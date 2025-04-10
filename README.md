@@ -1,20 +1,59 @@
-# Welcome to your Expo app 👋
+# NewApp mit EAS Update
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Dieses Projekt ist eine [Expo](https://expo.dev/) Anwendung, die mit [`expo-router`](https://docs.expo.dev/router/introduction/) erstellt wurde und EAS Update für Over-the-Air Updates unterstützt.
 
-## Get started
+## 🚀 Entwicklung
 
-1. Install dependencies
+```sh
+# Starten der Entwicklungsumgebung
+npm start
 
-   ```bash
-   npm install
-   ```
+# Starten auf Android
+npm run android
 
-2. Start the app
+# Starten auf iOS
+npm run ios
 
-   ```bash
-    npx expo start
-   ```
+# Starten im Web-Browser
+npm run web
+```
+
+## 📱 EAS Update
+
+Dieses Projekt ist für EAS Update konfiguriert, was Over-the-Air Updates ermöglicht, ohne neue App-Versionen in den App Stores veröffentlichen zu müssen.
+
+### Updates veröffentlichen
+
+```sh
+# Veröffentlichen eines Updates für alle Kanäle
+eas update
+
+# Veröffentlichen eines Updates für einen bestimmten Kanal
+eas update --channel production
+```
+
+### Builds erstellen
+
+```sh
+# Erstellen einer Entwicklungsversion
+eas build --profile development
+
+# Erstellen einer Vorschauversion
+eas build --profile preview
+
+# Erstellen einer Produktionsversion
+eas build --profile production
+```
+
+## 🔄 Git-Workflow
+
+Das Projekt verwendet einen Master-Branch für die Hauptentwicklung. Wenn Sie Code zum Master-Branch pushen, wird automatisch ein neues EAS Update veröffentlicht (wenn GitHub Actions konfiguriert ist).
+
+## 📝 Weitere Ressourcen
+
+- [Expo Router: Dokumentation](https://docs.expo.dev/router/introduction/)
+- [EAS Update: Dokumentation](https://docs.expo.dev/eas-update/introduction/)
+- [EAS Build: Dokumentation](https://docs.expo.dev/build/introduction/)
 
 In the output, you'll find options to open the app in a
 
