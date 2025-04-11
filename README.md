@@ -1,6 +1,29 @@
-# NewApp mit EAS Update
+# Wehen-Tracker App
 
-Dieses Projekt ist eine [Expo](https://expo.dev/) Anwendung, die mit [`expo-router`](https://docs.expo.dev/router/introduction/) erstellt wurde und EAS Update für Over-the-Air Updates unterstützt.
+Eine React Native App zum Aufzeichnen und Verfolgen von Wehen während der Schwangerschaft. Die App verwendet Supabase für Authentifizierung und Datenspeicherung.
+
+## 🚀 Funktionen
+
+- **Wehen-Tracking**: Starten und Stoppen eines Timers für Wehen
+- **Verlaufsanzeige**: Anzeige der aufgezeichneten Wehen mit Dauer und Abständen
+- **Warnungen**: Benachrichtigungen, wenn Wehen in kurzen Abständen auftreten
+- **Benutzerkonten**: Registrierung und Anmeldung mit E-Mail und Passwort
+- **Cloud-Speicherung**: Speicherung der Wehen in Supabase für Zugriff auf verschiedenen Geräten
+
+## 🛠️ Technologien
+
+- [React Native](https://reactnative.dev/) - Mobile App Framework
+- [Expo](https://expo.dev/) - React Native Toolchain
+- [Expo Router](https://docs.expo.dev/router/introduction/) - Routing und Navigation
+- [Supabase](https://supabase.com/) - Backend-as-a-Service für Authentifizierung und Datenbank
+- [TypeScript](https://www.typescriptlang.org/) - Typsicheres JavaScript
+
+## 📋 Voraussetzungen
+
+- [Node.js](https://nodejs.org/) (v18 oder höher)
+- [npm](https://www.npmjs.com/) oder [yarn](https://yarnpkg.com/)
+- [Expo CLI](https://docs.expo.dev/workflow/expo-cli/)
+- Ein [Supabase](https://supabase.com/)-Konto
 
 ## 🚀 Entwicklung
 
@@ -54,6 +77,11 @@ Das Projekt verwendet einen Master-Branch für die Hauptentwicklung. Wenn Sie Co
 - [Expo Router: Dokumentation](https://docs.expo.dev/router/introduction/)
 - [EAS Update: Dokumentation](https://docs.expo.dev/eas-update/introduction/)
 - [EAS Build: Dokumentation](https://docs.expo.dev/build/introduction/)
+- [Supabase: Dokumentation](https://supabase.com/docs)
+
+## 🔧 Supabase-Einrichtung
+
+Für detaillierte Anweisungen zur Einrichtung von Supabase für dieses Projekt, siehe die Datei `SUPABASE_SETUP.md`.
 
 In the output, you'll find options to open the app in a
 
