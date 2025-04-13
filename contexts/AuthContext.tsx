@@ -5,6 +5,7 @@ import {
   signInWithEmail,
   signUpWithEmail,
   signOut,
+  signInWithApple,
   checkSupabaseConnection,
   isSupabaseReady
 } from '@/lib/supabase';
@@ -17,6 +18,8 @@ type AuthContextType = {
   // E-Mail-Authentifizierung
   signInWithEmail: (email: string, password: string) => Promise<{ data?: any, error: any }>;
   signUpWithEmail: (email: string, password: string) => Promise<{ data?: any, error: any }>;
+  // Social Logins
+  signInWithApple: () => Promise<{ data?: any, error: any }>;
   // Abmeldung
   signOut: () => Promise<{ error: any }>;
 };
@@ -113,6 +116,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { data, error };
   };
 
+  // Social Logins
+  const handleSignInWithApple = async () => {
+    const { data, error } = await signInWithApple();
+    return { data, error };
+  };
+
   // Abmeldung
   const handleSignOut = async () => {
     const { error } = await signOut();
@@ -128,6 +137,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loading,
         signInWithEmail: handleSignInWithEmail,
         signUpWithEmail: handleSignUpWithEmail,
+        signInWithApple: handleSignInWithApple,
         signOut: handleSignOut,
       }}
     >

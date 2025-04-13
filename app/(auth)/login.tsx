@@ -19,7 +19,7 @@ export default function LoginScreen() {
   const [isRegistering, setIsRegistering] = useState(false);
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
-  const { signInWithEmail, signUpWithEmail } = useAuth();
+  const { signInWithEmail, signUpWithEmail, signInWithApple } = useAuth();
 
   // Funktion zum Abrufen des is_baby_born-Flags
   const checkIsBabyBorn = async (userId: string) => {
@@ -177,6 +177,61 @@ export default function LoginScreen() {
           ? 'Registrierung fehlgeschlagen. Bitte versuche es erneut.'
           : 'Login fehlgeschlagen. Bitte versuche es erneut.');
       }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleAppleLogin = async () => {
+    try {
+      setIsLoading(true);
+      setError('');
+      console.log('Starting Apple login...');
+
+      // HINWEIS: Für Testzwecke ohne Supabase-Verbindung
+      // Wir simulieren eine erfolgreiche Anmeldung
+      if (supabaseUrl.includes('example.supabase.co')) {
+        console.log('Using demo mode because Supabase credentials are not set');
+        // Simulierte Verzögerung
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        // Im Demo-Modus zur Countdown-Seite navigieren
+        console.log('Apple login demo mode: Navigating to countdown page');
+        try {
+          router.replace('/(tabs)/countdown');
+        } catch (navError) {
+          console.error('Navigation error:', navError);
+          // Fallback-Navigation
+          router.navigate('/(tabs)/countdown');
+        }
+        return;
+      }
+
+      // Anmeldung mit Apple
+      const { data, error: authError } = await signInWithApple();
+
+      if (authError) {
+        console.error('Apple login auth error:', authError);
+        throw authError;
+      }
+
+      console.log('Apple login successful:', data);
+
+      // Bei erfolgreicher Anmeldung basierend auf is_baby_born-Flag navigieren
+      if (data && data.user && data.user.id) {
+        await navigateBasedOnBabyBornFlag(data.user.id);
+      } else {
+        // Fallback zur Countdown-Seite, wenn keine Benutzer-ID verfügbar ist
+        try {
+          router.replace('/(tabs)/countdown');
+        } catch (navError) {
+          console.error('Navigation error:', navError);
+          router.navigate('/(tabs)/countdown');
+        }
+      }
+    } catch (err) {
+      setError('Apple-Login fehlgeschlagen. Bitte versuche es erneut.');
+      console.error('Apple login error:', err);
     } finally {
       setIsLoading(false);
     }
@@ -348,6 +403,16 @@ export default function LoginScreen() {
               >
                 <ThemedText style={styles.buttonText}>
                   {isLoading ? (isRegistering ? 'Registrieren...' : 'Anmelden...') : (isRegistering ? 'Registrieren' : 'Anmelden')}
+                </ThemedText>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.button, styles.appleButton]}
+                onPress={handleAppleLogin}
+                disabled={isLoading}
+              >
+                <ThemedText style={styles.buttonText}>
+                  Mit Apple anmelden
                 </ThemedText>
               </TouchableOpacity>
 
