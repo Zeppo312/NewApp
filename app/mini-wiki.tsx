@@ -133,7 +133,7 @@ export default function MiniWikiScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const router = useRouter();
-  
+
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
@@ -141,22 +141,22 @@ export default function MiniWikiScreen() {
 
   // Filter articles based on search query and selected category
   const filteredArticles = articles.filter(article => {
-    const matchesSearch = article.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    const matchesSearch = article.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          article.teaser.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    const matchesCategory = 
-      selectedCategory === 'all' ? true : 
-      selectedCategory === 'favorites' ? article.isFavorite : 
+
+    const matchesCategory =
+      selectedCategory === 'all' ? true :
+      selectedCategory === 'favorites' ? article.isFavorite :
       article.category === selectedCategory;
-    
+
     return matchesSearch && matchesCategory;
   });
 
   // Toggle favorite status
   const toggleFavorite = (id: string) => {
-    setArticles(articles.map(article => 
-      article.id === id 
-        ? { ...article, isFavorite: !article.isFavorite } 
+    setArticles(articles.map(article =>
+      article.id === id
+        ? { ...article, isFavorite: !article.isFavorite }
         : article
     ));
   };
@@ -187,10 +187,10 @@ export default function MiniWikiScreen() {
           style={styles.favoriteButton}
           onPress={() => toggleFavorite(item.id)}
         >
-          <IconSymbol 
-            name={item.isFavorite ? 'star.fill' : 'star'} 
-            size={20} 
-            color={item.isFavorite ? theme.accent : theme.tabIconDefault} 
+          <IconSymbol
+            name={item.isFavorite ? 'star.fill' : 'star'}
+            size={20}
+            color={item.isFavorite ? theme.accent : theme.tabIconDefault}
           />
         </TouchableOpacity>
       </View>
@@ -216,7 +216,7 @@ export default function MiniWikiScreen() {
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => router.push('/(tabs)/more')}
+            onPress={() => router.back()}
           >
             <IconSymbol name="chevron.left" size={24} color={theme.text} />
             <ThemedText style={styles.backButtonText}>Zurück</ThemedText>
@@ -247,16 +247,16 @@ export default function MiniWikiScreen() {
                   style={styles.favoriteButton}
                   onPress={() => toggleFavorite(selectedArticle.id)}
                 >
-                  <IconSymbol 
-                    name={selectedArticle.isFavorite ? 'star.fill' : 'star'} 
-                    size={24} 
-                    color={selectedArticle.isFavorite ? theme.accent : theme.tabIconDefault} 
+                  <IconSymbol
+                    name={selectedArticle.isFavorite ? 'star.fill' : 'star'}
+                    size={24}
+                    color={selectedArticle.isFavorite ? theme.accent : theme.tabIconDefault}
                   />
                 </TouchableOpacity>
               </View>
-              
+
               <ThemedText style={styles.articleDetailCategory}>{selectedArticle.category}</ThemedText>
-              
+
               <View style={styles.readingTimeDetail}>
                 <IconSymbol name="clock" size={14} color={theme.tabIconDefault} />
                 <ThemedText style={styles.readingTimeText}>{selectedArticle.readingTime}</ThemedText>
