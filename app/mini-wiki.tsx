@@ -1,133 +1,24 @@
-import React, { useState } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, TextInput, ImageBackground, SafeAreaView, StatusBar, FlatList } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, ScrollView, View, TouchableOpacity, TextInput, ImageBackground, SafeAreaView, StatusBar, FlatList, ActivityIndicator, Alert } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useRouter } from 'expo-router';
+import { getWikiCategories, getWikiArticles, addWikiArticleToFavorites, removeWikiArticleFromFavorites, WikiArticle, WikiCategory } from '@/lib/supabase/wiki';
 
-// Define article type
-interface Article {
-  id: string;
-  title: string;
-  category: string;
-  teaser: string;
-  readingTime: string;
-  isFavorite: boolean;
-  content?: {
-    coreStatements: string[];
-    sections: {
-      title: string;
-      content: string;
-    }[];
-  };
+// Lokale Erweiterung des WikiArticle-Typs für die UI
+interface Article extends WikiArticle {
+  category?: string; // Für die Anzeige des Kategorienamens
+  readingTime?: string; // Alias für reading_time
 }
 
-// Sample articles data
-const SAMPLE_ARTICLES: Article[] = [
-  {
-    id: '1',
-    title: 'Stillen für Anfängerinnen',
-    category: 'Stillen & Ernährung',
-    teaser: 'Die wichtigsten Grundlagen zum erfolgreichen Stillen deines Babys.',
-    readingTime: '5 Min',
-    isFavorite: false,
-    content: {
-      coreStatements: [
-        'Stillen ist die natürlichste Form der Ernährung für dein Baby',
-        'Die richtige Anlegetechnik ist entscheidend für erfolgreiches Stillen',
-        'Bei Problemen kann eine Stillberaterin helfen'
-      ],
-      sections: [
-        {
-          title: 'Die richtige Anlegetechnik',
-          content: 'Achte darauf, dass dein Baby den Mund weit öffnet und möglichst viel vom Warzenhof erfasst. Die Nase und das Kinn deines Babys sollten die Brust berühren.'
-        },
-        {
-          title: 'Stillpositionen',
-          content: 'Es gibt verschiedene Stillpositionen wie die Wiegehaltung, die Rückengriffhaltung oder die Seitenlage. Probiere verschiedene Positionen aus, um herauszufinden, welche für dich und dein Baby am bequemsten ist.'
-        }
-      ]
-    }
-  },
-  {
-    id: '2',
-    title: 'Schlafrhythmus im ersten Monat',
-    category: 'Schlaf & Tagesrhythmus',
-    teaser: 'So findest du einen sanften Rhythmus für dein Neugeborenes.',
-    readingTime: '4 Min',
-    isFavorite: true,
-    content: {
-      coreStatements: [
-        'Neugeborene haben noch keinen Tag-Nacht-Rhythmus',
-        'Ein Baby schläft 14-17 Stunden täglich, aber in kurzen Phasen',
-        'Regelmäßige Abläufe helfen, einen Rhythmus zu entwickeln'
-      ],
-      sections: [
-        {
-          title: 'Schlafphasen verstehen',
-          content: 'Neugeborene durchlaufen kürzere Schlafzyklen als Erwachsene und wachen daher häufiger auf. Das ist völlig normal und dient dem Überleben.'
-        },
-        {
-          title: 'Tag-Nacht-Rhythmus fördern',
-          content: 'Tagsüber normal im Haushalt agieren, nachts gedämpftes Licht und ruhige Stimme verwenden. So lernt dein Baby mit der Zeit den Unterschied zwischen Tag und Nacht.'
-        }
-      ]
-    }
-  },
-  {
-    id: '3',
-    title: 'Nabelschnurpflege',
-    category: 'Gesundheit & Pflege',
-    teaser: 'So pflegst du den Nabelschnurrest richtig, bis er abfällt.',
-    readingTime: '3 Min',
-    isFavorite: false
-  },
-  {
-    id: '4',
-    title: 'Die ersten Meilensteine',
-    category: 'Entwicklung & Meilensteine',
-    teaser: 'Diese Entwicklungsschritte erwarten dich in den ersten drei Monaten.',
-    readingTime: '6 Min',
-    isFavorite: false
-  },
-  {
-    id: '5',
-    title: 'Wochenbett überstehen',
-    category: 'Mama & Papa',
-    teaser: 'Tipps für die herausfordernde Zeit nach der Geburt.',
-    readingTime: '7 Min',
-    isFavorite: true
-  },
-  {
-    id: '6',
-    title: 'Beikost einführen',
-    category: 'Stillen & Ernährung',
-    teaser: 'Der richtige Zeitpunkt und die besten ersten Lebensmittel.',
-    readingTime: '8 Min',
-    isFavorite: false
-  },
-  {
-    id: '7',
-    title: 'Baby-Blues und postpartale Depression',
-    category: 'Mama & Papa',
-    teaser: 'Unterschiede erkennen und Hilfe finden.',
-    readingTime: '5 Min',
-    isFavorite: false
-  }
-];
-
-// Category data with icons
-const CATEGORIES = [
-  { id: 'all', name: 'Alle Artikel', icon: 'doc.text.fill' },
-  { id: 'Stillen & Ernährung', name: 'Stillen & Ernährung', icon: 'drop.fill' },
-  { id: 'Schlaf & Tagesrhythmus', name: 'Schlaf & Tagesrhythmus', icon: 'moon.stars.fill' },
-  { id: 'Gesundheit & Pflege', name: 'Gesundheit & Pflege', icon: 'heart.fill' },
-  { id: 'Entwicklung & Meilensteine', name: 'Entwicklung & Meilensteine', icon: 'chart.bar.fill' },
-  { id: 'Mama & Papa', name: 'Mama & Papa', icon: 'person.2.fill' },
-  { id: 'favorites', name: 'Favoriten', icon: 'star.fill' }
-];
+// Lokale Erweiterung des WikiCategory-Typs für die UI
+interface Category extends WikiCategory {
+  isAll?: boolean; // Für die "Alle Artikel"-Kategorie
+  isFavorites?: boolean; // Für die "Favoriten"-Kategorie
+}
 
 export default function MiniWikiScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -137,7 +28,52 @@ export default function MiniWikiScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
-  const [articles, setArticles] = useState<Article[]>(SAMPLE_ARTICLES);
+  const [articles, setArticles] = useState<Article[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  // Laden der Kategorien und Artikel beim ersten Rendern
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+
+        // Kategorien laden
+        const { data: categoriesData, error: categoriesError } = await getWikiCategories();
+        if (categoriesError) throw categoriesError;
+
+        // Artikel laden
+        const { data: articlesData, error: articlesError } = await getWikiArticles();
+        if (articlesError) throw articlesError;
+
+        // Kategorien mit "Alle Artikel" und "Favoriten" erweitern
+        const allCategories: Category[] = [
+          { id: 'all', name: 'Alle Artikel', icon: 'doc.text.fill', isAll: true },
+          ...categoriesData,
+          { id: 'favorites', name: 'Favoriten', icon: 'star.fill', isFavorites: true }
+        ];
+
+        // Artikel mit Kategorienamen anreichern
+        const articlesWithCategories = articlesData.map(article => ({
+          ...article,
+          category: categoriesData.find(cat => cat.id === article.category_id)?.name || '',
+          readingTime: article.reading_time
+        }));
+
+        setCategories(allCategories);
+        setArticles(articlesWithCategories);
+      } catch (err) {
+        console.error('Error loading wiki data:', err);
+        setError(err instanceof Error ? err : new Error('Fehler beim Laden der Daten'));
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadData();
+  }, []);
 
   // Filter articles based on search query and selected category
   const filteredArticles = articles.filter(article => {
@@ -147,22 +83,51 @@ export default function MiniWikiScreen() {
     const matchesCategory =
       selectedCategory === 'all' ? true :
       selectedCategory === 'favorites' ? article.isFavorite :
-      article.category === selectedCategory;
+      article.category_id === selectedCategory;
 
     return matchesSearch && matchesCategory;
   });
 
   // Toggle favorite status
-  const toggleFavorite = (id: string) => {
-    setArticles(articles.map(article =>
-      article.id === id
-        ? { ...article, isFavorite: !article.isFavorite }
-        : article
-    ));
+  const toggleFavorite = async (id: string) => {
+    try {
+      const article = articles.find(a => a.id === id);
+      if (!article) return;
+
+      // Optimistisches UI-Update
+      setArticles(articles.map(article =>
+        article.id === id
+          ? { ...article, isFavorite: !article.isFavorite }
+          : article
+      ));
+
+      // Wenn der Artikel ein Favorit ist, entfernen wir ihn aus den Favoriten
+      if (article.isFavorite) {
+        const { error } = await removeWikiArticleFromFavorites(id);
+        if (error) throw error;
+      } else {
+        // Andernfalls fügen wir ihn zu den Favoriten hinzu
+        const { error } = await addWikiArticleToFavorites(id);
+        if (error) throw error;
+      }
+    } catch (err) {
+      console.error('Error toggling favorite:', err);
+      Alert.alert('Fehler', 'Der Favoriten-Status konnte nicht geändert werden.');
+
+      // Rückgängig machen des optimistischen Updates
+      const { data: articlesData } = await getWikiArticles();
+      if (articlesData) {
+        setArticles(articlesData.map(article => ({
+          ...article,
+          category: categories.find(cat => cat.id === article.category_id)?.name || '',
+          readingTime: article.reading_time
+        })));
+      }
+    }
   };
 
   // Render category item
-  const renderCategoryItem = ({ item }: { item: typeof CATEGORIES[0] }) => (
+  const renderCategoryItem = ({ item }: { item: Category }) => (
     <TouchableOpacity
       style={[
         styles.categoryItem,
@@ -227,7 +192,42 @@ export default function MiniWikiScreen() {
           </ThemedText>
         </View>
 
-        {selectedArticle ? (
+        {isLoading ? (
+          // Ladeindikator
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={theme.accent} />
+            <ThemedText style={styles.loadingText}>Lade Artikel...</ThemedText>
+          </View>
+        ) : error ? (
+          // Fehleranzeige
+          <View style={styles.errorContainer}>
+            <IconSymbol name="exclamationmark.triangle.fill" size={40} color={theme.warning} />
+            <ThemedText style={styles.errorText}>Fehler beim Laden der Artikel</ThemedText>
+            <ThemedText style={styles.errorSubtext}>{error.message}</ThemedText>
+            <TouchableOpacity
+              style={styles.retryButton}
+              onPress={() => {
+                setIsLoading(true);
+                getWikiArticles().then(({ data }) => {
+                  if (data) {
+                    setArticles(data.map(article => ({
+                      ...article,
+                      category: categories.find(cat => cat.id === article.category_id)?.name || '',
+                      readingTime: article.reading_time
+                    })));
+                    setError(null);
+                  }
+                }).catch(err => {
+                  setError(err instanceof Error ? err : new Error('Fehler beim Laden der Daten'));
+                }).finally(() => {
+                  setIsLoading(false);
+                });
+              }}
+            >
+              <ThemedText style={styles.retryButtonText}>Erneut versuchen</ThemedText>
+            </TouchableOpacity>
+          </View>
+        ) : selectedArticle ? (
           // Article detail view
           <ScrollView style={styles.articleDetailContainer}>
             <TouchableOpacity
@@ -259,7 +259,7 @@ export default function MiniWikiScreen() {
 
               <View style={styles.readingTimeDetail}>
                 <IconSymbol name="clock" size={14} color={theme.tabIconDefault} />
-                <ThemedText style={styles.readingTimeText}>{selectedArticle.readingTime}</ThemedText>
+                <ThemedText style={styles.readingTimeText}>{selectedArticle.readingTime || selectedArticle.reading_time}</ThemedText>
               </View>
 
               {selectedArticle.content && (
@@ -307,7 +307,7 @@ export default function MiniWikiScreen() {
 
             <View style={styles.categoriesContainer}>
               <FlatList
-                data={CATEGORIES}
+                data={categories}
                 renderItem={renderCategoryItem}
                 keyExtractor={item => item.id}
                 horizontal
@@ -367,6 +367,45 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: 'bold',
+  },
+  // Ladeindikator und Fehleranzeige
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  errorText: {
+    marginTop: 12,
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  errorSubtext: {
+    marginTop: 8,
+    fontSize: 14,
+    textAlign: 'center',
+    opacity: 0.7,
+  },
+  retryButton: {
+    marginTop: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  retryButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
   },
   searchContainer: {
     marginVertical: 12,

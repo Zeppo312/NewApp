@@ -36,6 +36,8 @@ const MAPPING = {
   'gear': 'settings',
   'person.crop.circle': 'account_circle',
   'arrow.uturn.backward': 'arrow_back',
+  'exclamationmark.triangle.fill': 'warning',
+  'ellipsis.circle.fill': 'more_horiz',
 } as Partial<
   Record<
     import('expo-symbols').SymbolViewProps['name'],
