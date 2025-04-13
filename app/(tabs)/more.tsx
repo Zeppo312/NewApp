@@ -91,7 +91,10 @@ export default function MoreScreen() {
               Baby & Familie
             </ThemedText>
 
-            <TouchableOpacity style={styles.menuItem}>
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => router.push('/termine')}
+            >
               <View style={styles.menuItemIcon}>
                 <IconSymbol name="calendar.badge.plus" size={24} color={theme.accent} />
               </View>

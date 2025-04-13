@@ -38,6 +38,9 @@ const MAPPING = {
   'arrow.uturn.backward': 'arrow_back',
   'exclamationmark.triangle.fill': 'warning',
   'ellipsis.circle.fill': 'more_horiz',
+  'calendar.badge.exclamationmark': 'event_busy',
+  'trash': 'delete',
+  'location': 'location_on',
 } as Partial<
   Record<
     import('expo-symbols').SymbolViewProps['name'],
