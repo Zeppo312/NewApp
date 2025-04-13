@@ -148,7 +148,10 @@ export default function MoreScreen() {
               </TouchableOpacity>
             )}
 
-            <TouchableOpacity style={styles.menuItem}>
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => router.push('/(tabs)/mini-wiki')}
+            >
               <View style={styles.menuItemIcon}>
                 <IconSymbol name="book.fill" size={24} color={theme.accent} />
               </View>
