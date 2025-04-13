@@ -17,15 +17,17 @@ SplashScreen.preventAutoHideAsync();
 // Wrapper-Komponente, die den AuthProvider verwendet
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
-  const { session, loading } = useAuth();
+  const { loading } = useAuth();
   const [initialRoute, setInitialRoute] = useState<string | null>(null);
 
-  // Bestimmen der initialen Route basierend auf dem Authentifizierungsstatus
+  // Wir verwenden jetzt die index.tsx Datei als Einstiegspunkt, die die Weiterleitung basierend auf dem Auth-Status übernimmt
   useEffect(() => {
     if (!loading) {
-      setInitialRoute(session ? '(tabs)' : '(auth)');
+      console.log('Layout: Auth loading complete, setting initial route');
+      // Wir setzen die initiale Route auf den Root-Pfad, der dann zur richtigen Route weiterleitet
+      setInitialRoute('index');
     }
-  }, [session, loading]);
+  }, [loading]);
 
   // Zeige einen Ladeindikator, während der Authentifizierungsstatus geprüft wird
   if (loading || !initialRoute) {
@@ -44,8 +46,10 @@ function RootLayoutNav() {
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack initialRouteName={initialRoute}>
+        <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+        <Stack.Screen name="diary-entries" options={{ headerShown: false }} />
         <Stack.Screen name="+not-found" />
         <Stack.Screen name="auth/callback" options={{ headerShown: false }} />
       </Stack>

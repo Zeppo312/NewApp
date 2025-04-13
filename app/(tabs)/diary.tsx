@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, Image, TextInput, Alert, ImageBackground, SafeAreaView, StatusBar, FlatList, Modal } from 'react-native';
+import { StyleSheet, ScrollView, View, TouchableOpacity, Image, TextInput, Alert, ImageBackground, SafeAreaView, StatusBar, Modal } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/contexts/AuthContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+// import { Collapsible } from '@/components/Collapsible';
 import {
   getDiaryEntries,
   saveDiaryEntry,
@@ -22,8 +23,9 @@ import {
 } from '@/lib/baby';
 import { setCurrentPhase as updateCurrentPhase } from '@/lib/baby';
 import * as ImagePicker from 'expo-image-picker';
-import { supabase } from '@/lib/supabase';
+// import { supabase } from '@/lib/supabase';
 import { differenceInDays, differenceInMonths, differenceInWeeks } from 'date-fns';
+import { router } from 'expo-router';
 
 export default function DiaryScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -124,19 +126,43 @@ export default function DiaryScreen() {
     }
   };
 
+  // Zustand für Animation und Feedback
+  const [animatingMilestoneId, setAnimatingMilestoneId] = useState<string | null>(null);
+  const [showFeedbackMessage, setShowFeedbackMessage] = useState(false);
+  const [feedbackMessage, setFeedbackMessage] = useState('');
+
   // Meilenstein umschalten (erreicht/nicht erreicht)
   const handleToggleMilestone = async (milestone: Milestone) => {
     try {
       const newStatus = !milestone.is_completed;
+      setAnimatingMilestoneId(milestone.id);
+
+      // Feedback-Nachricht anzeigen, wenn ein Meilenstein erreicht wurde
+      if (newStatus) {
+        setFeedbackMessage('Super! Ein neuer Schritt ist geschafft.');
+        setShowFeedbackMessage(true);
+
+        // Feedback nach 2 Sekunden ausblenden
+        setTimeout(() => {
+          setShowFeedbackMessage(false);
+        }, 2000);
+      }
+
       await toggleMilestone(milestone.id, newStatus);
 
       // Meilensteine neu laden, um den aktualisierten Status zu erhalten
       if (expandedPhaseId) {
         await loadMilestonesForPhase(expandedPhaseId);
       }
+
+      // Animation nach kurzer Zeit beenden
+      setTimeout(() => {
+        setAnimatingMilestoneId(null);
+      }, 500);
     } catch (err) {
       console.error('Failed to toggle milestone:', err);
       Alert.alert('Fehler', 'Der Meilenstein konnte nicht aktualisiert werden.');
+      setAnimatingMilestoneId(null);
     }
   };
 
@@ -156,6 +182,44 @@ export default function DiaryScreen() {
     } catch (err) {
       console.error('Failed to change phase:', err);
       Alert.alert('Fehler', 'Die Phase konnte nicht gewechselt werden.');
+    }
+  };
+
+  // Zu einer früheren Phase zurückkehren
+  const handleReactivatePhase = async (phase: DevelopmentPhase) => {
+    try {
+      Alert.alert(
+        "Phase reaktivieren",
+        `Möchtest du zu Phase ${phase.phase_number}: ${phase.title} zurückkehren?`,
+        [
+          {
+            text: "Abbrechen",
+            style: "cancel"
+          },
+          {
+            text: "Ja, reaktivieren",
+            onPress: async () => {
+              // Aktuelle Phase in Supabase aktualisieren
+              await updateCurrentPhase(phase.id);
+
+              // Lokalen Zustand aktualisieren
+              setCurrentPhase(phase);
+              setExpandedPhaseId(phase.id);
+              await loadMilestonesForPhase(phase.id);
+
+              // Erfolgsmeldung anzeigen
+              Alert.alert(
+                "Phase reaktiviert",
+                `Du bist jetzt wieder in Phase ${phase.phase_number}: ${phase.title}.`,
+                [{ text: "OK" }]
+              );
+            }
+          }
+        ]
+      );
+    } catch (err) {
+      console.error('Failed to reactivate phase:', err);
+      Alert.alert('Fehler', 'Die Phase konnte nicht reaktiviert werden.');
     }
   };
 
@@ -265,42 +329,48 @@ export default function DiaryScreen() {
       const result = await ImagePicker.launchImageLibraryAsync({
         allowsEditing: true,
         aspect: [4, 3],
-        quality: 0.8,
+        quality: 0.5, // Reduzierte Qualität für kleinere Dateigröße
+        base64: true, // Base64-Daten anfordern
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        const uri = result.assets[0].uri;
+        const asset = result.assets[0];
 
-        // Dateiname und Typ extrahieren
-        const fileExt = uri.substring(uri.lastIndexOf('.') + 1);
-        const fileName = `${Date.now()}.${fileExt}`;
-        const filePath = `diary-photos/${user?.id}/${fileName}`;
+        // Wenn base64 nicht direkt verfügbar ist, konvertieren wir das Bild
+        if (!asset.base64) {
+          console.log('Base64 nicht direkt verfügbar, konvertiere Bild...');
+          try {
+            const response = await fetch(asset.uri);
+            const blob = await response.blob();
+            const reader = new FileReader();
 
-        // Datei in einen Blob umwandeln
-        const response = await fetch(uri);
-        const blob = await response.blob();
+            // Promise für FileReader erstellen
+            const base64Data = await new Promise((resolve, reject) => {
+              reader.onload = () => resolve(reader.result);
+              reader.onerror = reject;
+              reader.readAsDataURL(blob);
+            });
 
-        // Datei zu Supabase Storage hochladen
-        const { error } = await supabase.storage
-          .from('diary-photos')
-          .upload(filePath, blob);
+            // Base64-Daten direkt als photo_url verwenden
+            setNewEntry({
+              ...newEntry,
+              photo_url: base64Data as string
+            });
 
-        if (error) {
-          console.error('Error uploading image:', error);
-          Alert.alert('Fehler', 'Das Bild konnte nicht hochgeladen werden.');
-          return;
+            console.log('Bild erfolgreich in Base64 konvertiert');
+          } catch (convError) {
+            console.error('Fehler bei der Konvertierung:', convError);
+            Alert.alert('Fehler', 'Das Bild konnte nicht verarbeitet werden.');
+          }
+        } else {
+          // Base64-Daten direkt verwenden
+          const base64Data = `data:image/jpeg;base64,${asset.base64}`;
+          setNewEntry({
+            ...newEntry,
+            photo_url: base64Data
+          });
+          console.log('Base64-Daten direkt verwendet');
         }
-
-        // Öffentliche URL für das Bild abrufen
-        const { data: publicUrlData } = supabase.storage
-          .from('diary-photos')
-          .getPublicUrl(filePath);
-
-        // Bild-URL in den Zustand setzen
-        setNewEntry({
-          ...newEntry,
-          photo_url: publicUrlData.publicUrl
-        });
       }
     } catch (error) {
       console.error('Error picking image:', error);
@@ -321,46 +391,19 @@ export default function DiaryScreen() {
     }
   };
 
-  const renderEntry = ({ item }: { item: DiaryEntry }) => {
-    const date = new Date(item.entry_date);
-
-    return (
-      <ThemedView style={styles.entryCard} lightColor={theme.card} darkColor={theme.card}>
-        <View style={styles.entryHeader}>
-          <View style={styles.dateContainer}>
-            <ThemedText style={styles.entryDate}>
-              {date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })}
-            </ThemedText>
-            {item.mood && (
-              <View style={styles.moodContainer}>
-                {renderMoodIcon(item.mood)}
-              </View>
-            )}
-          </View>
-
-          <TouchableOpacity
-            style={styles.deleteButton}
-            onPress={() => item.id && handleDeleteEntry(item.id)}
-          >
-            <IconSymbol name="trash" size={20} color="#FF6B6B" />
-          </TouchableOpacity>
-        </View>
-
-        <ThemedText style={styles.entryContent}>
-          {item.content}
-        </ThemedText>
-
-        {item.photo_url && (
-          <Image source={{ uri: item.photo_url }} style={styles.entryImage} />
-        )}
-      </ThemedView>
-    );
-  };
+  // Nicht mehr benötigt, da Einträge auf separater Seite angezeigt werden
 
   // Render-Funktion für die Meilensteine einer Phase
   const renderMilestones = (phaseMilestones: Milestone[]) => {
     return (
       <View style={styles.milestonesContainer}>
+        {/* Feedback-Nachricht */}
+        {showFeedbackMessage && (
+          <View style={styles.feedbackContainer}>
+            <ThemedText style={styles.feedbackText}>{feedbackMessage}</ThemedText>
+          </View>
+        )}
+
         {phaseMilestones.map((milestone) => (
           <TouchableOpacity
             key={milestone.id}
@@ -368,14 +411,32 @@ export default function DiaryScreen() {
             onPress={() => handleToggleMilestone(milestone)}
           >
             <View style={styles.checkboxContainer}>
-              <View style={[styles.checkbox, milestone.is_completed && styles.checkboxChecked]}>
+              <View
+                style={[
+                  styles.checkbox,
+                  milestone.is_completed && styles.checkboxChecked,
+                  animatingMilestoneId === milestone.id && styles.checkboxAnimating
+                ]}
+              >
                 {milestone.is_completed && (
-                  <IconSymbol name="checkmark" size={16} color="#fff" />
+                  <IconSymbol
+                    name="checkmark"
+                    size={16}
+                    color="#fff"
+                    style={animatingMilestoneId === milestone.id ? styles.checkmarkAnimating : undefined}
+                  />
                 )}
               </View>
             </View>
             <View style={styles.milestoneTextContainer}>
-              <ThemedText style={styles.milestoneTitle}>{milestone.title}</ThemedText>
+              <ThemedText
+                style={[
+                  styles.milestoneTitle,
+                  milestone.is_completed && styles.milestoneTitleCompleted
+                ]}
+              >
+                {milestone.title}
+              </ThemedText>
               {milestone.description && (
                 <ThemedText style={styles.milestoneDescription}>{milestone.description}</ThemedText>
               )}
@@ -388,13 +449,44 @@ export default function DiaryScreen() {
 
   // Render-Funktion für den Fortschrittsbalken
   const renderProgressBar = (progress: number, completedCount: number, totalCount: number) => {
+    // Bestimme die Farbe des Fortschrittsbalkens basierend auf dem Fortschritt
+    const getProgressBarColor = () => {
+      if (progress < 30) return '#6BAAE8'; // Blau für Anfang
+      if (progress < 60) return '#6BC6E8'; // Hellblau für mittleren Fortschritt
+      if (progress < 80) return '#6BE8B9'; // Türkis für guten Fortschritt
+      return '#6BE86B'; // Grün für fast fertig
+    };
+
+    // Motivierende Nachricht basierend auf dem Fortschritt
+    const getMotivationalMessage = () => {
+      if (progress === 0) return 'Los geht\'s!';
+      if (progress < 30) return 'Ein guter Start!';
+      if (progress < 60) return 'Weiter so!';
+      if (progress < 80) return 'Schon viel geschafft!';
+      if (progress < 100) return 'Fast geschafft!';
+      return 'Phase abgeschlossen – Zeit für den nächsten Schritt?';
+    };
+
     return (
       <View style={styles.progressContainer}>
-        <ThemedText style={styles.progressText}>
-          {completedCount} von {totalCount} Meilensteinen erreicht ({Math.round(progress)}%)
-        </ThemedText>
+        <View style={styles.progressHeader}>
+          <ThemedText style={styles.progressText}>
+            {completedCount} von {totalCount} Meilensteinen erreicht ({Math.round(progress)}%)
+          </ThemedText>
+          <ThemedText style={styles.motivationalText}>
+            {getMotivationalMessage()}
+          </ThemedText>
+        </View>
         <View style={styles.progressBarContainer}>
-          <View style={[styles.progressBar, { width: `${progress}%` }]} />
+          <View
+            style={[
+              styles.progressBar,
+              {
+                width: `${progress}%`,
+                backgroundColor: getProgressBarColor()
+              }
+            ]}
+          />
         </View>
       </View>
     );
@@ -402,27 +494,70 @@ export default function DiaryScreen() {
 
   // Render-Funktion für eine Entwicklungsphase
   const renderPhase = (phase: DevelopmentPhase, isExpanded: boolean, isActive: boolean) => {
+    // Bestimme den Status der Phase
+    const isCompleted = currentPhase && phase.phase_number < currentPhase.phase_number;
+    const isFuture = currentPhase && phase.phase_number > currentPhase.phase_number;
+
     return (
       <ThemedView
         key={phase.id}
-        style={[styles.phaseCard, isActive && styles.activePhaseCard]}
+        style={[
+          styles.phaseCard,
+          isActive && styles.activePhaseCard,
+          isCompleted && styles.completedPhaseCard,
+          isFuture && styles.futurePhaseCard
+        ]}
         lightColor="#fff"
         darkColor="#333"
       >
         <TouchableOpacity
           style={styles.phaseHeader}
           onPress={() => setExpandedPhaseId(isExpanded ? null : phase.id)}
+          disabled={isFuture ? true : false}
         >
           <View style={styles.phaseHeaderContent}>
-            <ThemedText style={[styles.phaseTitle, isActive && styles.activePhaseTitle]}>
-              Phase {phase.phase_number}: {phase.title}
-            </ThemedText>
+            <View style={styles.phaseTitleContainer}>
+              <ThemedText
+                style={[
+                  styles.phaseTitle,
+                  isActive && styles.activePhaseTitle,
+                  isCompleted && styles.completedPhaseTitle,
+                  isFuture && styles.futurePhaseTitle
+                ]}
+              >
+                Phase {phase.phase_number}: {phase.title}
+              </ThemedText>
+
+              {isCompleted && (
+                <View style={styles.phaseStatusContainer}>
+                  <View style={styles.phaseStatusBadge}>
+                    <IconSymbol name="checkmark.circle.fill" size={16} color="#9DBEBB" />
+                    <ThemedText style={styles.phaseStatusText}>Abgeschlossen</ThemedText>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.reactivateButton}
+                    onPress={() => handleReactivatePhase(phase)}
+                  >
+                    <IconSymbol name="arrow.uturn.backward" size={14} color="#7D5A50" />
+                    <ThemedText style={styles.reactivateButtonText}>Reaktivieren</ThemedText>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {isFuture && (
+                <View style={styles.phaseStatusBadge}>
+                  <IconSymbol name="lock.fill" size={16} color="#A9A9A9" />
+                  <ThemedText style={styles.phaseStatusText}>Noch nicht verfügbar</ThemedText>
+                </View>
+              )}
+            </View>
+
             <ThemedText style={styles.phaseAgeRange}>{phase.age_range}</ThemedText>
           </View>
           <IconSymbol
             name={isExpanded ? "chevron.down" : "chevron.right"}
             size={24}
-            color={theme.text}
+            color={isFuture ? "#A9A9A9" : theme.text}
           />
         </TouchableOpacity>
 
@@ -433,6 +568,9 @@ export default function DiaryScreen() {
 
             <View style={styles.phaseEntriesContainer}>
               <ThemedText style={styles.phaseEntriesTitle}>Einträge zu dieser Phase</ThemedText>
+            </View>
+
+            <View style={styles.entriesButtonsContainer}>
               <TouchableOpacity
                 style={styles.addEntryButton}
                 onPress={() => {
@@ -440,9 +578,23 @@ export default function DiaryScreen() {
                   setShowNewEntryModal(true);
                 }}
               >
-                <IconSymbol name="plus" size={18} color="#fff" />
+                <IconSymbol name="pencil.and.scribble" size={18} color="#fff" />
                 <ThemedText style={styles.addEntryButtonText}>Eintrag hinzufügen</ThemedText>
               </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.viewAllEntriesButton}
+                onPress={() => router.push('/diary-entries')}
+              >
+                <IconSymbol name="book" size={18} color="#fff" />
+                <ThemedText style={styles.addEntryButtonText}>Einträge</ThemedText>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.entrySuggestionContainer}>
+              <ThemedText style={styles.entrySuggestionText}>
+                📝 Teile einen besonderen Moment aus dieser Phase
+              </ThemedText>
             </View>
           </View>
         )}
@@ -600,19 +752,25 @@ export default function DiaryScreen() {
           </View>
         ) : (
           <>
-            {/* Header mit Babyalter und aktueller Phase */}
+            {/* Header mit Babyalter und aktueller Phase - emotionaler und dynamischer */}
             <View style={styles.header}>
               <View style={styles.headerContent}>
                 <ThemedText type="title" style={styles.title}>Mein Babytagebuch</ThemedText>
                 {currentPhase && (
-                  <ThemedText style={styles.currentPhase}>
-                    Phase aktuell: "{currentPhase.title}"
-                  </ThemedText>
+                  <View style={styles.phaseIndicator}>
+                    <IconSymbol name="star.fill" size={18} color="#E9C9B6" />
+                    <ThemedText style={styles.currentPhase}>
+                      Aktuelle Phase: "{currentPhase.title}"
+                    </ThemedText>
+                  </View>
                 )}
                 {babyBirthDate && (
-                  <ThemedText style={styles.babyAge}>
-                    Alter deines Babys: {calculateBabyAge()}
-                  </ThemedText>
+                  <View style={styles.ageIndicator}>
+                    <IconSymbol name="heart.fill" size={18} color="#E9C9B6" />
+                    <ThemedText style={styles.babyAge}>
+                      {calculateBabyAge()} alt
+                    </ThemedText>
+                  </View>
                 )}
               </View>
             </View>
@@ -628,36 +786,26 @@ export default function DiaryScreen() {
               ))}
             </ScrollView>
 
-            {/* Tagebucheinträge */}
-            <ThemedText style={styles.sectionTitle}>Tagebucheinträge</ThemedText>
-            <FlatList
-              data={entries}
-              renderItem={renderEntry}
-              keyExtractor={(item) => item.id || Math.random().toString()}
-              contentContainerStyle={styles.entriesContainer}
-              ListEmptyComponent={
-                <ThemedView style={styles.emptyContainer} lightColor="#f8f8f8" darkColor="#333">
-                  <ThemedText style={styles.emptyText}>
-                    Noch keine Einträge vorhanden. Tippe auf das Plus-Symbol, um deinen ersten Eintrag zu erstellen.
-                  </ThemedText>
-                </ThemedView>
-              }
-            />
-
-            {/* Floating Action Button zum Hinzufügen eines neuen Eintrags */}
+            {/* Button für Tagebucheinträge */}
             <TouchableOpacity
-              style={styles.addButton}
-              onPress={() => {
-                setSelectedMilestone(null);
-                setShowNewEntry(!showNewEntry);
-              }}
+              style={styles.entriesButton}
+              onPress={() => router.push('/diary-entries')}
             >
-              <IconSymbol
-                name={showNewEntry ? "xmark" : "plus"}
-                size={24}
-                color="#FFFFFF"
-              />
+              <View style={styles.entriesButtonContent}>
+                <View style={styles.entriesButtonTitleContainer}>
+                  <IconSymbol name="book.fill" size={20} color="#7D5A50" />
+                  <ThemedText style={styles.entriesButtonTitle}>Tagebucheinträge</ThemedText>
+                </View>
+                <View style={styles.entriesButtonSubtitleContainer}>
+                  <ThemedText style={styles.entriesButtonSubtitle}>
+                    {entries.length > 0 ? `${entries.length} Einträge` : "Keine Einträge"}
+                  </ThemedText>
+                </View>
+              </View>
+              {/* Chevron.right wurde entfernt */}
             </TouchableOpacity>
+
+            {/* Plus-Button wurde entfernt */}
 
             {/* Modals */}
             {renderPhaseChangeModal()}
@@ -763,20 +911,34 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingTop: 20,
+    marginBottom: 10,
   },
   headerContent: {
     flex: 1,
   },
   title: {
     fontSize: 28,
+    marginBottom: 10,
+    color: '#7D5A50',
+  },
+  phaseIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 5,
+  },
+  ageIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   currentPhase: {
     fontSize: 16,
-    marginBottom: 3,
+    marginLeft: 8,
+    fontWeight: '500',
+    color: '#7D5A50',
   },
   babyAge: {
     fontSize: 16,
+    marginLeft: 8,
     opacity: 0.8,
   },
   content: {
@@ -807,6 +969,15 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#7D5A50',
   },
+  completedPhaseCard: {
+    borderLeftWidth: 4,
+    borderLeftColor: '#9DBEBB',
+  },
+  futurePhaseCard: {
+    opacity: 0.7,
+    borderLeftWidth: 4,
+    borderLeftColor: '#A9A9A9',
+  },
   phaseHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -816,12 +987,48 @@ const styles = StyleSheet.create({
   phaseHeaderContent: {
     flex: 1,
   },
+  phaseTitleContainer: {
+    marginBottom: 5,
+  },
   phaseTitle: {
     fontSize: 18,
     fontWeight: 'bold',
   },
   activePhaseTitle: {
     color: '#7D5A50',
+  },
+  completedPhaseTitle: {
+    color: '#9DBEBB',
+  },
+  futurePhaseTitle: {
+    color: '#A9A9A9',
+  },
+  phaseStatusContainer: {
+    marginTop: 4,
+  },
+  phaseStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  reactivateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F2E2CE',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+  },
+  reactivateButtonText: {
+    fontSize: 12,
+    color: '#7D5A50',
+    marginLeft: 4,
+  },
+  phaseStatusText: {
+    fontSize: 12,
+    marginLeft: 4,
+    opacity: 0.8,
   },
   phaseAgeRange: {
     fontSize: 14,
@@ -862,24 +1069,67 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
   },
+  milestoneTitleCompleted: {
+    color: '#7D5A50',
+    fontWeight: 'bold',
+  },
   milestoneDescription: {
     fontSize: 14,
     opacity: 0.7,
   },
+  checkboxAnimating: {
+    transform: [{ scale: 1.2 }],
+  },
+  checkmarkAnimating: {
+    transform: [{ scale: 1.3 }],
+  },
+  feedbackContainer: {
+    backgroundColor: '#F9F1EC',
+    padding: 10,
+    borderRadius: 8,
+    marginBottom: 15,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  feedbackText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#7D5A50',
+  },
   // Fortschrittsbalken-Styles
   progressContainer: {
-    marginBottom: 15,
+    marginBottom: 20,
+    marginTop: 5,
+  },
+  progressHeader: {
+    marginBottom: 8,
   },
   progressText: {
     fontSize: 14,
-    marginBottom: 5,
     textAlign: 'center',
+    fontWeight: '500',
+  },
+  motivationalText: {
+    fontSize: 16,
+    textAlign: 'center',
+    marginTop: 5,
+    color: '#7D5A50',
+    fontWeight: 'bold',
   },
   progressBarContainer: {
-    height: 10,
+    height: 12,
     backgroundColor: '#E0E0E0',
-    borderRadius: 5,
+    borderRadius: 6,
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 1,
   },
   progressBar: {
     height: '100%',
@@ -887,27 +1137,104 @@ const styles = StyleSheet.create({
   },
   // Einträge zu Phasen
   phaseEntriesContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     marginTop: 10,
+    marginBottom: 8,
   },
   phaseEntriesTitle: {
     fontSize: 16,
     fontWeight: 'bold',
   },
+  entriesButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  entriesButton: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    padding: 16,
+    borderRadius: 12,
+    marginHorizontal: 18,
+    marginBottom: 15,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  entriesButtonContent: {
+    flex: 1,
+  },
+  entriesButtonTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  entriesButtonTitle: {
+    fontSize: 17,
+    fontWeight: 'bold',
+    color: '#7D5A50',
+    marginLeft: 8,
+  },
+  entriesButtonSubtitleContainer: {
+    marginLeft: 28,
+  },
+  entriesButtonSubtitle: {
+    fontSize: 15,
+    color: '#999',
+  },
   addEntryButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#7D5A50',
+    backgroundColor: '#E9C9B6',
     paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingHorizontal: 15,
     borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+    flex: 1,
+    marginRight: 8,
+    justifyContent: 'center',
+  },
+  viewAllEntriesButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#9DBEBB',
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+    flex: 1,
+    marginLeft: 8,
+    justifyContent: 'center',
   },
   addEntryButtonText: {
-    color: '#fff',
-    marginLeft: 5,
+    color: '#7D5A50',
+    marginLeft: 8,
     fontSize: 14,
+    fontWeight: 'bold',
+  },
+  entrySuggestionContainer: {
+    marginTop: 10,
+    padding: 10,
+    backgroundColor: 'rgba(233, 201, 182, 0.2)',
+    borderRadius: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: '#E9C9B6',
+  },
+  entrySuggestionText: {
+    fontSize: 14,
+    color: '#7D5A50',
+    fontStyle: 'italic',
   },
   // Modal-Styles
   modalOverlay: {
@@ -978,23 +1305,7 @@ const styles = StyleSheet.create({
     shadowRadius: 3.84,
     elevation: 5,
   },
-  // Bestehende Styles
-  addButton: {
-    position: 'absolute',
-    bottom: 20,
-    right: 20,
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: '#7D5A50',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 3,
-    elevation: 5,
-  },
+  // Styles für Plus-Button wurden entfernt
   newEntryCard: {
     margin: 20,
     padding: 20,
@@ -1115,19 +1426,19 @@ const styles = StyleSheet.create({
     marginTop: 15,
   },
   entriesContainer: {
-    padding: 20,
+    padding: 10,
     paddingTop: 0,
-    paddingBottom: 40,
+    paddingBottom: 20,
   },
   entryCard: {
-    padding: 15,
-    borderRadius: 15,
-    marginBottom: 15,
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 12,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowRadius: 3,
+    elevation: 2,
   },
   entryHeader: {
     flexDirection: 'row',
@@ -1150,15 +1461,15 @@ const styles = StyleSheet.create({
     padding: 5,
   },
   entryContent: {
-    fontSize: 16,
-    lineHeight: 24,
-    marginBottom: 10,
+    fontSize: 15,
+    lineHeight: 22,
+    marginBottom: 8,
   },
   entryImage: {
     width: '100%',
-    height: 200,
-    borderRadius: 10,
-    marginTop: 10,
+    height: 180,
+    borderRadius: 8,
+    marginTop: 8,
   },
   emptyContainer: {
     padding: 20,

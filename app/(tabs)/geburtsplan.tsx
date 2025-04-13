@@ -10,6 +10,8 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { supabase } from '@/lib/supabase';
 import { getCurrentUser, getGeburtsplan, saveGeburtsplan, saveStructuredGeburtsplan } from '@/lib/supabase';
 import { GeburtsplanData, defaultGeburtsplan } from '@/types/geburtsplan';
+import { useRouter } from 'expo-router';
+import { IconSymbol } from '@/components/ui/IconSymbol';
 
 // Import der Abschnittskomponenten
 import { AllgemeineAngabenSection } from '@/components/geburtsplan/AllgemeineAngabenSection';
@@ -89,7 +91,9 @@ const generateTextFromStructuredData = (data: GeburtsplanData): string => {
 export default function GeburtsplanScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
+  const router = useRouter();
   const [user, setUser] = useState<any>(null);
+  const styles = React.useMemo(() => createStyles(theme), [theme]);
 
   // State für den Geburtsplan
   const [geburtsplan, setGeburtsplan] = useState('');
@@ -223,6 +227,19 @@ export default function GeburtsplanScreen() {
         resizeMode="cover"
       >
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
+          {/* Zurück-Button */}
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.push('/(tabs)/countdown')}
+          >
+            <View style={styles.backButtonInner}>
+              <IconSymbol name="arrow.left" size={20} color="#FFFFFF" />
+              <ThemedText style={styles.backButtonText} lightColor="#FFFFFF" darkColor="#FFFFFF">
+                Zurück
+              </ThemedText>
+            </View>
+          </TouchableOpacity>
+
           <ThemedText type="title" style={styles.title}>
             Mein Geburtsplan
           </ThemedText>
@@ -349,7 +366,7 @@ export default function GeburtsplanScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: any) => StyleSheet.create({
   container: {
     flex: 1,
   },
@@ -368,6 +385,28 @@ const styles = StyleSheet.create({
     fontSize: 28,
     textAlign: 'center',
     marginVertical: 20,
+  },
+  backButton: {
+    alignSelf: 'flex-start',
+    marginBottom: 15,
+  },
+  backButtonInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.accent,
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  backButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginLeft: 5,
   },
   card: {
     padding: 20,

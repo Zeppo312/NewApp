@@ -15,12 +15,12 @@ export default function BabyScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const { user } = useAuth();
-  
+
   const [babyInfo, setBabyInfo] = useState<BabyInfo>({});
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
-  
+
   useEffect(() => {
     if (user) {
       loadBabyInfo();
@@ -28,7 +28,7 @@ export default function BabyScreen() {
       setIsLoading(false);
     }
   }, [user]);
-  
+
   const loadBabyInfo = async () => {
     try {
       setIsLoading(true);
@@ -51,7 +51,7 @@ export default function BabyScreen() {
       setIsLoading(false);
     }
   };
-  
+
   const handleSave = async () => {
     try {
       const { error } = await saveBabyInfo(babyInfo);
@@ -68,7 +68,7 @@ export default function BabyScreen() {
       Alert.alert('Fehler', 'Die Informationen konnten nicht gespeichert werden.');
     }
   };
-  
+
   const handleDateChange = (event: any, selectedDate?: Date) => {
     setShowDatePicker(Platform.OS === 'ios');
     if (selectedDate) {
@@ -78,7 +78,7 @@ export default function BabyScreen() {
       });
     }
   };
-  
+
   const pickImage = async () => {
     try {
       // Berechtigungen anfordern
@@ -87,55 +87,76 @@ export default function BabyScreen() {
         Alert.alert('Berechtigung erforderlich', 'Wir benötigen die Berechtigung, auf deine Fotos zuzugreifen.');
         return;
       }
-      
+
       // Bild auswählen
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [4, 3],
-        quality: 0.8,
+        quality: 0.5, // Reduzierte Qualität für kleinere Dateigröße
+        base64: true, // Base64-Daten anfordern
       });
-      
+
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        const uri = result.assets[0].uri;
-        
-        // Dateiname und Typ extrahieren
-        const fileExt = uri.substring(uri.lastIndexOf('.') + 1);
-        const fileName = `${Date.now()}.${fileExt}`;
-        const filePath = `baby-photos/${user?.id}/${fileName}`;
-        
-        // Datei in einen Blob umwandeln
-        const response = await fetch(uri);
-        const blob = await response.blob();
-        
-        // Datei zu Supabase Storage hochladen
-        const { data, error } = await supabase.storage
-          .from('baby-photos')
-          .upload(filePath, blob);
-        
-        if (error) {
-          console.error('Error uploading image:', error);
-          Alert.alert('Fehler', 'Das Bild konnte nicht hochgeladen werden.');
-          return;
+        const asset = result.assets[0];
+        let base64Data: string;
+
+        // Wenn base64 nicht direkt verfügbar ist, konvertieren wir das Bild
+        if (!asset.base64) {
+          console.log('Base64 nicht direkt verfügbar, konvertiere Bild...');
+          try {
+            const response = await fetch(asset.uri);
+            const blob = await response.blob();
+            const reader = new FileReader();
+
+            // Promise für FileReader erstellen
+            base64Data = await new Promise((resolve, reject) => {
+              reader.onload = () => resolve(reader.result as string);
+              reader.onerror = reject;
+              reader.readAsDataURL(blob);
+            });
+
+            console.log('Bild erfolgreich in Base64 konvertiert');
+          } catch (convError) {
+            console.error('Fehler bei der Konvertierung:', convError);
+            Alert.alert('Fehler', 'Das Bild konnte nicht verarbeitet werden.');
+            return;
+          }
+        } else {
+          // Base64-Daten direkt verwenden
+          base64Data = `data:image/jpeg;base64,${asset.base64}`;
+          console.log('Base64-Daten direkt verwendet');
         }
-        
-        // Öffentliche URL für das Bild abrufen
-        const { data: publicUrlData } = supabase.storage
-          .from('baby-photos')
-          .getPublicUrl(filePath);
-        
-        // Bild-URL in den Zustand setzen
-        setBabyInfo({
+
+        // Aktualisiere den lokalen Zustand
+        const updatedBabyInfo = {
           ...babyInfo,
-          photo_url: publicUrlData.publicUrl
-        });
+          photo_url: base64Data
+        };
+
+        setBabyInfo(updatedBabyInfo);
+
+        // Speichere das Bild sofort in der Datenbank
+        try {
+          const { error } = await saveBabyInfo(updatedBabyInfo);
+          if (error) {
+            console.error('Error saving baby photo:', error);
+            Alert.alert('Fehler', 'Das Bild konnte nicht gespeichert werden.');
+          } else {
+            console.log('Bild erfolgreich gespeichert');
+            // Kein Alert hier, um den Benutzer nicht zu stören
+          }
+        } catch (saveError) {
+          console.error('Failed to save baby photo:', saveError);
+          Alert.alert('Fehler', 'Das Bild konnte nicht gespeichert werden.');
+        }
       }
     } catch (error) {
       console.error('Error picking image:', error);
       Alert.alert('Fehler', 'Es ist ein Fehler beim Auswählen des Bildes aufgetreten.');
     }
   };
-  
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
@@ -148,7 +169,7 @@ export default function BabyScreen() {
           <ThemedText type="title" style={styles.title}>
             Mein Baby
           </ThemedText>
-          
+
           <ThemedView style={styles.card} lightColor={theme.card} darkColor={theme.card}>
             <View style={styles.photoContainer}>
               {babyInfo.photo_url ? (
@@ -158,14 +179,14 @@ export default function BabyScreen() {
                   <IconSymbol name="person.fill" size={60} color={theme.tabIconDefault} />
                 </View>
               )}
-              
+
               {isEditing && (
                 <TouchableOpacity style={styles.editPhotoButton} onPress={pickImage}>
                   <IconSymbol name="camera.fill" size={20} color="#FFFFFF" />
                 </TouchableOpacity>
               )}
             </View>
-            
+
             <View style={styles.infoContainer}>
               {isEditing ? (
                 <>
@@ -179,21 +200,21 @@ export default function BabyScreen() {
                       placeholderTextColor={colorScheme === 'dark' ? '#AAAAAA' : '#888888'}
                     />
                   </View>
-                  
+
                   <View style={styles.inputRow}>
                     <ThemedText style={styles.label}>Geburtsdatum:</ThemedText>
-                    <TouchableOpacity 
-                      style={styles.dateButton} 
+                    <TouchableOpacity
+                      style={styles.dateButton}
                       onPress={() => setShowDatePicker(true)}
                     >
                       <ThemedText style={styles.dateText}>
-                        {babyInfo.birth_date 
-                          ? new Date(babyInfo.birth_date).toLocaleDateString('de-DE') 
+                        {babyInfo.birth_date
+                          ? new Date(babyInfo.birth_date).toLocaleDateString('de-DE')
                           : 'Datum wählen'}
                       </ThemedText>
                       <IconSymbol name="calendar" size={20} color={theme.text} />
                     </TouchableOpacity>
-                    
+
                     {showDatePicker && (
                       <DateTimePicker
                         value={babyInfo.birth_date ? new Date(babyInfo.birth_date) : new Date()}
@@ -204,7 +225,7 @@ export default function BabyScreen() {
                       />
                     )}
                   </View>
-                  
+
                   <View style={styles.inputRow}>
                     <ThemedText style={styles.label}>Gewicht:</ThemedText>
                     <TextInput
@@ -215,7 +236,7 @@ export default function BabyScreen() {
                       placeholderTextColor={colorScheme === 'dark' ? '#AAAAAA' : '#888888'}
                     />
                   </View>
-                  
+
                   <View style={styles.inputRow}>
                     <ThemedText style={styles.label}>Größe:</ThemedText>
                     <TextInput
@@ -226,10 +247,10 @@ export default function BabyScreen() {
                       placeholderTextColor={colorScheme === 'dark' ? '#AAAAAA' : '#888888'}
                     />
                   </View>
-                  
+
                   <View style={styles.buttonRow}>
-                    <TouchableOpacity 
-                      style={[styles.button, styles.cancelButton]} 
+                    <TouchableOpacity
+                      style={[styles.button, styles.cancelButton]}
                       onPress={() => {
                         setIsEditing(false);
                         loadBabyInfo(); // Zurücksetzen auf gespeicherte Daten
@@ -239,9 +260,9 @@ export default function BabyScreen() {
                         Abbrechen
                       </ThemedText>
                     </TouchableOpacity>
-                    
-                    <TouchableOpacity 
-                      style={[styles.button, styles.saveButton]} 
+
+                    <TouchableOpacity
+                      style={[styles.button, styles.saveButton]}
                       onPress={handleSave}
                     >
                       <ThemedText style={styles.buttonText} lightColor="#FFFFFF" darkColor="#FFFFFF">
@@ -258,32 +279,32 @@ export default function BabyScreen() {
                       {babyInfo.name || 'Noch nicht festgelegt'}
                     </ThemedText>
                   </View>
-                  
+
                   <View style={styles.infoRow}>
                     <ThemedText style={styles.infoLabel}>Geburtsdatum:</ThemedText>
                     <ThemedText style={styles.infoValue}>
-                      {babyInfo.birth_date 
-                        ? new Date(babyInfo.birth_date).toLocaleDateString('de-DE') 
+                      {babyInfo.birth_date
+                        ? new Date(babyInfo.birth_date).toLocaleDateString('de-DE')
                         : 'Noch nicht festgelegt'}
                     </ThemedText>
                   </View>
-                  
+
                   <View style={styles.infoRow}>
                     <ThemedText style={styles.infoLabel}>Gewicht:</ThemedText>
                     <ThemedText style={styles.infoValue}>
                       {babyInfo.weight || 'Noch nicht festgelegt'}
                     </ThemedText>
                   </View>
-                  
+
                   <View style={styles.infoRow}>
                     <ThemedText style={styles.infoLabel}>Größe:</ThemedText>
                     <ThemedText style={styles.infoValue}>
                       {babyInfo.height || 'Noch nicht festgelegt'}
                     </ThemedText>
                   </View>
-                  
-                  <TouchableOpacity 
-                    style={[styles.button, styles.editButton]} 
+
+                  <TouchableOpacity
+                    style={[styles.button, styles.editButton]}
                     onPress={() => setIsEditing(true)}
                   >
                     <ThemedText style={styles.buttonText} lightColor="#FFFFFF" darkColor="#FFFFFF">
@@ -294,7 +315,7 @@ export default function BabyScreen() {
               )}
             </View>
           </ThemedView>
-          
+
           <ThemedView style={styles.infoCard} lightColor={theme.cardLight} darkColor={theme.cardDark}>
             <ThemedText style={styles.infoTitle}>
               Die ersten Wochen

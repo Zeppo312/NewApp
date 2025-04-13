@@ -236,20 +236,22 @@ export default function CountdownScreen() {
 
           <ThemedView style={styles.infoCard} lightColor={theme.cardLight} darkColor={theme.cardDark}>
             <ThemedText style={styles.infoTitle}>
-              Wissenswertes
+              Geburtsplan
             </ThemedText>
             <ThemedText style={styles.infoText}>
-              • Eine Schwangerschaft dauert durchschnittlich 40 Wochen (280 Tage) ab dem ersten Tag der letzten Periode.
+              Hast du schon deinen Geburtsplan erstellt? Ein durchdachter Plan kann dir helfen, besser vorbereitet in den Kreißsaal zu gehen. Erstelle jetzt deinen individuellen Geburtsplan mit deinen Wünschen und Vorstellungen für die Geburt.
             </ThemedText>
-            <ThemedText style={styles.infoText}>
-              • Nur etwa 4% der Babys kommen tatsächlich am errechneten Geburtstermin zur Welt.
-            </ThemedText>
-            <ThemedText style={styles.infoText}>
-              • Die meisten Babys werden zwischen der 38. und 42. Schwangerschaftswoche geboren.
-            </ThemedText>
-            <ThemedText style={styles.infoText}>
-              • Ab der 37. SSW gilt dein Baby als termingerecht.
-            </ThemedText>
+
+            <TouchableOpacity
+              style={styles.geburtsplanButton}
+              onPress={() => router.push('/(tabs)/geburtsplan')}
+            >
+              <ThemedView style={styles.geburtsplanButtonInner} lightColor={theme.accent} darkColor={theme.accent}>
+                <ThemedText style={styles.geburtsplanButtonText} lightColor="#FFFFFF" darkColor="#FFFFFF">
+                  Geburtsplan erstellen
+                </ThemedText>
+              </ThemedView>
+            </TouchableOpacity>
           </ThemedView>
         </ScrollView>
       </ImageBackground>
@@ -352,6 +354,25 @@ const styles = StyleSheet.create({
   infoText: {
     fontSize: 14,
     lineHeight: 22,
-    marginBottom: 8,
+    marginBottom: 16,
+  },
+  geburtsplanButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 10,
+  },
+  geburtsplanButtonInner: {
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 25,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  geburtsplanButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });

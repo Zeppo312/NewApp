@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, ScrollView, View, TouchableOpacity, TextInput, Alert, ImageBackground, SafeAreaView, StatusBar, FlatList } from 'react-native';
+import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { Colors } from '@/constants/Colors';
@@ -9,25 +10,26 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { getDailyEntries, saveDailyEntry, deleteDailyEntry, DailyEntry } from '@/lib/baby';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
-export default function DailyScreen() {
+export default function DailyOldScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const { user } = useAuth();
-  
+  const router = useRouter();
+
   const [entries, setEntries] = useState<DailyEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showNewEntry, setShowNewEntry] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [activeTab, setActiveTab] = useState<'all' | 'diaper' | 'sleep' | 'feeding'>('all');
-  
+
   const [newEntry, setNewEntry] = useState<DailyEntry>({
     entry_date: new Date().toISOString(),
     entry_type: 'feeding',
     start_time: new Date().toISOString(),
     notes: ''
   });
-  
+
   useEffect(() => {
     if (user) {
       loadEntries();
@@ -35,7 +37,7 @@ export default function DailyScreen() {
       setIsLoading(false);
     }
   }, [user, activeTab, selectedDate]);
-  
+
   const loadEntries = async () => {
     try {
       setIsLoading(true);
@@ -52,7 +54,7 @@ export default function DailyScreen() {
       setIsLoading(false);
     }
   };
-  
+
   const handleSaveEntry = async () => {
     try {
       const { error } = await saveDailyEntry(newEntry);
@@ -75,7 +77,7 @@ export default function DailyScreen() {
       Alert.alert('Fehler', 'Der Eintrag konnte nicht gespeichert werden.');
     }
   };
-  
+
   const handleDeleteEntry = async (id: string) => {
     try {
       Alert.alert(
@@ -106,14 +108,14 @@ export default function DailyScreen() {
       Alert.alert('Fehler', 'Der Eintrag konnte nicht gelöscht werden.');
     }
   };
-  
+
   const handleDateChange = (event: any, selectedDate?: Date) => {
     setShowDatePicker(false);
     if (selectedDate) {
       setSelectedDate(selectedDate);
     }
   };
-  
+
   const handleStartTimeChange = (event: any, selectedTime?: Date) => {
     if (selectedTime) {
       setNewEntry({
@@ -122,7 +124,7 @@ export default function DailyScreen() {
       });
     }
   };
-  
+
   const handleEndTimeChange = (event: any, selectedTime?: Date) => {
     if (selectedTime) {
       setNewEntry({
@@ -131,7 +133,7 @@ export default function DailyScreen() {
       });
     }
   };
-  
+
   const getEntryTypeIcon = (type: string) => {
     switch (type) {
       case 'diaper':
@@ -144,12 +146,12 @@ export default function DailyScreen() {
         return <IconSymbol name="star.fill" size={24} color="#9C27B0" />;
     }
   };
-  
+
   const formatTime = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
   };
-  
+
   const renderEntry = ({ item }: { item: DailyEntry }) => {
     return (
       <ThemedView style={styles.entryCard} lightColor={theme.card} darkColor={theme.card}>
@@ -157,27 +159,27 @@ export default function DailyScreen() {
           <View style={styles.typeContainer}>
             {getEntryTypeIcon(item.entry_type)}
             <ThemedText style={styles.entryType}>
-              {item.entry_type === 'diaper' ? 'Wickeln' : 
-               item.entry_type === 'sleep' ? 'Schlafen' : 
+              {item.entry_type === 'diaper' ? 'Wickeln' :
+               item.entry_type === 'sleep' ? 'Schlafen' :
                item.entry_type === 'feeding' ? 'Füttern' : 'Sonstiges'}
             </ThemedText>
           </View>
-          
-          <TouchableOpacity 
-            style={styles.deleteButton} 
+
+          <TouchableOpacity
+            style={styles.deleteButton}
             onPress={() => item.id && handleDeleteEntry(item.id)}
           >
             <IconSymbol name="trash" size={20} color="#FF6B6B" />
           </TouchableOpacity>
         </View>
-        
+
         <View style={styles.timeContainer}>
           <ThemedText style={styles.timeText}>
             {item.start_time && formatTime(item.start_time)}
             {item.end_time && ` - ${formatTime(item.end_time)}`}
           </ThemedText>
         </View>
-        
+
         {item.notes && (
           <ThemedText style={styles.entryNotes}>
             {item.notes}
@@ -186,7 +188,7 @@ export default function DailyScreen() {
       </ThemedView>
     );
   };
-  
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
@@ -196,25 +198,33 @@ export default function DailyScreen() {
         resizeMode="cover"
       >
         <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.push('/(tabs)/home')}
+          >
+            <IconSymbol name="chevron.left" size={24} color={theme.text} />
+            <ThemedText style={styles.backButtonText}>Zurück</ThemedText>
+          </TouchableOpacity>
+
           <ThemedText type="title" style={styles.title}>
             Alltag
           </ThemedText>
-          
-          <TouchableOpacity 
-            style={styles.addButton} 
+
+          <TouchableOpacity
+            style={styles.addButton}
             onPress={() => setShowNewEntry(!showNewEntry)}
           >
-            <IconSymbol 
-              name={showNewEntry ? "xmark" : "plus"} 
-              size={24} 
-              color="#FFFFFF" 
+            <IconSymbol
+              name={showNewEntry ? "xmark" : "plus"}
+              size={24}
+              color="#FFFFFF"
             />
           </TouchableOpacity>
         </View>
-        
+
         <View style={styles.dateSelector}>
-          <TouchableOpacity 
-            style={styles.dateButton} 
+          <TouchableOpacity
+            style={styles.dateButton}
             onPress={() => {
               const prevDate = new Date(selectedDate);
               prevDate.setDate(prevDate.getDate() - 1);
@@ -223,18 +233,18 @@ export default function DailyScreen() {
           >
             <IconSymbol name="chevron.left" size={20} color={theme.text} />
           </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={styles.dateDisplay} 
+
+          <TouchableOpacity
+            style={styles.dateDisplay}
             onPress={() => setShowDatePicker(true)}
           >
             <ThemedText style={styles.dateText}>
               {selectedDate.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })}
             </ThemedText>
           </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={styles.dateButton} 
+
+          <TouchableOpacity
+            style={styles.dateButton}
             onPress={() => {
               const nextDate = new Date(selectedDate);
               nextDate.setDate(nextDate.getDate() + 1);
@@ -243,7 +253,7 @@ export default function DailyScreen() {
           >
             <IconSymbol name="chevron.right" size={20} color={theme.text} />
           </TouchableOpacity>
-          
+
           {showDatePicker && (
             <DateTimePicker
               value={selectedDate}
@@ -254,13 +264,13 @@ export default function DailyScreen() {
             />
           )}
         </View>
-        
+
         <View style={styles.tabContainer}>
-          <TouchableOpacity 
-            style={[styles.tab, activeTab === 'all' && styles.activeTab]} 
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'all' && styles.activeTab]}
             onPress={() => setActiveTab('all')}
           >
-            <ThemedText 
+            <ThemedText
               style={[styles.tabText, activeTab === 'all' && styles.activeTabText]}
               lightColor={activeTab === 'all' ? '#FFFFFF' : theme.text}
               darkColor={activeTab === 'all' ? '#FFFFFF' : theme.text}
@@ -268,12 +278,12 @@ export default function DailyScreen() {
               Alle
             </ThemedText>
           </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={[styles.tab, activeTab === 'feeding' && styles.activeTab]} 
+
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'feeding' && styles.activeTab]}
             onPress={() => setActiveTab('feeding')}
           >
-            <ThemedText 
+            <ThemedText
               style={[styles.tabText, activeTab === 'feeding' && styles.activeTabText]}
               lightColor={activeTab === 'feeding' ? '#FFFFFF' : theme.text}
               darkColor={activeTab === 'feeding' ? '#FFFFFF' : theme.text}
@@ -281,12 +291,12 @@ export default function DailyScreen() {
               Füttern
             </ThemedText>
           </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={[styles.tab, activeTab === 'sleep' && styles.activeTab]} 
+
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'sleep' && styles.activeTab]}
             onPress={() => setActiveTab('sleep')}
           >
-            <ThemedText 
+            <ThemedText
               style={[styles.tabText, activeTab === 'sleep' && styles.activeTabText]}
               lightColor={activeTab === 'sleep' ? '#FFFFFF' : theme.text}
               darkColor={activeTab === 'sleep' ? '#FFFFFF' : theme.text}
@@ -294,12 +304,12 @@ export default function DailyScreen() {
               Schlafen
             </ThemedText>
           </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={[styles.tab, activeTab === 'diaper' && styles.activeTab]} 
+
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'diaper' && styles.activeTab]}
             onPress={() => setActiveTab('diaper')}
           >
-            <ThemedText 
+            <ThemedText
               style={[styles.tabText, activeTab === 'diaper' && styles.activeTabText]}
               lightColor={activeTab === 'diaper' ? '#FFFFFF' : theme.text}
               darkColor={activeTab === 'diaper' ? '#FFFFFF' : theme.text}
@@ -308,55 +318,55 @@ export default function DailyScreen() {
             </ThemedText>
           </TouchableOpacity>
         </View>
-        
+
         {showNewEntry && (
           <ThemedView style={styles.newEntryCard} lightColor={theme.card} darkColor={theme.card}>
             <View style={styles.typeSelector}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[
-                  styles.typeButton, 
+                  styles.typeButton,
                   newEntry.entry_type === 'feeding' && styles.selectedTypeButton
-                ]} 
+                ]}
                 onPress={() => setNewEntry({ ...newEntry, entry_type: 'feeding' })}
               >
                 <IconSymbol name="drop.fill" size={24} color="#FF9800" />
                 <ThemedText style={styles.typeButtonText}>Füttern</ThemedText>
               </TouchableOpacity>
-              
-              <TouchableOpacity 
+
+              <TouchableOpacity
                 style={[
-                  styles.typeButton, 
+                  styles.typeButton,
                   newEntry.entry_type === 'sleep' && styles.selectedTypeButton
-                ]} 
+                ]}
                 onPress={() => setNewEntry({ ...newEntry, entry_type: 'sleep' })}
               >
                 <IconSymbol name="moon.fill" size={24} color="#5C6BC0" />
                 <ThemedText style={styles.typeButtonText}>Schlafen</ThemedText>
               </TouchableOpacity>
-              
-              <TouchableOpacity 
+
+              <TouchableOpacity
                 style={[
-                  styles.typeButton, 
+                  styles.typeButton,
                   newEntry.entry_type === 'diaper' && styles.selectedTypeButton
-                ]} 
+                ]}
                 onPress={() => setNewEntry({ ...newEntry, entry_type: 'diaper' })}
               >
                 <IconSymbol name="heart.fill" size={24} color="#4CAF50" />
                 <ThemedText style={styles.typeButtonText}>Wickeln</ThemedText>
               </TouchableOpacity>
-              
-              <TouchableOpacity 
+
+              <TouchableOpacity
                 style={[
-                  styles.typeButton, 
+                  styles.typeButton,
                   newEntry.entry_type === 'other' && styles.selectedTypeButton
-                ]} 
+                ]}
                 onPress={() => setNewEntry({ ...newEntry, entry_type: 'other' })}
               >
                 <IconSymbol name="star.fill" size={24} color="#9C27B0" />
                 <ThemedText style={styles.typeButtonText}>Sonstiges</ThemedText>
               </TouchableOpacity>
             </View>
-            
+
             <View style={styles.timeInputContainer}>
               <View style={styles.timeInput}>
                 <ThemedText style={styles.timeLabel}>Start:</ThemedText>
@@ -367,7 +377,7 @@ export default function DailyScreen() {
                   onChange={handleStartTimeChange}
                 />
               </View>
-              
+
               {(newEntry.entry_type === 'sleep' || newEntry.entry_type === 'feeding') && (
                 <View style={styles.timeInput}>
                   <ThemedText style={styles.timeLabel}>Ende:</ThemedText>
@@ -380,10 +390,10 @@ export default function DailyScreen() {
                 </View>
               )}
             </View>
-            
+
             <TextInput
               style={[
-                styles.notesInput, 
+                styles.notesInput,
                 { color: colorScheme === 'dark' ? '#FFFFFF' : '#000000' }
               ]}
               value={newEntry.notes}
@@ -393,9 +403,9 @@ export default function DailyScreen() {
               multiline
               numberOfLines={2}
             />
-            
-            <TouchableOpacity 
-              style={styles.saveButton} 
+
+            <TouchableOpacity
+              style={styles.saveButton}
               onPress={handleSaveEntry}
             >
               <ThemedText style={styles.saveButtonText} lightColor="#FFFFFF" darkColor="#FFFFFF">
@@ -404,7 +414,7 @@ export default function DailyScreen() {
             </TouchableOpacity>
           </ThemedView>
         )}
-        
+
         <FlatList
           data={entries}
           renderItem={renderEntry}
@@ -438,9 +448,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 20,
   },
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 5,
+  },
+  backButtonText: {
+    fontSize: 16,
+    marginLeft: 5,
+  },
   title: {
     fontSize: 28,
     flex: 1,
+    textAlign: 'center',
   },
   addButton: {
     width: 50,

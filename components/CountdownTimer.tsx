@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, Dimensions } from 'react-native';
+import { View, StyleSheet, Dimensions, AppState, AppStateStatus } from 'react-native';
 import { ThemedText } from './ThemedText';
 import { ThemedView } from './ThemedView';
 import { Colors } from '@/constants/Colors';
@@ -7,6 +7,28 @@ import { pregnancyWeekInfo } from '@/constants/PregnancyWeekInfo';
 import { babySizeComparison } from '@/constants/BabySizeComparison';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import Svg, { Circle, G, Text as SvgText } from 'react-native-svg';
+
+// Hilfsfunktion zum Aufteilen von Text in mehrere Zeilen
+const splitTextIntoLines = (text: string, maxCharsPerLine: number): string[] => {
+  const words = text.split(' ');
+  const lines: string[] = [];
+  let currentLine = '';
+
+  words.forEach(word => {
+    if ((currentLine + ' ' + word).length <= maxCharsPerLine || currentLine.length === 0) {
+      currentLine += (currentLine.length === 0 ? '' : ' ') + word;
+    } else {
+      lines.push(currentLine);
+      currentLine = word;
+    }
+  });
+
+  if (currentLine.length > 0) {
+    lines.push(currentLine);
+  }
+
+  return lines;
+};
 
 interface CountdownTimerProps {
   dueDate: Date | null;
@@ -24,16 +46,27 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({ dueDate }) => {
     if (!dueDate) return;
 
     const calculateTimeLeft = () => {
+      // Aktuelles Datum ohne Uhrzeit (nur Tag)
       const now = new Date();
-      const difference = dueDate.getTime() - now.getTime();
+      now.setHours(0, 0, 0, 0);
 
-      // Berechne die Tage bis zum Geburtstermin
-      const days = Math.ceil(difference / (1000 * 60 * 60 * 24));
+      // Geburtstermin ohne Uhrzeit (nur Tag)
+      const dueDateCopy = new Date(dueDate);
+      dueDateCopy.setHours(0, 0, 0, 0);
+
+      // Berechne die Differenz in Millisekunden
+      const difference = dueDateCopy.getTime() - now.getTime();
+
+      // Berechne die Tage bis zum Geburtstermin (immer ganze Tage)
+      const days = Math.round(difference / (1000 * 60 * 60 * 24));
       setDaysLeft(days);
 
       // Berechne die aktuelle SSW
       // Schwangerschaft dauert ca. 40 Wochen
       const totalDaysInPregnancy = 280; // 40 Wochen * 7 Tage
+
+      // Berechne die Tage der Schwangerschaft
+      // Wir verwenden Math.max, um negative Werte zu vermeiden (falls das Datum in der Vergangenheit liegt)
       const daysRemaining = Math.max(0, days);
       const daysPregnant = totalDaysInPregnancy - daysRemaining;
 
@@ -48,10 +81,48 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({ dueDate }) => {
       setProgress(Math.min(1, Math.max(0, daysPregnant / totalDaysInPregnancy)));
     };
 
+    // Initiale Berechnung
     calculateTimeLeft();
-    const timer = setInterval(calculateTimeLeft, 1000 * 60 * 60); // Update every hour
 
-    return () => clearInterval(timer);
+    // Stündliches Update
+    const hourlyTimer = setInterval(calculateTimeLeft, 1000 * 60 * 60); // Update every hour
+
+    // Tägliches Update um Mitternacht
+    const setMidnightTimer = () => {
+      const now = new Date();
+      const tomorrow = new Date(now);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      tomorrow.setHours(0, 0, 0, 0);
+
+      const timeUntilMidnight = tomorrow.getTime() - now.getTime();
+
+      return setTimeout(() => {
+        calculateTimeLeft(); // Aktualisiere sofort um Mitternacht
+        const dailyTimer = setInterval(calculateTimeLeft, 1000 * 60 * 60 * 24); // Dann täglich
+
+        // Speichere den Timer, um ihn später zu löschen
+        return () => clearInterval(dailyTimer);
+      }, timeUntilMidnight);
+    };
+
+    const midnightTimer = setMidnightTimer();
+
+    // AppState-Listener für Aktualisierung, wenn die App in den Vordergrund kommt
+    const handleAppStateChange = (nextAppState: AppStateStatus) => {
+      if (nextAppState === 'active') {
+        // App ist wieder im Vordergrund, Countdown aktualisieren
+        calculateTimeLeft();
+      }
+    };
+
+    // AppState-Listener registrieren
+    const appStateSubscription = AppState.addEventListener('change', handleAppStateChange);
+
+    return () => {
+      clearInterval(hourlyTimer);
+      clearTimeout(midnightTimer);
+      appStateSubscription.remove(); // AppState-Listener entfernen
+    };
   }, [dueDate]);
 
   if (dueDate === null) {
@@ -78,7 +149,7 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({ dueDate }) => {
     );
   }
 
-  const size = Dimensions.get('window').width * 0.8;
+  const size = Dimensions.get('window').width * 0.9; // Größerer Kreis
   const strokeWidth = 15;
   const radius = (size - strokeWidth) / 2;
   const circumference = radius * 2 * Math.PI;
@@ -103,7 +174,7 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({ dueDate }) => {
             cx={size / 2}
             cy={size / 2}
             r={radius}
-            stroke={theme.accent}
+            stroke={Colors.light.success}
             strokeWidth={strokeWidth}
             strokeDasharray={`${circumference} ${circumference}`}
             strokeDashoffset={strokeDashoffset}
@@ -112,46 +183,85 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({ dueDate }) => {
             transform={`rotate(-90, ${size / 2}, ${size / 2})`}
           />
 
-          {/* Text in der Mitte */}
+          {/* Text in der Mitte - SSW, Trimester und Infotext */}
           <G>
+            <SvgText
+              x={size / 2}
+              y={size / 2 - 60}
+              textAnchor="middle"
+              fontSize="50"
+              fontWeight="bold"
+              fill={colorScheme === 'dark' ? '#fff' : '#333'}
+            >
+              {currentWeek}
+            </SvgText>
             <SvgText
               x={size / 2}
               y={size / 2 - 20}
               textAnchor="middle"
-              fontSize="40"
-              fontWeight="bold"
+              fontSize="24"
               fill={colorScheme === 'dark' ? '#fff' : '#333'}
             >
-              {daysLeft}
+              SSW
             </SvgText>
             <SvgText
               x={size / 2}
-              y={size / 2 + 20}
+              y={size / 2 + 10}
               textAnchor="middle"
               fontSize="20"
-              fill={colorScheme === 'dark' ? '#fff' : '#333'}
+              fontWeight="bold"
+              fill={Colors.light.success}
             >
-              Tage
+              {currentWeek && currentWeek <= 13 ? '1. Trimester' :
+               currentWeek && currentWeek <= 27 ? '2. Trimester' :
+               currentWeek && currentWeek >= 28 ? '3. Trimester' : ''}
             </SvgText>
+            {currentWeek && currentWeek >= 4 && currentWeek <= 42 && (
+              <G>
+                {/* Wir teilen den Text in mehrere Zeilen auf */}
+                {splitTextIntoLines(pregnancyWeekInfo[currentWeek] || "Dein Baby entwickelt sich weiter.", 20).map((line, index) => (
+                  <SvgText
+                    key={index}
+                    x={size / 2}
+                    y={size / 2 + 45 + (index * 20)}
+                    textAnchor="middle"
+                    fontSize="14"
+                    fontWeight="600"
+                    fill={colorScheme === 'dark' ? '#fff' : '#333'}
+                  >
+                    {line}
+                  </SvgText>
+                ))}
+              </G>
+            )}
           </G>
         </Svg>
       </View>
 
-      <ThemedText style={styles.countdownText}>
-        {daysLeft === 1 ? 'Noch 1 Tag' : `Noch ${daysLeft} Tage`} bis zur Geburt
-      </ThemedText>
-
-      <ThemedText style={styles.weekText}>
-        SSW {currentWeek}+{currentDay}
-      </ThemedText>
-
-      {currentWeek && currentWeek >= 4 && currentWeek <= 42 && (
-        <ThemedView style={styles.weekInfoContainer} lightColor={theme.cardLight} darkColor={theme.cardDark}>
-          <ThemedText style={styles.weekInfoText}>
-            {pregnancyWeekInfo[currentWeek] || "Dein Baby entwickelt sich weiter."}
+      <View style={styles.infoContainer}>
+        <View style={styles.infoRow}>
+          <ThemedText style={styles.infoLabel}>Noch:</ThemedText>
+          <ThemedText style={styles.infoValue}>
+            {daysLeft === 1 ? '1 Tag' : `${daysLeft} Tage`}
           </ThemedText>
-        </ThemedView>
-      )}
+        </View>
+
+        <View style={styles.infoRow}>
+          <ThemedText style={styles.infoLabel}>Genau:</ThemedText>
+          <ThemedText style={styles.infoValue}>
+            SSW {currentWeek}+{currentDay}
+          </ThemedText>
+        </View>
+
+        <View style={styles.infoRow}>
+          <ThemedText style={styles.infoLabel}>Geschafft:</ThemedText>
+          <ThemedText style={[styles.infoValue, styles.percentValue]}>
+            {Math.round(progress * 100)}%
+          </ThemedText>
+        </View>
+      </View>
+
+      {/* Informationstext wird jetzt im Kreis angezeigt */}
 
       {currentWeek && currentWeek >= 4 && currentWeek <= 42 && (
         <ThemedView style={styles.babySizeContainer} lightColor={theme.cardLight} darkColor={theme.cardDark}>
@@ -195,17 +305,33 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginVertical: 10,
   },
-  countdownText: {
-    fontSize: 22,
-    fontWeight: 'bold',
+  infoContainer: {
     marginTop: 15,
-    textAlign: 'center',
-  },
-  weekText: {
-    fontSize: 18,
-    marginTop: 5,
     marginBottom: 15,
-    textAlign: 'center',
+    width: '100%',
+    paddingHorizontal: 20,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  infoLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#7D5A50',
+  },
+  infoValue: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  percentValue: {
+    color: Colors.light.success,
+    fontSize: 20,
   },
   noDateText: {
     fontSize: 16,

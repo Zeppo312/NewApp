@@ -6,12 +6,16 @@ import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
+import { useRouter } from 'expo-router';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function MoreScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
-  const { setIsBabyBorn } = useBabyStatus();
-  
+  const { isBabyBorn, setIsBabyBorn } = useBabyStatus();
+  const router = useRouter();
+  const { signOut } = useAuth();
+
   const handleSwitchBack = () => {
     Alert.alert(
       "Zurück zur Schwangerschaftsansicht",
@@ -21,8 +25,8 @@ export default function MoreScreen() {
           text: "Abbrechen",
           style: "cancel"
         },
-        { 
-          text: "Ja, zurückkehren", 
+        {
+          text: "Ja, zurückkehren",
           onPress: async () => {
             try {
               await setIsBabyBorn(false);
@@ -36,7 +40,39 @@ export default function MoreScreen() {
       ]
     );
   };
-  
+
+  // Abmelden-Funktion
+  const handleLogout = async () => {
+    Alert.alert(
+      'Abmelden',
+      'Möchtest du dich wirklich abmelden?',
+      [
+        {
+          text: 'Abbrechen',
+          style: 'cancel',
+        },
+        {
+          text: 'Abmelden',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // Abmelden mit Supabase
+              const { error } = await signOut();
+              if (error) throw error;
+
+              // Zur Login-Seite navigieren
+              router.replace('/(auth)');
+            } catch (error) {
+              console.error('Logout error:', error);
+              Alert.alert('Fehler', 'Beim Abmelden ist ein Fehler aufgetreten.');
+            }
+          },
+        },
+      ],
+      { cancelable: true }
+    );
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
@@ -49,12 +85,12 @@ export default function MoreScreen() {
           <ThemedText type="title" style={styles.title}>
             Mehr
           </ThemedText>
-          
+
           <ThemedView style={styles.section} lightColor={theme.card} darkColor={theme.card}>
             <ThemedText style={styles.sectionTitle}>
               Baby & Familie
             </ThemedText>
-            
+
             <TouchableOpacity style={styles.menuItem}>
               <View style={styles.menuItemIcon}>
                 <IconSymbol name="person.2.fill" size={24} color={theme.accent} />
@@ -69,7 +105,7 @@ export default function MoreScreen() {
               </View>
               <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
             </TouchableOpacity>
-            
+
             <TouchableOpacity style={styles.menuItem}>
               <View style={styles.menuItemIcon}>
                 <IconSymbol name="calendar.badge.plus" size={24} color={theme.accent} />
@@ -85,12 +121,33 @@ export default function MoreScreen() {
               <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
             </TouchableOpacity>
           </ThemedView>
-          
+
           <ThemedView style={styles.section} lightColor={theme.card} darkColor={theme.card}>
             <ThemedText style={styles.sectionTitle}>
               Wissen & Hilfe
             </ThemedText>
-            
+
+            {/* Geburtsplan-Link (nur vor der Geburt anzeigen) */}
+            {!isBabyBorn && (
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={() => router.push('/(tabs)/geburtsplan')}
+              >
+                <View style={styles.menuItemIcon}>
+                  <IconSymbol name="doc.text.fill" size={24} color={theme.accent} />
+                </View>
+                <View style={styles.menuItemContent}>
+                  <ThemedText style={styles.menuItemTitle}>
+                    Geburtsplan
+                  </ThemedText>
+                  <ThemedText style={styles.menuItemDescription}>
+                    Erstelle und bearbeite deinen persönlichen Geburtsplan
+                  </ThemedText>
+                </View>
+                <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
+              </TouchableOpacity>
+            )}
+
             <TouchableOpacity style={styles.menuItem}>
               <View style={styles.menuItemIcon}>
                 <IconSymbol name="book.fill" size={24} color={theme.accent} />
@@ -105,7 +162,7 @@ export default function MoreScreen() {
               </View>
               <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
             </TouchableOpacity>
-            
+
             <TouchableOpacity style={styles.menuItem}>
               <View style={styles.menuItemIcon}>
                 <IconSymbol name="questionmark.circle.fill" size={24} color={theme.accent} />
@@ -121,12 +178,12 @@ export default function MoreScreen() {
               <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
             </TouchableOpacity>
           </ThemedView>
-          
+
           <ThemedView style={styles.section} lightColor={theme.card} darkColor={theme.card}>
             <ThemedText style={styles.sectionTitle}>
               Einstellungen
             </ThemedText>
-            
+
             <TouchableOpacity style={styles.menuItem}>
               <View style={styles.menuItemIcon}>
                 <IconSymbol name="gear" size={24} color={theme.accent} />
@@ -141,7 +198,7 @@ export default function MoreScreen() {
               </View>
               <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
             </TouchableOpacity>
-            
+
             <TouchableOpacity style={styles.menuItem}>
               <View style={styles.menuItemIcon}>
                 <IconSymbol name="person.crop.circle" size={24} color={theme.accent} />
@@ -156,31 +213,34 @@ export default function MoreScreen() {
               </View>
               <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
             </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={styles.menuItem}
-              onPress={handleSwitchBack}
-            >
-              <View style={styles.menuItemIcon}>
-                <IconSymbol name="arrow.uturn.backward" size={24} color="#FF6B6B" />
-              </View>
-              <View style={styles.menuItemContent}>
-                <ThemedText style={styles.menuItemTitle}>
-                  Zurück zur Schwangerschaftsansicht
-                </ThemedText>
-                <ThemedText style={styles.menuItemDescription}>
-                  Wechsle zurück zur Ansicht vor der Geburt
-                </ThemedText>
-              </View>
-              <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
-            </TouchableOpacity>
+
+            {/* Zurück zur Schwangerschaftsansicht (nur nach der Geburt anzeigen) */}
+            {isBabyBorn && (
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={handleSwitchBack}
+              >
+                <View style={styles.menuItemIcon}>
+                  <IconSymbol name="arrow.uturn.backward" size={24} color="#FF6B6B" />
+                </View>
+                <View style={styles.menuItemContent}>
+                  <ThemedText style={styles.menuItemTitle}>
+                    Zurück zur Schwangerschaftsansicht
+                  </ThemedText>
+                  <ThemedText style={styles.menuItemDescription}>
+                    Wechsle zurück zur Ansicht vor der Geburt
+                  </ThemedText>
+                </View>
+                <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
+              </TouchableOpacity>
+            )}
           </ThemedView>
-          
+
           <ThemedView style={styles.section} lightColor={theme.card} darkColor={theme.card}>
             <ThemedText style={styles.sectionTitle}>
               Über die App
             </ThemedText>
-            
+
             <TouchableOpacity style={styles.menuItem}>
               <View style={styles.menuItemIcon}>
                 <IconSymbol name="info.circle.fill" size={24} color={theme.accent} />
@@ -195,7 +255,7 @@ export default function MoreScreen() {
               </View>
               <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
             </TouchableOpacity>
-            
+
             <TouchableOpacity style={styles.menuItem}>
               <View style={styles.menuItemIcon}>
                 <IconSymbol name="star.fill" size={24} color={theme.accent} />
@@ -211,6 +271,18 @@ export default function MoreScreen() {
               <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
             </TouchableOpacity>
           </ThemedView>
+
+          {/* Logout Section */}
+          <View style={styles.logoutSection}>
+            <TouchableOpacity
+              style={styles.logoutButton}
+              onPress={handleLogout}
+            >
+              <ThemedText style={styles.logoutButtonText}>
+                Abmelden
+              </ThemedText>
+            </TouchableOpacity>
+          </View>
         </ScrollView>
       </ImageBackground>
     </SafeAreaView>
@@ -277,5 +349,28 @@ const styles = StyleSheet.create({
   menuItemDescription: {
     fontSize: 14,
     opacity: 0.7,
+  },
+  logoutSection: {
+    marginTop: 20,
+    marginBottom: 40,
+    alignItems: 'center',
+  },
+  logoutButton: {
+    backgroundColor: '#E9C9B6', // Using warning color from our palette
+    paddingVertical: 14,
+    paddingHorizontal: 30,
+    borderRadius: 30,
+    minWidth: 200,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  logoutButtonText: {
+    color: '#5C4033', // Dark brown text
+    fontWeight: 'bold',
+    fontSize: 18,
   },
 });

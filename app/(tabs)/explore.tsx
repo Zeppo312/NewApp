@@ -13,7 +13,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { ChecklistItem, getHospitalChecklist, addChecklistItem, toggleChecklistItem, deleteChecklistItem, supabaseUrl } from '@/lib/supabase';
 
 export default function TabTwoScreen() {
-  const { signOut } = useAuth();
+  const { } = useAuth(); // signOut wurde zur Mehr-Seite verschoben
 
   // State für die Checkliste
   const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
@@ -231,36 +231,7 @@ export default function TabTwoScreen() {
     return groups;
   }, {});
 
-  // Abmelden-Funktion
-  const handleLogout = async () => {
-    Alert.alert(
-      'Abmelden',
-      'Möchtest du dich wirklich abmelden?',
-      [
-        {
-          text: 'Abbrechen',
-          style: 'cancel',
-        },
-        {
-          text: 'Abmelden',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              // Abmelden mit Supabase
-              const { error } = await signOut();
-              if (error) throw error;
-
-              // Die Navigation wird automatisch durch den AuthProvider gesteuert
-            } catch (error) {
-              console.error('Logout error:', error);
-              Alert.alert('Fehler', 'Beim Abmelden ist ein Fehler aufgetreten.');
-            }
-          },
-        },
-      ],
-      { cancelable: true }
-    );
-  };
+  // Abmelden-Funktion wurde zur Mehr-Seite verschoben
 
   return (
     <ParallaxScrollView
@@ -320,17 +291,7 @@ export default function TabTwoScreen() {
         </>
       )}
 
-      {/* Logout Section */}
-      <ThemedView style={styles.logoutSection}>
-        <TouchableOpacity
-          style={styles.logoutButton}
-          onPress={handleLogout}
-        >
-          <ThemedText style={styles.logoutButtonText}>
-            Abmelden
-          </ThemedText>
-        </TouchableOpacity>
-      </ThemedView>
+      {/* Logout Section wurde zur Mehr-Seite verschoben */}
     </ParallaxScrollView>
   );
 }
@@ -344,6 +305,7 @@ const styles = StyleSheet.create({
   },
   titleContainer: {
     flexDirection: 'row',
+    color:'black' ,
     gap: 8,
     marginBottom: 8,
   },
@@ -399,27 +361,5 @@ const styles = StyleSheet.create({
     opacity: 0.7,
     lineHeight: 22,
   },
-  logoutSection: {
-    marginTop: 40,
-    marginBottom: 20,
-    alignItems: 'center',
-  },
-  logoutButton: {
-    backgroundColor: '#E9C9B6', // Using warning color from our palette
-    paddingVertical: 14,
-    paddingHorizontal: 30,
-    borderRadius: 30,
-    minWidth: 200,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  logoutButtonText: {
-    color: '#5C4033', // Dark brown text
-    fontWeight: 'bold',
-    fontSize: 18,
-  },
+  // Logout-Styles wurden zur Mehr-Seite verschoben
 });

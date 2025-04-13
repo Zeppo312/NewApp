@@ -9,7 +9,7 @@ import { ThemedView } from '@/components/ThemedView';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabaseUrl, supabaseAnonKey } from '@/lib/supabase';
+import { supabase, supabaseUrl, supabaseAnonKey } from '@/lib/supabase';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -20,6 +20,49 @@ export default function LoginScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const { signInWithEmail, signUpWithEmail } = useAuth();
+
+  // Funktion zum Abrufen des is_baby_born-Flags
+  const checkIsBabyBorn = async (userId: string) => {
+    try {
+      console.log('Checking is_baby_born flag for user:', userId);
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('is_baby_born')
+        .eq('user_id', userId)
+        .single();
+
+      if (error) {
+        console.error('Error fetching is_baby_born flag:', error);
+        return false; // Standardmäßig auf false setzen, wenn ein Fehler auftritt
+      }
+
+      console.log('is_baby_born flag data:', data);
+      return data?.is_baby_born || false;
+    } catch (err) {
+      console.error('Exception when checking is_baby_born flag:', err);
+      return false;
+    }
+  };
+
+  // Funktion zur Navigation basierend auf dem is_baby_born-Flag
+  const navigateBasedOnBabyBornFlag = async (userId: string) => {
+    try {
+      const isBabyBorn = await checkIsBabyBorn(userId);
+      console.log('Navigation based on is_baby_born flag:', isBabyBorn);
+
+      if (isBabyBorn) {
+        // Wenn das Baby geboren ist, zur MeinBaby-Seite navigieren
+        router.replace('/(tabs)/baby');
+      } else {
+        // Wenn das Baby noch nicht geboren ist, zur Countdown-Seite navigieren
+        router.replace('/(tabs)/countdown');
+      }
+    } catch (navError) {
+      console.error('Navigation error:', navError);
+      // Fallback-Navigation zur Countdown-Seite
+      router.navigate('/(tabs)/countdown');
+    }
+  };
 
   const handleAuth = async () => {
     // Reset error state
@@ -42,13 +85,14 @@ export default function LoginScreen() {
         // Simulierte Verzögerung
         await new Promise(resolve => setTimeout(resolve, 1000));
 
-        // Direkt zur Hauptseite navigieren
+        // Im Demo-Modus zur Countdown-Seite navigieren
+        console.log('Demo mode: Navigating to countdown page');
         try {
-          router.replace('/(tabs)');
+          router.replace('/(tabs)/countdown');
         } catch (navError) {
           console.error('Navigation error:', navError);
           // Fallback-Navigation
-          router.navigate('/(tabs)');
+          router.navigate('/(tabs)/countdown');
         }
         return;
       }
@@ -75,14 +119,18 @@ export default function LoginScreen() {
               [{ text: 'OK' }]
             );
           } else {
-            // Wenn keine E-Mail-Bestätigung erforderlich ist, direkt anmelden
-            console.log('No email confirmation required, navigating to tabs');
-            try {
-              router.replace('/(tabs)');
-            } catch (navError) {
-              console.error('Navigation error:', navError);
-              // Fallback-Navigation
-              router.navigate('/(tabs)');
+            // Wenn keine E-Mail-Bestätigung erforderlich ist, basierend auf is_baby_born-Flag navigieren
+            console.log('No email confirmation required, navigating based on is_baby_born flag');
+            if (data.user && data.user.id) {
+              await navigateBasedOnBabyBornFlag(data.user.id);
+            } else {
+              // Fallback zur Countdown-Seite, wenn keine Benutzer-ID verfügbar ist
+              try {
+                router.replace('/(tabs)/countdown');
+              } catch (navError) {
+                console.error('Navigation error:', navError);
+                router.navigate('/(tabs)/countdown');
+              }
             }
           }
         }
@@ -98,13 +146,17 @@ export default function LoginScreen() {
 
         console.log('Sign in successful:', data);
 
-        // Bei erfolgreicher Anmeldung zur Hauptseite navigieren
-        try {
-          router.replace('/(tabs)');
-        } catch (navError) {
-          console.error('Navigation error:', navError);
-          // Fallback-Navigation
-          router.navigate('/(tabs)');
+        // Bei erfolgreicher Anmeldung basierend auf is_baby_born-Flag navigieren
+        if (data && data.user && data.user.id) {
+          await navigateBasedOnBabyBornFlag(data.user.id);
+        } else {
+          // Fallback zur Countdown-Seite, wenn keine Benutzer-ID verfügbar ist
+          try {
+            router.replace('/(tabs)/countdown');
+          } catch (navError) {
+            console.error('Navigation error:', navError);
+            router.navigate('/(tabs)/countdown');
+          }
         }
       }
     } catch (err: any) {
@@ -142,13 +194,14 @@ export default function LoginScreen() {
         // Simulierte Verzögerung
         await new Promise(resolve => setTimeout(resolve, 1000));
 
-        // Direkt zur Hauptseite navigieren
+        // Im Demo-Modus zur Countdown-Seite navigieren
+        console.log('Demo login mode: Navigating to countdown page');
         try {
-          router.replace('/(tabs)');
+          router.replace('/(tabs)/countdown');
         } catch (navError) {
           console.error('Navigation error:', navError);
           // Fallback-Navigation
-          router.navigate('/(tabs)');
+          router.navigate('/(tabs)/countdown');
         }
         return;
       }
@@ -187,13 +240,17 @@ export default function LoginScreen() {
         console.log('Demo login successful:', data);
       }
 
-      // Bei erfolgreicher Anmeldung zur Hauptseite navigieren
-      try {
-        router.replace('/(tabs)');
-      } catch (navError) {
-        console.error('Navigation error:', navError);
-        // Fallback-Navigation
-        router.navigate('/(tabs)');
+      // Bei erfolgreicher Anmeldung basierend auf is_baby_born-Flag navigieren
+      if (data && data.user && data.user.id) {
+        await navigateBasedOnBabyBornFlag(data.user.id);
+      } else {
+        // Fallback zur Countdown-Seite, wenn keine Benutzer-ID verfügbar ist
+        try {
+          router.replace('/(tabs)/countdown');
+        } catch (navError) {
+          console.error('Navigation error:', navError);
+          router.navigate('/(tabs)/countdown');
+        }
       }
     } catch (err) {
       setError('Demo-Login fehlgeschlagen. Bitte versuche es erneut.');
