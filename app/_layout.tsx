@@ -53,6 +53,7 @@ function RootLayoutNav() {
         <Stack.Screen name="mini-wiki" options={{ headerShown: false }} />
         <Stack.Screen name="faq" options={{ headerShown: false }} />
         <Stack.Screen name="termine" options={{ headerShown: false }} />
+        <Stack.Screen name="profile" options={{ headerShown: false }} />
         <Stack.Screen name="+not-found" />
         <Stack.Screen name="auth/callback" options={{ headerShown: false }} />
       </Stack>
