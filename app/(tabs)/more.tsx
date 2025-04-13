@@ -93,21 +93,6 @@ export default function MoreScreen() {
 
             <TouchableOpacity style={styles.menuItem}>
               <View style={styles.menuItemIcon}>
-                <IconSymbol name="person.2.fill" size={24} color={theme.accent} />
-              </View>
-              <View style={styles.menuItemContent}>
-                <ThemedText style={styles.menuItemTitle}>
-                  Besuche planen
-                </ThemedText>
-                <ThemedText style={styles.menuItemDescription}>
-                  Plane Besuche von Familie und Freunden
-                </ThemedText>
-              </View>
-              <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.menuItem}>
-              <View style={styles.menuItemIcon}>
                 <IconSymbol name="calendar.badge.plus" size={24} color={theme.accent} />
               </View>
               <View style={styles.menuItemContent}>
