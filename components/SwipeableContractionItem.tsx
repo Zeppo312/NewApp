@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, TouchableOpacity, Alert, Image } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { ThemedText } from './ThemedText';
 import { ThemedView } from './ThemedView';
 import { Colors } from '@/constants/Colors';
@@ -142,10 +142,13 @@ const ContractionItem: React.FC<SwipeableContractionItemProps> = ({
           style={styles.deleteButton}
           onPress={handleDelete}
         >
-          <Image
-            source={require('../assets/images/trash-icon.png')}
-            style={styles.deleteIcon}
-          />
+          <ThemedText
+            style={styles.deleteButtonText}
+            lightColor="#FF6B6B"
+            darkColor="#FF6B6B"
+          >
+            Löschen
+          </ThemedText>
         </TouchableOpacity>
       </View>
 
@@ -292,15 +295,17 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.5)',
   },
   deleteButton: {
-    padding: 10,
-    borderRadius: 20,
+    padding: 8,
+    borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#FF6B6B',
+    backgroundColor: 'rgba(255, 107, 107, 0.1)',
   },
-  deleteIcon: {
-    width: 24,
-    height: 24,
-    tintColor: '#FF6B6B',
+  deleteButtonText: {
+    fontSize: 12,
+    fontWeight: 'bold',
   },
 });
 
