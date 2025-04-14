@@ -193,7 +193,10 @@ export default function MoreScreen() {
               <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.menuItem}>
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => router.push('/profil')}
+            >
               <View style={styles.menuItemIcon}>
                 <IconSymbol name="person.crop.circle" size={24} color={theme.accent} />
               </View>
