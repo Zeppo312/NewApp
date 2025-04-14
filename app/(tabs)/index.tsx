@@ -1,9 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
-import { StyleSheet, TouchableOpacity, ScrollView, FlatList, Alert, View, StatusBar, SafeAreaView, ActivityIndicator, ImageBackground, Dimensions } from 'react-native';
+import { StyleSheet, TouchableOpacity, ScrollView, Alert, View, StatusBar, SafeAreaView, ActivityIndicator, ImageBackground, Dimensions } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
-import ContractionChart from '@/components/ContractionChart';
-import SwipeableContractionItem from '@/components/SwipeableContractionItem';
+import VerticalContractionTimeline from '@/components/VerticalContractionTimeline';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/contexts/AuthContext';
@@ -364,24 +363,6 @@ export default function HomeScreen() {
 
           {/* Contractions History */}
           <ThemedView style={styles.historySection} lightColor="transparent" darkColor="transparent">
-            <ThemedText
-              type="subtitle"
-              style={styles.historyTitle}
-              lightColor="#5C4033"
-              darkColor="#F2E6DD"
-            >
-              Wehen Verlauf
-            </ThemedText>
-
-            {/* Visualisierung der Wehen */}
-            {!isLoading && contractions.length > 0 && (
-              <ContractionChart
-                contractions={contractions}
-                lightColor="rgba(255, 255, 255, 0.8)"
-                darkColor="rgba(50, 50, 50, 0.8)"
-              />
-            )}
-
             {isLoading ? (
               <ThemedView
                 style={styles.emptyState}
@@ -393,29 +374,12 @@ export default function HomeScreen() {
                   Wehen werden geladen...
                 </ThemedText>
               </ThemedView>
-            ) : contractions.length === 0 ? (
-              <ThemedView
-                style={styles.emptyState}
-                lightColor={theme.card}
-                darkColor={theme.card}
-              >
-                <ThemedText lightColor={theme.text} darkColor={theme.text}>
-                  Noch keine Wehen aufgezeichnet
-                </ThemedText>
-              </ThemedView>
             ) : (
-              <FlatList
-                data={contractions}
-                renderItem={({ item, index }) => (
-                  <SwipeableContractionItem
-                    item={item}
-                    index={index}
-                    totalCount={contractions.length}
-                    onDelete={handleDeleteContraction}
-                  />
-                )}
-                keyExtractor={item => item.id}
-                scrollEnabled={false}
+              <VerticalContractionTimeline
+                contractions={contractions}
+                onDeleteContraction={handleDeleteContraction}
+                lightColor="rgba(255, 255, 255, 0.8)"
+                darkColor="rgba(50, 50, 50, 0.8)"
               />
             )}
           </ThemedView>
