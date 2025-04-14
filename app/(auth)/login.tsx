@@ -119,19 +119,19 @@ export default function LoginScreen() {
               [{ text: 'OK' }]
             );
           } else {
-            // Wenn keine E-Mail-Bestätigung erforderlich ist, zur Tabs-Seite navigieren
-            console.log('No email confirmation required, navigating to tabs');
-            // Wir navigieren zur Tabs-Seite
-            router.replace('/(tabs)');
-
-            // Hinweis anzeigen, dass der Benutzer sein Profil vervollständigen soll
-            setTimeout(() => {
-              Alert.alert(
-                'Willkommen!',
-                'Bitte vervollständige dein Profil und die Informationen zu deinem Baby in den Einstellungen.',
-                [{ text: 'OK' }]
-              );
-            }, 1000);
+            // Wenn keine E-Mail-Bestätigung erforderlich ist, basierend auf is_baby_born-Flag navigieren
+            console.log('No email confirmation required, navigating based on is_baby_born flag');
+            if (data.user && data.user.id) {
+              await navigateBasedOnBabyBornFlag(data.user.id);
+            } else {
+              // Fallback zur Countdown-Seite, wenn keine Benutzer-ID verfügbar ist
+              try {
+                router.replace('/(tabs)/countdown');
+              } catch (navError) {
+                console.error('Navigation error:', navError);
+                router.navigate('/(tabs)/countdown');
+              }
+            }
           }
         }
       } else {

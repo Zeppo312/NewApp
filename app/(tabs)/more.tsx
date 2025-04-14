@@ -91,21 +91,6 @@ export default function MoreScreen() {
               Baby & Familie
             </ThemedText>
 
-            <TouchableOpacity style={styles.menuItem}>
-              <View style={styles.menuItemIcon}>
-                <IconSymbol name="person.2.fill" size={24} color={theme.accent} />
-              </View>
-              <View style={styles.menuItemContent}>
-                <ThemedText style={styles.menuItemTitle}>
-                  Besuche planen
-                </ThemedText>
-                <ThemedText style={styles.menuItemDescription}>
-                  Plane Besuche von Familie und Freunden
-                </ThemedText>
-              </View>
-              <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
-            </TouchableOpacity>
-
             <TouchableOpacity
               style={styles.menuItem}
               onPress={() => router.push('/termine')}
@@ -208,10 +193,7 @@ export default function MoreScreen() {
               <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={() => router.push('/profile')}
-            >
+            <TouchableOpacity style={styles.menuItem}>
               <View style={styles.menuItemIcon}>
                 <IconSymbol name="person.crop.circle" size={24} color={theme.accent} />
               </View>
