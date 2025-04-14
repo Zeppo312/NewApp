@@ -41,6 +41,22 @@ const getIntensityColor = (intensity: string | null): string => {
   }
 };
 
+// Funktion zur Bestimmung des Icons basierend auf der Intensität
+const getIntensityIcon = (intensity: string | null): string => {
+  if (!intensity) return '❓'; // Fragezeichen für unbekannte Intensität
+
+  switch (intensity.toLowerCase()) {
+    case 'schwach':
+      return '💧'; // Wassertropfen für schwache Intensität
+    case 'mittel':
+      return '💦'; // Mehrere Tropfen für mittlere Intensität
+    case 'stark':
+      return '🌊'; // Welle für hohe Intensität
+    default:
+      return '❓'; // Fragezeichen für unbekannte Intensität
+  }
+};
+
 // Formatierung der Zeit für die Anzeige
 const formatTime = (date: Date): string => {
   return format(date, 'HH:mm', { locale: de });
@@ -164,56 +180,72 @@ const VerticalContractionTimeline: React.FC<VerticalContractionTimelineProps> = 
                   {/* Mittlere Spalte: Linie und Punkt */}
                   <View style={styles.lineColumn}>
                     <View style={[styles.lineAbove, index === 0 && styles.firstLineAbove]} />
-                    <View
-                      style={[
-                        styles.contractionDot,
-                        { backgroundColor: getIntensityColor(contraction.intensity) }
-                      ]}
-                    />
+                    <View style={styles.dotContainer}>
+                      <View
+                        style={[
+                          styles.contractionDot,
+                          { backgroundColor: getIntensityColor(contraction.intensity) }
+                        ]}
+                      >
+                        <Text style={styles.intensityIconText}>
+                          {getIntensityIcon(contraction.intensity)}
+                        </Text>
+                      </View>
+                    </View>
                     <View style={[styles.lineBelow, index === sortedContractions.length - 1 && styles.lastLineBelow]} />
                   </View>
 
                   {/* Rechte Spalte: Details */}
                   <View style={styles.detailsColumn}>
                     <View style={styles.contractionDetails}>
-                      <View style={styles.detailHeader}>
-                        <View style={[
-                          styles.intensityIndicator,
-                          { backgroundColor: getIntensityColor(contraction.intensity) }
-                        ]} />
-                        <ThemedText style={styles.detailHeaderText}>
-                          {contraction.intensity || 'Unbekannt'}
-                        </ThemedText>
-                        <TouchableOpacity
-                          style={styles.deleteButtonSmall}
-                          onPress={() => onDeleteContraction(contraction.id)}
-                        >
-                          <Text style={styles.deleteButtonIcon}>×</Text>
-                        </TouchableOpacity>
-                      </View>
-
                       <View style={styles.detailContent}>
                         <View style={styles.detailRow}>
-                          <Text style={styles.detailIcon}>⏱</Text>
-                          <ThemedText style={styles.detailValue}>
-                            {formatDuration(contraction.duration)}
-                          </ThemedText>
+                          <View style={styles.detailIconContainer}>
+                            <Text style={styles.detailIcon}>⏱</Text>
+                          </View>
+                          <View style={styles.detailTextContainer}>
+                            <ThemedText style={styles.detailLabel}>Dauer</ThemedText>
+                            <ThemedText style={styles.detailValue}>
+                              {formatDuration(contraction.duration)}
+                            </ThemedText>
+                          </View>
                         </View>
 
                         <View style={styles.detailRow}>
-                          <Text style={styles.detailIcon}>⌛</Text>
-                          <ThemedText style={styles.detailValue}>
-                            {formatInterval(contraction.interval)}
-                          </ThemedText>
+                          <View style={styles.detailIconContainer}>
+                            <Text style={styles.detailIcon}>⌛</Text>
+                          </View>
+                          <View style={styles.detailTextContainer}>
+                            <ThemedText style={styles.detailLabel}>Abstand</ThemedText>
+                            <ThemedText style={styles.detailValue}>
+                              {formatInterval(contraction.interval)}
+                            </ThemedText>
+                          </View>
                         </View>
 
                         <View style={styles.detailRow}>
-                          <Text style={styles.detailIcon}>🕒</Text>
-                          <ThemedText style={styles.detailValue}>
-                            {formatTime(contraction.startTime)}
-                          </ThemedText>
+                          <View style={styles.detailIconContainer}>
+                            <Text style={styles.detailIcon}>{getIntensityIcon(contraction.intensity)}</Text>
+                          </View>
+                          <View style={styles.detailTextContainer}>
+                            <ThemedText style={styles.detailLabel}>Stärke</ThemedText>
+                            <ThemedText style={[
+                              styles.detailValue,
+                              styles.intensityText,
+                              { color: getIntensityColor(contraction.intensity) }
+                            ]}>
+                              {contraction.intensity || 'Unbekannt'}
+                            </ThemedText>
+                          </View>
                         </View>
                       </View>
+
+                      <TouchableOpacity
+                        style={styles.deleteButton}
+                        onPress={() => onDeleteContraction(contraction.id)}
+                      >
+                        <Text style={styles.deleteButtonIcon}>×</Text>
+                      </TouchableOpacity>
                     </View>
                   </View>
                 </View>
@@ -223,16 +255,11 @@ const VerticalContractionTimeline: React.FC<VerticalContractionTimelineProps> = 
 
                 {showDateSeparator && (
                   <View style={styles.dateSeparatorContainer}>
-                    <View style={styles.dateSeparator}>
-                      <View style={styles.dateLine} />
-                      <View style={styles.dateContainer}>
-                        <Text style={styles.dateText}>
-                          {formatDate(nextContraction!.startTime)}
-                        </Text>
-                      </View>
-                      <View style={styles.dateLine} />
+                    <View style={styles.dateHeader}>
+                      <Text style={styles.dateText}>
+                        {formatDate(nextContraction!.startTime)}
+                      </Text>
                     </View>
-                    <View style={styles.dateBackground} />
                   </View>
                 )}
 
@@ -258,13 +285,14 @@ const styles = StyleSheet.create({
   container: {
     marginVertical: 10,
     padding: 10,
-    borderRadius: 10,
+    borderRadius: 15,
   },
   title: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 15,
     textAlign: 'center',
+    color: '#5C4033', // Wärmerer Braunton
   },
   scrollView: {
     maxHeight: 500, // Begrenzte Höhe, damit die ScrollView nicht zu groß wird
@@ -272,6 +300,7 @@ const styles = StyleSheet.create({
   timeline: {
     paddingBottom: 20,
     paddingTop: 10,
+    paddingHorizontal: 5,
   },
   timelineItem: {
     flexDirection: 'row',
@@ -280,25 +309,25 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   timeColumn: {
-    width: 45,
+    width: 50,
     alignItems: 'flex-end',
-    paddingTop: 10,
-    paddingRight: 8,
+    paddingTop: 12,
+    paddingRight: 10,
   },
   timeText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '500',
-    color: '#555555',
+    color: '#5C4033', // Wärmerer Braunton
   },
   lineColumn: {
-    width: 20,
+    width: 30,
     alignItems: 'center',
     zIndex: 2,
   },
   lineAbove: {
     width: 2,
-    height: 30,
-    backgroundColor: '#CCCCCC',
+    height: 40,
+    backgroundColor: '#E6D7C3', // Warmer Beigeton
   },
   firstLineAbove: {
     // Erste Linie oben ist kürzer
@@ -307,17 +336,24 @@ const styles = StyleSheet.create({
   },
   lineBelow: {
     width: 2,
-    height: 30,
-    backgroundColor: '#CCCCCC',
+    height: 40,
+    backgroundColor: '#E6D7C3', // Warmer Beigeton
   },
   lastLineBelow: {
     // Letzte Linie unten ist kürzer
     height: 15,
   },
+  dotContainer: {
+    width: 30,
+    height: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 3,
+  },
   contractionDot: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     borderWidth: 2,
     borderColor: '#FFFFFF',
     shadowColor: '#000',
@@ -326,45 +362,72 @@ const styles = StyleSheet.create({
     shadowRadius: 1.5,
     elevation: 2,
     zIndex: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  intensityIconText: {
+    fontSize: 12,
   },
   detailsColumn: {
     flex: 1,
     paddingLeft: 10,
   },
   contractionDetails: {
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
-    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.85)',
+    borderRadius: 12,
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
-    shadowRadius: 1,
+    shadowRadius: 2,
     elevation: 1,
+    position: 'relative',
+    paddingBottom: 5,
   },
-  detailHeader: {
+  detailContent: {
+    padding: 12,
+  },
+  detailRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    backgroundColor: 'rgba(0, 0, 0, 0.03)',
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0, 0, 0, 0.05)',
+    marginBottom: 8,
   },
-  intensityIndicator: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    marginRight: 6,
+  detailIconContainer: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: 'rgba(230, 215, 195, 0.3)', // Heller Beigeton
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
   },
-  detailHeaderText: {
-    fontSize: 13,
-    fontWeight: 'bold',
+  detailIcon: {
+    fontSize: 16,
+    textAlign: 'center',
+  },
+  detailTextContainer: {
     flex: 1,
   },
-  deleteButtonSmall: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+  detailLabel: {
+    fontSize: 12,
+    color: '#888888',
+    marginBottom: 2,
+  },
+  detailValue: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#5C4033', // Wärmerer Braunton
+  },
+  intensityText: {
+    fontWeight: 'bold',
+  },
+  deleteButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     backgroundColor: 'rgba(255, 0, 0, 0.1)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -376,79 +439,44 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     textAlign: 'center',
   },
-  detailContent: {
-    padding: 10,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  detailIcon: {
-    fontSize: 14,
-    marginRight: 8,
-    width: 16,
-    textAlign: 'center',
-  },
-  detailValue: {
-    fontSize: 13,
-  },
   // Styles für Tagesgrenzen
   dateSeparatorContainer: {
+    marginVertical: 20,
+    paddingLeft: 50, // Gleicher Abstand wie die Timeline
     position: 'relative',
-    marginVertical: 15,
-    zIndex: 1,
   },
-  dateSeparator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    position: 'relative',
-    zIndex: 3,
-  },
-  dateBackground: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: -10,
-    bottom: -10,
-    backgroundColor: 'rgba(240, 240, 240, 0.5)',
-    borderRadius: 5,
-    zIndex: 1,
-  },
-  dateLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.15)',
-  },
-  dateContainer: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(0, 0, 0, 0.1)',
-    marginHorizontal: 10,
-    zIndex: 2,
+  dateHeader: {
+    paddingVertical: 6,
+    paddingHorizontal: 15,
+    backgroundColor: '#F2E6DD', // Warmer Beigeton
+    borderRadius: 20,
+    alignSelf: 'flex-start',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 1,
+    elevation: 1,
   },
   dateText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: 'bold',
-    color: '#555555',
+    color: '#5C4033', // Wärmerer Braunton
   },
   // Styles für Zeitlücken
   timeGapIndicator: {
     flexDirection: 'row',
     alignItems: 'center',
     marginVertical: 8,
+    paddingLeft: 80, // Mehr Einrückung für Zeitlücken
   },
   timeGapLine: {
     flex: 1,
     height: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    backgroundColor: 'rgba(230, 215, 195, 0.5)', // Heller Beigeton
   },
   timeGapText: {
     fontSize: 12,
-    color: '#888888',
+    color: '#8D7B68', // Wärmerer Grauton
     fontStyle: 'italic',
     marginHorizontal: 10,
   },
@@ -456,7 +484,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginVertical: 20,
     fontSize: 16,
-    color: '#888888',
+    color: '#8D7B68', // Wärmerer Grauton
   },
 });
 
