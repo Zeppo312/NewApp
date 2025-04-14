@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, SafeAreaView, ImageBackground, StatusBar, TextInput, TouchableOpacity, Alert, ActivityIndicator, ScrollView, Platform, Switch } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Stack, router } from 'expo-router';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
@@ -333,11 +334,26 @@ export default function OnboardingScreen() {
   };
 
   // Onboarding abschließen und zur Hauptapp navigieren
-  const completeOnboarding = () => {
-    if (isBabyBorn) {
-      router.replace('/(tabs)/baby');
-    } else {
-      router.replace('/(tabs)/countdown');
+  const completeOnboarding = async () => {
+    try {
+      // Setzen eines Flags in AsyncStorage, um anzuzeigen, dass die Daten neu geladen werden müssen
+      console.log('Setting reload flag...');
+      await AsyncStorage.setItem('reload_data_after_onboarding', 'true');
+
+      // Kurze Verzögerung, um sicherzustellen, dass alle Daten gespeichert wurden
+      setIsSaving(true);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      setIsSaving(false);
+
+      // Zur entsprechenden Seite navigieren
+      if (isBabyBorn) {
+        router.replace('/(tabs)/baby');
+      } else {
+        router.replace('/(tabs)/countdown');
+      }
+    } catch (error) {
+      console.error('Error completing onboarding:', error);
+      Alert.alert('Fehler', 'Es gab ein Problem beim Abschließen des Onboarding-Prozesses. Bitte versuche es erneut.');
     }
   };
 

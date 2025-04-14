@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, ScrollView, View, TouchableOpacity, Image, TextInput, Alert, ImageBackground, SafeAreaView, StatusBar, Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { Colors } from '@/constants/Colors';
@@ -23,11 +24,42 @@ export default function BabyScreen() {
 
   useEffect(() => {
     if (user) {
-      loadBabyInfo();
+      checkAndLoadData();
     } else {
       setIsLoading(false);
     }
   }, [user]);
+
+  // Überprüfen, ob Daten nach dem Onboarding neu geladen werden müssen
+  const checkAndLoadData = async () => {
+    try {
+      const shouldReload = await AsyncStorage.getItem('reload_data_after_onboarding');
+      console.log('Should reload data after onboarding:', shouldReload);
+
+      if (shouldReload === 'true') {
+        // Flag zurücksetzen
+        await AsyncStorage.removeItem('reload_data_after_onboarding');
+        console.log('Reload flag reset');
+
+        // Daten neu laden
+        await loadBabyInfo();
+
+        // Kurze Verzögerung, dann Seite aktualisieren
+        setTimeout(() => {
+          console.log('Refreshing page...');
+          // Hier könnte man einen State setzen, um die Seite neu zu rendern
+          setIsLoading(true);
+          setTimeout(() => setIsLoading(false), 100);
+        }, 500);
+      } else {
+        // Normale Datenladung
+        loadBabyInfo();
+      }
+    } catch (error) {
+      console.error('Error checking reload flag:', error);
+      loadBabyInfo();
+    }
+  };
 
   const loadBabyInfo = async () => {
     try {
