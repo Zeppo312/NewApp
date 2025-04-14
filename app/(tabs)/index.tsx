@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { StyleSheet, TouchableOpacity, ScrollView, FlatList, Alert, View, StatusBar, SafeAreaView, ActivityIndicator, ImageBackground, Dimensions } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
-import ContractionChart from '@/components/ContractionChart';
+import VerticalContractionTimeline from '@/components/VerticalContractionTimeline';
 import ContractionItem from '@/components/SwipeableContractionItem';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
@@ -433,7 +433,7 @@ export default function HomeScreen() {
 
             {/* Visualisierung der Wehen */}
             {!isLoading && contractions.length > 0 && (
-              <ContractionChart
+              <VerticalContractionTimeline
                 contractions={contractions}
                 lightColor="rgba(255, 255, 255, 0.8)"
                 darkColor="rgba(50, 50, 50, 0.8)"
