@@ -112,31 +112,37 @@ const VerticalContractionTimeline: React.FC<VerticalContractionTimelineProps> = 
   // Berechne die Höhe des Abstands basierend auf dem Zeitunterschied
   const getSpacingHeight = (current: Contraction, next: Contraction | null): number => {
     if (!next) return 20; // Standard-Abstand am Ende
-    
+
     const diffInMinutes = differenceInMinutes(current.startTime, next.startTime);
-    
-    // Basis-Abstand
-    let spacing = 20;
-    
-    // Zusätzlicher Abstand basierend auf der Zeit
-    if (diffInMinutes > 30 && diffInMinutes <= 120) {
-      // 30 Min - 2 Stunden: leicht erhöhter Abstand
-      spacing = 40;
-    } else if (diffInMinutes > 120 && diffInMinutes <= 360) {
-      // 2-6 Stunden: mittlerer Abstand
-      spacing = 60;
-    } else if (diffInMinutes > 360) {
-      // > 6 Stunden: großer Abstand
-      spacing = 100;
+
+    // Dynamischerer Abstand basierend auf der Zeit
+    // Minimaler Abstand: 15px, Maximaler Abstand: 150px
+    // Logarithmische Skalierung für natürlicheres Gefühl
+    const minSpacing = 15;
+    const maxSpacing = 150;
+
+    if (diffInMinutes <= 10) {
+      // Sehr kurze Abstände (< 10 Min): minimaler Abstand
+      return minSpacing;
+    } else if (diffInMinutes > 10 && diffInMinutes <= 60) {
+      // 10-60 Min: leicht erhöhter Abstand
+      return minSpacing + (diffInMinutes - 10) * 0.5; // 0.5px pro Minute
+    } else if (diffInMinutes > 60 && diffInMinutes <= 180) {
+      // 1-3 Stunden: mittlerer Abstand
+      return minSpacing + 25 + (diffInMinutes - 60) * 0.3; // 0.3px pro Minute
+    } else if (diffInMinutes > 180 && diffInMinutes <= 720) {
+      // 3-12 Stunden: größerer Abstand
+      return minSpacing + 25 + 36 + (diffInMinutes - 180) * 0.1; // 0.1px pro Minute
+    } else {
+      // > 12 Stunden: maximaler Abstand
+      return maxSpacing;
     }
-    
-    return spacing;
   };
 
   return (
     <ThemedView style={styles.container} lightColor={lightColor} darkColor={darkColor}>
       <ThemedText style={styles.title}>Wehen Verlauf</ThemedText>
-      
+
       <ScrollView style={styles.scrollView}>
         <View style={styles.timeline}>
           {sortedContractions.map((contraction, index) => {
@@ -144,7 +150,7 @@ const VerticalContractionTimeline: React.FC<VerticalContractionTimelineProps> = 
             const showDateSeparator = shouldShowDateSeparator(contraction, nextContraction);
             const hasTimeGap = hasLargeTimeGap(contraction, nextContraction);
             const spacingHeight = getSpacingHeight(contraction, nextContraction);
-            
+
             return (
               <React.Fragment key={contraction.id}>
                 <View style={styles.timelineItem}>
@@ -154,78 +160,89 @@ const VerticalContractionTimeline: React.FC<VerticalContractionTimelineProps> = 
                       {formatTime(contraction.startTime)}
                     </ThemedText>
                   </View>
-                  
+
                   {/* Mittlere Spalte: Linie und Punkt */}
                   <View style={styles.lineColumn}>
-                    <View style={styles.lineAbove} />
-                    <View 
+                    <View style={[styles.lineAbove, index === 0 && styles.firstLineAbove]} />
+                    <View
                       style={[
                         styles.contractionDot,
                         { backgroundColor: getIntensityColor(contraction.intensity) }
-                      ]} 
+                      ]}
                     />
-                    <View style={styles.lineBelow} />
+                    <View style={[styles.lineBelow, index === sortedContractions.length - 1 && styles.lastLineBelow]} />
                   </View>
-                  
+
                   {/* Rechte Spalte: Details */}
                   <View style={styles.detailsColumn}>
                     <View style={styles.contractionDetails}>
-                      <View style={styles.detailRow}>
-                        <ThemedText style={styles.detailLabel}>Dauer:</ThemedText>
-                        <ThemedText style={styles.detailValue}>
-                          {formatDuration(contraction.duration)}
-                        </ThemedText>
-                      </View>
-                      
-                      <View style={styles.detailRow}>
-                        <ThemedText style={styles.detailLabel}>Abstand:</ThemedText>
-                        <ThemedText style={styles.detailValue}>
-                          {formatInterval(contraction.interval)}
-                        </ThemedText>
-                      </View>
-                      
-                      <View style={styles.detailRow}>
-                        <ThemedText style={styles.detailLabel}>Stärke:</ThemedText>
+                      <View style={styles.detailHeader}>
                         <View style={[
-                          styles.intensityBadge,
+                          styles.intensityIndicator,
                           { backgroundColor: getIntensityColor(contraction.intensity) }
-                        ]}>
-                          <Text style={styles.intensityText}>
-                            {contraction.intensity || 'Unbekannt'}
-                          </Text>
+                        ]} />
+                        <ThemedText style={styles.detailHeaderText}>
+                          {contraction.intensity || 'Unbekannt'}
+                        </ThemedText>
+                        <TouchableOpacity
+                          style={styles.deleteButtonSmall}
+                          onPress={() => onDeleteContraction(contraction.id)}
+                        >
+                          <Text style={styles.deleteButtonIcon}>×</Text>
+                        </TouchableOpacity>
+                      </View>
+
+                      <View style={styles.detailContent}>
+                        <View style={styles.detailRow}>
+                          <Text style={styles.detailIcon}>⏱</Text>
+                          <ThemedText style={styles.detailValue}>
+                            {formatDuration(contraction.duration)}
+                          </ThemedText>
+                        </View>
+
+                        <View style={styles.detailRow}>
+                          <Text style={styles.detailIcon}>⌛</Text>
+                          <ThemedText style={styles.detailValue}>
+                            {formatInterval(contraction.interval)}
+                          </ThemedText>
+                        </View>
+
+                        <View style={styles.detailRow}>
+                          <Text style={styles.detailIcon}>🕒</Text>
+                          <ThemedText style={styles.detailValue}>
+                            {formatTime(contraction.startTime)}
+                          </ThemedText>
                         </View>
                       </View>
-                      
-                      <TouchableOpacity
-                        style={styles.deleteButton}
-                        onPress={() => onDeleteContraction(contraction.id)}
-                      >
-                        <ThemedText style={styles.deleteButtonText}>Löschen</ThemedText>
-                      </TouchableOpacity>
                     </View>
                   </View>
                 </View>
-                
+
                 {/* Abstand und ggf. Datumstrenner */}
                 <View style={{ height: spacingHeight }} />
-                
+
                 {showDateSeparator && (
-                  <View style={styles.dateSeparator}>
-                    <View style={styles.dateLine} />
-                    <View style={styles.dateContainer}>
-                      <Text style={styles.dateText}>
-                        {formatDate(nextContraction!.startTime)}
-                      </Text>
+                  <View style={styles.dateSeparatorContainer}>
+                    <View style={styles.dateSeparator}>
+                      <View style={styles.dateLine} />
+                      <View style={styles.dateContainer}>
+                        <Text style={styles.dateText}>
+                          {formatDate(nextContraction!.startTime)}
+                        </Text>
+                      </View>
+                      <View style={styles.dateLine} />
                     </View>
-                    <View style={styles.dateLine} />
+                    <View style={styles.dateBackground} />
                   </View>
                 )}
-                
+
                 {hasTimeGap && !showDateSeparator && (
                   <View style={styles.timeGapIndicator}>
+                    <View style={styles.timeGapLine} />
                     <Text style={styles.timeGapText}>
                       {differenceInHours(contraction.startTime, nextContraction!.startTime)} Stunden Pause
                     </Text>
+                    <View style={styles.timeGapLine} />
                   </View>
                 )}
               </React.Fragment>
@@ -254,33 +271,48 @@ const styles = StyleSheet.create({
   },
   timeline: {
     paddingBottom: 20,
+    paddingTop: 10,
   },
   timelineItem: {
     flexDirection: 'row',
     alignItems: 'flex-start',
+    position: 'relative',
+    zIndex: 1,
   },
   timeColumn: {
-    width: 50,
-    alignItems: 'center',
+    width: 45,
+    alignItems: 'flex-end',
     paddingTop: 10,
+    paddingRight: 8,
   },
   timeText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '500',
+    color: '#555555',
   },
   lineColumn: {
-    width: 30,
+    width: 20,
     alignItems: 'center',
+    zIndex: 2,
   },
   lineAbove: {
     width: 2,
-    height: 20,
+    height: 30,
     backgroundColor: '#CCCCCC',
+  },
+  firstLineAbove: {
+    // Erste Linie oben ist kürzer
+    height: 15,
+    backgroundColor: 'transparent',
   },
   lineBelow: {
     width: 2,
-    height: 20,
+    height: 30,
     backgroundColor: '#CCCCCC',
+  },
+  lastLineBelow: {
+    // Letzte Linie unten ist kürzer
+    height: 15,
   },
   contractionDot: {
     width: 16,
@@ -293,6 +325,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 1.5,
     elevation: 2,
+    zIndex: 3,
   },
   detailsColumn: {
     flex: 1,
@@ -301,77 +334,123 @@ const styles = StyleSheet.create({
   contractionDetails: {
     backgroundColor: 'rgba(255, 255, 255, 0.8)',
     borderRadius: 8,
-    padding: 10,
+    overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 1,
     elevation: 1,
   },
+  detailHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.03)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 0, 0, 0.05)',
+  },
+  intensityIndicator: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginRight: 6,
+  },
+  detailHeaderText: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    flex: 1,
+  },
+  deleteButtonSmall: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255, 0, 0, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deleteButtonIcon: {
+    color: '#FF0000',
+    fontSize: 16,
+    fontWeight: 'bold',
+    lineHeight: 20,
+    textAlign: 'center',
+  },
+  detailContent: {
+    padding: 10,
+  },
   detailRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 6,
   },
-  detailLabel: {
+  detailIcon: {
     fontSize: 14,
-    fontWeight: '500',
+    marginRight: 8,
+    width: 16,
+    textAlign: 'center',
   },
   detailValue: {
-    fontSize: 14,
+    fontSize: 13,
   },
-  intensityBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-  },
-  intensityText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  deleteButton: {
-    alignSelf: 'flex-end',
-    marginTop: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    backgroundColor: 'rgba(255, 0, 0, 0.1)',
-    borderRadius: 4,
-  },
-  deleteButtonText: {
-    color: '#FF0000',
-    fontSize: 12,
+  // Styles für Tagesgrenzen
+  dateSeparatorContainer: {
+    position: 'relative',
+    marginVertical: 15,
+    zIndex: 1,
   },
   dateSeparator: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 10,
+    position: 'relative',
+    zIndex: 3,
+  },
+  dateBackground: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: -10,
+    bottom: -10,
+    backgroundColor: 'rgba(240, 240, 240, 0.5)',
+    borderRadius: 5,
+    zIndex: 1,
   },
   dateLine: {
     flex: 1,
     height: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+    backgroundColor: 'rgba(0, 0, 0, 0.15)',
   },
   dateContainer: {
-    paddingHorizontal: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
-    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: 'rgba(0, 0, 0, 0.1)',
+    marginHorizontal: 10,
+    zIndex: 2,
   },
   dateText: {
-    fontSize: 12,
-    color: '#666666',
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: '#555555',
   },
+  // Styles für Zeitlücken
   timeGapIndicator: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 5,
+    marginVertical: 8,
+  },
+  timeGapLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
   },
   timeGapText: {
     fontSize: 12,
     color: '#888888',
     fontStyle: 'italic',
+    marginHorizontal: 10,
   },
   noDataText: {
     textAlign: 'center',
