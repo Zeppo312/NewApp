@@ -8,7 +8,7 @@ export interface BabyInfo {
   weight?: string;
   height?: string;
   photo_url?: string | null;
-  baby_gender?: 'male' | 'female' | '';
+  baby_gender?: 'male' | 'female' | 'unknown' | '';
 }
 
 // Typen für die Tagebucheinträge
@@ -126,6 +126,18 @@ export const saveBabyInfo = async (info: BabyInfo) => {
       return { data: null, error: fetchError };
     }
 
+    // Sicherstellen, dass die Daten korrekt formatiert sind
+    const cleanInfo = {
+      ...info,
+      // Leere Strings in null umwandeln, um Probleme mit der Datenbank zu vermeiden
+      name: info.name && info.name.trim() !== '' ? info.name : null,
+      baby_gender: info.baby_gender && info.baby_gender.trim() !== '' ? info.baby_gender : null,
+      weight: info.weight && info.weight.trim() !== '' ? info.weight : null,
+      height: info.height && info.height.trim() !== '' ? info.height : null
+    };
+
+    console.log('Cleaned baby info:', cleanInfo);
+
     let result;
 
     if (existingData && existingData.id) {
@@ -134,10 +146,11 @@ export const saveBabyInfo = async (info: BabyInfo) => {
       result = await supabase
         .from('baby_info')
         .update({
-          ...info,
+          ...cleanInfo,
           updated_at: new Date().toISOString()
         })
-        .eq('id', existingData.id);
+        .eq('id', existingData.id)
+        .select();
     } else {
       // Wenn kein Eintrag existiert, erstellen wir einen neuen
       console.log('Creating new baby info entry for user:', userData.user.id);
@@ -145,13 +158,14 @@ export const saveBabyInfo = async (info: BabyInfo) => {
         .from('baby_info')
         .insert({
           user_id: userData.user.id,
-          ...info,
+          ...cleanInfo,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
-        });
+        })
+        .select();
     }
 
-    console.log('Baby info save operation result:', result);
+    console.log('Save baby info result:', result);
 
     return { data: result.data, error: result.error };
   } catch (err) {

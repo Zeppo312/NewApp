@@ -437,6 +437,28 @@ export default function OnboardingScreen() {
                   </ThemedText>
                 </TouchableOpacity>
               </View>
+
+              <TouchableOpacity
+                style={[
+                  styles.unknownGenderButton,
+                  babyGender === 'unknown' && styles.genderButtonActive
+                ]}
+                onPress={() => setBabyGender('unknown')}
+              >
+                <IconSymbol
+                  name="questionmark.circle"
+                  size={24}
+                  color={babyGender === 'unknown' ? '#FFFFFF' : theme.tabIconDefault}
+                />
+                <ThemedText
+                  style={[
+                    styles.genderButtonText,
+                    babyGender === 'unknown' && styles.genderButtonTextActive
+                  ]}
+                >
+                  Weiß ich noch nicht
+                </ThemedText>
+              </TouchableOpacity>
             </View>
           </View>
         );
@@ -703,6 +725,17 @@ const styles = StyleSheet.create({
     borderColor: '#E0E0E0',
     borderRadius: 8,
     marginHorizontal: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+  },
+  unknownGenderButton: {
+    height: 48,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    borderRadius: 8,
+    marginTop: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
