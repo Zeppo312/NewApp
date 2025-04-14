@@ -23,11 +23,18 @@ type SwipeableContractionItemProps = {
   onDelete: (id: string) => void;
 };
 
-// Format seconds to mm:ss
+// Format seconds to mm:ss or hh:mm if longer than 60 minutes
 const formatTime = (seconds: number): string => {
-  const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  // Wenn der Abstand größer als 60 Minuten ist, in Stunden und Minuten anzeigen
+  if (seconds >= 3600) {
+    const hours = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    return `${hours}h ${mins}min`;
+  } else {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  }
 };
 
 // Format date to readable time

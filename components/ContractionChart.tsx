@@ -74,11 +74,18 @@ const groupContractionsByDay = (contractions: Contraction[]): { [key: string]: C
   return grouped;
 };
 
-// Formatierung der Dauer in Minuten und Sekunden
+// Formatierung der Dauer in Minuten und Sekunden oder Stunden und Minuten
 const formatDuration = (seconds: number): string => {
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = seconds % 60;
-  return `${minutes}:${remainingSeconds < 10 ? '0' : ''}${remainingSeconds}`;
+  // Wenn die Dauer größer als 60 Minuten ist, in Stunden und Minuten anzeigen
+  if (seconds >= 3600) {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    return `${hours}h ${minutes}min`;
+  } else {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes}:${remainingSeconds < 10 ? '0' : ''}${remainingSeconds}`;
+  }
 };
 
 const ContractionChart: React.FC<ContractionChartProps> = ({
