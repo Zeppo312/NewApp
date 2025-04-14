@@ -10,6 +10,7 @@ import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase, supabaseUrl, supabaseAnonKey } from '@/lib/supabase';
+import { initializeUserData } from '@/lib/user';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -119,12 +120,19 @@ export default function LoginScreen() {
               [{ text: 'OK' }]
             );
           } else {
-            // Nach erfolgreicher Registrierung zur Onboarding-Seite leiten, damit der Benutzer sein Profil schrittweise vervollständigen kann
-            console.log('Registration successful, navigating to onboarding page');
+            // Initialisieren der Benutzerdaten nach erfolgreicher Registrierung
+            console.log('Initializing user data after registration');
             try {
+              // Erstellen von leeren Einträgen in den Tabellen
+              const initResult = await initializeUserData(data.user.id);
+              console.log('User data initialization result:', initResult);
+
+              // Nach erfolgreicher Registrierung zur Onboarding-Seite leiten
+              console.log('Registration successful, navigating to onboarding page');
               router.replace('../onboarding');
             } catch (navError) {
-              console.error('Navigation error:', navError);
+              console.error('Error during initialization or navigation:', navError);
+              // Auch bei Fehlern zur Onboarding-Seite navigieren
               router.navigate('../onboarding');
             }
           }
