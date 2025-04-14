@@ -186,33 +186,41 @@ export default function HomeScreen() {
     const todayDiaperChanges = getTodayDiaperChanges();
 
     return (
-      <ThemedView style={styles.summaryContainer} lightColor={theme.cardLight} darkColor={theme.cardDark}>
-        <ThemedText style={styles.sectionTitle}>
-          Dein Tag im Überblick
-        </ThemedText>
-
-        <View style={styles.statsContainer}>
-          <View style={styles.statItem}>
-            <IconSymbol name="drop.fill" size={24} color="#FF9800" />
-            <ThemedText style={styles.statValue}>{todayFeedings}</ThemedText>
-            <ThemedText style={styles.statLabel}>Mahlzeiten</ThemedText>
+      <TouchableOpacity
+        onPress={() => router.push('/(tabs)/daily_old')}
+        activeOpacity={0.8}
+      >
+        <ThemedView style={styles.summaryContainer} lightColor={theme.cardLight} darkColor={theme.cardDark}>
+          <View style={styles.sectionTitleContainer}>
+            <ThemedText style={styles.sectionTitle}>
+              Dein Tag im Überblick
+            </ThemedText>
+            <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
           </View>
 
-          <View style={styles.statItem}>
-            <IconSymbol name="heart.fill" size={24} color="#4CAF50" />
-            <ThemedText style={styles.statValue}>{todayDiaperChanges}</ThemedText>
-            <ThemedText style={styles.statLabel}>Windelwechsel</ThemedText>
-          </View>
-
-          {currentPhase && phaseProgress && (
+          <View style={styles.statsContainer}>
             <View style={styles.statItem}>
-              <IconSymbol name="chart.bar.fill" size={24} color={theme.accent} />
-              <ThemedText style={styles.statValue}>{Math.round(phaseProgress.progress)}%</ThemedText>
-              <ThemedText style={styles.statLabel}>Fortschritt</ThemedText>
+              <IconSymbol name="drop.fill" size={24} color="#FF9800" />
+              <ThemedText style={styles.statValue}>{todayFeedings}</ThemedText>
+              <ThemedText style={styles.statLabel}>Mahlzeiten</ThemedText>
             </View>
-          )}
-        </View>
-      </ThemedView>
+
+            <View style={styles.statItem}>
+              <IconSymbol name="heart.fill" size={24} color="#4CAF50" />
+              <ThemedText style={styles.statValue}>{todayDiaperChanges}</ThemedText>
+              <ThemedText style={styles.statLabel}>Windelwechsel</ThemedText>
+            </View>
+
+            {currentPhase && phaseProgress && (
+              <View style={styles.statItem}>
+                <IconSymbol name="chart.bar.fill" size={24} color={theme.accent} />
+                <ThemedText style={styles.statValue}>{Math.round(phaseProgress.progress)}%</ThemedText>
+                <ThemedText style={styles.statLabel}>Fortschritt</ThemedText>
+              </View>
+            )}
+          </View>
+        </ThemedView>
+      </TouchableOpacity>
     );
   };
 
@@ -220,9 +228,11 @@ export default function HomeScreen() {
   const renderQuickAccessCards = () => {
     return (
       <View style={styles.cardsContainer}>
-        <ThemedText style={styles.sectionTitle}>
-          Schnellzugriff
-        </ThemedText>
+        <View style={styles.sectionTitleContainer}>
+          <ThemedText style={styles.sectionTitle}>
+            Schnellzugriff
+          </ThemedText>
+        </View>
 
         <View style={styles.cardsGrid}>
           <TouchableOpacity
@@ -398,10 +408,15 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
+  sectionTitleContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    marginBottom: 15,
   },
   statsContainer: {
     flexDirection: 'row',
