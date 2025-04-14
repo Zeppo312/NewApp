@@ -17,23 +17,23 @@ export default function ProfilScreen() {
   const theme = Colors[colorScheme];
   const { user } = useAuth();
   const { isBabyBorn, setIsBabyBorn } = useBabyStatus();
-  
+
   // Benutzerinformationen
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
-  
+
   // Baby-Informationen
   const [babyName, setBabyName] = useState('');
   const [babyGender, setBabyGender] = useState<'male' | 'female' | ''>('');
   const [dueDate, setDueDate] = useState<Date | null>(null);
   const [birthDate, setBirthDate] = useState<Date | null>(null);
-  
+
   // UI-Status
   const [isLoading, setIsLoading] = useState(true);
   const [showDueDatePicker, setShowDueDatePicker] = useState(false);
   const [showBirthDatePicker, setShowBirthDatePicker] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  
+
   // Laden der Daten beim Start
   useEffect(() => {
     if (user) {
@@ -42,26 +42,26 @@ export default function ProfilScreen() {
       setIsLoading(false);
     }
   }, [user]);
-  
+
   // Laden der Benutzerdaten aus verschiedenen Tabellen
   const loadUserData = async () => {
     try {
       setIsLoading(true);
-      
+
       // Laden der Profildaten (Vorname, Nachname)
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('first_name, last_name')
         .eq('id', user?.id)
         .single();
-        
+
       if (profileError && profileError.code !== 'PGRST116') {
         console.error('Error loading profile data:', profileError);
       } else if (profileData) {
         setFirstName(profileData.first_name || '');
         setLastName(profileData.last_name || '');
       }
-      
+
       // Laden der Benutzereinstellungen (Geburtstermin, Baby geboren)
       const { data: settingsData, error: settingsError } = await supabase
         .from('user_settings')
@@ -70,7 +70,7 @@ export default function ProfilScreen() {
         .order('updated_at', { ascending: false })
         .limit(1)
         .maybeSingle();
-        
+
       if (settingsError && settingsError.code !== 'PGRST116') {
         console.error('Error loading user settings:', settingsError);
       } else if (settingsData) {
@@ -78,7 +78,7 @@ export default function ProfilScreen() {
           setDueDate(new Date(settingsData.due_date));
         }
       }
-      
+
       // Laden der Baby-Informationen (Name, Geschlecht, Geburtsdatum)
       const { data: babyData } = await getBabyInfo();
       if (babyData) {
@@ -95,7 +95,7 @@ export default function ProfilScreen() {
       setIsLoading(false);
     }
   };
-  
+
   // Speichern der Benutzerdaten in verschiedenen Tabellen
   const saveUserData = async () => {
     try {
@@ -103,9 +103,9 @@ export default function ProfilScreen() {
         Alert.alert('Hinweis', 'Bitte melde dich an, um deine Daten zu speichern.');
         return;
       }
-      
+
       setIsSaving(true);
-      
+
       // Speichern der Profildaten (Vorname, Nachname)
       const { error: profileError } = await supabase
         .from('profiles')
@@ -115,12 +115,12 @@ export default function ProfilScreen() {
           updated_at: new Date().toISOString()
         })
         .eq('id', user.id);
-        
+
       if (profileError) {
         console.error('Error saving profile data:', profileError);
         throw new Error('Profildaten konnten nicht gespeichert werden.');
       }
-      
+
       // Speichern der Benutzereinstellungen (Geburtstermin, Baby geboren)
       // Zuerst prüfen, ob bereits ein Eintrag existiert
       const { data: existingSettings, error: fetchError } = await supabase
@@ -128,14 +128,14 @@ export default function ProfilScreen() {
         .select('id')
         .eq('user_id', user.id)
         .maybeSingle();
-        
+
       if (fetchError && fetchError.code !== 'PGRST116') {
         console.error('Error checking existing settings:', fetchError);
         throw new Error('Benutzereinstellungen konnten nicht überprüft werden.');
       }
-      
+
       let settingsResult;
-      
+
       if (existingSettings && existingSettings.id) {
         // Wenn ein Eintrag existiert, aktualisieren wir diesen
         settingsResult = await supabase
@@ -157,26 +157,26 @@ export default function ProfilScreen() {
             updated_at: new Date().toISOString()
           });
       }
-      
+
       if (settingsResult.error) {
         console.error('Error saving user settings:', settingsResult.error);
         throw new Error('Benutzereinstellungen konnten nicht gespeichert werden.');
       }
-      
+
       // Speichern der Baby-Informationen (Name, Geschlecht, Geburtsdatum)
       const babyInfo = {
         name: babyName,
         baby_gender: babyGender,
         birth_date: birthDate ? birthDate.toISOString() : null
       };
-      
+
       const { error: babyError } = await saveBabyInfo(babyInfo);
-      
+
       if (babyError) {
         console.error('Error saving baby info:', babyError);
         throw new Error('Baby-Informationen konnten nicht gespeichert werden.');
       }
-      
+
       Alert.alert('Erfolg', 'Deine Daten wurden erfolgreich gespeichert.');
     } catch (err) {
       console.error('Failed to save user data:', err);
@@ -185,7 +185,7 @@ export default function ProfilScreen() {
       setIsSaving(false);
     }
   };
-  
+
   // Formatieren eines Datums für die Anzeige
   const formatDate = (date: Date | null) => {
     if (!date) return 'Nicht festgelegt';
@@ -195,7 +195,7 @@ export default function ProfilScreen() {
       year: 'numeric'
     });
   };
-  
+
   // Handler für Änderungen am Geburtstermin
   const handleDueDateChange = (event: any, selectedDate?: Date) => {
     setShowDueDatePicker(Platform.OS === 'ios');
@@ -203,7 +203,7 @@ export default function ProfilScreen() {
       setDueDate(selectedDate);
     }
   };
-  
+
   // Handler für Änderungen am Geburtsdatum
   const handleBirthDateChange = (event: any, selectedDate?: Date) => {
     setShowBirthDatePicker(Platform.OS === 'ios');
@@ -213,7 +213,7 @@ export default function ProfilScreen() {
       setIsBabyBorn(true);
     }
   };
-  
+
   // Handler für Änderungen am Baby-Status
   const handleBabyBornChange = (value: boolean) => {
     setIsBabyBorn(value);
@@ -222,7 +222,7 @@ export default function ProfilScreen() {
       setBirthDate(null);
     }
   };
-  
+
   return (
     <SafeAreaView style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
@@ -233,21 +233,21 @@ export default function ProfilScreen() {
         resizeMode="cover"
       >
         <View style={styles.header}>
-          <TouchableOpacity 
-            style={styles.backButton} 
+          <TouchableOpacity
+            style={styles.backButton}
             onPress={() => router.push('/(tabs)/more')}
           >
             <IconSymbol name="chevron.left" size={24} color={theme.text} />
             <ThemedText style={styles.backButtonText}>Zurück</ThemedText>
           </TouchableOpacity>
-          
+
           <ThemedText type="title" style={styles.title}>
             Mein Profil
           </ThemedText>
-          
+
           <View style={styles.headerRight} />
         </View>
-        
+
         {isLoading ? (
           <View style={styles.loadingContainer}>
             <ThemedText>Lade Daten...</ThemedText>
@@ -257,7 +257,7 @@ export default function ProfilScreen() {
             {/* Benutzerinformationen */}
             <ThemedView style={styles.section} lightColor={theme.cardLight} darkColor={theme.cardDark}>
               <ThemedText style={styles.sectionTitle}>Persönliche Daten</ThemedText>
-              
+
               <View style={styles.formGroup}>
                 <ThemedText style={styles.label}>Vorname</ThemedText>
                 <TextInput
@@ -268,7 +268,7 @@ export default function ProfilScreen() {
                   placeholderTextColor={theme.tabIconDefault}
                 />
               </View>
-              
+
               <View style={styles.formGroup}>
                 <ThemedText style={styles.label}>Nachname</ThemedText>
                 <TextInput
@@ -280,11 +280,11 @@ export default function ProfilScreen() {
                 />
               </View>
             </ThemedView>
-            
+
             {/* Schwangerschafts-/Baby-Informationen */}
             <ThemedView style={styles.section} lightColor={theme.cardLight} darkColor={theme.cardDark}>
               <ThemedText style={styles.sectionTitle}>Baby-Informationen</ThemedText>
-              
+
               <View style={styles.formGroup}>
                 <ThemedText style={styles.label}>Errechneter Geburtstermin</ThemedText>
                 <TouchableOpacity
@@ -296,7 +296,7 @@ export default function ProfilScreen() {
                   </ThemedText>
                   <IconSymbol name="calendar" size={20} color={theme.tabIconDefault} />
                 </TouchableOpacity>
-                
+
                 {showDueDatePicker && (
                   <DateTimePicker
                     value={dueDate || new Date()}
@@ -306,7 +306,7 @@ export default function ProfilScreen() {
                   />
                 )}
               </View>
-              
+
               <View style={styles.formGroup}>
                 <ThemedText style={styles.label}>Baby bereits geboren?</ThemedText>
                 <View style={styles.switchContainer}>
@@ -321,95 +321,96 @@ export default function ProfilScreen() {
                   />
                 </View>
               </View>
-              
-              {isBabyBorn && (
-                <>
-                  <View style={styles.formGroup}>
-                    <ThemedText style={styles.label}>Geburtsdatum</ThemedText>
-                    <TouchableOpacity
-                      style={styles.dateButton}
-                      onPress={() => setShowBirthDatePicker(true)}
-                    >
-                      <ThemedText style={styles.dateButtonText}>
-                        {birthDate ? formatDate(birthDate) : 'Geburtsdatum auswählen'}
-                      </ThemedText>
-                      <IconSymbol name="calendar" size={20} color={theme.tabIconDefault} />
-                    </TouchableOpacity>
-                    
-                    {showBirthDatePicker && (
-                      <DateTimePicker
-                        value={birthDate || new Date()}
-                        mode="date"
-                        display="default"
-                        onChange={handleBirthDateChange}
-                        maximumDate={new Date()}
-                      />
-                    )}
-                  </View>
-                  
-                  <View style={styles.formGroup}>
-                    <ThemedText style={styles.label}>Name des Babys</ThemedText>
-                    <TextInput
-                      style={[styles.input, { color: theme.text }]}
-                      value={babyName}
-                      onChangeText={setBabyName}
-                      placeholder="Name deines Babys"
-                      placeholderTextColor={theme.tabIconDefault}
+
+              {/* Name des Babys - immer anzeigen */}
+              <View style={styles.formGroup}>
+                <ThemedText style={styles.label}>Name des Babys</ThemedText>
+                <TextInput
+                  style={[styles.input, { color: theme.text }]}
+                  value={babyName}
+                  onChangeText={setBabyName}
+                  placeholder="Name deines Babys"
+                  placeholderTextColor={theme.tabIconDefault}
+                />
+              </View>
+
+              {/* Geschlecht - immer anzeigen */}
+              <View style={styles.formGroup}>
+                <ThemedText style={styles.label}>Geschlecht</ThemedText>
+                <View style={styles.genderContainer}>
+                  <TouchableOpacity
+                    style={[
+                      styles.genderButton,
+                      babyGender === 'male' && styles.genderButtonActive
+                    ]}
+                    onPress={() => setBabyGender('male')}
+                  >
+                    <IconSymbol
+                      name="person.fill"
+                      size={24}
+                      color={babyGender === 'male' ? '#FFFFFF' : theme.tabIconDefault}
                     />
-                  </View>
-                  
-                  <View style={styles.formGroup}>
-                    <ThemedText style={styles.label}>Geschlecht</ThemedText>
-                    <View style={styles.genderContainer}>
-                      <TouchableOpacity
-                        style={[
-                          styles.genderButton,
-                          babyGender === 'male' && styles.genderButtonActive
-                        ]}
-                        onPress={() => setBabyGender('male')}
-                      >
-                        <IconSymbol
-                          name="person.fill"
-                          size={24}
-                          color={babyGender === 'male' ? '#FFFFFF' : theme.tabIconDefault}
-                        />
-                        <ThemedText
-                          style={[
-                            styles.genderButtonText,
-                            babyGender === 'male' && styles.genderButtonTextActive
-                          ]}
-                        >
-                          Junge
-                        </ThemedText>
-                      </TouchableOpacity>
-                      
-                      <TouchableOpacity
-                        style={[
-                          styles.genderButton,
-                          babyGender === 'female' && styles.genderButtonActive
-                        ]}
-                        onPress={() => setBabyGender('female')}
-                      >
-                        <IconSymbol
-                          name="person.fill"
-                          size={24}
-                          color={babyGender === 'female' ? '#FFFFFF' : theme.tabIconDefault}
-                        />
-                        <ThemedText
-                          style={[
-                            styles.genderButtonText,
-                            babyGender === 'female' && styles.genderButtonTextActive
-                          ]}
-                        >
-                          Mädchen
-                        </ThemedText>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                </>
+                    <ThemedText
+                      style={[
+                        styles.genderButtonText,
+                        babyGender === 'male' && styles.genderButtonTextActive
+                      ]}
+                    >
+                      Junge
+                    </ThemedText>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.genderButton,
+                      babyGender === 'female' && styles.genderButtonActive
+                    ]}
+                    onPress={() => setBabyGender('female')}
+                  >
+                    <IconSymbol
+                      name="person.fill"
+                      size={24}
+                      color={babyGender === 'female' ? '#FFFFFF' : theme.tabIconDefault}
+                    />
+                    <ThemedText
+                      style={[
+                        styles.genderButtonText,
+                        babyGender === 'female' && styles.genderButtonTextActive
+                      ]}
+                    >
+                      Mädchen
+                    </ThemedText>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Geburtsdatum - nur anzeigen, wenn Baby geboren ist */}
+              {isBabyBorn && (
+                <View style={styles.formGroup}>
+                  <ThemedText style={styles.label}>Geburtsdatum</ThemedText>
+                  <TouchableOpacity
+                    style={styles.dateButton}
+                    onPress={() => setShowBirthDatePicker(true)}
+                  >
+                    <ThemedText style={styles.dateButtonText}>
+                      {birthDate ? formatDate(birthDate) : 'Geburtsdatum auswählen'}
+                    </ThemedText>
+                    <IconSymbol name="calendar" size={20} color={theme.tabIconDefault} />
+                  </TouchableOpacity>
+
+                  {showBirthDatePicker && (
+                    <DateTimePicker
+                      value={birthDate || new Date()}
+                      mode="date"
+                      display="default"
+                      onChange={handleBirthDateChange}
+                      maximumDate={new Date()}
+                    />
+                  )}
+                </View>
               )}
             </ThemedView>
-            
+
             {/* Speichern-Button */}
             <TouchableOpacity
               style={styles.saveButton}
