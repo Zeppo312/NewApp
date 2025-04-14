@@ -8,7 +8,6 @@ export interface BabyInfo {
   weight?: string;
   height?: string;
   photo_url?: string | null;
-  baby_gender?: 'male' | 'female' | '';
 }
 
 // Typen für die Tagebucheinträge

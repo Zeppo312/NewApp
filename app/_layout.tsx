@@ -5,6 +5,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { View, ActivityIndicator, Text } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/hooks/useColorScheme';
@@ -44,18 +45,22 @@ function RootLayoutNav() {
 
   // Wenn der Benutzer angemeldet ist, zur Hauptapp navigieren, sonst zum Login-Screen
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack initialRouteName={initialRoute}>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+        <Stack initialRouteName={initialRoute}>
         <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />
         <Stack.Screen name="diary-entries" options={{ headerShown: false }} />
-        <Stack.Screen name="profil" options={{ headerShown: false }} />
+        <Stack.Screen name="mini-wiki" options={{ headerShown: false }} />
+        <Stack.Screen name="faq" options={{ headerShown: false }} />
+        <Stack.Screen name="termine" options={{ headerShown: false }} />
         <Stack.Screen name="+not-found" />
         <Stack.Screen name="auth/callback" options={{ headerShown: false }} />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>
+    </GestureHandlerRootView>
   );
 }
 

@@ -91,22 +91,10 @@ export default function MoreScreen() {
               Baby & Familie
             </ThemedText>
 
-            <TouchableOpacity style={styles.menuItem}>
-              <View style={styles.menuItemIcon}>
-                <IconSymbol name="person.2.fill" size={24} color={theme.accent} />
-              </View>
-              <View style={styles.menuItemContent}>
-                <ThemedText style={styles.menuItemTitle}>
-                  Besuche planen
-                </ThemedText>
-                <ThemedText style={styles.menuItemDescription}>
-                  Plane Besuche von Familie und Freunden
-                </ThemedText>
-              </View>
-              <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.menuItem}>
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => router.push('/termine')}
+            >
               <View style={styles.menuItemIcon}>
                 <IconSymbol name="calendar.badge.plus" size={24} color={theme.accent} />
               </View>
@@ -148,7 +136,10 @@ export default function MoreScreen() {
               </TouchableOpacity>
             )}
 
-            <TouchableOpacity style={styles.menuItem}>
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => router.push('/mini-wiki')}
+            >
               <View style={styles.menuItemIcon}>
                 <IconSymbol name="book.fill" size={24} color={theme.accent} />
               </View>
@@ -163,7 +154,10 @@ export default function MoreScreen() {
               <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.menuItem}>
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => router.push('/faq')}
+            >
               <View style={styles.menuItemIcon}>
                 <IconSymbol name="questionmark.circle.fill" size={24} color={theme.accent} />
               </View>
