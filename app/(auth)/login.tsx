@@ -119,13 +119,13 @@ export default function LoginScreen() {
               [{ text: 'OK' }]
             );
           } else {
-            // Nach erfolgreicher Registrierung zur Profil-Seite leiten, damit der Benutzer sein Profil vervollständigen kann
-            console.log('Registration successful, navigating to profile page for completion');
+            // Nach erfolgreicher Registrierung zur Onboarding-Seite leiten, damit der Benutzer sein Profil schrittweise vervollständigen kann
+            console.log('Registration successful, navigating to onboarding page');
             try {
-              router.replace('../profil');
+              router.replace('../onboarding');
             } catch (navError) {
               console.error('Navigation error:', navError);
-              router.navigate('../profil');
+              router.navigate('../onboarding');
             }
           }
         }
