@@ -248,12 +248,23 @@ export const updateContraction = async (id: string, updates: Partial<Contraction
 };
 
 export const deleteContraction = async (id: string) => {
-  const { error } = await supabase
-    .from('contractions')
-    .delete()
-    .eq('id', id);
+  try {
+    console.log(`Attempting to delete contraction with ID: ${id}`);
 
-  return { error };
+    const { error } = await supabase
+      .from('contractions')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error(`Error deleting contraction with ID ${id}:`, error);
+    }
+
+    return { error };
+  } catch (err) {
+    console.error(`Exception when deleting contraction with ID ${id}:`, err);
+    return { error: err instanceof Error ? err : new Error('Unknown error during deletion') };
+  }
 };
 
 // Hilfsfunktionen für den Baby-Status

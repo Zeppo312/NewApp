@@ -29,10 +29,16 @@ export default function HomeScreen() {
   const theme = Colors[colorScheme];
   const { user } = useAuth();
 
+  // Hilfsfunktion zur Generierung einer eindeutigen ID
+  const generateUniqueId = (): string => {
+    // Kombiniere Zeitstempel mit einer zufälligen Zahl für mehr Eindeutigkeit
+    return `${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
+  };
+
   // Start a new contraction
   const startContraction = () => {
     const newContraction: Contraction = {
-      id: Date.now().toString(),
+      id: generateUniqueId(),
       startTime: new Date(),
       endTime: null,
       duration: null,
@@ -42,6 +48,7 @@ export default function HomeScreen() {
       intensity: null // Wird später beim Beenden der Wehe gesetzt
     };
 
+    console.log('Starting new contraction with ID:', newContraction.id);
     setCurrentContraction(newContraction);
     setTimerRunning(true);
     setElapsedTime(0);
@@ -83,25 +90,57 @@ export default function HomeScreen() {
       intensity
     };
 
+    console.log('Saving contraction with ID:', finalContraction.id, 'and intensity:', intensity);
+
     // Lokale Aktualisierung für sofortige UI-Reaktion
     setContractions([finalContraction, ...contractions]);
 
     // In Supabase speichern
     try {
-      const { error } = await saveContraction({
+      const contractionData = {
         start_time: finalContraction.startTime.toISOString(),
         end_time: finalContraction.endTime?.toISOString() || null,
         duration: finalContraction.duration,
         interval: finalContraction.interval,
         intensity: finalContraction.intensity
-      });
+      };
+
+      console.log('Sending contraction data to Supabase:', contractionData);
+
+      const { data, error } = await saveContraction(contractionData);
 
       if (error) {
         console.error('Error saving contraction:', error);
-        Alert.alert('Fehler', 'Wehe konnte nicht gespeichert werden.');
+        let errorMessage = 'Wehe konnte nicht gespeichert werden.';
+        if (error.message) {
+          errorMessage += ` Grund: ${error.message}`;
+          console.error('Detailed error message:', error.message);
+        }
+        Alert.alert('Fehler', errorMessage);
+
+        // Bei Fehler die Wehen neu laden, um den lokalen Zustand zu aktualisieren
+        loadContractions();
+      } else {
+        console.log('Successfully saved contraction with server ID:', data?.id);
+
+        // Wenn die Wehe erfolgreich gespeichert wurde und eine Server-ID erhalten hat,
+        // aktualisieren wir die lokale ID, um sie mit der Server-ID zu synchronisieren
+        if (data && data.id) {
+          setContractions(prevContractions => {
+            return prevContractions.map(c => {
+              if (c.id === finalContraction.id) {
+                return { ...c, id: data.id };
+              }
+              return c;
+            });
+          });
+        }
       }
     } catch (err) {
       console.error('Failed to save contraction:', err);
+      Alert.alert('Fehler', `Ein unerwarteter Fehler ist aufgetreten: ${err instanceof Error ? err.message : 'Unbekannter Fehler'}`);
+      // Bei Fehler die Wehen neu laden
+      loadContractions();
     }
 
     // Check if contractions are getting close together and frequent
@@ -171,6 +210,21 @@ export default function HomeScreen() {
 
     // Wir führen die Löschung direkt aus, da der Bestätigungsdialog bereits in der ContractionItem-Komponente angezeigt wird
     try {
+      // Prüfen, ob die ID ein gültiges Format hat
+      if (!contractionId || typeof contractionId !== 'string') {
+        console.error('Invalid contraction ID:', contractionId);
+        Alert.alert('Fehler', 'Ungültige Wehen-ID. Bitte versuchen Sie es erneut.');
+        return;
+      }
+
+      // Prüfen, ob die Wehe in der lokalen Liste existiert
+      const contractionExists = contractions.some(c => c.id === contractionId);
+      if (!contractionExists) {
+        console.error('Contraction not found in local state:', contractionId);
+        Alert.alert('Fehler', 'Die Wehe konnte nicht gefunden werden.');
+        return;
+      }
+
       // Optimistische UI-Aktualisierung
       setContractions(prevContractions =>
         prevContractions.filter(c => c.id !== contractionId)
@@ -181,7 +235,15 @@ export default function HomeScreen() {
       deleteContraction(contractionId).then(({ error }) => {
         if (error) {
           console.error('Error deleting contraction:', error);
-          Alert.alert('Fehler', 'Wehe konnte nicht gelöscht werden.');
+
+          // Detailliertere Fehlermeldung
+          let errorMessage = 'Wehe konnte nicht gelöscht werden.';
+          if (error.message) {
+            errorMessage += ` Grund: ${error.message}`;
+            console.error('Detailed error message:', error.message);
+          }
+
+          Alert.alert('Fehler', errorMessage);
 
           // Bei Fehler die Wehen neu laden
           loadContractions();
@@ -191,11 +253,13 @@ export default function HomeScreen() {
       }).catch(err => {
         console.error('Failed to delete contraction:', err);
         // Bei Fehler die Wehen neu laden
+        Alert.alert('Fehler', `Wehe konnte nicht gelöscht werden. Fehler: ${err.message || 'Unbekannter Fehler'}`);
         loadContractions();
       });
     } catch (err) {
       console.error('Failed to delete contraction:', err);
       // Bei Fehler die Wehen neu laden
+      Alert.alert('Fehler', `Ein unerwarteter Fehler ist aufgetreten: ${err instanceof Error ? err.message : 'Unbekannter Fehler'}`);
       loadContractions();
     }
   };
