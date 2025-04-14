@@ -91,11 +91,10 @@ const ContractionChart: React.FC<ContractionChartProps> = ({
 
   const timeRange = lastTime - firstTime;
 
-  // Skalierungsfaktor für die Breite der Balken
-  // Mindestens 12 Pixel pro Minute für breitere Balken, aber nicht mehr als die Breite des Charts
-  // Wir reduzieren leicht die maximale Breite, um Platz für Abstände zwischen den Balken zu schaffen
-  const pixelsPerMinute = Math.min(12, (chartWidth * 0.95) / (timeRange / 1000 / 60));
-  const chartContentWidth = Math.max(chartWidth, (timeRange / 1000 / 60) * pixelsPerMinute);
+  // Fester Skalierungsfaktor für die Breite der Balken
+  // Wir verwenden einen festen Wert von 20 Pixeln pro Minute, um genügend Platz zwischen den Balken zu haben
+  const pixelsPerMinute = 20; // Fester Wert für bessere Lesbarkeit
+  const chartContentWidth = Math.max(chartWidth, (timeRange / 1000 / 60) * pixelsPerMinute + 100); // Extra Platz am Ende
 
   // Höhe eines Balkens
   const barHeight = 30;
@@ -104,7 +103,14 @@ const ContractionChart: React.FC<ContractionChartProps> = ({
     <ThemedView style={styles.container} lightColor={lightColor} darkColor={darkColor}>
       <ThemedText style={styles.title}>Wehenverlauf</ThemedText>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={true} style={styles.scrollView}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={true}
+        style={styles.scrollView}
+        contentContainerStyle={{ paddingHorizontal: 10 }}
+        decelerationRate="normal"
+        snapToAlignment="start"
+      >
         <View style={[styles.chartContent, { width: chartContentWidth }]}>
           {/* Zeitachse - entfernt, da wir jetzt eine bessere Zeitachse unten haben */}
           <View style={styles.timeAxisPlaceholder} />
@@ -146,7 +152,7 @@ const ContractionChart: React.FC<ContractionChartProps> = ({
                       style={[
                         styles.bar,
                         {
-                          width: Math.max(barWidth, 6), // Mindestbreite 6px für bessere Sichtbarkeit
+                          width: Math.max(barWidth, 8), // Mindestbreite 8px für bessere Sichtbarkeit
                           left: barLeft,
                           backgroundColor: getIntensityColor(contraction.intensity),
                           height: barHeight,
@@ -157,8 +163,10 @@ const ContractionChart: React.FC<ContractionChartProps> = ({
                           shadowRadius: 1.5,
                           elevation: 2,
                           // Rand für bessere Abgrenzung
-                          borderWidth: 0.5,
-                          borderColor: 'rgba(0,0,0,0.1)'
+                          borderWidth: 1,
+                          borderColor: 'rgba(0,0,0,0.15)',
+                          // Abgerundete Ecken für bessere Optik
+                          borderRadius: 4
                         }
                       ]}
                     />
@@ -173,22 +181,28 @@ const ContractionChart: React.FC<ContractionChartProps> = ({
 
           {/* Zeitachse am unteren Rand */}
           <View style={styles.bottomTimeAxis}>
-            {/* Zeitmarken alle 30 Minuten */}
-            {Array.from({ length: Math.ceil(timeRange / (30 * 60 * 1000)) + 1 }).map((_, i) => {
-              const timeOffset = i * 30 * 60 * 1000; // 30 Minuten in Millisekunden
+            {/* Zeitmarken alle 15 Minuten für bessere Granularität */}
+            {Array.from({ length: Math.ceil(timeRange / (15 * 60 * 1000)) + 1 }).map((_, i) => {
+              const timeOffset = i * 15 * 60 * 1000; // 15 Minuten in Millisekunden
               const markerTime = new Date(firstTime + timeOffset);
               const markerPosition = (timeOffset / 1000 / 60) * pixelsPerMinute;
+
+              // Prüfen, ob genügend Platz für diesen Zeitstempel vorhanden ist
+              // Wir zeigen nur jeden zweiten Zeitstempel an, um Überlappungen zu vermeiden
+              const showLabel = i % 2 === 0;
 
               return (
                 <View key={`marker-${i}`} style={styles.timeMarker}>
                   <View
                     style={[styles.timeMarkerLine, { left: markerPosition }]}
                   />
-                  <Text
-                    style={[styles.timeMarkerLabel, { left: markerPosition }]}
-                  >
-                    {formatTime(markerTime)}
-                  </Text>
+                  {showLabel && (
+                    <Text
+                      style={[styles.timeMarkerLabel, { left: markerPosition }]}
+                    >
+                      {formatTime(markerTime)}
+                    </Text>
+                  )}
                 </View>
               );
             })}
@@ -249,7 +263,7 @@ const styles = StyleSheet.create({
   },
   chartContent: {
     paddingTop: 10, // Reduzierter Platz, da keine Zeitlabels mehr oben
-    paddingBottom: 60, // Mehr Platz für Zeitachse und Legende
+    paddingBottom: 80, // Mehr Platz für Zeitachse und Legende
     position: 'relative', // Für absolute Positionierung des Tooltips
   },
   timeAxisPlaceholder: {
@@ -259,7 +273,7 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   bars: {
-    height: 50, // Höhe für Balken und Labels
+    height: 60, // Erhöhte Höhe für Balken und Labels
     position: 'relative',
   },
   barContainer: {
@@ -269,14 +283,18 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 10,
     borderRadius: 4, // Abgerundete Ecken für einen weicheren Look
-    marginHorizontal: 1, // Leichter Abstand zwischen den Balken
+    marginHorizontal: 2, // Mehr Abstand zwischen den Balken
   },
   durationLabel: {
     position: 'absolute',
     top: 45,
-    fontSize: 9,
-    color: '#666666',
-    transform: [{ translateX: -10 }], // Zentrieren des Labels
+    fontSize: 10, // Größere Schrift
+    fontWeight: '500', // Etwas fetter für bessere Lesbarkeit
+    color: '#555555', // Dunklere Farbe für besseren Kontrast
+    transform: [{ translateX: -12 }], // Zentrieren des Labels
+    backgroundColor: 'rgba(255, 255, 255, 0.7)', // Hintergrund für bessere Lesbarkeit
+    paddingHorizontal: 2,
+    borderRadius: 2,
   },
   noDataText: {
     textAlign: 'center',
@@ -286,7 +304,7 @@ const styles = StyleSheet.create({
   },
   // Styles für die Zeitachse am unteren Rand
   bottomTimeAxis: {
-    height: 30,
+    height: 40, // Mehr Höhe für bessere Lesbarkeit
     borderTopWidth: 1,
     borderTopColor: '#CCCCCC',
     position: 'relative',
@@ -297,17 +315,22 @@ const styles = StyleSheet.create({
   },
   timeMarkerLine: {
     position: 'absolute',
-    height: 5,
+    height: 8, // Längere Linie
     width: 1,
-    backgroundColor: '#CCCCCC',
+    backgroundColor: '#AAAAAA', // Dunklere Farbe für bessere Sichtbarkeit
     top: 0,
   },
   timeMarkerLabel: {
     position: 'absolute',
-    fontSize: 9,
-    color: '#666666',
-    top: 8,
+    fontSize: 11, // Größere Schrift
+    fontWeight: '500', // Etwas fetter für bessere Lesbarkeit
+    color: '#444444', // Dunklere Farbe für besseren Kontrast
+    top: 12, // Mehr Abstand zur Linie
     transform: [{ translateX: -15 }], // Zentrieren des Labels
+    backgroundColor: 'rgba(255, 255, 255, 0.8)', // Hintergrund für bessere Lesbarkeit
+    paddingHorizontal: 3,
+    paddingVertical: 1,
+    borderRadius: 2,
   },
   // Styles für den Tooltip
   tooltip: {

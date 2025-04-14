@@ -18,8 +18,6 @@ type Contraction = {
 
 type SwipeableContractionItemProps = {
   item: Contraction;
-  index: number;
-  totalCount: number;
   onDelete: (id: string) => void;
 };
 
@@ -52,8 +50,6 @@ const getIntensityColor = (intensity: string): string => {
 
 const SwipeableContractionItem: React.FC<SwipeableContractionItemProps> = ({
   item,
-  index,
-  totalCount,
   onDelete
 }) => {
   const swipeableRef = useRef<Swipeable>(null);
@@ -119,7 +115,7 @@ const SwipeableContractionItem: React.FC<SwipeableContractionItemProps> = ({
                 lightColor={theme.text}
                 darkColor={theme.text}
               >
-                Wehe #{totalCount - index}
+                Wehe
               </ThemedText>
               <ThemedText
                 style={{fontSize: 16}} // Larger font
