@@ -111,13 +111,13 @@ const SwipeableContractionItem: React.FC<SwipeableContractionItemProps> = ({
   };
 
   return (
-    <GestureHandlerRootView>
-      <Swipeable
-        ref={swipeableRef}
-        renderRightActions={renderRightActions}
-        friction={2}
-        rightThreshold={40}
-      >
+    <Swipeable
+      ref={swipeableRef}
+      renderRightActions={renderRightActions}
+      friction={2}
+      rightThreshold={40}
+      overshootRight={false}
+    >
         <ThemedView
           style={styles.contractionItem}
           lightColor={theme.card}
@@ -234,7 +234,6 @@ const SwipeableContractionItem: React.FC<SwipeableContractionItemProps> = ({
           </View>
         </ThemedView>
       </Swipeable>
-    </GestureHandlerRootView>
   );
 };
 
