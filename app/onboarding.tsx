@@ -11,6 +11,7 @@ import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { supabase, checkSupabasePermissions } from '@/lib/supabase';
 import { getBabyInfo, saveBabyInfo } from '@/lib/baby';
+import { checkTableStructure, getAllDataFromTable, testSaveProcess, checkTablePermissions } from '@/lib/debug';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
 // Definieren der Schritte im Onboarding-Prozess
@@ -180,6 +181,18 @@ export default function OnboardingScreen() {
 
       setIsSaving(true);
 
+      console.log('Starting to save user data with values:', {
+        firstName,
+        lastName,
+        dueDate: dueDate ? dueDate.toISOString() : null,
+        isBabyBorn,
+        babyName,
+        babyGender,
+        birthDate: birthDate ? birthDate.toISOString() : null,
+        babyWeight,
+        babyHeight
+      });
+
       // Speichern der Profildaten (Vorname, Nachname)
       const { error: profileError } = await supabase
         .from('profiles')
@@ -315,6 +328,22 @@ export default function OnboardingScreen() {
 
         const { data: babyData, error: babyError } = await saveBabyInfo(babyInfo);
         console.log('Original saveBabyInfo result:', { data: babyData, error: babyError });
+
+        // Daten nach dem Speichern abrufen, um zu überprüfen, ob sie korrekt gespeichert wurden
+        console.log('Fetching saved data to verify...');
+        const { data: savedBabyInfo } = await supabase
+          .from('baby_info')
+          .select('*')
+          .eq('user_id', user.id);
+
+        console.log('Saved baby info:', savedBabyInfo);
+
+        const { data: savedUserSettings } = await supabase
+          .from('user_settings')
+          .select('*')
+          .eq('user_id', user.id);
+
+        console.log('Saved user settings:', savedUserSettings);
       } catch (saveError) {
         console.error('Error in direct save process:', saveError);
         Alert.alert('Fehler', `Fehler beim Speichern: ${saveError.message}`);
@@ -598,6 +627,53 @@ export default function OnboardingScreen() {
             <ThemedText style={styles.welcomeText}>
               Super! Dein Profil ist jetzt eingerichtet. Du kannst jetzt die App nutzen und alle Funktionen entdecken.
             </ThemedText>
+
+            {/* Debug-Button zum Testen der Speicherung */}
+            <TouchableOpacity
+              style={[styles.button, { marginTop: 20, backgroundColor: '#FF5722' }]}
+              onPress={async () => {
+                if (!user) return;
+
+                try {
+                  // Tabellenüberprüfung
+                  Alert.alert('Debug', 'Prüfe Tabellen...');
+
+                  // Struktur der Tabellen prüfen
+                  const babyInfoStructure = await checkTableStructure('baby_info');
+                  console.log('Baby Info Structure:', babyInfoStructure);
+
+                  const userSettingsStructure = await checkTableStructure('user_settings');
+                  console.log('User Settings Structure:', userSettingsStructure);
+
+                  // Berechtigungen prüfen
+                  const babyInfoPermissions = await checkTablePermissions('baby_info', user.id);
+                  console.log('Baby Info Permissions:', babyInfoPermissions);
+
+                  const userSettingsPermissions = await checkTablePermissions('user_settings', user.id);
+                  console.log('User Settings Permissions:', userSettingsPermissions);
+
+                  // Direkter Speichertest
+                  const saveTestResult = await testSaveProcess(user.id);
+                  console.log('Save Test Result:', saveTestResult);
+
+                  // Daten abrufen
+                  const babyInfoData = await getAllDataFromTable('baby_info', user.id);
+                  console.log('Baby Info Data:', babyInfoData);
+
+                  const userSettingsData = await getAllDataFromTable('user_settings', user.id);
+                  console.log('User Settings Data:', userSettingsData);
+
+                  Alert.alert('Debug', 'Prüfung abgeschlossen. Siehe Konsole für Details.');
+                } catch (error) {
+                  console.error('Debug error:', error);
+                  Alert.alert('Debug Error', error instanceof Error ? error.message : 'Unbekannter Fehler');
+                }
+              }}
+            >
+              <ThemedText style={{ color: '#FFFFFF', fontWeight: 'bold' }}>
+                DEBUG: Speicherung testen
+              </ThemedText>
+            </TouchableOpacity>
           </View>
         );
 
