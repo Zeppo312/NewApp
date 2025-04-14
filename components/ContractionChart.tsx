@@ -37,8 +37,19 @@ const getIntensityColor = (intensity: string | null): string => {
 };
 
 // Formatierung der Zeit für die Anzeige
-const formatTime = (date: Date): string => {
+const formatTime = (date: Date, showDate: boolean = false): string => {
+  if (showDate) {
+    // Format: "DD.MM. HH:MM"
+    return `${date.getDate().toString().padStart(2, '0')}.${(date.getMonth() + 1).toString().padStart(2, '0')}. ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+  }
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+};
+
+// Prüft, ob zwei Daten am selben Tag sind
+const isSameDay = (date1: Date, date2: Date): boolean => {
+  return date1.getDate() === date2.getDate() &&
+         date1.getMonth() === date2.getMonth() &&
+         date1.getFullYear() === date2.getFullYear();
 };
 
 // Formatierung der Dauer in Minuten und Sekunden
@@ -187,20 +198,41 @@ const ContractionChart: React.FC<ContractionChartProps> = ({
               const markerTime = new Date(firstTime + timeOffset);
               const markerPosition = (timeOffset / 1000 / 60) * pixelsPerMinute;
 
+              // Prüfen, ob ein neuer Tag beginnt
+              const previousMarkerTime = i > 0 ? new Date(firstTime + (i - 1) * 15 * 60 * 1000) : null;
+              const isNewDay = previousMarkerTime && !isSameDay(markerTime, previousMarkerTime);
+
               // Prüfen, ob genügend Platz für diesen Zeitstempel vorhanden ist
               // Wir zeigen nur jeden zweiten Zeitstempel an, um Überlappungen zu vermeiden
-              const showLabel = i % 2 === 0;
+              // Aber wir zeigen immer einen Zeitstempel an, wenn ein neuer Tag beginnt
+              const showLabel = isNewDay || i % 2 === 0;
 
               return (
                 <View key={`marker-${i}`} style={styles.timeMarker}>
+                  {/* Wenn ein neuer Tag beginnt, zeigen wir eine spezielle Markierung an */}
+                  {isNewDay && (
+                    <View
+                      style={[styles.dayDivider, { left: markerPosition }]}
+                    />
+                  )}
                   <View
-                    style={[styles.timeMarkerLine, { left: markerPosition }]}
+                    style={[
+                      styles.timeMarkerLine,
+                      { left: markerPosition },
+                      // Hervorhebung für Tageswechsel
+                      isNewDay && styles.newDayMarkerLine
+                    ]}
                   />
                   {showLabel && (
                     <Text
-                      style={[styles.timeMarkerLabel, { left: markerPosition }]}
+                      style={[
+                        styles.timeMarkerLabel,
+                        { left: markerPosition },
+                        // Hervorhebung für Tageswechsel
+                        isNewDay && styles.newDayMarkerLabel
+                      ]}
                     >
-                      {formatTime(markerTime)}
+                      {formatTime(markerTime, isNewDay)}
                     </Text>
                   )}
                 </View>
@@ -331,6 +363,29 @@ const styles = StyleSheet.create({
     paddingHorizontal: 3,
     paddingVertical: 1,
     borderRadius: 2,
+  },
+  // Styles für Tageswechsel
+  dayDivider: {
+    position: 'absolute',
+    height: 80, // Höher als die normale Zeitachse
+    width: 1.5, // Etwas breiter als normale Linien
+    backgroundColor: '#FF9A8A', // Auffällige Farbe für Tageswechsel
+    top: -60, // Nach oben versetzt, um in den Bereich der Balken zu ragen
+    zIndex: 10, // Über anderen Elementen
+  },
+  newDayMarkerLine: {
+    height: 12, // Längere Linie für Tageswechsel
+    width: 2, // Dicker für Tageswechsel
+    backgroundColor: '#FF9A8A', // Auffällige Farbe für Tageswechsel
+  },
+  newDayMarkerLabel: {
+    fontWeight: '700', // Fetter für Tageswechsel
+    backgroundColor: 'rgba(255, 154, 138, 0.2)', // Leicht eingefärbter Hintergrund
+    borderWidth: 1,
+    borderColor: '#FF9A8A',
+    color: '#333333', // Dunklere Textfarbe für besseren Kontrast
+    paddingHorizontal: 4,
+    paddingVertical: 2,
   },
   // Styles für den Tooltip
   tooltip: {
