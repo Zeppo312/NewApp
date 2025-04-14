@@ -97,7 +97,27 @@ export default function HomeScreen() {
     return new Date().toLocaleDateString('de-DE', options);
   };
 
-  // Berechne die Anzahl der heutigen Einträge
+  // Berechne die Anzahl der heutigen Mahlzeiten
+  const getTodayFeedings = () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Hier würden wir normalerweise die Mahlzeiten aus der Datenbank abrufen
+    // Für den Moment simulieren wir eine zufällige Anzahl zwischen 0 und 8
+    return Math.floor(Math.random() * 9);
+  };
+
+  // Berechne die Anzahl der heutigen Windelwechsel
+  const getTodayDiaperChanges = () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Hier würden wir normalerweise die Windelwechsel aus der Datenbank abrufen
+    // Für den Moment simulieren wir eine zufällige Anzahl zwischen 0 und 10
+    return Math.floor(Math.random() * 11);
+  };
+
+  // Berechne die Anzahl der heutigen Einträge (für Referenz, wird nicht mehr angezeigt)
   const getTodayEntries = () => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -109,7 +129,7 @@ export default function HomeScreen() {
     }).length;
   };
 
-  // Berechne die Anzahl der heute erreichten Meilensteine
+  // Berechne die Anzahl der heute erreichten Meilensteine (für Referenz, wird nicht mehr angezeigt)
   const getTodayMilestones = () => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -164,8 +184,8 @@ export default function HomeScreen() {
 
   // Rendere die Tagesübersicht
   const renderDailySummary = () => {
-    const todayEntries = getTodayEntries();
-    const todayMilestones = getTodayMilestones();
+    const todayFeedings = getTodayFeedings();
+    const todayDiaperChanges = getTodayDiaperChanges();
 
     return (
       <ThemedView style={styles.summaryContainer} lightColor={theme.cardLight} darkColor={theme.cardDark}>
@@ -175,15 +195,15 @@ export default function HomeScreen() {
 
         <View style={styles.statsContainer}>
           <View style={styles.statItem}>
-            <IconSymbol name="book.fill" size={24} color={theme.accent} />
-            <ThemedText style={styles.statValue}>{todayEntries}</ThemedText>
-            <ThemedText style={styles.statLabel}>Tagebucheinträge</ThemedText>
+            <IconSymbol name="drop.fill" size={24} color="#FF9800" />
+            <ThemedText style={styles.statValue}>{todayFeedings}</ThemedText>
+            <ThemedText style={styles.statLabel}>Mahlzeiten</ThemedText>
           </View>
 
           <View style={styles.statItem}>
-            <IconSymbol name="star.fill" size={24} color={theme.accent} />
-            <ThemedText style={styles.statValue}>{todayMilestones}</ThemedText>
-            <ThemedText style={styles.statLabel}>Meilensteine</ThemedText>
+            <IconSymbol name="heart.fill" size={24} color="#4CAF50" />
+            <ThemedText style={styles.statValue}>{todayDiaperChanges}</ThemedText>
+            <ThemedText style={styles.statLabel}>Windelwechsel</ThemedText>
           </View>
 
           {currentPhase && phaseProgress && (
@@ -208,7 +228,7 @@ export default function HomeScreen() {
 
         <View style={styles.cardsGrid}>
           <TouchableOpacity
-            style={[styles.card, { backgroundColor: 'rgba(157, 190, 187, 0.7)' }]}
+            style={[styles.card, { backgroundColor: 'rgba(157, 190, 187, 0.9)' }]}
             onPress={() => router.push('/(tabs)/diary')}
           >
             <IconSymbol name="book.fill" size={32} color={Colors.light.success} />
@@ -217,7 +237,7 @@ export default function HomeScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.card, { backgroundColor: 'rgba(233, 201, 182, 0.7)' }]}
+            style={[styles.card, { backgroundColor: 'rgba(233, 201, 182, 0.9)' }]}
             onPress={() => router.push('/(tabs)/baby')}
           >
             <IconSymbol name="person.fill" size={32} color="#E9C9B6" />
@@ -227,7 +247,7 @@ export default function HomeScreen() {
 
           {currentPhase && (
             <TouchableOpacity
-              style={[styles.card, { backgroundColor: 'rgba(125, 90, 80, 0.4)' }]}
+              style={[styles.card, { backgroundColor: 'rgba(125, 90, 80, 0.7)' }]}
               onPress={() => router.push('/(tabs)/diary')}
             >
               <View style={styles.progressCircle}>
@@ -243,7 +263,7 @@ export default function HomeScreen() {
           )}
 
           <TouchableOpacity
-            style={[styles.card, { backgroundColor: 'rgba(125, 90, 80, 0.4)' }]}
+            style={[styles.card, { backgroundColor: 'rgba(125, 90, 80, 0.7)' }]}
             onPress={() => router.push('/(tabs)/daily_old')}
           >
             <IconSymbol name="list.bullet" size={32} color="#7D5A50" />
