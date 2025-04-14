@@ -1,6 +1,5 @@
-import React, { useRef } from 'react';
-import { View, StyleSheet, TouchableOpacity, Alert } from 'react-native';
-import { Swipeable, GestureHandlerRootView } from 'react-native-gesture-handler';
+import React from 'react';
+import { View, StyleSheet, TouchableOpacity, Alert, Image } from 'react-native';
 import { ThemedText } from './ThemedText';
 import { ThemedView } from './ThemedView';
 import { Colors } from '@/constants/Colors';
@@ -62,184 +61,167 @@ const getIntensityColor = (intensity: string): string => {
   }
 };
 
-const SwipeableContractionItem: React.FC<SwipeableContractionItemProps> = ({
+const ContractionItem: React.FC<SwipeableContractionItemProps> = ({
   item,
   index,
   totalCount,
   onDelete
 }) => {
-  const swipeableRef = useRef<Swipeable>(null);
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
 
-  // Render right actions (delete button that appears when swiping)
-  const renderRightActions = () => {
-    return (
-      <TouchableOpacity
-        style={styles.deleteAction}
-        onPress={() => {
-          if (swipeableRef.current) {
-            swipeableRef.current.close();
+  // Funktion zum Löschen einer Wehe
+  const handleDelete = () => {
+    Alert.alert(
+      'Wehe löschen',
+      'Möchtest du diese Wehe wirklich löschen?',
+      [
+        {
+          text: 'Abbrechen',
+          style: 'cancel'
+        },
+        {
+          text: 'Löschen',
+          style: 'destructive',
+          onPress: () => {
+            // Kleine Verzögerung, um sicherzustellen, dass die UI aktualisiert ist
+            setTimeout(() => {
+              console.log('Deleting contraction with ID:', item.id);
+              onDelete(item.id);
+            }, 300); // Längere Verzögerung für mehr Stabilität
           }
-          Alert.alert(
-            'Wehe löschen',
-            'Möchtest du diese Wehe wirklich löschen?',
-            [
-              {
-                text: 'Abbrechen',
-                style: 'cancel',
-                onPress: () => {
-                  if (swipeableRef.current) {
-                    swipeableRef.current.close();
-                  }
-                }
-              },
-              {
-                text: 'Löschen',
-                style: 'destructive',
-                onPress: () => {
-                  // Kleine Verzögerung, um sicherzustellen, dass die UI aktualisiert ist
-                  setTimeout(() => {
-                    console.log('Deleting contraction with ID:', item.id);
-                    onDelete(item.id);
-                  }, 100);
-                }
-              }
-            ]
-          );
-        }}
-      >
-        <ThemedText style={styles.deleteActionText}>
-          Löschen
-        </ThemedText>
-      </TouchableOpacity>
+        }
+      ]
     );
   };
 
   return (
-    <Swipeable
-      ref={swipeableRef}
-      renderRightActions={renderRightActions}
-      friction={2}
-      rightThreshold={40}
-      overshootRight={false}
+    <ThemedView
+      style={styles.contractionItem}
+      lightColor={theme.card}
+      darkColor={theme.card}
     >
-        <ThemedView
-          style={styles.contractionItem}
-          lightColor={theme.card}
-          darkColor={theme.card}
+      <View style={styles.contractionHeader}>
+        <View style={{flex: 1}}>
+          <ThemedText
+            type="defaultSemiBold"
+            style={{fontSize: 18}} // Larger font
+            lightColor={theme.text}
+            darkColor={theme.text}
+          >
+            {index !== undefined && totalCount !== undefined ? `Wehe #${totalCount - index}` : 'Wehe'}
+          </ThemedText>
+          <View style={{flexDirection: 'row', alignItems: 'center'}}>
+            <ThemedText
+              style={{fontSize: 16}} // Larger font
+              lightColor={theme.text}
+              darkColor={theme.text}
+            >
+              {formatDateTime(new Date(item.startTime))}
+            </ThemedText>
+            <View style={{
+              backgroundColor: '#FF9A8A',
+              paddingHorizontal: 6,
+              paddingVertical: 2,
+              borderRadius: 10,
+              marginLeft: 8
+            }}>
+              <ThemedText
+                style={{fontSize: 12, fontWeight: 'bold'}}
+                lightColor="#FFFFFF"
+                darkColor="#FFFFFF"
+              >
+                {formatDate(new Date(item.startTime))}
+              </ThemedText>
+            </View>
+          </View>
+        </View>
+
+        {/* Löschen-Button */}
+        <TouchableOpacity
+          style={styles.deleteButton}
+          onPress={handleDelete}
         >
-          <View style={styles.contractionHeader}>
-            <View style={{flex: 1}}>
-              <ThemedText
-                type="defaultSemiBold"
-                style={{fontSize: 18}} // Larger font
-                lightColor={theme.text}
-                darkColor={theme.text}
-              >
-                {index !== undefined && totalCount !== undefined ? `Wehe #${totalCount - index}` : 'Wehe'}
-              </ThemedText>
-              <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                <ThemedText
-                  style={{fontSize: 16}} // Larger font
-                  lightColor={theme.text}
-                  darkColor={theme.text}
-                >
-                  {formatDateTime(new Date(item.startTime))}
-                </ThemedText>
-                <View style={{
-                  backgroundColor: '#FF9A8A',
-                  paddingHorizontal: 6,
-                  paddingVertical: 2,
-                  borderRadius: 10,
-                  marginLeft: 8
-                }}>
-                  <ThemedText
-                    style={{fontSize: 12, fontWeight: 'bold'}}
-                    lightColor="#FFFFFF"
-                    darkColor="#FFFFFF"
-                  >
-                    {formatDate(new Date(item.startTime))}
-                  </ThemedText>
-                </View>
-              </View>
-            </View>
-          </View>
+          <Image
+            source={require('../assets/images/trash-icon.png')}
+            style={styles.deleteIcon}
+          />
+        </TouchableOpacity>
+      </View>
 
-          <View style={styles.contractionDetailsContainer}>
-            {/* Linke Spalte: Dauer und Abstand */}
-            <View style={styles.leftColumn}>
-              <ThemedView
-                style={[styles.detailItem, {backgroundColor: colorScheme === 'light' ? 'rgba(230, 204, 178, 0.15)' : 'rgba(230, 204, 178, 0.1)'}]}
-                lightColor={colorScheme === 'light' ? 'rgba(247, 239, 229, 0.8)' : theme.card}
-                darkColor={colorScheme === 'dark' ? 'rgba(92, 77, 65, 0.8)' : theme.card}
-              >
-                <ThemedText
-                  style={styles.detailLabel}
-                  lightColor={theme.text}
-                  darkColor={theme.text}
-                >
-                  Dauer:
-                </ThemedText>
-                <ThemedText
-                  type="defaultSemiBold"
-                  style={styles.detailValue}
-                  lightColor={theme.accent}
-                  darkColor={theme.accent}
-                >
-                  {item.duration ? formatTime(item.duration) : '--:--'}
-                </ThemedText>
-              </ThemedView>
+      <View style={styles.contractionDetailsContainer}>
+        {/* Linke Spalte: Dauer und Abstand */}
+        <View style={styles.leftColumn}>
+          <ThemedView
+            style={[styles.detailItem, {backgroundColor: colorScheme === 'light' ? 'rgba(230, 204, 178, 0.15)' : 'rgba(230, 204, 178, 0.1)'}]}
+            lightColor={colorScheme === 'light' ? 'rgba(247, 239, 229, 0.8)' : theme.card}
+            darkColor={colorScheme === 'dark' ? 'rgba(92, 77, 65, 0.8)' : theme.card}
+          >
+            <ThemedText
+              style={styles.detailLabel}
+              lightColor={theme.text}
+              darkColor={theme.text}
+            >
+              Dauer:
+            </ThemedText>
+            <ThemedText
+              type="defaultSemiBold"
+              style={styles.detailValue}
+              lightColor={theme.accent}
+              darkColor={theme.accent}
+            >
+              {item.duration ? formatTime(item.duration) : '--:--'}
+            </ThemedText>
+          </ThemedView>
 
-              <ThemedView
-                style={[styles.detailItem, {backgroundColor: colorScheme === 'light' ? 'rgba(230, 204, 178, 0.15)' : 'rgba(230, 204, 178, 0.1)'}]}
-                lightColor={colorScheme === 'light' ? 'rgba(247, 239, 229, 0.8)' : theme.card}
-                darkColor={colorScheme === 'dark' ? 'rgba(92, 77, 65, 0.8)' : theme.card}
-              >
-                <ThemedText
-                  style={styles.detailLabel}
-                  lightColor={theme.text}
-                  darkColor={theme.text}
-                >
-                  Abstand:
-                </ThemedText>
-                <ThemedText
-                  type="defaultSemiBold"
-                  style={styles.detailValue}
-                  lightColor={theme.accent}
-                  darkColor={theme.accent}
-                >
-                  {item.interval ? formatTime(item.interval) : '--:--'}
-                </ThemedText>
-              </ThemedView>
-            </View>
+          <ThemedView
+            style={[styles.detailItem, {backgroundColor: colorScheme === 'light' ? 'rgba(230, 204, 178, 0.15)' : 'rgba(230, 204, 178, 0.1)'}]}
+            lightColor={colorScheme === 'light' ? 'rgba(247, 239, 229, 0.8)' : theme.card}
+            darkColor={colorScheme === 'dark' ? 'rgba(92, 77, 65, 0.8)' : theme.card}
+          >
+            <ThemedText
+              style={styles.detailLabel}
+              lightColor={theme.text}
+              darkColor={theme.text}
+            >
+              Abstand:
+            </ThemedText>
+            <ThemedText
+              type="defaultSemiBold"
+              style={styles.detailValue}
+              lightColor={theme.accent}
+              darkColor={theme.accent}
+            >
+              {item.interval ? formatTime(item.interval) : '--:--'}
+            </ThemedText>
+          </ThemedView>
+        </View>
 
-            {/* Rechte Spalte: Stärke */}
-            <View style={styles.rightColumn}>
-              <ThemedText
-                style={styles.detailLabel}
-                lightColor={theme.text}
-                darkColor={theme.text}
-              >
-                Stärke:
-              </ThemedText>
+        {/* Rechte Spalte: Stärke */}
+        <View style={styles.rightColumn}>
+          <ThemedText
+            style={styles.detailLabel}
+            lightColor={theme.text}
+            darkColor={theme.text}
+          >
+            Stärke:
+          </ThemedText>
 
-              {item.intensity ? (
-                <View style={[styles.intensityBadge, { backgroundColor: getIntensityColor(item.intensity) }]} />
-              ) : (
-                <ThemedText
-                  type="defaultSemiBold"
-                  style={styles.detailValue}
-                  lightColor={theme.accent}
-                  darkColor={theme.accent}
-                >
-                  --
-                </ThemedText>
-              )}
-            </View>
-          </View>
-        </ThemedView>
-      </Swipeable>
+          {item.intensity ? (
+            <View style={[styles.intensityBadge, { backgroundColor: getIntensityColor(item.intensity) }]} />
+          ) : (
+            <ThemedText
+              type="defaultSemiBold"
+              style={styles.detailValue}
+              lightColor={theme.accent}
+              darkColor={theme.accent}
+            >
+              --
+            </ThemedText>
+          )}
+        </View>
+      </View>
+    </ThemedView>
   );
 };
 
@@ -309,18 +291,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.5)',
   },
-  deleteAction: {
-    backgroundColor: '#F44336',
+  deleteButton: {
+    padding: 10,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
-    width: 100,
-    height: '100%',
   },
-  deleteActionText: {
-    color: 'white',
-    fontWeight: 'bold',
-    padding: 10,
+  deleteIcon: {
+    width: 24,
+    height: 24,
+    tintColor: '#FF6B6B',
   },
 });
 
-export default SwipeableContractionItem;
+export default ContractionItem;

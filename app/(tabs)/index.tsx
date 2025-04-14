@@ -3,7 +3,7 @@ import { StyleSheet, TouchableOpacity, ScrollView, FlatList, Alert, View, Status
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import ContractionChart from '@/components/ContractionChart';
-import SwipeableContractionItem from '@/components/SwipeableContractionItem';
+import ContractionItem from '@/components/SwipeableContractionItem';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/contexts/AuthContext';
@@ -169,18 +169,16 @@ export default function HomeScreen() {
   const handleDeleteContraction = (contractionId: string) => {
     console.log('Handling delete for contraction ID:', contractionId);
 
-    // Direktes Löschen ohne zusätzlichen Dialog (da der Dialog bereits in der SwipeableContractionItem-Komponente angezeigt wird)
-    const deleteContractionNow = async () => {
-      try {
-        // Optimistische UI-Aktualisierung
-        setContractions(prevContractions =>
-          prevContractions.filter(c => c.id !== contractionId)
-        );
+    // Wir führen die Löschung direkt aus, da der Bestätigungsdialog bereits in der ContractionItem-Komponente angezeigt wird
+    try {
+      // Optimistische UI-Aktualisierung
+      setContractions(prevContractions =>
+        prevContractions.filter(c => c.id !== contractionId)
+      );
 
-        console.log('Sending delete request to Supabase for ID:', contractionId);
-        // In Supabase löschen
-        const { error } = await deleteContraction(contractionId);
-
+      console.log('Sending delete request to Supabase for ID:', contractionId);
+      // In Supabase löschen
+      deleteContraction(contractionId).then(({ error }) => {
         if (error) {
           console.error('Error deleting contraction:', error);
           Alert.alert('Fehler', 'Wehe konnte nicht gelöscht werden.');
@@ -190,15 +188,16 @@ export default function HomeScreen() {
         } else {
           console.log('Successfully deleted contraction with ID:', contractionId);
         }
-      } catch (err) {
+      }).catch(err => {
         console.error('Failed to delete contraction:', err);
         // Bei Fehler die Wehen neu laden
         loadContractions();
-      }
-    };
-
-    // Ausführen der Löschfunktion mit einer kleinen Verzögerung
-    setTimeout(deleteContractionNow, 100);
+      });
+    } catch (err) {
+      console.error('Failed to delete contraction:', err);
+      // Bei Fehler die Wehen neu laden
+      loadContractions();
+    }
   };
 
   // Funktion zum Laden der Wehen aus Supabase
@@ -402,7 +401,7 @@ export default function HomeScreen() {
               <FlatList
                 data={contractions}
                 renderItem={({ item, index }) => (
-                  <SwipeableContractionItem
+                  <ContractionItem
                     item={item}
                     index={index}
                     totalCount={contractions.length}
