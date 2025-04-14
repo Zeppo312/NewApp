@@ -27,6 +27,8 @@ export default function ProfilScreen() {
   const [babyGender, setBabyGender] = useState<'male' | 'female' | ''>('');
   const [dueDate, setDueDate] = useState<Date | null>(null);
   const [birthDate, setBirthDate] = useState<Date | null>(null);
+  const [babyWeight, setBabyWeight] = useState('');
+  const [babyHeight, setBabyHeight] = useState('');
 
   // UI-Status
   const [isLoading, setIsLoading] = useState(true);
@@ -79,11 +81,13 @@ export default function ProfilScreen() {
         }
       }
 
-      // Laden der Baby-Informationen (Name, Geschlecht, Geburtsdatum)
+      // Laden der Baby-Informationen (Name, Geschlecht, Geburtsdatum, Gewicht, Größe)
       const { data: babyData } = await getBabyInfo();
       if (babyData) {
         setBabyName(babyData.name || '');
         setBabyGender(babyData.baby_gender || '');
+        setBabyWeight(babyData.weight || '');
+        setBabyHeight(babyData.height || '');
         if (babyData.birth_date) {
           setBirthDate(new Date(babyData.birth_date));
         }
@@ -163,11 +167,13 @@ export default function ProfilScreen() {
         throw new Error('Benutzereinstellungen konnten nicht gespeichert werden.');
       }
 
-      // Speichern der Baby-Informationen (Name, Geschlecht, Geburtsdatum)
+      // Speichern der Baby-Informationen (Name, Geschlecht, Geburtsdatum, Gewicht, Größe)
       const babyInfo = {
         name: babyName,
         baby_gender: babyGender,
-        birth_date: birthDate ? birthDate.toISOString() : null
+        birth_date: birthDate ? birthDate.toISOString() : null,
+        weight: babyWeight,
+        height: babyHeight
       };
 
       const { error: babyError } = await saveBabyInfo(babyInfo);
@@ -384,30 +390,56 @@ export default function ProfilScreen() {
                 </View>
               </View>
 
-              {/* Geburtsdatum - nur anzeigen, wenn Baby geboren ist */}
+              {/* Geburtsdatum, Gewicht und Größe - nur anzeigen, wenn Baby geboren ist */}
               {isBabyBorn && (
-                <View style={styles.formGroup}>
-                  <ThemedText style={styles.label}>Geburtsdatum</ThemedText>
-                  <TouchableOpacity
-                    style={styles.dateButton}
-                    onPress={() => setShowBirthDatePicker(true)}
-                  >
-                    <ThemedText style={styles.dateButtonText}>
-                      {birthDate ? formatDate(birthDate) : 'Geburtsdatum auswählen'}
-                    </ThemedText>
-                    <IconSymbol name="calendar" size={20} color={theme.tabIconDefault} />
-                  </TouchableOpacity>
+                <>
+                  <View style={styles.formGroup}>
+                    <ThemedText style={styles.label}>Geburtsdatum</ThemedText>
+                    <TouchableOpacity
+                      style={styles.dateButton}
+                      onPress={() => setShowBirthDatePicker(true)}
+                    >
+                      <ThemedText style={styles.dateButtonText}>
+                        {birthDate ? formatDate(birthDate) : 'Geburtsdatum auswählen'}
+                      </ThemedText>
+                      <IconSymbol name="calendar" size={20} color={theme.tabIconDefault} />
+                    </TouchableOpacity>
 
-                  {showBirthDatePicker && (
-                    <DateTimePicker
-                      value={birthDate || new Date()}
-                      mode="date"
-                      display="default"
-                      onChange={handleBirthDateChange}
-                      maximumDate={new Date()}
+                    {showBirthDatePicker && (
+                      <DateTimePicker
+                        value={birthDate || new Date()}
+                        mode="date"
+                        display="default"
+                        onChange={handleBirthDateChange}
+                        maximumDate={new Date()}
+                      />
+                    )}
+                  </View>
+
+                  <View style={styles.formGroup}>
+                    <ThemedText style={styles.label}>Geburtsgewicht (g)</ThemedText>
+                    <TextInput
+                      style={[styles.input, { color: theme.text }]}
+                      value={babyWeight}
+                      onChangeText={setBabyWeight}
+                      placeholder="z.B. 3500"
+                      placeholderTextColor={theme.tabIconDefault}
+                      keyboardType="numeric"
                     />
-                  )}
-                </View>
+                  </View>
+
+                  <View style={styles.formGroup}>
+                    <ThemedText style={styles.label}>Größe bei Geburt (cm)</ThemedText>
+                    <TextInput
+                      style={[styles.input, { color: theme.text }]}
+                      value={babyHeight}
+                      onChangeText={setBabyHeight}
+                      placeholder="z.B. 52"
+                      placeholderTextColor={theme.tabIconDefault}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                </>
               )}
             </ThemedView>
 
