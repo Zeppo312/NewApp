@@ -97,7 +97,13 @@ const SwipeableContractionItem: React.FC<SwipeableContractionItemProps> = ({
               {
                 text: 'Löschen',
                 style: 'destructive',
-                onPress: () => onDelete(item.id)
+                onPress: () => {
+                  // Kleine Verzögerung, um sicherzustellen, dass die UI aktualisiert ist
+                  setTimeout(() => {
+                    console.log('Deleting contraction with ID:', item.id);
+                    onDelete(item.id);
+                  }, 100);
+                }
               }
             ]
           );

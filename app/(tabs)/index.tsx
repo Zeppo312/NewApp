@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
-import { StyleSheet, TouchableOpacity, ScrollView, Alert, View, StatusBar, SafeAreaView, ActivityIndicator, ImageBackground, Dimensions } from 'react-native';
+import { StyleSheet, TouchableOpacity, ScrollView, FlatList, Alert, View, StatusBar, SafeAreaView, ActivityIndicator, ImageBackground, Dimensions } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
-import VerticalContractionTimeline from '@/components/VerticalContractionTimeline';
+import ContractionChart from '@/components/ContractionChart';
+import SwipeableContractionItem from '@/components/SwipeableContractionItem';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/contexts/AuthContext';
@@ -166,43 +167,38 @@ export default function HomeScreen() {
 
   // Funktion zum Löschen einer Wehe
   const handleDeleteContraction = (contractionId: string) => {
-    Alert.alert(
-      'Wehe löschen',
-      'Möchtest du diese Wehe wirklich löschen?',
-      [
-        {
-          text: 'Abbrechen',
-          style: 'cancel'
-        },
-        {
-          text: 'Löschen',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              // Optimistische UI-Aktualisierung
-              setContractions(prevContractions =>
-                prevContractions.filter(c => c.id !== contractionId)
-              );
+    console.log('Handling delete for contraction ID:', contractionId);
 
-              // In Supabase löschen
-              const { error } = await deleteContraction(contractionId);
+    // Direktes Löschen ohne zusätzlichen Dialog (da der Dialog bereits in der SwipeableContractionItem-Komponente angezeigt wird)
+    const deleteContractionNow = async () => {
+      try {
+        // Optimistische UI-Aktualisierung
+        setContractions(prevContractions =>
+          prevContractions.filter(c => c.id !== contractionId)
+        );
 
-              if (error) {
-                console.error('Error deleting contraction:', error);
-                Alert.alert('Fehler', 'Wehe konnte nicht gelöscht werden.');
+        console.log('Sending delete request to Supabase for ID:', contractionId);
+        // In Supabase löschen
+        const { error } = await deleteContraction(contractionId);
 
-                // Bei Fehler die Wehen neu laden
-                loadContractions();
-              }
-            } catch (err) {
-              console.error('Failed to delete contraction:', err);
-              // Bei Fehler die Wehen neu laden
-              loadContractions();
-            }
-          }
+        if (error) {
+          console.error('Error deleting contraction:', error);
+          Alert.alert('Fehler', 'Wehe konnte nicht gelöscht werden.');
+
+          // Bei Fehler die Wehen neu laden
+          loadContractions();
+        } else {
+          console.log('Successfully deleted contraction with ID:', contractionId);
         }
-      ]
-    );
+      } catch (err) {
+        console.error('Failed to delete contraction:', err);
+        // Bei Fehler die Wehen neu laden
+        loadContractions();
+      }
+    };
+
+    // Ausführen der Löschfunktion mit einer kleinen Verzögerung
+    setTimeout(deleteContractionNow, 100);
   };
 
   // Funktion zum Laden der Wehen aus Supabase
@@ -363,6 +359,24 @@ export default function HomeScreen() {
 
           {/* Contractions History */}
           <ThemedView style={styles.historySection} lightColor="transparent" darkColor="transparent">
+            <ThemedText
+              type="subtitle"
+              style={styles.historyTitle}
+              lightColor="#5C4033"
+              darkColor="#F2E6DD"
+            >
+              Wehen Verlauf
+            </ThemedText>
+
+            {/* Visualisierung der Wehen */}
+            {!isLoading && contractions.length > 0 && (
+              <ContractionChart
+                contractions={contractions}
+                lightColor="rgba(255, 255, 255, 0.8)"
+                darkColor="rgba(50, 50, 50, 0.8)"
+              />
+            )}
+
             {isLoading ? (
               <ThemedView
                 style={styles.emptyState}
@@ -374,12 +388,29 @@ export default function HomeScreen() {
                   Wehen werden geladen...
                 </ThemedText>
               </ThemedView>
+            ) : contractions.length === 0 ? (
+              <ThemedView
+                style={styles.emptyState}
+                lightColor={theme.card}
+                darkColor={theme.card}
+              >
+                <ThemedText lightColor={theme.text} darkColor={theme.text}>
+                  Noch keine Wehen aufgezeichnet
+                </ThemedText>
+              </ThemedView>
             ) : (
-              <VerticalContractionTimeline
-                contractions={contractions}
-                onDeleteContraction={handleDeleteContraction}
-                lightColor="rgba(255, 255, 255, 0.8)"
-                darkColor="rgba(50, 50, 50, 0.8)"
+              <FlatList
+                data={contractions}
+                renderItem={({ item, index }) => (
+                  <SwipeableContractionItem
+                    item={item}
+                    index={index}
+                    totalCount={contractions.length}
+                    onDelete={handleDeleteContraction}
+                  />
+                )}
+                keyExtractor={item => item.id}
+                scrollEnabled={false}
               />
             )}
           </ThemedView>
