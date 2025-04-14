@@ -8,7 +8,7 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { supabase } from '@/lib/supabase';
+import { supabase, checkSupabasePermissions } from '@/lib/supabase';
 import { getBabyInfo, saveBabyInfo } from '@/lib/baby';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
@@ -246,21 +246,81 @@ export default function OnboardingScreen() {
         isBabyBorn
       });
 
-      const babyInfo = {
-        name: babyName,
-        baby_gender: babyGender,
-        birth_date: birthDate ? birthDate.toISOString() : null,
-        weight: babyWeight,
-        height: babyHeight
-      };
+      try {
+        // Berechtigungen prüfen
+        console.log('Checking Supabase permissions...');
+        const permissionCheck = await checkSupabasePermissions();
+        console.log('Permission check result:', permissionCheck);
 
-      const { data: babyData, error: babyError } = await saveBabyInfo(babyInfo);
-      console.log('Baby info save result:', { data: babyData, error: babyError });
+        // Direkte Speicherung in Supabase ohne Umwege
+        console.log('Checking if baby info entry exists...');
+        const { data: existingBabyInfo, error: fetchError } = await supabase
+          .from('baby_info')
+          .select('id')
+          .eq('user_id', user.id)
+          .maybeSingle();
 
-      if (babyError) {
-        console.error('Error saving baby info:', babyError);
-        throw new Error('Baby-Informationen konnten nicht gespeichert werden.');
+        console.log('Existing baby info check result:', { existingBabyInfo, fetchError });
+
+        // Daten vorbereiten
+        const babyInfoData = {
+          name: babyName || null,
+          baby_gender: babyGender || null,
+          birth_date: birthDate ? birthDate.toISOString() : null,
+          weight: babyWeight || null,
+          height: babyHeight || null,
+          updated_at: new Date().toISOString()
+        };
+
+        console.log('Prepared baby info data:', babyInfoData);
+
+        let saveResult;
+
+        if (existingBabyInfo && existingBabyInfo.id) {
+          // Update existing entry
+          console.log('Updating existing baby info with ID:', existingBabyInfo.id);
+          saveResult = await supabase
+            .from('baby_info')
+            .update(babyInfoData)
+            .eq('id', existingBabyInfo.id)
+            .select();
+        } else {
+          // Create new entry
+          console.log('Creating new baby info entry for user:', user.id);
+          saveResult = await supabase
+            .from('baby_info')
+            .insert({
+              user_id: user.id,
+              ...babyInfoData,
+              created_at: new Date().toISOString()
+            })
+            .select();
+        }
+
+        console.log('Direct save result:', saveResult);
+
+        if (saveResult.error) {
+          throw new Error(`Fehler beim Speichern der Baby-Informationen: ${saveResult.error.message}`);
+        }
+
+        // Auch noch die ursprüngliche Methode versuchen
+        const babyInfo = {
+          name: babyName,
+          baby_gender: babyGender,
+          birth_date: birthDate ? birthDate.toISOString() : null,
+          weight: babyWeight,
+          height: babyHeight
+        };
+
+        const { data: babyData, error: babyError } = await saveBabyInfo(babyInfo);
+        console.log('Original saveBabyInfo result:', { data: babyData, error: babyError });
+      } catch (saveError) {
+        console.error('Error in direct save process:', saveError);
+        Alert.alert('Fehler', `Fehler beim Speichern: ${saveError.message}`);
+        throw saveError;
       }
+
+      // Fehlerbehandlung erfolgt bereits im try-catch-Block oben
 
       // Zum letzten Schritt gehen
       setCurrentStepIndex(STEPS.length - 1);
