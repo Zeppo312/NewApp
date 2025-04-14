@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, ScrollView, View, TouchableOpacity, Image, TextInput, Alert, ImageBackground, SafeAreaView, StatusBar, Platform } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { Colors } from '@/constants/Colors';
@@ -24,42 +23,11 @@ export default function BabyScreen() {
 
   useEffect(() => {
     if (user) {
-      checkAndLoadData();
+      loadBabyInfo();
     } else {
       setIsLoading(false);
     }
   }, [user]);
-
-  // Überprüfen, ob Daten nach dem Onboarding neu geladen werden müssen
-  const checkAndLoadData = async () => {
-    try {
-      const shouldReload = await AsyncStorage.getItem('reload_data_after_onboarding');
-      console.log('Should reload data after onboarding:', shouldReload);
-
-      if (shouldReload === 'true') {
-        // Flag zurücksetzen
-        await AsyncStorage.removeItem('reload_data_after_onboarding');
-        console.log('Reload flag reset');
-
-        // Daten neu laden
-        await loadBabyInfo();
-
-        // Kurze Verzögerung, dann Seite aktualisieren
-        setTimeout(() => {
-          console.log('Refreshing page...');
-          // Hier könnte man einen State setzen, um die Seite neu zu rendern
-          setIsLoading(true);
-          setTimeout(() => setIsLoading(false), 100);
-        }, 500);
-      } else {
-        // Normale Datenladung
-        loadBabyInfo();
-      }
-    } catch (error) {
-      console.error('Error checking reload flag:', error);
-      loadBabyInfo();
-    }
-  };
 
   const loadBabyInfo = async () => {
     try {
@@ -74,7 +42,8 @@ export default function BabyScreen() {
           birth_date: data.birth_date || null,
           weight: data.weight || '',
           height: data.height || '',
-          photo_url: data.photo_url || null
+          photo_url: data.photo_url || null,
+          baby_gender: data.baby_gender || ''
         });
       }
     } catch (err) {
@@ -234,6 +203,55 @@ export default function BabyScreen() {
                   </View>
 
                   <View style={styles.inputRow}>
+                    <ThemedText style={styles.label}>Geschlecht:</ThemedText>
+                    <View style={styles.genderContainer}>
+                      <TouchableOpacity
+                        style={[
+                          styles.genderButton,
+                          babyInfo.baby_gender === 'male' && styles.genderButtonActive
+                        ]}
+                        onPress={() => setBabyInfo({ ...babyInfo, baby_gender: 'male' })}
+                      >
+                        <IconSymbol
+                          name="person.fill"
+                          size={20}
+                          color={babyInfo.baby_gender === 'male' ? '#FFFFFF' : theme.tabIconDefault}
+                        />
+                        <ThemedText
+                          style={[
+                            styles.genderButtonText,
+                            babyInfo.baby_gender === 'male' && styles.genderButtonTextActive
+                          ]}
+                        >
+                          Junge
+                        </ThemedText>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[
+                          styles.genderButton,
+                          babyInfo.baby_gender === 'female' && styles.genderButtonActive
+                        ]}
+                        onPress={() => setBabyInfo({ ...babyInfo, baby_gender: 'female' })}
+                      >
+                        <IconSymbol
+                          name="person.fill"
+                          size={20}
+                          color={babyInfo.baby_gender === 'female' ? '#FFFFFF' : theme.tabIconDefault}
+                        />
+                        <ThemedText
+                          style={[
+                            styles.genderButtonText,
+                            babyInfo.baby_gender === 'female' && styles.genderButtonTextActive
+                          ]}
+                        >
+                          Mädchen
+                        </ThemedText>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  <View style={styles.inputRow}>
                     <ThemedText style={styles.label}>Geburtsdatum:</ThemedText>
                     <TouchableOpacity
                       style={styles.dateButton}
@@ -309,6 +327,15 @@ export default function BabyScreen() {
                     <ThemedText style={styles.infoLabel}>Name:</ThemedText>
                     <ThemedText style={styles.infoValue}>
                       {babyInfo.name || 'Noch nicht festgelegt'}
+                    </ThemedText>
+                  </View>
+
+                  <View style={styles.infoRow}>
+                    <ThemedText style={styles.infoLabel}>Geschlecht:</ThemedText>
+                    <ThemedText style={styles.infoValue}>
+                      {babyInfo.baby_gender === 'male' ? 'Junge' :
+                       babyInfo.baby_gender === 'female' ? 'Mädchen' :
+                       'Noch nicht festgelegt'}
                     </ThemedText>
                   </View>
 
@@ -478,6 +505,34 @@ const styles = StyleSheet.create({
   },
   dateText: {
     fontSize: 16,
+  },
+  genderContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 5,
+  },
+  genderButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F5F5F5',
+    borderRadius: 5,
+    padding: 10,
+    flex: 1,
+    marginHorizontal: 5,
+    borderWidth: 1,
+    borderColor: '#CCCCCC',
+  },
+  genderButtonActive: {
+    backgroundColor: '#7D5A50',
+    borderColor: '#7D5A50',
+  },
+  genderButtonText: {
+    fontSize: 14,
+    marginLeft: 5,
+  },
+  genderButtonTextActive: {
+    color: '#FFFFFF',
   },
   buttonRow: {
     flexDirection: 'row',

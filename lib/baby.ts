@@ -8,7 +8,7 @@ export interface BabyInfo {
   weight?: string;
   height?: string;
   photo_url?: string | null;
-  baby_gender?: 'male' | 'female' | 'unknown' | '';
+  baby_gender?: string;
 }
 
 // Typen für die Tagebucheinträge
@@ -104,13 +104,8 @@ export const getBabyInfo = async () => {
 
 export const saveBabyInfo = async (info: BabyInfo) => {
   try {
-    console.log('saveBabyInfo called with:', info);
-
     const { data: userData } = await supabase.auth.getUser();
-    if (!userData.user) {
-      console.error('Not logged in');
-      return { data: null, error: new Error('Nicht angemeldet') };
-    }
+    if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     // Prüfen, ob bereits ein Eintrag existiert
     const { data: existingData, error: fetchError } = await supabase
@@ -119,53 +114,33 @@ export const saveBabyInfo = async (info: BabyInfo) => {
       .eq('user_id', userData.user.id)
       .maybeSingle();
 
-    console.log('Existing baby info check result:', { existingData, fetchError });
-
     if (fetchError && fetchError.code !== 'PGRST116') {
       console.error('Error checking existing baby info:', fetchError);
       return { data: null, error: fetchError };
     }
 
-    // Sicherstellen, dass die Daten korrekt formatiert sind
-    const cleanInfo = {
-      ...info,
-      // Leere Strings in null umwandeln, um Probleme mit der Datenbank zu vermeiden
-      name: info.name && info.name.trim() !== '' ? info.name : null,
-      baby_gender: info.baby_gender && info.baby_gender.trim() !== '' ? info.baby_gender : null,
-      weight: info.weight && info.weight.trim() !== '' ? info.weight : null,
-      height: info.height && info.height.trim() !== '' ? info.height : null
-    };
-
-    console.log('Cleaned baby info:', cleanInfo);
-
     let result;
 
     if (existingData && existingData.id) {
       // Wenn ein Eintrag existiert, aktualisieren wir diesen
-      console.log('Updating existing baby info with ID:', existingData.id);
       result = await supabase
         .from('baby_info')
         .update({
-          ...cleanInfo,
+          ...info,
           updated_at: new Date().toISOString()
         })
-        .eq('id', existingData.id)
-        .select();
+        .eq('id', existingData.id);
     } else {
       // Wenn kein Eintrag existiert, erstellen wir einen neuen
-      console.log('Creating new baby info entry for user:', userData.user.id);
       result = await supabase
         .from('baby_info')
         .insert({
           user_id: userData.user.id,
-          ...cleanInfo,
+          ...info,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
-        })
-        .select();
+        });
     }
-
-    console.log('Save baby info result:', result);
 
     return { data: result.data, error: result.error };
   } catch (err) {
