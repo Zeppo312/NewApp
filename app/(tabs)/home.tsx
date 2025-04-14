@@ -237,7 +237,7 @@ export default function HomeScreen() {
         <View style={styles.cardsGrid}>
           <TouchableOpacity
             style={[styles.card, { backgroundColor: 'rgba(157, 190, 187, 0.9)' }]}
-            onPress={() => router.push('/(tabs)/diary')}
+            onPress={() => router.push('/diary-entries')}
           >
             <View style={styles.iconContainer}>
               <IconSymbol name="book.fill" size={40} color="#FFFFFF" />
