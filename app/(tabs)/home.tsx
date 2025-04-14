@@ -231,7 +231,9 @@ export default function HomeScreen() {
             style={[styles.card, { backgroundColor: 'rgba(157, 190, 187, 0.9)' }]}
             onPress={() => router.push('/(tabs)/diary')}
           >
-            <IconSymbol name="book.fill" size={32} color={Colors.light.success} />
+            <View style={styles.iconContainer}>
+              <IconSymbol name="book.fill" size={40} color="#FFFFFF" />
+            </View>
             <ThemedText style={styles.cardTitle}>Tagebuch</ThemedText>
             <ThemedText style={styles.cardDescription}>Erinnere besondere Momente</ThemedText>
           </TouchableOpacity>
@@ -240,7 +242,9 @@ export default function HomeScreen() {
             style={[styles.card, { backgroundColor: 'rgba(233, 201, 182, 0.9)' }]}
             onPress={() => router.push('/(tabs)/baby')}
           >
-            <IconSymbol name="person.fill" size={32} color="#E9C9B6" />
+            <View style={styles.iconContainer}>
+              <IconSymbol name="person.fill" size={40} color="#FFFFFF" />
+            </View>
             <ThemedText style={styles.cardTitle}>Mein Baby</ThemedText>
             <ThemedText style={styles.cardDescription}>Alle Infos & Entwicklungen</ThemedText>
           </TouchableOpacity>
@@ -250,10 +254,8 @@ export default function HomeScreen() {
               style={[styles.card, { backgroundColor: 'rgba(125, 90, 80, 0.7)' }]}
               onPress={() => router.push('/(tabs)/diary')}
             >
-              <View style={styles.progressCircle}>
-                <ThemedText style={styles.progressText}>
-                  {Math.round(phaseProgress?.progress || 0)}%
-                </ThemedText>
+              <View style={styles.iconContainer}>
+                <IconSymbol name="chart.bar.fill" size={40} color="#FFFFFF" />
               </View>
               <ThemedText style={styles.cardTitle}>Entwicklung</ThemedText>
               <ThemedText style={styles.cardDescription}>
@@ -266,16 +268,20 @@ export default function HomeScreen() {
             style={[styles.card, { backgroundColor: 'rgba(125, 90, 80, 0.7)' }]}
             onPress={() => router.push('/(tabs)/daily_old')}
           >
-            <IconSymbol name="list.bullet" size={32} color="#7D5A50" />
+            <View style={styles.iconContainer}>
+              <IconSymbol name="list.bullet" size={40} color="#FFFFFF" />
+            </View>
             <ThemedText style={styles.cardTitle}>Alltag</ThemedText>
             <ThemedText style={styles.cardDescription}>Tagesaktivitäten verwalten</ThemedText>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.card, { backgroundColor: 'rgba(255, 107, 107, 0.4)' }]}
+            style={[styles.card, { backgroundColor: 'rgba(255, 107, 107, 0.7)' }]}
             onPress={() => router.push('/(tabs)/selfcare')}
           >
-            <IconSymbol name="heart.fill" size={32} color="#FF6B6B" />
+            <View style={styles.iconContainer}>
+              <IconSymbol name="heart.fill" size={40} color="#FFFFFF" />
+            </View>
             <ThemedText style={styles.cardTitle}>Mama Selfcare</ThemedText>
             <ThemedText style={styles.cardDescription}>Nimm dir Zeit für dich</ThemedText>
           </TouchableOpacity>
@@ -450,6 +456,20 @@ const styles = StyleSheet.create({
     fontSize: 12,
     textAlign: 'center',
     opacity: 0.8,
+  },
+  iconContainer: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: 'rgba(0, 0, 0, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 4,
   },
   progressCircle: {
     width: 50,
