@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, Text, ScrollView, TouchableOpacity, Dimensions } from 'react-native';
+import { View, StyleSheet, Text, ScrollView, TouchableOpacity, Dimensions, Alert } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { ThemedText } from './ThemedText';
 import { ThemedView } from './ThemedView';
 import { Colors } from '@/constants/Colors';
@@ -20,12 +21,13 @@ type VerticalContractionTimelineProps = {
   contractions: Contraction[];
   lightColor?: string;
   darkColor?: string;
+  onDelete?: (id: string) => void;
 };
 
 // Funktion zur Bestimmung der Farbe basierend auf der Intensität
 const getIntensityColor = (intensity: string | null): string => {
   if (!intensity) return '#D0D0D0'; // Hellgrau für unbekannte Intensität
-  
+
   switch (intensity.toLowerCase()) {
     case 'schwach':
       return '#A8D8A8'; // Pastellgrün für schwache Intensität
@@ -48,7 +50,7 @@ const formatDate = (date: Date): string => {
   const today = new Date();
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
-  
+
   if (isSameDay(date, today)) {
     return 'Heute';
   } else if (isSameDay(date, yesterday)) {
@@ -89,31 +91,32 @@ const formatInterval = (seconds: number): string => {
 const VerticalContractionTimeline: React.FC<VerticalContractionTimelineProps> = ({
   contractions,
   lightColor = '#FFFFFF',
-  darkColor = '#333333'
+  darkColor = '#333333',
+  onDelete
 }) => {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
-  
+
   // Sortieren der Wehen nach Startzeit (neueste zuerst)
   const sortedContractions = [...contractions].sort((a, b) =>
     b.startTime.getTime() - a.startTime.getTime()
   );
-  
+
   // Gruppieren der Wehen nach Tagen
   const groupedContractions: { [key: string]: Contraction[] } = {};
-  
+
   sortedContractions.forEach(contraction => {
     const date = new Date(contraction.startTime);
     const dateKey = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
-    
+
     if (!groupedContractions[dateKey]) {
       groupedContractions[dateKey] = [];
     }
-    
+
     groupedContractions[dateKey].push(contraction);
   });
-  
+
   // Wenn keine Wehen vorhanden sind
   if (contractions.length === 0) {
     return (
@@ -124,21 +127,48 @@ const VerticalContractionTimeline: React.FC<VerticalContractionTimelineProps> = 
       </ThemedView>
     );
   }
-  
+
   // Toggle für erweiterte Kartenansicht
   const toggleCardExpansion = (id: string) => {
     setExpandedCard(expandedCard === id ? null : id);
   };
-  
+
+  // Funktion zum Löschen einer Wehe mit Bestätigungsdialog
+  const handleDelete = (id: string) => {
+    if (!onDelete) return;
+
+    Alert.alert(
+      'Wehe löschen',
+      'Möchtest du diese Wehe wirklich löschen?',
+      [
+        {
+          text: 'Abbrechen',
+          style: 'cancel'
+        },
+        {
+          text: 'Löschen',
+          style: 'destructive',
+          onPress: () => {
+            // Kleine Verzögerung, um sicherzustellen, dass die UI aktualisiert ist
+            setTimeout(() => {
+              console.log('Deleting contraction with ID:', id);
+              onDelete(id);
+            }, 300); // Längere Verzögerung für mehr Stabilität
+          }
+        }
+      ]
+    );
+  };
+
   return (
     <ThemedView style={styles.container} lightColor={lightColor} darkColor={darkColor}>
       <ThemedText style={styles.title}>Wehenverlauf</ThemedText>
-      
+
       <ScrollView style={styles.scrollView}>
         {Object.keys(groupedContractions).map(dateKey => {
           const date = new Date(parseInt(dateKey.split('-')[0]), parseInt(dateKey.split('-')[1]), parseInt(dateKey.split('-')[2]));
           const dayContractions = groupedContractions[dateKey];
-          
+
           return (
             <View key={dateKey} style={styles.dayContainer}>
               <View style={styles.dateHeader}>
@@ -146,12 +176,12 @@ const VerticalContractionTimeline: React.FC<VerticalContractionTimelineProps> = 
                   {formatDate(date)}
                 </ThemedText>
               </View>
-              
+
               <View style={styles.timeline}>
                 {dayContractions.map((contraction, index) => {
                   const isLast = index === dayContractions.length - 1;
                   const isExpanded = expandedCard === contraction.id;
-                  
+
                   return (
                     <View key={contraction.id} style={styles.timelineItem}>
                       {/* Zeitstempel */}
@@ -160,7 +190,7 @@ const VerticalContractionTimeline: React.FC<VerticalContractionTimelineProps> = 
                           {formatTime(new Date(contraction.startTime))}
                         </ThemedText>
                       </View>
-                      
+
                       {/* Timeline-Linie und Punkt */}
                       <View style={styles.lineColumn}>
                         <View style={[
@@ -169,14 +199,14 @@ const VerticalContractionTimeline: React.FC<VerticalContractionTimelineProps> = 
                         ]} />
                         {!isLast && <View style={styles.timelineLine} />}
                       </View>
-                      
+
                       {/* Wehen-Karte */}
                       <View style={styles.cardColumn}>
                         <TouchableOpacity
                           activeOpacity={0.7}
                           onPress={() => toggleCardExpansion(contraction.id)}
                         >
-                          <ThemedView 
+                          <ThemedView
                             style={[
                               styles.contractionCard,
                               { borderLeftColor: getIntensityColor(contraction.intensity) }
@@ -185,21 +215,36 @@ const VerticalContractionTimeline: React.FC<VerticalContractionTimelineProps> = 
                             darkColor={colorScheme === 'dark' ? 'rgba(92, 77, 65, 0.8)' : theme.card}
                           >
                             <View style={styles.cardHeader}>
-                              <ThemedText style={styles.cardTitle}>
-                                Wehe #{contractions.length - contractions.findIndex(c => c.id === contraction.id)}
-                              </ThemedText>
-                              {contraction.intensity && (
-                                <View style={[
-                                  styles.intensityBadge,
-                                  { backgroundColor: getIntensityColor(contraction.intensity) }
-                                ]}>
-                                  <ThemedText style={styles.intensityText}>
-                                    {contraction.intensity}
-                                  </ThemedText>
-                                </View>
+                              <View style={styles.cardTitleContainer}>
+                                <ThemedText style={styles.cardTitle}>
+                                  Wehe #{contractions.length - contractions.findIndex(c => c.id === contraction.id)}
+                                </ThemedText>
+                                {contraction.intensity && (
+                                  <View style={[
+                                    styles.intensityBadge,
+                                    { backgroundColor: getIntensityColor(contraction.intensity) }
+                                  ]}>
+                                    <ThemedText style={styles.intensityText}>
+                                      {contraction.intensity}
+                                    </ThemedText>
+                                  </View>
+                                )}
+                              </View>
+
+                              {/* Lösch-Button */}
+                              {onDelete && (
+                                <TouchableOpacity
+                                  style={styles.deleteButton}
+                                  onPress={(e) => {
+                                    e.stopPropagation(); // Verhindert, dass der Klick die Karte erweitert
+                                    handleDelete(contraction.id);
+                                  }}
+                                >
+                                  <Ionicons name="trash-outline" size={18} color="#FF6B6B" />
+                                </TouchableOpacity>
                               )}
                             </View>
-                            
+
                             <View style={styles.cardDetails}>
                               <View style={styles.detailRow}>
                                 <ThemedText style={styles.detailLabel}>Dauer:</ThemedText>
@@ -207,14 +252,14 @@ const VerticalContractionTimeline: React.FC<VerticalContractionTimelineProps> = 
                                   {contraction.duration ? formatDuration(contraction.duration) : '--:--'}
                                 </ThemedText>
                               </View>
-                              
+
                               <View style={styles.detailRow}>
                                 <ThemedText style={styles.detailLabel}>Abstand:</ThemedText>
                                 <ThemedText style={styles.detailValue}>
                                   {contraction.interval ? formatInterval(contraction.interval) : '--:--'}
                                 </ThemedText>
                               </View>
-                              
+
                               {isExpanded && (
                                 <View style={styles.expandedDetails}>
                                   <View style={styles.divider} />
@@ -347,9 +392,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8,
   },
+  cardTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
   cardTitle: {
     fontSize: 15,
     fontWeight: 'bold',
+    marginRight: 8,
+  },
+  deleteButton: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 107, 107, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 107, 107, 0.3)',
   },
   intensityBadge: {
     paddingHorizontal: 8,
