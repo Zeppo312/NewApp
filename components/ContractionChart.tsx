@@ -20,20 +20,9 @@ type ContractionChartProps = {
   darkColor?: string;
 };
 
-// Funktion zur Bestimmung der Farbe basierend auf der Intensität
-const getIntensityColor = (intensity: string | null): string => {
-  if (!intensity) return '#D0D0D0'; // Hellgrau für unbekannte Intensität
-
-  switch (intensity.toLowerCase()) {
-    case 'schwach':
-      return '#A8D8A8'; // Pastellgrün für schwache Intensität
-    case 'mittel':
-      return '#FFD8A8'; // Apricot für mittlere Intensität
-    case 'stark':
-      return '#FF9A8A'; // Korallrot für hohe Intensität
-    default:
-      return '#D0D0D0'; // Hellgrau für unbekannte Intensität
-  }
+// Einheitliche Farbe für alle Wehen
+const getContractionColor = (): string => {
+  return '#FF9A8A'; // Korallrot für alle Wehen
 };
 
 // Formatierung der Zeit für die Anzeige
@@ -101,7 +90,6 @@ const ContractionChart: React.FC<ContractionChartProps> = ({
   const [tooltipVisible, setTooltipVisible] = useState(false);
   const [tooltipData, setTooltipData] = useState<{
     time: string;
-    intensity: string;
     duration: string;
     x: number;
     y: number;
@@ -241,10 +229,7 @@ const ContractionChart: React.FC<ContractionChartProps> = ({
               const barWidth = (contraction.duration / 60) * pixelsPerMinute;
               const barLeft = ((contraction.startTime.getTime() - firstTime) / 1000 / 60) * pixelsPerMinute;
 
-              // Intensität als Text für den Tooltip
-              const intensityText = contraction.intensity
-                ? contraction.intensity.charAt(0).toUpperCase() + contraction.intensity.slice(1)
-                : 'Unbekannt';
+              // Intensität wird nicht mehr angezeigt
 
               return (
                 <View key={contraction.id} style={styles.barContainer}>
@@ -252,7 +237,6 @@ const ContractionChart: React.FC<ContractionChartProps> = ({
                     onPress={() => {
                       setTooltipData({
                         time: formatTime(contraction.startTime),
-                        intensity: intensityText,
                         duration: formatDuration(contraction.duration),
                         x: barLeft + barWidth / 2,
                         y: 30, // Position über dem Balken
@@ -272,7 +256,7 @@ const ContractionChart: React.FC<ContractionChartProps> = ({
                         {
                           width: Math.max(barWidth, 8), // Mindestbreite 8px für bessere Sichtbarkeit
                           left: barLeft,
-                          backgroundColor: getIntensityColor(contraction.intensity),
+                          backgroundColor: getContractionColor(),
                           height: barHeight,
                           // Schatten für bessere Sichtbarkeit
                           shadowColor: '#000',
@@ -347,21 +331,7 @@ const ContractionChart: React.FC<ContractionChartProps> = ({
             })}
           </View>
 
-          {/* Legende */}
-          <View style={styles.legend}>
-            <View style={styles.legendItem}>
-              <View style={[styles.legendColor, { backgroundColor: getIntensityColor('schwach') }]} />
-              <Text style={styles.legendText}>Schwach</Text>
-            </View>
-            <View style={styles.legendItem}>
-              <View style={[styles.legendColor, { backgroundColor: getIntensityColor('mittel') }]} />
-              <Text style={styles.legendText}>Mittel</Text>
-            </View>
-            <View style={styles.legendItem}>
-              <View style={[styles.legendColor, { backgroundColor: getIntensityColor('stark') }]} />
-              <Text style={styles.legendText}>Stark</Text>
-            </View>
-          </View>
+          {/* Legende entfernt */}
 
           {/* Tooltip */}
           {tooltipVisible && tooltipData && (
@@ -375,7 +345,7 @@ const ContractionChart: React.FC<ContractionChartProps> = ({
               ]}
             >
               <Text style={styles.tooltipText}>
-                {tooltipData.time} – {tooltipData.intensity} – {tooltipData.duration}
+                {tooltipData.time} – {tooltipData.duration}
               </Text>
             </View>
           )}
@@ -537,26 +507,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     textAlign: 'center',
   },
-  legend: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginTop: 30,
-  },
-  legendItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginHorizontal: 10,
-  },
-  legendColor: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    marginRight: 5,
-  },
-  legendText: {
-    fontSize: 12,
-    color: '#666666',
-  },
+  // Styles für die Legende entfernt
 });
 
 export default ContractionChart;
