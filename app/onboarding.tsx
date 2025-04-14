@@ -42,8 +42,8 @@ const STEPS: Step[] = [
   },
   {
     id: 'baby_name',
-    title: 'Wie soll dein Baby heißen?',
-    subtitle: 'Gib den Namen deines Babys ein'
+    title: 'Wie soll dein Baby heißen? (Optional)',
+    subtitle: 'Gib den Namen deines Babys ein, falls du schon einen hast'
   },
   {
     id: 'baby_gender',
@@ -127,10 +127,8 @@ export default function OnboardingScreen() {
       return;
     }
 
-    if (currentStep.id === 'baby_name' && !babyName) {
-      Alert.alert('Hinweis', 'Bitte gib einen Namen für dein Baby ein.');
-      return;
-    }
+    // Baby-Name ist optional
+    // Keine Validierung für den Baby-Namen, da nicht alle Eltern bereits einen Namen haben
 
     if (currentStep.id === 'baby_gender' && !babyGender) {
       Alert.alert('Hinweis', 'Bitte wähle das Geschlecht deines Babys aus.');
@@ -364,14 +362,17 @@ export default function OnboardingScreen() {
         return (
           <View style={styles.stepContent}>
             <View style={styles.formGroup}>
-              <ThemedText style={styles.label}>Name des Babys</ThemedText>
+              <ThemedText style={styles.label}>Name des Babys (Optional)</ThemedText>
               <TextInput
                 style={[styles.input, { color: theme.text }]}
                 value={babyName}
                 onChangeText={setBabyName}
-                placeholder="Name deines Babys"
+                placeholder="Name deines Babys (optional)"
                 placeholderTextColor={theme.tabIconDefault}
               />
+              <ThemedText style={styles.helperText}>
+                Du kannst dieses Feld auch leer lassen, wenn du noch keinen Namen hast.
+              </ThemedText>
             </View>
           </View>
         );
@@ -642,6 +643,12 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 16,
     marginBottom: 8,
+  },
+  helperText: {
+    fontSize: 14,
+    marginTop: 8,
+    opacity: 0.7,
+    fontStyle: 'italic',
   },
   input: {
     height: 48,
