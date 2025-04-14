@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, Text, ScrollView, Dimensions, TouchableOpacity, Modal } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, Text, ScrollView, Dimensions, TouchableOpacity, Modal, FlatList } from 'react-native';
 import { ThemedText } from './ThemedText';
 import { ThemedView } from './ThemedView';
 
@@ -52,6 +52,39 @@ const isSameDay = (date1: Date, date2: Date): boolean => {
          date1.getFullYear() === date2.getFullYear();
 };
 
+// Formatiert das Datum für die Anzeige im Tagesfilter
+const formatDateForFilter = (date: Date): string => {
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  if (isSameDay(date, today)) {
+    return 'Heute';
+  } else if (isSameDay(date, yesterday)) {
+    return 'Gestern';
+  } else {
+    return `${date.getDate().toString().padStart(2, '0')}.${(date.getMonth() + 1).toString().padStart(2, '0')}.${date.getFullYear()}`;
+  }
+};
+
+// Gruppiert Wehen nach Tagen
+const groupContractionsByDay = (contractions: Contraction[]): { [key: string]: Contraction[] } => {
+  const grouped: { [key: string]: Contraction[] } = {};
+
+  contractions.forEach(contraction => {
+    const date = new Date(contraction.startTime);
+    const dateKey = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+
+    if (!grouped[dateKey]) {
+      grouped[dateKey] = [];
+    }
+
+    grouped[dateKey].push(contraction);
+  });
+
+  return grouped;
+};
+
 // Formatierung der Dauer in Minuten und Sekunden
 const formatDuration = (seconds: number): string => {
   const minutes = Math.floor(seconds / 60);
@@ -73,21 +106,71 @@ const ContractionChart: React.FC<ContractionChartProps> = ({
     x: number;
     y: number;
   } | null>(null);
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+
+  // Gruppiere Wehen nach Tagen
+  const contractionsByDay = groupContractionsByDay(contractions);
+
+  // Sortiere die Tage absteigend (neueste zuerst)
+  const dayKeys = Object.keys(contractionsByDay).sort().reverse();
+
+  // Wenn kein Tag ausgewählt ist, wähle den neuesten Tag
+  useEffect(() => {
+    if (dayKeys.length > 0 && !selectedDay) {
+      setSelectedDay(dayKeys[0]);
+    }
+  }, [dayKeys, selectedDay]);
 
   const screenWidth = Dimensions.get('window').width;
   const chartWidth = screenWidth - 40; // Abstand links und rechts
 
+  // Filtere Wehen nach ausgewähltem Tag
+  const filteredContractions = selectedDay ? contractionsByDay[selectedDay] || [] : contractions;
+
   // Sortieren der Wehen nach Startzeit (älteste zuerst)
-  const sortedContractions = [...contractions].sort((a, b) =>
+  const sortedContractions = [...filteredContractions].sort((a, b) =>
     a.startTime.getTime() - b.startTime.getTime()
   );
 
   // Wenn keine Wehen vorhanden sind
-  if (sortedContractions.length === 0) {
+  if (contractions.length === 0) {
     return (
       <ThemedView style={styles.container} lightColor={lightColor} darkColor={darkColor}>
         <ThemedText style={styles.noDataText}>
           Noch keine Wehen aufgezeichnet.
+        </ThemedText>
+      </ThemedView>
+    );
+  }
+
+  // Wenn keine Wehen für den ausgewählten Tag vorhanden sind
+  if (sortedContractions.length === 0 && selectedDay) {
+    return (
+      <ThemedView style={styles.container} lightColor={lightColor} darkColor={darkColor}>
+        <View style={styles.dayFilterContainer}>
+          {dayKeys.map(dayKey => {
+            const date = new Date(parseInt(dayKey.split('-')[0]), parseInt(dayKey.split('-')[1]), parseInt(dayKey.split('-')[2]));
+            return (
+              <TouchableOpacity
+                key={dayKey}
+                style={[
+                  styles.dayFilterButton,
+                  selectedDay === dayKey && styles.selectedDayButton
+                ]}
+                onPress={() => setSelectedDay(dayKey)}
+              >
+                <Text style={[
+                  styles.dayFilterButtonText,
+                  selectedDay === dayKey && styles.selectedDayButtonText
+                ]}>
+                  {formatDateForFilter(date)}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+        <ThemedText style={styles.noDataText}>
+          Keine Wehen an diesem Tag aufgezeichnet.
         </ThemedText>
       </ThemedView>
     );
@@ -113,6 +196,30 @@ const ContractionChart: React.FC<ContractionChartProps> = ({
   return (
     <ThemedView style={styles.container} lightColor={lightColor} darkColor={darkColor}>
       <ThemedText style={styles.title}>Wehenverlauf</ThemedText>
+
+      {/* Tagesfilter */}
+      <View style={styles.dayFilterContainer}>
+        {dayKeys.map(dayKey => {
+          const date = new Date(parseInt(dayKey.split('-')[0]), parseInt(dayKey.split('-')[1]), parseInt(dayKey.split('-')[2]));
+          return (
+            <TouchableOpacity
+              key={dayKey}
+              style={[
+                styles.dayFilterButton,
+                selectedDay === dayKey && styles.selectedDayButton
+              ]}
+              onPress={() => setSelectedDay(dayKey)}
+            >
+              <Text style={[
+                styles.dayFilterButtonText,
+                selectedDay === dayKey && styles.selectedDayButtonText
+              ]}>
+                {formatDateForFilter(date)}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
 
       <ScrollView
         horizontal
@@ -289,6 +396,35 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 10,
     textAlign: 'center',
+  },
+  // Styles für den Tagesfilter
+  dayFilterContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 15,
+    justifyContent: 'center',
+  },
+  dayFilterButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    marginRight: 8,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#DDDDDD',
+  },
+  selectedDayButton: {
+    backgroundColor: '#FF9A8A',
+    borderColor: '#FF7A6A',
+  },
+  dayFilterButtonText: {
+    fontSize: 12,
+    color: '#444444',
+  },
+  selectedDayButtonText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
   },
   scrollView: {
     marginBottom: 10,

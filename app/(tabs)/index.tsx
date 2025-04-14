@@ -406,9 +406,11 @@ export default function HomeScreen() {
             ) : (
               <FlatList
                 data={contractions}
-                renderItem={({ item }) => (
+                renderItem={({ item, index }) => (
                   <SwipeableContractionItem
                     item={item}
+                    index={index}
+                    totalCount={contractions.length}
                     onDelete={handleDeleteContraction}
                   />
                 )}

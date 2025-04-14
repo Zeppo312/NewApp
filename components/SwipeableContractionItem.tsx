@@ -18,6 +18,8 @@ type Contraction = {
 
 type SwipeableContractionItemProps = {
   item: Contraction;
+  index?: number;
+  totalCount?: number;
   onDelete: (id: string) => void;
 };
 
@@ -31,6 +33,11 @@ const formatTime = (seconds: number): string => {
 // Format date to readable time
 const formatDateTime = (date: Date): string => {
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+};
+
+// Format date only
+const formatDate = (date: Date): string => {
+  return `${date.getDate().toString().padStart(2, '0')}.${(date.getMonth() + 1).toString().padStart(2, '0')}`;
 };
 
 // Funktion zur Bestimmung der Farbe basierend auf der Intensität
@@ -50,6 +57,8 @@ const getIntensityColor = (intensity: string): string => {
 
 const SwipeableContractionItem: React.FC<SwipeableContractionItemProps> = ({
   item,
+  index,
+  totalCount,
   onDelete
 }) => {
   const swipeableRef = useRef<Swipeable>(null);
@@ -115,15 +124,32 @@ const SwipeableContractionItem: React.FC<SwipeableContractionItemProps> = ({
                 lightColor={theme.text}
                 darkColor={theme.text}
               >
-                Wehe
+                {index !== undefined && totalCount !== undefined ? `Wehe #${totalCount - index}` : 'Wehe'}
               </ThemedText>
-              <ThemedText
-                style={{fontSize: 16}} // Larger font
-                lightColor={theme.text}
-                darkColor={theme.text}
-              >
-                {formatDateTime(new Date(item.startTime))}
-              </ThemedText>
+              <View style={{flexDirection: 'row', alignItems: 'center'}}>
+                <ThemedText
+                  style={{fontSize: 16}} // Larger font
+                  lightColor={theme.text}
+                  darkColor={theme.text}
+                >
+                  {formatDateTime(new Date(item.startTime))}
+                </ThemedText>
+                <View style={{
+                  backgroundColor: '#FF9A8A',
+                  paddingHorizontal: 6,
+                  paddingVertical: 2,
+                  borderRadius: 10,
+                  marginLeft: 8
+                }}>
+                  <ThemedText
+                    style={{fontSize: 12, fontWeight: 'bold'}}
+                    lightColor="#FFFFFF"
+                    darkColor="#FFFFFF"
+                  >
+                    {formatDate(new Date(item.startTime))}
+                  </ThemedText>
+                </View>
+              </View>
             </View>
           </View>
 
