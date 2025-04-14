@@ -8,7 +8,7 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { getBabyInfo, getDiaryEntries, getCurrentPhase, getPhaseProgress, getMilestonesByPhase } from '@/lib/baby';
+import { getBabyInfo, getDiaryEntries, getCurrentPhase, getPhaseProgress, getMilestonesByPhase, getDailyEntries } from '@/lib/baby';
 
 // Tägliche Tipps für Mamas
 const dailyTips = [
@@ -33,6 +33,7 @@ export default function HomeScreen() {
 
   const [babyInfo, setBabyInfo] = useState<any>(null);
   const [diaryEntries, setDiaryEntries] = useState<any[]>([]);
+  const [dailyEntries, setDailyEntries] = useState<any[]>([]);
   const [currentPhase, setCurrentPhase] = useState<any>(null);
   const [phaseProgress, setPhaseProgress] = useState<any>(null);
   const [milestones, setMilestones] = useState<any[]>([]);
@@ -62,6 +63,13 @@ export default function HomeScreen() {
       const { data: diaryData } = await getDiaryEntries();
       if (diaryData) {
         setDiaryEntries(diaryData.slice(0, 5));
+      }
+
+      // Alltags-Einträge für heute laden
+      const today = new Date();
+      const { data: dailyData } = await getDailyEntries(undefined, today);
+      if (dailyData) {
+        setDailyEntries(dailyData);
       }
 
       // Aktuelle Entwicklungsphase laden
@@ -99,22 +107,12 @@ export default function HomeScreen() {
 
   // Berechne die Anzahl der heutigen Mahlzeiten
   const getTodayFeedings = () => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    // Hier würden wir normalerweise die Mahlzeiten aus der Datenbank abrufen
-    // Für den Moment simulieren wir eine zufällige Anzahl zwischen 0 und 8
-    return Math.floor(Math.random() * 9);
+    return dailyEntries.filter(entry => entry.entry_type === 'feeding').length;
   };
 
   // Berechne die Anzahl der heutigen Windelwechsel
   const getTodayDiaperChanges = () => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    // Hier würden wir normalerweise die Windelwechsel aus der Datenbank abrufen
-    // Für den Moment simulieren wir eine zufällige Anzahl zwischen 0 und 10
-    return Math.floor(Math.random() * 11);
+    return dailyEntries.filter(entry => entry.entry_type === 'diaper').length;
   };
 
   // Berechne die Anzahl der heutigen Einträge (für Referenz, wird nicht mehr angezeigt)
