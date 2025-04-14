@@ -230,19 +230,6 @@ const VerticalContractionTimeline: React.FC<VerticalContractionTimelineProps> = 
                                   </View>
                                 )}
                               </View>
-
-                              {/* Lösch-Button */}
-                              {onDelete && (
-                                <TouchableOpacity
-                                  style={styles.deleteButton}
-                                  onPress={(e) => {
-                                    e.stopPropagation(); // Verhindert, dass der Klick die Karte erweitert
-                                    handleDelete(contraction.id);
-                                  }}
-                                >
-                                  <Ionicons name="trash-outline" size={18} color="#FF6B6B" />
-                                </TouchableOpacity>
-                              )}
                             </View>
 
                             <View style={styles.cardDetails}>
@@ -275,6 +262,22 @@ const VerticalContractionTimeline: React.FC<VerticalContractionTimelineProps> = 
                                       <ThemedText style={styles.detailValue}>
                                         {formatTime(new Date(contraction.endTime))}
                                       </ThemedText>
+                                    </View>
+                                  )}
+
+                                  {/* Lösch-Button - nur in aufgeklappter Karte anzeigen */}
+                                  {onDelete && (
+                                    <View style={styles.deleteButtonContainer}>
+                                      <TouchableOpacity
+                                        style={styles.deleteButton}
+                                        onPress={(e) => {
+                                          e.stopPropagation(); // Verhindert, dass der Klick die Karte erweitert
+                                          handleDelete(contraction.id);
+                                        }}
+                                      >
+                                        <Ionicons name="trash-outline" size={18} color="#FF6B6B" />
+                                        <ThemedText style={styles.deleteButtonText}>Löschen</ThemedText>
+                                      </TouchableOpacity>
                                     </View>
                                   )}
                                 </View>
@@ -402,12 +405,26 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginRight: 8,
   },
+  deleteButtonContainer: {
+    marginTop: 16,
+    alignItems: 'center',
+  },
   deleteButton: {
-    padding: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
     borderRadius: 20,
     backgroundColor: 'rgba(255, 107, 107, 0.1)',
     borderWidth: 1,
     borderColor: 'rgba(255, 107, 107, 0.3)',
+  },
+  deleteButtonText: {
+    color: '#FF6B6B',
+    fontWeight: 'bold',
+    fontSize: 14,
+    marginLeft: 6,
   },
   intensityBadge: {
     paddingHorizontal: 8,
