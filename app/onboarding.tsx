@@ -1,13 +1,501 @@
-import React, { useState } from 'react';
-import { StyleSheet, View, SafeAreaView, ImageBackground, StatusBar } from 'react-native';
-import { Stack } from 'expo-router';
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, View, SafeAreaView, ImageBackground, StatusBar, TextInput, TouchableOpacity, Alert, ActivityIndicator, ScrollView, Platform, Switch } from 'react-native';
+import { Stack, router } from 'expo-router';
 import { ThemedText } from '@/components/ThemedText';
+import { ThemedView } from '@/components/ThemedView';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { useAuth } from '@/contexts/AuthContext';
+import { useBabyStatus } from '@/contexts/BabyStatusContext';
+import { IconSymbol } from '@/components/ui/IconSymbol';
+import { supabase } from '@/lib/supabase';
+import { getBabyInfo, saveBabyInfo } from '@/lib/baby';
+import DateTimePicker from '@react-native-community/datetimepicker';
+
+// Definieren der Schritte im Onboarding-Prozess
+type Step = {
+  id: string;
+  title: string;
+  subtitle: string;
+};
+
+const STEPS: Step[] = [
+  {
+    id: 'welcome',
+    title: 'Willkommen!',
+    subtitle: 'Lass uns dein Profil einrichten'
+  },
+  {
+    id: 'name',
+    title: 'Wie heißt du?',
+    subtitle: 'Gib deinen Vor- und Nachnamen ein'
+  },
+  {
+    id: 'due_date',
+    title: 'Wann ist der Geburtstermin?',
+    subtitle: 'Wähle den errechneten Geburtstermin aus'
+  },
+  {
+    id: 'baby_born',
+    title: 'Ist dein Baby bereits geboren?',
+    subtitle: 'Wähle aus, ob dein Baby bereits auf der Welt ist'
+  },
+  {
+    id: 'baby_name',
+    title: 'Wie soll dein Baby heißen?',
+    subtitle: 'Gib den Namen deines Babys ein'
+  },
+  {
+    id: 'baby_gender',
+    title: 'Welches Geschlecht hat dein Baby?',
+    subtitle: 'Wähle das Geschlecht deines Babys aus'
+  },
+  {
+    id: 'baby_birth_details',
+    title: 'Geburtsdaten',
+    subtitle: 'Wann wurde dein Baby geboren? (Optional: Gewicht und Größe)'
+  },
+  {
+    id: 'complete',
+    title: 'Geschafft!',
+    subtitle: 'Dein Profil ist jetzt eingerichtet'
+  }
+];
 
 export default function OnboardingScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
+  const { user } = useAuth();
+  const { isBabyBorn, setIsBabyBorn } = useBabyStatus();
+
+  // Zustand für den aktuellen Schritt
+  const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  const currentStep = STEPS[currentStepIndex];
+
+  // Benutzerdaten
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [dueDate, setDueDate] = useState<Date | null>(null);
+  const [babyName, setBabyName] = useState('');
+  const [babyGender, setBabyGender] = useState<'male' | 'female' | ''>('');
+  const [birthDate, setBirthDate] = useState<Date | null>(null);
+  const [babyWeight, setBabyWeight] = useState('');
+  const [babyHeight, setBabyHeight] = useState('');
+
+  // UI-Status
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [showDueDatePicker, setShowDueDatePicker] = useState(false);
+  const [showBirthDatePicker, setShowBirthDatePicker] = useState(false);
+
+  // Formatieren eines Datums für die Anzeige
+  const formatDate = (date: Date | null) => {
+    if (!date) return 'Nicht festgelegt';
+    return date.toLocaleDateString('de-DE', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    });
+  };
+
+  // Handler für Änderungen am Geburtstermin
+  const handleDueDateChange = (event: any, selectedDate?: Date) => {
+    setShowDueDatePicker(Platform.OS === 'ios');
+    if (selectedDate) {
+      setDueDate(selectedDate);
+    }
+  };
+
+  // Handler für Änderungen am Geburtsdatum
+  const handleBirthDateChange = (event: any, selectedDate?: Date) => {
+    setShowBirthDatePicker(Platform.OS === 'ios');
+    if (selectedDate) {
+      setBirthDate(selectedDate);
+    }
+  };
+
+  // Zum nächsten Schritt gehen
+  const goToNextStep = () => {
+    // Validierung für den aktuellen Schritt
+    if (currentStep.id === 'name' && (!firstName || !lastName)) {
+      Alert.alert('Hinweis', 'Bitte gib deinen Vor- und Nachnamen ein.');
+      return;
+    }
+
+    if (currentStep.id === 'due_date' && !dueDate) {
+      Alert.alert('Hinweis', 'Bitte wähle einen Geburtstermin aus.');
+      return;
+    }
+
+    if (currentStep.id === 'baby_name' && !babyName) {
+      Alert.alert('Hinweis', 'Bitte gib einen Namen für dein Baby ein.');
+      return;
+    }
+
+    if (currentStep.id === 'baby_gender' && !babyGender) {
+      Alert.alert('Hinweis', 'Bitte wähle das Geschlecht deines Babys aus.');
+      return;
+    }
+
+    if (currentStep.id === 'baby_birth_details' && isBabyBorn && !birthDate) {
+      Alert.alert('Hinweis', 'Bitte gib das Geburtsdatum deines Babys ein.');
+      return;
+    }
+
+    // Wenn wir beim letzten Schritt sind, speichern wir die Daten
+    if (currentStepIndex === STEPS.length - 2) {
+      saveUserData();
+      return;
+    }
+
+    // Zum nächsten Schritt gehen
+    setCurrentStepIndex(prevIndex => {
+      // Wenn das Baby nicht geboren ist, überspringen wir den Schritt mit den Geburtsdaten
+      if (prevIndex === 5 && !isBabyBorn) {
+        return prevIndex + 2;
+      }
+      return prevIndex + 1;
+    });
+  };
+
+  // Zum vorherigen Schritt gehen
+  const goToPreviousStep = () => {
+    if (currentStepIndex > 0) {
+      setCurrentStepIndex(prevIndex => {
+        // Wenn das Baby nicht geboren ist, überspringen wir den Schritt mit den Geburtsdaten
+        if (prevIndex === 7 && !isBabyBorn) {
+          return prevIndex - 2;
+        }
+        return prevIndex - 1;
+      });
+    }
+  };
+
+  // Speichern der Benutzerdaten
+  const saveUserData = async () => {
+    try {
+      if (!user) {
+        Alert.alert('Hinweis', 'Bitte melde dich an, um deine Daten zu speichern.');
+        return;
+      }
+
+      setIsSaving(true);
+
+      // Speichern der Profildaten (Vorname, Nachname)
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({
+          first_name: firstName,
+          last_name: lastName,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', user.id);
+
+      if (profileError) {
+        console.error('Error saving profile data:', profileError);
+        throw new Error('Profildaten konnten nicht gespeichert werden.');
+      }
+
+      // Speichern der Benutzereinstellungen (Geburtstermin, Baby geboren)
+      // Zuerst prüfen, ob bereits ein Eintrag existiert
+      const { data: existingSettings, error: fetchError } = await supabase
+        .from('user_settings')
+        .select('id')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (fetchError && fetchError.code !== 'PGRST116') {
+        console.error('Error checking existing settings:', fetchError);
+        throw new Error('Benutzereinstellungen konnten nicht überprüft werden.');
+      }
+
+      let settingsResult;
+
+      if (existingSettings && existingSettings.id) {
+        // Wenn ein Eintrag existiert, aktualisieren wir diesen
+        settingsResult = await supabase
+          .from('user_settings')
+          .update({
+            due_date: dueDate ? dueDate.toISOString() : null,
+            is_baby_born: isBabyBorn,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', existingSettings.id);
+      } else {
+        // Wenn kein Eintrag existiert, erstellen wir einen neuen
+        settingsResult = await supabase
+          .from('user_settings')
+          .insert({
+            user_id: user.id,
+            due_date: dueDate ? dueDate.toISOString() : null,
+            is_baby_born: isBabyBorn,
+            updated_at: new Date().toISOString()
+          });
+      }
+
+      if (settingsResult.error) {
+        console.error('Error saving user settings:', settingsResult.error);
+        throw new Error('Benutzereinstellungen konnten nicht gespeichert werden.');
+      }
+
+      // Speichern der Baby-Informationen (Name, Geschlecht, Geburtsdatum, Gewicht, Größe)
+      const babyInfo = {
+        name: babyName,
+        baby_gender: babyGender,
+        birth_date: birthDate ? birthDate.toISOString() : null,
+        weight: babyWeight,
+        height: babyHeight
+      };
+
+      const { error: babyError } = await saveBabyInfo(babyInfo);
+
+      if (babyError) {
+        console.error('Error saving baby info:', babyError);
+        throw new Error('Baby-Informationen konnten nicht gespeichert werden.');
+      }
+
+      // Zum letzten Schritt gehen
+      setCurrentStepIndex(STEPS.length - 1);
+    } catch (err) {
+      console.error('Failed to save user data:', err);
+      Alert.alert('Fehler', err instanceof Error ? err.message : 'Deine Daten konnten nicht gespeichert werden.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Onboarding abschließen und zur Hauptapp navigieren
+  const completeOnboarding = () => {
+    if (isBabyBorn) {
+      router.replace('/(tabs)/baby');
+    } else {
+      router.replace('/(tabs)/countdown');
+    }
+  };
+
+  // Rendern des aktuellen Schritts
+  const renderStepContent = () => {
+    switch (currentStep.id) {
+      case 'welcome':
+        return (
+          <View style={styles.stepContent}>
+            <IconSymbol name="person.crop.circle" size={80} color={theme.accent} style={styles.welcomeIcon} />
+            <ThemedText style={styles.welcomeText}>
+              Wir freuen uns, dass du da bist! Lass uns ein paar Informationen sammeln, damit wir deine App personalisieren können.
+            </ThemedText>
+          </View>
+        );
+
+      case 'name':
+        return (
+          <View style={styles.stepContent}>
+            <View style={styles.formGroup}>
+              <ThemedText style={styles.label}>Vorname</ThemedText>
+              <TextInput
+                style={[styles.input, { color: theme.text }]}
+                value={firstName}
+                onChangeText={setFirstName}
+                placeholder="Dein Vorname"
+                placeholderTextColor={theme.tabIconDefault}
+              />
+            </View>
+
+            <View style={styles.formGroup}>
+              <ThemedText style={styles.label}>Nachname</ThemedText>
+              <TextInput
+                style={[styles.input, { color: theme.text }]}
+                value={lastName}
+                onChangeText={setLastName}
+                placeholder="Dein Nachname"
+                placeholderTextColor={theme.tabIconDefault}
+              />
+            </View>
+          </View>
+        );
+
+      case 'due_date':
+        return (
+          <View style={styles.stepContent}>
+            <View style={styles.formGroup}>
+              <ThemedText style={styles.label}>Errechneter Geburtstermin</ThemedText>
+              <TouchableOpacity
+                style={styles.dateButton}
+                onPress={() => setShowDueDatePicker(true)}
+              >
+                <ThemedText style={styles.dateButtonText}>
+                  {dueDate ? formatDate(dueDate) : 'Geburtstermin auswählen'}
+                </ThemedText>
+                <IconSymbol name="calendar" size={20} color={theme.tabIconDefault} />
+              </TouchableOpacity>
+
+              {showDueDatePicker && (
+                <DateTimePicker
+                  value={dueDate || new Date()}
+                  mode="date"
+                  display="default"
+                  onChange={handleDueDateChange}
+                />
+              )}
+            </View>
+          </View>
+        );
+
+      case 'baby_born':
+        return (
+          <View style={styles.stepContent}>
+            <View style={styles.formGroup}>
+              <ThemedText style={styles.label}>Ist dein Baby bereits geboren?</ThemedText>
+              <View style={styles.switchContainer}>
+                <ThemedText style={styles.switchLabel}>
+                  {isBabyBorn ? 'Ja' : 'Nein'}
+                </ThemedText>
+                <Switch
+                  value={isBabyBorn}
+                  onValueChange={setIsBabyBorn}
+                  trackColor={{ false: '#767577', true: '#E9C9B6' }}
+                  thumbColor={isBabyBorn ? '#7D5A50' : '#f4f3f4'}
+                />
+              </View>
+            </View>
+          </View>
+        );
+
+      case 'baby_name':
+        return (
+          <View style={styles.stepContent}>
+            <View style={styles.formGroup}>
+              <ThemedText style={styles.label}>Name des Babys</ThemedText>
+              <TextInput
+                style={[styles.input, { color: theme.text }]}
+                value={babyName}
+                onChangeText={setBabyName}
+                placeholder="Name deines Babys"
+                placeholderTextColor={theme.tabIconDefault}
+              />
+            </View>
+          </View>
+        );
+
+      case 'baby_gender':
+        return (
+          <View style={styles.stepContent}>
+            <View style={styles.formGroup}>
+              <ThemedText style={styles.label}>Geschlecht</ThemedText>
+              <View style={styles.genderContainer}>
+                <TouchableOpacity
+                  style={[
+                    styles.genderButton,
+                    babyGender === 'male' && styles.genderButtonActive
+                  ]}
+                  onPress={() => setBabyGender('male')}
+                >
+                  <IconSymbol
+                    name="person.fill"
+                    size={24}
+                    color={babyGender === 'male' ? '#FFFFFF' : theme.tabIconDefault}
+                  />
+                  <ThemedText
+                    style={[
+                      styles.genderButtonText,
+                      babyGender === 'male' && styles.genderButtonTextActive
+                    ]}
+                  >
+                    Junge
+                  </ThemedText>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.genderButton,
+                    babyGender === 'female' && styles.genderButtonActive
+                  ]}
+                  onPress={() => setBabyGender('female')}
+                >
+                  <IconSymbol
+                    name="person.fill"
+                    size={24}
+                    color={babyGender === 'female' ? '#FFFFFF' : theme.tabIconDefault}
+                  />
+                  <ThemedText
+                    style={[
+                      styles.genderButtonText,
+                      babyGender === 'female' && styles.genderButtonTextActive
+                    ]}
+                  >
+                    Mädchen
+                  </ThemedText>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        );
+
+      case 'baby_birth_details':
+        return (
+          <View style={styles.stepContent}>
+            <View style={styles.formGroup}>
+              <ThemedText style={styles.label}>Geburtsdatum</ThemedText>
+              <TouchableOpacity
+                style={styles.dateButton}
+                onPress={() => setShowBirthDatePicker(true)}
+              >
+                <ThemedText style={styles.dateButtonText}>
+                  {birthDate ? formatDate(birthDate) : 'Geburtsdatum auswählen'}
+                </ThemedText>
+                <IconSymbol name="calendar" size={20} color={theme.tabIconDefault} />
+              </TouchableOpacity>
+
+              {showBirthDatePicker && (
+                <DateTimePicker
+                  value={birthDate || new Date()}
+                  mode="date"
+                  display="default"
+                  onChange={handleBirthDateChange}
+                  maximumDate={new Date()}
+                />
+              )}
+            </View>
+
+            <View style={styles.formGroup}>
+              <ThemedText style={styles.label}>Geburtsgewicht (g)</ThemedText>
+              <TextInput
+                style={[styles.input, { color: theme.text }]}
+                value={babyWeight}
+                onChangeText={setBabyWeight}
+                placeholder="z.B. 3500"
+                placeholderTextColor={theme.tabIconDefault}
+                keyboardType="numeric"
+              />
+            </View>
+
+            <View style={styles.formGroup}>
+              <ThemedText style={styles.label}>Größe bei Geburt (cm)</ThemedText>
+              <TextInput
+                style={[styles.input, { color: theme.text }]}
+                value={babyHeight}
+                onChangeText={setBabyHeight}
+                placeholder="z.B. 52"
+                placeholderTextColor={theme.tabIconDefault}
+                keyboardType="numeric"
+              />
+            </View>
+          </View>
+        );
+
+      case 'complete':
+        return (
+          <View style={styles.stepContent}>
+            <IconSymbol name="checkmark.circle.fill" size={80} color={theme.accent} style={styles.welcomeIcon} />
+            <ThemedText style={styles.welcomeText}>
+              Super! Dein Profil ist jetzt eingerichtet. Du kannst jetzt die App nutzen und alle Funktionen entdecken.
+            </ThemedText>
+          </View>
+        );
+
+      default:
+        return null;
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -18,12 +506,69 @@ export default function OnboardingScreen() {
         style={styles.backgroundImage}
         resizeMode="cover"
       >
-        <View style={styles.content}>
-          <ThemedText style={styles.title}>Willkommen!</ThemedText>
-          <ThemedText style={styles.subtitle}>
-            Lass uns dein Profil einrichten
-          </ThemedText>
-        </View>
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={theme.accent} />
+            <ThemedText style={styles.loadingText}>Lade Daten...</ThemedText>
+          </View>
+        ) : (
+          <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
+            <View style={styles.header}>
+              <ThemedText style={styles.title}>{currentStep.title}</ThemedText>
+              <ThemedText style={styles.subtitle}>{currentStep.subtitle}</ThemedText>
+            </View>
+
+            <ThemedView style={styles.card} lightColor={theme.cardLight} darkColor={theme.cardDark}>
+              {renderStepContent()}
+            </ThemedView>
+
+            <View style={styles.buttonContainer}>
+              {currentStepIndex > 0 && currentStep.id !== 'complete' && (
+                <TouchableOpacity
+                  style={[styles.button, styles.backButton]}
+                  onPress={goToPreviousStep}
+                >
+                  <ThemedText style={styles.backButtonText}>Zurück</ThemedText>
+                </TouchableOpacity>
+              )}
+
+              {currentStep.id !== 'complete' ? (
+                <TouchableOpacity
+                  style={[styles.button, styles.nextButton, isSaving && styles.buttonDisabled]}
+                  onPress={goToNextStep}
+                  disabled={isSaving}
+                >
+                  {isSaving ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <ThemedText style={styles.nextButtonText}>
+                      {currentStepIndex === STEPS.length - 2 ? 'Speichern' : 'Weiter'}
+                    </ThemedText>
+                  )}
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.button, styles.nextButton]}
+                  onPress={completeOnboarding}
+                >
+                  <ThemedText style={styles.nextButtonText}>Los geht's</ThemedText>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <View style={styles.progressContainer}>
+              {STEPS.map((step, index) => (
+                <View
+                  key={step.id}
+                  style={[
+                    styles.progressDot,
+                    index === currentStepIndex && styles.progressDotActive
+                  ]}
+                />
+              ))}
+            </View>
+          </ScrollView>
+        )}
       </ImageBackground>
     </SafeAreaView>
   );
@@ -37,10 +582,24 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
   },
-  content: {
+  loadingContainer: {
     flex: 1,
-    padding: 20,
     justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  contentContainer: {
+    padding: 20,
+    paddingBottom: 40,
+  },
+  header: {
+    marginBottom: 20,
     alignItems: 'center',
   },
   title: {
@@ -52,6 +611,146 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 18,
     textAlign: 'center',
-    marginBottom: 30,
+    marginBottom: 10,
+    opacity: 0.8,
+  },
+  card: {
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  stepContent: {
+    minHeight: 150,
+  },
+  welcomeIcon: {
+    alignSelf: 'center',
+    marginBottom: 20,
+  },
+  welcomeText: {
+    fontSize: 16,
+    textAlign: 'center',
+    lineHeight: 24,
+  },
+  formGroup: {
+    marginBottom: 20,
+  },
+  label: {
+    fontSize: 16,
+    marginBottom: 8,
+  },
+  input: {
+    height: 48,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    fontSize: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+  },
+  dateButton: {
+    height: 48,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+  },
+  dateButtonText: {
+    fontSize: 16,
+  },
+  switchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+  },
+  switchLabel: {
+    fontSize: 16,
+  },
+  genderContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  genderButton: {
+    flex: 1,
+    height: 48,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    borderRadius: 8,
+    marginHorizontal: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+  },
+  genderButtonActive: {
+    backgroundColor: '#7D5A50',
+    borderColor: '#7D5A50',
+  },
+  genderButtonText: {
+    fontSize: 16,
+    marginLeft: 8,
+  },
+  genderButtonTextActive: {
+    color: '#FFFFFF',
+  },
+  buttonContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+  },
+  button: {
+    height: 48,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+  },
+  backButton: {
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+    flex: 1,
+    marginRight: 10,
+  },
+  backButtonText: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  nextButton: {
+    backgroundColor: '#7D5A50',
+    flex: 2,
+  },
+  nextButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  buttonDisabled: {
+    backgroundColor: '#A89992',
+  },
+  progressContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  progressDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.2)',
+    marginHorizontal: 4,
+  },
+  progressDotActive: {
+    backgroundColor: '#7D5A50',
+    width: 12,
+    height: 12,
+    borderRadius: 6,
   },
 });
