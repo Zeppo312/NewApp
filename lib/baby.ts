@@ -104,8 +104,13 @@ export const getBabyInfo = async () => {
 
 export const saveBabyInfo = async (info: BabyInfo) => {
   try {
+    console.log('saveBabyInfo called with:', info);
+
     const { data: userData } = await supabase.auth.getUser();
-    if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
+    if (!userData.user) {
+      console.error('Not logged in');
+      return { data: null, error: new Error('Nicht angemeldet') };
+    }
 
     // Prüfen, ob bereits ein Eintrag existiert
     const { data: existingData, error: fetchError } = await supabase
@@ -113,6 +118,8 @@ export const saveBabyInfo = async (info: BabyInfo) => {
       .select('id')
       .eq('user_id', userData.user.id)
       .maybeSingle();
+
+    console.log('Existing baby info check result:', { existingData, fetchError });
 
     if (fetchError && fetchError.code !== 'PGRST116') {
       console.error('Error checking existing baby info:', fetchError);
@@ -123,6 +130,7 @@ export const saveBabyInfo = async (info: BabyInfo) => {
 
     if (existingData && existingData.id) {
       // Wenn ein Eintrag existiert, aktualisieren wir diesen
+      console.log('Updating existing baby info with ID:', existingData.id);
       result = await supabase
         .from('baby_info')
         .update({
@@ -132,6 +140,7 @@ export const saveBabyInfo = async (info: BabyInfo) => {
         .eq('id', existingData.id);
     } else {
       // Wenn kein Eintrag existiert, erstellen wir einen neuen
+      console.log('Creating new baby info entry for user:', userData.user.id);
       result = await supabase
         .from('baby_info')
         .insert({
@@ -141,6 +150,8 @@ export const saveBabyInfo = async (info: BabyInfo) => {
           updated_at: new Date().toISOString()
         });
     }
+
+    console.log('Baby info save operation result:', result);
 
     return { data: result.data, error: result.error };
   } catch (err) {

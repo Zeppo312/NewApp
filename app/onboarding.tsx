@@ -237,6 +237,15 @@ export default function OnboardingScreen() {
       }
 
       // Speichern der Baby-Informationen (Name, Geschlecht, Geburtsdatum, Gewicht, Größe)
+      console.log('Saving baby info with values:', {
+        babyName,
+        babyGender,
+        birthDate: birthDate ? birthDate.toISOString() : null,
+        babyWeight,
+        babyHeight,
+        isBabyBorn
+      });
+
       const babyInfo = {
         name: babyName,
         baby_gender: babyGender,
@@ -245,7 +254,8 @@ export default function OnboardingScreen() {
         height: babyHeight
       };
 
-      const { error: babyError } = await saveBabyInfo(babyInfo);
+      const { data: babyData, error: babyError } = await saveBabyInfo(babyInfo);
+      console.log('Baby info save result:', { data: babyData, error: babyError });
 
       if (babyError) {
         console.error('Error saving baby info:', babyError);
