@@ -1,5 +1,5 @@
 import { StyleSheet, TouchableOpacity, Alert, ActivityIndicator, View } from 'react-native';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 
 import ParallaxScrollView from '@/components/ParallaxScrollView';
@@ -8,6 +8,7 @@ import { ThemedView } from '@/components/ThemedView';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { ChecklistCategory } from '@/components/ChecklistCategory';
 import { AddChecklistItem } from '@/components/AddChecklistItem';
+import Svg, { Circle, Path, G, Text as SvgText } from 'react-native-svg';
 
 import { useAuth } from '@/contexts/AuthContext';
 import { ChecklistItem, getHospitalChecklist, addChecklistItem, toggleChecklistItem, deleteChecklistItem, supabaseUrl } from '@/lib/supabase';
@@ -231,6 +232,13 @@ export default function TabTwoScreen() {
     return groups;
   }, {});
 
+  // Berechnung des Gesamtfortschritts
+  const totalProgress = useMemo(() => {
+    if (checklist.length === 0) return 0;
+    const checkedCount = checklist.filter(item => item.is_checked).length;
+    return Math.round((checkedCount / checklist.length) * 100);
+  }, [checklist]);
+
   // Abmelden-Funktion wurde zur Mehr-Seite verschoben
 
   return (
@@ -244,9 +252,50 @@ export default function TabTwoScreen() {
           style={styles.headerImage}
         />
       }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Krankenhaus-Checkliste</ThemedText>
-      </ThemedView>
+      <View style={styles.headerContainer}>
+        {/* Fortschrittskreis */}
+        <View style={styles.progressCircleContainer}>
+          <Svg height="60" width="60" viewBox="0 0 100 100">
+            {/* Hintergrundkreis */}
+            <Circle
+              cx="50"
+              cy="50"
+              r="45"
+              stroke="#E8D5C4"
+              strokeWidth="8"
+              fill="transparent"
+            />
+            {/* Fortschrittskreis */}
+            <Path
+              d={`
+                M 50 5
+                A 45 45 0 ${totalProgress > 50 ? 1 : 0} 1 ${50 + 45 * Math.sin(2 * Math.PI * totalProgress / 100)} ${50 - 45 * Math.cos(2 * Math.PI * totalProgress / 100)}
+              `}
+              stroke="#7D5A50"
+              strokeWidth="8"
+              fill="transparent"
+              strokeLinecap="round"
+            />
+            {/* Prozentanzeige in der Mitte */}
+            <G>
+              <SvgText
+                x="50"
+                y="55"
+                fontSize="24"
+                textAnchor="middle"
+                fill="#5D4037"
+                fontWeight="bold"
+              >
+                {totalProgress}%
+              </SvgText>
+            </G>
+          </Svg>
+        </View>
+
+        <ThemedView style={styles.titleContainer}>
+          <ThemedText type="title">Krankenhaus-Checkliste</ThemedText>
+        </ThemedView>
+      </View>
 
       <ThemedText style={styles.description}>
         Hier kannst du alle wichtigen Dinge für deinen Krankenhausaufenthalt notieren.
@@ -303,11 +352,19 @@ const styles = StyleSheet.create({
     left: -35,
     position: 'absolute',
   },
-  titleContainer: {
+  headerContainer: {
     flexDirection: 'row',
-    color:'black' ,
-    gap: 8,
+    alignItems: 'center',
     marginBottom: 8,
+  },
+  progressCircleContainer: {
+    marginRight: 15,
+  },
+  titleContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    color:'black',
+    gap: 8,
   },
   description: {
     marginBottom: 20,
