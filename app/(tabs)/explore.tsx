@@ -276,29 +276,18 @@ export default function TabTwoScreen() {
               fill="transparent"
               strokeLinecap="round"
             />
-            {/* Hintergrund für die Prozentanzeige */}
-            <Circle
-              cx="50"
-              cy="50"
-              r="30"
-              fill="transparent"
-            />
-
             {/* Prozentanzeige in der Mitte */}
-            <G>
-              <SvgText
-                x="50"
-                y="50"
-                fontSize="22"
-                textAnchor="middle"
-                alignmentBaseline="central"
-                fill="#5D4037"
-                fontWeight="bold"
-                dy="1"
-              >
-                {totalProgress}%
-              </SvgText>
-            </G>
+            <SvgText
+              x="50"
+              y="50"
+              fontSize="20"
+              textAnchor="middle"
+              alignmentBaseline="central"
+              fill="#5D4037"
+              fontWeight="bold"
+            >
+              {totalProgress} %
+            </SvgText>
           </Svg>
         </View>
 
