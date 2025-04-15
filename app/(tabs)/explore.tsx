@@ -283,6 +283,7 @@ export default function TabTwoScreen() {
                 y="55"
                 fontSize="24"
                 textAnchor="middle"
+                alignmentBaseline="middle"
                 fill="#5D4037"
                 fontWeight="bold"
               >
