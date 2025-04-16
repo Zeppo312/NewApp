@@ -42,8 +42,7 @@ export default function BabyScreen() {
           birth_date: data.birth_date || null,
           weight: data.weight || '',
           height: data.height || '',
-          photo_url: data.photo_url || null,
-          baby_gender: data.baby_gender || ''
+          photo_url: data.photo_url || null
         });
       }
     } catch (err) {
@@ -159,13 +158,13 @@ export default function BabyScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
-      <ImageBackground
-        source={require('@/assets/images/Background_Hell.png')}
-        style={styles.backgroundImage}
-        resizeMode="cover"
-      >
+    <ImageBackground
+      source={require('@/assets/images/Background_Hell.png')}
+      style={styles.backgroundImage}
+      resizeMode="repeat"
+    >
+      <SafeAreaView style={styles.container}>
+      <StatusBar hidden={true} />
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
           <ThemedText type="title" style={styles.title}>
             Mein Baby
@@ -200,55 +199,6 @@ export default function BabyScreen() {
                       placeholder="Name des Babys"
                       placeholderTextColor={colorScheme === 'dark' ? '#AAAAAA' : '#888888'}
                     />
-                  </View>
-
-                  <View style={styles.inputRow}>
-                    <ThemedText style={styles.label}>Geschlecht:</ThemedText>
-                    <View style={styles.genderContainer}>
-                      <TouchableOpacity
-                        style={[
-                          styles.genderButton,
-                          babyInfo.baby_gender === 'male' && styles.genderButtonActive
-                        ]}
-                        onPress={() => setBabyInfo({ ...babyInfo, baby_gender: 'male' })}
-                      >
-                        <IconSymbol
-                          name="person.fill"
-                          size={20}
-                          color={babyInfo.baby_gender === 'male' ? '#FFFFFF' : theme.tabIconDefault}
-                        />
-                        <ThemedText
-                          style={[
-                            styles.genderButtonText,
-                            babyInfo.baby_gender === 'male' && styles.genderButtonTextActive
-                          ]}
-                        >
-                          Junge
-                        </ThemedText>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={[
-                          styles.genderButton,
-                          babyInfo.baby_gender === 'female' && styles.genderButtonActive
-                        ]}
-                        onPress={() => setBabyInfo({ ...babyInfo, baby_gender: 'female' })}
-                      >
-                        <IconSymbol
-                          name="person.fill"
-                          size={20}
-                          color={babyInfo.baby_gender === 'female' ? '#FFFFFF' : theme.tabIconDefault}
-                        />
-                        <ThemedText
-                          style={[
-                            styles.genderButtonText,
-                            babyInfo.baby_gender === 'female' && styles.genderButtonTextActive
-                          ]}
-                        >
-                          Mädchen
-                        </ThemedText>
-                      </TouchableOpacity>
-                    </View>
                   </View>
 
                   <View style={styles.inputRow}>
@@ -331,15 +281,6 @@ export default function BabyScreen() {
                   </View>
 
                   <View style={styles.infoRow}>
-                    <ThemedText style={styles.infoLabel}>Geschlecht:</ThemedText>
-                    <ThemedText style={styles.infoValue}>
-                      {babyInfo.baby_gender === 'male' ? 'Junge' :
-                       babyInfo.baby_gender === 'female' ? 'Mädchen' :
-                       'Noch nicht festgelegt'}
-                    </ThemedText>
-                  </View>
-
-                  <View style={styles.infoRow}>
                     <ThemedText style={styles.infoLabel}>Geburtsdatum:</ThemedText>
                     <ThemedText style={styles.infoValue}>
                       {babyInfo.birth_date
@@ -393,8 +334,8 @@ export default function BabyScreen() {
             </ThemedText>
           </ThemedView>
         </ScrollView>
-      </ImageBackground>
-    </SafeAreaView>
+      </SafeAreaView>
+    </ImageBackground>
   );
 }
 
@@ -505,34 +446,6 @@ const styles = StyleSheet.create({
   },
   dateText: {
     fontSize: 16,
-  },
-  genderContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 5,
-  },
-  genderButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#F5F5F5',
-    borderRadius: 5,
-    padding: 10,
-    flex: 1,
-    marginHorizontal: 5,
-    borderWidth: 1,
-    borderColor: '#CCCCCC',
-  },
-  genderButtonActive: {
-    backgroundColor: '#7D5A50',
-    borderColor: '#7D5A50',
-  },
-  genderButtonText: {
-    fontSize: 14,
-    marginLeft: 5,
-  },
-  genderButtonTextActive: {
-    color: '#FFFFFF',
   },
   buttonRow: {
     flexDirection: 'row',

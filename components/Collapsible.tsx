@@ -11,11 +11,13 @@ export function Collapsible({
   children,
   title,
   subtitle,
-  initiallyExpanded = false
+  initiallyExpanded = false,
+  leftComponent
 }: PropsWithChildren & {
   title: string,
   subtitle?: string,
-  initiallyExpanded?: boolean
+  initiallyExpanded?: boolean,
+  leftComponent?: React.ReactNode
 }) {
   const [isOpen, setIsOpen] = useState(initiallyExpanded);
   const theme = useColorScheme() ?? 'light';
@@ -26,6 +28,11 @@ export function Collapsible({
         style={styles.heading}
         onPress={() => setIsOpen((value) => !value)}
         activeOpacity={0.8}>
+        {leftComponent && (
+          <View style={styles.leftComponentContainer}>
+            {leftComponent}
+          </View>
+        )}
         <View style={styles.titleContainer}>
           <ThemedText style={styles.title}>{title}</ThemedText>
           {subtitle && (
@@ -59,6 +66,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     backgroundColor: '#F2E6DD',
+  },
+  leftComponentContainer: {
+    marginRight: 12,
   },
   titleContainer: {
     flex: 1,

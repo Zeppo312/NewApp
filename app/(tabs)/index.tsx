@@ -368,10 +368,10 @@ export default function HomeScreen() {
     <ImageBackground
       source={require('../../assets/images/Background_Hell.png')}
       style={[styles.backgroundImage, { width: screenWidth, height: screenHeight }]}
-      resizeMode="cover"
+      resizeMode="repeat"
     >
       <SafeAreaView style={styles.safeArea}>
-        <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
+        <StatusBar hidden={true} />
         <View style={styles.container}>
         <ScrollView contentContainerStyle={styles.scrollContent}>
           {/* Header with title - moved down for better visibility */}

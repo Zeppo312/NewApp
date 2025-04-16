@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, Dimensions, AppState, AppStateStatus } from 'react-native';
+import { View, StyleSheet, Dimensions, AppState, AppStateStatus, TouchableOpacity } from 'react-native';
 import { ThemedText } from './ThemedText';
 import { ThemedView } from './ThemedView';
 import { Colors } from '@/constants/Colors';
 import { pregnancyWeekInfo } from '@/constants/PregnancyWeekInfo';
 import { babySizeComparison } from '@/constants/BabySizeComparison';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { router } from 'expo-router';
 import Svg, { Circle, G, Text as SvgText } from 'react-native-svg';
 
 // Hilfsfunktion zum Aufteilen von Text in mehrere Zeilen
@@ -155,9 +156,17 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({ dueDate }) => {
   const circumference = radius * 2 * Math.PI;
   const strokeDashoffset = circumference * (1 - progress);
 
+  const navigateToStats = () => {
+    router.push('/pregnancy-stats');
+  };
+
   return (
     <ThemedView style={styles.container} lightColor={theme.card} darkColor={theme.card}>
-      <View style={styles.countdownContainer}>
+      <TouchableOpacity
+        style={styles.countdownContainer}
+        onPress={navigateToStats}
+        activeOpacity={0.8}
+      >
         <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
           {/* Hintergrundkreis */}
           <Circle
@@ -236,7 +245,12 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({ dueDate }) => {
             )}
           </G>
         </Svg>
-      </View>
+
+        {/* Hinweis zum Tippen */}
+        <ThemedText style={styles.tapHint}>
+          Tippen für Details
+        </ThemedText>
+      </TouchableOpacity>
 
       <View style={styles.infoContainer}>
         <View style={styles.infoRow}>
@@ -304,6 +318,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginVertical: 10,
+  },
+  tapHint: {
+    fontSize: 12,
+    marginTop: 5,
+    opacity: 0.7,
+    fontStyle: 'italic',
   },
   infoContainer: {
     marginTop: 15,

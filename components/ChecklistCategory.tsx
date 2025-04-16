@@ -4,6 +4,7 @@ import { ThemedText } from './ThemedText';
 import { ChecklistItem as ChecklistItemType } from '@/lib/supabase';
 import { ChecklistItem } from './ChecklistItem';
 import { Collapsible } from './Collapsible';
+import { ProgressCircle } from './ProgressCircle';
 
 interface ChecklistCategoryProps {
   title: string;
@@ -24,10 +25,11 @@ export const ChecklistCategory: React.FC<ChecklistCategoryProps> = ({
   const progress = totalCount > 0 ? Math.round((checkedCount / totalCount) * 100) : 0;
 
   return (
-    <Collapsible 
+    <Collapsible
       title={title}
       subtitle={`${checkedCount}/${totalCount} (${progress}%)`}
       initiallyExpanded={true}
+      leftComponent={<ProgressCircle progress={progress} size={36} />}
     >
       <View style={styles.container}>
         {items.length === 0 ? (

@@ -274,14 +274,14 @@ export default function DiaryEntriesScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <ImageBackground
+      source={require('@/assets/images/Background_Hell.png')}
+      style={styles.backgroundImage}
+      resizeMode="repeat"
+    >
+      <SafeAreaView style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
-      <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
-      <ImageBackground
-        source={require('@/assets/images/Background_Hell.png')}
-        style={styles.backgroundImage}
-        resizeMode="cover"
-      >
+      <StatusBar hidden={true} />
         <View style={styles.titleContainer}>
           <TouchableOpacity
             style={styles.backButton}
@@ -478,8 +478,8 @@ export default function DiaryEntriesScreen() {
             </ThemedView>
           </View>
         </Modal>
-      </ImageBackground>
-    </SafeAreaView>
+      </SafeAreaView>
+    </ImageBackground>
   );
 }
 

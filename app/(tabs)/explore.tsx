@@ -8,7 +8,7 @@ import { ThemedView } from '@/components/ThemedView';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { ChecklistCategory } from '@/components/ChecklistCategory';
 import { AddChecklistItem } from '@/components/AddChecklistItem';
-import Svg, { Circle, Path, G, Text as SvgText } from 'react-native-svg';
+import { ProgressCircle } from '@/components/ProgressCircle';
 
 import { useAuth } from '@/contexts/AuthContext';
 import { ChecklistItem, getHospitalChecklist, addChecklistItem, toggleChecklistItem, deleteChecklistItem, supabaseUrl } from '@/lib/supabase';
@@ -232,11 +232,13 @@ export default function TabTwoScreen() {
     return groups;
   }, {});
 
-  // Berechnung des Gesamtfortschritts
+  // Berechne den Gesamtfortschritt über alle Kategorien
   const totalProgress = useMemo(() => {
-    if (checklist.length === 0) return 0;
-    const checkedCount = checklist.filter(item => item.is_checked).length;
-    return Math.round((checkedCount / checklist.length) * 100);
+    const totalItems = checklist.length;
+    if (totalItems === 0) return 0;
+
+    const checkedItems = checklist.filter(item => item.is_checked).length;
+    return Math.round((checkedItems / totalItems) * 100);
   }, [checklist]);
 
   // Abmelden-Funktion wurde zur Mehr-Seite verschoben
@@ -253,44 +255,9 @@ export default function TabTwoScreen() {
         />
       }>
       <View style={styles.headerContainer}>
-        {/* Fortschrittskreis */}
         <View style={styles.progressCircleContainer}>
-          <Svg height="60" width="60" viewBox="0 0 100 100">
-            {/* Hintergrundkreis */}
-            <Circle
-              cx="50"
-              cy="50"
-              r="45"
-              stroke="#E8D5C4"
-              strokeWidth="8"
-              fill="transparent"
-            />
-            {/* Fortschrittskreis */}
-            <Path
-              d={`
-                M 50 5
-                A 45 45 0 ${totalProgress > 50 ? 1 : 0} 1 ${50 + 45 * Math.sin(2 * Math.PI * totalProgress / 100)} ${50 - 45 * Math.cos(2 * Math.PI * totalProgress / 100)}
-              `}
-              stroke="#7D5A50"
-              strokeWidth="8"
-              fill="transparent"
-              strokeLinecap="round"
-            />
-            {/* Prozentanzeige in der Mitte */}
-            <SvgText
-              x="50"
-              y="50"
-              fontSize="20"
-              textAnchor="middle"
-              alignmentBaseline="central"
-              fill="#5D4037"
-              fontWeight="bold"
-            >
-              {totalProgress} %
-            </SvgText>
-          </Svg>
+          <ProgressCircle progress={totalProgress} size={50} />
         </View>
-
         <ThemedView style={styles.titleContainer}>
           <ThemedText type="title">Krankenhaus-Checkliste</ThemedText>
         </ThemedView>

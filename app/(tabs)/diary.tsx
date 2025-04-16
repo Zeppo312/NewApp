@@ -739,13 +739,13 @@ export default function DiaryScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
-      <ImageBackground
-        source={require('@/assets/images/Background_Hell.png')}
-        style={styles.backgroundImage}
-        resizeMode="cover"
-      >
+    <ImageBackground
+      source={require('@/assets/images/Background_Hell.png')}
+      style={styles.backgroundImage}
+      resizeMode="repeat"
+    >
+      <SafeAreaView style={styles.container}>
+      <StatusBar hidden={true} />
         {loading ? (
           <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
             <ThemedText>Lade Daten...</ThemedText>
@@ -892,8 +892,8 @@ export default function DiaryScreen() {
             )}
           </>
         )}
-      </ImageBackground>
-    </SafeAreaView>
+      </SafeAreaView>
+    </ImageBackground>
   );
 }
 

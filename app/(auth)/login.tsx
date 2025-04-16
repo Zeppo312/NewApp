@@ -10,7 +10,6 @@ import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase, supabaseUrl, supabaseAnonKey } from '@/lib/supabase';
-import { initializeUserData } from '@/lib/user';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -52,8 +51,8 @@ export default function LoginScreen() {
       console.log('Navigation based on is_baby_born flag:', isBabyBorn);
 
       if (isBabyBorn) {
-        // Wenn das Baby geboren ist, zur MeinBaby-Seite navigieren
-        router.replace('/(tabs)/baby');
+        // Wenn das Baby geboren ist, zur Home-Seite navigieren
+        router.replace('/(tabs)/home');
       } else {
         // Wenn das Baby noch nicht geboren ist, zur Countdown-Seite navigieren
         router.replace('/(tabs)/countdown');
@@ -120,20 +119,13 @@ export default function LoginScreen() {
               [{ text: 'OK' }]
             );
           } else {
-            // Initialisieren der Benutzerdaten nach erfolgreicher Registrierung
-            console.log('Initializing user data after registration');
+            // Nach erfolgreicher Registrierung zur Profil-Seite leiten, damit der Benutzer sein Profil vervollständigen kann
+            console.log('Registration successful, navigating to profile page for completion');
             try {
-              // Erstellen von leeren Einträgen in den Tabellen
-              const initResult = await initializeUserData(data.user.id);
-              console.log('User data initialization result:', initResult);
-
-              // Nach erfolgreicher Registrierung zur Onboarding-Seite leiten
-              console.log('Registration successful, navigating to onboarding page');
-              router.replace('../onboarding');
+              router.replace('../profil');
             } catch (navError) {
-              console.error('Error during initialization or navigation:', navError);
-              // Auch bei Fehlern zur Onboarding-Seite navigieren
-              router.navigate('../onboarding');
+              console.error('Navigation error:', navError);
+              router.navigate('../profil');
             }
           }
         }
@@ -266,13 +258,13 @@ export default function LoginScreen() {
 
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
-      <KeyboardAvoidingView
-        style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
-      >
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+    >
+      <SafeAreaView style={styles.safeArea}>
+      <StatusBar hidden={true} />
         <ScrollView contentContainerStyle={styles.scrollContent}>
           <ThemedView
             style={styles.container}
@@ -376,8 +368,8 @@ export default function LoginScreen() {
             </ThemedView>
           </ThemedView>
         </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+      </SafeAreaView>
+    </KeyboardAvoidingView>
   );
 }
 

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, TextInput, ImageBackground, SafeAreaView, StatusBar, FlatList, Alert } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, ScrollView, View, TouchableOpacity, TextInput, ImageBackground, SafeAreaView, StatusBar, FlatList, Alert, Switch, Platform } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { Colors } from '@/constants/Colors';
@@ -9,16 +9,10 @@ import { useRouter } from 'expo-router';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
+import { Appointment as AppointmentType, requestCalendarPermissions, syncAppointmentWithCalendar, deleteAppointmentFromCalendar } from '@/lib/calendarService';
 
 // Typdefinition für einen Termin
-interface Appointment {
-  id: string;
-  title: string;
-  date: Date;
-  location: string;
-  notes: string;
-  type: 'doctor' | 'checkup' | 'other';
-}
+interface Appointment extends AppointmentType {}
 
 // Beispieldaten für Termine
 const SAMPLE_APPOINTMENTS: Appointment[] = [
@@ -52,7 +46,7 @@ export default function TermineScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const router = useRouter();
-  
+
   const [appointments, setAppointments] = useState<Appointment[]>(SAMPLE_APPOINTMENTS);
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
@@ -64,12 +58,36 @@ export default function TermineScreen() {
     type: 'other'
   });
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [calendarPermission, setCalendarPermission] = useState(false);
+  const [syncWithCalendar, setSyncWithCalendar] = useState(false);
+
+  // Überprüfe Kalender-Berechtigungen beim Laden der Komponente
+  useEffect(() => {
+    const checkCalendarPermissions = async () => {
+      try {
+        console.log('Prüfe Kalender-Berechtigungen...');
+        const hasPermission = await requestCalendarPermissions();
+        console.log('Kalender-Berechtigungen erteilt:', hasPermission);
+        setCalendarPermission(hasPermission);
+
+        // Wenn Berechtigungen erteilt wurden, aktiviere standardmäßig die Synchronisierung
+        if (hasPermission) {
+          setSyncWithCalendar(true);
+        }
+      } catch (error) {
+        console.error('Fehler beim Prüfen der Kalender-Berechtigungen:', error);
+        setCalendarPermission(false);
+      }
+    };
+
+    checkCalendarPermissions();
+  }, []);
 
   // Sortiere Termine nach Datum (aufsteigend)
   const sortedAppointments = [...appointments].sort((a, b) => a.date.getTime() - b.date.getTime());
 
   // Filtere Termine basierend auf der Suchanfrage
-  const filteredAppointments = sortedAppointments.filter(appointment => 
+  const filteredAppointments = sortedAppointments.filter(appointment =>
     appointment.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
     appointment.location.toLowerCase().includes(searchQuery.toLowerCase()) ||
     appointment.notes.toLowerCase().includes(searchQuery.toLowerCase())
@@ -86,7 +104,7 @@ export default function TermineScreen() {
   };
 
   // Füge einen neuen Termin hinzu
-  const addAppointment = () => {
+  const addAppointment = async () => {
     if (!newAppointment.title) {
       Alert.alert('Fehler', 'Bitte gib einen Titel ein');
       return;
@@ -99,6 +117,27 @@ export default function TermineScreen() {
       date: newAppointment.date || new Date(),
       type: newAppointment.type || 'other'
     } as Appointment;
+
+    // Synchronisiere mit dem Kalender, wenn die Berechtigung erteilt wurde und der Benutzer es wünscht
+    if (calendarPermission && syncWithCalendar) {
+      try {
+        console.log('Starte Synchronisierung mit dem Kalender...');
+        const eventId = await syncAppointmentWithCalendar(appointmentToAdd);
+        console.log('Kalender-Event-ID erhalten:', eventId);
+        appointmentToAdd.calendarEventId = eventId;
+      } catch (error) {
+        console.error('Fehler beim Synchronisieren mit dem Kalender:', error);
+        Alert.alert(
+          'Kalender-Synchronisierung fehlgeschlagen',
+          'Der Termin wurde in der App gespeichert, konnte aber nicht mit dem Kalender synchronisiert werden. Bitte überprüfe die Kalender-Berechtigungen in den Einstellungen deines Geräts.'
+        );
+      }
+    } else {
+      console.log('Keine Kalender-Synchronisierung durchgeführt:', {
+        calendarPermission,
+        syncWithCalendar
+      });
+    }
 
     setAppointments([...appointments, appointmentToAdd]);
     setNewAppointment({
@@ -113,6 +152,8 @@ export default function TermineScreen() {
 
   // Lösche einen Termin
   const deleteAppointment = (id: string) => {
+    const appointment = appointments.find(app => app.id === id);
+
     Alert.alert(
       'Termin löschen',
       'Möchtest du diesen Termin wirklich löschen?',
@@ -123,7 +164,17 @@ export default function TermineScreen() {
         },
         {
           text: 'Löschen',
-          onPress: () => {
+          onPress: async () => {
+            // Lösche den Termin aus dem Kalender, wenn er dort gespeichert ist
+            if (appointment?.calendarEventId) {
+              try {
+                await deleteAppointmentFromCalendar(appointment.calendarEventId);
+              } catch (error) {
+                console.error('Fehler beim Löschen des Termins aus dem Kalender:', error);
+                // Wir setzen fort, auch wenn das Löschen aus dem Kalender fehlschlägt
+              }
+            }
+
             setAppointments(appointments.filter(appointment => appointment.id !== id));
           },
           style: 'destructive'
@@ -134,20 +185,20 @@ export default function TermineScreen() {
 
   // Rendere einen Termin
   const renderAppointmentItem = ({ item }: { item: Appointment }) => (
-    <ThemedView 
-      style={styles.appointmentItem} 
-      lightColor={theme.card} 
+    <ThemedView
+      style={styles.appointmentItem}
+      lightColor={theme.card}
       darkColor={theme.card}
     >
       <View style={styles.appointmentHeader}>
         <View style={styles.appointmentTitleContainer}>
           <View style={[
-            styles.appointmentTypeIndicator, 
-            { 
-              backgroundColor: 
-                item.type === 'doctor' ? '#FF9F9F' : 
-                item.type === 'checkup' ? '#9FD8FF' : 
-                '#D9D9D9' 
+            styles.appointmentTypeIndicator,
+            {
+              backgroundColor:
+                item.type === 'doctor' ? '#FF9F9F' :
+                item.type === 'checkup' ? '#9FD8FF' :
+                '#D9D9D9'
             }
           ]} />
           <ThemedText style={styles.appointmentTitle}>{item.title}</ThemedText>
@@ -159,25 +210,25 @@ export default function TermineScreen() {
           <IconSymbol name="trash" size={20} color="#FF6B6B" />
         </TouchableOpacity>
       </View>
-      
+
       <View style={styles.appointmentDetails}>
         <View style={styles.appointmentDetailRow}>
           <IconSymbol name="calendar" size={16} color={theme.tabIconDefault} />
           <ThemedText style={styles.appointmentDetailText}>{formatDate(item.date)}</ThemedText>
         </View>
-        
+
         <View style={styles.appointmentDetailRow}>
           <IconSymbol name="clock" size={16} color={theme.tabIconDefault} />
           <ThemedText style={styles.appointmentDetailText}>{formatTime(item.date)} Uhr</ThemedText>
         </View>
-        
+
         {item.location ? (
           <View style={styles.appointmentDetailRow}>
             <IconSymbol name="location" size={16} color={theme.tabIconDefault} />
             <ThemedText style={styles.appointmentDetailText}>{item.location}</ThemedText>
           </View>
         ) : null}
-        
+
         {item.notes ? (
           <View style={styles.appointmentDetailRow}>
             <IconSymbol name="doc.text" size={16} color={theme.tabIconDefault} />
@@ -189,13 +240,13 @@ export default function TermineScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
-      <ImageBackground
-        source={require('@/assets/images/Background_Hell.png')}
-        style={styles.backgroundImage}
-        resizeMode="cover"
-      >
+    <ImageBackground
+      source={require('@/assets/images/Background_Hell.png')}
+      style={styles.backgroundImage}
+      resizeMode="repeat"
+    >
+      <SafeAreaView style={styles.container}>
+      <StatusBar hidden={true} />
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backButton}
@@ -279,6 +330,49 @@ export default function TermineScreen() {
                 multiline
                 numberOfLines={3}
               />
+            </View>
+
+            <View style={styles.formGroup}>
+              <View style={styles.switchContainer}>
+                <ThemedText style={styles.formLabel}>
+                  Im Kalender speichern
+                  {!calendarPermission && (
+                    <ThemedText style={styles.permissionHint}>
+                      {' '}(Erfordert Kalender-Berechtigung)
+                    </ThemedText>
+                  )}
+                </ThemedText>
+                <Switch
+                  value={calendarPermission && syncWithCalendar}
+                  onValueChange={(value) => {
+                    if (!calendarPermission && value) {
+                      // Wenn der Benutzer versucht, die Synchronisierung zu aktivieren, aber keine Berechtigungen hat
+                      Alert.alert(
+                        'Kalender-Berechtigung erforderlich',
+                        'Um Termine mit dem Kalender zu synchronisieren, benötigt die App Zugriff auf deinen Kalender. Bitte erteile die Berechtigung in den Einstellungen deines Geräts.',
+                        [
+                          { text: 'Abbrechen', style: 'cancel' },
+                          {
+                            text: 'Erneut versuchen',
+                            onPress: async () => {
+                              const hasPermission = await requestCalendarPermissions();
+                              setCalendarPermission(hasPermission);
+                              if (hasPermission) {
+                                setSyncWithCalendar(true);
+                              }
+                            }
+                          }
+                        ]
+                      );
+                    } else {
+                      setSyncWithCalendar(value);
+                    }
+                  }}
+                  trackColor={{ false: '#D9D9D9', true: '#9FD8FF' }}
+                  thumbColor={(calendarPermission && syncWithCalendar) ? '#7D5A50' : '#f4f3f4'}
+                  disabled={!calendarPermission}
+                />
+              </View>
             </View>
 
             <View style={styles.formGroup}>
@@ -372,8 +466,8 @@ export default function TermineScreen() {
             </TouchableOpacity>
           </>
         )}
-      </ImageBackground>
-    </SafeAreaView>
+      </SafeAreaView>
+    </ImageBackground>
   );
 }
 
@@ -574,5 +668,16 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  switchContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  permissionHint: {
+    fontSize: 12,
+    fontStyle: 'italic',
+    opacity: 0.7,
   },
 });

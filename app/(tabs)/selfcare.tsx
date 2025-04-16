@@ -77,7 +77,7 @@ export default function SelfcareScreen() {
   const theme = Colors[colorScheme];
   const { user } = useAuth();
   const router = useRouter();
-  
+
   const [userName, setUserName] = useState<string>('');
   const [currentMood, setCurrentMood] = useState<MoodType | null>(null);
   const [journalEntry, setJournalEntry] = useState('');
@@ -88,7 +88,7 @@ export default function SelfcareScreen() {
   const [checkedActivities, setCheckedActivities] = useState<string[]>([]);
   const [todayEntry, setTodayEntry] = useState<SelfcareEntry | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  
+
   // Lade Benutzerdaten und heutigen Eintrag
   useEffect(() => {
     if (user) {
@@ -100,7 +100,7 @@ export default function SelfcareScreen() {
       setIsLoading(false);
     }
   }, [user]);
-  
+
   // Lade Benutzerdaten
   const loadUserData = async () => {
     try {
@@ -109,7 +109,7 @@ export default function SelfcareScreen() {
         .select('first_name')
         .eq('id', user?.id)
         .single();
-        
+
       if (error) {
         console.error('Error loading user data:', error);
       } else if (data) {
@@ -119,15 +119,15 @@ export default function SelfcareScreen() {
       console.error('Failed to load user data:', err);
     }
   };
-  
+
   // Lade den heutigen Eintrag
   const loadTodayEntry = async () => {
     try {
       setIsLoading(true);
-      
+
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      
+
       const { data, error } = await supabase
         .from('selfcare_entries')
         .select('*')
@@ -135,7 +135,7 @@ export default function SelfcareScreen() {
         .gte('date', today.toISOString())
         .lt('date', new Date(today.getTime() + 24 * 60 * 60 * 1000).toISOString())
         .maybeSingle();
-        
+
       if (error) {
         console.error('Error loading today entry:', error);
       } else if (data) {
@@ -153,7 +153,7 @@ export default function SelfcareScreen() {
       setIsLoading(false);
     }
   };
-  
+
   // Speichere den Eintrag
   const saveEntry = async () => {
     try {
@@ -161,10 +161,10 @@ export default function SelfcareScreen() {
         Alert.alert('Hinweis', 'Bitte melde dich an, um deine Daten zu speichern.');
         return;
       }
-      
+
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      
+
       const entryData: SelfcareEntry = {
         user_id: user.id,
         date: today.toISOString(),
@@ -175,9 +175,9 @@ export default function SelfcareScreen() {
         exercise_done: exerciseDone,
         selfcare_activities: checkedActivities
       };
-      
+
       let result;
-      
+
       if (todayEntry?.id) {
         // Update existing entry
         result = await supabase
@@ -190,7 +190,7 @@ export default function SelfcareScreen() {
           .from('selfcare_entries')
           .insert(entryData);
       }
-      
+
       if (result.error) {
         console.error('Error saving entry:', result.error);
         Alert.alert('Fehler', 'Deine Daten konnten nicht gespeichert werden.');
@@ -203,7 +203,7 @@ export default function SelfcareScreen() {
       Alert.alert('Fehler', 'Deine Daten konnten nicht gespeichert werden.');
     }
   };
-  
+
   // Stimmungs-Emoji basierend auf der Stimmung
   const getMoodEmoji = (mood: MoodType | null) => {
     switch (mood) {
@@ -215,7 +215,7 @@ export default function SelfcareScreen() {
       default: return '❓';
     }
   };
-  
+
   // Feedback-Text basierend auf der Stimmung
   const getMoodFeedback = (mood: MoodType | null) => {
     switch (mood) {
@@ -227,7 +227,7 @@ export default function SelfcareScreen() {
       default: return 'Wie fühlst du dich heute?';
     }
   };
-  
+
   // Toggle für Selfcare-Aktivitäten
   const toggleActivity = (id: string) => {
     if (checkedActivities.includes(id)) {
@@ -236,32 +236,32 @@ export default function SelfcareScreen() {
       setCheckedActivities([...checkedActivities, id]);
     }
   };
-  
+
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
-      <ImageBackground
-        source={require('@/assets/images/Background_Hell.png')}
-        style={styles.backgroundImage}
-        resizeMode="cover"
-      >
+    <ImageBackground
+      source={require('@/assets/images/Background_Hell.png')}
+      style={styles.backgroundImage}
+      resizeMode="repeat"
+    >
+      <SafeAreaView style={styles.container}>
+      <StatusBar hidden={true} />
         <View style={styles.header}>
-          <TouchableOpacity 
-            style={styles.backButton} 
+          <TouchableOpacity
+            style={styles.backButton}
             onPress={() => router.push('/(tabs)/home')}
           >
             <IconSymbol name="chevron.left" size={24} color={theme.text} />
             <ThemedText style={styles.backButtonText}>Zurück</ThemedText>
           </TouchableOpacity>
-          
+
           <ThemedText type="title" style={styles.title}>
             Mama Selfcare
           </ThemedText>
-          
+
           <View style={styles.headerRight} />
         </View>
-        
-        <ScrollView 
+
+        <ScrollView
           style={styles.scrollView}
           contentContainerStyle={styles.contentContainer}
         >
@@ -270,54 +270,54 @@ export default function SelfcareScreen() {
             <ThemedText style={styles.cardTitle}>
               {userName ? `Hallo, ${userName}!` : 'Hallo!'} Wie fühlst du dich heute?
             </ThemedText>
-            
+
             <View style={styles.moodContainer}>
-              <TouchableOpacity 
-                style={[styles.moodButton, currentMood === 'great' && styles.selectedMoodButton]} 
+              <TouchableOpacity
+                style={[styles.moodButton, currentMood === 'great' && styles.selectedMoodButton]}
                 onPress={() => setCurrentMood('great')}
               >
                 <ThemedText style={styles.moodEmoji}>😃</ThemedText>
               </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={[styles.moodButton, currentMood === 'good' && styles.selectedMoodButton]} 
+
+              <TouchableOpacity
+                style={[styles.moodButton, currentMood === 'good' && styles.selectedMoodButton]}
                 onPress={() => setCurrentMood('good')}
               >
                 <ThemedText style={styles.moodEmoji}>🙂</ThemedText>
               </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={[styles.moodButton, currentMood === 'okay' && styles.selectedMoodButton]} 
+
+              <TouchableOpacity
+                style={[styles.moodButton, currentMood === 'okay' && styles.selectedMoodButton]}
                 onPress={() => setCurrentMood('okay')}
               >
                 <ThemedText style={styles.moodEmoji}>😐</ThemedText>
               </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={[styles.moodButton, currentMood === 'bad' && styles.selectedMoodButton]} 
+
+              <TouchableOpacity
+                style={[styles.moodButton, currentMood === 'bad' && styles.selectedMoodButton]}
                 onPress={() => setCurrentMood('bad')}
               >
                 <ThemedText style={styles.moodEmoji}>😔</ThemedText>
               </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={[styles.moodButton, currentMood === 'awful' && styles.selectedMoodButton]} 
+
+              <TouchableOpacity
+                style={[styles.moodButton, currentMood === 'awful' && styles.selectedMoodButton]}
                 onPress={() => setCurrentMood('awful')}
               >
                 <ThemedText style={styles.moodEmoji}>😢</ThemedText>
               </TouchableOpacity>
             </View>
-            
+
             {currentMood && (
               <ThemedText style={styles.moodFeedback}>
                 {getMoodFeedback(currentMood)}
               </ThemedText>
             )}
-            
+
             <ThemedText style={styles.sectionTitle}>Tagebucheintrag</ThemedText>
             <TextInput
               style={[
-                styles.journalInput, 
+                styles.journalInput,
                 { color: colorScheme === 'dark' ? '#FFFFFF' : '#000000' }
               ]}
               value={journalEntry}
@@ -328,17 +328,17 @@ export default function SelfcareScreen() {
               numberOfLines={4}
             />
           </ThemedView>
-          
+
           {/* 2. Selbstfürsorge-Tipps & Anleitungen */}
           <ThemedView style={styles.card} lightColor={theme.card} darkColor={theme.card}>
             <ThemedText style={styles.cardTitle}>Täglicher Selfcare-Tipp</ThemedText>
-            
+
             <View style={styles.tipContainer}>
               <IconSymbol name="lightbulb.fill" size={24} color="#FFD700" />
               <ThemedText style={styles.tipText}>{dailyTip}</ThemedText>
             </View>
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               style={styles.refreshButton}
               onPress={() => setDailyTip(selfcareTips[Math.floor(Math.random() * selfcareTips.length)])}
             >
@@ -346,24 +346,24 @@ export default function SelfcareScreen() {
               <ThemedText style={styles.refreshButtonText}>Neuer Tipp</ThemedText>
             </TouchableOpacity>
           </ThemedView>
-          
+
           {/* 3. Gesundheit & Wohlbefinden */}
           <ThemedView style={styles.card} lightColor={theme.card} darkColor={theme.card}>
             <ThemedText style={styles.cardTitle}>Gesundheit & Wohlbefinden</ThemedText>
-            
+
             <View style={styles.healthItem}>
               <ThemedText style={styles.healthLabel}>Schlaf:</ThemedText>
               <View style={styles.sleepContainer}>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.sleepButton}
                   onPress={() => setSleepHours(Math.max(0, sleepHours - 1))}
                 >
                   <IconSymbol name="minus" size={16} color={theme.text} />
                 </TouchableOpacity>
-                
+
                 <ThemedText style={styles.sleepHours}>{sleepHours} Stunden</ThemedText>
-                
-                <TouchableOpacity 
+
+                <TouchableOpacity
                   style={styles.sleepButton}
                   onPress={() => setSleepHours(Math.min(24, sleepHours + 1))}
                 >
@@ -371,20 +371,20 @@ export default function SelfcareScreen() {
                 </TouchableOpacity>
               </View>
             </View>
-            
+
             <View style={styles.healthItem}>
               <ThemedText style={styles.healthLabel}>Wasser:</ThemedText>
               <View style={styles.waterContainer}>
                 <View style={styles.waterProgressBackground}>
-                  <View 
+                  <View
                     style={[
-                      styles.waterProgress, 
+                      styles.waterProgress,
                       { width: `${Math.min(100, (waterIntake / 8) * 100)}%` }
-                    ]} 
+                    ]}
                   />
                 </View>
                 <ThemedText style={styles.waterText}>{waterIntake} / 8 Gläser</ThemedText>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.waterButton}
                   onPress={() => setWaterIntake(Math.min(8, waterIntake + 1))}
                 >
@@ -392,24 +392,24 @@ export default function SelfcareScreen() {
                 </TouchableOpacity>
               </View>
             </View>
-            
+
             <View style={styles.healthItem}>
               <ThemedText style={styles.healthLabel}>Bewegung:</ThemedText>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[
-                  styles.exerciseButton, 
+                  styles.exerciseButton,
                   exerciseDone && styles.exerciseButtonDone
                 ]}
                 onPress={() => setExerciseDone(!exerciseDone)}
               >
-                <IconSymbol 
-                  name={exerciseDone ? "checkmark.circle.fill" : "circle"} 
-                  size={24} 
-                  color={exerciseDone ? Colors.light.success : theme.text} 
+                <IconSymbol
+                  name={exerciseDone ? "checkmark.circle.fill" : "circle"}
+                  size={24}
+                  color={exerciseDone ? Colors.light.success : theme.text}
                 />
-                <ThemedText 
+                <ThemedText
                   style={[
-                    styles.exerciseText, 
+                    styles.exerciseText,
                     exerciseDone && styles.exerciseTextDone
                   ]}
                 >
@@ -418,11 +418,11 @@ export default function SelfcareScreen() {
               </TouchableOpacity>
             </View>
           </ThemedView>
-          
+
           {/* 4. Rückbildung & Körperpflege */}
           <ThemedView style={styles.card} lightColor={theme.card} darkColor={theme.card}>
             <ThemedText style={styles.cardTitle}>Rückbildung & Körperpflege</ThemedText>
-            
+
             <ThemedText style={styles.sectionTitle}>Rückbildungsübung des Tages</ThemedText>
             <View style={styles.exerciseCard}>
               <ThemedText style={styles.exerciseTitle}>
@@ -432,22 +432,22 @@ export default function SelfcareScreen() {
                 {postpartumExercises[Math.floor(Math.random() * postpartumExercises.length)].description}
               </ThemedText>
             </View>
-            
+
             <ThemedText style={styles.sectionTitle}>Meine Selfcare-Checkliste</ThemedText>
             {selfcareActivities.map(activity => (
-              <TouchableOpacity 
+              <TouchableOpacity
                 key={activity.id}
                 style={styles.checklistItem}
                 onPress={() => toggleActivity(activity.id)}
               >
-                <IconSymbol 
-                  name={checkedActivities.includes(activity.id) ? "checkmark.square.fill" : "square"} 
-                  size={24} 
-                  color={checkedActivities.includes(activity.id) ? Colors.light.success : theme.text} 
+                <IconSymbol
+                  name={checkedActivities.includes(activity.id) ? "checkmark.square.fill" : "square"}
+                  size={24}
+                  color={checkedActivities.includes(activity.id) ? Colors.light.success : theme.text}
                 />
-                <ThemedText 
+                <ThemedText
                   style={[
-                    styles.checklistText, 
+                    styles.checklistText,
                     checkedActivities.includes(activity.id) && styles.checklistTextDone
                   ]}
                 >
@@ -456,8 +456,8 @@ export default function SelfcareScreen() {
               </TouchableOpacity>
             ))}
           </ThemedView>
-          
-          <TouchableOpacity 
+
+          <TouchableOpacity
             style={styles.saveButton}
             onPress={saveEntry}
           >
@@ -466,8 +466,8 @@ export default function SelfcareScreen() {
             </ThemedText>
           </TouchableOpacity>
         </ScrollView>
-      </ImageBackground>
-    </SafeAreaView>
+      </SafeAreaView>
+    </ImageBackground>
   );
 }
 

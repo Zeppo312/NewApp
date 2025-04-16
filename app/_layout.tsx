@@ -37,7 +37,7 @@ function RootLayoutNav() {
         <ActivityIndicator size="large" color="#E9C9B6" />
         <View style={{ marginTop: 20 }}>
           <Text style={{ marginTop: 10, color: '#7D5A50' }}>Lade...</Text>
-          <StatusBar style="auto" />
+          <StatusBar hidden={true} />
         </View>
       </View>
     );
@@ -55,12 +55,11 @@ function RootLayoutNav() {
         <Stack.Screen name="mini-wiki" options={{ headerShown: false }} />
         <Stack.Screen name="faq" options={{ headerShown: false }} />
         <Stack.Screen name="termine" options={{ headerShown: false }} />
-        <Stack.Screen name="profil" options={{ headerShown: false }} />
-        <Stack.Screen name="onboarding" options={{ headerShown: false }} />
+        <Stack.Screen name="pregnancy-stats" options={{ headerShown: false }} />
         <Stack.Screen name="+not-found" />
         <Stack.Screen name="auth/callback" options={{ headerShown: false }} />
       </Stack>
-      <StatusBar style="auto" />
+      <StatusBar hidden={true} />
     </ThemeProvider>
     </GestureHandlerRootView>
   );

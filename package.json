@@ -1,7 +1,7 @@
 {
   "name": "newapp",
   "main": "expo-router/entry",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "scripts": {
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
@@ -9,7 +9,8 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "test": "jest --watchAll",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "update": "eas update --auto"
   },
   "jest": {
     "preset": "jest-expo"
@@ -25,6 +26,7 @@
     "date-fns": "^4.1.0",
     "expo": "~52.0.43",
     "expo-blur": "~14.0.3",
+    "expo-calendar": "^14.0.6",
     "expo-constants": "~17.0.8",
     "expo-font": "~13.0.4",
     "expo-haptics": "~14.0.1",

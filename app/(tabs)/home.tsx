@@ -299,13 +299,14 @@ export default function HomeScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
-      <ImageBackground
+    
+    <ImageBackground
         source={require('@/assets/images/Background_Hell.png')}
         style={styles.backgroundImage}
-        resizeMode="cover"
+        resizeMode="repeat"
       >
+      <SafeAreaView style={styles.container}>
+      <StatusBar hidden={true} />
         {isLoading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={theme.accent} />
@@ -318,8 +319,9 @@ export default function HomeScreen() {
             {renderQuickAccessCards()}
           </ScrollView>
         )}
-      </ImageBackground>
-    </SafeAreaView>
+      </SafeAreaView>
+    </ImageBackground>
+    
   );
 }
 

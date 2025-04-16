@@ -18,7 +18,7 @@ export default function FaqScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const router = useRouter();
-  
+
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [faqEntries, setFaqEntries] = useState<FaqEntry[]>([]);
@@ -63,14 +63,14 @@ export default function FaqScreen() {
 
   // Filter FAQ entries based on search query and selected category
   const filteredEntries = faqEntries.filter(entry => {
-    const matchesSearch = 
-      entry.question.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    const matchesSearch =
+      entry.question.toLowerCase().includes(searchQuery.toLowerCase()) ||
       entry.answer.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    const matchesCategory = 
-      selectedCategory === 'all' ? true : 
+
+    const matchesCategory =
+      selectedCategory === 'all' ? true :
       entry.category_id === selectedCategory;
-    
+
     return matchesSearch && matchesCategory;
   });
 
@@ -99,11 +99,11 @@ export default function FaqScreen() {
   // Render FAQ entry item
   const renderFaqItem = ({ item }: { item: FaqEntry }) => {
     const isExpanded = expandedEntries[item.id] || false;
-    
+
     return (
-      <ThemedView 
-        style={styles.faqItem} 
-        lightColor={theme.card} 
+      <ThemedView
+        style={styles.faqItem}
+        lightColor={theme.card}
         darkColor={theme.card}
       >
         <TouchableOpacity
@@ -114,13 +114,13 @@ export default function FaqScreen() {
             <ThemedText style={styles.faqQuestionText}>{item.question}</ThemedText>
             <ThemedText style={styles.faqCategoryText}>{item.category}</ThemedText>
           </View>
-          <IconSymbol 
-            name={isExpanded ? 'chevron.up' : 'chevron.down'} 
-            size={20} 
-            color={theme.tabIconDefault} 
+          <IconSymbol
+            name={isExpanded ? 'chevron.up' : 'chevron.down'}
+            size={20}
+            color={theme.tabIconDefault}
           />
         </TouchableOpacity>
-        
+
         {isExpanded && (
           <View style={styles.faqAnswer}>
             <ThemedText style={styles.faqAnswerText}>{item.answer}</ThemedText>
@@ -131,13 +131,13 @@ export default function FaqScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
-      <ImageBackground
-        source={require('@/assets/images/Background_Hell.png')}
-        style={styles.backgroundImage}
-        resizeMode="cover"
-      >
+    <ImageBackground
+      source={require('@/assets/images/Background_Hell.png')}
+      style={styles.backgroundImage}
+      resizeMode="repeat"
+    >
+      <SafeAreaView style={styles.container}>
+      <StatusBar hidden={true} />
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backButton}
@@ -164,7 +164,7 @@ export default function FaqScreen() {
             <IconSymbol name="exclamationmark.triangle.fill" size={40} color={theme.warning} />
             <ThemedText style={styles.errorText}>Fehler beim Laden der Fragen</ThemedText>
             <ThemedText style={styles.errorSubtext}>{error.message}</ThemedText>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.retryButton}
               onPress={() => {
                 setIsLoading(true);
@@ -235,8 +235,8 @@ export default function FaqScreen() {
             />
           </>
         )}
-      </ImageBackground>
-    </SafeAreaView>
+      </SafeAreaView>
+    </ImageBackground>
   );
 }
 

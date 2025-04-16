@@ -120,17 +120,45 @@ export default function ProfilScreen() {
       setIsSaving(true);
 
       // Speichern der Profildaten (Vorname, Nachname)
-      const { error: profileError } = await supabase
+      // Zuerst prüfen, ob bereits ein Eintrag existiert
+      const { data: existingProfile, error: fetchProfileError } = await supabase
         .from('profiles')
-        .update({
-          first_name: firstName,
-          last_name: lastName,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', user.id);
+        .select('id')
+        .eq('id', user.id)
+        .maybeSingle();
 
-      if (profileError) {
-        console.error('Error saving profile data:', profileError);
+      if (fetchProfileError && fetchProfileError.code !== 'PGRST116') {
+        console.error('Error checking existing profile:', fetchProfileError);
+        throw new Error('Profildaten konnten nicht überprüft werden.');
+      }
+
+      let profileResult;
+
+      if (existingProfile && existingProfile.id) {
+        // Wenn ein Eintrag existiert, aktualisieren wir diesen
+        profileResult = await supabase
+          .from('profiles')
+          .update({
+            first_name: firstName,
+            last_name: lastName,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', user.id);
+      } else {
+        // Wenn kein Eintrag existiert, erstellen wir einen neuen
+        profileResult = await supabase
+          .from('profiles')
+          .insert({
+            id: user.id,
+            first_name: firstName,
+            last_name: lastName,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          });
+      }
+
+      if (profileResult.error) {
+        console.error('Error saving profile data:', profileResult.error);
         throw new Error('Profildaten konnten nicht gespeichert werden.');
       }
 

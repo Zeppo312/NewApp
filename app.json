@@ -2,20 +2,25 @@
   "expo": {
     "name": "NewApp",
     "slug": "NewApp",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "myapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCalendarsUsageDescription": "Diese App benötigt Zugriff auf deinen Kalender, um Termine zu synchronisieren.",
+        "NSRemindersUsageDescription": "Diese App benötigt Zugriff auf deine Erinnerungen, um Termine zu synchronisieren."
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "permissions": ["READ_CALENDAR", "WRITE_CALENDAR"]
     },
     "web": {
       "bundler": "metro",
@@ -24,6 +29,7 @@
     },
     "plugins": [
       "expo-router",
+      "expo-calendar",
       [
         "expo-splash-screen",
         {

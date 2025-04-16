@@ -47,19 +47,19 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="baby"
-        options={{
-          title: 'Mein Baby',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="person.fill" color={color} />,
-          href: isBabyBorn ? undefined : null,
-        }}
-      />
-      <Tabs.Screen
         name="diary"
         options={{
           title: 'Tagebuch',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="book.fill" color={color} />,
           href: isBabyBorn ? undefined : null,
+        }}
+      />
+      <Tabs.Screen
+        name="baby"
+        options={{
+          title: 'Mein Baby',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="person.fill" color={color} />,
+          href: null, // Aus der Navigation ausblenden, aber für die Routing-Funktionalität beibehalten
         }}
       />
 

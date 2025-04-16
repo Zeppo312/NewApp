@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, ScrollView, View, TouchableOpacity, Alert, Platform, ImageBackground, SafeAreaView, StatusBar } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
@@ -26,42 +25,11 @@ export default function CountdownScreen() {
 
   useEffect(() => {
     if (user) {
-      checkAndLoadData();
+      loadDueDate();
     } else {
       setIsLoading(false);
     }
   }, [user]);
-
-  // Überprüfen, ob Daten nach dem Onboarding neu geladen werden müssen
-  const checkAndLoadData = async () => {
-    try {
-      const shouldReload = await AsyncStorage.getItem('reload_data_after_onboarding');
-      console.log('Should reload data after onboarding:', shouldReload);
-
-      if (shouldReload === 'true') {
-        // Flag zurücksetzen
-        await AsyncStorage.removeItem('reload_data_after_onboarding');
-        console.log('Reload flag reset');
-
-        // Daten neu laden
-        await loadDueDate();
-
-        // Kurze Verzögerung, dann Seite aktualisieren
-        setTimeout(() => {
-          console.log('Refreshing page...');
-          // Hier könnte man einen State setzen, um die Seite neu zu rendern
-          setIsLoading(true);
-          setTimeout(() => setIsLoading(false), 100);
-        }, 500);
-      } else {
-        // Normale Datenladung
-        loadDueDate();
-      }
-    } catch (error) {
-      console.error('Error checking reload flag:', error);
-      loadDueDate();
-    }
-  };
 
   const loadDueDate = async () => {
     try {
