@@ -276,81 +276,75 @@ export default function GeburtsplanScreen() {
 
               body {
                 font-family: 'Roboto', Arial, sans-serif;
-                line-height: 1.6;
+                line-height: 1.3;
                 margin: 0;
                 padding: 0;
                 color: #5D4037;
                 background-color: #FFF8F0;
+                font-size: 9pt;
               }
 
               .page-container {
                 position: relative;
                 width: 100%;
-                min-height: 100vh;
-                padding: 40px;
+                height: 100%;
+                padding: 20px;
                 box-sizing: border-box;
                 background-color: #FFF8F0;
-                background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiPjxkZWZzPjxwYXR0ZXJuIGlkPSJwYXR0ZXJuXzAiIHBhdHRlcm5Vbml0cz0idXNlclNwYWNlT25Vc2UiIHdpZHRoPSIxMCIgaGVpZ2h0PSIxMCIgcGF0dGVyblRyYW5zZm9ybT0icm90YXRlKDQ1KSI+PHJlY3QgeD0iMCIgeT0iMCIgd2lkdGg9IjEwIiBoZWlnaHQ9IjEwIiBmaWxsPSIjRjdFRkU1Ii8+PHJlY3QgeD0iMCIgeT0iMCIgd2lkdGg9IjUiIGhlaWdodD0iNSIgZmlsbD0iI0ZGRjhGMCIvPjwvcGF0dGVybj48L2RlZnM+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0idXJsKCNwYXR0ZXJuXzApIi8+PC9zdmc+');
               }
 
               .content-card {
-                background-color: rgba(255, 255, 255, 0.9);
-                border-radius: 15px;
-                padding: 30px;
-                box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-                margin-bottom: 30px;
+                background-color: #FFFFFF;
+                border-radius: 8px;
+                padding: 12px 15px;
+                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+                max-width: 800px;
+                margin: 0 auto;
+                position: relative;
+              }
+
+              .page-number {
+                position: absolute;
+                top: 15px;
+                left: 15px;
+                font-size: 9pt;
+                color: #888;
+                display: flex;
+                align-items: center;
+              }
+
+              .page-number-icon {
+                margin-right: 5px;
               }
 
               h1 {
                 color: #7D5A50;
                 text-align: center;
-                margin-bottom: 30px;
-                font-size: 28px;
+                margin: 5px 0 10px 0;
+                font-size: 16pt;
                 font-weight: 700;
-                padding-bottom: 15px;
-                border-bottom: 2px solid #E8D5C4;
-                position: relative;
-              }
-
-              h1:after {
-                content: '';
-                display: block;
-                width: 50px;
-                height: 3px;
-                background-color: #7D5A50;
-                position: absolute;
-                bottom: -2px;
-                left: 50%;
-                transform: translateX(-50%);
-              }
-
-              .title-container {
-                text-align: center;
-                margin-bottom: 30px;
-              }
-
-              .title-icon {
-                font-size: 24px;
-                color: #7D5A50;
-                margin-bottom: 10px;
+                padding-bottom: 5px;
+                border-bottom: 1px solid #E8D5C4;
               }
 
               .section-title {
                 color: #7D5A50;
-                font-size: 18px;
+                font-size: 10pt;
                 font-weight: 600;
-                margin-top: 25px;
-                margin-bottom: 15px;
+                margin-top: 10px;
+                margin-bottom: 5px;
                 border-bottom: 1px solid #E8D5C4;
-                padding-bottom: 8px;
+                padding-bottom: 2px;
               }
 
               .section-content {
-                margin-left: 15px;
+                margin-left: 0;
+                margin-bottom: 5px;
               }
 
               .item {
-                margin-bottom: 10px;
+                margin-bottom: 2px;
+                font-size: 9pt;
               }
 
               .item-label {
@@ -358,16 +352,14 @@ export default function GeburtsplanScreen() {
               }
 
               .item-value {
-                margin-left: 5px;
+                margin-left: 3px;
               }
 
               .footer {
-                margin-top: 40px;
+                margin-top: 8px;
                 text-align: center;
-                font-size: 12px;
+                font-size: 7pt;
                 color: #7D5A50;
-                padding: 15px 10px;
-                border-top: 1px solid #E8D5C4;
               }
 
               .footer-content {
@@ -378,26 +370,46 @@ export default function GeburtsplanScreen() {
               }
 
               .footer-icon {
-                margin-bottom: 5px;
-                font-size: 14px;
+                margin-bottom: 2px;
+                font-size: 10pt;
+              }
+
+              @page {
+                size: A4 portrait;
+                margin: 0;
+                padding: 0;
+              }
+
+              @media print {
+                body {
+                  -webkit-print-color-adjust: exact;
+                  print-color-adjust: exact;
+                }
+                .page-container {
+                  height: 100vh;
+                  page-break-after: always;
+                }
+                .content-card {
+                  height: calc(100vh - 40px);
+                  overflow: hidden;
+                }
               }
             </style>
           </head>
           <body>
             <div class="page-container">
               <div class="content-card">
-                <div class="title-container">
-                  <div class="title-icon">📝</div>
-                  <h1>Mein Geburtsplan</h1>
+                <div class="page-number">
+                  <span class="page-number-icon">�</span> 1 von 1
                 </div>
+
+                <h1>Mein Geburtsplan</h1>
 
                 ${formatGeburtsplanContent(content)}
 
                 <div class="footer">
                   <div class="footer-content">
-                    <div class="footer-icon">👶</div>
-                    <div>Erstellt mit der Wehen-Tracker App</div>
-                    <div>${new Date().toLocaleDateString('de-DE')}</div>
+                    <div>Erstellt mit der Wehen-Tracker App · ${new Date().toLocaleDateString('de-DE')}</div>
                   </div>
                 </div>
               </div>
