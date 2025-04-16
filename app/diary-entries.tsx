@@ -293,7 +293,7 @@ export default function DiaryEntriesScreen() {
             <Image source={{ uri: babyPhoto }} style={styles.babyPhoto} />
           )}
           <ThemedText type="title" style={styles.title}>
-            {babyName ? `${babyName}s Tagebuch` : 'Tagebuch'}
+            {babyName ? `${babyName.split(' ')[0]}s Tagebuch` : 'Tagebuch'}
           </ThemedText>
           <View style={styles.spacer} />
           <TouchableOpacity
