@@ -8,14 +8,11 @@ import { ThemedView } from '@/components/ThemedView';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { supabase } from '@/lib/supabase';
-import { getCurrentUser, getGeburtsplan, saveGeburtsplan, saveStructuredGeburtsplan } from '@/lib/supabase';
+import { getCurrentUser, getGeburtsplan, saveGeburtsplan, saveStructuredGeburtsplan, generateGeburtsplanPDF } from '@/lib/supabase';
 import { GeburtsplanData, defaultGeburtsplan } from '@/types/geburtsplan';
 import { useRouter } from 'expo-router';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import * as FileSystem from 'expo-file-system';
-import * as Sharing from 'expo-sharing';
-import * as Print from 'expo-print';
-import { Asset } from 'expo-asset';
+// Keine zusätzlichen Importe mehr benötigt, da wir die gemeinsame Funktion verwenden
 
 // Import der Abschnittskomponenten
 import { AllgemeineAngabenSection } from '@/components/geburtsplan/AllgemeineAngabenSection';
@@ -208,29 +205,7 @@ export default function GeburtsplanScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
-  const [babyIconBase64, setBabyIconBase64] = useState<string | null>(null);
-
-  // Lade das Baby-Icon beim Start
-  useEffect(() => {
-    const loadBabyIcon = async () => {
-      try {
-        // Lade das Bild
-        const asset = Asset.fromModule(require('@/assets/images/Baby_Icon.png'));
-        await asset.downloadAsync();
-
-        // Lese die Datei als Base64
-        const base64 = await FileSystem.readAsStringAsync(asset.localUri!, {
-          encoding: FileSystem.EncodingType.Base64,
-        });
-
-        setBabyIconBase64(base64);
-      } catch (error) {
-        console.error('Fehler beim Laden des Baby-Icons:', error);
-      }
-    };
-
-    loadBabyIcon();
-  }, []);
+  // Wir verwenden jetzt die gemeinsame Funktion in lib/supabase.ts
 
   useEffect(() => {
     const checkUser = async () => {
@@ -306,161 +281,20 @@ export default function GeburtsplanScreen() {
 
   // Funktion zum Generieren und Herunterladen des Geburtsplans als PDF
   const handleGeneratePDF = async () => {
-    if (!user) {
-      Alert.alert('Hinweis', 'Bitte melde dich an, um deinen Geburtsplan als PDF zu speichern.');
-      return;
-    }
-
     try {
       setIsGeneratingPDF(true);
 
-      // Generiere den Inhalt für das PDF
-      let content = '';
-
+      // Wenn wir im strukturierten Editor sind und Änderungen vorgenommen haben,
+      // speichern wir diese zuerst, damit das PDF die aktuellen Daten enthält
       if (useStructuredEditor) {
-        // Wenn der strukturierte Editor verwendet wird, generieren wir den Text aus den strukturierten Daten
-        content = generateTextFromStructuredData(structuredData);
-      } else {
-        // Ansonsten verwenden wir den eingegebenen Text
-        content = geburtsplan;
+        // Generiere den Text aus den strukturierten Daten
+        const generatedContent = generateTextFromStructuredData(structuredData);
+        // Speichere die Änderungen temporär, ohne zur Countdown-Seite zurückzukehren
+        await saveStructuredGeburtsplan(structuredData, generatedContent);
       }
 
-      // Erstelle HTML für das PDF
-      const htmlContent = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="utf-8">
-          <title>Mein Geburtsplan</title>
-          <style>
-            @page {
-              margin: 1.5cm;
-              size: A4;
-            }
-            body {
-              font-family: Arial, sans-serif;
-              line-height: 1.4;
-              margin: 0;
-              padding: 0;
-              color: #333;
-              background-color: #FFF8F0;
-              font-size: 10pt;
-            }
-            .container {
-              max-width: 100%;
-              margin: 0 auto;
-              background-color: white;
-              padding: 20px;
-            }
-            .header {
-              text-align: center;
-              margin-bottom: 15px;
-              padding-bottom: 10px;
-              border-bottom: 1px solid #E8D5C4;
-            }
-            h1 {
-              color: #7D5A50;
-              font-size: 18pt;
-              margin: 0 0 5px 0;
-            }
-            h2 {
-              color: #7D5A50;
-              font-size: 12pt;
-              margin: 10px 0 5px 0;
-              border-bottom: 1px solid #E8D5C4;
-              padding-bottom: 3px;
-            }
-            h3 {
-              color: #7D5A50;
-              font-size: 11pt;
-              margin: 8px 0 4px 0;
-            }
-            p {
-              margin: 4px 0;
-            }
-            .columns {
-              display: flex;
-              flex-direction: row;
-              justify-content: space-between;
-              gap: 20px;
-            }
-            .column {
-              width: 48%;
-            }
-            .section {
-              margin-bottom: 10px;
-            }
-            .item {
-              margin-bottom: 4px;
-            }
-            .item-label {
-              font-weight: bold;
-              color: #5D4037;
-            }
-            .item-value {
-              margin-left: 3px;
-            }
-            .footer {
-              text-align: center;
-              margin-top: 15px;
-              font-size: 9pt;
-              color: #7D5A50;
-              font-style: italic;
-              border-top: 1px solid #E8D5C4;
-              padding-top: 10px;
-            }
-            .baby-icon {
-              text-align: center;
-              margin: 10px auto;
-            }
-            .baby-icon img {
-              height: 50px;
-              width: auto;
-            }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <div class="header">
-              <h1>Mein Geburtsplan</h1>
-              <p>Erstellt am ${new Date().toLocaleDateString('de-DE', {day: '2-digit', month: '2-digit', year: 'numeric'})}</p>
-            </div>
-
-            <div class="columns">
-              <div class="column left-column">
-                ${formatContentForHTMLLeftColumn(content)}
-              </div>
-              <div class="column right-column">
-                ${formatContentForHTMLRightColumn(content)}
-              </div>
-            </div>
-
-            <div class="footer">
-              ${babyIconBase64 ? `<div class="baby-icon"><img src="data:image/png;base64,${babyIconBase64}" alt="Baby Icon" /></div>` : ''}
-              <p>Dieser Geburtsplan wurde mit der Zeppi Baby App erstellt.</p>
-            </div>
-          </div>
-        </body>
-        </html>
-      `;
-
-      // Generiere das PDF mit expo-print
-      const { uri } = await Print.printToFileAsync({
-        html: htmlContent,
-        base64: false,
-      });
-
-      // Teile die PDF-Datei
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri, {
-          mimeType: 'application/pdf',
-          dialogTitle: 'Geburtsplan als PDF speichern',
-          UTI: 'com.adobe.pdf'
-        });
-      } else {
-        Alert.alert('Teilen nicht verfügbar', 'Das Teilen von Dateien wird auf diesem Gerät nicht unterstützt.');
-      }
-
+      // Verwende die gemeinsame Funktion zum Generieren des PDFs
+      await generateGeburtsplanPDF();
     } catch (error) {
       console.error('Fehler beim Generieren des PDFs:', error);
       Alert.alert('Fehler', 'Der Geburtsplan konnte nicht als PDF gespeichert werden.');
