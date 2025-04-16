@@ -23,6 +23,30 @@ import { NachDerGeburtSection } from '@/components/geburtsplan/NachDerGeburtSect
 import { NotfallSection } from '@/components/geburtsplan/NotfallSection';
 import { SonstigeWuenscheSection } from '@/components/geburtsplan/SonstigeWuenscheSection';
 
+// Funktion zum Formatieren des Inhalts für HTML
+const formatContentForHTML = (content: string): string => {
+  // Ersetze Zeilenumbrüche durch <br>
+  let formattedContent = content.replace(/\n/g, '<br>');
+
+  // Ersetze Markdown-Überschriften durch HTML-Überschriften
+  formattedContent = formattedContent.replace(/^# (.*)$/gm, '<h1>$1</h1>');
+  formattedContent = formattedContent.replace(/^## (.*)$/gm, '<h2>$1</h2>');
+
+  // Formatiere Schlüssel-Wert-Paare (z.B. "Name der Mutter: Anna")
+  formattedContent = formattedContent.replace(/(.*?): (.*?)(<br>|$)/g, '<div class="item"><span class="item-label">$1:</span> <span class="item-value">$2</span></div>');
+
+  // Gruppiere Abschnitte
+  formattedContent = formattedContent.replace(/<h2>(.*?)<\/h2>/g, '</div><div class="section"><h2>$1</h2>');
+
+  // Schließe den ersten Abschnitt und füge einen öffnenden div für den ersten Abschnitt hinzu
+  formattedContent = '<div class="section">' + formattedContent + '</div>';
+
+  // Entferne leere Abschnitte
+  formattedContent = formattedContent.replace(/<div class="section"><\/div>/g, '');
+
+  return formattedContent;
+};
+
 // Funktion zum Generieren eines Textes aus den strukturierten Daten
 const generateTextFromStructuredData = (data: GeburtsplanData): string => {
   let text = '';
@@ -207,37 +231,96 @@ export default function GeburtsplanScreen() {
           <meta charset="utf-8">
           <title>Mein Geburtsplan</title>
           <style>
+            @page {
+              margin: 2cm;
+            }
             body {
               font-family: Arial, sans-serif;
               line-height: 1.6;
-              margin: 20px;
+              margin: 0;
+              padding: 20px;
               color: #333;
+              background-color: #FFF8F0;
+            }
+            .container {
+              max-width: 800px;
+              margin: 0 auto;
+              background-color: white;
+              padding: 30px;
+              border-radius: 10px;
+              box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            }
+            .header {
+              text-align: center;
+              margin-bottom: 30px;
+              padding-bottom: 20px;
+              border-bottom: 2px solid #E8D5C4;
             }
             h1 {
               color: #7D5A50;
-              text-align: center;
-              margin-bottom: 30px;
+              font-size: 28px;
+              margin-bottom: 10px;
             }
             h2 {
               color: #7D5A50;
-              margin-top: 20px;
+              font-size: 22px;
+              margin-top: 25px;
+              margin-bottom: 15px;
               border-bottom: 1px solid #E8D5C4;
-              padding-bottom: 5px;
+              padding-bottom: 8px;
+            }
+            h3 {
+              color: #7D5A50;
+              font-size: 18px;
+              margin-top: 20px;
+              margin-bottom: 10px;
             }
             p {
-              margin: 10px 0;
+              margin: 12px 0;
+              font-size: 16px;
+            }
+            .section {
+              margin-bottom: 25px;
+            }
+            .item {
+              margin-bottom: 8px;
+            }
+            .item-label {
+              font-weight: bold;
+              color: #5D4037;
+            }
+            .item-value {
+              margin-left: 5px;
+            }
+            .footer {
+              text-align: center;
+              margin-top: 30px;
+              font-size: 14px;
+              color: #7D5A50;
+              font-style: italic;
             }
           </style>
         </head>
         <body>
-          <h1>Mein Geburtsplan</h1>
-          ${content.replace(/\n/g, '<br>').replace(/^# (.*)$/gm, '<h1>$1</h1>').replace(/^## (.*)$/gm, '<h2>$1</h2>')}
+          <div class="container">
+            <div class="header">
+              <h1>Mein Geburtsplan</h1>
+              <p>Erstellt am ${new Date().toLocaleDateString('de-DE', {day: '2-digit', month: '2-digit', year: 'numeric'})}</p>
+            </div>
+
+            <div class="content">
+              ${formatContentForHTML(content)}
+            </div>
+
+            <div class="footer">
+              <p>Dieser Geburtsplan wurde mit der Wehen-Tracker App erstellt.</p>
+            </div>
+          </div>
         </body>
         </html>
       `;
 
-      // Erstelle einen temporären Dateinamen
-      const fileName = FileSystem.documentDirectory + 'geburtsplan.pdf';
+      // Erstelle einen temporären Dateinamen für die HTML-Datei
 
       // Speichere die HTML-Datei temporär
       const htmlFile = FileSystem.documentDirectory + 'geburtsplan.html';
