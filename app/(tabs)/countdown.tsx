@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, Alert, Platform, ImageBackground, SafeAreaView, StatusBar } from 'react-native';
+import { StyleSheet, ScrollView, View, TouchableOpacity, Alert, Platform, ImageBackground, SafeAreaView, StatusBar, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
@@ -7,7 +7,10 @@ import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import CountdownTimer from '@/components/CountdownTimer';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { supabase, hasGeburtsplan, generateGeburtsplanPDF } from '@/lib/supabase';
+import { supabase, hasGeburtsplan } from '@/lib/supabase';
+import { Asset } from 'expo-asset';
+import * as FileSystem from 'expo-file-system';
+import { generateAndDownloadPDF } from '@/lib/geburtsplan-utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
@@ -23,6 +26,30 @@ export default function CountdownScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [geburtsplanExists, setGeburtsplanExists] = useState(false);
+  const [babyIconBase64, setBabyIconBase64] = useState<string | null>(null);
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+
+  // Lade das Baby-Icon beim Start
+  useEffect(() => {
+    const loadBabyIcon = async () => {
+      try {
+        // Lade das Bild
+        const asset = Asset.fromModule(require('@/assets/images/Baby_Icon.png'));
+        await asset.downloadAsync();
+
+        // Lese die Datei als Base64
+        const base64 = await FileSystem.readAsStringAsync(asset.localUri!, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+
+        setBabyIconBase64(base64);
+      } catch (error) {
+        console.error('Fehler beim Laden des Baby-Icons:', error);
+      }
+    };
+
+    loadBabyIcon();
+  }, []);
 
   useEffect(() => {
     if (user) {
@@ -145,6 +172,17 @@ export default function CountdownScreen() {
     setShowDatePicker(true);
   };
 
+  // Funktion zum Herunterladen des Geburtsplans als PDF
+  const handleDownloadPDF = async () => {
+    if (!user) {
+      Alert.alert('Hinweis', 'Bitte melde dich an, um deinen Geburtsplan als PDF zu speichern.');
+      return;
+    }
+
+    // Verwende die ausgelagerte Funktion
+    await generateAndDownloadPDF(babyIconBase64, setIsGeneratingPDF);
+  };
+
   const handleBabyBorn = async () => {
     try {
       Alert.alert(
@@ -254,9 +292,12 @@ export default function CountdownScreen() {
             <ThemedText style={styles.infoTitle}>
               Geburtsplan
             </ThemedText>
-            <ThemedText style={styles.infoText}>
-              Hast du schon deinen Geburtsplan erstellt? Ein durchdachter Plan kann dir helfen, besser vorbereitet in den Kreißsaal zu gehen. Erstelle jetzt deinen individuellen Geburtsplan mit deinen Wünschen und Vorstellungen für die Geburt.
-            </ThemedText>
+            {/* Wenn kein Geburtsplan existiert, zeigen wir den Text an */}
+            {!geburtsplanExists && (
+              <ThemedText style={styles.infoText}>
+                Hast du schon deinen Geburtsplan erstellt? Ein durchdachter Plan kann dir helfen, besser vorbereitet in den Kreißsaal zu gehen. Erstelle jetzt deinen individuellen Geburtsplan mit deinen Wünschen und Vorstellungen für die Geburt.
+              </ThemedText>
+            )}
 
             <TouchableOpacity
               style={styles.geburtsplanButton}
@@ -269,34 +310,26 @@ export default function CountdownScreen() {
               </ThemedView>
             </TouchableOpacity>
 
+            {/* Download-Button, nur anzeigen wenn ein Geburtsplan existiert */}
             {geburtsplanExists && (
               <TouchableOpacity
-                style={styles.geburtsplanButton}
-                onPress={async () => {
-                  try {
-                    await generateGeburtsplanPDF();
-                  } catch (error) {
-                    console.error('Fehler beim Generieren des PDFs:', error);
-                    Alert.alert('Fehler', 'Der Geburtsplan konnte nicht als PDF gespeichert werden.');
-                  }
-                }}
+                style={[styles.geburtsplanButton, { marginTop: 10 }]}
+                onPress={handleDownloadPDF}
+                disabled={isGeneratingPDF}
               >
-                <ThemedView style={[styles.geburtsplanButtonInner, { backgroundColor: theme.success }]}>
-                  <View style={styles.buttonWithIcon}>
-                    <IconSymbol name="arrow.down.doc" size={20} color="#FFFFFF" />
-                    <ThemedText style={[styles.geburtsplanButtonText, { marginLeft: 8 }]} lightColor="#FFFFFF" darkColor="#FFFFFF">
-                      Als PDF herunterladen
-                    </ThemedText>
-                  </View>
+                <ThemedView style={[styles.geburtsplanButtonInner, { backgroundColor: theme.success }]} lightColor={theme.success} darkColor={theme.success}>
+                  {isGeneratingPDF ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <IconSymbol name="arrow.down.doc" size={20} color="#FFFFFF" />
+                      <ThemedText style={[styles.geburtsplanButtonText, { marginLeft: 8 }]} lightColor="#FFFFFF" darkColor="#FFFFFF">
+                        Als PDF herunterladen
+                      </ThemedText>
+                    </View>
+                  )}
                 </ThemedView>
               </TouchableOpacity>
-            )}
-
-            {!geburtsplanExists && (
-              <ThemedText style={styles.infoText}>
-                Erstelle deinen persönlichen Geburtsplan, um deine Wünsche und Vorstellungen für die Geburt festzuhalten.
-                Teile ihn mit deinem Partner, deiner Hebamme und dem Geburtsteam.
-              </ThemedText>
             )}
           </ThemedView>
         </ScrollView>
@@ -421,10 +454,5 @@ const styles = StyleSheet.create({
   geburtsplanButtonText: {
     fontSize: 16,
     fontWeight: 'bold',
-  },
-  buttonWithIcon: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 });
