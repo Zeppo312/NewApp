@@ -28,9 +28,12 @@ const formatContentForHTML = (content: string): string => {
   // Ersetze Zeilenumbrüche durch <br>
   let formattedContent = content.replace(/\n/g, '<br>');
 
-  // Ersetze Markdown-Überschriften durch HTML-Überschriften
+  // Ersetze Markdown-Überschriften durch HTML-Überschriften und entferne die Hashtags
   formattedContent = formattedContent.replace(/^# (.*)$/gm, '<h1>$1</h1>');
   formattedContent = formattedContent.replace(/^## (.*)$/gm, '<h2>$1</h2>');
+
+  // Entferne alle verbliebenen Hashtags am Anfang von Zeilen
+  formattedContent = formattedContent.replace(/^#+ (.*)(<br>|$)/gm, '<h3>$1</h3>');
 
   // Formatiere Schlüssel-Wert-Paare (z.B. "Name der Mutter: Anna")
   formattedContent = formattedContent.replace(/(.*?): (.*?)(<br>|$)/g, '<div class="item"><span class="item-label">$1:</span> <span class="item-value">$2</span></div>');
@@ -52,8 +55,8 @@ const generateTextFromStructuredData = (data: GeburtsplanData): string => {
   let text = '';
 
   // 1. Allgemeine Angaben
-  text += '# GEBURTSPLAN\n\n';
-  text += '## 1. Allgemeine Angaben\n';
+  text += 'GEBURTSPLAN\n\n';
+  text += '1. Allgemeine Angaben\n';
   if (data.allgemeineAngaben.mutterName) text += `Name der Mutter: ${data.allgemeineAngaben.mutterName}\n`;
   if (data.allgemeineAngaben.entbindungstermin) text += `Entbindungstermin: ${data.allgemeineAngaben.entbindungstermin}\n`;
   if (data.allgemeineAngaben.geburtsklinik) text += `Geburtsklinik / Hausgeburt: ${data.allgemeineAngaben.geburtsklinik}\n`;
@@ -61,7 +64,7 @@ const generateTextFromStructuredData = (data: GeburtsplanData): string => {
   text += '\n';
 
   // 2. Wünsche zur Geburt
-  text += '## 2. Wünsche zur Geburt\n';
+  text += '2. Wünsche zur Geburt\n';
   if (data.geburtsWuensche.geburtspositionen.length > 0) {
     text += `Geburtspositionen: ${data.geburtsWuensche.geburtspositionen.join(', ')}\n`;
   }
@@ -80,7 +83,7 @@ const generateTextFromStructuredData = (data: GeburtsplanData): string => {
   text += '\n';
 
   // 3. Medizinische Eingriffe & Maßnahmen
-  text += '## 3. Medizinische Eingriffe & Maßnahmen\n';
+  text += '3. Medizinische Eingriffe & Maßnahmen\n';
   if (data.medizinischeEingriffe.wehenfoerderung) text += `Wehenförderung: ${data.medizinischeEingriffe.wehenfoerderung}\n`;
   if (data.medizinischeEingriffe.dammschnitt) text += `Dammschnitt / -massage: ${data.medizinischeEingriffe.dammschnitt}\n`;
   if (data.medizinischeEingriffe.monitoring) text += `Monitoring: ${data.medizinischeEingriffe.monitoring}\n`;
@@ -89,7 +92,7 @@ const generateTextFromStructuredData = (data: GeburtsplanData): string => {
   text += '\n';
 
   // 4. Nach der Geburt
-  text += '## 4. Nach der Geburt\n';
+  text += '4. Nach der Geburt\n';
   text += `Bonding: ${data.nachDerGeburt.bonding ? 'Ja' : 'Nein'}\n`;
   text += `Stillen: ${data.nachDerGeburt.stillen ? 'Ja' : 'Nein'}\n`;
   if (data.nachDerGeburt.plazenta) text += `Plazenta: ${data.nachDerGeburt.plazenta}\n`;
@@ -98,7 +101,7 @@ const generateTextFromStructuredData = (data: GeburtsplanData): string => {
   text += '\n';
 
   // 5. Für den Notfall / Kaiserschnitt
-  text += '## 5. Für den Notfall / Kaiserschnitt\n';
+  text += '5. Für den Notfall / Kaiserschnitt\n';
   if (data.notfall.begleitpersonImOP) text += `Begleitperson im OP: ${data.notfall.begleitpersonImOP}\n`;
   text += `Bonding im OP: ${data.notfall.bondingImOP ? 'Ja' : 'Nein'}\n`;
   if (data.notfall.fotoerlaubnis) text += `Fotoerlaubnis: ${data.notfall.fotoerlaubnis}\n`;
@@ -107,7 +110,7 @@ const generateTextFromStructuredData = (data: GeburtsplanData): string => {
 
   // 6. Sonstige Wünsche / Hinweise
   if (data.sonstigeWuensche.freitext) {
-    text += '## 6. Sonstige Wünsche / Hinweise\n';
+    text += '6. Sonstige Wünsche / Hinweise\n';
     text += `${data.sonstigeWuensche.freitext}\n`;
   }
 
