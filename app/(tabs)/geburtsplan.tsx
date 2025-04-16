@@ -178,6 +178,72 @@ export default function GeburtsplanScreen() {
     }
   };
 
+  // Funktion zum Formatieren des Geburtsplan-Inhalts für das PDF
+  const formatGeburtsplanContent = (content: string): string => {
+    // Prüfen, ob der Inhalt das Format des strukturierten Editors hat
+    if (content.includes('## 1. Allgemeine Angaben')) {
+      // Wir teilen den Inhalt in Abschnitte auf
+      const sections = content.split(/##\s+\d+\.\s+/);
+
+      // Der erste Eintrag ist der Titel oder leer, wir überspringen ihn
+      const formattedSections = sections.slice(1).map((section, index) => {
+        // Wir teilen den Abschnitt in Titel und Inhalt
+        const sectionParts = section.trim().split('\n');
+        const sectionTitle = sectionParts[0];
+        const sectionContent = sectionParts.slice(1).join('\n');
+
+        // Wir formatieren den Inhalt als Liste von Elementen
+        const formattedContent = sectionContent
+          .split('\n')
+          .filter(line => line.trim() !== '')
+          .map(line => {
+            // Wir prüfen, ob die Zeile ein Label und einen Wert hat
+            const parts = line.split(':');
+            if (parts.length > 1) {
+              const label = parts[0].trim();
+              const value = parts.slice(1).join(':').trim();
+              return `
+                <div class="item">
+                  <span class="item-label">${label}:</span>
+                  <span class="item-value">${value}</span>
+                </div>
+              `;
+            } else {
+              // Wenn es keine Trennung gibt, geben wir die Zeile als Ganzes zurück
+              return `<div class="item">${line.trim()}</div>`;
+            }
+          })
+          .join('');
+
+        return `
+          <div class="section-title">${index + 1}. ${sectionTitle}</div>
+          <div class="section-content">
+            ${formattedContent}
+          </div>
+        `;
+      }).join('');
+
+      return formattedSections;
+    } else {
+      // Für den einfachen Texteditor formatieren wir den Text als Absatz
+      // Wir versuchen, Abschnitte zu erkennen und zu formatieren
+      const paragraphs = content.split('\n\n');
+
+      return paragraphs.map(paragraph => {
+        paragraph = paragraph.trim();
+        if (!paragraph) return '';
+
+        // Prüfen, ob es eine Überschrift ist (z.B. in Großbuchstaben oder mit # markiert)
+        if (paragraph.startsWith('#') || paragraph === paragraph.toUpperCase()) {
+          return `<div class="section-title">${paragraph.replace(/^#+\s*/, '')}</div>`;
+        } else {
+          // Normaler Absatz
+          return `<p>${paragraph.replace(/\n/g, '<br>')}</p>`;
+        }
+      }).join('');
+    }
+  };
+
   // Funktion zum Erstellen und Teilen des PDFs
   const handleCreateAndSharePdf = async () => {
     try {
@@ -194,6 +260,10 @@ export default function GeburtsplanScreen() {
         content = geburtsplan;
       }
 
+      // Hintergrundbild als Base64 einbetten
+      // Wir verwenden hier ein vereinfachtes Beispiel mit einem Farbverlauf, da das tatsächliche Bild zu groß wäre
+      // In einer realen Implementierung könnte man das Bild komprimieren oder einen Cloud-Link verwenden
+
       // HTML für das PDF erstellen
       const htmlContent = `
         <!DOCTYPE html>
@@ -202,39 +272,135 @@ export default function GeburtsplanScreen() {
             <meta charset="utf-8">
             <title>Mein Geburtsplan</title>
             <style>
+              @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap');
+
               body {
-                font-family: Arial, sans-serif;
-                line-height: 1.5;
-                margin: 40px;
-                color: #333;
+                font-family: 'Roboto', Arial, sans-serif;
+                line-height: 1.6;
+                margin: 0;
+                padding: 0;
+                color: #5D4037;
+                background-color: #FFF8F0;
               }
+
+              .page-container {
+                position: relative;
+                width: 100%;
+                min-height: 100vh;
+                padding: 40px;
+                box-sizing: border-box;
+                background-color: #FFF8F0;
+                background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiPjxkZWZzPjxwYXR0ZXJuIGlkPSJwYXR0ZXJuXzAiIHBhdHRlcm5Vbml0cz0idXNlclNwYWNlT25Vc2UiIHdpZHRoPSIxMCIgaGVpZ2h0PSIxMCIgcGF0dGVyblRyYW5zZm9ybT0icm90YXRlKDQ1KSI+PHJlY3QgeD0iMCIgeT0iMCIgd2lkdGg9IjEwIiBoZWlnaHQ9IjEwIiBmaWxsPSIjRjdFRkU1Ii8+PHJlY3QgeD0iMCIgeT0iMCIgd2lkdGg9IjUiIGhlaWdodD0iNSIgZmlsbD0iI0ZGRjhGMCIvPjwvcGF0dGVybj48L2RlZnM+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0idXJsKCNwYXR0ZXJuXzApIi8+PC9zdmc+');
+              }
+
+              .content-card {
+                background-color: rgba(255, 255, 255, 0.9);
+                border-radius: 15px;
+                padding: 30px;
+                box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+                margin-bottom: 30px;
+              }
+
               h1 {
                 color: #7D5A50;
                 text-align: center;
                 margin-bottom: 30px;
+                font-size: 28px;
+                font-weight: 700;
+                padding-bottom: 15px;
+                border-bottom: 2px solid #E8D5C4;
+                position: relative;
               }
-              h2 {
+
+              h1:after {
+                content: '';
+                display: block;
+                width: 50px;
+                height: 3px;
+                background-color: #7D5A50;
+                position: absolute;
+                bottom: -2px;
+                left: 50%;
+                transform: translateX(-50%);
+              }
+
+              .title-container {
+                text-align: center;
+                margin-bottom: 30px;
+              }
+
+              .title-icon {
+                font-size: 24px;
                 color: #7D5A50;
-                margin-top: 20px;
+                margin-bottom: 10px;
+              }
+
+              .section-title {
+                color: #7D5A50;
+                font-size: 18px;
+                font-weight: 600;
+                margin-top: 25px;
+                margin-bottom: 15px;
                 border-bottom: 1px solid #E8D5C4;
-                padding-bottom: 5px;
+                padding-bottom: 8px;
               }
-              p {
-                margin: 10px 0;
+
+              .section-content {
+                margin-left: 15px;
               }
+
+              .item {
+                margin-bottom: 10px;
+              }
+
+              .item-label {
+                font-weight: 500;
+              }
+
+              .item-value {
+                margin-left: 5px;
+              }
+
               .footer {
-                margin-top: 50px;
+                margin-top: 40px;
                 text-align: center;
                 font-size: 12px;
-                color: #999;
+                color: #7D5A50;
+                padding: 15px 10px;
+                border-top: 1px solid #E8D5C4;
+              }
+
+              .footer-content {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+              }
+
+              .footer-icon {
+                margin-bottom: 5px;
+                font-size: 14px;
               }
             </style>
           </head>
           <body>
-            <h1>Mein Geburtsplan</h1>
-            ${content.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>').replace(/^(.+)$/gm, '<p>$1</p>')}
-            <div class="footer">
-              Erstellt mit der Wehen-Tracker App
+            <div class="page-container">
+              <div class="content-card">
+                <div class="title-container">
+                  <div class="title-icon">📝</div>
+                  <h1>Mein Geburtsplan</h1>
+                </div>
+
+                ${formatGeburtsplanContent(content)}
+
+                <div class="footer">
+                  <div class="footer-content">
+                    <div class="footer-icon">👶</div>
+                    <div>Erstellt mit der Wehen-Tracker App</div>
+                    <div>${new Date().toLocaleDateString('de-DE')}</div>
+                  </div>
+                </div>
+              </div>
             </div>
           </body>
         </html>
