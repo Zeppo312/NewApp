@@ -276,19 +276,21 @@ export default function GeburtsplanScreen() {
 
               body {
                 font-family: 'Roboto', Arial, sans-serif;
-                line-height: 1.2;
+                line-height: 1.3;
                 margin: 0;
                 padding: 0;
                 color: #5D4037;
                 background-color: #FFFFFF;
-                font-size: 8pt;
+                font-size: 9pt;
               }
 
               .page-container {
                 position: relative;
                 width: 100%;
-                height: 100%;
-                padding: 10px;
+                max-width: 21cm; /* A4 width */
+                min-height: 29.7cm; /* A4 height */
+                margin: 0 auto;
+                padding: 15px;
                 box-sizing: border-box;
                 background-color: #FFFFFF;
               }
@@ -296,7 +298,7 @@ export default function GeburtsplanScreen() {
               .content-card {
                 background-color: #FFFFFF;
                 border: 1px solid #E8D5C4;
-                padding: 8px 10px;
+                padding: 15px 20px;
                 max-width: 800px;
                 margin: 0 auto;
                 position: relative;
@@ -304,46 +306,42 @@ export default function GeburtsplanScreen() {
 
               .page-number {
                 position: absolute;
-                top: 8px;
-                left: 10px;
-                font-size: 7pt;
+                top: 15px;
+                left: 20px;
+                font-size: 8pt;
                 color: #888;
                 display: flex;
                 align-items: center;
               }
 
-              .page-number-icon {
-                margin-right: 5px;
-              }
-
               h1 {
                 color: #7D5A50;
                 text-align: center;
-                margin: 3px 0 8px 0;
-                font-size: 14pt;
+                margin: 5px 0 15px 0;
+                font-size: 16pt;
                 font-weight: 700;
-                padding-bottom: 3px;
+                padding-bottom: 5px;
                 border-bottom: 1px solid #E8D5C4;
               }
 
               .section-title {
                 color: #7D5A50;
-                font-size: 9pt;
+                font-size: 11pt;
                 font-weight: 600;
-                margin-top: 6px;
-                margin-bottom: 3px;
+                margin-top: 12px;
+                margin-bottom: 6px;
                 border-bottom: 1px solid #E8D5C4;
-                padding-bottom: 1px;
+                padding-bottom: 3px;
               }
 
               .section-content {
-                margin-left: 0;
-                margin-bottom: 3px;
+                margin-left: 10px;
+                margin-bottom: 8px;
               }
 
               .item {
-                margin-bottom: 1px;
-                font-size: 8pt;
+                margin-bottom: 4px;
+                font-size: 9pt;
               }
 
               .item-label {
@@ -355,22 +353,10 @@ export default function GeburtsplanScreen() {
               }
 
               .footer {
-                margin-top: 5px;
+                margin-top: 20px;
                 text-align: center;
-                font-size: 6pt;
+                font-size: 8pt;
                 color: #7D5A50;
-              }
-
-              .footer-content {
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                justify-content: center;
-              }
-
-              .footer-icon {
-                margin-bottom: 2px;
-                font-size: 10pt;
               }
 
               @page {
@@ -404,7 +390,7 @@ export default function GeburtsplanScreen() {
             <div class="page-container">
               <div class="content-card">
                 <div class="page-number">
-                  <span class="page-number-icon">�</span> 1 von 1
+                  📄 1 von 1
                 </div>
 
                 <h1>Mein Geburtsplan</h1>
@@ -412,9 +398,7 @@ export default function GeburtsplanScreen() {
                 ${formatGeburtsplanContent(content)}
 
                 <div class="footer">
-                  <div class="footer-content">
-                    <div>Erstellt mit der Wehen-Tracker App · ${new Date().toLocaleDateString('de-DE')}</div>
-                  </div>
+                  👶 Erstellt mit der Wehen-Tracker App · ${new Date().toLocaleDateString('de-DE')}
                 </div>
               </div>
             </div>
@@ -427,7 +411,13 @@ export default function GeburtsplanScreen() {
         html: htmlContent,
         base64: false,
         height: 842, // A4 height in points (72dpi)
-        width: 595   // A4 width in points (72dpi)
+        width: 595,  // A4 width in points (72dpi)
+        margins: {
+          left: 0,
+          top: 0,
+          right: 0,
+          bottom: 0
+        }
       });
 
       // Prüfen, ob Sharing verfügbar ist
