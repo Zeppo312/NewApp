@@ -276,28 +276,27 @@ export default function GeburtsplanScreen() {
 
               body {
                 font-family: 'Roboto', Arial, sans-serif;
-                line-height: 1.3;
+                line-height: 1.2;
                 margin: 0;
                 padding: 0;
                 color: #5D4037;
-                background-color: #FFF8F0;
-                font-size: 9pt;
+                background-color: #FFFFFF;
+                font-size: 8pt;
               }
 
               .page-container {
                 position: relative;
                 width: 100%;
                 height: 100%;
-                padding: 20px;
+                padding: 10px;
                 box-sizing: border-box;
-                background-color: #FFF8F0;
+                background-color: #FFFFFF;
               }
 
               .content-card {
                 background-color: #FFFFFF;
-                border-radius: 8px;
-                padding: 12px 15px;
-                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+                border: 1px solid #E8D5C4;
+                padding: 8px 10px;
                 max-width: 800px;
                 margin: 0 auto;
                 position: relative;
@@ -305,9 +304,9 @@ export default function GeburtsplanScreen() {
 
               .page-number {
                 position: absolute;
-                top: 15px;
-                left: 15px;
-                font-size: 9pt;
+                top: 8px;
+                left: 10px;
+                font-size: 7pt;
                 color: #888;
                 display: flex;
                 align-items: center;
@@ -320,31 +319,31 @@ export default function GeburtsplanScreen() {
               h1 {
                 color: #7D5A50;
                 text-align: center;
-                margin: 5px 0 10px 0;
-                font-size: 16pt;
+                margin: 3px 0 8px 0;
+                font-size: 14pt;
                 font-weight: 700;
-                padding-bottom: 5px;
+                padding-bottom: 3px;
                 border-bottom: 1px solid #E8D5C4;
               }
 
               .section-title {
                 color: #7D5A50;
-                font-size: 10pt;
+                font-size: 9pt;
                 font-weight: 600;
-                margin-top: 10px;
-                margin-bottom: 5px;
+                margin-top: 6px;
+                margin-bottom: 3px;
                 border-bottom: 1px solid #E8D5C4;
-                padding-bottom: 2px;
+                padding-bottom: 1px;
               }
 
               .section-content {
                 margin-left: 0;
-                margin-bottom: 5px;
+                margin-bottom: 3px;
               }
 
               .item {
-                margin-bottom: 2px;
-                font-size: 9pt;
+                margin-bottom: 1px;
+                font-size: 8pt;
               }
 
               .item-label {
@@ -356,9 +355,9 @@ export default function GeburtsplanScreen() {
               }
 
               .footer {
-                margin-top: 8px;
+                margin-top: 5px;
                 text-align: center;
-                font-size: 7pt;
+                font-size: 6pt;
                 color: #7D5A50;
               }
 
@@ -378,6 +377,8 @@ export default function GeburtsplanScreen() {
                 size: A4 portrait;
                 margin: 0;
                 padding: 0;
+                orphans: 4;
+                widows: 4;
               }
 
               @media print {
@@ -387,11 +388,14 @@ export default function GeburtsplanScreen() {
                 }
                 .page-container {
                   height: 100vh;
-                  page-break-after: always;
+                  page-break-inside: avoid;
+                  page-break-after: avoid;
+                  page-break-before: avoid;
                 }
                 .content-card {
-                  height: calc(100vh - 40px);
-                  overflow: hidden;
+                  height: auto;
+                  max-height: 100vh;
+                  overflow: visible;
                 }
               }
             </style>
@@ -421,7 +425,9 @@ export default function GeburtsplanScreen() {
       // PDF erstellen
       const { uri } = await Print.printToFileAsync({
         html: htmlContent,
-        base64: false
+        base64: false,
+        height: 842, // A4 height in points (72dpi)
+        width: 595   // A4 width in points (72dpi)
       });
 
       // Prüfen, ob Sharing verfügbar ist
