@@ -37,7 +37,7 @@ export default function TabLayout() {
           default: {},
         }),
       }}>
-      {/* Nach-der-Geburt-Tabs - Home zuerst */}
+      {/* Nach-der-Geburt-Tabs - Home zuerst, dann Tagebuch, dann Mehr */}
       <Tabs.Screen
         name="home"
         options={{
