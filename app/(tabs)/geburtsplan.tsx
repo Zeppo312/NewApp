@@ -437,7 +437,7 @@ export default function GeburtsplanScreen() {
 
             <div class="footer">
               ${babyIconBase64 ? `<div class="baby-icon"><img src="data:image/png;base64,${babyIconBase64}" alt="Baby Icon" /></div>` : ''}
-              <p>Dieser Geburtsplan wurde mit der Wehen-Tracker App erstellt.</p>
+              <p>Dieser Geburtsplan wurde mit der Zeppi Baby App erstellt.</p>
             </div>
           </div>
         </body>

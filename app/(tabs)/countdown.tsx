@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, Alert, Platform, ImageBackground, SafeAreaView, StatusBar } from 'react-native';
+import { StyleSheet, ScrollView, View, TouchableOpacity, Alert, Platform, ImageBackground, SafeAreaView, StatusBar, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
@@ -7,7 +7,9 @@ import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import CountdownTimer from '@/components/CountdownTimer';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { supabase, hasGeburtsplan } from '@/lib/supabase';
+import { supabase, hasGeburtsplan, getGeburtsplan } from '@/lib/supabase';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
@@ -23,6 +25,7 @@ export default function CountdownScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [geburtsplanExists, setGeburtsplanExists] = useState(false);
+  const [isDownloadingPDF, setIsDownloadingPDF] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -45,6 +48,173 @@ export default function CountdownScreen() {
       console.error('Failed to check geburtsplan:', err);
     }
   };
+
+  // Funktion zum Herunterladen des Geburtsplans als PDF
+  const handleDownloadGeburtsplan = async () => {
+    if (!user) {
+      Alert.alert('Hinweis', 'Bitte melde dich an, um deinen Geburtsplan herunterzuladen.');
+      return;
+    }
+
+    try {
+      setIsDownloadingPDF(true);
+
+      // Geburtsplan laden
+      const { data, error } = await getGeburtsplan();
+
+      if (error) {
+        console.error('Error loading geburtsplan:', error);
+        Alert.alert('Fehler', 'Der Geburtsplan konnte nicht geladen werden.');
+        return;
+      }
+
+      if (!data) {
+        Alert.alert('Hinweis', 'Es wurde noch kein Geburtsplan erstellt.');
+        return;
+      }
+
+      // Generiere den Inhalt für das PDF
+      let content = '';
+
+      if (data.structured_data) {
+        // Wenn strukturierte Daten vorhanden sind, verwenden wir den gespeicherten Textinhalt
+        content = data.textContent || data.content || '';
+      } else {
+        // Ansonsten verwenden wir den einfachen Textinhalt
+        content = data.content || '';
+      }
+
+      // Erstelle HTML für das PDF
+      const htmlContent = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <title>Mein Geburtsplan</title>
+          <style>
+            @page {
+              margin: 1.5cm;
+              size: A4;
+            }
+            body {
+              font-family: Arial, sans-serif;
+              line-height: 1.4;
+              margin: 0;
+              padding: 0;
+              color: #333;
+              background-color: #FFF8F0;
+              font-size: 10pt;
+            }
+            .container {
+              max-width: 100%;
+              margin: 0 auto;
+              background-color: white;
+              padding: 20px;
+            }
+            .header {
+              text-align: center;
+              margin-bottom: 15px;
+              padding-bottom: 10px;
+              border-bottom: 1px solid #E8D5C4;
+            }
+            h1 {
+              color: #7D5A50;
+              font-size: 18pt;
+              margin: 0 0 5px 0;
+            }
+            h2 {
+              color: #7D5A50;
+              font-size: 12pt;
+              margin: 10px 0 5px 0;
+              border-bottom: 1px solid #E8D5C4;
+              padding-bottom: 3px;
+            }
+            h3 {
+              color: #7D5A50;
+              font-size: 11pt;
+              margin: 8px 0 4px 0;
+            }
+            p {
+              margin: 4px 0;
+            }
+            .columns {
+              display: flex;
+              flex-direction: row;
+              justify-content: space-between;
+              gap: 20px;
+            }
+            .column {
+              width: 48%;
+            }
+            .section {
+              margin-bottom: 10px;
+            }
+            .item {
+              margin-bottom: 4px;
+            }
+            .item-label {
+              font-weight: bold;
+              color: #5D4037;
+            }
+            .item-value {
+              margin-left: 3px;
+            }
+            .footer {
+              text-align: center;
+              margin-top: 15px;
+              font-size: 9pt;
+              color: #7D5A50;
+              font-style: italic;
+              border-top: 1px solid #E8D5C4;
+              padding-top: 10px;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>Mein Geburtsplan</h1>
+              <p>Erstellt am ${new Date().toLocaleDateString('de-DE', {day: '2-digit', month: '2-digit', year: 'numeric'})}</p>
+            </div>
+
+            <div class="content">
+              ${content.replace(/\n/g, '<br>').replace(/^# (.*)$/gm, '<h1>$1</h1>').replace(/^## (.*)$/gm, '<h2>$2</h2>')}
+            </div>
+
+            <div class="footer">
+              <p>Dieser Geburtsplan wurde mit der Wehen-Tracker App erstellt.</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `;
+
+      // Generiere das PDF mit expo-print
+      const { uri } = await Print.printToFileAsync({
+        html: htmlContent,
+        base64: false,
+      });
+
+      // Teile die PDF-Datei
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, {
+          mimeType: 'application/pdf',
+          dialogTitle: 'Geburtsplan als PDF speichern',
+          UTI: 'com.adobe.pdf'
+        });
+      } else {
+        Alert.alert('Teilen nicht verfügbar', 'Das Teilen von Dateien wird auf diesem Gerät nicht unterstützt.');
+      }
+
+    } catch (error) {
+      console.error('Fehler beim Generieren des PDFs:', error);
+      Alert.alert('Fehler', 'Der Geburtsplan konnte nicht als PDF gespeichert werden.');
+    } finally {
+      setIsDownloadingPDF(false);
+    }
+  };
+
+
 
   const loadDueDate = async () => {
     try {
@@ -254,9 +424,11 @@ export default function CountdownScreen() {
             <ThemedText style={styles.infoTitle}>
               Geburtsplan
             </ThemedText>
-            <ThemedText style={styles.infoText}>
-              Hast du schon deinen Geburtsplan erstellt? Ein durchdachter Plan kann dir helfen, besser vorbereitet in den Kreißsaal zu gehen. Erstelle jetzt deinen individuellen Geburtsplan mit deinen Wünschen und Vorstellungen für die Geburt.
-            </ThemedText>
+            {!geburtsplanExists && (
+              <ThemedText style={styles.infoText}>
+                Hast du schon deinen Geburtsplan erstellt? Ein durchdachter Plan kann dir helfen, besser vorbereitet in den Kreißsaal zu gehen. Erstelle jetzt deinen individuellen Geburtsplan mit deinen Wünschen und Vorstellungen für die Geburt.
+              </ThemedText>
+            )}
 
             <TouchableOpacity
               style={styles.geburtsplanButton}
@@ -268,6 +440,27 @@ export default function CountdownScreen() {
                 </ThemedText>
               </ThemedView>
             </TouchableOpacity>
+
+            {geburtsplanExists && (
+              <TouchableOpacity
+                style={[styles.geburtsplanButton, { marginTop: 10 }]}
+                onPress={handleDownloadGeburtsplan}
+                disabled={isDownloadingPDF}
+              >
+                <ThemedView style={[styles.geburtsplanButtonInner, { backgroundColor: theme.success }]} lightColor={theme.success} darkColor={theme.success}>
+                  {isDownloadingPDF ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <View style={styles.downloadButtonInner}>
+                      <IconSymbol name="arrow.down.doc" size={20} color="#FFFFFF" />
+                      <ThemedText style={styles.geburtsplanButtonText} lightColor="#FFFFFF" darkColor="#FFFFFF">
+                        Als PDF herunterladen
+                      </ThemedText>
+                    </View>
+                  )}
+                </ThemedView>
+              </TouchableOpacity>
+            )}
           </ThemedView>
         </ScrollView>
         </SafeAreaView>
@@ -391,5 +584,10 @@ const styles = StyleSheet.create({
   geburtsplanButtonText: {
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  downloadButtonInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
