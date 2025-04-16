@@ -15,6 +15,7 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import * as Print from 'expo-print';
+import { Asset } from 'expo-asset';
 
 // Import der Abschnittskomponenten
 import { AllgemeineAngabenSection } from '@/components/geburtsplan/AllgemeineAngabenSection';
@@ -207,6 +208,29 @@ export default function GeburtsplanScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+  const [babyIconBase64, setBabyIconBase64] = useState<string | null>(null);
+
+  // Lade das Baby-Icon beim Start
+  useEffect(() => {
+    const loadBabyIcon = async () => {
+      try {
+        // Lade das Bild
+        const asset = Asset.fromModule(require('@/assets/images/Baby_Icon.png'));
+        await asset.downloadAsync();
+
+        // Lese die Datei als Base64
+        const base64 = await FileSystem.readAsStringAsync(asset.localUri!, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+
+        setBabyIconBase64(base64);
+      } catch (error) {
+        console.error('Fehler beim Laden des Baby-Icons:', error);
+      }
+    };
+
+    loadBabyIcon();
+  }, []);
 
   useEffect(() => {
     const checkUser = async () => {
@@ -385,6 +409,14 @@ export default function GeburtsplanScreen() {
               border-top: 1px solid #E8D5C4;
               padding-top: 10px;
             }
+            .baby-icon {
+              text-align: center;
+              margin: 10px auto;
+            }
+            .baby-icon img {
+              height: 50px;
+              width: auto;
+            }
           </style>
         </head>
         <body>
@@ -404,6 +436,7 @@ export default function GeburtsplanScreen() {
             </div>
 
             <div class="footer">
+              ${babyIconBase64 ? `<div class="baby-icon"><img src="data:image/png;base64,${babyIconBase64}" alt="Baby Icon" /></div>` : ''}
               <p>Dieser Geburtsplan wurde mit der Wehen-Tracker App erstellt.</p>
             </div>
           </div>
