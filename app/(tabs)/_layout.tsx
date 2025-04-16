@@ -1,4 +1,4 @@
-import { Tabs } from 'expo-router';
+import { Tabs, router } from 'expo-router';
 import React from 'react';
 import { Platform, View, ActivityIndicator } from 'react-native';
 
@@ -52,6 +52,14 @@ export default function TabLayout() {
           title: 'Tagebuch',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="book.fill" color={color} />,
           href: isBabyBorn ? undefined : null,
+        }}
+        listeners={{
+          tabPress: (e) => {
+            // Verhindern der Standard-Navigation
+            e.preventDefault();
+            // Stattdessen zur diary-entries.tsx navigieren
+            router.push('/diary-entries');
+          },
         }}
       />
       <Tabs.Screen
