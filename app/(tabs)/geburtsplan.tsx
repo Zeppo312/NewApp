@@ -1,10 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, View, TextInput, TouchableOpacity, Alert, ActivityIndicator, Switch, Platform } from 'react-native';
+import { StyleSheet, ScrollView, View, TextInput, TouchableOpacity, Alert, ActivityIndicator, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { ImageBackground } from 'react-native';
-import * as Print from 'expo-print';
-import * as Sharing from 'expo-sharing';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { Colors } from '@/constants/Colors';
@@ -14,6 +12,8 @@ import { getCurrentUser, getGeburtsplan, saveGeburtsplan, saveStructuredGeburtsp
 import { GeburtsplanData, defaultGeburtsplan } from '@/types/geburtsplan';
 import { useRouter } from 'expo-router';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 
 // Import der Abschnittskomponenten
 import { AllgemeineAngabenSection } from '@/components/geburtsplan/AllgemeineAngabenSection';
@@ -104,7 +104,7 @@ export default function GeburtsplanScreen() {
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
 
   useEffect(() => {
     const checkUser = async () => {
@@ -178,273 +178,87 @@ export default function GeburtsplanScreen() {
     }
   };
 
-  // Funktion zum Formatieren des Geburtsplan-Inhalts für das PDF
-  const formatGeburtsplanContent = (content: string): string => {
-    // Prüfen, ob der Inhalt das Format des strukturierten Editors hat
-    if (content.includes('## 1. Allgemeine Angaben')) {
-      // Wir teilen den Inhalt in Abschnitte auf
-      const sections = content.split(/##\s+\d+\.\s+/);
-
-      // Der erste Eintrag ist der Titel oder leer, wir überspringen ihn
-      const formattedSections = sections.slice(1).map((section, index) => {
-        // Wir teilen den Abschnitt in Titel und Inhalt
-        const sectionParts = section.trim().split('\n');
-        const sectionTitle = sectionParts[0];
-        const sectionContent = sectionParts.slice(1).join('\n');
-
-        // Wir formatieren den Inhalt als Liste von Elementen
-        const formattedContent = sectionContent
-          .split('\n')
-          .filter(line => line.trim() !== '')
-          .map(line => {
-            // Wir prüfen, ob die Zeile ein Label und einen Wert hat
-            const parts = line.split(':');
-            if (parts.length > 1) {
-              const label = parts[0].trim();
-              const value = parts.slice(1).join(':').trim();
-              return `
-                <div class="item">
-                  <span class="item-label">${label}:</span>
-                  <span class="item-value">${value}</span>
-                </div>
-              `;
-            } else {
-              // Wenn es keine Trennung gibt, geben wir die Zeile als Ganzes zurück
-              return `<div class="item">${line.trim()}</div>`;
-            }
-          })
-          .join('');
-
-        return `
-          <div class="section-title">${index + 1}. ${sectionTitle}</div>
-          <div class="section-content">
-            ${formattedContent}
-          </div>
-        `;
-      }).join('');
-
-      return formattedSections;
-    } else {
-      // Für den einfachen Texteditor formatieren wir den Text als Absatz
-      // Wir versuchen, Abschnitte zu erkennen und zu formatieren
-      const paragraphs = content.split('\n\n');
-
-      return paragraphs.map(paragraph => {
-        paragraph = paragraph.trim();
-        if (!paragraph) return '';
-
-        // Prüfen, ob es eine Überschrift ist (z.B. in Großbuchstaben oder mit # markiert)
-        if (paragraph.startsWith('#') || paragraph === paragraph.toUpperCase()) {
-          return `<div class="section-title">${paragraph.replace(/^#+\s*/, '')}</div>`;
-        } else {
-          // Normaler Absatz
-          return `<p>${paragraph.replace(/\n/g, '<br>')}</p>`;
-        }
-      }).join('');
+  // Funktion zum Generieren und Herunterladen des Geburtsplans als PDF
+  const handleGeneratePDF = async () => {
+    if (!user) {
+      Alert.alert('Hinweis', 'Bitte melde dich an, um deinen Geburtsplan als PDF zu speichern.');
+      return;
     }
-  };
 
-  // Funktion zum Erstellen und Teilen des PDFs
-  const handleCreateAndSharePdf = async () => {
     try {
-      setIsGeneratingPdf(true);
+      setIsGeneratingPDF(true);
 
-      // Wir verwenden den aktuellen Inhalt des Geburtsplans
+      // Generiere den Inhalt für das PDF
       let content = '';
 
       if (useStructuredEditor) {
         // Wenn der strukturierte Editor verwendet wird, generieren wir den Text aus den strukturierten Daten
         content = generateTextFromStructuredData(structuredData);
       } else {
-        // Sonst verwenden wir den Text aus dem Texteditor
+        // Ansonsten verwenden wir den eingegebenen Text
         content = geburtsplan;
       }
 
-      // Hintergrundbild als Base64 einbetten
-      // Wir verwenden hier ein vereinfachtes Beispiel mit einem Farbverlauf, da das tatsächliche Bild zu groß wäre
-      // In einer realen Implementierung könnte man das Bild komprimieren oder einen Cloud-Link verwenden
-
-      // HTML für das PDF erstellen
+      // Erstelle HTML für das PDF
       const htmlContent = `
         <!DOCTYPE html>
         <html>
-          <head>
-            <meta charset="utf-8">
-            <title>Mein Geburtsplan</title>
-            <style>
-              @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap');
-
-              body {
-                font-family: 'Roboto', Arial, sans-serif;
-                line-height: 1.2;
-                margin: 0;
-                padding: 0;
-                color: #5D4037;
-                background-color: #FFFFFF;
-                font-size: 7pt;
-              }
-
-              .page-container {
-                position: relative;
-                width: 100%;
-                max-width: 21cm; /* A4 width */
-                min-height: 29.7cm; /* A4 height */
-                margin: 0 auto;
-                padding: 5px;
-                box-sizing: border-box;
-                background-color: #FFFFFF;
-              }
-
-              .content-card {
-                background-color: #FFFFFF;
-                border: 1px solid #E8D5C4;
-                padding: 8px 10px;
-                max-width: 800px;
-                margin: 0 auto;
-                position: relative;
-              }
-
-              .page-number {
-                position: absolute;
-                top: 8px;
-                left: 10px;
-                font-size: 6pt;
-                color: #888;
-                display: flex;
-                align-items: center;
-              }
-
-              h1 {
-                color: #7D5A50;
-                text-align: center;
-                margin: 3px 0 8px 0;
-                font-size: 12pt;
-                font-weight: 700;
-                padding-bottom: 3px;
-                border-bottom: 1px solid #E8D5C4;
-              }
-
-              .section-title {
-                color: #7D5A50;
-                font-size: 8pt;
-                font-weight: 600;
-                margin-top: 6px;
-                margin-bottom: 3px;
-                border-bottom: 1px solid #E8D5C4;
-                padding-bottom: 2px;
-              }
-
-              .section-content {
-                margin-left: 5px;
-                margin-bottom: 4px;
-              }
-
-              .item {
-                margin-bottom: 2px;
-                font-size: 7pt;
-              }
-
-              .item-label {
-                font-weight: 500;
-              }
-
-              .item-value {
-                margin-left: 3px;
-              }
-
-              .footer {
-                margin-top: 10px;
-                text-align: center;
-                font-size: 6pt;
-                color: #7D5A50;
-              }
-
-              @page {
-                size: A4 portrait;
-                margin: 0;
-                padding: 0;
-                orphans: 2;
-                widows: 2;
-              }
-
-              @media print {
-                body {
-                  -webkit-print-color-adjust: exact;
-                  print-color-adjust: exact;
-                }
-                .page-container {
-                  height: 100vh;
-                  page-break-inside: avoid;
-                  page-break-after: avoid;
-                  page-break-before: avoid;
-                  max-height: 29.7cm;
-                }
-                .content-card {
-                  height: auto;
-                  max-height: 29.7cm;
-                  overflow: visible;
-                }
-                h1 {
-                  margin-top: 0;
-                }
-              }
-            </style>
-          </head>
-          <body>
-            <div class="page-container">
-              <div class="content-card">
-                <div class="page-number">
-                  📄 1 von 1
-                </div>
-
-                <h1>Mein Geburtsplan</h1>
-
-                ${formatGeburtsplanContent(content)}
-
-                <div class="footer">
-                  👶 Erstellt mit der Wehen-Tracker App · ${new Date().toLocaleDateString('de-DE')}
-                </div>
-              </div>
-            </div>
-          </body>
+        <head>
+          <meta charset="utf-8">
+          <title>Mein Geburtsplan</title>
+          <style>
+            body {
+              font-family: Arial, sans-serif;
+              line-height: 1.6;
+              margin: 20px;
+              color: #333;
+            }
+            h1 {
+              color: #7D5A50;
+              text-align: center;
+              margin-bottom: 30px;
+            }
+            h2 {
+              color: #7D5A50;
+              margin-top: 20px;
+              border-bottom: 1px solid #E8D5C4;
+              padding-bottom: 5px;
+            }
+            p {
+              margin: 10px 0;
+            }
+          </style>
+        </head>
+        <body>
+          <h1>Mein Geburtsplan</h1>
+          ${content.replace(/\n/g, '<br>').replace(/^# (.*)$/gm, '<h1>$1</h1>').replace(/^## (.*)$/gm, '<h2>$1</h2>')}
+        </body>
         </html>
       `;
 
-      // PDF erstellen
-      const { uri } = await Print.printToFileAsync({
-        html: htmlContent,
-        base64: false,
-        height: 842, // A4 height in points (72dpi)
-        width: 595,  // A4 width in points (72dpi)
-        margins: {
-          left: 0,
-          top: 0,
-          right: 0,
-          bottom: 0
-        }
-      });
+      // Erstelle einen temporären Dateinamen
+      const fileName = FileSystem.documentDirectory + 'geburtsplan.pdf';
 
-      // Prüfen, ob Sharing verfügbar ist
-      const isSharingAvailable = await Sharing.isAvailableAsync();
+      // Speichere die HTML-Datei temporär
+      const htmlFile = FileSystem.documentDirectory + 'geburtsplan.html';
+      await FileSystem.writeAsStringAsync(htmlFile, htmlContent);
 
-      if (isSharingAvailable) {
-        // PDF teilen
-        await Sharing.shareAsync(uri, {
-          mimeType: 'application/pdf',
-          dialogTitle: 'Geburtsplan als PDF teilen',
-          UTI: 'com.adobe.pdf' // Für iOS
+      // Teile die Datei
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(htmlFile, {
+          mimeType: 'text/html',
+          dialogTitle: 'Geburtsplan teilen',
+          UTI: 'public.html'
         });
       } else {
-        Alert.alert(
-          'Teilen nicht verfügbar',
-          'Das Teilen von Dateien wird auf diesem Gerät nicht unterstützt.'
-        );
+        Alert.alert('Teilen nicht verfügbar', 'Das Teilen von Dateien wird auf diesem Gerät nicht unterstützt.');
       }
+
     } catch (error) {
-      console.error('Error creating or sharing PDF:', error);
-      Alert.alert('Fehler', 'Beim Erstellen oder Teilen des PDFs ist ein Fehler aufgetreten.');
+      console.error('Fehler beim Generieren des PDFs:', error);
+      Alert.alert('Fehler', 'Der Geburtsplan konnte nicht als PDF gespeichert werden.');
     } finally {
-      setIsGeneratingPdf(false);
+      setIsGeneratingPDF(false);
     }
   };
 
@@ -635,13 +449,13 @@ export default function GeburtsplanScreen() {
 
             <TouchableOpacity
               style={[styles.downloadButton, { backgroundColor: theme.success }]}
-              onPress={handleCreateAndSharePdf}
-              disabled={isGeneratingPdf}
+              onPress={handleGeneratePDF}
+              disabled={isGeneratingPDF}
             >
-              {isGeneratingPdf ? (
+              {isGeneratingPDF ? (
                 <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
-                <View style={styles.downloadButtonContent}>
+                <View style={styles.downloadButtonInner}>
                   <IconSymbol name="arrow.down.doc" size={20} color="#FFFFFF" />
                   <ThemedText style={styles.downloadButtonText} lightColor="#FFFFFF" darkColor="#FFFFFF">
                     Als PDF speichern
@@ -760,13 +574,13 @@ const createStyles = (theme: any) => StyleSheet.create({
   },
   buttonContainer: {
     marginBottom: 20,
-    gap: 15,
   },
   saveButton: {
     padding: 15,
     borderRadius: 30,
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: 15,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
@@ -782,13 +596,14 @@ const createStyles = (theme: any) => StyleSheet.create({
     borderRadius: 30,
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 4,
     elevation: 3,
   },
-  downloadButtonContent: {
+  downloadButtonInner: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
