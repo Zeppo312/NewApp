@@ -14,6 +14,7 @@ import { useRouter } from 'expo-router';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
+import * as Print from 'expo-print';
 
 // Import der Abschnittskomponenten
 import { AllgemeineAngabenSection } from '@/components/geburtsplan/AllgemeineAngabenSection';
@@ -236,6 +237,7 @@ export default function GeburtsplanScreen() {
           <style>
             @page {
               margin: 2cm;
+              size: A4;
             }
             body {
               font-family: Arial, sans-serif;
@@ -323,18 +325,18 @@ export default function GeburtsplanScreen() {
         </html>
       `;
 
-      // Erstelle einen temporären Dateinamen für die HTML-Datei
+      // Generiere das PDF mit expo-print
+      const { uri } = await Print.printToFileAsync({
+        html: htmlContent,
+        base64: false,
+      });
 
-      // Speichere die HTML-Datei temporär
-      const htmlFile = FileSystem.documentDirectory + 'geburtsplan.html';
-      await FileSystem.writeAsStringAsync(htmlFile, htmlContent);
-
-      // Teile die Datei
+      // Teile die PDF-Datei
       if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(htmlFile, {
-          mimeType: 'text/html',
-          dialogTitle: 'Geburtsplan teilen',
-          UTI: 'public.html'
+        await Sharing.shareAsync(uri, {
+          mimeType: 'application/pdf',
+          dialogTitle: 'Geburtsplan als PDF speichern',
+          UTI: 'com.adobe.pdf'
         });
       } else {
         Alert.alert('Teilen nicht verfügbar', 'Das Teilen von Dateien wird auf diesem Gerät nicht unterstützt.');
@@ -544,7 +546,7 @@ export default function GeburtsplanScreen() {
                 <View style={styles.downloadButtonInner}>
                   <IconSymbol name="arrow.down.doc" size={20} color="#FFFFFF" />
                   <ThemedText style={styles.downloadButtonText} lightColor="#FFFFFF" darkColor="#FFFFFF">
-                    Als PDF speichern
+                    Als PDF herunterladen
                   </ThemedText>
                 </View>
               )}
