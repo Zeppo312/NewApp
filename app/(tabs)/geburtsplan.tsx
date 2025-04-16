@@ -205,7 +205,15 @@ export default function GeburtsplanScreen() {
         console.error('Error saving geburtsplan:', error);
         Alert.alert('Fehler', 'Der Geburtsplan konnte nicht gespeichert werden.');
       } else {
-        Alert.alert('Erfolg', 'Dein Geburtsplan wurde gespeichert.');
+        Alert.alert('Erfolg', 'Dein Geburtsplan wurde gespeichert.', [
+          {
+            text: 'OK',
+            onPress: () => {
+              // Nach erfolgreichem Speichern zur Countdown-Seite zurückkehren
+              router.push('/(tabs)/countdown');
+            }
+          }
+        ]);
         // Nach erfolgreichem Speichern den Geburtsplan neu laden
         await loadGeburtsplan();
         console.log('Geburtsplan gespeichert und neu geladen');
@@ -219,13 +227,14 @@ export default function GeburtsplanScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
-      <ImageBackground
+
+    <ImageBackground
         source={require('@/assets/images/Background_Hell.png')}
         style={styles.backgroundImage}
-        resizeMode="cover"
-      >
+        resizeMode="repeat"
+    >
+      <SafeAreaView style={styles.container}>
+      <StatusBar hidden={true} />
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
           {/* Zurück-Button */}
           <TouchableOpacity
@@ -361,8 +370,9 @@ export default function GeburtsplanScreen() {
             <ThemedText style={styles.tipText}>• Nach der Geburt: Wünsche für die ersten Stunden mit deinem Baby</ThemedText>
           </ThemedView>
         </ScrollView>
+        </SafeAreaView>
       </ImageBackground>
-    </SafeAreaView>
+
   );
 }
 

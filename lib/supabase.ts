@@ -340,6 +340,30 @@ export const setBabyBornStatus = async (isBabyBorn: boolean) => {
 };
 
 // Hilfsfunktionen für den Geburtsplan
+
+// Prüfen, ob ein Geburtsplan existiert
+export const hasGeburtsplan = async () => {
+  try {
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) return { exists: false, error: new Error('Nicht angemeldet') };
+
+    // Wir prüfen, ob ein Geburtsplan existiert
+    const { data, error } = await supabase
+      .from('geburtsplan')
+      .select('id')
+      .eq('user_id', userData.user.id)
+      .limit(1)
+      .maybeSingle();
+
+    if (error && error.code !== 'PGRST116') throw error;
+
+    return { exists: !!data, error: null };
+  } catch (error) {
+    console.error('Error checking geburtsplan existence:', error);
+    return { exists: false, error };
+  }
+};
+
 export const getGeburtsplan = async () => {
   try {
     const { data: userData } = await supabase.auth.getUser();

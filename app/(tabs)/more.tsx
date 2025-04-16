@@ -74,13 +74,14 @@ export default function MoreScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
-      <ImageBackground
+    
+    <ImageBackground
         source={require('@/assets/images/Background_Hell.png')}
         style={styles.backgroundImage}
-        resizeMode="cover"
-      >
+        resizeMode="repeat"
+    >
+      <SafeAreaView style={styles.container}>
+       <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
           <ThemedText type="title" style={styles.title}>
             Mehr
@@ -281,8 +282,9 @@ export default function MoreScreen() {
             </TouchableOpacity>
           </View>
         </ScrollView>
-      </ImageBackground>
-    </SafeAreaView>
+      </SafeAreaView>
+    </ImageBackground>
+    
   );
 }
 

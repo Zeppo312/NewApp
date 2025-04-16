@@ -7,7 +7,7 @@ import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import CountdownTimer from '@/components/CountdownTimer';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { supabase } from '@/lib/supabase';
+import { supabase, hasGeburtsplan } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
@@ -22,14 +22,29 @@ export default function CountdownScreen() {
   const [dueDate, setDueDate] = useState<Date | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [geburtsplanExists, setGeburtsplanExists] = useState(false);
 
   useEffect(() => {
     if (user) {
       loadDueDate();
+      checkGeburtsplan();
     } else {
       setIsLoading(false);
     }
   }, [user]);
+
+  const checkGeburtsplan = async () => {
+    try {
+      const { exists, error } = await hasGeburtsplan();
+      if (error) {
+        console.error('Error checking geburtsplan:', error);
+      } else {
+        setGeburtsplanExists(exists);
+      }
+    } catch (err) {
+      console.error('Failed to check geburtsplan:', err);
+    }
+  };
 
   const loadDueDate = async () => {
     try {
@@ -119,7 +134,7 @@ export default function CountdownScreen() {
     }
   };
 
-  const handleDateChange = (event: any, selectedDate?: Date) => {
+  const handleDateChange = (_event: any, selectedDate?: Date) => {
     setShowDatePicker(Platform.OS === 'ios');
     if (selectedDate) {
       saveDueDate(selectedDate);
@@ -170,13 +185,14 @@ export default function CountdownScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
-      <ImageBackground
+
+    <ImageBackground
         source={require('@/assets/images/Background_Hell.png')}
         style={styles.backgroundImage}
-        resizeMode="cover"
+        resizeMode="repeat"
       >
+      <SafeAreaView style={styles.container}>
+        <StatusBar hidden={true} />
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
           <ThemedText type="title" style={styles.title}>
             Countdown zur Geburt
@@ -234,7 +250,7 @@ export default function CountdownScreen() {
             )}
           </ThemedView>
 
-          <ThemedView style={styles.infoCard} lightColor={theme.cardLight} darkColor={theme.cardDark}>
+          <ThemedView style={styles.infoCard} lightColor={theme.card} darkColor={theme.card}>
             <ThemedText style={styles.infoTitle}>
               Geburtsplan
             </ThemedText>
@@ -248,14 +264,15 @@ export default function CountdownScreen() {
             >
               <ThemedView style={styles.geburtsplanButtonInner} lightColor={theme.accent} darkColor={theme.accent}>
                 <ThemedText style={styles.geburtsplanButtonText} lightColor="#FFFFFF" darkColor="#FFFFFF">
-                  Geburtsplan erstellen
+                  {geburtsplanExists ? 'Geburtsplan bearbeiten' : 'Geburtsplan erstellen'}
                 </ThemedText>
               </ThemedView>
             </TouchableOpacity>
           </ThemedView>
         </ScrollView>
+        </SafeAreaView>
       </ImageBackground>
-    </SafeAreaView>
+
   );
 }
 

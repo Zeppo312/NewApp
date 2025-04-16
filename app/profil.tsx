@@ -267,14 +267,15 @@ export default function ProfilScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <Stack.Screen options={{ headerShown: false }} />
-      <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
-      <ImageBackground
+    
+    <ImageBackground
         source={require('@/assets/images/Background_Hell.png')}
         style={styles.backgroundImage}
-        resizeMode="cover"
-      >
+        resizeMode="repeat"
+    >
+      <SafeAreaView style={styles.container}>
+      <Stack.Screen options={{ headerShown: false }} />
+      <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backButton}
@@ -508,8 +509,9 @@ export default function ProfilScreen() {
             </TouchableOpacity>
           </ScrollView>
         )}
+        </SafeAreaView>
       </ImageBackground>
-    </SafeAreaView>
+    
   );
 }
 
