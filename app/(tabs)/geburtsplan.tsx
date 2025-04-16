@@ -24,8 +24,8 @@ import { NachDerGeburtSection } from '@/components/geburtsplan/NachDerGeburtSect
 import { NotfallSection } from '@/components/geburtsplan/NotfallSection';
 import { SonstigeWuenscheSection } from '@/components/geburtsplan/SonstigeWuenscheSection';
 
-// Funktion zum Formatieren des Inhalts für HTML
-const formatContentForHTML = (content: string): string => {
+// Hilfsfunktion zum Formatieren des Inhalts
+const formatContent = (content: string): string => {
   // Ersetze Zeilenumbrüche durch <br>
   let formattedContent = content.replace(/\n/g, '<br>');
 
@@ -38,6 +38,80 @@ const formatContentForHTML = (content: string): string => {
 
   // Formatiere Schlüssel-Wert-Paare (z.B. "Name der Mutter: Anna")
   formattedContent = formattedContent.replace(/(.*?): (.*?)(<br>|$)/g, '<div class="item"><span class="item-label">$1:</span> <span class="item-value">$2</span></div>');
+
+  return formattedContent;
+};
+
+// Funktion zum Formatieren der linken Spalte (Abschnitte 1-3)
+const formatContentForHTMLLeftColumn = (content: string): string => {
+  // Extrahiere die ersten drei Abschnitte (1-3)
+  const sections = content.split(/\n\n/);
+  let leftColumnContent = '';
+
+  // Abschnitt 1: Allgemeine Angaben
+  if (sections.length > 0 && sections[0].includes('GEBURTSPLAN')) {
+    leftColumnContent += sections[0] + '\n\n';
+  }
+
+  // Abschnitt 1: Allgemeine Angaben
+  const section1Index = sections.findIndex(s => s.includes('1. Allgemeine Angaben'));
+  if (section1Index !== -1) {
+    leftColumnContent += sections[section1Index] + '\n\n';
+  }
+
+  // Abschnitt 2: Wünsche zur Geburt
+  const section2Index = sections.findIndex(s => s.includes('2. Wünsche zur Geburt'));
+  if (section2Index !== -1) {
+    leftColumnContent += sections[section2Index] + '\n\n';
+  }
+
+  // Abschnitt 3: Medizinische Eingriffe
+  const section3Index = sections.findIndex(s => s.includes('3. Medizinische Eingriffe'));
+  if (section3Index !== -1) {
+    leftColumnContent += sections[section3Index] + '\n\n';
+  }
+
+  // Formatiere den Inhalt
+  let formattedContent = formatContent(leftColumnContent);
+
+  // Gruppiere Abschnitte
+  formattedContent = formattedContent.replace(/<h2>(.*?)<\/h2>/g, '</div><div class="section"><h2>$1</h2>');
+
+  // Schließe den ersten Abschnitt und füge einen öffnenden div für den ersten Abschnitt hinzu
+  formattedContent = '<div class="section">' + formattedContent + '</div>';
+
+  // Entferne leere Abschnitte
+  formattedContent = formattedContent.replace(/<div class="section"><\/div>/g, '');
+
+  return formattedContent;
+};
+
+// Funktion zum Formatieren der rechten Spalte (Abschnitte 4-5)
+const formatContentForHTMLRightColumn = (content: string): string => {
+  // Extrahiere die letzten zwei Abschnitte (4-5)
+  const sections = content.split(/\n\n/);
+  let rightColumnContent = '';
+
+  // Abschnitt 4: Nach der Geburt
+  const section4Index = sections.findIndex(s => s.includes('4. Nach der Geburt'));
+  if (section4Index !== -1) {
+    rightColumnContent += sections[section4Index] + '\n\n';
+  }
+
+  // Abschnitt 5: Für den Notfall / Kaiserschnitt
+  const section5Index = sections.findIndex(s => s.includes('5. Für den Notfall'));
+  if (section5Index !== -1) {
+    rightColumnContent += sections[section5Index] + '\n\n';
+  }
+
+  // Abschnitt 6: Sonstige Wünsche / Hinweise
+  const section6Index = sections.findIndex(s => s.includes('6. Sonstige Wünsche'));
+  if (section6Index !== -1) {
+    rightColumnContent += sections[section6Index] + '\n\n';
+  }
+
+  // Formatiere den Inhalt
+  let formattedContent = formatContent(rightColumnContent);
 
   // Gruppiere Abschnitte
   formattedContent = formattedContent.replace(/<h2>(.*?)<\/h2>/g, '</div><div class="section"><h2>$1</h2>');
@@ -236,73 +310,80 @@ export default function GeburtsplanScreen() {
           <title>Mein Geburtsplan</title>
           <style>
             @page {
-              margin: 2cm;
+              margin: 1.5cm;
               size: A4;
             }
             body {
               font-family: Arial, sans-serif;
-              line-height: 1.6;
+              line-height: 1.4;
               margin: 0;
-              padding: 20px;
+              padding: 0;
               color: #333;
               background-color: #FFF8F0;
+              font-size: 10pt;
             }
             .container {
-              max-width: 800px;
+              max-width: 100%;
               margin: 0 auto;
               background-color: white;
-              padding: 30px;
-              border-radius: 10px;
-              box-shadow: 0 0 10px rgba(0,0,0,0.1);
+              padding: 20px;
             }
             .header {
               text-align: center;
-              margin-bottom: 30px;
-              padding-bottom: 20px;
-              border-bottom: 2px solid #E8D5C4;
+              margin-bottom: 15px;
+              padding-bottom: 10px;
+              border-bottom: 1px solid #E8D5C4;
             }
             h1 {
               color: #7D5A50;
-              font-size: 28px;
-              margin-bottom: 10px;
+              font-size: 18pt;
+              margin: 0 0 5px 0;
             }
             h2 {
               color: #7D5A50;
-              font-size: 22px;
-              margin-top: 25px;
-              margin-bottom: 15px;
+              font-size: 12pt;
+              margin: 10px 0 5px 0;
               border-bottom: 1px solid #E8D5C4;
-              padding-bottom: 8px;
+              padding-bottom: 3px;
             }
             h3 {
               color: #7D5A50;
-              font-size: 18px;
-              margin-top: 20px;
-              margin-bottom: 10px;
+              font-size: 11pt;
+              margin: 8px 0 4px 0;
             }
             p {
-              margin: 12px 0;
-              font-size: 16px;
+              margin: 4px 0;
+            }
+            .columns {
+              display: flex;
+              flex-direction: row;
+              justify-content: space-between;
+              gap: 20px;
+            }
+            .column {
+              width: 48%;
             }
             .section {
-              margin-bottom: 25px;
+              margin-bottom: 10px;
             }
             .item {
-              margin-bottom: 8px;
+              margin-bottom: 4px;
             }
             .item-label {
               font-weight: bold;
               color: #5D4037;
             }
             .item-value {
-              margin-left: 5px;
+              margin-left: 3px;
             }
             .footer {
               text-align: center;
-              margin-top: 30px;
-              font-size: 14px;
+              margin-top: 15px;
+              font-size: 9pt;
               color: #7D5A50;
               font-style: italic;
+              border-top: 1px solid #E8D5C4;
+              padding-top: 10px;
             }
           </style>
         </head>
@@ -313,8 +394,13 @@ export default function GeburtsplanScreen() {
               <p>Erstellt am ${new Date().toLocaleDateString('de-DE', {day: '2-digit', month: '2-digit', year: 'numeric'})}</p>
             </div>
 
-            <div class="content">
-              ${formatContentForHTML(content)}
+            <div class="columns">
+              <div class="column left-column">
+                ${formatContentForHTMLLeftColumn(content)}
+              </div>
+              <div class="column right-column">
+                ${formatContentForHTMLRightColumn(content)}
+              </div>
             </div>
 
             <div class="footer">
