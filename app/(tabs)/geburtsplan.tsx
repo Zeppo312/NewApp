@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, View, TextInput, TouchableOpacity, Alert, ActivityIndicator, Switch } from 'react-native';
+import { StyleSheet, ScrollView, View, TextInput, TouchableOpacity, Alert, ActivityIndicator, Switch, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { ImageBackground } from 'react-native';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { Colors } from '@/constants/Colors';
@@ -102,6 +104,7 @@ export default function GeburtsplanScreen() {
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
   useEffect(() => {
     const checkUser = async () => {
@@ -119,7 +122,7 @@ export default function GeburtsplanScreen() {
 
     // Auth state listener
     const { data: authListener } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      async (_event, session) => {
         const currentUser = session?.user || null;
         setUser(currentUser);
 
@@ -172,6 +175,98 @@ export default function GeburtsplanScreen() {
       // Keine Alert-Meldung mehr, um die Benutzererfahrung nicht zu beeinträchtigen
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Funktion zum Erstellen und Teilen des PDFs
+  const handleCreateAndSharePdf = async () => {
+    try {
+      setIsGeneratingPdf(true);
+
+      // Wir verwenden den aktuellen Inhalt des Geburtsplans
+      let content = '';
+
+      if (useStructuredEditor) {
+        // Wenn der strukturierte Editor verwendet wird, generieren wir den Text aus den strukturierten Daten
+        content = generateTextFromStructuredData(structuredData);
+      } else {
+        // Sonst verwenden wir den Text aus dem Texteditor
+        content = geburtsplan;
+      }
+
+      // HTML für das PDF erstellen
+      const htmlContent = `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="utf-8">
+            <title>Mein Geburtsplan</title>
+            <style>
+              body {
+                font-family: Arial, sans-serif;
+                line-height: 1.5;
+                margin: 40px;
+                color: #333;
+              }
+              h1 {
+                color: #7D5A50;
+                text-align: center;
+                margin-bottom: 30px;
+              }
+              h2 {
+                color: #7D5A50;
+                margin-top: 20px;
+                border-bottom: 1px solid #E8D5C4;
+                padding-bottom: 5px;
+              }
+              p {
+                margin: 10px 0;
+              }
+              .footer {
+                margin-top: 50px;
+                text-align: center;
+                font-size: 12px;
+                color: #999;
+              }
+            </style>
+          </head>
+          <body>
+            <h1>Mein Geburtsplan</h1>
+            ${content.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>').replace(/^(.+)$/gm, '<p>$1</p>')}
+            <div class="footer">
+              Erstellt mit der Wehen-Tracker App
+            </div>
+          </body>
+        </html>
+      `;
+
+      // PDF erstellen
+      const { uri } = await Print.printToFileAsync({
+        html: htmlContent,
+        base64: false
+      });
+
+      // Prüfen, ob Sharing verfügbar ist
+      const isSharingAvailable = await Sharing.isAvailableAsync();
+
+      if (isSharingAvailable) {
+        // PDF teilen
+        await Sharing.shareAsync(uri, {
+          mimeType: 'application/pdf',
+          dialogTitle: 'Geburtsplan als PDF teilen',
+          UTI: 'com.adobe.pdf' // Für iOS
+        });
+      } else {
+        Alert.alert(
+          'Teilen nicht verfügbar',
+          'Das Teilen von Dateien wird auf diesem Gerät nicht unterstützt.'
+        );
+      }
+    } catch (error) {
+      console.error('Error creating or sharing PDF:', error);
+      Alert.alert('Fehler', 'Beim Erstellen oder Teilen des PDFs ist ein Fehler aufgetreten.');
+    } finally {
+      setIsGeneratingPdf(false);
     }
   };
 
@@ -345,19 +440,38 @@ export default function GeburtsplanScreen() {
             </ThemedView>
           )}
 
-          <TouchableOpacity
-            style={[styles.saveButton, { backgroundColor: theme.accent }]}
-            onPress={handleSaveGeburtsplan}
-            disabled={isSaving}
-          >
-            {isSaving ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            ) : (
-              <ThemedText style={styles.saveButtonText} lightColor="#FFFFFF" darkColor="#FFFFFF">
-                Geburtsplan speichern
-              </ThemedText>
-            )}
-          </TouchableOpacity>
+          <View style={styles.buttonContainer}>
+            <TouchableOpacity
+              style={[styles.saveButton, { backgroundColor: theme.accent }]}
+              onPress={handleSaveGeburtsplan}
+              disabled={isSaving}
+            >
+              {isSaving ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <ThemedText style={styles.saveButtonText} lightColor="#FFFFFF" darkColor="#FFFFFF">
+                  Geburtsplan speichern
+                </ThemedText>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.downloadButton, { backgroundColor: theme.success }]}
+              onPress={handleCreateAndSharePdf}
+              disabled={isGeneratingPdf}
+            >
+              {isGeneratingPdf ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <View style={styles.downloadButtonContent}>
+                  <IconSymbol name="arrow.down.doc" size={20} color="#FFFFFF" />
+                  <ThemedText style={styles.downloadButtonText} lightColor="#FFFFFF" darkColor="#FFFFFF">
+                    Als PDF speichern
+                  </ThemedText>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
 
           <ThemedView style={styles.tipsCard} lightColor={theme.card} darkColor={theme.card}>
             <ThemedText type="defaultSemiBold" style={styles.tipsTitle}>
@@ -466,12 +580,15 @@ const createStyles = (theme: any) => StyleSheet.create({
     minHeight: 300,
     textAlignVertical: 'top',
   },
+  buttonContainer: {
+    marginBottom: 20,
+    gap: 15,
+  },
   saveButton: {
     padding: 15,
     borderRadius: 30,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
@@ -481,6 +598,27 @@ const createStyles = (theme: any) => StyleSheet.create({
   saveButtonText: {
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  downloadButton: {
+    padding: 15,
+    borderRadius: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  downloadButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  downloadButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginLeft: 8,
   },
   tipsCard: {
     padding: 20,
