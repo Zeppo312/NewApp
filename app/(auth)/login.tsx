@@ -122,10 +122,10 @@ export default function LoginScreen() {
             // Nach erfolgreicher Registrierung zur Profil-Seite leiten, damit der Benutzer sein Profil vervollständigen kann
             console.log('Registration successful, navigating to profile page for completion');
             try {
-              router.replace('../profil');
+              router.replace('../getUserInfo');
             } catch (navError) {
               console.error('Navigation error:', navError);
-              router.navigate('../profil');
+              router.navigate('../getUserInfo');
             }
           }
         }

@@ -2,6 +2,8 @@ import { StyleSheet, TouchableOpacity, Alert, ActivityIndicator, View } from 're
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 
+import { useRouter } from 'expo-router';
+
 import ParallaxScrollView from '@/components/ParallaxScrollView';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
@@ -15,6 +17,7 @@ import { ChecklistItem, getHospitalChecklist, addChecklistItem, toggleChecklistI
 
 export default function TabTwoScreen() {
   const { } = useAuth(); // signOut wurde zur Mehr-Seite verschoben
+  const router = useRouter();
 
   // State für die Checkliste
   const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
@@ -243,6 +246,21 @@ export default function TabTwoScreen() {
 
   // Abmelden-Funktion wurde zur Mehr-Seite verschoben
 
+  // Zurück-Button zur Pregnancy-Home-Seite
+  const backButton = (
+    <TouchableOpacity
+      style={styles.backButton}
+      onPress={() => router.push({ pathname: '/(tabs)/pregnancy-home' })}
+    >
+      <IconSymbol name="chevron.left" size={24} color="#E57373" />
+    </TouchableOpacity>
+  );
+
+  // Funktion für Swipe nach rechts
+  const handleSwipeRight = () => {
+    router.push({ pathname: '/(tabs)/pregnancy-home' });
+  };
+
   return (
     <ParallaxScrollView
       headerBackgroundColor={{ light: '#F9F1EC', dark: '#353636' }}
@@ -253,7 +271,9 @@ export default function TabTwoScreen() {
           name="checklist"
           style={styles.headerImage}
         />
-      }>
+      }
+      backButton={backButton}
+      onSwipeRight={handleSwipeRight}>
       <View style={styles.headerContainer}>
         <View style={styles.progressCircleContainer}>
           <ProgressCircle progress={totalProgress} size={50} />
@@ -317,6 +337,19 @@ const styles = StyleSheet.create({
     bottom: -90,
     left: -35,
     position: 'absolute',
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   headerContainer: {
     flexDirection: 'row',

@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import { ImageBackground } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
+import { BackButton } from '@/components/BackButton';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { supabase } from '@/lib/supabase';
@@ -277,17 +278,7 @@ export default function GeburtsplanScreen() {
       <StatusBar hidden={true} />
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
           {/* Zurück-Button */}
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => router.push('/(tabs)/countdown')}
-          >
-            <View style={styles.backButtonInner}>
-              <IconSymbol name="arrow.left" size={20} color="#FFFFFF" />
-              <ThemedText style={styles.backButtonText} lightColor="#FFFFFF" darkColor="#FFFFFF">
-                Zurück
-              </ThemedText>
-            </View>
-          </TouchableOpacity>
+          <BackButton onPress={() => router.push('/(tabs)/countdown')} />
 
           <ThemedText type="title" style={styles.title}>
             Mein Geburtsplan
@@ -455,28 +446,7 @@ const createStyles = (theme: any) => StyleSheet.create({
     textAlign: 'center',
     marginVertical: 20,
   },
-  backButton: {
-    alignSelf: 'flex-start',
-    marginBottom: 15,
-  },
-  backButtonInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: theme.accent,
-    paddingVertical: 8,
-    paddingHorizontal: 15,
-    borderRadius: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-    elevation: 3,
-  },
-  backButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginLeft: 5,
-  },
+  // Zurück-Button-Styles werden jetzt in der BackButton-Komponente verwaltet
   card: {
     padding: 20,
     borderRadius: 15,

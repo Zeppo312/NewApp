@@ -318,6 +318,8 @@ export const setBabyBornStatus = async (isBabyBorn: boolean) => {
         .from('user_settings')
         .update({
           is_baby_born: isBabyBorn,
+          theme: 'light', // Standard-Theme
+          notifications_enabled: true, // Benachrichtigungen standardmäßig aktiviert
           updated_at: new Date().toISOString()
         })
         .eq('id', existingData.id);
@@ -328,6 +330,9 @@ export const setBabyBornStatus = async (isBabyBorn: boolean) => {
         .insert({
           user_id: userData.user.id,
           is_baby_born: isBabyBorn,
+          theme: 'light', // Standard-Theme
+          notifications_enabled: true, // Benachrichtigungen standardmäßig aktiviert
+          created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         });
     }
@@ -451,6 +456,7 @@ export const saveGeburtsplan = async (content: string) => {
         .insert({
           user_id: userData.user.id,
           content,
+          created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         })
         .select()
@@ -511,6 +517,7 @@ export const saveStructuredGeburtsplan = async (structuredData: any, textContent
         .insert({
           user_id: userData.user.id,
           content: combinedContent,
+          created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         })
         .select()

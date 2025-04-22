@@ -36,7 +36,7 @@ export default function Index() {
     console.log('Baby is born, redirecting to home');
     return <Redirect href="/(tabs)/home" />;
   } else {
-    console.log('Baby is not born yet, redirecting to countdown');
-    return <Redirect href="/(tabs)/countdown" />;
+    console.log('Baby is not born yet, redirecting to pregnancy home');
+    return <Redirect href="/(tabs)/pregnancy-home" />;
   }
 }

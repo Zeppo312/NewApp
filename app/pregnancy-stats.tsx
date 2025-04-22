@@ -90,17 +90,23 @@ export default function PregnancyStatsScreen() {
     const daysPregnant = totalDaysInPregnancy - daysRemaining;
 
     // Berechne SSW und Tag
+    // weeksPregnant ist die Anzahl der vollständig abgeschlossenen Wochen
     const weeksPregnant = Math.floor(daysPregnant / 7);
+    // daysInCurrentWeek ist die Anzahl der Tage in der aktuellen Woche (0-6)
     const daysInCurrentWeek = daysPregnant % 7;
+
+    // currentWeek ist die aktuelle Schwangerschaftswoche (1-basiert)
+    // Wenn du 37+3 bist, bedeutet das, du bist in der 38. SSW
+    const currentWeek = weeksPregnant + 1;
 
     // Berechne den Fortschritt (0-1)
     const progress = Math.min(1, Math.max(0, daysPregnant / totalDaysInPregnancy));
 
-    // Berechne das Trimester
+    // Berechne das Trimester basierend auf der aktuellen SSW (1-basiert)
     let trimester = '';
-    if (weeksPregnant <= 13) {
+    if (currentWeek <= 13) {
       trimester = '1. Trimester';
-    } else if (weeksPregnant <= 27) {
+    } else if (currentWeek <= 27) {
       trimester = '2. Trimester';
     } else {
       trimester = '3. Trimester';
@@ -110,11 +116,12 @@ export default function PregnancyStatsScreen() {
     const calendarMonth = Math.ceil(daysPregnant / 30);
 
     // Berechne den Schwangerschaftsmonat (jeweils 4 Wochen)
-    const pregnancyMonth = Math.ceil(weeksPregnant / 4);
+    // Basierend auf der aktuellen SSW (1-basiert)
+    const pregnancyMonth = Math.ceil(currentWeek / 4);
 
     setStats({
       daysLeft: daysRemaining,
-      currentWeek: weeksPregnant,
+      currentWeek: currentWeek, // Verwende die korrekte SSW (1-basiert)
       currentDay: daysInCurrentWeek,
       progress,
       trimester,
@@ -267,7 +274,7 @@ export default function PregnancyStatsScreen() {
 
             <View style={styles.statsCard}>
               <Text style={styles.statTitle}>ICH BIN SCHWANGER SEIT</Text>
-              <Text style={styles.statValue}>{stats.currentWeek} W + {stats.currentDay} T</Text>
+              <Text style={styles.statValue}>{stats.currentWeek-1} W + {stats.currentDay} T</Text>
             </View>
 
             <View style={styles.statsCard}>

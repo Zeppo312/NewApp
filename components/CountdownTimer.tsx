@@ -150,7 +150,7 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({ dueDate }) => {
     );
   }
 
-  const size = Dimensions.get('window').width * 0.9; // Größerer Kreis
+  const size = Dimensions.get('window').width * 0.7; // Kleinerer Kreis
   const strokeWidth = 15;
   const radius = (size - strokeWidth) / 2;
   const circumference = radius * 2 * Math.PI;
@@ -278,14 +278,23 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({ dueDate }) => {
       {/* Informationstext wird jetzt im Kreis angezeigt */}
 
       {currentWeek && currentWeek >= 4 && currentWeek <= 42 && (
-        <ThemedView style={styles.babySizeContainer} lightColor={theme.cardLight} darkColor={theme.cardDark}>
-          <ThemedText style={styles.babySizeTitle}>
-            Heute ist dein Baby so groß wie ein:
-          </ThemedText>
-          <ThemedText style={styles.babySizeText}>
-            {babySizeComparison[currentWeek] || "Wächst und gedeiht 🌱"}
-          </ThemedText>
-        </ThemedView>
+        <TouchableOpacity
+          style={styles.babySizeButton}
+          onPress={() => router.push(`/baby-size?week=${currentWeek}`)}
+          activeOpacity={0.7}
+        >
+          <ThemedView style={styles.babySizeContainer} lightColor={theme.cardLight} darkColor={theme.cardDark}>
+            <ThemedText style={styles.babySizeTitle}>
+              Heute ist dein Baby so groß wie ein:
+            </ThemedText>
+            <ThemedText style={styles.babySizeText}>
+              {babySizeComparison[currentWeek] || "Wächst und gedeiht 🌱"}
+            </ThemedText>
+            <ThemedText style={styles.tapHint}>
+              Tippen für Details
+            </ThemedText>
+          </ThemedView>
+        </TouchableOpacity>
       )}
 
       <ThemedView style={styles.timelineContainer} lightColor={theme.cardLight} darkColor={theme.cardDark}>
@@ -303,6 +312,10 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({ dueDate }) => {
 };
 
 const styles = StyleSheet.create({
+  babySizeButton: {
+    width: '100%',
+    marginBottom: 16,
+  },
   container: {
     borderRadius: 15,
     padding: 20,

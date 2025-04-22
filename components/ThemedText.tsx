@@ -46,7 +46,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: 'bold',
-    lineHeight: 32,
+    lineHeight: 40, // Erhöhte Zeilenhöhe, um Buchstaben mit Überlängen Platz zu geben
   },
   subtitle: {
     fontSize: 20,

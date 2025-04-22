@@ -8,6 +8,7 @@ export interface BabyInfo {
   weight?: string;
   height?: string;
   photo_url?: string | null;
+  baby_gender?: 'male' | 'female' | 'unknown' | string;
 }
 
 // Typen für die Tagebucheinträge
@@ -467,7 +468,9 @@ export const setCurrentPhase = async (phaseId: string) => {
         .insert({
           user_id: userData.user.id,
           phase_id: phaseId,
-          start_date: new Date().toISOString()
+          start_date: new Date().toISOString(),
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
         });
     }
 
@@ -517,7 +520,9 @@ export const toggleMilestone = async (milestoneId: string, isCompleted: boolean)
           user_id: userData.user.id,
           milestone_id: milestoneId,
           is_completed: isCompleted,
-          completion_date: isCompleted ? new Date().toISOString() : null
+          completion_date: isCompleted ? new Date().toISOString() : null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
         });
     }
 

@@ -32,6 +32,11 @@ export default function DiaryScreen() {
   const theme = Colors[colorScheme];
   const { user } = useAuth();
 
+  // Automatische Weiterleitung zur diary-entries.tsx Seite
+  useEffect(() => {
+    router.push('/diary-entries');
+  }, []);
+
   // Zustand für Tagebucheinträge
   const [entries, setEntries] = useState<DiaryEntry[]>([]);
   const [loading, setLoading] = useState(true);

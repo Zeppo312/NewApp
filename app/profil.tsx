@@ -22,6 +22,7 @@ export default function ProfilScreen() {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
+  const [userRole, setUserRole] = useState<'mama' | 'papa' | ''>('');
 
   // Baby-Informationen
   const [babyName, setBabyName] = useState('');
@@ -56,10 +57,10 @@ export default function ProfilScreen() {
         setEmail(user.email);
       }
 
-      // Laden der Profildaten (Vorname, Nachname)
+      // Laden der Profildaten (Vorname, Nachname, Rolle)
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select('first_name, last_name')
+        .select('first_name, last_name, user_role')
         .eq('id', user?.id)
         .single();
 
@@ -68,6 +69,7 @@ export default function ProfilScreen() {
       } else if (profileData) {
         setFirstName(profileData.first_name || '');
         setLastName(profileData.last_name || '');
+        setUserRole(profileData.user_role || '');
       }
 
       // Laden der Benutzereinstellungen (Geburtstermin, Baby geboren)
@@ -141,6 +143,7 @@ export default function ProfilScreen() {
           .update({
             first_name: firstName,
             last_name: lastName,
+            user_role: userRole,
             updated_at: new Date().toISOString()
           })
           .eq('id', user.id);
@@ -152,6 +155,7 @@ export default function ProfilScreen() {
             id: user.id,
             first_name: firstName,
             last_name: lastName,
+            user_role: userRole,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
           });
@@ -184,6 +188,8 @@ export default function ProfilScreen() {
           .update({
             due_date: dueDate ? dueDate.toISOString() : null,
             is_baby_born: isBabyBorn,
+            theme: 'light', // Standard-Theme
+            notifications_enabled: true, // Benachrichtigungen standardmäßig aktiviert
             updated_at: new Date().toISOString()
           })
           .eq('id', existingSettings.id);
@@ -195,6 +201,8 @@ export default function ProfilScreen() {
             user_id: user.id,
             due_date: dueDate ? dueDate.toISOString() : null,
             is_baby_born: isBabyBorn,
+            theme: 'light', // Standard-Theme
+            notifications_enabled: true, // Benachrichtigungen standardmäßig aktiviert
             updated_at: new Date().toISOString()
           });
       }
@@ -240,7 +248,7 @@ export default function ProfilScreen() {
   };
 
   // Handler für Änderungen am Geburtstermin
-  const handleDueDateChange = (event: any, selectedDate?: Date) => {
+  const handleDueDateChange = (_: any, selectedDate?: Date) => {
     setShowDueDatePicker(Platform.OS === 'ios');
     if (selectedDate) {
       setDueDate(selectedDate);
@@ -248,7 +256,7 @@ export default function ProfilScreen() {
   };
 
   // Handler für Änderungen am Geburtsdatum
-  const handleBirthDateChange = (event: any, selectedDate?: Date) => {
+  const handleBirthDateChange = (_: any, selectedDate?: Date) => {
     setShowBirthDatePicker(Platform.OS === 'ios');
     if (selectedDate) {
       setBirthDate(selectedDate);
@@ -267,7 +275,7 @@ export default function ProfilScreen() {
   };
 
   return (
-    
+
     <ImageBackground
         source={require('@/assets/images/Background_Hell.png')}
         style={styles.backgroundImage}
@@ -300,7 +308,7 @@ export default function ProfilScreen() {
         ) : (
           <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
             {/* Benutzerinformationen */}
-            <ThemedView style={styles.section} lightColor={theme.cardLight} darkColor={theme.cardDark}>
+            <ThemedView style={styles.section} lightColor="#FFFFFF" darkColor="#333333">
               <ThemedText style={styles.sectionTitle}>Persönliche Daten</ThemedText>
 
               <View style={styles.formGroup}>
@@ -335,10 +343,43 @@ export default function ProfilScreen() {
                   placeholderTextColor={theme.tabIconDefault}
                 />
               </View>
+
+              <View style={styles.formGroup}>
+                <ThemedText style={styles.label}>Rolle</ThemedText>
+                <View style={styles.roleButtonsContainer}>
+                  <TouchableOpacity
+                    style={[styles.roleButton, userRole === 'mama' && styles.roleButtonActive]}
+                    onPress={() => setUserRole('mama')}
+                  >
+                    <IconSymbol
+                      name="person.fill"
+                      size={24}
+                      color={userRole === 'mama' ? '#FFFFFF' : theme.tabIconDefault}
+                    />
+                    <ThemedText style={[styles.roleButtonText, userRole === 'mama' && styles.roleButtonTextActive]}>
+                      Mama
+                    </ThemedText>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.roleButton, userRole === 'papa' && styles.roleButtonActive]}
+                    onPress={() => setUserRole('papa')}
+                  >
+                    <IconSymbol
+                      name="person.fill"
+                      size={24}
+                      color={userRole === 'papa' ? '#FFFFFF' : theme.tabIconDefault}
+                    />
+                    <ThemedText style={[styles.roleButtonText, userRole === 'papa' && styles.roleButtonTextActive]}>
+                      Papa
+                    </ThemedText>
+                  </TouchableOpacity>
+                </View>
+              </View>
             </ThemedView>
 
             {/* Schwangerschafts-/Baby-Informationen */}
-            <ThemedView style={styles.section} lightColor={theme.cardLight} darkColor={theme.cardDark}>
+            <ThemedView style={styles.section} lightColor="#FFFFFF" darkColor="#333333">
               <ThemedText style={styles.sectionTitle}>Baby-Informationen</ThemedText>
 
               <View style={styles.formGroup}>
@@ -511,7 +552,7 @@ export default function ProfilScreen() {
         )}
         </SafeAreaView>
       </ImageBackground>
-    
+
   );
 }
 
@@ -656,6 +697,33 @@ const styles = StyleSheet.create({
   saveButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
+    fontWeight: 'bold',
+  },
+  roleButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  roleButton: {
+    flex: 1,
+    height: 80,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E9C9B6',
+    borderRadius: 10,
+    marginHorizontal: 5,
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+  },
+  roleButtonActive: {
+    backgroundColor: '#9DBEBB',
+    borderColor: '#9DBEBB',
+  },
+  roleButtonText: {
+    fontSize: 16,
+    marginTop: 5,
+  },
+  roleButtonTextActive: {
+    color: '#FFFFFF',
     fontWeight: 'bold',
   },
 });

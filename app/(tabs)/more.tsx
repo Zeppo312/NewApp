@@ -74,7 +74,7 @@ export default function MoreScreen() {
   };
 
   return (
-    
+
     <ImageBackground
         source={require('@/assets/images/Background_Hell.png')}
         style={styles.backgroundImage}
@@ -94,17 +94,35 @@ export default function MoreScreen() {
 
             <TouchableOpacity
               style={styles.menuItem}
-              onPress={() => router.push('/termine')}
+              onPress={() => router.push('/community')}
             >
               <View style={styles.menuItemIcon}>
-                <IconSymbol name="calendar.badge.plus" size={24} color={theme.accent} />
+                <IconSymbol name="bubble.left.and.bubble.right" size={24} color={theme.accent} />
               </View>
               <View style={styles.menuItemContent}>
                 <ThemedText style={styles.menuItemTitle}>
-                  Termine
+                  Community
                 </ThemedText>
                 <ThemedText style={styles.menuItemDescription}>
-                  Arzttermine und Vorsorgeuntersuchungen
+                  Fragen stellen und Erfahrungen austauschen
+                </ThemedText>
+              </View>
+              <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => router.push('/(tabs)/weight-tracker')}
+            >
+              <View style={styles.menuItemIcon}>
+                <IconSymbol name="scale" size={24} color={theme.accent} />
+              </View>
+              <View style={styles.menuItemContent}>
+                <ThemedText style={styles.menuItemTitle}>
+                  Gewichtskurve
+                </ThemedText>
+                <ThemedText style={styles.menuItemDescription}>
+                  Verfolge deine Gewichtsentwicklung
                 </ThemedText>
               </View>
               <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
@@ -284,7 +302,7 @@ export default function MoreScreen() {
         </ScrollView>
       </SafeAreaView>
     </ImageBackground>
-    
+
   );
 }
 

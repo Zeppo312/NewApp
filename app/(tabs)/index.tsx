@@ -160,35 +160,51 @@ export default function HomeScreen() {
 
       setCurrentContraction(null);
       setTimerRunning(false);
+      // Timer auf 0 zurücksetzen
+      setElapsedTime(0);
 
       // Zeige den Dialog zur Eingabe der Intensität an
       showIntensityDialog(completedContraction);
     }
   };
 
-  // Check if contractions indicate active labor
+  // Überprüft, ob die Wehen auf einen fortgeschrittenen Geburtsbeginn hindeuten
   const checkContractionWarning = (newContraction: Contraction, existingContractions: Contraction[]) => {
-    if (existingContractions.length >= 2) {
-      const recentContractions = [newContraction, ...existingContractions.slice(0, 2)];
+    // Wir brauchen mindestens 12 Wehen für eine Stunde Beobachtung (ca. alle 5 Minuten)
+    if (existingContractions.length < 11) return; // 11 existierende + 1 neue = 12 Wehen
 
-      // Check if we have 3 contractions that are:
-      // 1. Less than 5 minutes apart (300 seconds)
-      // 2. Each lasting more than 45 seconds
-      const closeIntervals = recentContractions.every(c =>
-        c.interval !== null && c.interval < 300
+    // Alle Wehen der letzten Stunde sammeln (neueste zuerst)
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    const recentContractions = [newContraction, ...existingContractions]
+      .filter(c => c.startTime >= oneHourAgo && c.endTime !== null && c.duration !== null);
+
+    // Wenn wir nicht genug Wehen in der letzten Stunde haben, abbrechen
+    if (recentContractions.length < 12) return;
+
+    // Die letzten 12 Wehen für die Analyse verwenden
+    const lastTwelveContractions = recentContractions.slice(0, 12);
+
+    // 1. Häufigkeit: Wehen etwa alle 5 Minuten (300 Sekunden)
+    // Wir prüfen, ob die Intervalle zwischen 240-360 Sekunden (4-6 Minuten) liegen
+    const correctFrequency = lastTwelveContractions.every(c =>
+      c.interval !== null && c.interval >= 240 && c.interval <= 360
+    );
+
+    // 2. Dauer: Jede Wehe hält etwa 1 Minute an (50-70 Sekunden)
+    const correctDuration = lastTwelveContractions.every(c =>
+      c.duration !== null && c.duration >= 50 && c.duration <= 70
+    );
+
+    // 3. Konstanz: Dieses Muster hält mindestens 1 Stunde an
+    // (Wir haben bereits gefiltert, dass wir 12 Wehen in der letzten Stunde haben)
+
+    // Wenn alle Kriterien erfüllt sind, zeige die Warnung an
+    if (correctFrequency && correctDuration) {
+      Alert.alert(
+        "Geburtsbeginn fortgeschritten",
+        "Deine Wehen zeigen ein konstantes Muster: Sie treten etwa alle 5 Minuten auf und halten jeweils etwa 1 Minute an. Dieses Muster besteht seit mindestens einer Stunde. Der Geburtsbeginn ist wahrscheinlich so weit fortgeschritten, dass du besser jetzt ins Krankenhaus fahren solltest.",
+        [{ text: "Verstanden" }]
       );
-
-      const longDurations = recentContractions.every(c =>
-        c.duration !== null && c.duration > 45
-      );
-
-      if (closeIntervals && longDurations) {
-        Alert.alert(
-          "Aktive Wehen",
-          "Deine Wehen sind weniger als 5 Minuten auseinander und dauern länger als 45 Sekunden. Dies könnte auf aktive Wehen hindeuten.",
-          [{ text: "OK" }]
-        );
-      }
     }
   };
 

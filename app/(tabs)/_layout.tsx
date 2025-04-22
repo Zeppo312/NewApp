@@ -1,4 +1,4 @@
-import { Tabs, router } from 'expo-router';
+import { Tabs } from 'expo-router';
 import React from 'react';
 import { Platform, View, ActivityIndicator } from 'react-native';
 
@@ -46,20 +46,22 @@ export default function TabLayout() {
           href: isBabyBorn ? undefined : null,
         }}
       />
+
+      {/* Schwangerschafts-Home-Tab */}
+      <Tabs.Screen
+        name="pregnancy-home"
+        options={{
+          title: 'Home',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
+          href: isBabyBorn ? null : undefined,
+        }}
+      />
       <Tabs.Screen
         name="diary"
         options={{
           title: 'Tagebuch',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="book.fill" color={color} />,
           href: isBabyBorn ? undefined : null,
-        }}
-        listeners={{
-          tabPress: (e) => {
-            // Verhindern der Standard-Navigation
-            e.preventDefault();
-            // Stattdessen zur diary-entries.tsx navigieren
-            router.push('/diary-entries');
-          },
         }}
       />
       <Tabs.Screen
@@ -93,7 +95,17 @@ export default function TabLayout() {
         options={{
           title: 'Checkliste',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="checklist" color={color} />,
-          href: isBabyBorn ? null : undefined,
+          href: null, // Aus der Navigation ausblenden, aber für die Routing-Funktionalität beibehalten
+        }}
+      />
+
+      {/* Community-Tab */}
+      <Tabs.Screen
+        name="community"
+        options={{
+          title: 'Community',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="bubble.left.and.bubble.right.fill" color={color} />,
+          href: undefined, // Immer anzeigen, unabhängig vom Baby-Status
         }}
       />
 
@@ -135,6 +147,26 @@ export default function TabLayout() {
           title: 'Mama Selfcare',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="heart.fill" color={color} />,
           href: null, // Immer ausblenden
+        }}
+      />
+
+      {/* Gewichtskurven-Tab - nicht in der Navigationsleiste anzeigen */}
+      <Tabs.Screen
+        name="weight-tracker"
+        options={{
+          title: 'Gewicht',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="scale" color={color} />,
+          href: null, // Nicht in der Navigationsleiste anzeigen
+        }}
+      />
+
+      {/* Debug-Tab - nur im Entwicklungsmodus sichtbar */}
+      <Tabs.Screen
+        name="debug"
+        options={{
+          title: 'Debug',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="wrench.fill" color={color} />,
+          href: __DEV__ ? undefined : null, // Nur im Entwicklungsmodus anzeigen
         }}
       />
     </Tabs>
