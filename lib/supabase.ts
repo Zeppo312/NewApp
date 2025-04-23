@@ -218,32 +218,110 @@ export const getCurrentUser = async () => {
 
 // Hilfsfunktionen für Wehen-Daten
 export const saveContraction = async (contraction: Omit<Contraction, 'id' | 'user_id' | 'created_at'>) => {
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user) return { error: new Error('Nicht angemeldet') };
+  try {
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
-  const { data, error } = await supabase
-    .from('contractions')
-    .insert({
-      ...contraction,
-      user_id: userData.user.id,
-    })
-    .select()
-    .single();
+    // Verwenden der neuen RPC-Funktion zum Hinzufügen und Synchronisieren
+    const { data: rpcData, error: rpcError } = await supabase.rpc('add_contraction_and_sync', {
+      p_user_id: userData.user.id,
+      p_start_time: contraction.start_time,
+      p_end_time: contraction.end_time,
+      p_duration: contraction.duration,
+      p_intensity: contraction.intensity,
+      p_notes: contraction.notes || null
+    });
 
-  return { data, error };
+    if (rpcError) {
+      console.error('Error adding contraction with sync:', rpcError);
+
+      // Fallback auf die alte Methode
+      const { data, error } = await supabase
+        .from('contractions')
+        .insert({
+          ...contraction,
+          user_id: userData.user.id,
+        })
+        .select()
+        .single();
+
+      return { data, error, synced: false };
+    }
+
+    console.log('Contraction added with sync:', rpcData);
+
+    // Umwandeln des Formats, um mit der bestehenden Implementierung kompatibel zu sein
+    return {
+      data: { id: rpcData.contractionId, ...contraction, user_id: userData.user.id },
+      error: null,
+      synced: rpcData.synced,
+      syncedTo: rpcData.syncedTo
+    };
+  } catch (err) {
+    console.error('Failed to save contraction:', err);
+    return { data: null, error: err instanceof Error ? err : new Error('Unknown error') };
+  }
 };
 
 export const getContractions = async () => {
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
+  try {
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
-  const { data, error } = await supabase
-    .from('contractions')
-    .select('*')
-    .eq('user_id', userData.user.id)
-    .order('start_time', { ascending: false });
+    // Verwenden der neuen RPC-Funktion
+    const { data: rpcData, error: rpcError } = await supabase.rpc('get_contractions_with_sync_info', {
+      p_user_id: userData.user.id
+    });
 
-  return { data, error };
+    if (rpcError) {
+      console.error('Error fetching contractions with sync info:', rpcError);
+
+      // Fallback auf die alte Methode
+      const { data: fallbackData, error: fallbackError } = await supabase
+        .from('contractions')
+        .select('*')
+        .eq('user_id', userData.user.id)
+        .order('start_time', { ascending: false });
+
+      return { data: fallbackData, error: fallbackError };
+    }
+
+    console.log('Contractions with sync info:', rpcData);
+
+    // Umwandeln des Formats, um mit der bestehenden Implementierung kompatibel zu sein
+    return {
+      data: rpcData.contractions,
+      error: null,
+      syncInfo: rpcData.syncInfo
+    };
+  } catch (err) {
+    console.error('Failed to fetch contractions:', err);
+    return { data: null, error: err instanceof Error ? err : new Error('Unknown error') };
+  }
+};
+
+// Funktion zum Synchronisieren der Wehen vom einladenden Benutzer
+export const syncContractionsFromInviter = async () => {
+  try {
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) return { success: false, error: 'Nicht angemeldet' };
+
+    // Verwenden der neuen RPC-Funktion
+    const { data, error } = await supabase.rpc('sync_contractions_from_inviter_to_invitee', {
+      p_user_id: userData.user.id
+    });
+
+    if (error) {
+      console.error('Error syncing contractions from inviter:', error);
+      return { success: false, error };
+    }
+
+    console.log('Contractions synced from inviter:', data);
+    return data; // Die Funktion gibt { success: true, syncedFrom: {...}, contractionsCount: X, syncedCount: Y } zurück
+  } catch (err) {
+    console.error('Failed to sync contractions from inviter:', err);
+    return { success: false, error: err };
+  }
 };
 
 export const updateContraction = async (id: string, updates: Partial<Contraction>) => {
@@ -261,16 +339,39 @@ export const deleteContraction = async (id: string) => {
   try {
     console.log(`Attempting to delete contraction with ID: ${id}`);
 
-    const { error } = await supabase
-      .from('contractions')
-      .delete()
-      .eq('id', id);
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) return { error: new Error('Nicht angemeldet') };
 
-    if (error) {
-      console.error(`Error deleting contraction with ID ${id}:`, error);
+    // Verwenden der neuen RPC-Funktion zum Löschen und Synchronisieren
+    const { data: rpcData, error: rpcError } = await supabase.rpc('delete_contraction_and_sync', {
+      p_user_id: userData.user.id,
+      p_contraction_id: id
+    });
+
+    if (rpcError) {
+      console.error(`Error deleting contraction with sync for ID ${id}:`, rpcError);
+
+      // Fallback auf die alte Methode
+      const { error } = await supabase
+        .from('contractions')
+        .delete()
+        .eq('id', id);
+
+      if (error) {
+        console.error(`Error deleting contraction with ID ${id}:`, error);
+      }
+
+      return { error, synced: false };
     }
 
-    return { error };
+    console.log('Contraction deleted with sync:', rpcData);
+
+    return {
+      error: null,
+      synced: rpcData.synced,
+      deletedCount: rpcData.deletedCount,
+      syncedCount: rpcData.syncedCount
+    };
   } catch (err) {
     console.error(`Exception when deleting contraction with ID ${id}:`, err);
     return { error: err instanceof Error ? err : new Error('Unknown error during deletion') };

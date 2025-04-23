@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
-import { StyleSheet, TouchableOpacity, ScrollView, Alert, View, StatusBar, SafeAreaView, ActivityIndicator, ImageBackground, Dimensions } from 'react-native';
+import { StyleSheet, TouchableOpacity, ScrollView, Alert, View, StatusBar, SafeAreaView, ActivityIndicator } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
+import { ThemedBackground } from '@/components/ThemedBackground';
 import VerticalContractionTimeline from '@/components/VerticalContractionTimeline';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/contexts/AuthContext';
-import { saveContraction, getContractions, deleteContraction } from '@/lib/supabase';
+import { saveContraction, getContractions, deleteContraction, syncContractionsFromInviter } from '@/lib/supabase';
 
 type Contraction = {
   id: string;
@@ -23,6 +24,8 @@ export default function HomeScreen() {
   const [timerRunning, setTimerRunning] = useState(false);
   const [elapsedTime, setElapsedTime] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncInfo, setSyncInfo] = useState<any>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
@@ -285,7 +288,7 @@ export default function HomeScreen() {
 
     try {
       setIsLoading(true);
-      const { data, error } = await getContractions();
+      const { data, error, syncInfo: newSyncInfo } = await getContractions();
 
       if (error) {
         console.error('Error loading contractions:', error);
@@ -305,6 +308,12 @@ export default function HomeScreen() {
         }));
 
         setContractions(formattedContractions);
+
+        // Speichern der Synchronisierungsinformationen
+        if (newSyncInfo) {
+          setSyncInfo(newSyncInfo);
+          console.log('Sync info loaded:', newSyncInfo);
+        }
       }
     } catch (err) {
       console.error('Failed to load contractions:', err);
@@ -313,42 +322,70 @@ export default function HomeScreen() {
     }
   };
 
-  // Laden der Wehen aus Supabase beim Start
-  useEffect(() => {
-    const loadData = async () => {
-      if (!user) return;
+  // Funktion zum Synchronisieren der Wehen vom einladenden Benutzer
+  const syncContractions = async () => {
+    if (!user) return;
 
-      try {
-        setIsLoading(true);
-        const { data, error } = await getContractions();
+    try {
+      setIsSyncing(true);
 
-        if (error) {
-          console.error('Error loading contractions:', error);
-          Alert.alert('Fehler', 'Wehen konnten nicht geladen werden.');
+      // Prüfen, ob wir Synchronisierungsinformationen haben
+      if (!syncInfo) {
+        console.log('No sync info available, loading contractions first');
+        await loadContractions();
+
+        // Wenn immer noch keine Synchronisierungsinformationen vorhanden sind, abbrechen
+        if (!syncInfo) {
+          console.log('Still no sync info available, cannot sync');
+          Alert.alert('Hinweis', 'Keine Synchronisierungsinformationen verfügbar. Bitte versuchen Sie es später erneut.');
+          setIsSyncing(false);
           return;
         }
-
-        if (data) {
-          // Konvertieren der Supabase-Daten in das lokale Format
-          const formattedContractions: Contraction[] = data.map(c => ({
-            id: c.id,
-            startTime: new Date(c.start_time),
-            endTime: c.end_time ? new Date(c.end_time) : null,
-            duration: c.duration,
-            interval: c.interval,
-            intensity: c.intensity
-          }));
-
-          setContractions(formattedContractions);
-        }
-      } catch (err) {
-        console.error('Failed to load contractions:', err);
-      } finally {
-        setIsLoading(false);
       }
-    };
 
-    loadData();
+      // Wenn wir der Einladende sind, können wir nicht synchronisieren
+      if (syncInfo.isInviter) {
+        console.log('User is the inviter, cannot sync from inviter');
+        Alert.alert('Hinweis', 'Als Einladender können Sie keine Wehen vom Einladenden synchronisieren.');
+        setIsSyncing(false);
+        return;
+      }
+
+      // Synchronisieren der Wehen vom einladenden Benutzer
+      const result = await syncContractionsFromInviter();
+
+      if (!result.success) {
+        console.error('Error syncing contractions:', result.error);
+        Alert.alert('Fehler', 'Wehen konnten nicht synchronisiert werden.');
+        setIsSyncing(false);
+        return;
+      }
+
+      console.log('Contractions synced successfully:', result);
+
+      // Erfolgsmeldung anzeigen
+      if (result.syncedFrom && result.syncedFrom.firstName) {
+        Alert.alert(
+          'Synchronisierung erfolgreich',
+          `${result.syncedCount} Wehen wurden erfolgreich von ${result.syncedFrom.firstName} synchronisiert.`
+        );
+      } else {
+        Alert.alert('Synchronisierung erfolgreich', `${result.syncedCount} Wehen wurden erfolgreich synchronisiert.`);
+      }
+
+      // Wehen neu laden
+      await loadContractions();
+    } catch (err) {
+      console.error('Failed to sync contractions:', err);
+      Alert.alert('Fehler', `Ein unerwarteter Fehler ist aufgetreten: ${err instanceof Error ? err.message : 'Unbekannter Fehler'}`);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  // Laden der Wehen aus Supabase beim Start
+  useEffect(() => {
+    loadContractions();
   }, [user]);
 
   // Timer effect
@@ -376,16 +413,10 @@ export default function HomeScreen() {
 
 
 
-  // Holen der Bildschirmabmessungen für das Hintergrundbild
-  const screenWidth = Dimensions.get('window').width;
-  const screenHeight = Dimensions.get('window').height;
+  // Keine Bildschirmabmessungen mehr nötig, da ThemedBackground diese intern verwaltet
 
   return (
-    <ImageBackground
-      source={require('../../assets/images/Background_Hell.png')}
-      style={[styles.backgroundImage, { width: screenWidth, height: screenHeight }]}
-      resizeMode="repeat"
-    >
+    <ThemedBackground style={styles.backgroundImage}>
       <SafeAreaView style={styles.safeArea}>
         <StatusBar hidden={true} />
         <View style={styles.container}>
@@ -437,14 +468,40 @@ export default function HomeScreen() {
 
           {/* Contractions History */}
           <ThemedView style={styles.historySection} lightColor="transparent" darkColor="transparent">
-            <ThemedText
-              type="subtitle"
-              style={styles.historyTitle}
-              lightColor="#5C4033"
-              darkColor="#F2E6DD"
-            >
-              Wehen Verlauf
-            </ThemedText>
+            <View style={styles.historyHeader}>
+              <ThemedText
+                type="subtitle"
+                style={styles.historyTitle}
+                lightColor="#5C4033"
+                darkColor="#F2E6DD"
+              >
+                Wehen Verlauf
+              </ThemedText>
+
+              {/* Synchronisierungsbutton - nur anzeigen, wenn Synchronisierungsinformationen vorhanden sind */}
+              {syncInfo && !syncInfo.isInviter && (
+                <TouchableOpacity
+                  style={[styles.syncButton, isSyncing && styles.syncButtonDisabled]}
+                  onPress={syncContractions}
+                  disabled={isSyncing}
+                >
+                  <ThemedText style={styles.syncButtonText} lightColor="#FFFFFF" darkColor="#FFFFFF">
+                    {isSyncing ? 'Synchronisiere...' : 'Wehen synchronisieren'}
+                  </ThemedText>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Synchronisierungsinfo anzeigen */}
+            {syncInfo && (
+              <ThemedView style={styles.syncInfoContainer} lightColor="rgba(255, 255, 255, 0.8)" darkColor="rgba(50, 50, 50, 0.8)">
+                <ThemedText style={styles.syncInfoText} lightColor="#5C4033" darkColor="#F2E6DD">
+                  {syncInfo.isInviter
+                    ? `Deine Wehen werden automatisch mit ${syncInfo.partnerName || 'deinem Partner'} synchronisiert.`
+                    : `Du kannst Wehen von ${syncInfo.partnerName || 'deinem Partner'} synchronisieren.`}
+                </ThemedText>
+              </ThemedView>
+            )}
 
             {/* Visualisierung der Wehen */}
             {!isLoading && contractions.length > 0 && (
@@ -456,7 +513,7 @@ export default function HomeScreen() {
               />
             )}
 
-            {isLoading ? (
+            {isLoading || isSyncing ? (
               <ThemedView
                 style={styles.emptyState}
                 lightColor={theme.card}
@@ -464,7 +521,7 @@ export default function HomeScreen() {
               >
                 <ActivityIndicator size="large" color={theme.accent} />
                 <ThemedText style={{marginTop: 10}} lightColor={theme.text} darkColor={theme.text}>
-                  Wehen werden geladen...
+                  {isSyncing ? 'Wehen werden synchronisiert...' : 'Wehen werden geladen...'}
                 </ThemedText>
               </ThemedView>
             ) : contractions.length === 0 ? (
@@ -482,11 +539,49 @@ export default function HomeScreen() {
         </ScrollView>
       </View>
     </SafeAreaView>
-    </ImageBackground>
+    </ThemedBackground>
   );
 }
 
 const styles = StyleSheet.create({
+  historyHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  syncButton: {
+    backgroundColor: '#FF8C94', // Pastel red
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  syncButtonDisabled: {
+    opacity: 0.6,
+  },
+  syncButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  syncInfoContainer: {
+    padding: 10,
+    borderRadius: 10,
+    marginBottom: 15,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  syncInfoText: {
+    fontSize: 14,
+    textAlign: 'center',
+  },
   backgroundImage: {
     flex: 1,
     width: '100%',
