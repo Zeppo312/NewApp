@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, Image, TextInput, Alert, ImageBackground, SafeAreaView, StatusBar, Modal } from 'react-native';
+import { StyleSheet, ScrollView, View, TouchableOpacity, Image, TextInput, Alert, SafeAreaView, StatusBar, Modal } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
+import { ThemedBackground } from '@/components/ThemedBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/contexts/AuthContext';
@@ -744,11 +745,7 @@ export default function DiaryScreen() {
   };
 
   return (
-    <ImageBackground
-      source={require('@/assets/images/Background_Hell.png')}
-      style={styles.backgroundImage}
-      resizeMode="repeat"
-    >
+    <ThemedBackground style={styles.backgroundImage}>
       <SafeAreaView style={styles.container}>
       <StatusBar hidden={true} />
         {loading ? (
@@ -898,7 +895,7 @@ export default function DiaryScreen() {
           </>
         )}
       </SafeAreaView>
-    </ImageBackground>
+    </ThemedBackground>
   );
 }
 

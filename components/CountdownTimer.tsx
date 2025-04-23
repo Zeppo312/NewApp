@@ -173,7 +173,7 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({ dueDate }) => {
             cx={size / 2}
             cy={size / 2}
             r={radius}
-            stroke={colorScheme === 'dark' ? '#333' : '#eee'}
+            stroke={colorScheme === 'dark' ? '#3D3330' : '#eee'}
             strokeWidth={strokeWidth}
             fill="none"
           />
@@ -183,7 +183,7 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({ dueDate }) => {
             cx={size / 2}
             cy={size / 2}
             r={radius}
-            stroke={Colors.light.success}
+            stroke={colorScheme === 'dark' ? '#A5D6D9' : Colors.light.success}
             strokeWidth={strokeWidth}
             strokeDasharray={`${circumference} ${circumference}`}
             strokeDashoffset={strokeDashoffset}
@@ -200,7 +200,7 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({ dueDate }) => {
               textAnchor="middle"
               fontSize="50"
               fontWeight="bold"
-              fill={colorScheme === 'dark' ? '#fff' : '#333'}
+              fill={colorScheme === 'dark' ? '#FFFFFF' : '#333'}
             >
               {currentWeek}
             </SvgText>
@@ -209,7 +209,7 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({ dueDate }) => {
               y={size / 2 - 20}
               textAnchor="middle"
               fontSize="24"
-              fill={colorScheme === 'dark' ? '#fff' : '#333'}
+              fill={colorScheme === 'dark' ? '#FFFFFF' : '#333'}
             >
               SSW
             </SvgText>
@@ -219,7 +219,7 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({ dueDate }) => {
               textAnchor="middle"
               fontSize="20"
               fontWeight="bold"
-              fill={Colors.light.success}
+              fill={colorScheme === 'dark' ? '#A5D6D9' : Colors.light.success}
             >
               {currentWeek && currentWeek <= 13 ? '1. Trimester' :
                currentWeek && currentWeek <= 27 ? '2. Trimester' :
@@ -236,7 +236,7 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({ dueDate }) => {
                     textAnchor="middle"
                     fontSize="14"
                     fontWeight="600"
-                    fill={colorScheme === 'dark' ? '#fff' : '#333'}
+                    fill={colorScheme === 'dark' ? '#F8F0E5' : '#333'}
                   >
                     {line}
                   </SvgText>
@@ -247,29 +247,33 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({ dueDate }) => {
         </Svg>
 
         {/* Hinweis zum Tippen */}
-        <ThemedText style={styles.tapHint}>
+        <ThemedText style={styles.tapHint} lightColor="#7D5A50" darkColor="#E9D8C2">
           Tippen für Details
         </ThemedText>
       </TouchableOpacity>
 
       <View style={styles.infoContainer}>
         <View style={styles.infoRow}>
-          <ThemedText style={styles.infoLabel}>Noch:</ThemedText>
-          <ThemedText style={styles.infoValue}>
+          <ThemedText style={styles.infoLabel} lightColor="#5C4033" darkColor="#FFFFFF">Noch:</ThemedText>
+          <ThemedText style={styles.infoValue} lightColor="#333333" darkColor="#FFFFFF">
             {daysLeft === 1 ? '1 Tag' : `${daysLeft} Tage`}
           </ThemedText>
         </View>
 
         <View style={styles.infoRow}>
-          <ThemedText style={styles.infoLabel}>Genau:</ThemedText>
-          <ThemedText style={styles.infoValue}>
+          <ThemedText style={styles.infoLabel} lightColor="#5C4033" darkColor="#FFFFFF">Genau:</ThemedText>
+          <ThemedText style={styles.infoValue} lightColor="#333333" darkColor="#FFFFFF">
             SSW {currentWeek}+{currentDay}
           </ThemedText>
         </View>
 
         <View style={styles.infoRow}>
-          <ThemedText style={styles.infoLabel}>Geschafft:</ThemedText>
-          <ThemedText style={[styles.infoValue, styles.percentValue]}>
+          <ThemedText style={styles.infoLabel} lightColor="#5C4033" darkColor="#FFFFFF">Geschafft:</ThemedText>
+          <ThemedText
+            style={[styles.infoValue, styles.percentValue]}
+            lightColor={Colors.light.success}
+            darkColor="#A5D6D9"
+          >
             {Math.round(progress * 100)}%
           </ThemedText>
         </View>
@@ -284,13 +288,13 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({ dueDate }) => {
           activeOpacity={0.7}
         >
           <ThemedView style={styles.babySizeContainer} lightColor={theme.cardLight} darkColor={theme.cardDark}>
-            <ThemedText style={styles.babySizeTitle}>
+            <ThemedText style={styles.babySizeTitle} lightColor="#5C4033" darkColor="#FFFFFF">
               Heute ist dein Baby so groß wie ein:
             </ThemedText>
-            <ThemedText style={styles.babySizeText}>
+            <ThemedText style={styles.babySizeText} lightColor="#333333" darkColor="#F8F0E5">
               {babySizeComparison[currentWeek] || "Wächst und gedeiht 🌱"}
             </ThemedText>
-            <ThemedText style={styles.tapHint}>
+            <ThemedText style={styles.tapHint} lightColor="#7D5A50" darkColor="#E9D8C2">
               Tippen für Details
             </ThemedText>
           </ThemedView>
@@ -299,12 +303,12 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({ dueDate }) => {
 
       <ThemedView style={styles.timelineContainer} lightColor={theme.cardLight} darkColor={theme.cardDark}>
         <View style={styles.timeline}>
-          <View style={[styles.timelineProgress, { width: `${progress * 100}%`, backgroundColor: theme.accent }]} />
+          <View style={[styles.timelineProgress, { width: `${progress * 100}%`, backgroundColor: colorScheme === 'dark' ? '#A5D6D9' : theme.accent }]} />
         </View>
         <View style={styles.timelineLabels}>
-          <ThemedText style={styles.timelineLabel}>SSW 0</ThemedText>
-          <ThemedText style={styles.timelineLabel}>SSW 20</ThemedText>
-          <ThemedText style={styles.timelineLabel}>SSW 40</ThemedText>
+          <ThemedText style={styles.timelineLabel} lightColor="#5C4033" darkColor="#FFFFFF">SSW 0</ThemedText>
+          <ThemedText style={styles.timelineLabel} lightColor="#5C4033" darkColor="#FFFFFF">SSW 20</ThemedText>
+          <ThemedText style={styles.timelineLabel} lightColor="#5C4033" darkColor="#FFFFFF">SSW 40</ThemedText>
         </View>
       </ThemedView>
     </ThemedView>

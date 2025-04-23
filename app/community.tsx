@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { StyleSheet, View, TouchableOpacity, TextInput, ImageBackground, SafeAreaView, StatusBar, FlatList, Alert, ActivityIndicator, RefreshControl } from 'react-native';
+import { StyleSheet, View, TouchableOpacity, TextInput, SafeAreaView, StatusBar, FlatList, Alert, ActivityIndicator, RefreshControl } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
+import { ThemedBackground } from '@/components/ThemedBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { IconSymbol } from '@/components/ui/IconSymbol';
@@ -594,11 +595,7 @@ export default function CommunityScreen() {
   };
 
   return (
-    <ImageBackground
-      source={require('@/assets/images/Background_Hell.png')}
-      style={styles.backgroundImage}
-      resizeMode="repeat"
-    >
+    <ThemedBackground style={styles.backgroundImage}>
       <SafeAreaView style={styles.container}>
         <StatusBar hidden={true} />
         <View style={styles.header}>
@@ -764,7 +761,7 @@ export default function CommunityScreen() {
           </>
         )}
       </SafeAreaView>
-    </ImageBackground>
+    </ThemedBackground>
   );
 }
 

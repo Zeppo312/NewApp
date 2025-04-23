@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator, Platform, Modal, ImageBackground, SafeAreaView, StatusBar } from 'react-native';
+import { StyleSheet, View, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator, Platform, Modal, SafeAreaView, StatusBar } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
+import { ThemedBackground } from '@/components/ThemedBackground';
 import { BackButton } from '@/components/BackButton';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
@@ -165,7 +166,7 @@ export default function WeightTrackerScreen() {
       return (
         <ThemedView style={styles.emptyChartContainer} lightColor={theme.card} darkColor={theme.card}>
           <IconSymbol name="chart.line.uptrend.xyaxis" size={40} color={theme.tabIconDefault} />
-          <ThemedText style={styles.emptyChartText}>
+          <ThemedText style={styles.emptyChartText} lightColor="#888" darkColor="#E9D8C2">
             Füge mindestens zwei Gewichtseinträge hinzu, um eine Kurve zu sehen.
           </ThemedText>
         </ThemedView>
@@ -249,10 +250,10 @@ export default function WeightTrackerScreen() {
       return (
         <ThemedView style={styles.emptyState} lightColor={theme.card} darkColor={theme.card}>
           <IconSymbol name="scalemass" size={40} color={theme.tabIconDefault} />
-          <ThemedText style={styles.emptyStateText}>
+          <ThemedText style={styles.emptyStateText} lightColor="#5C4033" darkColor="#FFFFFF">
             Noch keine Gewichtseinträge
           </ThemedText>
-          <ThemedText style={styles.emptyStateSubtext}>
+          <ThemedText style={styles.emptyStateSubtext} lightColor="#888" darkColor="#E9D8C2">
             Füge deinen ersten Gewichtseintrag hinzu, um deine Gewichtskurve zu sehen.
           </ThemedText>
         </ThemedView>
@@ -261,7 +262,7 @@ export default function WeightTrackerScreen() {
 
     return (
       <View style={styles.entriesContainer}>
-        <ThemedText style={styles.sectionTitle}>Gewichtseinträge</ThemedText>
+        <ThemedText style={styles.sectionTitle} lightColor="#5C4033" darkColor="#FFFFFF">Gewichtseinträge</ThemedText>
         {weightEntries.map(entry => (
           <ThemedView
             key={entry.id}
@@ -270,7 +271,7 @@ export default function WeightTrackerScreen() {
             darkColor={theme.card}
           >
             <View style={styles.entryHeader}>
-              <ThemedText style={styles.entryDate}>{formatDate(entry.date)}</ThemedText>
+              <ThemedText style={styles.entryDate} lightColor="#5C4033" darkColor="#FFFFFF">{formatDate(entry.date)}</ThemedText>
               <TouchableOpacity
                 style={styles.deleteButton}
                 onPress={() => handleDeleteWeightEntry(entry.id)}
@@ -278,9 +279,9 @@ export default function WeightTrackerScreen() {
                 <IconSymbol name="trash" size={18} color="#FF6B6B" />
               </TouchableOpacity>
             </View>
-            <ThemedText style={styles.entryWeight}>{entry.weight} kg</ThemedText>
+            <ThemedText style={styles.entryWeight} lightColor="#333333" darkColor="#F8F0E5">{entry.weight} kg</ThemedText>
             {entry.notes && (
-              <ThemedText style={styles.entryNotes}>{entry.notes}</ThemedText>
+              <ThemedText style={styles.entryNotes} lightColor="#888" darkColor="#E9D8C2">{entry.notes}</ThemedText>
             )}
           </ThemedView>
         ))}
@@ -299,7 +300,7 @@ export default function WeightTrackerScreen() {
         <View style={styles.saveViewContainer}>
           <ThemedView style={styles.saveView} lightColor={theme.card} darkColor={theme.card}>
             <ActivityIndicator size="large" color={theme.accent} />
-            <ThemedText style={styles.saveViewText}>
+            <ThemedText style={styles.saveViewText} lightColor="#5C4033" darkColor="#FFFFFF">
               Daten werden gespeichert...
             </ThemedText>
           </ThemedView>
@@ -313,19 +314,19 @@ export default function WeightTrackerScreen() {
     return (
       <ThemedView style={styles.addFormContainer} lightColor={theme.card} darkColor={theme.card}>
         <View style={styles.formHeader}>
-          <ThemedText style={styles.formTitle}>Neuen Gewichtseintrag hinzufügen</ThemedText>
+          <ThemedText style={styles.formTitle} lightColor="#5C4033" darkColor="#FFFFFF">Neuen Gewichtseintrag hinzufügen</ThemedText>
           <TouchableOpacity onPress={() => setShowAddForm(false)}>
             <IconSymbol name="xmark.circle.fill" size={24} color={theme.tabIconDefault} />
           </TouchableOpacity>
         </View>
 
         <View style={styles.formGroup}>
-          <ThemedText style={styles.label}>Datum</ThemedText>
+          <ThemedText style={styles.label} lightColor="#5C4033" darkColor="#FFFFFF">Datum</ThemedText>
           <TouchableOpacity
             style={styles.datePickerButton}
             onPress={() => setShowDatePicker(true)}
           >
-            <ThemedText>{date.toLocaleDateString('de-DE')}</ThemedText>
+            <ThemedText lightColor="#333333" darkColor="#F8F0E5">{date.toLocaleDateString('de-DE')}</ThemedText>
             <IconSymbol name="calendar" size={20} color={theme.tabIconDefault} />
           </TouchableOpacity>
           {showDatePicker && (
@@ -344,7 +345,7 @@ export default function WeightTrackerScreen() {
         </View>
 
         <View style={styles.formGroup}>
-          <ThemedText style={styles.label}>Gewicht (kg)</ThemedText>
+          <ThemedText style={styles.label} lightColor="#5C4033" darkColor="#FFFFFF">Gewicht (kg)</ThemedText>
           <TextInput
             style={[styles.input, { color: theme.text }]}
             placeholder="z.B. 65.5"
@@ -356,7 +357,7 @@ export default function WeightTrackerScreen() {
         </View>
 
         <View style={styles.formGroup}>
-          <ThemedText style={styles.label}>Notizen (optional)</ThemedText>
+          <ThemedText style={styles.label} lightColor="#5C4033" darkColor="#FFFFFF">Notizen (optional)</ThemedText>
           <TextInput
             style={[styles.input, styles.notesInput, { color: theme.text }]}
             placeholder="z.B. Nach dem Sport gemessen"
@@ -380,14 +381,12 @@ export default function WeightTrackerScreen() {
     );
   };
 
-  // Holen der Bildschirmabmessungen für das Hintergrundbild
+  // Holen der Bildschirmabmessungen für das Diagramm
   const screenWidth = Dimensions.get('window').width;
-  const screenHeight = Dimensions.get('window').height;
 
   return (
-    <ImageBackground
-      source={require('@/assets/images/Background_Hell.png')}
-      style={[styles.backgroundImage, { width: screenWidth, height: screenHeight }]}
+    <ThemedBackground
+      style={styles.backgroundImage}
       resizeMode="repeat"
     >
       {/* SaveView Modal */}
@@ -402,7 +401,7 @@ export default function WeightTrackerScreen() {
                 <BackButton />
               </View>
 
-              <ThemedText type="title" style={styles.title}>
+              <ThemedText type="title" style={styles.title} lightColor="#5C4033" darkColor="#FFFFFF">
                 Gewichtskurve
               </ThemedText>
             </View>
@@ -410,7 +409,7 @@ export default function WeightTrackerScreen() {
             {isLoading && !showAddForm ? (
               <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color={theme.accent} />
-                <ThemedText style={styles.loadingText}>Daten werden geladen...</ThemedText>
+                <ThemedText style={styles.loadingText} lightColor="#888" darkColor="#E9D8C2">Daten werden geladen...</ThemedText>
               </View>
             ) : showAddForm ? (
               renderAddForm()
@@ -433,7 +432,7 @@ export default function WeightTrackerScreen() {
           )}
         </View>
       </SafeAreaView>
-    </ImageBackground>
+    </ThemedBackground>
   );
 }
 
@@ -471,7 +470,6 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#7D5A50',
   },
   saveViewContainer: {
     flex: 1,
@@ -532,7 +530,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
     marginTop: 16,
-    color: '#888',
   },
   entriesContainer: {
     marginBottom: 20,
@@ -541,7 +538,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 12,
-    color: '#7D5A50',
   },
   entryItem: {
     borderRadius: 12,
@@ -569,7 +565,6 @@ const styles = StyleSheet.create({
   },
   entryNotes: {
     fontSize: 14,
-    color: '#888',
     fontStyle: 'italic',
   },
   deleteButton: {
@@ -657,7 +652,6 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    color: '#888',
   },
   emptyState: {
     alignItems: 'center',
@@ -674,7 +668,6 @@ const styles = StyleSheet.create({
   },
   emptyStateSubtext: {
     fontSize: 14,
-    color: '#888',
     textAlign: 'center',
   },
 });

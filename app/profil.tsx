@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, TextInput, Alert, ImageBackground, SafeAreaView, StatusBar, Platform, Switch, ActivityIndicator } from 'react-native';
+import { StyleSheet, ScrollView, View, TouchableOpacity, TextInput, Alert, SafeAreaView, StatusBar, Platform, Switch, ActivityIndicator } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
+import { ThemedBackground } from '@/components/ThemedBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/contexts/AuthContext';
@@ -275,12 +276,7 @@ export default function ProfilScreen() {
   };
 
   return (
-
-    <ImageBackground
-        source={require('@/assets/images/Background_Hell.png')}
-        style={styles.backgroundImage}
-        resizeMode="repeat"
-    >
+    <ThemedBackground style={styles.backgroundImage}>
       <SafeAreaView style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
       <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
@@ -551,8 +547,7 @@ export default function ProfilScreen() {
           </ScrollView>
         )}
         </SafeAreaView>
-      </ImageBackground>
-
+      </ThemedBackground>
   );
 }
 

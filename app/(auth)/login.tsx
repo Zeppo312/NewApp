@@ -9,7 +9,7 @@ import { ThemedView } from '@/components/ThemedView';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase, supabaseUrl, supabaseAnonKey } from '@/lib/supabase';
+import { supabase, supabaseUrl, supabaseAnonKey, redeemInvitationCode } from '@/lib/supabase';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -17,6 +17,8 @@ export default function LoginScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [isRegistering, setIsRegistering] = useState(false);
+  const [invitationCode, setInvitationCode] = useState('');
+  const [showInvitationField, setShowInvitationField] = useState(false);
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const { signInWithEmail, signUpWithEmail } = useAuth();
@@ -119,6 +121,30 @@ export default function LoginScreen() {
               [{ text: 'OK' }]
             );
           } else {
+            // Wenn ein Einladungscode eingegeben wurde, diesen einlösen
+            if (invitationCode.trim()) {
+              console.log('Redeeming invitation code:', invitationCode);
+              try {
+                const redeemResult = await redeemInvitationCode(data.user.id, invitationCode.trim());
+
+                if (!redeemResult.success) {
+                  console.error('Error redeeming invitation code:', redeemResult.error);
+                  Alert.alert(
+                    'Einladungscode ungültig',
+                    redeemResult.error?.message || 'Der Einladungscode konnte nicht eingelöst werden.'
+                  );
+                } else {
+                  console.log('Invitation code redeemed successfully:', redeemResult.linkData);
+                  Alert.alert(
+                    'Accounts verknüpft',
+                    'Dein Account wurde erfolgreich mit dem anderen Benutzer verknüpft.'
+                  );
+                }
+              } catch (redeemError) {
+                console.error('Exception redeeming invitation code:', redeemError);
+              }
+            }
+
             // Nach erfolgreicher Registrierung zur Profil-Seite leiten, damit der Benutzer sein Profil vervollständigen kann
             console.log('Registration successful, navigating to profile page for completion');
             try {
@@ -356,9 +382,50 @@ export default function LoginScreen() {
                 </ThemedText>
               </TouchableOpacity>
 
+              {isRegistering && (
+                <View style={styles.inputContainer}>
+                  <TouchableOpacity
+                    style={styles.invitationToggle}
+                    onPress={() => setShowInvitationField(!showInvitationField)}
+                    disabled={isLoading}
+                  >
+                    <ThemedText style={styles.invitationToggleText} lightColor={theme.accent} darkColor={theme.accent}>
+                      {showInvitationField ? 'Ohne Einladungscode fortfahren' : 'Ich habe einen Einladungscode'}
+                    </ThemedText>
+                  </TouchableOpacity>
+
+                  {showInvitationField && (
+                    <>
+                      <ThemedText style={styles.inputLabel} lightColor={theme.text} darkColor={theme.text}>
+                        Einladungscode (optional)
+                      </ThemedText>
+                      <TextInput
+                        style={[
+                          styles.input,
+                          {
+                            backgroundColor: colorScheme === 'dark' ? '#362E28' : '#FFFFFF',
+                            color: colorScheme === 'dark' ? '#FFF8F0' : '#7D5A50',
+                            borderColor: colorScheme === 'dark' ? '#7D6A5A' : '#EFE1CF'
+                          }
+                        ]}
+                        placeholder="Einladungscode eingeben"
+                        placeholderTextColor={colorScheme === 'dark' ? '#A68A7B' : '#C8B6A6'}
+                        value={invitationCode}
+                        onChangeText={setInvitationCode}
+                        autoCapitalize="characters"
+                      />
+                    </>
+                  )}
+                </View>
+              )}
+
               <TouchableOpacity
                 style={styles.switchModeButton}
-                onPress={() => setIsRegistering(!isRegistering)}
+                onPress={() => {
+                  setIsRegistering(!isRegistering);
+                  setShowInvitationField(false);
+                  setInvitationCode('');
+                }}
                 disabled={isLoading}
               >
                 <ThemedText style={styles.switchModeText} lightColor={theme.accent} darkColor={theme.accent}>
@@ -516,6 +583,15 @@ const styles = StyleSheet.create({
   },
   switchModeText: {
     fontSize: 16,
+    textDecorationLine: 'underline',
+  },
+  invitationToggle: {
+    marginTop: 16,
+    marginBottom: 8,
+    alignItems: 'center',
+  },
+  invitationToggleText: {
+    fontSize: 14,
     textDecorationLine: 'underline',
   },
 });

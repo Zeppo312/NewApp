@@ -12,6 +12,8 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { BabyStatusProvider } from '@/contexts/BabyStatusContext';
 import { ThemeProvider as AppThemeProvider } from '@/contexts/ThemeContext';
+import { initializeOfflineSupport } from '@/lib/init-offline-db';
+import { NetworkStatusIndicator } from '@/components/NetworkStatusIndicator';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -45,45 +47,21 @@ function RootLayoutNav() {
   }
 
   // Wenn der Benutzer angemeldet ist, zur Hauptapp navigieren, sonst zum Login-Screen
-  // Anpassen der Themes, um den weißen Banner zu entfernen
-  const customLightTheme = {
-    ...DefaultTheme,
-    colors: {
-      ...DefaultTheme.colors,
-      background: 'transparent',
-    },
-  };
-
-  const customDarkTheme = {
-    ...DarkTheme,
-    colors: {
-      ...DarkTheme.colors,
-      background: 'transparent',
-    },
-  };
-
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <ThemeProvider value={colorScheme === 'dark' ? customDarkTheme : customLightTheme}>
-        <Stack
-          initialRouteName={initialRoute}
-          screenOptions={{
-            headerShown: false,
-            contentStyle: { backgroundColor: 'transparent' },
-            animation: 'slide_from_right'
-          }}
-        >
-        <Stack.Screen name="index" />
-        <Stack.Screen name="(tabs)" />
-        <Stack.Screen name="(auth)" />
-        <Stack.Screen name="diary-entries" />
-        <Stack.Screen name="mini-wiki" />
-        <Stack.Screen name="faq" />
-        <Stack.Screen name="community" />
-        <Stack.Screen name="pregnancy-stats" />
-        <Stack.Screen name="account-linking" />
+      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+        <NetworkStatusIndicator />
+        <Stack initialRouteName={initialRoute}>
+        <Stack.Screen name="index" options={{ headerShown: false }} />
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+        <Stack.Screen name="diary-entries" options={{ headerShown: false }} />
+        <Stack.Screen name="mini-wiki" options={{ headerShown: false }} />
+        <Stack.Screen name="faq" options={{ headerShown: false }} />
+        <Stack.Screen name="community" options={{ headerShown: false }} />
+        <Stack.Screen name="pregnancy-stats" options={{ headerShown: false }} />
         <Stack.Screen name="+not-found" />
-        <Stack.Screen name="auth/callback" />
+        <Stack.Screen name="auth/callback" options={{ headerShown: false }} />
       </Stack>
       <StatusBar hidden={true} />
     </ThemeProvider>
@@ -104,6 +82,9 @@ export default function RootLayout() {
       try {
         // Warten, bis die Schriftarten geladen sind
         if (loaded) {
+          // Initialisiere die Offline-Unterstützung
+          await initializeOfflineSupport();
+
           // Simulierte Verzögerung, um sicherzustellen, dass alles bereit ist
           await new Promise(resolve => setTimeout(resolve, 500));
 

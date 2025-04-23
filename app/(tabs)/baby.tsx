@@ -10,11 +10,13 @@ import { getBabyInfo, saveBabyInfo, BabyInfo } from '@/lib/baby';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '@/lib/supabase';
+import { useRouter } from 'expo-router';
 
 export default function BabyScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const { user } = useAuth();
+  const router = useRouter();
 
   const [babyInfo, setBabyInfo] = useState<BabyInfo>({});
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -166,9 +168,18 @@ export default function BabyScreen() {
       <SafeAreaView style={styles.container}>
       <StatusBar hidden={true} />
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
-          <ThemedText type="title" style={styles.title}>
-            Mein Baby
-          </ThemedText>
+          <View style={styles.header}>
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={() => router.back()}
+            >
+              <IconSymbol name="chevron.left" size={24} color="#E57373" />
+            </TouchableOpacity>
+
+            <ThemedText type="title" style={styles.title}>
+              Mein Baby
+            </ThemedText>
+          </View>
 
           <ThemedView style={styles.card} lightColor={theme.card} darkColor={theme.card}>
             <View style={styles.photoContainer}>
@@ -354,10 +365,30 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 40,
   },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
+  },
   title: {
     fontSize: 28,
+    flex: 1,
     textAlign: 'center',
-    marginVertical: 20,
+    fontWeight: 'bold',
   },
   card: {
     padding: 20,

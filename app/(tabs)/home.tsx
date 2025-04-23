@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, Text, ImageBackground, SafeAreaView, StatusBar, Image, ActivityIndicator } from 'react-native';
+import { StyleSheet, ScrollView, View, TouchableOpacity, Text, SafeAreaView, StatusBar, Image, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
+import { ThemedBackground } from '@/components/ThemedBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { getBabyInfo, getDiaryEntries, getCurrentPhase, getPhaseProgress, getMilestonesByPhase, getDailyEntries } from '@/lib/baby';
+import { supabase } from '@/lib/supabase';
 
 // Tägliche Tipps für Mamas
 const dailyTips = [
@@ -39,6 +41,7 @@ export default function HomeScreen() {
   const [milestones, setMilestones] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [dailyTip, setDailyTip] = useState("");
+  const [userName, setUserName] = useState("");
 
   useEffect(() => {
     if (user) {
@@ -54,6 +57,19 @@ export default function HomeScreen() {
   const loadData = async () => {
     try {
       setIsLoading(true);
+
+      // Benutzernamen laden
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('first_name')
+        .eq('id', user?.id)
+        .single();
+
+      if (profileError) {
+        console.error('Error loading user profile:', profileError);
+      } else if (profileData && profileData.first_name) {
+        setUserName(profileData.first_name);
+      }
 
       // Baby-Informationen laden
       const { data: babyData } = await getBabyInfo();
@@ -142,14 +158,15 @@ export default function HomeScreen() {
 
   // Rendere den Begrüßungsbereich
   const renderGreetingSection = () => {
-    const userName = babyInfo?.name ? babyInfo.name.split(' ')[0] : 'Mama';
+    // Verwende den Benutzernamen aus der profiles-Tabelle
+    const displayName = userName || 'Mama';
 
     return (
       <ThemedView style={styles.greetingContainer} lightColor={theme.cardLight} darkColor={theme.cardDark}>
         <View style={styles.greetingHeader}>
           <View>
             <ThemedText style={styles.greeting}>
-              Hallo, {userName === 'Mama' ? userName : `${userName}s Mama`}!
+              Hallo {displayName}!
             </ThemedText>
             <ThemedText style={styles.dateText}>
               {formatDate()}
@@ -299,12 +316,7 @@ export default function HomeScreen() {
   };
 
   return (
-    
-    <ImageBackground
-        source={require('@/assets/images/Background_Hell.png')}
-        style={styles.backgroundImage}
-        resizeMode="repeat"
-      >
+    <ThemedBackground style={styles.backgroundImage}>
       <SafeAreaView style={styles.container}>
       <StatusBar hidden={true} />
         {isLoading ? (
@@ -320,8 +332,7 @@ export default function HomeScreen() {
           </ScrollView>
         )}
       </SafeAreaView>
-    </ImageBackground>
-    
+    </ThemedBackground>
   );
 }
 

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, Image, TextInput, Alert, ImageBackground, SafeAreaView, StatusBar, FlatList, Modal } from 'react-native';
+import { StyleSheet, ScrollView, View, TouchableOpacity, Image, TextInput, Alert, SafeAreaView, StatusBar, FlatList, Modal } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
+import { ThemedBackground } from '@/components/ThemedBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/contexts/AuthContext';
@@ -274,11 +275,7 @@ export default function DiaryEntriesScreen() {
   };
 
   return (
-    <ImageBackground
-      source={require('@/assets/images/Background_Hell.png')}
-      style={styles.backgroundImage}
-      resizeMode="repeat"
-    >
+    <ThemedBackground style={styles.backgroundImage}>
       <SafeAreaView style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
       <StatusBar hidden={true} />
@@ -479,7 +476,7 @@ export default function DiaryEntriesScreen() {
           </View>
         </Modal>
       </SafeAreaView>
-    </ImageBackground>
+    </ThemedBackground>
   );
 }
 

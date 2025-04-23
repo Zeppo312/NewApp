@@ -1,7 +1,8 @@
 import React from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, Alert, ImageBackground, SafeAreaView, StatusBar } from 'react-native';
+import { StyleSheet, ScrollView, View, TouchableOpacity, Alert, SafeAreaView, StatusBar } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
+import { ThemedBackground } from '@/components/ThemedBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { IconSymbol } from '@/components/ui/IconSymbol';
@@ -74,12 +75,7 @@ export default function MoreScreen() {
   };
 
   return (
-
-    <ImageBackground
-        source={require('@/assets/images/Background_Hell.png')}
-        style={styles.backgroundImage}
-        resizeMode="repeat"
-    >
+    <ThemedBackground style={styles.backgroundImage}>
       <SafeAreaView style={styles.container}>
        <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
@@ -94,28 +90,10 @@ export default function MoreScreen() {
 
             <TouchableOpacity
               style={styles.menuItem}
-              onPress={() => router.push('/community')}
-            >
-              <View style={styles.menuItemIcon}>
-                <IconSymbol name="bubble.left.and.bubble.right" size={24} color={theme.accent} />
-              </View>
-              <View style={styles.menuItemContent}>
-                <ThemedText style={styles.menuItemTitle}>
-                  Community
-                </ThemedText>
-                <ThemedText style={styles.menuItemDescription}>
-                  Fragen stellen und Erfahrungen austauschen
-                </ThemedText>
-              </View>
-              <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.menuItem}
               onPress={() => router.push('/(tabs)/weight-tracker')}
             >
               <View style={styles.menuItemIcon}>
-                <IconSymbol name="scale" size={24} color={theme.accent} />
+                <IconSymbol name="chart.line.uptrend.xyaxis" size={24} color={theme.accent} />
               </View>
               <View style={styles.menuItemContent}>
                 <ThemedText style={styles.menuItemTitle}>
@@ -197,7 +175,10 @@ export default function MoreScreen() {
               Einstellungen
             </ThemedText>
 
-            <TouchableOpacity style={styles.menuItem}>
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => router.push('/app-settings')}
+            >
               <View style={styles.menuItemIcon}>
                 <IconSymbol name="gear" size={24} color={theme.accent} />
               </View>
@@ -225,6 +206,24 @@ export default function MoreScreen() {
                 </ThemedText>
                 <ThemedText style={styles.menuItemDescription}>
                   Deine persönlichen Daten verwalten
+                </ThemedText>
+              </View>
+              <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => router.push('/account-linking')}
+            >
+              <View style={styles.menuItemIcon}>
+                <IconSymbol name="link" size={24} color={theme.accent} />
+              </View>
+              <View style={styles.menuItemContent}>
+                <ThemedText style={styles.menuItemTitle}>
+                  Accounts verknüpfen
+                </ThemedText>
+                <ThemedText style={styles.menuItemDescription}>
+                  Verbinde dich mit deinem Partner oder Familie
                 </ThemedText>
               </View>
               <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
@@ -301,8 +300,7 @@ export default function MoreScreen() {
           </View>
         </ScrollView>
       </SafeAreaView>
-    </ImageBackground>
-
+    </ThemedBackground>
   );
 }
 

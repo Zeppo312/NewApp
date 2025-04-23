@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, SafeAreaView, StatusBar, ImageBackground, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, SafeAreaView, StatusBar, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
+import { ThemedBackground } from '@/components/ThemedBackground';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import CountdownTimer from '@/components/CountdownTimer';
 import { useRouter } from 'expo-router';
@@ -100,11 +101,7 @@ export default function PregnancyHomeScreen() {
   };
 
   return (
-    <ImageBackground
-      source={require('@/assets/images/Background_Hell.png')}
-      style={styles.backgroundImage}
-      resizeMode="repeat"
-    >
+    <ThemedBackground style={styles.backgroundImage}>
       <SafeAreaView style={styles.container}>
         <StatusBar hidden={true} />
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
@@ -225,11 +222,22 @@ export default function PregnancyHomeScreen() {
                 <ThemedText style={styles.cardTitle}>Geburtsplan</ThemedText>
                 <ThemedText style={styles.cardDescription}>Wünsche für die Geburt</ThemedText>
               </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.card, { backgroundColor: 'rgba(157, 190, 187, 0.9)' }]}
+                onPress={() => router.push('/doctor-questions' as any)}
+              >
+                <View style={styles.iconContainer}>
+                  <IconSymbol name="questionmark.circle" size={40} color="#FFFFFF" />
+                </View>
+                <ThemedText style={styles.cardTitle}>Frauenarzt-Fragen</ThemedText>
+                <ThemedText style={styles.cardDescription}>Fragen für den nächsten Termin</ThemedText>
+              </TouchableOpacity>
             </View>
           </View>
         </ScrollView>
       </SafeAreaView>
-    </ImageBackground>
+    </ThemedBackground>
   );
 }
 

@@ -190,36 +190,27 @@ export default function DailyOldScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
-      <ImageBackground
-        source={require('@/assets/images/Background_Hell.png')}
-        style={styles.backgroundImage}
-        resizeMode="cover"
-      >
+    <ImageBackground
+      source={require('@/assets/images/Background_Hell.png')}
+      style={styles.backgroundImage}
+      resizeMode="repeat"
+    >
+      <SafeAreaView style={styles.container}>
+      <StatusBar hidden={true} />
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backButton}
             onPress={() => router.push('/(tabs)/home')}
           >
-            <IconSymbol name="chevron.left" size={24} color={theme.text} />
-            <ThemedText style={styles.backButtonText}>Zurück</ThemedText>
+            <IconSymbol name="chevron.left" size={24} color="#E57373" />
           </TouchableOpacity>
 
           <ThemedText type="title" style={styles.title}>
             Alltag
           </ThemedText>
 
-          <TouchableOpacity
-            style={styles.addButton}
-            onPress={() => setShowNewEntry(!showNewEntry)}
-          >
-            <IconSymbol
-              name={showNewEntry ? "xmark" : "plus"}
-              size={24}
-              color="#FFFFFF"
-            />
-          </TouchableOpacity>
+          {/* Plus-Button wurde nach unten rechts verschoben */}
+          <View style={{width: 40}} />
         </View>
 
         <View style={styles.dateSelector}>
@@ -428,8 +419,20 @@ export default function DailyOldScreen() {
             </ThemedView>
           }
         />
-      </ImageBackground>
-    </SafeAreaView>
+
+        {/* Floating Action Button (FAB) unten rechts */}
+        <TouchableOpacity
+          style={styles.fab}
+          onPress={() => setShowNewEntry(!showNewEntry)}
+        >
+          <IconSymbol
+            name={showNewEntry ? "xmark" : "plus"}
+            size={24}
+            color="#FFFFFF"
+          />
+        </TouchableOpacity>
+      </SafeAreaView>
+    </ImageBackground>
   );
 }
 
@@ -449,31 +452,40 @@ const styles = StyleSheet.create({
     paddingTop: 20,
   },
   backButton: {
-    flexDirection: 'row',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    justifyContent: 'center',
     alignItems: 'center',
-    padding: 5,
-  },
-  backButtonText: {
-    fontSize: 16,
-    marginLeft: 5,
+    marginRight: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
   },
   title: {
     fontSize: 28,
     flex: 1,
     textAlign: 'center',
   },
-  addButton: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+  fab: {
+    position: 'absolute',
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     backgroundColor: '#7D5A50',
     justifyContent: 'center',
     alignItems: 'center',
+    bottom: 30,
+    right: 30,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 3,
     elevation: 5,
+    zIndex: 999,
   },
   dateSelector: {
     flexDirection: 'row',
