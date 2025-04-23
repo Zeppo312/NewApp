@@ -1172,31 +1172,61 @@ export const redeemInvitationCode = async (userId: string, invitationCode: strin
 
     // Aktualisieren des Einladungsstatus
     console.log(`Updating invitation status for ID: ${finalData.id}, setting invited_id to: ${userId}`);
-    const { data: updateData, error: updateError } = await supabase
-      .from('account_links')
-      .update({
-        invited_id: userId,
-        status: 'accepted',
-        accepted_at: new Date().toISOString()
-      })
-      .eq('id', finalData.id)
-      .select();
 
-    if (updateError) {
-      console.error('Error accepting invitation:', updateError);
-      return { success: false, error: { message: 'Fehler beim Aktualisieren des Einladungsstatus.' } };
-    }
+    // Zuerst versuchen wir, die RLS-Richtlinie zu umgehen, indem wir die Anfrage als Service-Rolle ausführen
+    // Dies ist notwendig, wenn die invited_id noch NULL ist und der Benutzer nicht der Ersteller ist
+    try {
+      const { data: updateData, error: updateError } = await supabase
+        .from('account_links')
+        .update({
+          invited_id: userId,
+          status: 'accepted',
+          accepted_at: new Date().toISOString()
+        })
+        .eq('id', finalData.id)
+        .select();
 
-    if (!updateData || updateData.length === 0) {
-      console.error('Update returned no data');
+      if (updateError) {
+        console.error('Error accepting invitation with standard client:', updateError);
+        console.log('Trying to update with RPC function to bypass RLS...');
+
+        // Wenn die normale Aktualisierung fehlschlägt, versuchen wir es mit einer RPC-Funktion
+        // Diese Funktion muss in Supabase erstellt werden und die RLS umgehen
+        const { data: rpcData, error: rpcError } = await supabase.rpc('accept_invitation', {
+          invitation_id: finalData.id,
+          user_id: userId
+        });
+
+        if (rpcError) {
+          console.error('Error accepting invitation with RPC:', rpcError);
+          return {
+            success: false,
+            error: { message: 'Fehler beim Aktualisieren des Einladungsstatus. Bitte kontaktieren Sie den Support.' }
+          };
+        }
+
+        return { success: true, linkData: rpcData };
+      }
+
+      if (!updateData || updateData.length === 0) {
+        console.error('Update returned no data');
+        return {
+          success: false,
+          error: { message: 'Die Einladung konnte nicht aktualisiert werden.' }
+        };
+      }
+
+      console.log('Invitation successfully accepted:', updateData[0]);
+      return { success: true, linkData: updateData[0] };
+    } catch (updateError) {
+      console.error('Exception during invitation update:', updateError);
       return {
         success: false,
-        error: { message: 'Die Einladung konnte nicht aktualisiert werden.' }
+        error: { message: 'Ein unerwarteter Fehler ist beim Aktualisieren der Einladung aufgetreten.' }
       };
     }
 
-    console.log('Invitation successfully accepted:', updateData[0]);
-    return { success: true, linkData: updateData[0] };
+    // Dieser Code wird nicht mehr erreicht, da wir die Funktion bereits in dem try-catch-Block verlassen haben
   } catch (error) {
     console.error('Unexpected error in redeemInvitationCode:', error);
     return {
