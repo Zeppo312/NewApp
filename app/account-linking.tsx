@@ -7,7 +7,8 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/contexts/AuthContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { router } from 'expo-router';
-import { createInvitationLink, getUserInvitations, getLinkedUsers, redeemInvitationCode } from '@/lib/supabase';
+import { createInvitationLink, getUserInvitations, getLinkedUsers } from '@/lib/supabase';
+import { redeemInvitationCodeDirect } from '@/lib/redeemInvitationCodeDirect';
 
 export default function AccountLinkingScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -88,7 +89,8 @@ export default function AccountLinkingScreen() {
         return;
       }
 
-      const result = await redeemInvitationCode(user.id, cleanedCode);
+      // Verwende die direkte RPC-Funktion statt der normalen Funktion
+      const result = await redeemInvitationCodeDirect(user.id, cleanedCode);
 
       if (result.success) {
         Alert.alert(
