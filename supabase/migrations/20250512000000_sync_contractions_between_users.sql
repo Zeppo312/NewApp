@@ -366,6 +366,7 @@ DECLARE
       AND al.status = 'accepted';
   v_deleted_count INTEGER := 0;
   v_synced_count INTEGER := 0;
+  v_temp_count INTEGER;
   v_linked_users jsonb := '[]'::jsonb;
 BEGIN
   -- Abrufen der Startzeit der zu löschenden Wehe
@@ -418,7 +419,8 @@ BEGIN
       AND start_time = v_start_time;
 
     -- Zählen der synchronisierten Löschungen
-    GET DIAGNOSTICS v_synced_count = v_synced_count + ROW_COUNT;
+    GET DIAGNOSTICS v_temp_count = ROW_COUNT;
+    v_synced_count := v_synced_count + v_temp_count;
   END LOOP;
   CLOSE v_linked_users_cursor;
 
