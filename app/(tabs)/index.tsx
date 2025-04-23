@@ -7,7 +7,7 @@ import VerticalContractionTimeline from '@/components/VerticalContractionTimelin
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/contexts/AuthContext';
-import { saveContraction, getContractions, deleteContraction, syncContractionsFromInviter } from '@/lib/supabase';
+import { saveContraction, getContractions, deleteContraction } from '@/lib/supabase';
 
 type Contraction = {
   id: string;
@@ -24,7 +24,7 @@ export default function HomeScreen() {
   const [timerRunning, setTimerRunning] = useState(false);
   const [elapsedTime, setElapsedTime] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
-  const [isSyncing, setIsSyncing] = useState(false);
+
   const [syncInfo, setSyncInfo] = useState<any>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const colorScheme = useColorScheme() ?? 'light';
@@ -322,66 +322,7 @@ export default function HomeScreen() {
     }
   };
 
-  // Funktion zum Synchronisieren der Wehen vom einladenden Benutzer
-  const syncContractions = async () => {
-    if (!user) return;
 
-    try {
-      setIsSyncing(true);
-
-      // Prüfen, ob wir Synchronisierungsinformationen haben
-      if (!syncInfo) {
-        console.log('No sync info available, loading contractions first');
-        await loadContractions();
-
-        // Wenn immer noch keine Synchronisierungsinformationen vorhanden sind, abbrechen
-        if (!syncInfo) {
-          console.log('Still no sync info available, cannot sync');
-          Alert.alert('Hinweis', 'Keine Synchronisierungsinformationen verfügbar. Bitte versuchen Sie es später erneut.');
-          setIsSyncing(false);
-          return;
-        }
-      }
-
-      // Wenn wir der Einladende sind, können wir nicht synchronisieren
-      if (syncInfo.isInviter) {
-        console.log('User is the inviter, cannot sync from inviter');
-        Alert.alert('Hinweis', 'Als Einladender können Sie keine Wehen vom Einladenden synchronisieren.');
-        setIsSyncing(false);
-        return;
-      }
-
-      // Synchronisieren der Wehen vom einladenden Benutzer
-      const result = await syncContractionsFromInviter();
-
-      if (!result.success) {
-        console.error('Error syncing contractions:', result.error);
-        Alert.alert('Fehler', 'Wehen konnten nicht synchronisiert werden.');
-        setIsSyncing(false);
-        return;
-      }
-
-      console.log('Contractions synced successfully:', result);
-
-      // Erfolgsmeldung anzeigen
-      if (result.syncedFrom && result.syncedFrom.firstName) {
-        Alert.alert(
-          'Synchronisierung erfolgreich',
-          `${result.syncedCount} Wehen wurden erfolgreich von ${result.syncedFrom.firstName} synchronisiert.`
-        );
-      } else {
-        Alert.alert('Synchronisierung erfolgreich', `${result.syncedCount} Wehen wurden erfolgreich synchronisiert.`);
-      }
-
-      // Wehen neu laden
-      await loadContractions();
-    } catch (err) {
-      console.error('Failed to sync contractions:', err);
-      Alert.alert('Fehler', `Ein unerwarteter Fehler ist aufgetreten: ${err instanceof Error ? err.message : 'Unbekannter Fehler'}`);
-    } finally {
-      setIsSyncing(false);
-    }
-  };
 
   // Laden der Wehen aus Supabase beim Start
   useEffect(() => {
@@ -477,28 +418,13 @@ export default function HomeScreen() {
               >
                 Wehen Verlauf
               </ThemedText>
-
-              {/* Synchronisierungsbutton - nur anzeigen, wenn Synchronisierungsinformationen vorhanden sind */}
-              {syncInfo && !syncInfo.isInviter && (
-                <TouchableOpacity
-                  style={[styles.syncButton, isSyncing && styles.syncButtonDisabled]}
-                  onPress={syncContractions}
-                  disabled={isSyncing}
-                >
-                  <ThemedText style={styles.syncButtonText} lightColor="#FFFFFF" darkColor="#FFFFFF">
-                    {isSyncing ? 'Synchronisiere...' : 'Wehen synchronisieren'}
-                  </ThemedText>
-                </TouchableOpacity>
-              )}
             </View>
 
             {/* Synchronisierungsinfo anzeigen */}
-            {syncInfo && (
+            {syncInfo && syncInfo.partnerName && (
               <ThemedView style={styles.syncInfoContainer} lightColor="rgba(255, 255, 255, 0.8)" darkColor="rgba(50, 50, 50, 0.8)">
                 <ThemedText style={styles.syncInfoText} lightColor="#5C4033" darkColor="#F2E6DD">
-                  {syncInfo.isInviter
-                    ? `Deine Wehen werden automatisch mit ${syncInfo.partnerName || 'deinem Partner'} synchronisiert.`
-                    : `Du kannst Wehen von ${syncInfo.partnerName || 'deinem Partner'} synchronisieren.`}
+                  Deine Wehen werden automatisch mit {syncInfo.partnerName || 'deinem Partner'} synchronisiert.
                 </ThemedText>
               </ThemedView>
             )}
@@ -513,7 +439,7 @@ export default function HomeScreen() {
               />
             )}
 
-            {isLoading || isSyncing ? (
+            {isLoading ? (
               <ThemedView
                 style={styles.emptyState}
                 lightColor={theme.card}
@@ -521,7 +447,7 @@ export default function HomeScreen() {
               >
                 <ActivityIndicator size="large" color={theme.accent} />
                 <ThemedText style={{marginTop: 10}} lightColor={theme.text} darkColor={theme.text}>
-                  {isSyncing ? 'Wehen werden synchronisiert...' : 'Wehen werden geladen...'}
+                  Wehen werden geladen...
                 </ThemedText>
               </ThemedView>
             ) : contractions.length === 0 ? (

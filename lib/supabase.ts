@@ -300,29 +300,7 @@ export const getContractions = async () => {
   }
 };
 
-// Funktion zum Synchronisieren der Wehen vom einladenden Benutzer
-export const syncContractionsFromInviter = async () => {
-  try {
-    const { data: userData } = await supabase.auth.getUser();
-    if (!userData.user) return { success: false, error: 'Nicht angemeldet' };
 
-    // Verwenden der neuen RPC-Funktion
-    const { data, error } = await supabase.rpc('sync_contractions_from_inviter_to_invitee', {
-      p_user_id: userData.user.id
-    });
-
-    if (error) {
-      console.error('Error syncing contractions from inviter:', error);
-      return { success: false, error };
-    }
-
-    console.log('Contractions synced from inviter:', data);
-    return data; // Die Funktion gibt { success: true, syncedFrom: {...}, contractionsCount: X, syncedCount: Y } zurück
-  } catch (err) {
-    console.error('Failed to sync contractions from inviter:', err);
-    return { success: false, error: err };
-  }
-};
 
 export const updateContraction = async (id: string, updates: Partial<Contraction>) => {
   const { data, error } = await supabase
