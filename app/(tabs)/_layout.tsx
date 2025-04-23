@@ -130,13 +130,13 @@ export default function TabLayout() {
         }}
       />
 
-      {/* Daily_old-Tab - immer ausgeblendet, aber für die Navigation verfügbar */}
+      {/* Daily_old-Tab - Nach der Geburt anzeigen */}
       <Tabs.Screen
         name="daily_old"
         options={{
           title: 'Alltag',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="list.bullet" color={color} />,
-          href: null, // Immer ausblenden
+          href: isBabyBorn ? undefined : null, // Nur nach der Geburt anzeigen
         }}
       />
 
