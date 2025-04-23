@@ -997,7 +997,23 @@ export const redeemInvitationCode = async (userId: string, invitationCode: strin
     }
 
     // Bereinigen des Einladungscodes (Leerzeichen entfernen und in Großbuchstaben umwandeln)
-    const cleanedCode = invitationCode.replace(/\s+/g, '').toUpperCase();
+    console.log(`Original invitation code: '${invitationCode}' (length: ${invitationCode.length})`);
+
+    // Entfernen aller Leerzeichen
+    let cleanedCode = invitationCode.replace(/\s+/g, '');
+    console.log(`After removing whitespace: '${cleanedCode}' (length: ${cleanedCode.length})`);
+
+    // Umwandlung in Großbuchstaben
+    cleanedCode = cleanedCode.toUpperCase();
+    console.log(`After converting to uppercase: '${cleanedCode}' (length: ${cleanedCode.length})`);
+
+    // Entfernen aller nicht-alphanumerischen Zeichen
+    const alphanumericOnly = cleanedCode.replace(/[^A-Z0-9]/g, '');
+    console.log(`Alphanumeric only: '${alphanumericOnly}' (length: ${alphanumericOnly.length})`);
+
+    // Prüfen auf unsichtbare Zeichen
+    const hexRepresentation = Array.from(cleanedCode).map(c => c.charCodeAt(0).toString(16).padStart(4, '0')).join(' ');
+    console.log(`Hex representation of cleaned code: ${hexRepresentation}`);
 
     console.log(`Attempting to redeem invitation code: '${cleanedCode}' for user: ${userId}`);
 
@@ -1017,73 +1033,100 @@ export const redeemInvitationCode = async (userId: string, invitationCode: strin
     }
 
     // Prüfen, ob der Einladungscode gültig ist - zuerst nur nach dem Code suchen
+    console.log(`Searching for invitation code in database: '${cleanedCode}'`);
+
+    // Direkte Suche mit exakter Übereinstimmung
+    const { data: exactMatch, error: exactError } = await supabase
+      .from('account_links')
+      .select('*')
+      .eq('invitation_code', cleanedCode)
+      .maybeSingle();
+
+    console.log(`Exact match result:`, exactMatch);
+
+    // Case-insensitive Suche als Fallback
     const { data: invitationData, error: fetchError } = await supabase
       .from('account_links')
       .select('*')
       .ilike('invitation_code', cleanedCode) // Case-insensitive Suche
       .maybeSingle();
 
+    console.log(`Case-insensitive search result:`, invitationData);
+
+    // Wenn die exakte Suche erfolgreich war, verwenden wir dieses Ergebnis
+    const finalData = exactMatch || invitationData;
+
     // Detaillierte Fehlerbehandlung
-    if (fetchError) {
-      console.error('Database error fetching invitation:', fetchError);
+    if (exactError || fetchError) {
+      console.error('Database error fetching invitation:', exactError || fetchError);
       return {
         success: false,
         error: { message: 'Datenbankfehler beim Abrufen des Einladungscodes.' }
       };
     }
 
+    // Alle Einladungscodes abrufen, um zu debuggen
+    const { data: allInvitations, error: listError } = await supabase
+      .from('account_links')
+      .select('invitation_code, status, expires_at, creator_id')
+      .order('created_at', { ascending: false });
+
+    if (listError) {
+      console.error('Error listing all invitations:', listError);
+    } else {
+      console.log(`Found ${allInvitations.length} total invitations in database:`);
+      allInvitations.forEach((inv, index) => {
+        console.log(`${index + 1}. Code: '${inv.invitation_code}', Status: ${inv.status}, Expires: ${inv.expires_at}`);
+      });
+    }
+
     // Wenn ein Code gefunden wurde, aber nicht exakt übereinstimmt
-    if (invitationData && invitationData.invitation_code !== cleanedCode) {
-      console.log(`Found similar code: ${invitationData.invitation_code} instead of ${cleanedCode}`);
+    if (finalData && finalData.invitation_code !== cleanedCode) {
+      console.log(`Found similar code: ${finalData.invitation_code} instead of ${cleanedCode}`);
       return {
         success: false,
-        error: { message: `Ähnlicher Code gefunden: ${invitationData.invitation_code}. Bitte geben Sie den Code exakt ein.` }
+        error: { message: `Ähnlicher Code gefunden: ${finalData.invitation_code}. Bitte geben Sie den Code exakt ein.` }
       };
     }
 
     // Wenn ein Code gefunden wurde, aber nicht mehr gültig ist
-    if (invitationData) {
+    if (finalData) {
+      console.log(`Found valid invitation: ID=${finalData.id}, Code=${finalData.invitation_code}, Status=${finalData.status}`);
+
       // Prüfen, ob der Code abgelaufen ist
-      if (new Date(invitationData.expires_at) <= new Date()) {
+      if (new Date(finalData.expires_at) <= new Date()) {
+        console.log(`Code expired: ${finalData.expires_at}`);
         return {
           success: false,
-          error: { message: `Dieser Einladungscode ist abgelaufen. Ablaufdatum: ${new Date(invitationData.expires_at).toLocaleString()}` }
+          error: { message: `Dieser Einladungscode ist abgelaufen. Ablaufdatum: ${new Date(finalData.expires_at).toLocaleString()}` }
         };
       }
 
       // Prüfen, ob der Code bereits verwendet wurde
-      if (invitationData.status !== 'pending') {
+      if (finalData.status !== 'pending') {
+        console.log(`Code already used: status=${finalData.status}`);
         return {
           success: false,
-          error: { message: `Dieser Einladungscode wurde bereits verwendet. Status: ${invitationData.status}` }
+          error: { message: `Dieser Einladungscode wurde bereits verwendet. Status: ${finalData.status}` }
         };
       }
 
       // Prüfen, ob der Benutzer versucht, seinen eigenen Code einzulösen
-      if (invitationData.creator_id === userId) {
+      if (finalData.creator_id === userId) {
+        console.log(`User trying to redeem own code: creator_id=${finalData.creator_id}, userId=${userId}`);
         return {
           success: false,
           error: { message: 'Sie können Ihre eigene Einladung nicht einlösen.' }
         };
       }
+    } else {
+      console.log(`No invitation found for code: '${cleanedCode}'`);
     }
 
     // Wenn kein Einladungscode gefunden wurde
-    if (!invitationData) {
-      console.log(`No invitation found for code: '${cleanedCode}'`);
-
-      // Alle Einladungscodes abrufen, um zu debuggen
-      const { data: allInvitations, error: listError } = await supabase
-        .from('account_links')
-        .select('invitation_code, status, expires_at, creator_id')
-        .order('created_at', { ascending: false });
-
-      if (listError) {
-        console.error('Error listing invitations:', listError);
-      } else {
-        console.log('All invitations in database:', allInvitations);
-
-        // Suche nach ähnlichen Codes (Groß-/Kleinschreibung ignorieren)
+    if (!finalData) {
+      // Suche nach ähnlichen Codes (Groß-/Kleinschreibung ignorieren)
+      if (allInvitations) {
         const similarCodes = allInvitations.filter(inv =>
           inv.invitation_code.toLowerCase() === cleanedCode.toLowerCase());
 
@@ -1092,6 +1135,27 @@ export const redeemInvitationCode = async (userId: string, invitationCode: strin
           return {
             success: false,
             error: { message: `Ähnlicher Code gefunden: ${similarCodes[0].invitation_code}. Bitte geben Sie den Code exakt ein.` }
+          };
+        }
+
+        // Suche nach ähnlichen Codes (Levenshtein-Distanz)
+        const possibleMatches = allInvitations
+          .filter(inv => inv.status === 'pending')
+          .map(inv => ({
+            code: inv.invitation_code,
+            // Einfache Ähnlichkeitsberechnung: Anzahl der übereinstimmenden Zeichen
+            similarity: Array.from(inv.invitation_code).filter((c, i) => i < cleanedCode.length && c === cleanedCode[i]).length
+          }))
+          .filter(match => match.similarity >= Math.min(4, cleanedCode.length - 1)) // Mindestens 4 übereinstimmende Zeichen oder fast alle
+          .sort((a, b) => b.similarity - a.similarity)
+          .slice(0, 3); // Top 3 Ähnlichkeiten
+
+        if (possibleMatches.length > 0) {
+          console.log('Possible similar codes:', possibleMatches);
+          const suggestions = possibleMatches.map(m => m.code).join(', ');
+          return {
+            success: false,
+            error: { message: `Ungültiger Einladungscode. Möglicherweise meinten Sie: ${suggestions}` }
           };
         }
       }
@@ -1103,19 +1167,11 @@ export const redeemInvitationCode = async (userId: string, invitationCode: strin
       };
     }
 
-    // Prüfen, ob der Benutzer nicht versucht, seine eigene Einladung einzulösen
-    if (invitationData.creator_id === userId) {
-      console.log(`User ${userId} attempted to redeem their own invitation code`);
-      return {
-        success: false,
-        error: { message: 'Sie können Ihre eigene Einladung nicht einlösen.' }
-      };
-    }
-
-    console.log(`Valid invitation found:`, invitationData);
+    // Hier sind wir sicher, dass wir einen gültigen Code gefunden haben
+    console.log(`Valid invitation found:`, finalData);
 
     // Aktualisieren des Einladungsstatus
-    console.log(`Updating invitation status for ID: ${invitationData.id}, setting invited_id to: ${userId}`);
+    console.log(`Updating invitation status for ID: ${finalData.id}, setting invited_id to: ${userId}`);
     const { data: updateData, error: updateError } = await supabase
       .from('account_links')
       .update({
@@ -1123,7 +1179,7 @@ export const redeemInvitationCode = async (userId: string, invitationCode: strin
         status: 'accepted',
         accepted_at: new Date().toISOString()
       })
-      .eq('id', invitationData.id)
+      .eq('id', finalData.id)
       .select();
 
     if (updateError) {
