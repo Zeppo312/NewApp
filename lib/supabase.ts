@@ -950,72 +950,53 @@ export const createInvitationLink = async (userId: string, relationshipType: str
   };
 };
 
-// Funktion zum Abrufen aller Einladungen eines Benutzers
+// Funktion zum Abrufen aller Einladungen eines Benutzers mit Profilinformationen
 export const getUserInvitations = async (userId: string) => {
-  const { data, error } = await supabase
-    .from('account_links')
-    .select(`
-      id,
-      creator_id,
-      invited_id,
-      invitation_code,
-      status,
-      created_at,
-      expires_at,
-      accepted_at,
-      relationship_type,
-      profiles!creator_id(first_name, last_name, user_role),
-      profiles!invited_id(first_name, last_name, user_role)
-    `)
-    .or(`creator_id.eq.${userId},invited_id.eq.${userId}`);
+  try {
+    // Verwenden der neuen RPC-Funktion, die Benutzerinformationen zurückgibt
+    const { data, error } = await supabase.rpc('get_user_invitations_with_info', {
+      p_user_id: userId
+    });
 
-  if (error) {
-    console.error('Error fetching user invitations:', error);
-    return { success: false, error };
+    if (error) {
+      console.error('Error fetching user invitations:', error);
+      return { success: false, error };
+    }
+
+    console.log('User invitations with info:', data);
+    return data; // Die Funktion gibt bereits { success: true, invitations: [...] } zurück
+  } catch (error) {
+    console.error('Exception fetching user invitations:', error);
+    return {
+      success: false,
+      error: { message: 'Fehler beim Abrufen der Einladungen.' }
+    };
   }
-
-  return { success: true, invitations: data };
 };
 
 // Funktion zum Einlösen eines Einladungscodes wurde in eine separate Datei ausgelagert
 export { redeemInvitationCode } from './redeemInvitationCode';
 
-// Funktion zum Abrufen verknüpfter Benutzer
+// Funktion zum Abrufen verknüpfter Benutzer mit Profilinformationen
 export const getLinkedUsers = async (userId: string) => {
-  const { data, error } = await supabase
-    .from('account_links')
-    .select(`
-      id,
-      creator_id,
-      invited_id,
-      status,
-      relationship_type,
-      profiles!creator_id(first_name, last_name, user_role),
-      profiles!invited_id(first_name, last_name, user_role)
-    `)
-    .or(`creator_id.eq.${userId},invited_id.eq.${userId}`)
-    .eq('status', 'accepted');
+  try {
+    // Verwenden der neuen RPC-Funktion, die Benutzerinformationen zurückgibt
+    const { data, error } = await supabase.rpc('get_linked_users_with_info', {
+      p_user_id: userId
+    });
 
-  if (error) {
-    console.error('Error fetching linked users:', error);
-    return { success: false, error };
-  }
+    if (error) {
+      console.error('Error fetching linked users:', error);
+      return { success: false, error };
+    }
 
-  // Transformieren der Daten, um eine Liste der verknüpften Benutzer zu erhalten
-  const linkedUsers = data.map(link => {
-    const isCreator = link.creator_id === userId;
-    const linkedUserId = isCreator ? link.invited_id : link.creator_id;
-    const linkedUserProfile = isCreator ? link.profiles.invited_id : link.profiles.creator_id;
-
+    console.log('Linked users with info:', data);
+    return data; // Die Funktion gibt bereits { success: true, linkedUsers: [...] } zurück
+  } catch (error) {
+    console.error('Exception fetching linked users:', error);
     return {
-      linkId: link.id,
-      userId: linkedUserId,
-      firstName: linkedUserProfile?.first_name || 'Unbekannt',
-      lastName: linkedUserProfile?.last_name || '',
-      userRole: linkedUserProfile?.user_role || 'unknown',
-      relationshipType: link.relationship_type
+      success: false,
+      error: { message: 'Fehler beim Abrufen der verknüpften Benutzer.' }
     };
-  });
-
-  return { success: true, linkedUsers };
+  }
 };

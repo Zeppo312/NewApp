@@ -24,11 +24,11 @@ export const redeemInvitationCodeDirect = async (userId: string, invitationCode:
 
     // Bereinigen des Einladungscodes (Leerzeichen entfernen und in Großbuchstaben umwandeln)
     console.log(`Original invitation code: '${invitationCode}' (length: ${invitationCode.length})`);
-    
+
     // Entfernen aller Leerzeichen
     let cleanedCode = invitationCode.replace(/\s+/g, '');
     console.log(`After removing whitespace: '${cleanedCode}' (length: ${cleanedCode.length})`);
-    
+
     // Umwandlung in Großbuchstaben
     cleanedCode = cleanedCode.toUpperCase();
     console.log(`After converting to uppercase: '${cleanedCode}' (length: ${cleanedCode.length})`);
@@ -45,7 +45,7 @@ export const redeemInvitationCodeDirect = async (userId: string, invitationCode:
       console.error('Error debugging invitation code:', debugError);
     } else {
       console.log('Debug results:', debugData);
-      
+
       if (debugData && debugData.length > 0) {
         console.log(`Found ${debugData.length} matching invitation(s):`);
         debugData.forEach((inv, i) => {
@@ -57,18 +57,19 @@ export const redeemInvitationCodeDirect = async (userId: string, invitationCode:
     }
 
     // Direkt die RPC-Funktion aufrufen, um den Einladungscode einzulösen
-    console.log('Calling redeem_invitation_by_code RPC function...');
-    const { data: rpcData, error: rpcError } = await supabase.rpc('redeem_invitation_by_code', {
+    // Verwenden der neuen Funktion, die auch Benutzerinformationen zurückgibt
+    console.log('Calling redeem_invitation_by_code_with_info RPC function...');
+    const { data: rpcData, error: rpcError } = await supabase.rpc('redeem_invitation_by_code_with_info', {
       p_invitation_code: cleanedCode,
       p_user_id: userId
     });
 
     if (rpcError) {
       console.error('Error redeeming invitation code with RPC:', rpcError);
-      
+
       // Versuchen, eine detailliertere Fehlermeldung zu extrahieren
       let errorMessage = 'Fehler beim Einlösen des Einladungscodes.';
-      
+
       if (rpcError.message) {
         if (rpcError.message.includes('not found')) {
           errorMessage = 'Einladungscode nicht gefunden.';
@@ -80,7 +81,7 @@ export const redeemInvitationCodeDirect = async (userId: string, invitationCode:
           errorMessage = 'Diese Einladung wurde bereits verwendet.';
         }
       }
-      
+
       return {
         success: false,
         error: { message: errorMessage, details: rpcError.message }
@@ -88,7 +89,7 @@ export const redeemInvitationCodeDirect = async (userId: string, invitationCode:
     }
 
     console.log('RPC function result:', rpcData);
-    
+
     if (!rpcData || !rpcData.success) {
       const errorMessage = rpcData?.error || 'Unbekannter Fehler beim Einlösen des Einladungscodes.';
       return {

@@ -93,9 +93,11 @@ export default function AccountLinkingScreen() {
       const result = await redeemInvitationCodeDirect(user.id, cleanedCode);
 
       if (result.success) {
+        // Anzeigen des Namens des Erstellers, wenn verfügbar
+        const creatorName = result.creatorInfo?.firstName || 'einem anderen Benutzer';
         Alert.alert(
           'Erfolg',
-          'Der Einladungscode wurde erfolgreich eingelöst. Dein Account ist jetzt verknüpft.',
+          `Der Einladungscode wurde erfolgreich eingelöst. Dein Account ist jetzt mit ${creatorName} verknüpft.`,
           [{ text: 'OK', onPress: () => {
             setInvitationCode('');
             loadData();
@@ -234,7 +236,7 @@ export default function AccountLinkingScreen() {
                 </ThemedView>
               )}
 
-              {invitations.filter(inv => inv.status === 'pending').length > 0 && (
+              {invitations && invitations.filter(inv => inv.status === 'pending').length > 0 && (
                 <ThemedView style={styles.section} lightColor={theme.card} darkColor={theme.card}>
                   <ThemedText style={styles.sectionTitle}>
                     Ausstehende Einladungen
@@ -245,20 +247,20 @@ export default function AccountLinkingScreen() {
                       <ThemedView key={invitation.id} style={styles.invitationCard} lightColor={theme.cardLight} darkColor={theme.cardDark}>
                         <View style={styles.invitationInfo}>
                           <ThemedText style={styles.invitationCode}>
-                            Code: {invitation.invitation_code}
+                            Code: {invitation.invitationCode}
                           </ThemedText>
                           <ThemedText style={styles.invitationDate}>
-                            Erstellt am: {new Date(invitation.created_at).toLocaleDateString()}
+                            Erstellt am: {new Date(invitation.createdAt).toLocaleDateString()}
                           </ThemedText>
                           <ThemedText style={styles.invitationExpiry}>
-                            Gültig bis: {new Date(invitation.expires_at).toLocaleDateString()}
+                            Gültig bis: {new Date(invitation.expiresAt).toLocaleDateString()}
                           </ThemedText>
                         </View>
                         <TouchableOpacity
                           style={styles.shareButton}
                           onPress={() => {
                             Share.share({
-                              message: `Verbinde dich mit mir in der Wehen-Tracker App! Verwende diesen Einladungscode: ${invitation.invitation_code} oder klicke auf diesen Link: wehen-tracker://invite?code=${invitation.invitation_code}`,
+                              message: `Verbinde dich mit mir in der Wehen-Tracker App! Verwende diesen Einladungscode: ${invitation.invitationCode} oder klicke auf diesen Link: wehen-tracker://invite?code=${invitation.invitationCode}`,
                               title: 'Wehen-Tracker App - Einladung'
                             });
                           }}
