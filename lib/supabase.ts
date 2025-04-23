@@ -311,7 +311,7 @@ export const setBabyBornStatus = async (isBabyBorn: boolean) => {
     // Zuerst prüfen, ob bereits ein Eintrag existiert
     const { data: existingData, error: fetchError } = await supabase
       .from('user_settings')
-      .select('id')
+      .select('id, due_date')
       .eq('user_id', userData.user.id)
       .maybeSingle();
 
@@ -328,20 +328,28 @@ export const setBabyBornStatus = async (isBabyBorn: boolean) => {
         .from('user_settings')
         .update({
           is_baby_born: isBabyBorn,
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(),
+          // Wichtig: sync_in_progress auf false setzen, damit der Trigger funktioniert
+          sync_in_progress: false
         })
         .eq('id', existingData.id);
     } else {
       // Wenn kein Eintrag existiert, erstellen wir einen neuen
+      // Wir benötigen ein Standarddatum, wenn keines vorhanden ist
+      const defaultDueDate = new Date();
+      defaultDueDate.setDate(defaultDueDate.getDate() + 280); // Standardmäßig 280 Tage (40 Wochen) in der Zukunft
+
       result = await supabase
         .from('user_settings')
         .insert({
           user_id: userData.user.id,
           is_baby_born: isBabyBorn,
+          due_date: existingData?.due_date || defaultDueDate.toISOString(),
           theme: 'light', // Standard-Theme
           notifications_enabled: true, // Benachrichtigungen standardmäßig aktiviert
           created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(),
+          sync_in_progress: false // Wichtig: sync_in_progress auf false setzen
         });
     }
 

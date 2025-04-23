@@ -80,10 +80,11 @@ export default function CountdownScreen() {
       setIsLoading(true);
 
       // Versuchen, den synchronisierten Entbindungstermin zu laden
+      // Diese Funktion gibt nur den aktuellen Termin zurück, ohne Synchronisierung
       const syncedResult = await getSyncedDueDate(user?.id || '');
 
       if (syncedResult.success) {
-        console.log('Loaded synced due date:', syncedResult);
+        console.log('Loaded due date:', syncedResult);
 
         if (syncedResult.dueDate) {
           setDueDate(new Date(syncedResult.dueDate));
@@ -92,28 +93,17 @@ export default function CountdownScreen() {
           if (syncedResult.syncedFrom) {
             setSyncedFrom(syncedResult.syncedFrom);
             console.log('Due date synced from:', syncedResult.syncedFrom);
+          } else {
+            // Wenn kein syncedFrom vorhanden ist, setzen wir es zurück
+            setSyncedFrom(null);
           }
         } else {
-          // Wenn kein synchronisierter Termin gefunden wurde, versuchen wir es mit dem lokalen Termin
-          const { data, error } = await supabase
-            .from('user_settings')
-            .select('due_date')
-            .eq('user_id', user?.id)
-            .order('updated_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
-
-          if (error && error.code !== 'PGRST116') {
-            console.error('Error loading due date:', error);
-          } else if (data && data.due_date) {
-            console.log('Loaded local due date:', new Date(data.due_date).toLocaleDateString());
-            setDueDate(new Date(data.due_date));
-          } else {
-            console.log('No due date found for user:', user?.id);
-          }
+          console.log('No due date found in result');
+          setDueDate(null);
+          setSyncedFrom(null);
         }
       } else {
-        console.error('Error loading synced due date:', syncedResult.error);
+        console.error('Error loading due date:', syncedResult.error);
 
         // Fallback auf lokalen Termin
         const { data, error } = await supabase
@@ -129,8 +119,11 @@ export default function CountdownScreen() {
         } else if (data && data.due_date) {
           console.log('Loaded local due date:', new Date(data.due_date).toLocaleDateString());
           setDueDate(new Date(data.due_date));
+          setSyncedFrom(null); // Kein synchronisierter Termin
         } else {
           console.log('No due date found for user:', user?.id);
+          setDueDate(null);
+          setSyncedFrom(null);
         }
       }
     } catch (err) {
@@ -150,7 +143,7 @@ export default function CountdownScreen() {
       // Zuerst prüfen, ob bereits ein Eintrag existiert
       const { data: existingData, error: fetchError } = await supabase
         .from('user_settings')
-        .select('id')
+        .select('id, is_baby_born')
         .eq('user_id', user.id)
         .maybeSingle();
 
@@ -169,7 +162,9 @@ export default function CountdownScreen() {
           .from('user_settings')
           .update({
             due_date: date.toISOString(),
-            updated_at: new Date().toISOString()
+            updated_at: new Date().toISOString(),
+            // Wichtig: sync_in_progress auf false setzen, damit der Trigger funktioniert
+            sync_in_progress: false
           })
           .eq('id', existingData.id);
       } else {
@@ -180,7 +175,9 @@ export default function CountdownScreen() {
           .insert({
             user_id: user.id,
             due_date: date.toISOString(),
-            updated_at: new Date().toISOString()
+            is_baby_born: false, // Standardwert
+            updated_at: new Date().toISOString(),
+            sync_in_progress: false // Wichtig: sync_in_progress auf false setzen
           });
       }
 
@@ -193,7 +190,27 @@ export default function CountdownScreen() {
         setDueDate(date);
         // Erfolgreiche Speicherung mit Erfolgsmeldung
         console.log('Geburtstermin erfolgreich gespeichert:', date.toLocaleDateString());
-        Alert.alert('Erfolg', 'Dein Geburtstermin wurde erfolgreich gespeichert.');
+
+        // Wenn der Benutzer mit anderen Benutzern verknüpft ist, zeigen wir eine entsprechende Meldung an
+        const linkedUsersResult = await getLinkedUsers(user.id);
+        if (linkedUsersResult.success && linkedUsersResult.linkedUsers && linkedUsersResult.linkedUsers.length > 0) {
+          const linkedUserNames = linkedUsersResult.linkedUsers
+            .map(user => user.firstName)
+            .join(', ');
+
+          Alert.alert(
+            'Erfolg',
+            `Dein Geburtstermin wurde erfolgreich gespeichert und mit ${linkedUserNames} synchronisiert.`
+          );
+        } else {
+          Alert.alert('Erfolg', 'Dein Geburtstermin wurde erfolgreich gespeichert.');
+        }
+
+        // Setzen wir syncedFrom zurück, da wir jetzt der "Besitzer" des Termins sind
+        setSyncedFrom(null);
+
+        // Aktualisieren der Anzeige
+        loadDueDate();
       }
     } catch (err) {
       console.error('Failed to save due date:', err);
@@ -236,12 +253,25 @@ export default function CountdownScreen() {
           {
             text: "Ja, mein Baby ist da!",
             onPress: async () => {
+              // Setzen des Baby-Status auf 'geboren'
               await setIsBabyBorn(true);
+
+              // Prüfen, ob der Benutzer mit anderen Benutzern verknüpft ist
+              const linkedUsersResult = await getLinkedUsers(user?.id || '');
+              let syncMessage = '';
+
+              if (linkedUsersResult.success && linkedUsersResult.linkedUsers && linkedUsersResult.linkedUsers.length > 0) {
+                const linkedUserNames = linkedUsersResult.linkedUsers
+                  .map(user => user.firstName)
+                  .join(', ');
+
+                syncMessage = `\n\nDiese Information wurde auch mit ${linkedUserNames} geteilt.`;
+              }
 
               // Erfolgsmeldung anzeigen
               Alert.alert(
                 "Herzlichen Glückwunsch!",
-                "Wir freuen uns mit dir über die Geburt deines Babys! 🎉",
+                `Wir freuen uns mit dir über die Geburt deines Babys! 🎉${syncMessage}`,
                 [
                   {
                     text: "OK",
