@@ -478,7 +478,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#7D5A50',
     justifyContent: 'center',
     alignItems: 'center',
-    bottom: 30,
+    bottom: 90, // Weiter nach oben verschoben, um nicht von der Navigationsleiste verdeckt zu werden
     right: 30,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },

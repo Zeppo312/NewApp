@@ -109,6 +109,16 @@ export default function TabLayout() {
         }}
       />
 
+      {/* Daily_old-Tab - Nach der Geburt anzeigen (jetzt an zweiter Position von rechts) */}
+      <Tabs.Screen
+        name="daily_old"
+        options={{
+          title: 'Alltag',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="list.bullet" color={color} />,
+          href: isBabyBorn ? undefined : null, // Nur nach der Geburt anzeigen
+        }}
+      />
+
       {/* Mehr-Tab für beide Ansichten (jetzt ganz rechts) */}
       <Tabs.Screen
         name="more"
@@ -127,16 +137,6 @@ export default function TabLayout() {
           title: 'Geburtsplan',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="doc.text.fill" color={color} />,
           href: null, // Immer ausblenden
-        }}
-      />
-
-      {/* Daily_old-Tab - Nach der Geburt anzeigen */}
-      <Tabs.Screen
-        name="daily_old"
-        options={{
-          title: 'Alltag',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="list.bullet" color={color} />,
-          href: isBabyBorn ? undefined : null, // Nur nach der Geburt anzeigen
         }}
       />
 
