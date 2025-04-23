@@ -306,21 +306,145 @@ export const syncAllExistingContractions = async () => {
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) return { success: false, error: 'Nicht angemeldet' };
 
-    // Verwenden der neuen RPC-Funktion
+    console.log('Attempting to sync all existing contractions for user:', userData.user.id);
+
+    // Prüfen, ob der Benutzer verknüpfte Benutzer hat
+    const linkedUsersResult = await getLinkedUsersWithDetails();
+    if (!linkedUsersResult.success || !linkedUsersResult.linkedUsers || linkedUsersResult.linkedUsers.length === 0) {
+      console.log('No linked users found, skipping sync');
+      return {
+        success: true,
+        message: 'Keine verknüpften Benutzer gefunden',
+        syncedCount: 0,
+        linkedUsers: []
+      };
+    }
+
+    console.log('Found linked users:', linkedUsersResult.linkedUsers);
+
+    // Verwenden der verbesserten RPC-Funktion
     const { data, error } = await supabase.rpc('sync_all_existing_contractions', {
       p_user_id: userData.user.id
     });
 
     if (error) {
       console.error('Error syncing all existing contractions:', error);
-      return { success: false, error };
+
+      // Fallback: Manuelles Synchronisieren der Wehen
+      console.log('Attempting manual sync as fallback...');
+
+      // Abrufen aller Wehen des Benutzers
+      const { data: myContractions, error: myError } = await supabase
+        .from('contractions')
+        .select('*')
+        .eq('user_id', userData.user.id);
+
+      if (myError) {
+        console.error('Error fetching user contractions:', myError);
+        return { success: false, error: myError };
+      }
+
+      console.log(`Found ${myContractions?.length || 0} contractions for current user`);
+
+      let syncedCount = 0;
+
+      // Für jeden verknüpften Benutzer
+      for (const linkedUser of linkedUsersResult.linkedUsers) {
+        console.log(`Syncing with linked user: ${linkedUser.firstName} (${linkedUser.userId})`);
+
+        // Abrufen aller Wehen des verknüpften Benutzers
+        const { data: theirContractions, error: theirError } = await supabase
+          .from('contractions')
+          .select('*')
+          .eq('user_id', linkedUser.userId);
+
+        if (theirError) {
+          console.error(`Error fetching contractions for linked user ${linkedUser.userId}:`, theirError);
+          continue;
+        }
+
+        console.log(`Found ${theirContractions?.length || 0} contractions for linked user ${linkedUser.userId}`);
+
+        // Kopieren aller Wehen vom Benutzer zum verknüpften Benutzer
+        if (myContractions && myContractions.length > 0) {
+          for (const contraction of myContractions) {
+            // Prüfen, ob die Wehe bereits beim verknüpften Benutzer existiert
+            const exists = theirContractions?.some(c =>
+              new Date(c.start_time).getTime() === new Date(contraction.start_time).getTime()
+            );
+
+            if (!exists) {
+              console.log(`Copying contraction from ${userData.user.id} to ${linkedUser.userId}:`, contraction);
+
+              // Hinzufügen der Wehe für den verknüpften Benutzer
+              const { error: insertError } = await supabase
+                .from('contractions')
+                .insert({
+                  user_id: linkedUser.userId,
+                  start_time: contraction.start_time,
+                  end_time: contraction.end_time,
+                  duration: contraction.duration,
+                  intensity: contraction.intensity,
+                  notes: contraction.notes
+                });
+
+              if (insertError) {
+                console.error(`Error copying contraction to linked user ${linkedUser.userId}:`, insertError);
+              } else {
+                syncedCount++;
+              }
+            }
+          }
+        }
+
+        // Kopieren aller Wehen vom verknüpften Benutzer zum Benutzer
+        if (theirContractions && theirContractions.length > 0) {
+          for (const contraction of theirContractions) {
+            // Prüfen, ob die Wehe bereits beim Benutzer existiert
+            const exists = myContractions?.some(c =>
+              new Date(c.start_time).getTime() === new Date(contraction.start_time).getTime()
+            );
+
+            if (!exists) {
+              console.log(`Copying contraction from ${linkedUser.userId} to ${userData.user.id}:`, contraction);
+
+              // Hinzufügen der Wehe für den Benutzer
+              const { error: insertError } = await supabase
+                .from('contractions')
+                .insert({
+                  user_id: userData.user.id,
+                  start_time: contraction.start_time,
+                  end_time: contraction.end_time,
+                  duration: contraction.duration,
+                  intensity: contraction.intensity,
+                  notes: contraction.notes
+                });
+
+              if (insertError) {
+                console.error(`Error copying contraction to current user:`, insertError);
+              } else {
+                syncedCount++;
+              }
+            }
+          }
+        }
+      }
+
+      console.log(`Manual sync completed, synced ${syncedCount} contractions`);
+
+      return {
+        success: true,
+        syncedCount,
+        linkedUsers: linkedUsersResult.linkedUsers,
+        message: 'Manuelle Synchronisierung erfolgreich'
+      };
     }
 
     console.log('All existing contractions synced:', data);
     return data; // Die Funktion gibt { success: true, syncedCount: X, linkedUsers: [...] } zurück
   } catch (err) {
     console.error('Failed to sync all existing contractions:', err);
-    return { success: false, error: err };
+    return { success: false, error: err instanceof Error ? err.message : 'Unbekannter Fehler' };
   }
 };
 

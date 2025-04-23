@@ -330,7 +330,9 @@ export default function HomeScreen() {
     if (!user) return;
 
     try {
+      console.log('Loading linked users...');
       const result = await getLinkedUsersWithDetails();
+      console.log('Linked users result:', result);
 
       if (result.success && result.linkedUsers) {
         setLinkedUsers(result.linkedUsers);
@@ -338,11 +340,21 @@ export default function HomeScreen() {
 
         // Wenn verknüpfte Benutzer vorhanden sind, einmalige Synchronisierung durchführen
         if (result.linkedUsers.length > 0) {
+          console.log(`Found ${result.linkedUsers.length} linked users, starting sync...`);
           await syncContractions();
+        } else {
+          console.log('No linked users found, skipping sync');
         }
+      } else {
+        console.log('No linked users found or error loading linked users');
+        setLinkedUsers([]);
       }
     } catch (err) {
       console.error('Failed to load linked users:', err);
+      setLinkedUsers([]);
+
+      // Trotzdem versuchen, die Wehen zu laden
+      await loadContractions();
     }
   };
 
@@ -353,32 +365,42 @@ export default function HomeScreen() {
     try {
       setIsSyncing(true);
 
+      console.log('Starting contraction synchronization...');
       const result = await syncAllExistingContractions();
+      console.log('Sync result:', result);
 
       if (!result.success) {
         console.error('Error syncing all existing contractions:', result.error);
-        Alert.alert('Fehler', 'Wehen konnten nicht synchronisiert werden.');
+        Alert.alert('Fehler', `Wehen konnten nicht synchronisiert werden: ${result.error || 'Unbekannter Fehler'}`);
         return;
       }
 
-      console.log('All existing contractions synced successfully:', result);
+      // Wenn keine verknüpften Benutzer gefunden wurden
+      if (result.message === 'Keine verknüpften Benutzer gefunden') {
+        console.log('No linked users found, skipping sync notification');
+        // Keine Benachrichtigung anzeigen, da keine Synchronisierung notwendig war
+        return;
+      }
 
       // Erfolgsmeldung anzeigen, wenn Wehen synchronisiert wurden
       if (result.syncedCount > 0) {
-        const linkedUserNames = result.linkedUsers
-          .map((user: any) => user.firstName)
-          .join(', ');
+        const linkedUserNames = result.linkedUsers && result.linkedUsers.length > 0
+          ? result.linkedUsers.map((user: any) => user.firstName).join(', ')
+          : 'deinem Partner';
 
         Alert.alert(
           'Synchronisierung erfolgreich',
           `${result.syncedCount} Wehen wurden erfolgreich mit ${linkedUserNames} synchronisiert.`
         );
+      } else {
+        console.log('No contractions needed to be synced');
       }
 
       // Wehen neu laden
       await loadContractions();
     } catch (err) {
       console.error('Failed to sync contractions:', err);
+      Alert.alert('Fehler', `Ein unerwarteter Fehler ist aufgetreten: ${err instanceof Error ? err.message : 'Unbekannter Fehler'}`);
     } finally {
       setIsSyncing(false);
     }
