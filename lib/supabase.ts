@@ -328,8 +328,6 @@ export const setBabyBornStatus = async (isBabyBorn: boolean) => {
         .from('user_settings')
         .update({
           is_baby_born: isBabyBorn,
-          theme: 'light', // Standard-Theme
-          notifications_enabled: true, // Benachrichtigungen standardmäßig aktiviert
           updated_at: new Date().toISOString()
         })
         .eq('id', existingData.id);
@@ -345,6 +343,21 @@ export const setBabyBornStatus = async (isBabyBorn: boolean) => {
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         });
+    }
+
+    // Prüfen, ob der Benutzer mit anderen Benutzern verknüpft ist
+    const linkedUsersResult = await getLinkedUsers(userData.user.id);
+
+    if (linkedUsersResult.success && linkedUsersResult.linkedUsers && linkedUsersResult.linkedUsers.length > 0) {
+      console.log(`User has ${linkedUsersResult.linkedUsers.length} linked users. Syncing baby born status...`);
+
+      // Der Trigger in der Datenbank sollte die Änderung automatisch mit allen verknüpften Benutzern synchronisieren
+      // Wir geben hier die verknüpften Benutzer zurück, damit die UI sie anzeigen kann
+      return {
+        data: result.data,
+        error: result.error,
+        linkedUsers: linkedUsersResult.linkedUsers
+      };
     }
 
     return { data: result.data, error: result.error };
