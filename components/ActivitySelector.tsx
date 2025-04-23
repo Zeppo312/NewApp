@@ -57,12 +57,12 @@ const ActivitySelector: React.FC<ActivitySelectorProps> = ({ visible, onSelect }
 
   if (!visible) return null;
 
-  // Calculate transforms for each button - vertical arrangement
+  // Calculate transforms for each button - vertical arrangement directly above the plus button
   const getAnimatedStyle = (animation: Animated.Value, index: number) => {
-    // Calculate position in vertical line
+    // Calculate position in vertical line - starting from the bottom (plus button position)
     const translateY = animation.interpolate({
       inputRange: [0, 1],
-      outputRange: [0, -70 - index * 60], // Vertical offset increases with index
+      outputRange: [0, -60 - index * 60], // Vertical offset increases with index, starting right above the plus button
     });
 
     const scale = animation.interpolate({
@@ -128,9 +128,9 @@ const styles = StyleSheet.create({
     bottom: 0,
     right: 0,
     width: 60,
-    height: 60,
+    height: 300, // Erhöht, um Platz für die Buttons zu schaffen
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-end', // Ausrichtung am unteren Ende
     zIndex: 998,
   },
   button: {
@@ -139,6 +139,7 @@ const styles = StyleSheet.create({
     height: 50,
     alignItems: 'center',
     justifyContent: 'center',
+    right: 5, // Zentriert über dem Plus-Button
   },
   iconButton: {
     width: 50,
