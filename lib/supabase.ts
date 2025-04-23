@@ -268,7 +268,7 @@ export const getContractions = async () => {
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
-    // Verwenden der neuen RPC-Funktion
+    // Verwenden der verbesserten RPC-Funktion
     const { data: rpcData, error: rpcError } = await supabase.rpc('get_contractions_with_sync_info', {
       p_user_id: userData.user.id
     });
@@ -297,6 +297,54 @@ export const getContractions = async () => {
   } catch (err) {
     console.error('Failed to fetch contractions:', err);
     return { data: null, error: err instanceof Error ? err : new Error('Unknown error') };
+  }
+};
+
+// Funktion zum einmaligen Synchronisieren aller bestehenden Wehen
+export const syncAllExistingContractions = async () => {
+  try {
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) return { success: false, error: 'Nicht angemeldet' };
+
+    // Verwenden der neuen RPC-Funktion
+    const { data, error } = await supabase.rpc('sync_all_existing_contractions', {
+      p_user_id: userData.user.id
+    });
+
+    if (error) {
+      console.error('Error syncing all existing contractions:', error);
+      return { success: false, error };
+    }
+
+    console.log('All existing contractions synced:', data);
+    return data; // Die Funktion gibt { success: true, syncedCount: X, linkedUsers: [...] } zurück
+  } catch (err) {
+    console.error('Failed to sync all existing contractions:', err);
+    return { success: false, error: err };
+  }
+};
+
+// Funktion zum Abrufen aller verknüpften Benutzer mit Details
+export const getLinkedUsersWithDetails = async () => {
+  try {
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) return { success: false, error: 'Nicht angemeldet' };
+
+    // Verwenden der neuen RPC-Funktion
+    const { data, error } = await supabase.rpc('get_linked_users_with_details', {
+      p_user_id: userData.user.id
+    });
+
+    if (error) {
+      console.error('Error fetching linked users with details:', error);
+      return { success: false, error };
+    }
+
+    console.log('Linked users with details:', data);
+    return data; // Die Funktion gibt { success: true, linkedUsers: [...] } zurück
+  } catch (err) {
+    console.error('Failed to fetch linked users with details:', err);
+    return { success: false, error: err };
   }
 };
 

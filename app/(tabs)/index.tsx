@@ -7,7 +7,7 @@ import VerticalContractionTimeline from '@/components/VerticalContractionTimelin
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/contexts/AuthContext';
-import { saveContraction, getContractions, deleteContraction } from '@/lib/supabase';
+import { saveContraction, getContractions, deleteContraction, syncAllExistingContractions, getLinkedUsersWithDetails } from '@/lib/supabase';
 
 type Contraction = {
   id: string;
@@ -24,8 +24,9 @@ export default function HomeScreen() {
   const [timerRunning, setTimerRunning] = useState(false);
   const [elapsedTime, setElapsedTime] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
-
+  const [isSyncing, setIsSyncing] = useState(false);
   const [syncInfo, setSyncInfo] = useState<any>(null);
+  const [linkedUsers, setLinkedUsers] = useState<any[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
@@ -324,9 +325,71 @@ export default function HomeScreen() {
 
 
 
-  // Laden der Wehen aus Supabase beim Start
+  // Funktion zum Laden der verknüpften Benutzer
+  const loadLinkedUsers = async () => {
+    if (!user) return;
+
+    try {
+      const result = await getLinkedUsersWithDetails();
+
+      if (result.success && result.linkedUsers) {
+        setLinkedUsers(result.linkedUsers);
+        console.log('Linked users loaded:', result.linkedUsers);
+
+        // Wenn verknüpfte Benutzer vorhanden sind, einmalige Synchronisierung durchführen
+        if (result.linkedUsers.length > 0) {
+          await syncContractions();
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load linked users:', err);
+    }
+  };
+
+  // Funktion zum einmaligen Synchronisieren aller bestehenden Wehen
+  const syncContractions = async () => {
+    if (!user) return;
+
+    try {
+      setIsSyncing(true);
+
+      const result = await syncAllExistingContractions();
+
+      if (!result.success) {
+        console.error('Error syncing all existing contractions:', result.error);
+        Alert.alert('Fehler', 'Wehen konnten nicht synchronisiert werden.');
+        return;
+      }
+
+      console.log('All existing contractions synced successfully:', result);
+
+      // Erfolgsmeldung anzeigen, wenn Wehen synchronisiert wurden
+      if (result.syncedCount > 0) {
+        const linkedUserNames = result.linkedUsers
+          .map((user: any) => user.firstName)
+          .join(', ');
+
+        Alert.alert(
+          'Synchronisierung erfolgreich',
+          `${result.syncedCount} Wehen wurden erfolgreich mit ${linkedUserNames} synchronisiert.`
+        );
+      }
+
+      // Wehen neu laden
+      await loadContractions();
+    } catch (err) {
+      console.error('Failed to sync contractions:', err);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  // Laden der Wehen und verknüpften Benutzer beim Start
   useEffect(() => {
-    loadContractions();
+    if (user) {
+      loadContractions();
+      loadLinkedUsers();
+    }
   }, [user]);
 
   // Timer effect
@@ -421,10 +484,10 @@ export default function HomeScreen() {
             </View>
 
             {/* Synchronisierungsinfo anzeigen */}
-            {syncInfo && syncInfo.partnerName && (
+            {linkedUsers.length > 0 && (
               <ThemedView style={styles.syncInfoContainer} lightColor="rgba(255, 255, 255, 0.8)" darkColor="rgba(50, 50, 50, 0.8)">
                 <ThemedText style={styles.syncInfoText} lightColor="#5C4033" darkColor="#F2E6DD">
-                  Deine Wehen werden automatisch mit {syncInfo.partnerName || 'deinem Partner'} synchronisiert.
+                  Deine Wehen werden automatisch mit {linkedUsers.map(user => user.firstName).join(', ')} synchronisiert.
                 </ThemedText>
               </ThemedView>
             )}
@@ -439,7 +502,7 @@ export default function HomeScreen() {
               />
             )}
 
-            {isLoading ? (
+            {isLoading || isSyncing ? (
               <ThemedView
                 style={styles.emptyState}
                 lightColor={theme.card}
@@ -447,7 +510,7 @@ export default function HomeScreen() {
               >
                 <ActivityIndicator size="large" color={theme.accent} />
                 <ThemedText style={{marginTop: 10}} lightColor={theme.text} darkColor={theme.text}>
-                  Wehen werden geladen...
+                  {isSyncing ? 'Wehen werden synchronisiert...' : 'Wehen werden geladen...'}
                 </ThemedText>
               </ThemedView>
             ) : contractions.length === 0 ? (
