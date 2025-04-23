@@ -9,6 +9,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { getDailyEntries, saveDailyEntry, deleteDailyEntry, DailyEntry } from '@/lib/baby';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import ActivitySelector from '@/components/ActivitySelector';
+import ActivityInputModal from '@/components/ActivityInputModal';
 
 export default function DailyOldScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -18,17 +20,14 @@ export default function DailyOldScreen() {
 
   const [entries, setEntries] = useState<DailyEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [showNewEntry, setShowNewEntry] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [activeTab, setActiveTab] = useState<'all' | 'diaper' | 'sleep' | 'feeding'>('all');
 
-  const [newEntry, setNewEntry] = useState<DailyEntry>({
-    entry_date: new Date().toISOString(),
-    entry_type: 'feeding',
-    start_time: new Date().toISOString(),
-    notes: ''
-  });
+  // State for activity selector and modal
+  const [showActivitySelector, setShowActivitySelector] = useState(false);
+  const [showInputModal, setShowInputModal] = useState(false);
+  const [selectedActivityType, setSelectedActivityType] = useState<'feeding' | 'sleep' | 'diaper' | 'other'>('feeding');
 
   useEffect(() => {
     if (user) {
@@ -55,21 +54,28 @@ export default function DailyOldScreen() {
     }
   };
 
-  const handleSaveEntry = async () => {
+  const handleSaveEntry = async (entryData: {
+    entry_type: 'feeding' | 'sleep' | 'diaper' | 'other';
+    start_time: string;
+    end_time?: string;
+    notes?: string;
+    duration: number;
+  }) => {
     try {
+      // Create a new entry with the current date
+      const newEntry: DailyEntry = {
+        entry_date: selectedDate.toISOString(),
+        entry_type: entryData.entry_type,
+        start_time: entryData.start_time,
+        end_time: entryData.end_time,
+        notes: entryData.notes || ''
+      };
+
       const { error } = await saveDailyEntry(newEntry);
       if (error) {
         console.error('Error saving daily entry:', error);
         Alert.alert('Fehler', 'Der Eintrag konnte nicht gespeichert werden.');
       } else {
-        // Zurücksetzen des neuen Eintrags
-        setNewEntry({
-          entry_date: new Date().toISOString(),
-          entry_type: 'feeding',
-          start_time: new Date().toISOString(),
-          notes: ''
-        });
-        setShowNewEntry(false);
         loadEntries(); // Neu laden, um den neuen Eintrag anzuzeigen
       }
     } catch (err) {
@@ -116,22 +122,16 @@ export default function DailyOldScreen() {
     }
   };
 
-  const handleStartTimeChange = (event: any, selectedTime?: Date) => {
-    if (selectedTime) {
-      setNewEntry({
-        ...newEntry,
-        start_time: selectedTime.toISOString()
-      });
-    }
+  // Handle activity selection
+  const handleActivitySelect = (type: 'feeding' | 'sleep' | 'diaper' | 'other') => {
+    setSelectedActivityType(type);
+    setShowActivitySelector(false);
+    setShowInputModal(true);
   };
 
-  const handleEndTimeChange = (event: any, selectedTime?: Date) => {
-    if (selectedTime) {
-      setNewEntry({
-        ...newEntry,
-        end_time: selectedTime.toISOString()
-      });
-    }
+  // Toggle activity selector
+  const toggleActivitySelector = () => {
+    setShowActivitySelector(!showActivitySelector);
   };
 
   const getEntryTypeIcon = (type: string) => {
@@ -310,101 +310,13 @@ export default function DailyOldScreen() {
           </TouchableOpacity>
         </View>
 
-        {showNewEntry && (
-          <ThemedView style={styles.newEntryCard} lightColor={theme.card} darkColor={theme.card}>
-            <View style={styles.typeSelector}>
-              <TouchableOpacity
-                style={[
-                  styles.typeButton,
-                  newEntry.entry_type === 'feeding' && styles.selectedTypeButton
-                ]}
-                onPress={() => setNewEntry({ ...newEntry, entry_type: 'feeding' })}
-              >
-                <IconSymbol name="drop.fill" size={24} color="#FF9800" />
-                <ThemedText style={styles.typeButtonText}>Füttern</ThemedText>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.typeButton,
-                  newEntry.entry_type === 'sleep' && styles.selectedTypeButton
-                ]}
-                onPress={() => setNewEntry({ ...newEntry, entry_type: 'sleep' })}
-              >
-                <IconSymbol name="moon.fill" size={24} color="#5C6BC0" />
-                <ThemedText style={styles.typeButtonText}>Schlafen</ThemedText>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.typeButton,
-                  newEntry.entry_type === 'diaper' && styles.selectedTypeButton
-                ]}
-                onPress={() => setNewEntry({ ...newEntry, entry_type: 'diaper' })}
-              >
-                <IconSymbol name="heart.fill" size={24} color="#4CAF50" />
-                <ThemedText style={styles.typeButtonText}>Wickeln</ThemedText>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.typeButton,
-                  newEntry.entry_type === 'other' && styles.selectedTypeButton
-                ]}
-                onPress={() => setNewEntry({ ...newEntry, entry_type: 'other' })}
-              >
-                <IconSymbol name="star.fill" size={24} color="#9C27B0" />
-                <ThemedText style={styles.typeButtonText}>Sonstiges</ThemedText>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.timeInputContainer}>
-              <View style={styles.timeInput}>
-                <ThemedText style={styles.timeLabel}>Start:</ThemedText>
-                <DateTimePicker
-                  value={new Date(newEntry.start_time)}
-                  mode="time"
-                  display="default"
-                  onChange={handleStartTimeChange}
-                />
-              </View>
-
-              {(newEntry.entry_type === 'sleep' || newEntry.entry_type === 'feeding') && (
-                <View style={styles.timeInput}>
-                  <ThemedText style={styles.timeLabel}>Ende:</ThemedText>
-                  <DateTimePicker
-                    value={newEntry.end_time ? new Date(newEntry.end_time) : new Date()}
-                    mode="time"
-                    display="default"
-                    onChange={handleEndTimeChange}
-                  />
-                </View>
-              )}
-            </View>
-
-            <TextInput
-              style={[
-                styles.notesInput,
-                { color: colorScheme === 'dark' ? '#FFFFFF' : '#000000' }
-              ]}
-              value={newEntry.notes}
-              onChangeText={(text) => setNewEntry({ ...newEntry, notes: text })}
-              placeholder="Notizen (optional)"
-              placeholderTextColor={colorScheme === 'dark' ? '#AAAAAA' : '#888888'}
-              multiline
-              numberOfLines={2}
-            />
-
-            <TouchableOpacity
-              style={styles.saveButton}
-              onPress={handleSaveEntry}
-            >
-              <ThemedText style={styles.saveButtonText} lightColor="#FFFFFF" darkColor="#FFFFFF">
-                Speichern
-              </ThemedText>
-            </TouchableOpacity>
-          </ThemedView>
-        )}
+        {/* Activity Input Modal */}
+        <ActivityInputModal
+          visible={showInputModal}
+          activityType={selectedActivityType}
+          onClose={() => setShowInputModal(false)}
+          onSave={handleSaveEntry}
+        />
 
         <FlatList
           data={entries}
@@ -420,13 +332,19 @@ export default function DailyOldScreen() {
           }
         />
 
+        {/* Activity Selector */}
+        <ActivitySelector
+          visible={showActivitySelector}
+          onSelect={handleActivitySelect}
+        />
+
         {/* Floating Action Button (FAB) unten rechts */}
         <TouchableOpacity
           style={styles.fab}
-          onPress={() => setShowNewEntry(!showNewEntry)}
+          onPress={toggleActivitySelector}
         >
           <IconSymbol
-            name={showNewEntry ? "xmark" : "plus"}
+            name={showActivitySelector ? "xmark" : "plus"}
             size={24}
             color="#FFFFFF"
           />
