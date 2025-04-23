@@ -1278,7 +1278,6 @@ export const redeemInvitationCode = async (userId: string, invitationCode: strin
       };
     }
 
-    // Dieser Code wird nicht mehr erreicht, da wir die Funktion bereits in dem try-catch-Block verlassen haben
   } catch (error) {
     console.error('Unexpected error in redeemInvitationCode:', error);
     return {
