@@ -1000,3 +1000,27 @@ export const getLinkedUsers = async (userId: string) => {
     };
   }
 };
+
+// Funktion zum Abrufen des synchronisierten Entbindungstermins
+export const getSyncedDueDate = async (userId: string) => {
+  try {
+    // Verwenden der RPC-Funktion, die den synchronisierten ET zurückgibt
+    const { data, error } = await supabase.rpc('get_synced_due_date', {
+      p_user_id: userId
+    });
+
+    if (error) {
+      console.error('Error fetching synced due date:', error);
+      return { success: false, error };
+    }
+
+    console.log('Synced due date info:', data);
+    return data; // Die Funktion gibt bereits { success: true, dueDate: ..., isBabyBorn: ..., syncedFrom: ... } zurück
+  } catch (error) {
+    console.error('Exception fetching synced due date:', error);
+    return {
+      success: false,
+      error: { message: 'Fehler beim Abrufen des synchronisierten Entbindungstermins.' }
+    };
+  }
+};

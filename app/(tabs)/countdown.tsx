@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, Alert, Platform, ImageBackground, SafeAreaView, StatusBar, ActivityIndicator } from 'react-native';
+import { StyleSheet, ScrollView, View, TouchableOpacity, Alert, Platform, SafeAreaView, StatusBar, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
+import { ThemedBackground } from '@/components/ThemedBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import CountdownTimer from '@/components/CountdownTimer';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { supabase, hasGeburtsplan } from '@/lib/supabase';
+import { supabase, hasGeburtsplan, getSyncedDueDate } from '@/lib/supabase';
 import { Asset } from 'expo-asset';
 import * as FileSystem from 'expo-file-system';
 import { generateAndDownloadPDF } from '@/lib/geburtsplan-utils';
@@ -28,6 +29,7 @@ export default function CountdownScreen() {
   const [geburtsplanExists, setGeburtsplanExists] = useState(false);
   const [babyIconBase64, setBabyIconBase64] = useState<string | null>(null);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+  const [syncedFrom, setSyncedFrom] = useState<{ firstName?: string } | null>(null);
 
   // Lade das Baby-Icon beim Start
   useEffect(() => {
@@ -76,22 +78,60 @@ export default function CountdownScreen() {
   const loadDueDate = async () => {
     try {
       setIsLoading(true);
-      // Wir holen den neuesten Eintrag, sortiert nach dem Aktualisierungsdatum
-      const { data, error } = await supabase
-        .from('user_settings')
-        .select('due_date')
-        .eq('user_id', user?.id)
-        .order('updated_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
 
-      if (error && error.code !== 'PGRST116') {
-        console.error('Error loading due date:', error);
-      } else if (data && data.due_date) {
-        console.log('Loaded due date:', new Date(data.due_date).toLocaleDateString());
-        setDueDate(new Date(data.due_date));
+      // Versuchen, den synchronisierten Entbindungstermin zu laden
+      const syncedResult = await getSyncedDueDate(user?.id || '');
+
+      if (syncedResult.success) {
+        console.log('Loaded synced due date:', syncedResult);
+
+        if (syncedResult.dueDate) {
+          setDueDate(new Date(syncedResult.dueDate));
+
+          // Wenn der Termin von einem anderen Benutzer synchronisiert wurde
+          if (syncedResult.syncedFrom) {
+            setSyncedFrom(syncedResult.syncedFrom);
+            console.log('Due date synced from:', syncedResult.syncedFrom);
+          }
+        } else {
+          // Wenn kein synchronisierter Termin gefunden wurde, versuchen wir es mit dem lokalen Termin
+          const { data, error } = await supabase
+            .from('user_settings')
+            .select('due_date')
+            .eq('user_id', user?.id)
+            .order('updated_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (error && error.code !== 'PGRST116') {
+            console.error('Error loading due date:', error);
+          } else if (data && data.due_date) {
+            console.log('Loaded local due date:', new Date(data.due_date).toLocaleDateString());
+            setDueDate(new Date(data.due_date));
+          } else {
+            console.log('No due date found for user:', user?.id);
+          }
+        }
       } else {
-        console.log('No due date found for user:', user?.id);
+        console.error('Error loading synced due date:', syncedResult.error);
+
+        // Fallback auf lokalen Termin
+        const { data, error } = await supabase
+          .from('user_settings')
+          .select('due_date')
+          .eq('user_id', user?.id)
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (error && error.code !== 'PGRST116') {
+          console.error('Error loading due date:', error);
+        } else if (data && data.due_date) {
+          console.log('Loaded local due date:', new Date(data.due_date).toLocaleDateString());
+          setDueDate(new Date(data.due_date));
+        } else {
+          console.log('No due date found for user:', user?.id);
+        }
       }
     } catch (err) {
       console.error('Failed to load due date:', err);
@@ -223,16 +263,11 @@ export default function CountdownScreen() {
   };
 
   return (
-
-    <ImageBackground
-        source={require('@/assets/images/Background_Hell.png')}
-        style={styles.backgroundImage}
-        resizeMode="repeat"
-      >
+    <ThemedBackground style={styles.backgroundImage}>
       <SafeAreaView style={styles.container}>
         <StatusBar hidden={true} />
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
-          <ThemedText type="title" style={styles.title}>
+          <ThemedText type="title" style={styles.title} lightColor="#5C4033" darkColor="#FFFFFF">
             Countdown zur Geburt
           </ThemedText>
 
@@ -250,12 +285,22 @@ export default function CountdownScreen() {
           </TouchableOpacity>
 
           <ThemedView style={styles.card} lightColor={theme.card} darkColor={theme.card}>
-            <ThemedText style={styles.cardTitle}>
-              Geburtstermin
-            </ThemedText>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <ThemedText style={styles.cardTitle} lightColor="#5C4033" darkColor="#FFFFFF">
+                Geburtstermin
+              </ThemedText>
+
+              {syncedFrom && syncedFrom.firstName && (
+                <ThemedView style={styles.syncBadge} lightColor={theme.accent} darkColor={theme.accent}>
+                  <ThemedText style={styles.syncBadgeText} lightColor="#FFFFFF" darkColor="#FFFFFF">
+                    Synchronisiert mit {syncedFrom.firstName}
+                  </ThemedText>
+                </ThemedView>
+              )}
+            </View>
 
             <View style={styles.dateContainer}>
-              <ThemedText style={styles.dateText}>
+              <ThemedText style={styles.dateText} lightColor="#333333" darkColor="#F8F0E5">
                 {dueDate
                   ? dueDate.toLocaleDateString('de-DE', {
                       day: '2-digit',
@@ -289,12 +334,12 @@ export default function CountdownScreen() {
           </ThemedView>
 
           <ThemedView style={styles.infoCard} lightColor={theme.card} darkColor={theme.card}>
-            <ThemedText style={styles.infoTitle}>
+            <ThemedText style={styles.infoTitle} lightColor="#5C4033" darkColor="#FFFFFF">
               Geburtsplan
             </ThemedText>
             {/* Wenn kein Geburtsplan existiert, zeigen wir den Text an */}
             {!geburtsplanExists && (
-              <ThemedText style={styles.infoText}>
+              <ThemedText style={styles.infoText} lightColor="#333333" darkColor="#F8F0E5">
                 Hast du schon deinen Geburtsplan erstellt? Ein durchdachter Plan kann dir helfen, besser vorbereitet in den Kreißsaal zu gehen. Erstelle jetzt deinen individuellen Geburtsplan mit deinen Wünschen und Vorstellungen für die Geburt.
               </ThemedText>
             )}
@@ -334,8 +379,7 @@ export default function CountdownScreen() {
           </ThemedView>
         </ScrollView>
         </SafeAreaView>
-      </ImageBackground>
-
+      </ThemedBackground>
   );
 }
 
@@ -453,6 +497,16 @@ const styles = StyleSheet.create({
   },
   geburtsplanButtonText: {
     fontSize: 16,
+    fontWeight: 'bold',
+  },
+  syncBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 15,
+    marginLeft: 10,
+  },
+  syncBadgeText: {
+    fontSize: 12,
     fontWeight: 'bold',
   },
 });

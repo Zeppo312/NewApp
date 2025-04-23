@@ -57,9 +57,9 @@ export const redeemInvitationCodeDirect = async (userId: string, invitationCode:
     }
 
     // Direkt die RPC-Funktion aufrufen, um den Einladungscode einzulösen
-    // Verwenden der neuen Funktion, die auch Benutzerinformationen zurückgibt
-    console.log('Calling redeem_invitation_by_code_with_info RPC function...');
-    const { data: rpcData, error: rpcError } = await supabase.rpc('redeem_invitation_by_code_with_info', {
+    // Verwenden der neuen Funktion, die auch Benutzerinformationen zurückgibt und den ET synchronisiert
+    console.log('Calling redeem_invitation_code_and_sync_due_date RPC function...');
+    const { data: rpcData, error: rpcError } = await supabase.rpc('redeem_invitation_code_and_sync_due_date', {
       p_invitation_code: cleanedCode,
       p_user_id: userId
     });
