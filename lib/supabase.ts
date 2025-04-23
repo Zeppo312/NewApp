@@ -308,67 +308,27 @@ export const setBabyBornStatus = async (isBabyBorn: boolean) => {
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
-    // Zuerst prüfen, ob bereits ein Eintrag existiert
-    const { data: existingData, error: fetchError } = await supabase
-      .from('user_settings')
-      .select('id, due_date')
-      .eq('user_id', userData.user.id)
-      .maybeSingle();
+    // Verwenden der neuen RPC-Funktion
+    const { data, error } = await supabase.rpc('update_baby_born_status_and_sync', {
+      p_user_id: userData.user.id,
+      p_is_baby_born: isBabyBorn
+    });
 
-    if (fetchError && fetchError.code !== 'PGRST116') {
-      console.error('Error checking existing settings:', fetchError);
-      return { data: null, error: fetchError };
+    if (error) {
+      console.error('Error updating baby born status and syncing:', error);
+      return { data: null, error };
     }
 
-    let result;
+    console.log('Baby born status updated and synced:', data);
 
-    if (existingData && existingData.id) {
-      // Wenn ein Eintrag existiert, aktualisieren wir diesen
-      result = await supabase
-        .from('user_settings')
-        .update({
-          is_baby_born: isBabyBorn,
-          updated_at: new Date().toISOString(),
-          // Wichtig: sync_in_progress auf false setzen, damit der Trigger funktioniert
-          sync_in_progress: false
-        })
-        .eq('id', existingData.id);
-    } else {
-      // Wenn kein Eintrag existiert, erstellen wir einen neuen
-      // Wir benötigen ein Standarddatum, wenn keines vorhanden ist
-      const defaultDueDate = new Date();
-      defaultDueDate.setDate(defaultDueDate.getDate() + 280); // Standardmäßig 280 Tage (40 Wochen) in der Zukunft
+    // Extrahieren der verknüpften Benutzer aus dem Ergebnis
+    const linkedUsers = data.syncResult?.linkedUsers || [];
 
-      result = await supabase
-        .from('user_settings')
-        .insert({
-          user_id: userData.user.id,
-          is_baby_born: isBabyBorn,
-          due_date: existingData?.due_date || defaultDueDate.toISOString(),
-          theme: 'light', // Standard-Theme
-          notifications_enabled: true, // Benachrichtigungen standardmäßig aktiviert
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          sync_in_progress: false // Wichtig: sync_in_progress auf false setzen
-        });
-    }
-
-    // Prüfen, ob der Benutzer mit anderen Benutzern verknüpft ist
-    const linkedUsersResult = await getLinkedUsers(userData.user.id);
-
-    if (linkedUsersResult.success && linkedUsersResult.linkedUsers && linkedUsersResult.linkedUsers.length > 0) {
-      console.log(`User has ${linkedUsersResult.linkedUsers.length} linked users. Syncing baby born status...`);
-
-      // Der Trigger in der Datenbank sollte die Änderung automatisch mit allen verknüpften Benutzern synchronisieren
-      // Wir geben hier die verknüpften Benutzer zurück, damit die UI sie anzeigen kann
-      return {
-        data: result.data,
-        error: result.error,
-        linkedUsers: linkedUsersResult.linkedUsers
-      };
-    }
-
-    return { data: result.data, error: result.error };
+    return {
+      data: { is_baby_born: isBabyBorn },
+      error: null,
+      linkedUsers: linkedUsers
+    };
   } catch (err) {
     console.error('Failed to set baby born status:', err);
     return { data: null, error: err };
@@ -1022,26 +982,51 @@ export const getLinkedUsers = async (userId: string) => {
   }
 };
 
-// Funktion zum Abrufen des synchronisierten Entbindungstermins
-export const getSyncedDueDate = async (userId: string) => {
+// Funktion zum Abrufen des Entbindungstermins mit Informationen über verknüpfte Benutzer
+export const getDueDateWithLinkedUsers = async (userId: string) => {
   try {
-    // Verwenden der RPC-Funktion, die den synchronisierten ET zurückgibt
-    const { data, error } = await supabase.rpc('get_synced_due_date', {
+    // Verwenden der neuen RPC-Funktion
+    const { data, error } = await supabase.rpc('get_due_date_with_linked_users', {
       p_user_id: userId
     });
 
     if (error) {
-      console.error('Error fetching synced due date:', error);
+      console.error('Error fetching due date with linked users:', error);
       return { success: false, error };
     }
 
-    console.log('Synced due date info:', data);
-    return data; // Die Funktion gibt bereits { success: true, dueDate: ..., isBabyBorn: ..., syncedFrom: ... } zurück
+    console.log('Due date with linked users:', data);
+    return data; // Die Funktion gibt { success: true, dueDate: ..., isBabyBorn: ..., linkedUsers: [...] } zurück
   } catch (error) {
-    console.error('Exception fetching synced due date:', error);
+    console.error('Exception fetching due date with linked users:', error);
     return {
       success: false,
-      error: { message: 'Fehler beim Abrufen des synchronisierten Entbindungstermins.' }
+      error: { message: 'Fehler beim Abrufen des Entbindungstermins.' }
+    };
+  }
+};
+
+// Funktion zum Aktualisieren des Entbindungstermins und Synchronisieren mit verknüpften Benutzern
+export const updateDueDateAndSync = async (userId: string, dueDate: Date) => {
+  try {
+    // Verwenden der neuen RPC-Funktion
+    const { data, error } = await supabase.rpc('update_due_date_and_sync', {
+      p_user_id: userId,
+      p_due_date: dueDate.toISOString()
+    });
+
+    if (error) {
+      console.error('Error updating due date and syncing:', error);
+      return { success: false, error };
+    }
+
+    console.log('Due date updated and synced:', data);
+    return data; // Die Funktion gibt { success: true, dueDate: ..., syncResult: {...} } zurück
+  } catch (error) {
+    console.error('Exception updating due date and syncing:', error);
+    return {
+      success: false,
+      error: { message: 'Fehler beim Aktualisieren des Entbindungstermins.' }
     };
   }
 };

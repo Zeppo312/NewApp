@@ -8,7 +8,7 @@ import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import CountdownTimer from '@/components/CountdownTimer';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { supabase, hasGeburtsplan, getSyncedDueDate } from '@/lib/supabase';
+import { supabase, hasGeburtsplan, getDueDateWithLinkedUsers, updateDueDateAndSync } from '@/lib/supabase';
 import { Asset } from 'expo-asset';
 import * as FileSystem from 'expo-file-system';
 import { generateAndDownloadPDF } from '@/lib/geburtsplan-utils';
@@ -29,7 +29,7 @@ export default function CountdownScreen() {
   const [geburtsplanExists, setGeburtsplanExists] = useState(false);
   const [babyIconBase64, setBabyIconBase64] = useState<string | null>(null);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
-  const [syncedFrom, setSyncedFrom] = useState<{ firstName?: string } | null>(null);
+  const [linkedUsers, setLinkedUsers] = useState<any[]>([]);
 
   // Lade das Baby-Icon beim Start
   useEffect(() => {
@@ -79,31 +79,29 @@ export default function CountdownScreen() {
     try {
       setIsLoading(true);
 
-      // Versuchen, den synchronisierten Entbindungstermin zu laden
-      // Diese Funktion gibt nur den aktuellen Termin zurück, ohne Synchronisierung
-      const syncedResult = await getSyncedDueDate(user?.id || '');
+      // Versuchen, den Entbindungstermin mit Informationen über verknüpfte Benutzer zu laden
+      const result = await getDueDateWithLinkedUsers(user?.id || '');
 
-      if (syncedResult.success) {
-        console.log('Loaded due date:', syncedResult);
+      if (result.success) {
+        console.log('Loaded due date with linked users:', result);
 
-        if (syncedResult.dueDate) {
-          setDueDate(new Date(syncedResult.dueDate));
+        if (result.dueDate) {
+          setDueDate(new Date(result.dueDate));
 
-          // Wenn der Termin von einem anderen Benutzer synchronisiert wurde
-          if (syncedResult.syncedFrom) {
-            setSyncedFrom(syncedResult.syncedFrom);
-            console.log('Due date synced from:', syncedResult.syncedFrom);
+          // Speichern der verknüpften Benutzer
+          if (result.linkedUsers && result.linkedUsers.length > 0) {
+            setLinkedUsers(result.linkedUsers);
+            console.log('Linked users:', result.linkedUsers);
           } else {
-            // Wenn kein syncedFrom vorhanden ist, setzen wir es zurück
-            setSyncedFrom(null);
+            setLinkedUsers([]);
           }
         } else {
           console.log('No due date found in result');
           setDueDate(null);
-          setSyncedFrom(null);
+          setLinkedUsers([]);
         }
       } else {
-        console.error('Error loading due date:', syncedResult.error);
+        console.error('Error loading due date:', result.error);
 
         // Fallback auf lokalen Termin
         const { data, error } = await supabase
@@ -119,11 +117,11 @@ export default function CountdownScreen() {
         } else if (data && data.due_date) {
           console.log('Loaded local due date:', new Date(data.due_date).toLocaleDateString());
           setDueDate(new Date(data.due_date));
-          setSyncedFrom(null); // Kein synchronisierter Termin
+          setLinkedUsers([]); // Keine verknüpften Benutzer
         } else {
           console.log('No due date found for user:', user?.id);
           setDueDate(null);
-          setSyncedFrom(null);
+          setLinkedUsers([]);
         }
       }
     } catch (err) {
@@ -140,78 +138,39 @@ export default function CountdownScreen() {
         return;
       }
 
-      // Zuerst prüfen, ob bereits ein Eintrag existiert
-      const { data: existingData, error: fetchError } = await supabase
-        .from('user_settings')
-        .select('id, is_baby_born')
-        .eq('user_id', user.id)
-        .maybeSingle();
+      // Verwenden der neuen Funktion zum Aktualisieren des Entbindungstermins und Synchronisieren
+      const result = await updateDueDateAndSync(user.id, date);
 
-      if (fetchError && fetchError.code !== 'PGRST116') {
-        console.error('Error checking existing settings:', fetchError);
+      if (!result.success) {
+        console.error('Error saving due date:', result.error);
         Alert.alert('Fehler', 'Der Geburtstermin konnte nicht gespeichert werden.');
         return;
       }
 
-      let result;
+      // Aktualisieren des lokalen Zustands
+      setDueDate(date);
 
-      if (existingData && existingData.id) {
-        // Wenn ein Eintrag existiert, aktualisieren wir diesen
-        console.log('Updating existing due date for user:', user.id);
-        result = await supabase
-          .from('user_settings')
-          .update({
-            due_date: date.toISOString(),
-            updated_at: new Date().toISOString(),
-            // Wichtig: sync_in_progress auf false setzen, damit der Trigger funktioniert
-            sync_in_progress: false
-          })
-          .eq('id', existingData.id);
+      // Erfolgreiche Speicherung mit Erfolgsmeldung
+      console.log('Geburtstermin erfolgreich gespeichert:', date.toLocaleDateString());
+
+      // Prüfen, ob Benutzer synchronisiert wurden
+      const syncedUsers = result.syncResult?.linkedUsers || [];
+
+      if (syncedUsers.length > 0) {
+        const linkedUserNames = syncedUsers
+          .map(user => user.firstName)
+          .join(', ');
+
+        Alert.alert(
+          'Erfolg',
+          `Dein Geburtstermin wurde erfolgreich gespeichert und mit ${linkedUserNames} synchronisiert.`
+        );
       } else {
-        // Wenn kein Eintrag existiert, erstellen wir einen neuen
-        console.log('Creating new due date for user:', user.id);
-        result = await supabase
-          .from('user_settings')
-          .insert({
-            user_id: user.id,
-            due_date: date.toISOString(),
-            is_baby_born: false, // Standardwert
-            updated_at: new Date().toISOString(),
-            sync_in_progress: false // Wichtig: sync_in_progress auf false setzen
-          });
+        Alert.alert('Erfolg', 'Dein Geburtstermin wurde erfolgreich gespeichert.');
       }
 
-      const { error } = result;
-
-      if (error) {
-        console.error('Error saving due date:', error);
-        Alert.alert('Fehler', 'Der Geburtstermin konnte nicht gespeichert werden.');
-      } else {
-        setDueDate(date);
-        // Erfolgreiche Speicherung mit Erfolgsmeldung
-        console.log('Geburtstermin erfolgreich gespeichert:', date.toLocaleDateString());
-
-        // Wenn der Benutzer mit anderen Benutzern verknüpft ist, zeigen wir eine entsprechende Meldung an
-        const linkedUsersResult = await getLinkedUsers(user.id);
-        if (linkedUsersResult.success && linkedUsersResult.linkedUsers && linkedUsersResult.linkedUsers.length > 0) {
-          const linkedUserNames = linkedUsersResult.linkedUsers
-            .map(user => user.firstName)
-            .join(', ');
-
-          Alert.alert(
-            'Erfolg',
-            `Dein Geburtstermin wurde erfolgreich gespeichert und mit ${linkedUserNames} synchronisiert.`
-          );
-        } else {
-          Alert.alert('Erfolg', 'Dein Geburtstermin wurde erfolgreich gespeichert.');
-        }
-
-        // Setzen wir syncedFrom zurück, da wir jetzt der "Besitzer" des Termins sind
-        setSyncedFrom(null);
-
-        // Aktualisieren der Anzeige
-        loadDueDate();
-      }
+      // Aktualisieren der Anzeige
+      loadDueDate();
     } catch (err) {
       console.error('Failed to save due date:', err);
       Alert.alert('Fehler', 'Der Geburtstermin konnte nicht gespeichert werden.');
@@ -320,10 +279,10 @@ export default function CountdownScreen() {
                 Geburtstermin
               </ThemedText>
 
-              {syncedFrom && syncedFrom.firstName && (
+              {linkedUsers.length > 0 && (
                 <ThemedView style={styles.syncBadge} lightColor={theme.accent} darkColor={theme.accent}>
                   <ThemedText style={styles.syncBadgeText} lightColor="#FFFFFF" darkColor="#FFFFFF">
-                    Synchronisiert mit {syncedFrom.firstName}
+                    Synchronisiert mit {linkedUsers.map(u => u.firstName).join(', ')}
                   </ThemedText>
                 </ThemedView>
               )}
