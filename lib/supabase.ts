@@ -81,6 +81,16 @@ export type Contraction = {
   created_at: string;
 };
 
+export type DoctorQuestion = {
+  id: string;
+  user_id: string;
+  question: string;
+  answer?: string | null;
+  is_answered: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
 export type ChecklistItem = {
   id: string;
   user_id: string;
@@ -663,4 +673,519 @@ export const updateChecklistPositions = async (items: { id: string, position: nu
     console.error('Error updating checklist positions:', error);
     return { data: null, error };
   }
+};
+
+// Hilfsfunktionen für Frauenarzt-Fragen
+
+// Frage speichern
+export const saveDoctorQuestion = async (question: string) => {
+  try {
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
+
+    const { data, error } = await supabase
+      .from('doctor_questions')
+      .insert({
+        user_id: userData.user.id,
+        question,
+        is_answered: false,
+        updated_at: new Date().toISOString()
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return { data, error: null };
+  } catch (error) {
+    console.error('Error saving doctor question:', error);
+    return { data: null, error };
+  }
+};
+
+// Alle Fragen abrufen
+export const getDoctorQuestions = async () => {
+  try {
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
+
+    const { data, error } = await supabase
+      .from('doctor_questions')
+      .select('*')
+      .eq('user_id', userData.user.id)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return { data, error: null };
+  } catch (error) {
+    console.error('Error fetching doctor questions:', error);
+    return { data: null, error };
+  }
+};
+
+// Frage aktualisieren
+export const updateDoctorQuestion = async (id: string, updates: Partial<DoctorQuestion>) => {
+  try {
+    const { data, error } = await supabase
+      .from('doctor_questions')
+      .update({
+        ...updates,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return { data, error: null };
+  } catch (error) {
+    console.error('Error updating doctor question:', error);
+    return { data: null, error };
+  }
+};
+
+// Frage löschen
+export const deleteDoctorQuestion = async (id: string) => {
+  try {
+    const { error } = await supabase
+      .from('doctor_questions')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+    return { error: null };
+  } catch (error) {
+    console.error('Error deleting doctor question:', error);
+    return { error };
+  }
+};
+
+// Hilfsfunktionen für App-Einstellungen
+
+// Typ-Definition für App-Einstellungen
+export type AppSettings = {
+  id?: string;
+  user_id?: string;
+  theme: 'light' | 'dark' | 'system';
+  notifications_enabled: boolean;
+  due_date?: string | null;
+  is_baby_born?: boolean;
+  created_at?: string;
+  updated_at?: string;
+};
+
+// App-Einstellungen laden
+export const getAppSettings = async () => {
+  try {
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
+
+    const { data, error } = await supabase
+      .from('user_settings')
+      .select('*')
+      .eq('user_id', userData.user.id)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error && error.code !== 'PGRST116') {
+      console.error('Error fetching app settings:', error);
+      return { data: null, error };
+    }
+
+    // Standardwerte, falls keine Einstellungen gefunden wurden
+    const defaultSettings: AppSettings = {
+      theme: 'light',
+      notifications_enabled: true,
+      due_date: null,
+      is_baby_born: false
+    };
+
+    return { data: data || defaultSettings, error: null };
+  } catch (err) {
+    console.error('Failed to get app settings:', err);
+    return { data: null, error: err };
+  }
+};
+
+// App-Einstellungen speichern
+export const saveAppSettings = async (settings: Partial<AppSettings>) => {
+  try {
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
+
+    // Zuerst prüfen, ob bereits ein Eintrag existiert
+    const { data: existingData, error: fetchError } = await supabase
+      .from('user_settings')
+      .select('id')
+      .eq('user_id', userData.user.id)
+      .maybeSingle();
+
+    if (fetchError && fetchError.code !== 'PGRST116') {
+      console.error('Error checking existing settings:', fetchError);
+      return { data: null, error: fetchError };
+    }
+
+    let result;
+
+    if (existingData && existingData.id) {
+      // Wenn ein Eintrag existiert, aktualisieren wir diesen
+      result = await supabase
+        .from('user_settings')
+        .update({
+          ...settings,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', existingData.id)
+        .select()
+        .single();
+    } else {
+      // Wenn kein Eintrag existiert, erstellen wir einen neuen
+      result = await supabase
+        .from('user_settings')
+        .insert({
+          user_id: userData.user.id,
+          ...settings,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .select()
+        .single();
+    }
+
+    if (result.error) {
+      console.error('Error saving app settings:', result.error);
+      return { data: null, error: result.error };
+    }
+
+    return { data: result.data, error: null };
+  } catch (err) {
+    console.error('Failed to save app settings:', err);
+    return { data: null, error: err };
+  }
+};
+
+// Typdefinitionen für Account-Verlinkung
+export type AccountLink = {
+  id: string;
+  creator_id: string;
+  invited_id: string | null;
+  invitation_code: string;
+  status: 'pending' | 'accepted' | 'rejected';
+  created_at: string;
+  expires_at: string;
+  accepted_at: string | null;
+  relationship_type: string | null;
+};
+
+// Funktion zum Generieren eines eindeutigen Einladungscodes
+export const generateInvitationCode = () => {
+  // 8-stelliger alphanumerischer Code mit nur Großbuchstaben und Zahlen
+  // Vermeidet Buchstaben, die leicht verwechselt werden können (O/0, I/1, etc.)
+  const allowedChars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = '';
+
+  for (let i = 0; i < 8; i++) {
+    const randomIndex = Math.floor(Math.random() * allowedChars.length);
+    code += allowedChars[randomIndex];
+  }
+
+  return code;
+};
+
+// Funktion zum Erstellen eines Einladungslinks
+export const createInvitationLink = async (userId: string, relationshipType: string = 'partner') => {
+  // Generiere einen eindeutigen Code
+  let invitationCode = generateInvitationCode();
+  let isUnique = false;
+  let attempts = 0;
+
+  // Stelle sicher, dass der Code eindeutig ist
+  while (!isUnique && attempts < 5) {
+    attempts++;
+
+    // Prüfe, ob der Code bereits existiert
+    const { data: existingCode, error: checkError } = await supabase
+      .from('account_links')
+      .select('id')
+      .eq('invitation_code', invitationCode)
+      .maybeSingle();
+
+    if (checkError) {
+      console.error('Error checking invitation code uniqueness:', checkError);
+      break;
+    }
+
+    if (!existingCode) {
+      isUnique = true;
+    } else {
+      console.log(`Code ${invitationCode} already exists, generating a new one (attempt ${attempts})`);
+      invitationCode = generateInvitationCode();
+    }
+  }
+
+  if (!isUnique) {
+    console.error('Failed to generate a unique invitation code after multiple attempts');
+    return { success: false, error: { message: 'Konnte keinen eindeutigen Einladungscode generieren.' } };
+  }
+
+  console.log(`Creating invitation with code: ${invitationCode}`);
+  const { data, error } = await supabase
+    .from('account_links')
+    .insert({
+      creator_id: userId,
+      invitation_code: invitationCode,
+      relationship_type: relationshipType
+    })
+    .select();
+
+  if (error) {
+    console.error('Error creating invitation link:', error);
+    return { success: false, error };
+  }
+
+  return {
+    success: true,
+    invitationCode,
+    invitationLink: `wehen-tracker://invite?code=${invitationCode}`
+  };
+};
+
+// Funktion zum Abrufen aller Einladungen eines Benutzers
+export const getUserInvitations = async (userId: string) => {
+  const { data, error } = await supabase
+    .from('account_links')
+    .select(`
+      id,
+      creator_id,
+      invited_id,
+      invitation_code,
+      status,
+      created_at,
+      expires_at,
+      accepted_at,
+      relationship_type,
+      profiles!creator_id(first_name, last_name, user_role),
+      profiles!invited_id(first_name, last_name, user_role)
+    `)
+    .or(`creator_id.eq.${userId},invited_id.eq.${userId}`);
+
+  if (error) {
+    console.error('Error fetching user invitations:', error);
+    return { success: false, error };
+  }
+
+  return { success: true, invitations: data };
+};
+
+// Funktion zum Einlösen eines Einladungscodes
+export const redeemInvitationCode = async (userId: string, invitationCode: string) => {
+  try {
+    if (!userId) {
+      console.error('redeemInvitationCode called with empty userId');
+      return {
+        success: false,
+        error: { message: 'Benutzer-ID fehlt. Bitte melden Sie sich erneut an.' }
+      };
+    }
+
+    if (!invitationCode) {
+      console.error('redeemInvitationCode called with empty invitationCode');
+      return {
+        success: false,
+        error: { message: 'Bitte geben Sie einen Einladungscode ein.' }
+      };
+    }
+
+    // Bereinigen des Einladungscodes (Leerzeichen entfernen und in Großbuchstaben umwandeln)
+    const cleanedCode = invitationCode.replace(/\s+/g, '').toUpperCase();
+
+    console.log(`Attempting to redeem invitation code: '${cleanedCode}' for user: ${userId}`);
+
+    // Zuerst prüfen, ob der Benutzer bereits mit diesem Code verknüpft ist
+    const { data: existingLink, error: existingLinkError } = await supabase
+      .from('account_links')
+      .select('*')
+      .or(`and(creator_id.eq.${userId},invited_id.eq.${userId})`)
+      .eq('status', 'accepted')
+      .maybeSingle();
+
+    if (existingLinkError) {
+      console.error('Error checking for existing links:', existingLinkError);
+    } else if (existingLink) {
+      console.log('User already has an active link:', existingLink);
+      // Hier könnte man entscheiden, ob man mehrere Verknüpfungen erlauben möchte
+    }
+
+    // Prüfen, ob der Einladungscode gültig ist - zuerst nur nach dem Code suchen
+    const { data: invitationData, error: fetchError } = await supabase
+      .from('account_links')
+      .select('*')
+      .ilike('invitation_code', cleanedCode) // Case-insensitive Suche
+      .maybeSingle();
+
+    // Detaillierte Fehlerbehandlung
+    if (fetchError) {
+      console.error('Database error fetching invitation:', fetchError);
+      return {
+        success: false,
+        error: { message: 'Datenbankfehler beim Abrufen des Einladungscodes.' }
+      };
+    }
+
+    // Wenn ein Code gefunden wurde, aber nicht exakt übereinstimmt
+    if (invitationData && invitationData.invitation_code !== cleanedCode) {
+      console.log(`Found similar code: ${invitationData.invitation_code} instead of ${cleanedCode}`);
+      return {
+        success: false,
+        error: { message: `Ähnlicher Code gefunden: ${invitationData.invitation_code}. Bitte geben Sie den Code exakt ein.` }
+      };
+    }
+
+    // Wenn ein Code gefunden wurde, aber nicht mehr gültig ist
+    if (invitationData) {
+      // Prüfen, ob der Code abgelaufen ist
+      if (new Date(invitationData.expires_at) <= new Date()) {
+        return {
+          success: false,
+          error: { message: `Dieser Einladungscode ist abgelaufen. Ablaufdatum: ${new Date(invitationData.expires_at).toLocaleString()}` }
+        };
+      }
+
+      // Prüfen, ob der Code bereits verwendet wurde
+      if (invitationData.status !== 'pending') {
+        return {
+          success: false,
+          error: { message: `Dieser Einladungscode wurde bereits verwendet. Status: ${invitationData.status}` }
+        };
+      }
+
+      // Prüfen, ob der Benutzer versucht, seinen eigenen Code einzulösen
+      if (invitationData.creator_id === userId) {
+        return {
+          success: false,
+          error: { message: 'Sie können Ihre eigene Einladung nicht einlösen.' }
+        };
+      }
+    }
+
+    // Wenn kein Einladungscode gefunden wurde
+    if (!invitationData) {
+      console.log(`No invitation found for code: '${cleanedCode}'`);
+
+      // Alle Einladungscodes abrufen, um zu debuggen
+      const { data: allInvitations, error: listError } = await supabase
+        .from('account_links')
+        .select('invitation_code, status, expires_at, creator_id')
+        .order('created_at', { ascending: false });
+
+      if (listError) {
+        console.error('Error listing invitations:', listError);
+      } else {
+        console.log('All invitations in database:', allInvitations);
+
+        // Suche nach ähnlichen Codes (Groß-/Kleinschreibung ignorieren)
+        const similarCodes = allInvitations.filter(inv =>
+          inv.invitation_code.toLowerCase() === cleanedCode.toLowerCase());
+
+        if (similarCodes.length > 0) {
+          console.log('Found similar codes with different casing:', similarCodes);
+          return {
+            success: false,
+            error: { message: `Ähnlicher Code gefunden: ${similarCodes[0].invitation_code}. Bitte geben Sie den Code exakt ein.` }
+          };
+        }
+      }
+
+      // Generischer Fehler, wenn kein spezifischer Grund gefunden wurde
+      return {
+        success: false,
+        error: { message: `Ungültiger Einladungscode: '${cleanedCode}'. Bitte prüfe, ob du den Code korrekt eingegeben hast.` }
+      };
+    }
+
+    // Prüfen, ob der Benutzer nicht versucht, seine eigene Einladung einzulösen
+    if (invitationData.creator_id === userId) {
+      console.log(`User ${userId} attempted to redeem their own invitation code`);
+      return {
+        success: false,
+        error: { message: 'Sie können Ihre eigene Einladung nicht einlösen.' }
+      };
+    }
+
+    console.log(`Valid invitation found:`, invitationData);
+
+    // Aktualisieren des Einladungsstatus
+    console.log(`Updating invitation status for ID: ${invitationData.id}, setting invited_id to: ${userId}`);
+    const { data: updateData, error: updateError } = await supabase
+      .from('account_links')
+      .update({
+        invited_id: userId,
+        status: 'accepted',
+        accepted_at: new Date().toISOString()
+      })
+      .eq('id', invitationData.id)
+      .select();
+
+    if (updateError) {
+      console.error('Error accepting invitation:', updateError);
+      return { success: false, error: { message: 'Fehler beim Aktualisieren des Einladungsstatus.' } };
+    }
+
+    if (!updateData || updateData.length === 0) {
+      console.error('Update returned no data');
+      return {
+        success: false,
+        error: { message: 'Die Einladung konnte nicht aktualisiert werden.' }
+      };
+    }
+
+    console.log('Invitation successfully accepted:', updateData[0]);
+    return { success: true, linkData: updateData[0] };
+  } catch (error) {
+    console.error('Unexpected error in redeemInvitationCode:', error);
+    return {
+      success: false,
+      error: { message: `Ein unerwarteter Fehler ist aufgetreten: ${error.message || 'Unbekannter Fehler'}. Bitte versuche es später erneut.` }
+    };
+  }
+};
+
+// Funktion zum Abrufen verknüpfter Benutzer
+export const getLinkedUsers = async (userId: string) => {
+  const { data, error } = await supabase
+    .from('account_links')
+    .select(`
+      id,
+      creator_id,
+      invited_id,
+      status,
+      relationship_type,
+      profiles!creator_id(first_name, last_name, user_role),
+      profiles!invited_id(first_name, last_name, user_role)
+    `)
+    .or(`creator_id.eq.${userId},invited_id.eq.${userId}`)
+    .eq('status', 'accepted');
+
+  if (error) {
+    console.error('Error fetching linked users:', error);
+    return { success: false, error };
+  }
+
+  // Transformieren der Daten, um eine Liste der verknüpften Benutzer zu erhalten
+  const linkedUsers = data.map(link => {
+    const isCreator = link.creator_id === userId;
+    const linkedUserId = isCreator ? link.invited_id : link.creator_id;
+    const linkedUserProfile = isCreator ? link.profiles.invited_id : link.profiles.creator_id;
+
+    return {
+      linkId: link.id,
+      userId: linkedUserId,
+      firstName: linkedUserProfile?.first_name || 'Unbekannt',
+      lastName: linkedUserProfile?.last_name || '',
+      userRole: linkedUserProfile?.user_role || 'unknown',
+      relationshipType: link.relationship_type
+    };
+  });
+
+  return { success: true, linkedUsers };
 };
