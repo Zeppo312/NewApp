@@ -21,15 +21,10 @@ const ActivitySelector: React.FC<ActivitySelectorProps> = ({ visible, onSelect }
   // Start animations when visible changes
   useEffect(() => {
     if (visible) {
-      // Animate buttons in sequence with slight delay
-      Animated.stagger(50, [
-        Animated.timing(animations.feeding, {
-          toValue: 1,
-          duration: 200,
-          useNativeDriver: true,
-          easing: Easing.out(Easing.back(1.5)),
-        }),
-        Animated.timing(animations.sleep, {
+      // Animate buttons in sequence with slight delay - from bottom to top
+      Animated.stagger(70, [
+        // Start with the bottom button (other) and move up
+        Animated.timing(animations.other, {
           toValue: 1,
           duration: 200,
           useNativeDriver: true,
@@ -41,7 +36,13 @@ const ActivitySelector: React.FC<ActivitySelectorProps> = ({ visible, onSelect }
           useNativeDriver: true,
           easing: Easing.out(Easing.back(1.5)),
         }),
-        Animated.timing(animations.other, {
+        Animated.timing(animations.sleep, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+          easing: Easing.out(Easing.back(1.5)),
+        }),
+        Animated.timing(animations.feeding, {
           toValue: 1,
           duration: 200,
           useNativeDriver: true,
@@ -56,17 +57,12 @@ const ActivitySelector: React.FC<ActivitySelectorProps> = ({ visible, onSelect }
 
   if (!visible) return null;
 
-  // Calculate transforms for each button
+  // Calculate transforms for each button - vertical arrangement
   const getAnimatedStyle = (animation: Animated.Value, index: number) => {
-    // Calculate position in semi-circle
+    // Calculate position in vertical line
     const translateY = animation.interpolate({
       inputRange: [0, 1],
-      outputRange: [0, -60 - index * 15], // Vertical offset increases with index
-    });
-
-    const translateX = animation.interpolate({
-      inputRange: [0, 1],
-      outputRange: [0, (index - 1.5) * 30], // Horizontal offset based on index (centered)
+      outputRange: [0, -70 - index * 60], // Vertical offset increases with index
     });
 
     const scale = animation.interpolate({
@@ -80,7 +76,7 @@ const ActivitySelector: React.FC<ActivitySelectorProps> = ({ visible, onSelect }
     });
 
     return {
-      transform: [{ translateY }, { translateX }, { scale }],
+      transform: [{ translateY }, { scale }],
       opacity,
     };
   };
