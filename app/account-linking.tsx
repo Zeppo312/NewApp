@@ -8,7 +8,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { router } from 'expo-router';
 import { createInvitationLink, getUserInvitations, getLinkedUsers } from '@/lib/supabase';
-import { redeemInvitationCodeDirect } from '@/lib/redeemInvitationCodeDirect';
+import { redeemInvitationCodeFixed } from '@/lib/redeemInvitationCodeFixed';
+import Header from '@/components/Header';
 
 export default function AccountLinkingScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -89,12 +90,12 @@ export default function AccountLinkingScreen() {
         return;
       }
 
-      // Verwende die direkte RPC-Funktion statt der normalen Funktion
-      const result = await redeemInvitationCodeDirect(user.id, cleanedCode);
+      // Verwende die verbesserte direkte Funktion für das Einlösen des Codes
+      const result = await redeemInvitationCodeFixed(user.id, cleanedCode);
 
       if (result.success) {
         // Anzeigen des Namens des Erstellers, wenn verfügbar
-        const creatorName = result.creatorInfo?.firstName || 'einem anderen Benutzer';
+        const creatorName = result.creatorInfo?.first_name || 'einem anderen Benutzer';
         Alert.alert(
           'Erfolg',
           `Der Einladungscode wurde erfolgreich eingelöst. Dein Account ist jetzt mit ${creatorName} verknüpft.`,
@@ -132,18 +133,7 @@ export default function AccountLinkingScreen() {
       <SafeAreaView style={styles.container}>
         <StatusBar hidden={true} />
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
-          <View style={styles.header}>
-            <TouchableOpacity
-              style={styles.backButton}
-              onPress={() => router.back()}
-            >
-              <IconSymbol name="chevron.left" size={24} color="#E57373" />
-            </TouchableOpacity>
-
-            <ThemedText type="title" style={styles.title}>
-              Accounts verknüpfen
-            </ThemedText>
-          </View>
+         <Header title="Accounts verknüpfen" showBackButton={true} />
 
           {isLoading ? (
             <ActivityIndicator size="large" color={theme.accent} />
@@ -291,14 +281,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contentContainer: {
-    padding: 20,
+    paddingHorizontal: 0,
     paddingBottom: 40,
+    paddingTop: 0,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
+ 
   backButton: {
     width: 40,
     height: 40,

@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  View, 
-  Modal, 
-  StyleSheet, 
-  TouchableOpacity, 
+import {
+  View,
+  Modal,
+  StyleSheet,
+  TouchableOpacity,
   TextInput,
   TouchableWithoutFeedback,
   Keyboard,
@@ -12,12 +12,11 @@ import {
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import DurationSlider from './DurationSlider';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
-type ActivityType = 'feeding' | 'sleep' | 'diaper' | 'other';
+type ActivityType = 'feeding' | 'diaper' | 'other';
 
 interface ActivityInputModalProps {
   visible: boolean;
@@ -40,37 +39,30 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
 }) => {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
-  
+
   const [startTime, setStartTime] = useState(new Date());
-  const [endTime, setEndTime] = useState(new Date(startTime.getTime() + 30 * 60000));
-  const [duration, setDuration] = useState(30); // Default 30 minutes
+  const [endTime, setEndTime] = useState(new Date(startTime.getTime()));
   const [notes, setNotes] = useState('');
   const [showStartTimePicker, setShowStartTimePicker] = useState(false);
+  const [showNotesField, setShowNotesField] = useState(false);
 
   // Reset state when modal opens
   useEffect(() => {
     if (visible) {
       const now = new Date();
       setStartTime(now);
-      setEndTime(new Date(now.getTime() + 30 * 60000));
-      setDuration(30);
+      setEndTime(now); // Setze Ende gleich Start, da keine Dauer mehr benötigt wird
       setNotes('');
+      setShowNotesField(false); // Reset notes field visibility
     }
   }, [visible]);
-
-  // Handle duration change from slider
-  const handleDurationChange = (newDuration: number, calculatedEndTime: Date) => {
-    setDuration(newDuration);
-    setEndTime(calculatedEndTime);
-  };
 
   // Handle start time change
   const handleStartTimeChange = (event: any, selectedDate?: Date) => {
     setShowStartTimePicker(false);
     if (selectedDate) {
       setStartTime(selectedDate);
-      // Recalculate end time based on new start time and current duration
-      setEndTime(new Date(selectedDate.getTime() + duration * 60000));
+      setEndTime(selectedDate); // Setze Ende gleich Start, da keine Dauer mehr benötigt wird
     }
   };
 
@@ -78,13 +70,11 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   const getActivityInfo = () => {
     switch (activityType) {
       case 'feeding':
-        return { title: 'Füttern', color: '#FF9800', icon: 'drop.fill' };
-      case 'sleep':
-        return { title: 'Schlafen', color: '#5C6BC0', icon: 'moon.fill' };
+        return { title: 'Füttern', color: '#FF9800', icon: 'drop.fill' as const };
       case 'diaper':
-        return { title: 'Wickeln', color: '#4CAF50', icon: 'heart.fill' };
+        return { title: 'Wickeln', color: '#4CAF50', icon: 'heart.fill' as const };
       case 'other':
-        return { title: 'Sonstiges', color: '#9C27B0', icon: 'star.fill' };
+        return { title: 'Sonstiges', color: '#9C27B0', icon: 'star.fill' as const };
     }
   };
 
@@ -97,7 +87,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
       start_time: startTime.toISOString(),
       end_time: endTime.toISOString(),
       notes: notes,
-      duration: duration
+      duration: 0 // Feste Dauer auf 0 setzen
     });
     onClose();
   };
@@ -126,7 +116,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
               {/* Start Time Selector */}
               <View style={styles.timeSelector}>
                 <ThemedText style={styles.label}>Startzeit:</ThemedText>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.timeButton}
                   onPress={() => setShowStartTimePicker(true)}
                 >
@@ -145,26 +135,35 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
                 />
               )}
 
-              {/* Duration Slider */}
-              <DurationSlider
-                initialDuration={duration}
-                onChange={handleDurationChange}
-                startTime={startTime}
-              />
+              {/* "Notiz hinzufügen" Button - nur anzeigen, wenn das Notizfeld nicht sichtbar ist */}
+              {!showNotesField && (
+                <TouchableOpacity
+                  style={styles.addNotesButton}
+                  onPress={() => setShowNotesField(true)}
+                >
+                  <IconSymbol name="plus.circle" size={18} color={activityInfo.color} />
+                  <ThemedText style={[styles.addNotesText, { color: activityInfo.color }]}>
+                    Notiz hinzufügen
+                  </ThemedText>
+                </TouchableOpacity>
+              )}
 
-              {/* Notes Input */}
-              <TextInput
-                style={[
-                  styles.notesInput,
-                  { color: colorScheme === 'dark' ? '#FFFFFF' : '#000000' }
-                ]}
-                value={notes}
-                onChangeText={setNotes}
-                placeholder="Notizen (optional)"
-                placeholderTextColor={colorScheme === 'dark' ? '#AAAAAA' : '#888888'}
-                multiline
-                numberOfLines={3}
-              />
+              {/* Notes Input - nur anzeigen, wenn showNotesField true ist */}
+              {showNotesField && (
+                <TextInput
+                  style={[
+                    styles.notesInput,
+                    { color: colorScheme === 'dark' ? '#FFFFFF' : '#000000' }
+                  ]}
+                  value={notes}
+                  onChangeText={setNotes}
+                  placeholder="Notizen (optional)"
+                  placeholderTextColor={colorScheme === 'dark' ? '#AAAAAA' : '#888888'}
+                  multiline
+                  numberOfLines={3}
+                  autoFocus={true}
+                />
+              )}
 
               {/* Save Button */}
               <TouchableOpacity
@@ -261,6 +260,17 @@ const styles = StyleSheet.create({
   saveButtonText: {
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  addNotesButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    marginBottom: 15,
+  },
+  addNotesText: {
+    fontSize: 16,
+    marginLeft: 8,
+    fontWeight: '500',
   },
 });
 

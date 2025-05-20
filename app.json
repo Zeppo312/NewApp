@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "NewApp",
-    "slug": "NewApp",
+    "name": "Lotti Baby",
+    "slug": "LottiBaby",
     "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -9,18 +9,52 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true,
-      "infoPlist": {
-        "NSCalendarsUsageDescription": "Diese App benötigt Zugriff auf deinen Kalender, um Termine zu synchronisieren.",
-        "NSRemindersUsageDescription": "Diese App benötigt Zugriff auf deine Erinnerungen, um Termine zu synchronisieren."
-      }
-    },
+    "supportsTablet": true,
+    "bundleIdentifier": "com.LottiBaby.app",
+  "infoPlist": {
+    
+    "NSCalendarsUsageDescription": "Diese App benötigt Zugriff auf deinen Kalender, um Termine zu synchronisieren.",
+    "NSRemindersUsageDescription": "Diese App benötigt Zugriff auf deine Erinnerungen, um Termine zu synchronisieren.",
+
+    
+    "NSLocationWhenInUseUsageDescription": "Benötigt, um dir wetterbasierte Kleidungsempfehlungen für dein Baby anzuzeigen.",
+    "NSLocationAlwaysAndWhenInUseUsageDescription": "Benötigt, um dich bei Wetteränderungen auch im Hintergrund zu informieren.",
+
+    
+    "UIBackgroundModes": [
+      "processing",
+      "fetch",
+      "remote-notification"
+    ],
+    
+    "NSSupportsLiveActivities": true,
+    "NSSupportsLiveActivitiesFrequentUpdates": true,
+
+    
+    "BGTaskSchedulerPermittedIdentifiers": [
+      "com.LottiBaby.app.backgroundfetch"
+    ],
+
+    "ITSAppUsesNonExemptEncryption": false
+  }
+}
+,
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "permissions": ["READ_CALENDAR", "WRITE_CALENDAR"]
+      "permissions": [
+        "READ_CALENDAR",
+        "WRITE_CALENDAR",
+        "FOREGROUND_SERVICE",
+        "WAKE_LOCK",
+        "android.permission.READ_CALENDAR",
+        "android.permission.WRITE_CALENDAR",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.WAKE_LOCK"
+      ],
+      "package": "com.LottiBaby.app"
     },
     "web": {
       "bundler": "metro",
@@ -38,6 +72,18 @@
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"
         }
+      ],
+      "expo-font",
+      "expo-web-browser",
+      "expo-background-fetch",
+      "expo-task-manager",
+      "expo-notifications",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification-icon.png",
+          "color": "#ffffff"
+        }
       ]
     ],
     "experiments": {
@@ -48,15 +94,20 @@
         "origin": false
       },
       "eas": {
-        "projectId": "e53c769a-ffb6-451a-a2c8-8e9da83a4efa"
+        "projectId": "d7120520-e4ff-4967-a797-627a2cb3680b"
       }
     },
     "owner": "janzeppi",
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
+    "runtimeVersion": "1.0.0",
     "updates": {
-      "url": "https://u.expo.dev/e53c769a-ffb6-451a-a2c8-8e9da83a4efa"
+      "url": "https://u.expo.dev/d7120520-e4ff-4967-a797-627a2cb3680b",
+      "enabled": true,
+      "fallbackToCacheTimeout": 0,
+      "checkAutomatically": "ON_LOAD",
+      "codeSigningMetadata": {
+        "alg": "rsa-v1_5-sha256",
+        "keyid": "main"
+      }
     }
   }
 }

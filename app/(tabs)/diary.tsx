@@ -33,11 +33,6 @@ export default function DiaryScreen() {
   const theme = Colors[colorScheme];
   const { user } = useAuth();
 
-  // Automatische Weiterleitung zur diary-entries.tsx Seite
-  useEffect(() => {
-    router.push('/diary-entries');
-  }, []);
-
   // Zustand für Tagebucheinträge
   const [entries, setEntries] = useState<DiaryEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -757,7 +752,7 @@ export default function DiaryScreen() {
             {/* Header mit Babyalter und aktueller Phase - emotionaler und dynamischer */}
             <View style={styles.header}>
               <View style={styles.headerContent}>
-                <ThemedText type="title" style={styles.title}>Mein Babytagebuch</ThemedText>
+                <ThemedText type="title" style={styles.title}>Entwicklungssprünge</ThemedText>
                 {currentPhase && (
                   <View style={styles.phaseIndicator}>
                     <IconSymbol name="star.fill" size={18} color="#E9C9B6" />

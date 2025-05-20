@@ -3,6 +3,7 @@ import { StyleSheet, ScrollView, View, TouchableOpacity, TextInput, Alert, SafeA
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedBackground } from '@/components/ThemedBackground';
+import { BackButton } from '@/components/BackButton';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/contexts/AuthContext';
@@ -12,6 +13,7 @@ import { supabase } from '@/lib/supabase';
 import { getBabyInfo, saveBabyInfo } from '@/lib/baby';
 import { router, Stack } from 'expo-router';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import Header from '@/components/Header';
 
 export default function ProfilScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -229,7 +231,13 @@ export default function ProfilScreen() {
         throw new Error('Baby-Informationen konnten nicht gespeichert werden.');
       }
 
-      Alert.alert('Erfolg', 'Deine Daten wurden erfolgreich gespeichert.');
+      // Zeige kurze Erfolgsmeldung und navigiere dann zurück zur "Mehr"-Seite
+      Alert.alert('Erfolg', 'Deine Daten wurden erfolgreich gespeichert.', [
+        {
+          text: 'OK',
+          onPress: () => router.push('/(tabs)/more')
+        }
+      ]);
     } catch (err) {
       console.error('Failed to save user data:', err);
       Alert.alert('Fehler', err instanceof Error ? err.message : 'Deine Daten konnten nicht gespeichert werden.');
@@ -276,278 +284,270 @@ export default function ProfilScreen() {
   };
 
   return (
-    <ThemedBackground style={styles.backgroundImage}>
-      <SafeAreaView style={styles.container}>
+    <>
       <Stack.Screen options={{ headerShown: false }} />
-      <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => router.push('/(tabs)/more')}
-          >
-            <IconSymbol name="chevron.left" size={24} color={theme.text} />
-            <ThemedText style={styles.backButtonText}>Zurück</ThemedText>
-          </TouchableOpacity>
+      <ThemedBackground style={styles.container}>
+        <SafeAreaView style={styles.safeArea}>
+          <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
+          
+          <Header title="Profil" showBackButton={true} />
+          
+          <ScrollView contentContainerStyle={styles.scrollContainer}>
 
-          <ThemedText type="title" style={styles.title}>
-            Mein Profil
-          </ThemedText>
-
-          <View style={styles.headerRight} />
-        </View>
-
-        {isLoading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={theme.accent} />
-            <ThemedText style={styles.loadingText}>Lade Daten...</ThemedText>
-          </View>
-        ) : (
-          <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
-            {/* Benutzerinformationen */}
-            <ThemedView style={styles.section} lightColor="#FFFFFF" darkColor="#333333">
-              <ThemedText style={styles.sectionTitle}>Persönliche Daten</ThemedText>
-
-              <View style={styles.formGroup}>
-                <ThemedText style={styles.label}>E-Mail</ThemedText>
-                <TextInput
-                  style={[styles.input, { color: theme.text, backgroundColor: 'rgba(200, 200, 200, 0.3)' }]}
-                  value={email}
-                  editable={false}
-                  placeholder="Deine E-Mail-Adresse"
-                  placeholderTextColor={theme.tabIconDefault}
-                />
+            {isLoading ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color={theme.accent} />
+                <ThemedText style={styles.loadingText}>Lade Daten...</ThemedText>
               </View>
+            ) : (
+              <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
+                {/* Benutzerinformationen */}
+                <ThemedView style={styles.section} lightColor="#FFFFFF" darkColor="#333333">
+                  <ThemedText style={styles.sectionTitle}>Persönliche Daten</ThemedText>
 
-              <View style={styles.formGroup}>
-                <ThemedText style={styles.label}>Vorname</ThemedText>
-                <TextInput
-                  style={[styles.input, { color: theme.text }]}
-                  value={firstName}
-                  onChangeText={setFirstName}
-                  placeholder="Dein Vorname"
-                  placeholderTextColor={theme.tabIconDefault}
-                />
-              </View>
-
-              <View style={styles.formGroup}>
-                <ThemedText style={styles.label}>Nachname</ThemedText>
-                <TextInput
-                  style={[styles.input, { color: theme.text }]}
-                  value={lastName}
-                  onChangeText={setLastName}
-                  placeholder="Dein Nachname"
-                  placeholderTextColor={theme.tabIconDefault}
-                />
-              </View>
-
-              <View style={styles.formGroup}>
-                <ThemedText style={styles.label}>Rolle</ThemedText>
-                <View style={styles.roleButtonsContainer}>
-                  <TouchableOpacity
-                    style={[styles.roleButton, userRole === 'mama' && styles.roleButtonActive]}
-                    onPress={() => setUserRole('mama')}
-                  >
-                    <IconSymbol
-                      name="person.fill"
-                      size={24}
-                      color={userRole === 'mama' ? '#FFFFFF' : theme.tabIconDefault}
-                    />
-                    <ThemedText style={[styles.roleButtonText, userRole === 'mama' && styles.roleButtonTextActive]}>
-                      Mama
-                    </ThemedText>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[styles.roleButton, userRole === 'papa' && styles.roleButtonActive]}
-                    onPress={() => setUserRole('papa')}
-                  >
-                    <IconSymbol
-                      name="person.fill"
-                      size={24}
-                      color={userRole === 'papa' ? '#FFFFFF' : theme.tabIconDefault}
-                    />
-                    <ThemedText style={[styles.roleButtonText, userRole === 'papa' && styles.roleButtonTextActive]}>
-                      Papa
-                    </ThemedText>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </ThemedView>
-
-            {/* Schwangerschafts-/Baby-Informationen */}
-            <ThemedView style={styles.section} lightColor="#FFFFFF" darkColor="#333333">
-              <ThemedText style={styles.sectionTitle}>Baby-Informationen</ThemedText>
-
-              <View style={styles.formGroup}>
-                <ThemedText style={styles.label}>Errechneter Geburtstermin</ThemedText>
-                <TouchableOpacity
-                  style={styles.dateButton}
-                  onPress={() => setShowDueDatePicker(true)}
-                >
-                  <ThemedText style={styles.dateButtonText}>
-                    {dueDate ? formatDate(dueDate) : 'Geburtstermin auswählen'}
-                  </ThemedText>
-                  <IconSymbol name="calendar" size={20} color={theme.tabIconDefault} />
-                </TouchableOpacity>
-
-                {showDueDatePicker && (
-                  <DateTimePicker
-                    value={dueDate || new Date()}
-                    mode="date"
-                    display="default"
-                    onChange={handleDueDateChange}
-                  />
-                )}
-              </View>
-
-              <View style={styles.formGroup}>
-                <ThemedText style={styles.label}>Baby bereits geboren?</ThemedText>
-                <View style={styles.switchContainer}>
-                  <ThemedText style={styles.switchLabel}>
-                    {isBabyBorn ? 'Ja' : 'Nein'}
-                  </ThemedText>
-                  <Switch
-                    value={isBabyBorn}
-                    onValueChange={handleBabyBornChange}
-                    trackColor={{ false: '#767577', true: '#E9C9B6' }}
-                    thumbColor={isBabyBorn ? '#7D5A50' : '#f4f3f4'}
-                  />
-                </View>
-              </View>
-
-              {/* Name des Babys - immer anzeigen */}
-              <View style={styles.formGroup}>
-                <ThemedText style={styles.label}>Name des Babys</ThemedText>
-                <TextInput
-                  style={[styles.input, { color: theme.text }]}
-                  value={babyName}
-                  onChangeText={setBabyName}
-                  placeholder="Name deines Babys"
-                  placeholderTextColor={theme.tabIconDefault}
-                />
-              </View>
-
-              {/* Geschlecht - immer anzeigen */}
-              <View style={styles.formGroup}>
-                <ThemedText style={styles.label}>Geschlecht</ThemedText>
-                <View style={styles.genderContainer}>
-                  <TouchableOpacity
-                    style={[
-                      styles.genderButton,
-                      babyGender === 'male' && styles.genderButtonActive
-                    ]}
-                    onPress={() => setBabyGender('male')}
-                  >
-                    <IconSymbol
-                      name="person.fill"
-                      size={24}
-                      color={babyGender === 'male' ? '#FFFFFF' : theme.tabIconDefault}
-                    />
-                    <ThemedText
-                      style={[
-                        styles.genderButtonText,
-                        babyGender === 'male' && styles.genderButtonTextActive
-                      ]}
-                    >
-                      Junge
-                    </ThemedText>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[
-                      styles.genderButton,
-                      babyGender === 'female' && styles.genderButtonActive
-                    ]}
-                    onPress={() => setBabyGender('female')}
-                  >
-                    <IconSymbol
-                      name="person.fill"
-                      size={24}
-                      color={babyGender === 'female' ? '#FFFFFF' : theme.tabIconDefault}
-                    />
-                    <ThemedText
-                      style={[
-                        styles.genderButtonText,
-                        babyGender === 'female' && styles.genderButtonTextActive
-                      ]}
-                    >
-                      Mädchen
-                    </ThemedText>
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              {/* Geburtsdatum, Gewicht und Größe - nur anzeigen, wenn Baby geboren ist */}
-              {isBabyBorn && (
-                <>
                   <View style={styles.formGroup}>
-                    <ThemedText style={styles.label}>Geburtsdatum</ThemedText>
+                    <ThemedText style={styles.label}>E-Mail</ThemedText>
+                    <TextInput
+                      style={[styles.input, { color: theme.text, backgroundColor: 'rgba(200, 200, 200, 0.3)' }]}
+                      value={email}
+                      editable={false}
+                      placeholder="Deine E-Mail-Adresse"
+                      placeholderTextColor={theme.tabIconDefault}
+                    />
+                  </View>
+
+                  <View style={styles.formGroup}>
+                    <ThemedText style={styles.label}>Vorname</ThemedText>
+                    <TextInput
+                      style={[styles.input, { color: theme.text }]}
+                      value={firstName}
+                      onChangeText={setFirstName}
+                      placeholder="Dein Vorname"
+                      placeholderTextColor={theme.tabIconDefault}
+                    />
+                  </View>
+
+                  <View style={styles.formGroup}>
+                    <ThemedText style={styles.label}>Nachname</ThemedText>
+                    <TextInput
+                      style={[styles.input, { color: theme.text }]}
+                      value={lastName}
+                      onChangeText={setLastName}
+                      placeholder="Dein Nachname"
+                      placeholderTextColor={theme.tabIconDefault}
+                    />
+                  </View>
+
+                  <View style={styles.formGroup}>
+                    <ThemedText style={styles.label}>Rolle</ThemedText>
+                    <View style={styles.roleButtonsContainer}>
+                      <TouchableOpacity
+                        style={[styles.roleButton, userRole === 'mama' && styles.roleButtonActive]}
+                        onPress={() => setUserRole('mama')}
+                      >
+                        <IconSymbol
+                          name="person.fill"
+                          size={24}
+                          color={userRole === 'mama' ? '#FFFFFF' : theme.tabIconDefault}
+                        />
+                        <ThemedText style={[styles.roleButtonText, userRole === 'mama' && styles.roleButtonTextActive]}>
+                          Mama
+                        </ThemedText>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[styles.roleButton, userRole === 'papa' && styles.roleButtonActive]}
+                        onPress={() => setUserRole('papa')}
+                      >
+                        <IconSymbol
+                          name="person.fill"
+                          size={24}
+                          color={userRole === 'papa' ? '#FFFFFF' : theme.tabIconDefault}
+                        />
+                        <ThemedText style={[styles.roleButtonText, userRole === 'papa' && styles.roleButtonTextActive]}>
+                          Papa
+                        </ThemedText>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </ThemedView>
+
+                {/* Schwangerschafts-/Baby-Informationen */}
+                <ThemedView style={styles.section} lightColor="#FFFFFF" darkColor="#333333">
+                  <ThemedText style={styles.sectionTitle}>Baby-Informationen</ThemedText>
+
+                  <View style={styles.formGroup}>
+                    <ThemedText style={styles.label}>Errechneter Geburtstermin</ThemedText>
                     <TouchableOpacity
                       style={styles.dateButton}
-                      onPress={() => setShowBirthDatePicker(true)}
+                      onPress={() => setShowDueDatePicker(true)}
                     >
                       <ThemedText style={styles.dateButtonText}>
-                        {birthDate ? formatDate(birthDate) : 'Geburtsdatum auswählen'}
+                        {dueDate ? formatDate(dueDate) : 'Geburtstermin auswählen'}
                       </ThemedText>
                       <IconSymbol name="calendar" size={20} color={theme.tabIconDefault} />
                     </TouchableOpacity>
 
-                    {showBirthDatePicker && (
+                    {showDueDatePicker && (
                       <DateTimePicker
-                        value={birthDate || new Date()}
+                        value={dueDate || new Date()}
                         mode="date"
                         display="default"
-                        onChange={handleBirthDateChange}
-                        maximumDate={new Date()}
+                        onChange={handleDueDateChange}
                       />
                     )}
                   </View>
 
                   <View style={styles.formGroup}>
-                    <ThemedText style={styles.label}>Geburtsgewicht (g)</ThemedText>
-                    <TextInput
-                      style={[styles.input, { color: theme.text }]}
-                      value={babyWeight}
-                      onChangeText={setBabyWeight}
-                      placeholder="z.B. 3500"
-                      placeholderTextColor={theme.tabIconDefault}
-                      keyboardType="numeric"
-                    />
+                    <ThemedText style={styles.label}>Baby bereits geboren?</ThemedText>
+                    <View style={styles.switchContainer}>
+                      <ThemedText style={styles.switchLabel}>
+                        {isBabyBorn ? 'Ja' : 'Nein'}
+                      </ThemedText>
+                      <Switch
+                        value={isBabyBorn}
+                        onValueChange={handleBabyBornChange}
+                        trackColor={{ false: '#767577', true: '#E9C9B6' }}
+                        thumbColor={isBabyBorn ? '#7D5A50' : '#f4f3f4'}
+                      />
+                    </View>
                   </View>
 
+                  {/* Name des Babys - immer anzeigen */}
                   <View style={styles.formGroup}>
-                    <ThemedText style={styles.label}>Größe bei Geburt (cm)</ThemedText>
+                    <ThemedText style={styles.label}>Name des Babys</ThemedText>
                     <TextInput
                       style={[styles.input, { color: theme.text }]}
-                      value={babyHeight}
-                      onChangeText={setBabyHeight}
-                      placeholder="z.B. 52"
+                      value={babyName}
+                      onChangeText={setBabyName}
+                      placeholder="Name deines Babys"
                       placeholderTextColor={theme.tabIconDefault}
-                      keyboardType="numeric"
                     />
                   </View>
-                </>
-              )}
-            </ThemedView>
 
-            {/* Speichern-Button */}
-            <TouchableOpacity
-              style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
-              onPress={saveUserData}
-              disabled={isSaving}
-            >
-              {isSaving ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <ThemedText style={styles.saveButtonText}>
-                  Änderungen speichern
-                </ThemedText>
-              )}
-            </TouchableOpacity>
+                  {/* Geschlecht - immer anzeigen */}
+                  <View style={styles.formGroup}>
+                    <ThemedText style={styles.label}>Geschlecht</ThemedText>
+                    <View style={styles.genderContainer}>
+                      <TouchableOpacity
+                        style={[
+                          styles.genderButton,
+                          babyGender === 'male' && styles.genderButtonActive
+                        ]}
+                        onPress={() => setBabyGender('male')}
+                      >
+                        <IconSymbol
+                          name="person.fill"
+                          size={24}
+                          color={babyGender === 'male' ? '#FFFFFF' : theme.tabIconDefault}
+                        />
+                        <ThemedText
+                          style={[
+                            styles.genderButtonText,
+                            babyGender === 'male' && styles.genderButtonTextActive
+                          ]}
+                        >
+                          Junge
+                        </ThemedText>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[
+                          styles.genderButton,
+                          babyGender === 'female' && styles.genderButtonActive
+                        ]}
+                        onPress={() => setBabyGender('female')}
+                      >
+                        <IconSymbol
+                          name="person.fill"
+                          size={24}
+                          color={babyGender === 'female' ? '#FFFFFF' : theme.tabIconDefault}
+                        />
+                        <ThemedText
+                          style={[
+                            styles.genderButtonText,
+                            babyGender === 'female' && styles.genderButtonTextActive
+                          ]}
+                        >
+                          Mädchen
+                        </ThemedText>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  {/* Geburtsdatum, Gewicht und Größe - nur anzeigen, wenn Baby geboren ist */}
+                  {isBabyBorn && (
+                    <>
+                      <View style={styles.formGroup}>
+                        <ThemedText style={styles.label}>Geburtsdatum</ThemedText>
+                        <TouchableOpacity
+                          style={styles.dateButton}
+                          onPress={() => setShowBirthDatePicker(true)}
+                        >
+                          <ThemedText style={styles.dateButtonText}>
+                            {birthDate ? formatDate(birthDate) : 'Geburtsdatum auswählen'}
+                          </ThemedText>
+                          <IconSymbol name="calendar" size={20} color={theme.tabIconDefault} />
+                        </TouchableOpacity>
+
+                        {showBirthDatePicker && (
+                          <DateTimePicker
+                            value={birthDate || new Date()}
+                            mode="date"
+                            display="default"
+                            onChange={handleBirthDateChange}
+                            maximumDate={new Date()}
+                          />
+                        )}
+                      </View>
+
+                      <View style={styles.formGroup}>
+                        <ThemedText style={styles.label}>Geburtsgewicht (g)</ThemedText>
+                        <TextInput
+                          style={[styles.input, { color: theme.text }]}
+                          value={babyWeight}
+                          onChangeText={setBabyWeight}
+                          placeholder="z.B. 3500"
+                          placeholderTextColor={theme.tabIconDefault}
+                          keyboardType="numeric"
+                        />
+                      </View>
+
+                      <View style={styles.formGroup}>
+                        <ThemedText style={styles.label}>Größe bei Geburt (cm)</ThemedText>
+                        <TextInput
+                          style={[styles.input, { color: theme.text }]}
+                          value={babyHeight}
+                          onChangeText={setBabyHeight}
+                          placeholder="z.B. 52"
+                          placeholderTextColor={theme.tabIconDefault}
+                          keyboardType="numeric"
+                        />
+                      </View>
+                    </>
+                  )}
+                </ThemedView>
+
+                {/* Speichern-Button */}
+                <TouchableOpacity
+                  style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
+                  onPress={saveUserData}
+                  disabled={isSaving}
+                >
+                  {isSaving ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <ThemedText style={styles.saveButtonText}>
+                      Änderungen speichern
+                    </ThemedText>
+                  )}
+                </TouchableOpacity>
+              </ScrollView>
+            )}
           </ScrollView>
-        )}
         </SafeAreaView>
       </ThemedBackground>
+    </>
   );
 }
 
@@ -562,26 +562,24 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 8,
+    marginBottom: 20,
+    justifyContent: 'center',
+    position: 'relative',
   },
-  backButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  backButtonText: {
-    marginLeft: 4,
-    fontSize: 16,
+  backButtonContainer: {
+    position: 'absolute',
+    left: 16,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    zIndex: 10,
   },
   title: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: 'bold',
+    textAlign: 'center',
   },
-  headerRight: {
-    width: 80, // Für die Balance im Header
-  },
+  // Alte Back-Button Styles wurden entfernt und in den Header integriert
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -720,5 +718,17 @@ const styles = StyleSheet.create({
   roleButtonTextActive: {
     color: '#FFFFFF',
     fontWeight: 'bold',
+  },
+  backButtonInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 8,
+  },
+  safeArea: {
+    flex: 1,
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
+  },
+  scrollContainer: {
+    //padding: 16,
   },
 });

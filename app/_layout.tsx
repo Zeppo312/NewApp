@@ -7,11 +7,45 @@ import { useEffect, useState } from 'react';
 import { View, ActivityIndicator, Text } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
+import * as Notifications from 'expo-notifications';
+import * as TaskManager from 'expo-task-manager';
+import * as BackgroundFetch from 'expo-background-fetch';
 
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { BabyStatusProvider } from '@/contexts/BabyStatusContext';
 import { ThemeProvider as AppThemeProvider } from '@/contexts/ThemeContext';
+import { checkForNewNotifications, registerBackgroundNotificationTask, BACKGROUND_NOTIFICATION_TASK } from '@/lib/notificationService';
+
+// Importieren der Meilenstein-Task-Definition
+import { defineMilestoneCheckerTask } from '@/tasks/milestoneCheckerTask';
+
+// Task für Meilenstein-Benachrichtigungen definieren
+// Dies muss auf Root-Ebene der App geschehen, damit der Task auch im Hintergrund funktioniert
+defineMilestoneCheckerTask();
+
+// Definiere den Background-Task für Benachrichtigungen
+TaskManager.defineTask(BACKGROUND_NOTIFICATION_TASK, async () => {
+  try {
+    console.log('Führe Benachrichtigungs-Hintergrundtask aus...');
+    await checkForNewNotifications();
+    return BackgroundFetch.BackgroundFetchResult.NewData;
+  } catch (error) {
+    console.error('Error in background notification task:', error);
+    return BackgroundFetch.BackgroundFetchResult.Failed;
+  }
+});
+
+// Konfiguriere das Verhalten von Benachrichtigungen für die gesamte App
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -19,8 +53,17 @@ SplashScreen.preventAutoHideAsync();
 // Wrapper-Komponente, die den AuthProvider verwendet
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
-  const { loading } = useAuth();
+  const { loading, user } = useAuth();
   const [initialRoute, setInitialRoute] = useState<string | null>(null);
+
+  // Registriere den Benachrichtigungs-Hintergrundtask, wenn der Benutzer angemeldet ist
+  useEffect(() => {
+    if (user) {
+      registerBackgroundNotificationTask().catch(error => {
+        console.error('Fehler beim Registrieren des Benachrichtigungs-Hintergrundtasks:', error);
+      });
+    }
+  }, [user]);
 
   // Wir verwenden jetzt die index.tsx Datei als Einstiegspunkt, die die Weiterleitung basierend auf dem Auth-Status übernimmt
   useEffect(() => {
@@ -80,8 +123,11 @@ function RootLayoutNav() {
         <Stack.Screen name="mini-wiki" />
         <Stack.Screen name="faq" />
         <Stack.Screen name="community" />
+        <Stack.Screen name="chat/[id]" />
+        <Stack.Screen name="notifications" />
         <Stack.Screen name="pregnancy-stats" />
         <Stack.Screen name="account-linking" />
+        <Stack.Screen name="sync-test" />
         <Stack.Screen name="+not-found" />
         <Stack.Screen name="auth/callback" />
       </Stack>

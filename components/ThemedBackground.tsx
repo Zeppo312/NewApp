@@ -33,7 +33,16 @@ export function ThemedBackground({ children, style, resizeMode = "repeat", ...re
   return (
     <ImageBackground
       source={backgroundImage}
-      style={[{ width: screenWidth, height: screenHeight }, style]}
+      style={[
+        { 
+          width: screenWidth, 
+          height: screenHeight, 
+          flex: 1,
+          justifyContent: 'flex-start',
+          alignItems: 'stretch' 
+        }, 
+        style
+      ]}
       resizeMode={resizeMode}
       {...rest}
     >

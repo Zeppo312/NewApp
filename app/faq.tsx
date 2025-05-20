@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, TextInput, ImageBackground, SafeAreaView, StatusBar, FlatList, ActivityIndicator, Alert } from 'react-native';
+import { StyleSheet, ScrollView, View, TouchableOpacity, TextInput, SafeAreaView, StatusBar, FlatList, ActivityIndicator, Alert } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useRouter } from 'expo-router';
+import { ThemedBackground } from '@/components/ThemedBackground';
 import { getFaqCategories, getFaqEntries, FaqCategory, FaqEntry } from '@/lib/supabase/faq';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
@@ -91,8 +92,14 @@ export default function FaqScreen() {
       ]}
       onPress={() => setSelectedCategory(item.id)}
     >
-      <IconSymbol name={item.icon as any} size={20} color={theme.accent} />
-      <ThemedText style={styles.categoryText}>{item.name}</ThemedText>
+      <ThemedView
+        style={styles.categoryItemInner}
+        lightColor="rgba(255, 255, 255, 0.8)"
+        darkColor="rgba(50, 50, 50, 0.8)"
+      >
+        <IconSymbol name={item.icon as any} size={20} color={theme.accent} />
+        <ThemedText style={styles.categoryText}>{item.name}</ThemedText>
+      </ThemedView>
     </TouchableOpacity>
   );
 
@@ -131,8 +138,7 @@ export default function FaqScreen() {
   };
 
   return (
-    <ImageBackground
-      source={require('@/assets/images/Background_Hell.png')}
+    <ThemedBackground
       style={styles.backgroundImage}
       resizeMode="repeat"
     >
@@ -143,11 +149,17 @@ export default function FaqScreen() {
             style={styles.backButton}
             onPress={() => router.back()}
           >
-            <IconSymbol name="chevron.left" size={24} color={theme.text} />
-            <ThemedText style={styles.backButtonText}>Zurück</ThemedText>
+            <ThemedView
+              style={styles.backButtonInner}
+              lightColor="rgba(255, 255, 255, 0.9)"
+              darkColor="rgba(50, 50, 50, 0.9)"
+            >
+              <IconSymbol name="chevron.left" size={20} color={theme.tabIconDefault} />
+              <ThemedText style={styles.backButtonText}>Zurück</ThemedText>
+            </ThemedView>
           </TouchableOpacity>
 
-          <ThemedText type="title" style={styles.title}>
+          <ThemedText style={styles.title}>
             Häufige Fragen
           </ThemedText>
         </View>
@@ -187,7 +199,11 @@ export default function FaqScreen() {
           // FAQ list view
           <>
             <View style={styles.searchContainer}>
-              <View style={styles.searchInputContainer}>
+              <ThemedView
+                style={styles.searchInputContainer}
+                lightColor="rgba(255, 255, 255, 0.8)"
+                darkColor="rgba(50, 50, 50, 0.8)"
+              >
                 <IconSymbol name="magnifyingglass" size={20} color={theme.tabIconDefault} />
                 <TextInput
                   style={[styles.searchInput, { color: theme.text }]}
@@ -201,7 +217,7 @@ export default function FaqScreen() {
                     <IconSymbol name="xmark.circle.fill" size={20} color={theme.tabIconDefault} />
                   </TouchableOpacity>
                 )}
-              </View>
+              </ThemedView>
             </View>
 
             <View style={styles.categoriesContainer}>
@@ -236,7 +252,7 @@ export default function FaqScreen() {
           </>
         )}
       </SafeAreaView>
-    </ImageBackground>
+    </ThemedBackground>
   );
 }
 
@@ -255,17 +271,30 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   backButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
     marginRight: 16,
   },
-  backButtonText: {
-    fontSize: 16,
-    marginLeft: 4,
+  backButtonInner: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
+    marginBottom: 20,
+    textAlign: 'center',
+    width: '100%',
+  },
+  backButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
   },
   // Ladeindikator und Fehleranzeige
   loadingContainer: {
@@ -297,10 +326,10 @@ const styles = StyleSheet.create({
   },
   retryButton: {
     marginTop: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
   },
   retryButtonText: {
     fontSize: 16,
@@ -312,7 +341,6 @@ const styles = StyleSheet.create({
   searchInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 8,
@@ -330,13 +358,15 @@ const styles = StyleSheet.create({
     paddingRight: 16,
   },
   categoryItem: {
+    borderRadius: 20,
+    marginRight: 8,
+    overflow: 'hidden',
+  },
+  categoryItemInner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
-    borderRadius: 20,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    marginRight: 8,
   },
   categoryText: {
     marginLeft: 6,

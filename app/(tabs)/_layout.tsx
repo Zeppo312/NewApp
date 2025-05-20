@@ -37,31 +37,13 @@ export default function TabLayout() {
           default: {},
         }),
       }}>
-      {/* Nach-der-Geburt-Tabs - Home zuerst, dann Tagebuch, dann Mehr */}
-      <Tabs.Screen
-        name="home"
-        options={{
-          title: 'Home',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
-          href: isBabyBorn ? undefined : null,
-        }}
-      />
-
-      {/* Schwangerschafts-Home-Tab */}
-      <Tabs.Screen
-        name="pregnancy-home"
-        options={{
-          title: 'Home',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
-          href: isBabyBorn ? null : undefined,
-        }}
-      />
+      {/* VERSTECKTE TABS - diese werden in keiner der Ansichten in der Tab-Leiste angezeigt */}
       <Tabs.Screen
         name="diary"
         options={{
-          title: 'Tagebuch',
+          title: 'Entwicklungssprünge',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="book.fill" color={color} />,
-          href: isBabyBorn ? undefined : null,
+          href: null, // Aus der Navigation ausblenden
         }}
       />
       <Tabs.Screen
@@ -72,8 +54,49 @@ export default function TabLayout() {
           href: null, // Aus der Navigation ausblenden, aber für die Routing-Funktionalität beibehalten
         }}
       />
+      <Tabs.Screen
+        name="explore"
+        options={{
+          title: 'Checkliste',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="checklist" color={color} />,
+          href: null, // Aus der Navigation ausblenden
+        }}
+      />
+      <Tabs.Screen
+        name="geburtsplan"
+        options={{
+          title: 'Geburtsplan',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="doc.text.fill" color={color} />,
+          href: null, // Immer ausblenden
+        }}
+      />
+      <Tabs.Screen
+        name="selfcare"
+        options={{
+          title: 'Mama Selfcare',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="heart.fill" color={color} />,
+          href: null, // Immer ausblenden
+        }}
+      />
+      <Tabs.Screen
+        name="babyweather"
+        options={{
+          title: 'Babywetter',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="cloud.sun.fill" color={color} />,
+          href: null, // Nicht in der Navigationsleiste anzeigen
+        }}
+      />
+      <Tabs.Screen
+        name="weight-tracker"
+        options={{
+          title: 'Gewicht',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="chart.line.uptrend.xyaxis" color={color} />,
+          href: null, // Nicht in der Navigationsleiste anzeigen
+        }}
+      />
 
-      {/* Vor-der-Geburt-Tabs */}
+      {/* === SCHWANGERSCHAFTS-TABS === */}
+      {/* Tab 1/5: Countdown */}
       <Tabs.Screen
         name="countdown"
         options={{
@@ -82,6 +105,8 @@ export default function TabLayout() {
           href: isBabyBorn ? null : undefined,
         }}
       />
+
+      {/* Tab 2/5: Wehen */}
       <Tabs.Screen
         name="index"
         options={{
@@ -90,26 +115,19 @@ export default function TabLayout() {
           href: isBabyBorn ? null : undefined,
         }}
       />
+
+      {/* === BABY-TABS === */}
+      {/* Tab 1/5: Schlaftracker */}
       <Tabs.Screen
-        name="explore"
+        name="sleep-tracker"
         options={{
-          title: 'Checkliste',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="checklist" color={color} />,
-          href: null, // Aus der Navigation ausblenden, aber für die Routing-Funktionalität beibehalten
+          title: 'Schlaftracker',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="bed.double.fill" color={color} />,
+          href: isBabyBorn ? undefined : null,
         }}
       />
-
-      {/* Community-Tab */}
-      <Tabs.Screen
-        name="community"
-        options={{
-          title: 'Community',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="bubble.left.and.bubble.right.fill" color={color} />,
-          href: undefined, // Immer anzeigen, unabhängig vom Baby-Status
-        }}
-      />
-
-      {/* Daily_old-Tab - Nach der Geburt anzeigen (jetzt an zweiter Position von rechts) */}
+      
+      {/* Tab 2/5: Alltag */}
       <Tabs.Screen
         name="daily_old"
         options={{
@@ -119,14 +137,54 @@ export default function TabLayout() {
         }}
       />
 
-      {/* Mehr-Tab für beide Ansichten (jetzt ganz rechts) */}
+      {/* === GEMEINSAME TABS === */}
+      {/* Tab 3/5: Home (Mitte) - Schwangerschaft */}
+      <Tabs.Screen
+        name="pregnancy-home"
+        options={{
+          title: 'Home',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
+          href: isBabyBorn ? null : undefined,
+        }}
+      />
+
+      {/* Tab 3/5: Home (Mitte) - Baby */}
+      <Tabs.Screen
+        name="home"
+        options={{
+          title: 'Home',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
+          href: isBabyBorn ? undefined : null,
+        }}
+      />
+
+      {/* Tab 4/5: Community (in beiden Ansichten) */}
+      <Tabs.Screen
+        name="community"
+        options={{
+          title: 'Community',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="bubble.left.and.bubble.right.fill" color={color} />,
+          href: undefined, // Immer anzeigen, unabhängig vom Baby-Status
+        }}
+      />
+
+      {/* Versteckter Debug-Tab (nur im Debug-Modus) */}
+      <Tabs.Screen
+        name="debug"
+        options={{
+          title: 'Debug',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="wrench.fill" color={color} />,
+          href: __DEV__ ? undefined : null, // Nur im Entwicklungsmodus anzeigen
+        }}
+      />
+
+      {/* Tab 5 von 5 in beiden Ansichten (Mehr-Tab ganz rechts) */}
       <Tabs.Screen
         name="more"
         options={{
           title: 'Mehr',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="ellipsis.circle.fill" color={color} />,
-          // Immer anzeigen, unabhängig vom Baby-Status
-          href: undefined,
+          href: undefined, // Immer anzeigen, unabhängig vom Baby-Status
         }}
       />
 
@@ -150,12 +208,22 @@ export default function TabLayout() {
         }}
       />
 
+      {/* Babywetter-Tab - nicht in der Navigationsleiste anzeigen */}
+      <Tabs.Screen
+        name="babyweather"
+        options={{
+          title: 'Babywetter',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="cloud.sun.fill" color={color} />,
+          href: null, // Nicht in der Navigationsleiste anzeigen
+        }}
+      />
+
       {/* Gewichtskurven-Tab - nicht in der Navigationsleiste anzeigen */}
       <Tabs.Screen
         name="weight-tracker"
         options={{
           title: 'Gewicht',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="scale" color={color} />,
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="chart.line.uptrend.xyaxis" color={color} />,
           href: null, // Nicht in der Navigationsleiste anzeigen
         }}
       />

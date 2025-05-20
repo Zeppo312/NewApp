@@ -28,6 +28,19 @@ const accentTextDark = '#A5D6D9'; // Light turquoise - for highlights and accent
 const darkTextColor = secondaryTextLight;
 const lightTextColor = primaryTextDark;
 
+// Card design tokens
+export const CardBorder = '#E6E1DE';
+export const CardBg = '#F9F5F1';
+export const Shadow = { width: 0, height: 2, opacity: 0.1, radius: 3 };
+
+// Qualitätsfarben für Wehen-/Schlaftracker
+export const QualityColors = {
+  good: '#A8D8A8',    // Pastellgrün für gute Qualität / schwache Intensität
+  medium: '#FFD8A8',  // Apricot für mittlere Qualität / mittlere Intensität
+  bad: '#FF9A8A',     // Korallrot für schlechte Qualität / starke Intensität
+  unknown: '#D0D0D0'  // Hellgrau für unbekannte Qualität / keine Intensität
+};
+
 export const Colors = {
   light: {
     // Text colors

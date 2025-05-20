@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, Text, SafeAreaView, StatusBar, Image, ActivityIndicator } from 'react-native';
+import { StyleSheet, ScrollView, View, TouchableOpacity, Text, SafeAreaView, StatusBar, Image, ActivityIndicator, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
@@ -42,6 +42,7 @@ export default function HomeScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [dailyTip, setDailyTip] = useState("");
   const [userName, setUserName] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -54,9 +55,27 @@ export default function HomeScreen() {
     }
   }, [user]);
 
+  // Funktion für Pull-to-Refresh
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      // Lade die Daten neu
+      await loadData();
+      // Wähle einen neuen zufälligen Tipp
+      const randomTip = dailyTips[Math.floor(Math.random() * dailyTips.length)];
+      setDailyTip(randomTip);
+    } catch (error) {
+      console.error('Error during refresh:', error);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const loadData = async () => {
     try {
-      setIsLoading(true);
+      if (!refreshing) {
+        setIsLoading(true);
+      }
 
       // Benutzernamen laden
       const { data: profileData, error: profileError } = await supabase
@@ -165,7 +184,7 @@ export default function HomeScreen() {
       <ThemedView style={styles.greetingContainer} lightColor={theme.cardLight} darkColor={theme.cardDark}>
         <View style={styles.greetingHeader}>
           <View>
-            <ThemedText style={styles.greeting}>
+            <ThemedText style={[styles.greeting, { color: colorScheme === 'dark' ? '#E9C9B6' : '#6b4c3b' }]}>
               Hallo {displayName}!
             </ThemedText>
             <ThemedText style={styles.dateText}>
@@ -244,12 +263,10 @@ export default function HomeScreen() {
   // Rendere die Schnellzugriff-Karten
   const renderQuickAccessCards = () => {
     return (
-      <View style={styles.cardsContainer}>
-        <View style={styles.sectionTitleContainer}>
-          <ThemedText style={styles.sectionTitle}>
-            Schnellzugriff
-          </ThemedText>
-        </View>
+      <View style={styles.cardsSection}>
+        <ThemedText style={styles.cardsSectionTitle}>
+          Schnellzugriff
+        </ThemedText>
 
         <View style={styles.cardsGrid}>
           <TouchableOpacity
@@ -310,6 +327,17 @@ export default function HomeScreen() {
             <ThemedText style={styles.cardTitle}>Mama Selfcare</ThemedText>
             <ThemedText style={styles.cardDescription}>Nimm dir Zeit für dich</ThemedText>
           </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.card, { backgroundColor: 'rgba(100, 150, 255, 0.7)' }]}
+            onPress={() => router.push('/(tabs)/babyweather')}
+          >
+            <View style={styles.iconContainer}>
+              <IconSymbol name="cloud.sun.fill" size={40} color="#FFFFFF" />
+            </View>
+            <ThemedText style={styles.cardTitle}>Babywetter</ThemedText>
+            <ThemedText style={styles.cardDescription}>Aktuelle Wetterinfos</ThemedText>
+          </TouchableOpacity>
         </View>
       </View>
     );
@@ -325,7 +353,20 @@ export default function HomeScreen() {
             <ThemedText style={styles.loadingText}>Lade deine persönliche Übersicht...</ThemedText>
           </View>
         ) : (
-          <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
+          <ScrollView 
+            style={styles.scrollView} 
+            contentContainerStyle={styles.contentContainer}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                colors={['#7D5A50']}
+                tintColor={theme.text}
+                title="Aktualisiere..."
+                titleColor={theme.text}
+              />
+            }
+          >
             {renderGreetingSection()}
             {renderDailySummary()}
             {renderQuickAccessCards()}
@@ -449,9 +490,15 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
-  // Schnellzugriff-Karten
-  cardsContainer: {
-    marginBottom: 20,
+  // Updated styles for quick access section
+  cardsSection: {
+    marginBottom: 16,
+  },
+  cardsSectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 16,
+    textAlign: 'center',
   },
   cardsGrid: {
     flexDirection: 'row',
@@ -460,28 +507,15 @@ const styles = StyleSheet.create({
   },
   card: {
     width: '48%',
-    borderRadius: 15,
-    padding: 15,
-    marginBottom: 15,
-    alignItems: 'center',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
     elevation: 2,
-    minHeight: 140,
-  },
-  cardTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginTop: 10,
-    marginBottom: 5,
-    textAlign: 'center',
-  },
-  cardDescription: {
-    fontSize: 12,
-    textAlign: 'center',
-    opacity: 0.8,
+    alignItems: 'center',
   },
   iconContainer: {
     width: 70,
@@ -490,24 +524,23 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 5,
+    marginBottom: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 3,
     elevation: 4,
   },
-  progressCircle: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#7D5A50',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  progressText: {
-    color: '#FFFFFF',
+  cardTitle: {
+    fontSize: 16,
     fontWeight: 'bold',
-    fontSize: 14,
+    color: '#FFFFFF',
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  cardDescription: {
+    fontSize: 12,
+    color: '#FFFFFF',
+    textAlign: 'center',
   },
 });

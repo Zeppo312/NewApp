@@ -3,7 +3,7 @@ import { View, StyleSheet, Dimensions, AppState, AppStateStatus, TouchableOpacit
 import { ThemedText } from './ThemedText';
 import { ThemedView } from './ThemedView';
 import { Colors } from '@/constants/Colors';
-import { pregnancyWeekInfo } from '@/constants/PregnancyWeekInfo';
+import { pregnancyWeekInfo, pregnancyWeekCircleInfo } from '@/constants/PregnancyWeekInfo';
 import { babySizeComparison } from '@/constants/BabySizeComparison';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { router } from 'expo-router';
@@ -31,6 +31,14 @@ const splitTextIntoLines = (text: string, maxCharsPerLine: number): string[] => 
   return lines;
 };
 
+// Überfälligkeits-Info, die angezeigt wird, wenn das Baby überfällig ist
+const overdueInfo = {
+  week40: "Geburtszeit! Dein Baby macht sich auf den Weg in die Welt.",
+  week41: "Dein Baby wartet auf den richtigen Zeitpunkt.",
+  week42: "Besprich mit deinem Arzt eine mögliche Geburtseinleitung.",
+  default: "Dein Baby ist bereit für die Geburt."
+};
+
 interface CountdownTimerProps {
   dueDate: Date | null;
 }
@@ -42,6 +50,7 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({ dueDate }) => {
   const [currentWeek, setCurrentWeek] = useState<number | null>(null);
   const [currentDay, setCurrentDay] = useState<number | null>(null);
   const [progress, setProgress] = useState<number>(0);
+  const [isOverdue, setIsOverdue] = useState<boolean>(false);
 
   useEffect(() => {
     if (!dueDate) return;
@@ -61,6 +70,9 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({ dueDate }) => {
       // Berechne die Tage bis zum Geburtstermin (immer ganze Tage)
       const days = Math.round(difference / (1000 * 60 * 60 * 24));
       setDaysLeft(days);
+      
+      // Setze den Überfälligkeitsstatus
+      setIsOverdue(days < 0);
 
       // Berechne die aktuelle SSW
       // Schwangerschaft dauert ca. 40 Wochen
@@ -74,8 +86,12 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({ dueDate }) => {
       // Berechne SSW und Tag
       const weeksPregnant = Math.floor(daysPregnant / 7);
       const daysInCurrentWeek = daysPregnant % 7;
+      
+      // In der SSW-Zählung ist man bereits in der nächsten Woche, selbst bei 0 Tagen
+      // Das heißt: 36+6 bedeutet 37. SSW
+      const currentSSW = weeksPregnant + 1;
 
-      setCurrentWeek(weeksPregnant);
+      setCurrentWeek(currentSSW);
       setCurrentDay(daysInCurrentWeek);
 
       // Berechne den Fortschritt (0-1)
@@ -136,32 +152,41 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({ dueDate }) => {
     );
   }
 
-  // Wenn das Baby bereits geboren sein sollte
-  if (daysLeft !== null && daysLeft <= 0) {
-    return (
-      <ThemedView style={styles.container} lightColor={theme.card} darkColor={theme.card}>
-        <ThemedText style={styles.congratsText}>
-          Herzlichen Glückwunsch!
-        </ThemedText>
-        <ThemedText style={styles.babyText}>
-          Dein Baby ist da oder sollte bald kommen!
-        </ThemedText>
-      </ThemedView>
-    );
-  }
-
-  const size = Dimensions.get('window').width * 0.7; // Kleinerer Kreis
-  const strokeWidth = 15;
-  const radius = (size - strokeWidth) / 2;
-  const circumference = radius * 2 * Math.PI;
-  const strokeDashoffset = circumference * (1 - progress);
+  // Überfälligkeits-Info auswählen basierend auf der SSW
+  const getOverdueInfo = () => {
+    if (!currentWeek) return overdueInfo.default;
+    
+    if (currentWeek === 40) return overdueInfo.week40;
+    if (currentWeek === 41) return overdueInfo.week41;
+    if (currentWeek >= 42) return overdueInfo.week42;
+    
+    return overdueInfo.default;
+  };
 
   const navigateToStats = () => {
     router.push('/pregnancy-stats');
   };
 
+  const navigateToBabySize = () => {
+    router.push('/baby-size');
+  };
+
+  // Erhöhe die Größe des Kreises etwas
+  const size = Dimensions.get('window').width * 0.75; // Größerer Kreis (von 0.7 auf 0.75)
+  const strokeWidth = 15;
+  const radius = (size - strokeWidth) / 2;
+  const circumference = radius * 2 * Math.PI;
+  const strokeDashoffset = circumference * (1 - progress);
+
   return (
-    <ThemedView style={styles.container} lightColor={theme.card} darkColor={theme.card}>
+    <ThemedView 
+      style={[
+        styles.container, 
+        isOverdue && { borderWidth: 2, borderColor: colorScheme === 'dark' ? '#E9C9B6' : '#E9C9B6' }
+      ]} 
+      lightColor={theme.card} 
+      darkColor={theme.card}
+    >
       <TouchableOpacity
         style={styles.countdownContainer}
         onPress={navigateToStats}
@@ -173,7 +198,7 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({ dueDate }) => {
             cx={size / 2}
             cy={size / 2}
             r={radius}
-            stroke={colorScheme === 'dark' ? '#3D3330' : '#eee'}
+            stroke={colorScheme === 'dark' ? '#3D3330' : '#F2E2CE'}
             strokeWidth={strokeWidth}
             fill="none"
           />
@@ -183,7 +208,11 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({ dueDate }) => {
             cx={size / 2}
             cy={size / 2}
             r={radius}
-            stroke={colorScheme === 'dark' ? '#A5D6D9' : Colors.light.success}
+            stroke={
+              isOverdue 
+                ? colorScheme === 'dark' ? '#E9C9B6' : '#E9C9B6' 
+                : colorScheme === 'dark' ? '#A5D6D9' : '#9DBEBB'
+            }
             strokeWidth={strokeWidth}
             strokeDasharray={`${circumference} ${circumference}`}
             strokeDashoffset={strokeDashoffset}
@@ -196,135 +225,187 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({ dueDate }) => {
           <G>
             <SvgText
               x={size / 2}
-              y={size / 2 - 60}
+              y={size / 2 - 45}
               textAnchor="middle"
-              fontSize="50"
+              fontSize="70"
               fontWeight="bold"
-              fill={colorScheme === 'dark' ? '#FFFFFF' : '#333'}
+              fill={
+                isOverdue 
+                  ? colorScheme === 'dark' ? '#E9C9B6' : '#5C4033'
+                  : colorScheme === 'dark' ? '#FFFFFF' : '#5C4033'
+              }
             >
               {currentWeek}
             </SvgText>
             <SvgText
               x={size / 2}
-              y={size / 2 - 20}
+              y={size / 2}
               textAnchor="middle"
               fontSize="24"
-              fill={colorScheme === 'dark' ? '#FFFFFF' : '#333'}
+              fill={colorScheme === 'dark' ? '#FFFFFF' : '#5C4033'}
             >
               SSW
             </SvgText>
             <SvgText
               x={size / 2}
-              y={size / 2 + 10}
+              y={size / 2 + 35}
               textAnchor="middle"
-              fontSize="20"
+              fontSize="22"
               fontWeight="bold"
-              fill={colorScheme === 'dark' ? '#A5D6D9' : Colors.light.success}
+              fill={
+                isOverdue 
+                  ? colorScheme === 'dark' ? '#E9C9B6' : '#E9C9B6'
+                  : colorScheme === 'dark' ? '#A5D6D9' : '#9DBEBB'
+              }
             >
-              {currentWeek && currentWeek <= 13 ? '1. Trimester' :
-               currentWeek && currentWeek <= 27 ? '2. Trimester' :
-               currentWeek && currentWeek >= 28 ? '3. Trimester' : ''}
+              {isOverdue 
+                ? 'Überfällig' 
+                : currentWeek && currentWeek <= 13 ? '1. Trimester' :
+                  currentWeek && currentWeek <= 27 ? '2. Trimester' :
+                  currentWeek && currentWeek >= 28 ? '3. Trimester' : ''}
             </SvgText>
-            {currentWeek && currentWeek >= 4 && currentWeek <= 42 && (
-              <G>
-                {/* Wir teilen den Text in mehrere Zeilen auf */}
-                {splitTextIntoLines(pregnancyWeekInfo[currentWeek] || "Dein Baby entwickelt sich weiter.", 20).map((line, index) => (
+            
+            {/* SSW-Info mit Text genau wie im Screenshot */}
+            <G>
+              {/* Für SSW 40 nutzen wir den festen Text aus dem Screenshot */}
+              {currentWeek === 40 ? (
+                <>
                   <SvgText
-                    key={index}
                     x={size / 2}
-                    y={size / 2 + 45 + (index * 20)}
+                    y={size / 2 + 70}
                     textAnchor="middle"
-                    fontSize="14"
-                    fontWeight="600"
-                    fill={colorScheme === 'dark' ? '#F8F0E5' : '#333'}
+                    fontSize="15"
+                    fontWeight="500"
+                    fill={colorScheme === 'dark' ? '#F8F0E5' : '#5C4033'}
                   >
-                    {line}
+                    Geburtszeit! Dein
                   </SvgText>
-                ))}
-              </G>
-            )}
+                  <SvgText
+                    x={size / 2}
+                    y={size / 2 + 90}
+                    textAnchor="middle"
+                    fontSize="15"
+                    fontWeight="500"
+                    fill={colorScheme === 'dark' ? '#F8F0E5' : '#5C4033'}
+                  >
+                    Baby macht sich auf
+                  </SvgText>
+                  <SvgText
+                    x={size / 2}
+                    y={size / 2 + 110}
+                    textAnchor="middle"
+                    fontSize="15"
+                    fontWeight="500"
+                    fill={colorScheme === 'dark' ? '#F8F0E5' : '#5C4033'}
+                  >
+                    den Weg in die Welt.
+                  </SvgText>
+                </>
+              ) : (
+                /* Für andere SSW normal berechnen */
+                splitTextIntoLines(
+                  isOverdue
+                    ? getOverdueInfo()
+                    : (currentWeek && currentWeek >= 4 && currentWeek <= 42) 
+                      ? pregnancyWeekCircleInfo[currentWeek] || ""
+                      : "",
+                  15 // Kürzere Zeilenlänge für bessere Anpassung (von 16 auf 14 geändert)
+                ).slice(0, 3)
+                  .map((line, index) => (
+                    <SvgText
+                      key={index}
+                      x={size / 2}
+                      y={size / 2 + 70 + (index * 20)}
+                      textAnchor="middle"
+                      fontSize="15"
+                      fontWeight="500"
+                      fill={colorScheme === 'dark' ? '#F8F0E5' : '#5C4033'}
+                    >
+                      {line}
+                    </SvgText>
+                  ))
+              )}
+            </G>
           </G>
         </Svg>
 
-        {/* Hinweis zum Tippen */}
-        <ThemedText style={styles.tapHint} lightColor="#7D5A50" darkColor="#E9D8C2">
-          Tippen für Details
-        </ThemedText>
+        <ThemedText style={styles.tapHint}>Tippen für Details</ThemedText>
+
+        {/* Tage bis zur Geburt oder Tage überfällig */}
+        <View style={styles.detailsContainer}>
+          <View style={styles.detailRow}>
+            <ThemedText style={[
+              styles.detailLabel,
+              { color: colorScheme === 'dark' ? '#E9C9B6' : '#E9C9B6' }
+            ]}>Noch:</ThemedText>
+            <ThemedText 
+              style={[
+                styles.detailValue,
+                isOverdue && { color: colorScheme === 'dark' ? '#E9C9B6' : '#E9C9B6' }
+              ]}
+            >
+              {daysLeft !== null ? (
+                isOverdue
+                  ? `${Math.abs(daysLeft)} ${Math.abs(daysLeft) === 1 ? 'Tag' : 'Tage'} überfällig`
+                  : `${daysLeft} ${daysLeft === 1 ? 'Tag' : 'Tage'}`
+              ) : ''}
+            </ThemedText>
+          </View>
+          
+          <View style={styles.detailRow}>
+            <ThemedText style={[
+              styles.detailLabel,
+              { color: colorScheme === 'dark' ? '#E9C9B6' : '#E9C9B6' }
+            ]}>Genau:</ThemedText>
+            <ThemedText style={styles.detailValue}>
+              {currentWeek !== null && currentDay !== null ? 
+                `SSW ${currentWeek-1}+${currentDay}` : ''}
+            </ThemedText>
+          </View>
+          
+          <View style={styles.detailRow}>
+            <ThemedText style={[
+              styles.detailLabel,
+              { color: colorScheme === 'dark' ? '#E9C9B6' : '#E9C9B6' }
+            ]}>Geschafft:</ThemedText>
+            <ThemedText style={[styles.detailValue, { color: '#9DBEBB' }]}>
+              {progress ? `${Math.round(progress * 100)}%` : '0%'}
+            </ThemedText>
+          </View>
+        </View>
       </TouchableOpacity>
 
-      <View style={styles.infoContainer}>
-        <View style={styles.infoRow}>
-          <ThemedText style={styles.infoLabel} lightColor="#5C4033" darkColor="#FFFFFF">Noch:</ThemedText>
-          <ThemedText style={styles.infoValue} lightColor="#333333" darkColor="#FFFFFF">
-            {daysLeft === 1 ? '1 Tag' : `${daysLeft} Tage`}
-          </ThemedText>
-        </View>
-
-        <View style={styles.infoRow}>
-          <ThemedText style={styles.infoLabel} lightColor="#5C4033" darkColor="#FFFFFF">Genau:</ThemedText>
-          <ThemedText style={styles.infoValue} lightColor="#333333" darkColor="#FFFFFF">
-            SSW {currentWeek}+{currentDay}
-          </ThemedText>
-        </View>
-
-        <View style={styles.infoRow}>
-          <ThemedText style={styles.infoLabel} lightColor="#5C4033" darkColor="#FFFFFF">Geschafft:</ThemedText>
-          <ThemedText
-            style={[styles.infoValue, styles.percentValue]}
-            lightColor={Colors.light.success}
-            darkColor="#A5D6D9"
-          >
-            {Math.round(progress * 100)}%
-          </ThemedText>
-        </View>
-      </View>
-
-      {/* Informationstext wird jetzt im Kreis angezeigt */}
-
-      {currentWeek && currentWeek >= 4 && currentWeek <= 42 && (
+      {/* Container für die Babygröße */}
+      {currentWeek && currentWeek >= 4 && (
         <TouchableOpacity
-          style={styles.babySizeButton}
-          onPress={() => router.push(`/baby-size?week=${currentWeek}`)}
-          activeOpacity={0.7}
+          style={styles.babySizeContainer}
+          onPress={navigateToBabySize}
+          activeOpacity={0.8}
         >
-          <ThemedView style={styles.babySizeContainer} lightColor={theme.cardLight} darkColor={theme.cardDark}>
-            <ThemedText style={styles.babySizeTitle} lightColor="#5C4033" darkColor="#FFFFFF">
-              Heute ist dein Baby so groß wie ein:
+          <ThemedView style={styles.babySizeInnerContainer} lightColor={theme.card} darkColor={theme.card}>
+            <ThemedText style={styles.babySizeLabel}>Babygröße:</ThemedText>
+            <ThemedText style={[
+              styles.babySizeValue,
+              { color: colorScheme === 'dark' ? '#A5D6D9' : '#9DBEBB' }
+            ]}>
+              {babySizeComparison[currentWeek] || "Noch nicht berechenbar"}
             </ThemedText>
-            <ThemedText style={styles.babySizeText} lightColor="#333333" darkColor="#F8F0E5">
-              {babySizeComparison[currentWeek] || "Wächst und gedeiht 🌱"}
-            </ThemedText>
-            <ThemedText style={styles.tapHint} lightColor="#7D5A50" darkColor="#E9D8C2">
-              Tippen für Details
-            </ThemedText>
+            <ThemedText style={styles.babySizeTapHint}>Tippen für mehr Details</ThemedText>
           </ThemedView>
         </TouchableOpacity>
       )}
-
-      <ThemedView style={styles.timelineContainer} lightColor={theme.cardLight} darkColor={theme.cardDark}>
-        <View style={styles.timeline}>
-          <View style={[styles.timelineProgress, { width: `${progress * 100}%`, backgroundColor: colorScheme === 'dark' ? '#A5D6D9' : theme.accent }]} />
-        </View>
-        <View style={styles.timelineLabels}>
-          <ThemedText style={styles.timelineLabel} lightColor="#5C4033" darkColor="#FFFFFF">SSW 0</ThemedText>
-          <ThemedText style={styles.timelineLabel} lightColor="#5C4033" darkColor="#FFFFFF">SSW 20</ThemedText>
-          <ThemedText style={styles.timelineLabel} lightColor="#5C4033" darkColor="#FFFFFF">SSW 40</ThemedText>
-        </View>
-      </ThemedView>
     </ThemedView>
   );
 };
 
 const styles = StyleSheet.create({
-  babySizeButton: {
-    width: '100%',
-    marginBottom: 16,
-  },
   container: {
-    borderRadius: 15,
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 20,
     padding: 20,
     marginBottom: 20,
-    alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -334,109 +415,67 @@ const styles = StyleSheet.create({
   countdownContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginVertical: 10,
-  },
-  tapHint: {
-    fontSize: 12,
-    marginTop: 5,
-    opacity: 0.7,
-    fontStyle: 'italic',
-  },
-  infoContainer: {
-    marginTop: 15,
-    marginBottom: 15,
     width: '100%',
-    paddingHorizontal: 20,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-    paddingBottom: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  infoLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#7D5A50',
-  },
-  infoValue: {
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  percentValue: {
-    color: Colors.light.success,
-    fontSize: 20,
   },
   noDateText: {
     fontSize: 16,
     textAlign: 'center',
-    marginVertical: 20,
+    padding: 20,
   },
-  congratsText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginVertical: 10,
+  tapHint: {
+    fontSize: 14,
+    opacity: 0.6,
+    marginTop: 10,
+    marginBottom: 20,
+    fontStyle: 'italic',
   },
-  babyText: {
-    fontSize: 18,
-    textAlign: 'center',
-    marginVertical: 10,
-  },
-  weekInfoContainer: {
+  detailsContainer: {
     width: '100%',
-    padding: 15,
-    borderRadius: 10,
-    marginBottom: 10,
-  },
-  weekInfoText: {
-    fontSize: 16,
-    textAlign: 'center',
-    lineHeight: 22,
-  },
-  babySizeContainer: {
-    width: '100%',
-    padding: 15,
-    borderRadius: 10,
-    marginBottom: 10,
-  },
-  babySizeTitle: {
-    fontSize: 16,
-    textAlign: 'center',
-    marginBottom: 5,
-    fontWeight: 'bold',
-  },
-  babySizeText: {
-    fontSize: 20,
-    textAlign: 'center',
-    lineHeight: 28,
-  },
-  timelineContainer: {
-    width: '100%',
-    padding: 15,
-    borderRadius: 10,
     marginTop: 10,
   },
-  timeline: {
-    height: 10,
-    backgroundColor: '#e0e0e0',
-    borderRadius: 5,
-    overflow: 'hidden',
-  },
-  timelineProgress: {
-    height: '100%',
-    borderRadius: 5,
-  },
-  timelineLabels: {
+  detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 5,
+    alignItems: 'center',
+    marginBottom: 10,
   },
-  timelineLabel: {
+  detailLabel: {
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  detailValue: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  babySizeContainer: {
+    marginTop: 15,
+    width: '100%',
+  },
+  babySizeInnerContainer: {
+    padding: 15,
+    borderRadius: 15,
+    width: '100%',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  babySizeLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  babySizeValue: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    marginBottom: 5,
+  },
+  babySizeTapHint: {
     fontSize: 12,
+    opacity: 0.6,
+    fontStyle: 'italic',
   },
 });
 

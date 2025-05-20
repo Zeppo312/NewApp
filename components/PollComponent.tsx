@@ -116,12 +116,6 @@ export const PollComponent: React.FC<PollComponentProps> = ({ pollId, onVoteChan
               )}
             </View>
 
-            {option.has_voted && (
-              <View style={styles.checkmarkContainer}>
-                <IconSymbol name="checkmark.circle.fill" size={20} color={theme.accent} />
-              </View>
-            )}
-
             {/* Prozentanzeige immer anzeigen, wenn abgestimmt wurde */}
             {hasVoted && (
               <View style={styles.percentageBarContainer}>
@@ -129,7 +123,7 @@ export const PollComponent: React.FC<PollComponentProps> = ({ pollId, onVoteChan
                   style={[
                     styles.percentageBar,
                     {
-                      width: `${option.percentage}%`,
+                      right: option.percentage === 100 ? 0 : `${100 - option.percentage}%`,
                       backgroundColor: option.has_voted ? theme.accent : '#E0E0E0'
                     }
                   ]}
@@ -184,13 +178,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E0E0E0',
     borderRadius: 8,
-    padding: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
     marginBottom: 8,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     position: 'relative',
     overflow: 'hidden',
+    minHeight: 48,
   },
   votedOption: {
     borderColor: '#E57373',
@@ -209,20 +205,24 @@ const styles = StyleSheet.create({
     color: '#888',
     marginTop: 4,
   },
-  checkmarkContainer: {
-    marginLeft: 8,
-    zIndex: 2,
-  },
+
   percentageBarContainer: {
     position: 'absolute',
     left: 0,
+    right: 0,
     top: 0,
     bottom: 0,
-    width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
     zIndex: 1,
+  },
+  percentageBarWrapper: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: 'transparent',
   },
   percentageBar: {
     position: 'absolute',
@@ -230,19 +230,14 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     backgroundColor: '#E0E0E0',
-    opacity: 0.5,
-    borderTopRightRadius: 4,
-    borderBottomRightRadius: 4,
+    opacity: 0.7,
   },
   percentageText: {
     fontSize: 12,
     fontWeight: 'bold',
     position: 'absolute',
     right: 12,
-    color: '#555',
-    textShadowColor: 'rgba(255, 255, 255, 0.8)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 2,
+    color: '#333',
   },
   footer: {
     flexDirection: 'row',

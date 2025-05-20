@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, ImageBackground, SafeAreaView, StatusBar, Text } from 'react-native';
+import { StyleSheet, ScrollView, View, TouchableOpacity, ImageBackground, SafeAreaView, StatusBar, Text, Alert, Platform, Modal } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { supabase } from '@/lib/supabase';
+import { supabase, updateDueDateAndSync } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import Svg, { Circle, Path, G, Text as SvgText } from 'react-native-svg';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 export default function PregnancyStatsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -14,6 +15,7 @@ export default function PregnancyStatsScreen() {
 
   // Schwangerschaftsdaten
   const [dueDate, setDueDate] = useState<Date | null>(null);
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [stats, setStats] = useState({
     daysLeft: 0,
@@ -25,6 +27,7 @@ export default function PregnancyStatsScreen() {
     calendarMonth: 0,
     pregnancyMonth: 0
   });
+  const [tempDate, setTempDate] = useState<Date | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -131,6 +134,84 @@ export default function PregnancyStatsScreen() {
     });
   };
 
+  const saveDueDate = async (date: Date) => {
+    try {
+      if (!user) {
+        Alert.alert('Hinweis', 'Bitte melde dich an, um deinen Geburtstermin zu speichern.');
+        return;
+      }
+
+      // Verwenden der Funktion zum Aktualisieren des Entbindungstermins und Synchronisieren
+      const result = await updateDueDateAndSync(user.id, date);
+
+      if (!result.success) {
+        console.error('Error saving due date:', result.error);
+        Alert.alert('Fehler', 'Der Geburtstermin konnte nicht gespeichert werden.');
+        return;
+      }
+
+      // Aktualisieren des lokalen Zustands
+      setDueDate(date);
+
+      // Erfolgreiche Speicherung mit Erfolgsmeldung
+      console.log(`Geburtstermin erfolgreich gespeichert: ${date.toLocaleDateString()}`);
+      
+      // Prüfen, ob Benutzer synchronisiert wurden
+      const syncedUsers = result.syncResult?.linkedUsers || [];
+
+      if (syncedUsers.length > 0) {
+        const linkedUserNames = syncedUsers
+          .map((user: any) => user.firstName)
+          .join(', ');
+
+        Alert.alert(
+          'Erfolg',
+          `Dein Geburtstermin wurde erfolgreich gespeichert und mit ${linkedUserNames} synchronisiert.`
+        );
+      } else {
+        Alert.alert('Erfolg', 'Dein Geburtstermin wurde erfolgreich gespeichert.');
+      }
+
+      // Stats neu berechnen
+      calculateStats();
+    } catch (err) {
+      console.error('Failed to save due date:', err);
+      Alert.alert('Fehler', 'Der Geburtstermin konnte nicht gespeichert werden.');
+    }
+  };
+
+  const handleDateChange = (_event: any, selectedDate?: Date) => {
+    if (Platform.OS === 'android') {
+      setShowDatePicker(false);
+      if (selectedDate) {
+        saveDueDate(selectedDate);
+      }
+    } else {
+      // Auf iOS speichern wir das Datum temporär und warten auf die Bestätigung
+      if (selectedDate) {
+        setTempDate(selectedDate);
+      }
+    }
+  };
+
+  const confirmIOSDate = () => {
+    if (tempDate) {
+      saveDueDate(tempDate);
+    }
+    setShowDatePicker(false);
+  };
+
+  const showDatepicker = () => {
+    if (Platform.OS === 'ios') {
+      // Aktuellen Geburtstermin als Ausgangswert setzen
+      setTempDate(dueDate || new Date());
+      setShowDatePicker(true);
+    } else {
+      // Auf Android direkt den Picker anzeigen
+      setShowDatePicker(true);
+    }
+  };
+
   // Teilen-Funktionalität wurde entfernt
 
   if (!dueDate) {
@@ -184,6 +265,47 @@ export default function PregnancyStatsScreen() {
     >
       <SafeAreaView style={styles.container}>
       <StatusBar hidden={true} />
+        {/* Modal für iOS DatePicker */}
+        {Platform.OS === 'ios' && showDatePicker && (
+          <Modal
+            animationType="fade"
+            transparent={true}
+            visible={showDatePicker}
+            onRequestClose={() => setShowDatePicker(false)}
+          >
+            <View style={styles.centeredView}>
+              <View style={styles.modalView}>
+                <View style={styles.pickerHeader}>
+                  <Text style={styles.pickerTitle}>Geburtstermin auswählen</Text>
+                  <TouchableOpacity onPress={() => setShowDatePicker(false)}>
+                    <IconSymbol name="xmark.circle.fill" size={28} color="#7D5A50" style={{opacity: 0.8}} />
+                  </TouchableOpacity>
+                </View>
+                
+                <View style={styles.pickerContainer}>
+                  <DateTimePicker
+                    value={tempDate || dueDate || new Date()}
+                    mode="date"
+                    display="spinner"
+                    onChange={handleDateChange}
+                    minimumDate={new Date()}
+                    maximumDate={new Date(Date.now() + 1000 * 60 * 60 * 24 * 280)} // ca. 40 Wochen
+                    style={styles.datePicker}
+                    textColor="#333333"
+                  />
+                </View>
+                
+                <TouchableOpacity 
+                  style={styles.confirmButton}
+                  onPress={confirmIOSDate}
+                >
+                  <Text style={styles.confirmButtonText}>Bestätigen</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </Modal>
+        )}
+
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <IconSymbol name="xmark" size={24} color="#7D5A50" />
@@ -259,12 +381,39 @@ export default function PregnancyStatsScreen() {
             </View>
           </View>
 
-          <View style={styles.statsSection}>
+          <TouchableOpacity 
+            style={styles.statsSection} 
+            onPress={showDatepicker}
+            activeOpacity={0.7}
+          >
             <Text style={styles.sectionTitle}>ERRECHNETER GEBURTSTERMIN</Text>
+            <View style={styles.dueDateContainer}>
+              <IconSymbol name="calendar" size={22} color="#7D5A50" style={{ marginRight: 12 }} />
             <Text style={styles.dueDateValue}>
-              {dueDate.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' })}
+                {dueDate.toLocaleDateString('de-DE', { 
+                  day: '2-digit', 
+                  month: '2-digit', 
+                  year: '2-digit' 
+                })}
             </Text>
           </View>
+            <View style={styles.editHintContainer}>
+              <IconSymbol name="pencil" size={14} color="#7D5A50" style={{ marginRight: 5, opacity: 0.7 }} />
+              <Text style={styles.editHint}>Tippen zum Ändern</Text>
+            </View>
+          </TouchableOpacity>
+
+          {/* DatePicker nur für Android direkt im Screen */}
+          {Platform.OS === 'android' && showDatePicker && (
+            <DateTimePicker
+              value={dueDate || new Date()}
+              mode="date"
+              display="spinner"
+              onChange={handleDateChange}
+              minimumDate={new Date()}
+              maximumDate={new Date(Date.now() + 1000 * 60 * 60 * 24 * 280)} // ca. 40 Wochen
+            />
+          )}
 
           <View style={styles.statsGrid}>
             <View style={styles.statsCard}>
@@ -395,26 +544,31 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   statsSection: {
-    padding: 15,
+    padding: 20,
     borderRadius: 20,
     marginBottom: 15,
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
     backgroundColor: '#F7EFE5',
     width: '100%',
+    flexDirection: 'column',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(125, 90, 80, 0.1)',
   },
   sectionTitle: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: 'bold',
     color: '#7D5A50',
-    marginBottom: 5,
+    marginBottom: 12,
+    letterSpacing: 1,
   },
   dueDateValue: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: 'bold',
     color: '#5D4037',
   },
@@ -483,4 +637,102 @@ const styles = StyleSheet.create({
     color: '#7D5A50',
   },
   // SVG-Stile wurden entfernt, da sie nicht mehr benötigt werden
+  dateContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  editHint: {
+    fontSize: 12,
+    fontStyle: 'italic',
+    color: '#7D5A50',
+    marginTop: 5,
+    opacity: 0.8,
+  },
+  dueDateContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+    borderRadius: 15,
+    shadowColor: '#7D5A50',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  editHintContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  centeredView: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+  },
+  modalView: {
+    backgroundColor: '#F8F4ED',
+    padding: 20,
+    borderRadius: 20,
+    width: '90%',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 15,
+    borderWidth: 1,
+    borderColor: 'rgba(125, 90, 80, 0.25)',
+  },
+  pickerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    paddingBottom: 15,
+    marginBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(125, 90, 80, 0.15)',
+  },
+  pickerTitle: {
+    fontSize: 22,
+    fontWeight: '600',
+    color: '#7D5A50',
+  },
+  pickerContainer: {
+    width: '100%',
+    backgroundColor: 'rgba(255, 255, 255, 0.6)',
+    borderRadius: 15,
+    overflow: 'hidden',
+    marginVertical: 15,
+    borderWidth: 1,
+    borderColor: '#E2D9D0',
+  },
+  datePicker: {
+    width: '100%',
+    height: 215,
+  },
+  confirmButton: {
+    backgroundColor: '#7D5A50',
+    padding: 15,
+    borderRadius: 30,
+    width: '100%',
+    alignItems: 'center',
+    marginTop: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 5,
+    elevation: 5,
+  },
+  confirmButtonText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: 'white',
+    letterSpacing: 0.5,
+  },
 });

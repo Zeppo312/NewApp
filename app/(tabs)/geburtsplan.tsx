@@ -1,21 +1,21 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, View, TextInput, TouchableOpacity, Alert, ActivityIndicator, Switch } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { StatusBar } from 'expo-status-bar';
-import { ImageBackground } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { StyleSheet, ScrollView, View, TextInput, TouchableOpacity, Alert, ActivityIndicator, Switch, SafeAreaView, StatusBar, FlatList, Linking, useWindowDimensions, Platform } from 'react-native';
+import { Text as RNText } from 'react-native';
+import { router, useRouter } from 'expo-router';
+import { IconSymbol } from '@/components/ui/IconSymbol';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
+import { ThemedBackground } from '@/components/ThemedBackground';
 import { BackButton } from '@/components/BackButton';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { supabase } from '@/lib/supabase';
 import { getCurrentUser, getGeburtsplan, saveGeburtsplan, saveStructuredGeburtsplan } from '@/lib/supabase';
 import { GeburtsplanData, defaultGeburtsplan } from '@/types/geburtsplan';
-import { useRouter } from 'expo-router';
-import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Asset } from 'expo-asset';
 import * as FileSystem from 'expo-file-system';
 import { generateAndDownloadPDF } from '@/lib/geburtsplan-utils';
+import Header from '@/components/Header';
 
 // Import der Abschnittskomponenten
 import { AllgemeineAngabenSection } from '@/components/geburtsplan/AllgemeineAngabenSection';
@@ -268,161 +268,173 @@ export default function GeburtsplanScreen() {
   };
 
   return (
-
-    <ImageBackground
-        source={require('@/assets/images/Background_Hell.png')}
-        style={styles.backgroundImage}
-        resizeMode="repeat"
-    >
-      <SafeAreaView style={styles.container}>
-      <StatusBar hidden={true} />
-        <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
+    <ThemedBackground style={styles.container}>
+      <SafeAreaView style={{ flex: 1 }}>
+        <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
+        
+        <Header 
+          title="Geburtsplan" 
+          subtitle="Plane deine ideale Geburt" 
+        />
+        
+        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
           {/* Zurück-Button */}
-          <BackButton onPress={() => router.push('/(tabs)/countdown')} />
+          <ThemedBackground
+            style={styles.backgroundImage}
+            resizeMode="repeat"
+          >
+            <SafeAreaView style={styles.container}>
+            <StatusBar hidden={true} />
+              <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
+                {/* Zurück-Button */}
+                <BackButton onPress={() => router.push('/(tabs)/countdown')} />
 
-          <ThemedText type="title" style={styles.title}>
-            Mein Geburtsplan
-          </ThemedText>
-
-          <ThemedView style={styles.card} lightColor={theme.card} darkColor={theme.card}>
-            <ThemedText style={styles.cardText}>
-              Hier kannst du deinen persönlichen Geburtsplan erstellen und speichern.
-              Notiere deine Wünsche und Vorstellungen für die Geburt, damit du sie mit deinem
-              Geburtsteam teilen kannst.
-            </ThemedText>
-          </ThemedView>
-
-          {/* Editor-Umschalter */}
-          <ThemedView style={styles.switchContainer} lightColor={theme.card} darkColor={theme.card}>
-            <ThemedText style={styles.switchLabel}>
-              Strukturierter Editor
-            </ThemedText>
-            <Switch
-              value={useStructuredEditor}
-              onValueChange={setUseStructuredEditor}
-              trackColor={{ false: '#767577', true: theme.accent }}
-              thumbColor={useStructuredEditor ? '#f4f3f4' : '#f4f3f4'}
-            />
-          </ThemedView>
-
-          {isLoading ? (
-            <ActivityIndicator size="large" color={theme.accent} style={styles.loader} />
-          ) : useStructuredEditor ? (
-            // Strukturierter Editor
-            <>
-              <AllgemeineAngabenSection
-                data={structuredData.allgemeineAngaben}
-                onChange={(newData) => setStructuredData({
-                  ...structuredData,
-                  allgemeineAngaben: newData
-                })}
-              />
-
-              <GeburtsWuenscheSection
-                data={structuredData.geburtsWuensche}
-                onChange={(newData) => setStructuredData({
-                  ...structuredData,
-                  geburtsWuensche: newData
-                })}
-              />
-
-              <MedizinischeEingriffeSection
-                data={structuredData.medizinischeEingriffe}
-                onChange={(newData) => setStructuredData({
-                  ...structuredData,
-                  medizinischeEingriffe: newData
-                })}
-              />
-
-              <NachDerGeburtSection
-                data={structuredData.nachDerGeburt}
-                onChange={(newData) => setStructuredData({
-                  ...structuredData,
-                  nachDerGeburt: newData
-                })}
-              />
-
-              <NotfallSection
-                data={structuredData.notfall}
-                onChange={(newData) => setStructuredData({
-                  ...structuredData,
-                  notfall: newData
-                })}
-              />
-
-              <SonstigeWuenscheSection
-                data={structuredData.sonstigeWuensche}
-                onChange={(newData) => setStructuredData({
-                  ...structuredData,
-                  sonstigeWuensche: newData
-                })}
-              />
-            </>
-          ) : (
-            // Einfacher Texteditor
-            <ThemedView style={styles.textAreaContainer} lightColor={theme.card} darkColor={theme.card}>
-              <TextInput
-                style={[
-                  styles.textArea,
-                  { color: colorScheme === 'dark' ? theme.text : theme.text }
-                ]}
-                multiline
-                numberOfLines={20}
-                placeholder="Schreibe hier deinen Geburtsplan..."
-                placeholderTextColor={colorScheme === 'dark' ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)'}
-                value={geburtsplan}
-                onChangeText={setGeburtsplan}
-              />
-            </ThemedView>
-          )}
-
-          <View style={styles.buttonContainer}>
-            <TouchableOpacity
-              style={[styles.saveButton, { backgroundColor: theme.accent }]}
-              onPress={handleSaveGeburtsplan}
-              disabled={isSaving}
-            >
-              {isSaving ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <ThemedText style={styles.saveButtonText} lightColor="#FFFFFF" darkColor="#FFFFFF">
-                  Geburtsplan speichern
+                <ThemedText style={styles.title}>
+                  Geburtsplan
                 </ThemedText>
-              )}
-            </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[styles.downloadButton, { backgroundColor: theme.success }]}
-              onPress={handleGeneratePDF}
-              disabled={isGeneratingPDF}
-            >
-              {isGeneratingPDF ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <View style={styles.downloadButtonInner}>
-                  <IconSymbol name="arrow.down.doc" size={20} color="#FFFFFF" />
-                  <ThemedText style={styles.downloadButtonText} lightColor="#FFFFFF" darkColor="#FFFFFF">
-                    Als PDF herunterladen
+                <ThemedView style={styles.card} lightColor={theme.card} darkColor={theme.card}>
+                  <ThemedText style={styles.cardText}>
+                    Hier kannst du deinen persönlichen Geburtsplan erstellen und speichern.
+                    Notiere deine Wünsche und Vorstellungen für die Geburt, damit du sie mit deinem
+                    Geburtsteam teilen kannst.
                   </ThemedText>
+                </ThemedView>
+
+                {/* Editor-Umschalter */}
+                <ThemedView style={styles.switchContainer} lightColor={theme.card} darkColor={theme.card}>
+                  <ThemedText style={styles.switchLabel}>
+                    Strukturierter Editor
+                  </ThemedText>
+                  <Switch
+                    value={useStructuredEditor}
+                    onValueChange={setUseStructuredEditor}
+                    trackColor={{ false: '#767577', true: theme.tint }}
+                    thumbColor={useStructuredEditor ? '#fff' : '#f4f3f4'}
+                    ios_backgroundColor="#767577"
+                  />
+                </ThemedView>
+
+                {isLoading ? (
+                  <ActivityIndicator size="large" color={theme.accent} style={styles.loader} />
+                ) : useStructuredEditor ? (
+                  // Strukturierter Editor
+                  <>
+                    <AllgemeineAngabenSection
+                      data={structuredData.allgemeineAngaben}
+                      onChange={(newData) => setStructuredData({
+                        ...structuredData,
+                        allgemeineAngaben: newData
+                      })}
+                    />
+
+                    <GeburtsWuenscheSection
+                      data={structuredData.geburtsWuensche}
+                      onChange={(newData) => setStructuredData({
+                        ...structuredData,
+                        geburtsWuensche: newData
+                      })}
+                    />
+
+                    <MedizinischeEingriffeSection
+                      data={structuredData.medizinischeEingriffe}
+                      onChange={(newData) => setStructuredData({
+                        ...structuredData,
+                        medizinischeEingriffe: newData
+                      })}
+                    />
+
+                    <NachDerGeburtSection
+                      data={structuredData.nachDerGeburt}
+                      onChange={(newData) => setStructuredData({
+                        ...structuredData,
+                        nachDerGeburt: newData
+                      })}
+                    />
+
+                    <NotfallSection
+                      data={structuredData.notfall}
+                      onChange={(newData) => setStructuredData({
+                        ...structuredData,
+                        notfall: newData
+                      })}
+                    />
+
+                    <SonstigeWuenscheSection
+                      data={structuredData.sonstigeWuensche}
+                      onChange={(newData) => setStructuredData({
+                        ...structuredData,
+                        sonstigeWuensche: newData
+                      })}
+                    />
+                  </>
+                ) : (
+                  // Einfacher Texteditor
+                  <ThemedView style={styles.textAreaContainer} lightColor={theme.card} darkColor={theme.card}>
+                    <TextInput
+                      style={[
+                        styles.textArea,
+                        { color: colorScheme === 'dark' ? theme.text : theme.text }
+                      ]}
+                      multiline
+                      numberOfLines={20}
+                      placeholder="Schreibe hier deinen Geburtsplan..."
+                      placeholderTextColor={colorScheme === 'dark' ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)'}
+                      value={geburtsplan}
+                      onChangeText={setGeburtsplan}
+                    />
+                  </ThemedView>
+                )}
+
+                <View style={styles.buttonContainer}>
+                  <TouchableOpacity
+                    style={[styles.saveButton, { backgroundColor: theme.accent }]}
+                    onPress={handleSaveGeburtsplan}
+                    disabled={isSaving}
+                  >
+                    {isSaving ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <ThemedText style={styles.saveButtonText} lightColor="#FFFFFF" darkColor="#FFFFFF">
+                        Geburtsplan speichern
+                      </ThemedText>
+                    )}
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.downloadButton, { backgroundColor: theme.success }]}
+                    onPress={handleGeneratePDF}
+                    disabled={isGeneratingPDF}
+                  >
+                    {isGeneratingPDF ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <View style={styles.downloadButtonInner}>
+                        <IconSymbol name="arrow.down.doc" size={20} color="#FFFFFF" />
+                        <ThemedText style={styles.downloadButtonText} lightColor="#FFFFFF" darkColor="#FFFFFF">
+                          Als PDF herunterladen
+                        </ThemedText>
+                      </View>
+                    )}
+                  </TouchableOpacity>
                 </View>
-              )}
-            </TouchableOpacity>
-          </View>
 
-          <ThemedView style={styles.tipsCard} lightColor={theme.card} darkColor={theme.card}>
-            <ThemedText type="defaultSemiBold" style={styles.tipsTitle}>
-              Tipps für deinen Geburtsplan:
-            </ThemedText>
-            <ThemedText style={styles.tipText}>• Gebärposition: Welche Positionen bevorzugst du?</ThemedText>
-            <ThemedText style={styles.tipText}>• Schmerzlinderung: Welche Methoden möchtest du nutzen?</ThemedText>
-            <ThemedText style={styles.tipText}>• Atmosphäre: Musik, Licht, Anwesende Personen</ThemedText>
-            <ThemedText style={styles.tipText}>• Medizinische Eingriffe: Welche akzeptierst du, welche nicht?</ThemedText>
-            <ThemedText style={styles.tipText}>• Nach der Geburt: Wünsche für die ersten Stunden mit deinem Baby</ThemedText>
-          </ThemedView>
+                <ThemedView style={styles.tipsCard} lightColor={theme.card} darkColor={theme.card}>
+                  <ThemedText type="defaultSemiBold" style={styles.tipsTitle}>
+                    Tipps für deinen Geburtsplan:
+                  </ThemedText>
+                  <ThemedText style={styles.tipText}>• Gebärposition: Welche Positionen bevorzugst du?</ThemedText>
+                  <ThemedText style={styles.tipText}>• Schmerzlinderung: Welche Methoden möchtest du nutzen?</ThemedText>
+                  <ThemedText style={styles.tipText}>• Atmosphäre: Musik, Licht, Anwesende Personen</ThemedText>
+                  <ThemedText style={styles.tipText}>• Medizinische Eingriffe: Welche akzeptierst du, welche nicht?</ThemedText>
+                  <ThemedText style={styles.tipText}>• Nach der Geburt: Wünsche für die ersten Stunden mit deinem Baby</ThemedText>
+                </ThemedView>
+              </ScrollView>
+            </SafeAreaView>
+          </ThemedBackground>
         </ScrollView>
-        </SafeAreaView>
-      </ImageBackground>
-
+      </SafeAreaView>
+    </ThemedBackground>
   );
 }
 
@@ -442,9 +454,10 @@ const createStyles = (theme: any) => StyleSheet.create({
     paddingBottom: 40,
   },
   title: {
-    fontSize: 28,
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 20,
     textAlign: 'center',
-    marginVertical: 20,
   },
   // Zurück-Button-Styles werden jetzt in der BackButton-Komponente verwaltet
   card: {

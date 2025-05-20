@@ -9,6 +9,7 @@ export interface Post {
   updated_at: string;
   is_anonymous?: boolean;
   type?: 'text' | 'poll';
+  image_url?: string; // URL zum Bild, falls vorhanden
   // Virtuelle Felder (werden durch Joins oder clientseitige Berechnungen gefüllt)
   user_name?: string;
   user_role?: string;
@@ -38,8 +39,176 @@ export interface Comment {
   has_liked?: boolean;
 }
 
+export interface Notification {
+  id: string;
+  user_id: string;        // Empfänger der Benachrichtigung
+  sender_id: string;      // Absender der Benachrichtigung
+  type: 'like_post' | 'like_comment' | 'comment' | 'reply' | 'like_nested_comment' | 'follow' | 'message';
+  content: string;        // Zusätzlicher Kontext oder Inhalt (z.B. Kommentartext)
+  reference_id: string;   // ID des Beitrags oder Kommentars
+  created_at: string;
+  is_read: boolean;
+}
+
+// Neue Funktion: Benachrichtigung erstellen
+export const createNotification = async (
+  recipientId: string,
+  type: 'like_post' | 'like_comment' | 'comment' | 'reply' | 'like_nested_comment' | 'follow' | 'message',
+  referenceId: string,
+  content: string = ''
+) => {
+  try {
+    // Prüfen, ob der aktuelle Benutzer angemeldet ist
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
+
+    // Nicht an sich selbst senden
+    if (userData.user.id === recipientId) return { data: null, error: null };
+
+    // Wenn der Inhalt zu lang ist, kürzen
+    const truncatedContent = content.length > 100 ? content.substring(0, 97) + '...' : content;
+
+    // Notifikation erstellen
+    const { data, error } = await supabase
+      .from('community_notifications')
+      .insert({
+        user_id: recipientId,
+        sender_id: userData.user.id,
+        type,
+        content: truncatedContent,
+        reference_id: referenceId,
+        created_at: new Date().toISOString(),
+        is_read: false
+      });
+
+    if (error) {
+      console.error('Error creating notification:', error);
+      return { data: null, error };
+    }
+
+    return { data, error: null };
+  } catch (err) {
+    console.error('Failed to create notification:', err);
+    return { data: null, error: err };
+  }
+};
+
+// Benachrichtigungen für einen Benutzer abrufen
+export const getNotifications = async () => {
+  try {
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
+
+    console.log("Fetching notifications for user:", userData.user.id);
+
+    // Benachrichtigungen abrufen
+    const { data, error } = await supabase
+      .from('community_notifications')
+      .select()
+      .eq('user_id', userData.user.id)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching notifications:', error);
+      return { data: null, error };
+    }
+
+    console.log(`Retrieved ${data?.length || 0} notifications total`);
+    
+    // Anzahl der verschiedenen Typen von Benachrichtigungen ausgeben
+    const typeCounts = data?.reduce((acc, notification) => {
+      acc[notification.type] = (acc[notification.type] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+    console.log("Notification types count:", typeCounts);
+
+    // Für jede Benachrichtigung den Absendernamen abrufen
+    const notificationsWithSenders = await Promise.all(data.map(async (notification) => {
+      // Absenderinformationen abrufen
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('first_name, last_name, user_role')
+        .eq('id', notification.sender_id)
+        .single();
+
+      if (profileError) {
+        console.error('Error fetching sender profile:', profileError);
+        return {
+          ...notification,
+          sender_name: 'Benutzer'
+        };
+      }
+
+      // Vollständigen Namen verwenden, wenn beide Felder vorhanden sind
+      const fullName = profileData.first_name
+        ? (profileData.last_name 
+            ? `${profileData.first_name} ${profileData.last_name}` 
+            : profileData.first_name)
+        : 'Benutzer';
+
+      return {
+        ...notification,
+        sender_name: fullName
+      };
+    }));
+
+    return { data: notificationsWithSenders, error: null };
+  } catch (err) {
+    console.error('Failed to get notifications:', err);
+    return { data: null, error: err };
+  }
+};
+
+// Benachrichtigung als gelesen markieren
+export const markNotificationAsRead = async (notificationId: string) => {
+  try {
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
+
+    const { data, error } = await supabase
+      .from('community_notifications')
+      .update({ is_read: true })
+      .eq('id', notificationId)
+      .eq('user_id', userData.user.id);
+
+    if (error) {
+      console.error('Error marking notification as read:', error);
+      return { data: null, error };
+    }
+
+    return { data, error: null };
+  } catch (err) {
+    console.error('Failed to mark notification as read:', err);
+    return { data: null, error: err };
+  }
+};
+
+// Alle Benachrichtigungen als gelesen markieren
+export const markAllNotificationsAsRead = async () => {
+  try {
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
+
+    const { data, error } = await supabase
+      .from('community_notifications')
+      .update({ is_read: true })
+      .eq('user_id', userData.user.id)
+      .eq('is_read', false);
+
+    if (error) {
+      console.error('Error marking all notifications as read:', error);
+      return { data: null, error };
+    }
+
+    return { data, error: null };
+  } catch (err) {
+    console.error('Failed to mark all notifications as read:', err);
+    return { data: null, error: err };
+  }
+};
+
 // Beiträge abrufen
-export const getPosts = async (searchQuery: string = '', tagIds: string[] = []) => {
+export const getPosts = async (searchQuery: string = '', tagIds: string[] = [], userId?: string) => {
   try {
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
@@ -48,18 +217,32 @@ export const getPosts = async (searchQuery: string = '', tagIds: string[] = []) 
     let posts;
     let postsError;
 
+    // Basisabfrage
+    let query = supabase.from('community_posts').select();
+
+    // Filtere nach Benutzer ID, wenn angegeben
+    if (userId) {
+      query = query.eq('user_id', userId);
+    }
+
+    // Nach Erstellungsdatum sortieren
+    query = query.order('created_at', { ascending: false });
+
     if (tagIds.length > 0) {
       // Wenn Tags ausgewählt sind, verwende die get_posts_with_tags Funktion
       const result = await supabase
         .rpc('get_posts_with_tags', { tag_ids: tagIds });
+      
+      // Wenn auch user_id Filter angewendet werden soll
+      if (userId && result.data) {
+        result.data = result.data.filter((post: any) => post.user_id === userId);
+      }
+      
       posts = result.data;
       postsError = result.error;
     } else {
       // Normale Abfrage ohne Tag-Filter
-      const result = await supabase
-        .from('community_posts')
-        .select()
-        .order('created_at', { ascending: false });
+      const result = await query;
       posts = result.data;
       postsError = result.error;
     }
@@ -70,7 +253,7 @@ export const getPosts = async (searchQuery: string = '', tagIds: string[] = []) 
     }
 
     // Für jeden Beitrag die Benutzerinformationen, Likes und Kommentare abrufen
-    const postsWithCounts = await Promise.all(posts.map(async (post) => {
+    const postsWithCounts = await Promise.all(posts.map(async (post: any) => {
       // DIREKTER ANSATZ: Benutzerinformationen direkt aus der Datenbank abrufen
       console.log(`Fetching profile for user_id: ${post.user_id}`);
 
@@ -386,98 +569,103 @@ export const getComments = async (postId: string) => {
 };
 
 // Neuen Beitrag erstellen
-export const createPost = async (content: string, isAnonymous: boolean = false, type: 'text' | 'poll' = 'text', pollData?: any, tagIds: string[] = []) => {
+export const createPost = async (content: string, isAnonymous: boolean = false, type: 'text' | 'poll' = 'text', pollData?: any, tagIds: string[] = [], imageBase64?: string) => {
   try {
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
-    // Debug-Ausgabe
-    console.log('Creating post with is_anonymous:', isAnonymous, 'type:', type);
+    console.log('=== CREATE POST WITH IMAGE ===');
+    console.log('User ID:', userData.user.id);
+    console.log('Has image:', !!imageBase64);
+    
+    // Bild hochladen, falls vorhanden
+    let imageUrl = null;
+    if (imageBase64 && imageBase64.length > 0) {
+      try {
+        console.log('Starting DIRECT image upload...');
+        
+        // 1. Eindeutigen Dateinamen erzeugen
+        const timestamp = new Date().getTime();
+        const randomStr = Math.random().toString(36).substring(2, 15);
+        const fileName = `post_${timestamp}_${randomStr}.jpg`;
+        const filePath = `posts/${fileName}`;
+        
+        console.log('File path:', filePath);
 
-    // Direkter Ansatz: Explizit is_anonymous setzen
-    const insertData = {
+        // 2. Base64-Encoding vorbereiten
+        let base64Data = imageBase64;
+        if (imageBase64.includes('base64,')) {
+          console.log('Extracting base64 data from data URL...');
+          base64Data = imageBase64.split('base64,')[1];
+        }
+
+        // 3. In Binärdaten umwandeln
+        console.log('Converting to binary...');
+        const binary = atob(base64Data);
+        const array = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) {
+          array[i] = binary.charCodeAt(i);
+        }
+        
+        console.log('Binary data created, length:', array.length);
+
+        // 4. Datei hochladen
+        console.log('Uploading file to Supabase...');
+        const { data: uploadResult, error: uploadError } = await supabase.storage
+          .from('community-images')
+          .upload(filePath, array, {
+            contentType: 'image/jpeg'
+          });
+
+        if (uploadError) {
+          console.error('Upload error details:', JSON.stringify(uploadError));
+          throw new Error(`Fehler beim Hochladen: ${uploadError.message}`);
+        }
+
+        console.log('Upload successful:', JSON.stringify(uploadResult));
+
+        // 5. Öffentliche URL generieren
+        console.log('Generating public URL...');
+        const { data: urlData } = supabase.storage
+          .from('community-images')
+          .getPublicUrl(filePath);
+
+        imageUrl = urlData.publicUrl;
+        console.log('Generated image URL:', imageUrl);
+      } catch (imageError) {
+        console.error('IMAGE UPLOAD ERROR:', imageError);
+        console.error('Error details:', JSON.stringify(imageError));
+      }
+    }
+
+    // Post erstellen
+    console.log('Creating post with image_url:', imageUrl);
+    
+    const postData = {
       user_id: userData.user.id,
       content,
-      is_anonymous: isAnonymous, // Explizit auf true oder false setzen
-      type, // 'text' oder 'poll'
+      type,
+      is_anonymous: isAnonymous,
+      image_url: imageUrl,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
+    
+    console.log('Post data:', JSON.stringify(postData));
 
-    console.log('Insert data:', JSON.stringify(insertData));
-
-    // Versuche zuerst mit is_anonymous
-    let result = await supabase
+    const { data, error } = await supabase
       .from('community_posts')
-      .insert(insertData)
+      .insert(postData)
       .select()
       .single();
 
-    // Wenn es einen Fehler gibt und der Fehler mit is_anonymous zusammenhängt, versuche es ohne
-    if (result.error && result.error.message && result.error.message.includes('is_anonymous')) {
-      console.log('Error with is_anonymous field, trying without it');
-      const { is_anonymous, ...dataWithoutAnonymous } = insertData;
-      result = await supabase
-        .from('community_posts')
-        .insert(dataWithoutAnonymous)
-        .select()
-        .single();
-    }
-
-    const { data, error } = result;
-
     if (error) {
-      console.error('Error creating post:', error);
+      console.error('Error creating post:', JSON.stringify(error));
       return { data: null, error };
     }
 
-    // Wenn es sich um einen Umfrage-Post handelt, erstelle die Umfrage
-    if (type === 'poll' && pollData && data) {
-      try {
-        // Umfrage erstellen
-        const { data: poll, error: pollError } = await supabase
-          .from('community_polls')
-          .insert({
-            post_id: data.id,
-            question: pollData.question,
-            allow_multiple_choices: pollData.allow_multiple_choices || false,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          })
-          .select()
-          .single();
-
-        if (pollError) {
-          console.error('Error creating poll:', pollError);
-          return { data, error: pollError };
-        }
-
-        // Optionen für die Umfrage erstellen
-        if (poll && pollData.options && pollData.options.length > 0) {
-          const optionsToInsert = pollData.options.map((option: string) => ({
-            poll_id: poll.id,
-            option_text: option,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          }));
-
-          const { error: optionsError } = await supabase
-            .from('community_poll_options')
-            .insert(optionsToInsert);
-
-          if (optionsError) {
-            console.error('Error creating poll options:', optionsError);
-            return { data, error: optionsError };
-          }
-
-          // Füge die Umfrage-ID zum Post hinzu
-          return { data: { ...data, poll_id: poll.id }, error: null };
-        }
-      } catch (pollErr) {
-        console.error('Failed to create poll:', pollErr);
-        return { data, error: pollErr };
-      }
-    }
+    console.log('Post created successfully:', data);
+    console.log('Image URL in created post:', data.image_url);
 
     // Tags zum Beitrag hinzufügen, wenn vorhanden
     if (tagIds.length > 0 && data) {
@@ -554,6 +742,28 @@ export const createComment = async (postId: string, content: string, isAnonymous
       return { data: null, error };
     }
 
+    // Hole den Beitrag, um den Beitragersteller zu benachrichtigen
+    const { data: postData, error: postError } = await supabase
+      .from('community_posts')
+      .select('user_id, content')
+      .eq('id', postId)
+      .single();
+
+    if (!postError && postData && !isAnonymous) {
+      // Erstelle eine Benachrichtigung für den Beitragersteller
+      // Kürze den Beitragsinhalt für die Benachrichtigung
+      const shortPostContent = postData.content.length > 30 
+        ? postData.content.substring(0, 27) + '...' 
+        : postData.content;
+        
+      await createNotification(
+        postData.user_id,
+        'comment',
+        postId,
+        `${content} (zu: "${shortPostContent}")`
+      );
+    }
+
     return { data, error: null };
   } catch (err) {
     console.error('Failed to create comment:', err);
@@ -597,6 +807,30 @@ export const togglePostLike = async (postId: string) => {
           user_id: userData.user.id,
           created_at: new Date().toISOString()
         });
+
+      // Wenn erfolgreich, Benachrichtigung senden
+      if (!result.error) {
+        // Beitrag abrufen, um den Ersteller zu finden
+        const { data: postData, error: postError } = await supabase
+          .from('community_posts')
+          .select('user_id, content')
+          .eq('id', postId)
+          .single();
+
+        if (!postError && postData) {
+          // Kürze den Beitragsinhalt für die Benachrichtigung
+          const shortContent = postData.content.length > 30 
+            ? postData.content.substring(0, 27) + '...' 
+            : postData.content;
+            
+          await createNotification(
+            postData.user_id,
+            'like_post',
+            postId,
+            shortContent
+          );
+        }
+      }
     }
 
     if (result.error) {
@@ -647,6 +881,30 @@ export const toggleCommentLike = async (commentId: string) => {
           user_id: userData.user.id,
           created_at: new Date().toISOString()
         });
+
+      // Wenn erfolgreich, Benachrichtigung senden
+      if (!result.error) {
+        // Kommentar abrufen, um den Ersteller zu finden
+        const { data: commentData, error: commentError } = await supabase
+          .from('community_comments')
+          .select('user_id, content')
+          .eq('id', commentId)
+          .single();
+
+        if (!commentError && commentData) {
+          // Kürze den Kommentarinhalt für die Benachrichtigung
+          const shortContent = commentData.content.length > 30 
+            ? commentData.content.substring(0, 27) + '...' 
+            : commentData.content;
+            
+          await createNotification(
+            commentData.user_id,
+            'like_comment',
+            commentId,
+            shortContent
+          );
+        }
+      }
     }
 
     if (result.error) {
@@ -705,6 +963,207 @@ export const deleteComment = async (commentId: string) => {
     return { data, error: null };
   } catch (err) {
     console.error('Failed to delete comment:', err);
+    return { data: null, error: err };
+  }
+};
+
+// Verschachtelte Kommentare zu einem Kommentar abrufen
+export const getNestedComments = async (commentId: string) => {
+  try {
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
+
+    // Verschachtelte Kommentare abrufen
+    const { data: comments, error } = await supabase
+      .from('community_nested_comments')
+      .select()
+      .eq('parent_comment_id', commentId)
+      .order('created_at', { ascending: true });
+
+    if (error) return { data: null, error };
+
+    // Für jeden Kommentar die Benutzerinformationen und Likes abrufen
+    const commentsWithInfo = await Promise.all(comments.map(async (comment) => {
+      // Benutzerinformationen abrufen
+      const { data: profileData, error: profileError } = await supabase
+        .rpc('get_user_profile', { user_id_param: comment.user_id });
+
+      let profile = null;
+      if (!profileError && profileData && profileData.length > 0) {
+        profile = profileData[0];
+      }
+
+      // Likes für diesen Kommentar zählen
+      const { count: likesCount, error: likesError } = await supabase
+        .from('community_comment_likes')
+        .select('id', { count: 'exact', head: true })
+        .eq('comment_id', comment.id);
+
+      // Prüfen, ob der aktuelle Benutzer diesen Kommentar geliked hat
+      const { data: userLike, error: userLikeError } = await supabase
+        .from('community_comment_likes')
+        .select('id')
+        .eq('comment_id', comment.id)
+        .eq('user_id', userData.user.id)
+        .maybeSingle();
+
+      return {
+        ...comment,
+        user_name: comment.is_anonymous ? 'Anonym' : profile ? `${profile.first_name} ${profile.last_name}`.trim() : 'Benutzer',
+        user_role: profile?.user_role || null,
+        likes_count: likesCount || 0,
+        has_liked: !!userLike
+      };
+    }));
+
+    return { data: commentsWithInfo, error: null };
+  } catch (error) {
+    console.error('Error in getNestedComments:', error);
+    return { data: null, error };
+  }
+};
+
+// Erstelle eine Antwort auf einen Kommentar
+export const createReply = async (commentId: string, content: string, isAnonymous: boolean = false) => {
+  try {
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
+
+    // Kommentar erstellen
+    const { data, error } = await supabase
+      .from('community_nested_comments')
+      .insert({
+        parent_comment_id: commentId,
+        user_id: userData.user.id,
+        content,
+        is_anonymous: isAnonymous
+      })
+      .select();
+
+    if (!error && data && !isAnonymous) {
+      // Hole den übergeordneten Kommentar, um den Kommentarersteller zu benachrichtigen
+      const { data: commentData, error: commentError } = await supabase
+        .from('community_comments')
+        .select('user_id, content')
+        .eq('id', commentId)
+        .single();
+
+      if (!commentError && commentData) {
+        // Kürze den Kommentarinhalt für die Benachrichtigung
+        const shortCommentContent = commentData.content.length > 30 
+          ? commentData.content.substring(0, 27) + '...' 
+          : commentData.content;
+          
+        await createNotification(
+          commentData.user_id,
+          'reply',
+          commentId,
+          `${content} (zu: "${shortCommentContent}")`
+        );
+      }
+    }
+
+    return { data, error };
+  } catch (error) {
+    console.error('Error in createReply:', error);
+    return { data: null, error };
+  }
+};
+
+// Verschachtelte Kommentare liken oder Unlike
+export const toggleNestedCommentLike = async (nestedCommentId: string) => {
+  try {
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
+
+    // Prüfen, ob der Benutzer den Kommentar bereits geliked hat
+    const { data: existingLike, error: checkError } = await supabase
+      .from('community_nested_comment_likes')
+      .select('id')
+      .eq('nested_comment_id', nestedCommentId)
+      .eq('user_id', userData.user.id)
+      .maybeSingle();
+
+    if (checkError) {
+      console.error('Error checking existing nested comment like:', checkError);
+      return { data: null, error: checkError };
+    }
+
+    let result;
+
+    if (existingLike) {
+      // Unlike: Like entfernen
+      result = await supabase
+        .from('community_nested_comment_likes')
+        .delete()
+        .eq('id', existingLike.id);
+    } else {
+      // Like hinzufügen
+      result = await supabase
+        .from('community_nested_comment_likes')
+        .insert({
+          nested_comment_id: nestedCommentId,
+          user_id: userData.user.id,
+          created_at: new Date().toISOString()
+        });
+
+      // Wenn erfolgreich, Benachrichtigung senden
+      if (!result.error) {
+        // Verschachtelten Kommentar abrufen, um den Ersteller zu finden
+        const { data: nestedCommentData, error: nestedCommentError } = await supabase
+          .from('community_nested_comments')
+          .select('user_id, content')
+          .eq('id', nestedCommentId)
+          .single();
+
+        if (!nestedCommentError && nestedCommentData) {
+          // Kürze den Kommentarinhalt für die Benachrichtigung
+          const shortContent = nestedCommentData.content.length > 30 
+            ? nestedCommentData.content.substring(0, 27) + '...' 
+            : nestedCommentData.content;
+            
+          await createNotification(
+            nestedCommentData.user_id,
+            'like_nested_comment',
+            nestedCommentId,
+            shortContent
+          );
+        }
+      }
+    }
+
+    if (result.error) {
+      console.error('Error toggling nested comment like:', result.error);
+      return { data: null, error: result.error };
+    }
+
+    return { data: { liked: !existingLike }, error: null };
+  } catch (err) {
+    console.error('Failed to toggle nested comment like:', err);
+    return { data: null, error: err };
+  }
+};
+
+// Verschachtelten Kommentar löschen
+export const deleteNestedComment = async (nestedCommentId: string) => {
+  try {
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
+
+    const { data, error } = await supabase
+      .from('community_nested_comments')
+      .delete()
+      .eq('id', nestedCommentId)
+      .eq('user_id', userData.user.id);
+
+    if (error) {
+      console.error('Error deleting nested comment:', error);
+      return { data: null, error };
+    }
+
+    return { data, error: null };
+  } catch (err) {
+    console.error('Failed to delete nested comment:', err);
     return { data: null, error: err };
   }
 };

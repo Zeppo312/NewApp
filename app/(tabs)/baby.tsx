@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, Image, TextInput, Alert, ImageBackground, SafeAreaView, StatusBar, Platform } from 'react-native';
+import { StyleSheet, ScrollView, View, TouchableOpacity, Image, TextInput, Alert, SafeAreaView, StatusBar, Platform } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
+import { ThemedBackground } from '@/components/ThemedBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/contexts/AuthContext';
@@ -10,7 +11,12 @@ import { getBabyInfo, saveBabyInfo, BabyInfo } from '@/lib/baby';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '@/lib/supabase';
-import { useRouter } from 'expo-router';
+import { useRouter, Stack } from 'expo-router';
+import { BackButton } from '@/components/BackButton';
+import Header from '@/components/Header';
+import * as Notifications from 'expo-notifications';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { registerBackgroundFetchAsync, saveBabyInfoForBackgroundTask, getBackgroundFetchStatus } from '@/tasks/milestoneCheckerTask';
 
 export default function BabyScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -22,14 +28,41 @@ export default function BabyScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
+  const [notificationsRequested, setNotificationsRequested] = useState(false);
+  const [backgroundTaskStatus, setBackgroundTaskStatus] = useState<{status: string, isRegistered: boolean} | null>(null);
 
   useEffect(() => {
     if (user) {
       loadBabyInfo();
+      registerForPushNotificationsAsync();
+      setupBackgroundTask();
     } else {
       setIsLoading(false);
     }
   }, [user]);
+  
+  // Wir speichern die Baby-Infos für den Hintergrund-Task nur in handleSave,
+  // um unnötige Speichervorgänge zu vermeiden
+  
+  // Hintergrund-Task einrichten
+  const setupBackgroundTask = async () => {
+    try {
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      if (existingStatus === 'granted') {
+        await registerBackgroundFetchAsync();
+        console.log('Hintergrund-Task für Meilensteine registriert.');
+        
+        // Status prüfen und speichern
+        const status = await getBackgroundFetchStatus();
+        setBackgroundTaskStatus(status);
+        console.log('Background Fetch Status:', status);
+      } else {
+        console.log('Keine Berechtigung für Benachrichtigungen, Hintergrund-Task nicht registriert.');
+      }
+    } catch (error) {
+      console.error('Fehler beim Einrichten des Hintergrund-Tasks:', error);
+    }
+  };
 
   const loadBabyInfo = async () => {
     try {
@@ -44,8 +77,11 @@ export default function BabyScreen() {
           birth_date: data.birth_date || null,
           weight: data.weight || '',
           height: data.height || '',
-          photo_url: data.photo_url || null
+          photo_url: data.photo_url || null,
+          baby_gender: data.baby_gender || 'unknown'
         });
+        
+        // Wir planen keine Benachrichtigungen im Voraus mehr, stattdessen prüfen wir täglich
       }
     } catch (err) {
       console.error('Failed to load baby info:', err);
@@ -63,6 +99,13 @@ export default function BabyScreen() {
       } else {
         Alert.alert('Erfolg', 'Die Informationen wurden erfolgreich gespeichert.');
         setIsEditing(false);
+        
+        // Speichere relevante Baby-Infos für den Hintergrund-Task
+        if (babyInfo.birth_date) {
+          await saveBabyInfoForBackgroundTask(babyInfo);
+          console.log('Baby-Infos für Hintergrund-Task gespeichert.');
+        }
+        
         loadBabyInfo(); // Neu laden, um sicherzustellen, dass wir die aktuellsten Daten haben
       }
     } catch (err) {
@@ -160,33 +203,25 @@ export default function BabyScreen() {
   };
 
   return (
-    <ImageBackground
-      source={require('@/assets/images/Background_Hell.png')}
-      style={styles.backgroundImage}
-      resizeMode="repeat"
-    >
-      <SafeAreaView style={styles.container}>
-      <StatusBar hidden={true} />
-        <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
-          <View style={styles.header}>
-            <TouchableOpacity
-              style={styles.backButton}
-              onPress={() => router.back()}
-            >
-              <IconSymbol name="chevron.left" size={24} color="#E57373" />
-            </TouchableOpacity>
-
-            <ThemedText type="title" style={styles.title}>
-              Mein Baby
-            </ThemedText>
-          </View>
+    <ThemedBackground style={styles.container}>
+      <SafeAreaView style={{ flex: 1 }}>
+        <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
+        
+        <Header title="Mein Baby" showBackButton={true} />
+        
+        <ScrollView 
+          style={styles.scrollView}
+          contentContainerStyle={styles.contentContainer}
+          showsVerticalScrollIndicator={false}
+        >
+          
 
           <ThemedView style={styles.card} lightColor={theme.card} darkColor={theme.card}>
             <View style={styles.photoContainer}>
               {babyInfo.photo_url ? (
                 <Image source={{ uri: babyInfo.photo_url }} style={styles.babyPhoto} />
               ) : (
-                <View style={styles.placeholderPhoto}>
+                <View style={[styles.placeholderPhoto, { backgroundColor: colorScheme === 'dark' ? '#555' : '#E0E0E0' }]}>
                   <IconSymbol name="person.fill" size={60} color={theme.tabIconDefault} />
                 </View>
               )}
@@ -204,7 +239,14 @@ export default function BabyScreen() {
                   <View style={styles.inputRow}>
                     <ThemedText style={styles.label}>Name:</ThemedText>
                     <TextInput
-                      style={[styles.input, { color: colorScheme === 'dark' ? '#FFFFFF' : '#000000' }]}
+                      style={[
+                        styles.input, 
+                        { 
+                          color: colorScheme === 'dark' ? '#FFFFFF' : '#000000',
+                          borderColor: colorScheme === 'dark' ? '#666' : '#CCCCCC',
+                          backgroundColor: colorScheme === 'dark' ? '#444' : '#FFFFFF'
+                        }
+                      ]}
                       value={babyInfo.name}
                       onChangeText={(text) => setBabyInfo({ ...babyInfo, name: text })}
                       placeholder="Name des Babys"
@@ -215,7 +257,13 @@ export default function BabyScreen() {
                   <View style={styles.inputRow}>
                     <ThemedText style={styles.label}>Geburtsdatum:</ThemedText>
                     <TouchableOpacity
-                      style={styles.dateButton}
+                      style={[
+                        styles.dateButton,
+                        {
+                          borderColor: colorScheme === 'dark' ? '#666' : '#CCCCCC',
+                          backgroundColor: colorScheme === 'dark' ? '#444' : '#FFFFFF' 
+                        }
+                      ]}
                       onPress={() => setShowDatePicker(true)}
                     >
                       <ThemedText style={styles.dateText}>
@@ -233,6 +281,7 @@ export default function BabyScreen() {
                         display="default"
                         onChange={handleDateChange}
                         maximumDate={new Date()}
+                        textColor={colorScheme === 'dark' ? '#FFFFFF' : undefined}
                       />
                     )}
                   </View>
@@ -240,7 +289,14 @@ export default function BabyScreen() {
                   <View style={styles.inputRow}>
                     <ThemedText style={styles.label}>Gewicht:</ThemedText>
                     <TextInput
-                      style={[styles.input, { color: colorScheme === 'dark' ? '#FFFFFF' : '#000000' }]}
+                      style={[
+                        styles.input, 
+                        { 
+                          color: colorScheme === 'dark' ? '#FFFFFF' : '#000000',
+                          borderColor: colorScheme === 'dark' ? '#666' : '#CCCCCC',
+                          backgroundColor: colorScheme === 'dark' ? '#444' : '#FFFFFF'
+                        }
+                      ]}
                       value={babyInfo.weight}
                       onChangeText={(text) => setBabyInfo({ ...babyInfo, weight: text })}
                       placeholder="z.B. 3250g"
@@ -251,7 +307,14 @@ export default function BabyScreen() {
                   <View style={styles.inputRow}>
                     <ThemedText style={styles.label}>Größe:</ThemedText>
                     <TextInput
-                      style={[styles.input, { color: colorScheme === 'dark' ? '#FFFFFF' : '#000000' }]}
+                      style={[
+                        styles.input, 
+                        { 
+                          color: colorScheme === 'dark' ? '#FFFFFF' : '#000000',
+                          borderColor: colorScheme === 'dark' ? '#666' : '#CCCCCC',
+                          backgroundColor: colorScheme === 'dark' ? '#444' : '#FFFFFF'
+                        }
+                      ]}
                       value={babyInfo.height}
                       onChangeText={(text) => setBabyInfo({ ...babyInfo, height: text })}
                       placeholder="z.B. 52cm"
@@ -327,6 +390,21 @@ export default function BabyScreen() {
             </View>
           </ThemedView>
 
+          <TouchableOpacity onPress={() => router.push({ pathname: '/baby-stats' } as any)}>
+            <ThemedView style={styles.infoCard} lightColor={theme.cardLight} darkColor={theme.cardDark}>
+              <View style={styles.statsButtonContent}>
+                <View>
+                  <ThemedText style={styles.infoTitle}>
+                    Baby-Statistiken
+                  </ThemedText>
+                  <ThemedText style={styles.infoText}>
+                    Alter, Entwicklung, Meilensteine und interessante Fakten über dein Baby
+                  </ThemedText>
+                </View>
+              </View>
+            </ThemedView>
+          </TouchableOpacity>
+          
           <ThemedView style={styles.infoCard} lightColor={theme.cardLight} darkColor={theme.cardDark}>
             <ThemedText style={styles.infoTitle}>
               Die ersten Wochen
@@ -346,9 +424,42 @@ export default function BabyScreen() {
           </ThemedView>
         </ScrollView>
       </SafeAreaView>
-    </ImageBackground>
+    </ThemedBackground>
   );
 }
+
+  const registerForPushNotificationsAsync = async () => {
+    try {
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+      
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+      
+      if (finalStatus !== 'granted') {
+        console.log('Permission to receive notifications was denied');
+        return;
+      }
+      
+      // Set notification handler
+      Notifications.setNotificationHandler({
+        handleNotification: async () => ({
+          shouldShowAlert: true,
+          shouldPlaySound: true,
+          shouldSetBadge: true,
+          shouldShowBanner: true,
+          shouldShowList: true,
+        }),
+      });
+      
+    } catch (error) {
+      console.error('Error requesting notification permissions:', error);
+    }
+  };
+  
+  // Die Meilenstein-Prüfung erfolgt jetzt vollständig im Hintergrund-Task
 
 const styles = StyleSheet.create({
   container: {
@@ -356,7 +467,6 @@ const styles = StyleSheet.create({
   },
   backgroundImage: {
     flex: 1,
-    width: '100%',
   },
   scrollView: {
     flex: 1,
@@ -370,22 +480,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 20,
   },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    justifyContent: 'center',
-    alignItems: 'center',
+  backButtonContainer: {
     marginRight: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 2,
   },
   title: {
-    fontSize: 28,
+    fontSize: 24,
     flex: 1,
     textAlign: 'center',
     fontWeight: 'bold',
@@ -414,7 +513,6 @@ const styles = StyleSheet.create({
     width: 150,
     height: 150,
     borderRadius: 75,
-    backgroundColor: '#E0E0E0',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -461,7 +559,6 @@ const styles = StyleSheet.create({
   },
   input: {
     borderWidth: 1,
-    borderColor: '#CCCCCC',
     borderRadius: 5,
     padding: 10,
     fontSize: 16,
@@ -471,7 +568,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#CCCCCC',
     borderRadius: 5,
     padding: 10,
   },
@@ -497,17 +593,17 @@ const styles = StyleSheet.create({
   },
   editButton: {
     backgroundColor: '#7D5A50',
-    marginTop: 20,
-  },
-  saveButton: {
-    backgroundColor: '#7D5A50',
-    flex: 1,
-    marginLeft: 10,
+    marginTop: 10,
   },
   cancelButton: {
-    backgroundColor: '#999999',
+    backgroundColor: '#9E9E9E',
     flex: 1,
     marginRight: 10,
+  },
+  saveButton: {
+    backgroundColor: '#9DBEBB',
+    flex: 1,
+    marginLeft: 10,
   },
   buttonText: {
     fontSize: 16,
@@ -526,11 +622,16 @@ const styles = StyleSheet.create({
   infoTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    marginBottom: 10,
+    marginBottom: 15,
   },
   infoText: {
     fontSize: 14,
-    lineHeight: 22,
-    marginBottom: 8,
+    marginBottom: 10,
+    lineHeight: 20,
   },
+  statsButtonContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  }
 });

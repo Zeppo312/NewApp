@@ -41,6 +41,8 @@ const MAPPING = {
   'calendar.badge.exclamationmark': 'event_busy',
   'trash': 'delete',
   'location': 'location_on',
+  'wind': 'air',
+  'humidity': 'water_drop',
 } as Partial<
   Record<
     import('expo-symbols').SymbolViewProps['name'],

@@ -1,5 +1,22 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { StyleSheet, View, TouchableOpacity, TextInput, SafeAreaView, StatusBar, FlatList, Alert, ActivityIndicator, RefreshControl } from 'react-native';
+import {
+  StyleSheet,
+  View,
+  TouchableOpacity,
+  TextInput,
+  SafeAreaView,
+  StatusBar,
+  FlatList,
+  Alert,
+  ActivityIndicator,
+  RefreshControl,
+  Image,
+  Keyboard,
+  TouchableWithoutFeedback,
+  KeyboardAvoidingView,
+  Platform,
+  Animated
+} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
@@ -9,7 +26,7 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 // useRouter wird durch die BackButton-Komponente verwaltet
 import { useAuth } from '@/contexts/AuthContext';
-import { Post, Comment, getPosts, getComments, createPost, createComment, togglePostLike, toggleCommentLike, deletePost, deleteComment } from '@/lib/community';
+import { Post, Comment, getPosts, getComments, createPost, createComment, togglePostLike, toggleCommentLike, deletePost, deleteComment, getNestedComments, createReply, toggleNestedCommentLike, deleteNestedComment } from '@/lib/community';
 import { PollComponent } from '@/components/PollComponent';
 import { CreatePollForm } from '@/components/CreatePollForm';
 import { CreatePollPost } from '@/components/CreatePollPost';
@@ -17,12 +34,19 @@ import { getPollsByPostId } from '@/lib/polls';
 import { TagSelector } from '@/components/TagSelector';
 import { TagDisplay } from '@/components/TagDisplay';
 import { TagFilter } from '@/components/TagFilter';
+import * as ImagePicker from 'expo-image-picker';
+import Header from '@/components/Header';
+import { NotificationsList } from '@/components/NotificationsList';
+import { NotificationBadge } from '@/components/NotificationBadge';
+import { useRouter } from 'expo-router';
+import { FollowButton } from '@/components/FollowButton';
 
 export default function CommunityScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   // router wird durch die BackButton-Komponente verwaltet
   const { user } = useAuth();
+  const router = useRouter();
 
   const [posts, setPosts] = useState<Post[]>([]);
   const [postComments, setPostComments] = useState<{[key: string]: Comment[]}>({});
@@ -42,6 +66,17 @@ export default function CommunityScreen() {
   const [selectedPostForPoll, setSelectedPostForPoll] = useState<string | null>(null);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [selectedFilterTagIds, setSelectedFilterTagIds] = useState<string[]>([]);
+  const [postImage, setPostImage] = useState<string | null>(null);
+  // Neuer State für das Anzeigen/Ausblenden der Buttons
+  const [showFloatingButtons, setShowFloatingButtons] = useState(false);
+  const rotateAnimation = useState(new Animated.Value(0))[0];
+  // State für verschachtelte Kommentare
+  const [replyToCommentId, setReplyToCommentId] = useState<string | null>(null);
+  const [replyInputs, setReplyInputs] = useState<{[key: string]: string}>({});
+  const [isAnonymousReply, setIsAnonymousReply] = useState<{[key: string]: boolean}>({}); 
+  const [nestedComments, setNestedComments] = useState<{[key: string]: Comment[]}>({});
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [refreshNotificationBadge, setRefreshNotificationBadge] = useState<number>(0);
 
   // Konstanten für AsyncStorage-Keys
   const FILTER_STORAGE_KEY = 'community_filter_tags';
@@ -108,6 +143,83 @@ export default function CommunityScreen() {
     }
   };
 
+  // Lade verschachtelte Kommentare (Antworten auf Kommentare)
+  const loadNestedComments = async (commentId: string) => {
+    try {
+      const { data, error } = await getNestedComments(commentId);
+      if (error) throw error;
+      setNestedComments(prev => ({
+        ...prev,
+        [commentId]: data || []
+      }));
+    } catch (error) {
+      console.error('Error loading nested comments:', error);
+      Alert.alert('Fehler', 'Beim Laden der Antworten ist ein Fehler aufgetreten.');
+    }
+  };
+
+  // Bild für einen Beitrag auswählen
+  const pickImage = async () => {
+    try {
+      // Berechtigungen anfordern
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Berechtigung erforderlich', 'Wir benötigen die Berechtigung, auf deine Fotos zuzugreifen.');
+        return;
+      }
+
+      // Bild auswählen
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.5, // Reduzierte Qualität für kleinere Dateigröße
+        base64: true, // Base64-Daten anfordern
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+
+        // Wenn base64 nicht direkt verfügbar ist, konvertieren wir das Bild
+        if (!asset.base64) {
+          console.log('Base64 nicht direkt verfügbar, konvertiere Bild...');
+          try {
+            const response = await fetch(asset.uri);
+            const blob = await response.blob();
+            const reader = new FileReader();
+
+            // Promise für FileReader erstellen
+            const base64Data = await new Promise((resolve, reject) => {
+              reader.onload = () => resolve(reader.result);
+              reader.onerror = reject;
+              reader.readAsDataURL(blob);
+            });
+
+            // Base64-Daten direkt als photo_url verwenden
+            setPostImage(base64Data as string);
+            console.log('Bild erfolgreich in Base64 konvertiert');
+          } catch (convError) {
+            console.error('Fehler bei der Konvertierung:', convError);
+            Alert.alert('Fehler', 'Das Bild konnte nicht verarbeitet werden.');
+          }
+        } else {
+          // Base64-Daten direkt verwenden
+          const base64Data = `data:image/jpeg;base64,${asset.base64}`;
+          setPostImage(base64Data);
+          console.log('Base64-Daten direkt verwendet');
+        }
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      Alert.alert('Fehler', 'Es ist ein Fehler beim Auswählen des Bildes aufgetreten.');
+    }
+  };
+
+  // Bild entfernen
+  const removeImage = () => {
+    setPostImage(null);
+  };
+
   // Erstelle einen neuen Beitrag
   const handleCreatePost = async () => {
     if (!newPostContent.trim()) {
@@ -117,7 +229,7 @@ export default function CommunityScreen() {
 
     try {
       setIsLoading(true);
-      const { error } = await createPost(newPostContent, isAnonymousPost, 'text', undefined, selectedTagIds);
+      const { error } = await createPost(newPostContent, isAnonymousPost, 'text', undefined, selectedTagIds, postImage || undefined);
       if (error) {
         console.error('Detailed error creating post:', JSON.stringify(error));
         throw error;
@@ -127,6 +239,7 @@ export default function CommunityScreen() {
       await loadPosts();
       setNewPostContent('');
       setIsAnonymousPost(false);
+      setPostImage(null);
       setShowAddForm(false);
       Alert.alert('Erfolg', 'Dein Beitrag wurde erfolgreich veröffentlicht.');
     } catch (error) {
@@ -167,6 +280,40 @@ export default function CommunityScreen() {
     } catch (error) {
       console.error('Error creating comment:', error);
       Alert.alert('Fehler', 'Beim Erstellen des Kommentars ist ein Fehler aufgetreten.');
+    }
+  };
+
+  // Erstelle eine Antwort auf einen Kommentar
+  const handleCreateReply = async (commentId: string) => {
+    const replyText = replyInputs[commentId];
+    if (!replyText || !replyText.trim()) {
+      Alert.alert('Hinweis', 'Bitte gib einen Text ein.');
+      return;
+    }
+
+    try {
+      const isAnonymous = isAnonymousReply[commentId] || false;
+      const { error } = await createReply(commentId, replyText, isAnonymous);
+      if (error) throw error;
+
+      // Lade verschachtelte Kommentare neu
+      await loadNestedComments(commentId);
+
+      // Leere das Eingabefeld und setze anonym zurück
+      setReplyInputs(prev => ({
+        ...prev,
+        [commentId]: ''
+      }));
+      setIsAnonymousReply(prev => ({
+        ...prev,
+        [commentId]: false
+      }));
+      
+      // Schließe das Antwortformular
+      setReplyToCommentId(null);
+    } catch (error) {
+      console.error('Error creating reply:', error);
+      Alert.alert('Fehler', 'Beim Erstellen der Antwort ist ein Fehler aufgetreten.');
     }
   };
 
@@ -282,6 +429,67 @@ export default function CommunityScreen() {
     );
   };
 
+  // Like/Unlike einen verschachtelten Kommentar
+  const handleToggleNestedCommentLike = async (nestedCommentId: string, commentId: string) => {
+    try {
+      const { error } = await toggleNestedCommentLike(nestedCommentId);
+      if (error) throw error;
+
+      // Aktualisiere den verschachtelten Kommentar in der Liste
+      setNestedComments(prevNestedComments => ({
+        ...prevNestedComments,
+        [commentId]: (prevNestedComments[commentId] || []).map(nestedComment => {
+          if (nestedComment.id === nestedCommentId) {
+            const newLikesCount = nestedComment.has_liked ? (nestedComment.likes_count || 0) - 1 : (nestedComment.likes_count || 0) + 1;
+            return {
+              ...nestedComment,
+              likes_count: newLikesCount,
+              has_liked: !nestedComment.has_liked
+            };
+          }
+          return nestedComment;
+        })
+      }));
+    } catch (error) {
+      console.error('Error toggling nested comment like:', error);
+      Alert.alert('Fehler', 'Beim Liken der Antwort ist ein Fehler aufgetreten.');
+    }
+  };
+
+  // Verschachtelten Kommentar löschen
+  const handleDeleteNestedComment = async (nestedCommentId: string, commentId: string) => {
+    Alert.alert(
+      'Antwort löschen',
+      'Möchtest du diese Antwort wirklich löschen?',
+      [
+        { text: 'Abbrechen', style: 'cancel' },
+        {
+          text: 'Löschen',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await deleteNestedComment(nestedCommentId);
+              if (error) throw error;
+
+              // Entferne den verschachtelten Kommentar aus der Liste
+              setNestedComments(prevNestedComments => ({
+                ...prevNestedComments,
+                [commentId]: (prevNestedComments[commentId] || []).filter(
+                  nestedComment => nestedComment.id !== nestedCommentId
+                )
+              }));
+              
+              Alert.alert('Erfolg', 'Deine Antwort wurde erfolgreich gelöscht.');
+            } catch (error) {
+              console.error('Error deleting nested comment:', error);
+              Alert.alert('Fehler', 'Beim Löschen der Antwort ist ein Fehler aufgetreten.');
+            }
+          }
+        }
+      ]
+    );
+  };
+
   // Aktualisiere die Beiträge durch Pull-to-Refresh
   const onRefresh = useCallback(() => {
     setIsRefreshing(true);
@@ -306,14 +514,9 @@ export default function CommunityScreen() {
     }
   };
 
-  // Umfrage erstellen
+  // Umfrage erstellen - funktionalität entfernt
   const handleCreatePoll = () => {
-    if (!expandedPostId) {
-      Alert.alert('Fehler', 'Bitte wähle zuerst einen Beitrag aus.');
-      return;
-    }
-    setSelectedPostForPoll(expandedPostId);
-    setShowPollForm(true);
+    // Funktionalität entfernt
   };
 
   // Nach Erstellung einer Umfrage
@@ -370,6 +573,10 @@ export default function CommunityScreen() {
     const comments = postComments[item.id] || [];
     const isOwnPost = user?.id === item.user_id;
 
+    // Debug logging für Bilder
+    if (item.image_url) {
+      console.log(`Post ${item.id} has image_url: ${item.image_url}`);
+    }
 
     return (
       <ThemedView
@@ -395,6 +602,15 @@ export default function CommunityScreen() {
               </ThemedText>
             )}
             <ThemedText style={styles.postDate}>{formatDate(item.created_at)}</ThemedText>
+            
+            {!isOwnPost && !item.is_anonymous && (
+              <FollowButton 
+                userId={item.user_id} 
+                size="small" 
+                showText={false} 
+                style={styles.followButton}
+              />
+            )}
           </View>
 
           {isOwnPost && (
@@ -408,53 +624,46 @@ export default function CommunityScreen() {
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={styles.contentTouchable}
           onPress={() => togglePostExpansion(item.id)}
-          activeOpacity={0.7}
+          style={styles.contentTouchable}
         >
-          {item.type === 'poll' ? (
-            <View style={styles.pollPostContainer}>
-              <IconSymbol name="chart.bar" size={16} color={theme.accent} style={styles.pollIcon} />
-              <ThemedText style={[styles.postContent, styles.pollPostContent]}>{item.content}</ThemedText>
+          <ThemedView
+            lightColor="#FAFAFA"
+            darkColor={theme.cardDark}
+          >
+            <ThemedText style={styles.postContent}>{item.content}</ThemedText>
 
-              {/* Tags anzeigen */}
-              {item.tags && item.tags.length > 0 && (
-                <TagDisplay tags={item.tags} small={true} onTagPress={async (tagId) => {
-                  // Setze den Filter und speichere ihn
-                  const newFilter = [tagId];
-                  setSelectedFilterTagIds(newFilter);
-                  // Speichere den Filter in AsyncStorage
-                  await saveFilterToStorage(newFilter);
-                  // Lade die Beiträge neu
-                  loadPosts();
-                }} />
-              )}
+            {/* Bild anzeigen, falls vorhanden */}
+            {item.image_url && item.image_url.length > 0 && (
+              <View style={styles.postImageContainer}>
+                <Image
+                  source={{ uri: item.image_url }}
+                  style={styles.postImage}
+                  resizeMode="cover"
+                  onError={(e) => console.error('Image load error:', e.nativeEvent.error)}
+                  onLoad={() => console.log(`Image loaded successfully for post ${item.id}`)}
+                />
+              </View>
+            )}
 
-              <ThemedText style={styles.tapHint}>Tippen zum {isExpanded ? 'Schließen' : 'Öffnen'}</ThemedText>
-            </View>
-          ) : (
-            <View>
-              <ThemedText style={styles.postContent}>{item.content}</ThemedText>
+            {/* Tags anzeigen */}
+            {item.tags && item.tags.length > 0 && (
+              <TagDisplay tags={item.tags} small={true} onTagPress={async (tagId) => {
+                const newFilter = [tagId];
+                setSelectedFilterTagIds(newFilter);
+                await saveFilterToStorage(newFilter);
+                loadPosts();
+              }} />
+            )}
 
-              {/* Tags anzeigen */}
-              {item.tags && item.tags.length > 0 && (
-                <TagDisplay tags={item.tags} small={true} onTagPress={async (tagId) => {
-                  // Setze den Filter und speichere ihn
-                  const newFilter = [tagId];
-                  setSelectedFilterTagIds(newFilter);
-                  // Speichere den Filter in AsyncStorage
-                  await saveFilterToStorage(newFilter);
-                  // Lade die Beiträge neu
-                  loadPosts();
-                }} />
-              )}
-
-              <ThemedText style={styles.tapHint}>Tippen zum {isExpanded ? 'Schließen' : 'Öffnen'}</ThemedText>
-            </View>
-          )}
+            <ThemedText style={styles.tapHint}>Tippen zum {isExpanded ? 'Schließen' : 'Öffnen'}</ThemedText>
+          </ThemedView>
         </TouchableOpacity>
 
-        <View style={styles.postActions}>
+        <View style={[
+          styles.postActions,
+          { borderTopColor: colorScheme === 'dark' ? theme.border : '#EFEFEF' }
+        ]}>
           <TouchableOpacity
             style={styles.actionButton}
             onPress={() => handleTogglePostLike(item.id)}
@@ -476,8 +685,8 @@ export default function CommunityScreen() {
         </View>
 
         {isExpanded && (
-          <>
-            {/* Umfragen anzeigen */}
+          <View style={styles.expandedContent}>
+            {/* Umfragen anzeigen, wenn vorhanden */}
             {postPolls[item.id] && postPolls[item.id].length > 0 && (
               <View style={styles.pollsContainer}>
                 {postPolls[item.id].map(poll => (
@@ -490,30 +699,17 @@ export default function CommunityScreen() {
               </View>
             )}
 
-            {/* Umfrage erstellen Button (nur für eigene Beiträge) */}
-            {isOwnPost && (
-              <View style={styles.pollButtonContainer}>
-                <TouchableOpacity
-                  style={styles.createPollButton}
-                  onPress={() => {
-                    setSelectedPostForPoll(item.id);
-                    setShowPollForm(true);
-                  }}
-                >
-                  <IconSymbol name="chart.bar" size={16} color={theme.accent} />
-                  <ThemedText style={styles.createPollButtonText}>Umfrage erstellen</ThemedText>
-                </TouchableOpacity>
-              </View>
-            )}
-
             {/* Kommentare anzeigen */}
             {comments.length > 0 && (
-              <View style={styles.commentsContainer}>
+              <View style={[
+                styles.commentsContainer,
+                { borderTopColor: colorScheme === 'dark' ? theme.border : '#EFEFEF' }
+              ]}>
                 <ThemedText style={styles.commentsTitle}>Antworten:</ThemedText>
                 {comments.map(comment => {
                   const isOwnComment = user?.id === comment.user_id;
                   return (
-                    <View key={comment.id} style={styles.commentItem}>
+                    <ThemedView key={comment.id} style={styles.commentItem} lightColor="#F9F9F9" darkColor={theme.cardDark}>
                       <View style={styles.commentHeader}>
                         <View style={styles.userInfo}>
                           <View style={[
@@ -529,6 +725,15 @@ export default function CommunityScreen() {
                             </ThemedText>
                           )}
                           <ThemedText style={styles.commentDate}>{formatDate(comment.created_at)}</ThemedText>
+                          
+                          {user?.id !== comment.user_id && !comment.is_anonymous && (
+                            <FollowButton 
+                              userId={comment.user_id} 
+                              size="small" 
+                              showText={false} 
+                              style={styles.followButton}
+                            />
+                          )}
                         </View>
 
                         {isOwnComment && (
@@ -553,8 +758,137 @@ export default function CommunityScreen() {
                           />
                           <ThemedText style={styles.actionText}>{comment.likes_count || 0}</ThemedText>
                         </TouchableOpacity>
+                        
+                        <TouchableOpacity
+                          style={styles.actionButton}
+                          onPress={() => {
+                            setReplyToCommentId(comment.id);
+                            // Lade verschachtelte Kommentare, wenn noch nicht geladen
+                            if (!nestedComments[comment.id]) {
+                              loadNestedComments(comment.id);
+                            }
+                          }}
+                        >
+                          <IconSymbol name="arrowshape.turn.up.left" size={16} color={theme.tabIconDefault} />
+                          <ThemedText style={styles.actionText}>Antworten</ThemedText>
+                        </TouchableOpacity>
                       </View>
-                    </View>
+                      
+                      {/* Verschachtelte Kommentare anzeigen */}
+                      {nestedComments[comment.id] && nestedComments[comment.id].length > 0 && (
+                        <View style={styles.nestedCommentsContainer}>
+                          <ThemedText style={styles.nestedCommentsTitle}>Antworten:</ThemedText>
+                          {nestedComments[comment.id].map(nestedComment => (
+                            <ThemedView 
+                              key={nestedComment.id} 
+                              style={styles.nestedCommentItem} 
+                              lightColor="#F0F0F0" 
+                              darkColor={colorScheme === 'dark' ? '#1F2937' : undefined}
+                            >
+                              <View style={styles.commentHeader}>
+                                <View style={styles.userInfo}>
+                                  <View style={[
+                                    styles.userRoleIndicator,
+                                    { backgroundColor: nestedComment.user_role === 'mama' ? '#FF9F9F' : nestedComment.user_role === 'papa' ? '#9FD8FF' : '#D9D9D9' }
+                                  ]} />
+                                  <ThemedText style={styles.userName}>
+                                    {nestedComment.user_name || 'Anonym'}
+                                  </ThemedText>
+                                  <ThemedText style={styles.commentDate}>{formatDate(nestedComment.created_at)}</ThemedText>
+                                </View>
+                                
+                                {user?.id === nestedComment.user_id && (
+                                  <TouchableOpacity
+                                    style={styles.deleteButton}
+                                    onPress={() => handleDeleteNestedComment(nestedComment.id, comment.id)}
+                                  >
+                                    <IconSymbol name="trash" size={16} color="#FF6B6B" />
+                                  </TouchableOpacity>
+                                )}
+                              </View>
+                              <ThemedText style={styles.commentContent}>{nestedComment.content}</ThemedText>
+                              <View style={styles.commentActions}>
+                                <TouchableOpacity
+                                  style={styles.actionButton}
+                                  onPress={() => handleToggleNestedCommentLike(nestedComment.id, comment.id)}
+                                >
+                                  <IconSymbol
+                                    name={nestedComment.has_liked ? "heart.fill" : "heart"}
+                                    size={16}
+                                    color={nestedComment.has_liked ? "#FF6B6B" : theme.tabIconDefault}
+                                  />
+                                  <ThemedText style={styles.actionText}>{nestedComment.likes_count || 0}</ThemedText>
+                                </TouchableOpacity>
+                                
+                                <TouchableOpacity
+                                  style={styles.actionButton}
+                                  onPress={() => {
+                                    setReplyToCommentId(comment.id);
+                                    // Lade verschachtelte Kommentare, wenn noch nicht geladen
+                                    if (!nestedComments[comment.id]) {
+                                      loadNestedComments(comment.id);
+                                    }
+                                  }}
+                                >
+                                  <IconSymbol name="arrowshape.turn.up.left" size={16} color={theme.tabIconDefault} />
+                                  <ThemedText style={styles.actionText}>Antworten</ThemedText>
+                                </TouchableOpacity>
+                              </View>
+                            </ThemedView>
+                          ))}
+                        </View>
+                      )}
+                      
+                      {/* Antwortformular */}
+                      {replyToCommentId === comment.id && (
+                        <View style={styles.replyContainer}>
+                          <TextInput
+                            style={[
+                              styles.replyInput,
+                              {
+                                color: theme.text,
+                                backgroundColor: colorScheme === 'dark' ? theme.cardDark : '#F0F0F0'
+                              }
+                            ]}
+                            placeholder="Schreibe eine Antwort..."
+                            placeholderTextColor={theme.tabIconDefault}
+                            value={replyInputs[comment.id] || ''}
+                            onChangeText={(text) => setReplyInputs(prev => ({ ...prev, [comment.id]: text }))}
+                          />
+                          <View style={styles.replyActions}>
+                            <TouchableOpacity
+                              style={styles.anonymousReplyOption}
+                              onPress={() => setIsAnonymousReply(prev => ({ ...prev, [comment.id]: !(prev[comment.id] || false) }))}
+                            >
+                              <View style={[
+                                styles.checkbox,
+                                (isAnonymousReply[comment.id] || false) && styles.checkboxChecked,
+                                !(isAnonymousReply[comment.id] || false) && { backgroundColor: colorScheme === 'dark' ? theme.cardDark : '#F0F0F0' }
+                              ]}>
+                                {(isAnonymousReply[comment.id] || false) && <IconSymbol name="checkmark" size={12} color="#FFFFFF" />}
+                              </View>
+                              <ThemedText style={styles.checkboxLabelSmall}>Anonym</ThemedText>
+                            </TouchableOpacity>
+                            
+                            <View style={styles.replyButtonsContainer}>
+                              <TouchableOpacity
+                                style={styles.cancelReplyButton}
+                                onPress={() => setReplyToCommentId(null)}
+                              >
+                                <ThemedText style={styles.cancelReplyText}>Abbrechen</ThemedText>
+                              </TouchableOpacity>
+                              
+                              <TouchableOpacity
+                                style={[styles.sendReplyButton, { backgroundColor: theme.accent }]}
+                                onPress={() => handleCreateReply(comment.id)}
+                              >
+                                <ThemedText style={styles.sendReplyText}>Antworten</ThemedText>
+                              </TouchableOpacity>
+                            </View>
+                          </View>
+                        </View>
+                      )}
+                    </ThemedView>
                   );
                 })}
               </View>
@@ -562,9 +896,18 @@ export default function CommunityScreen() {
 
             {/* Kommentar hinzufügen */}
             <View>
-              <View style={styles.addCommentContainer}>
+              <View style={[
+                styles.addCommentContainer,
+                { borderTopColor: colorScheme === 'dark' ? theme.border : '#EFEFEF' }
+              ]}>
                 <TextInput
-                  style={[styles.addCommentInput, { color: theme.text }]}
+                  style={[
+                    styles.addCommentInput,
+                    {
+                      color: theme.text,
+                      backgroundColor: colorScheme === 'dark' ? theme.cardDark : '#F5F5F5'
+                    }
+                  ]}
                   placeholder="Schreibe einen Kommentar..."
                   placeholderTextColor={theme.tabIconDefault}
                   value={commentInputs[item.id] || ''}
@@ -582,186 +925,346 @@ export default function CommunityScreen() {
                 style={styles.anonymousCommentOption}
                 onPress={() => setIsAnonymousComment(prev => ({ ...prev, [item.id]: !(prev[item.id] || false) }))}
               >
-                <View style={[styles.checkbox, (isAnonymousComment[item.id] || false) && styles.checkboxChecked]}>
+                <View style={[
+                  styles.checkbox,
+                  (isAnonymousComment[item.id] || false) && styles.checkboxChecked,
+                  !(isAnonymousComment[item.id] || false) && { backgroundColor: colorScheme === 'dark' ? theme.cardDark : '#F5F5F5' }
+                ]}>
                   {(isAnonymousComment[item.id] || false) && <IconSymbol name="checkmark" size={12} color="#FFFFFF" />}
                 </View>
-                <ThemedText style={styles.checkboxLabelSmall}>Anonym antworten</ThemedText>
+                <ThemedText style={styles.checkboxLabelSmall}>Anonym</ThemedText>
               </TouchableOpacity>
             </View>
-          </>
+          </View>
         )}
       </ThemedView>
     );
   };
 
+  // Funktion zum Ausblenden der Tastatur
+  const dismissKeyboard = () => {
+    Keyboard.dismiss();
+  };
+
+  // Funktion zum Aktualisieren des Notification Badges
+  const handleNotificationUpdate = () => {
+    setRefreshNotificationBadge(prev => prev + 1);
+  };
+
+  // Update in toggleFloatingButtons function
+  const toggleFloatingButtons = (show: boolean) => {
+    // Start animation
+    Animated.timing(rotateAnimation, {
+      toValue: show ? 1 : 0,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+    
+    // Show/hide buttons
+    setShowFloatingButtons(show);
+  };
+
   return (
-    <ThemedBackground style={styles.backgroundImage}>
-      <SafeAreaView style={styles.container}>
-        <StatusBar hidden={true} />
-        <View style={styles.header}>
-          <ThemedText type="title" style={styles.title}>
-            Community
-          </ThemedText>
-        </View>
-
-        {/* Formular zum Erstellen einer Umfrage */}
-        {showPollForm && selectedPostForPoll && (
-          <CreatePollForm
-            postId={selectedPostForPoll}
-            onPollCreated={handlePollCreated}
-            onCancel={() => {
-              setShowPollForm(false);
-              setSelectedPostForPoll(null);
-            }}
-          />
-        )}
-
-        {showAddPollForm ? (
-          // Formular zum Erstellen einer Umfrage
-          <CreatePollPost
-            onPollCreated={() => {
-              setShowAddPollForm(false);
-              loadPosts();
-            }}
-            onCancel={() => setShowAddPollForm(false)}
-          />
-        ) : showAddForm ? (
-          // Formular zum Erstellen eines neuen Beitrags
-          <ThemedView style={styles.addFormContainer} lightColor={theme.card} darkColor={theme.card}>
-            <View style={styles.formHeader}>
-              <ThemedText style={styles.formTitle}>Neue Frage stellen</ThemedText>
-              <TouchableOpacity onPress={() => setShowAddForm(false)}>
-                <IconSymbol name="xmark.circle.fill" size={24} color={theme.tabIconDefault} />
-              </TouchableOpacity>
-            </View>
-
-            <TextInput
-              style={[styles.postInput, { color: theme.text }]}
-              placeholder="Was möchtest du fragen?"
-              placeholderTextColor={theme.tabIconDefault}
-              value={newPostContent}
-              onChangeText={setNewPostContent}
-              multiline
-              numberOfLines={5}
-            />
-
-            {/* Tag-Auswahl */}
-            <TagSelector
-              selectedTagIds={selectedTagIds}
-              onTagsChange={setSelectedTagIds}
-            />
-
-            <View style={styles.anonymousOption}>
-              <TouchableOpacity
-                style={styles.checkboxContainer}
-                onPress={() => setIsAnonymousPost(!isAnonymousPost)}
-              >
-                <View style={[styles.checkbox, isAnonymousPost && styles.checkboxChecked]}>
-                  {isAnonymousPost && <IconSymbol name="checkmark" size={14} color="#FFFFFF" />}
-                </View>
-                <ThemedText style={styles.checkboxLabel}>Anonym posten</ThemedText>
-              </TouchableOpacity>
-            </View>
-
-            <TouchableOpacity
-              style={[styles.addButton, { backgroundColor: theme.accent }]}
-              onPress={handleCreatePost}
-              disabled={isLoading}
-            >
-              <ThemedText style={styles.addButtonText}>
-                {isLoading ? 'Wird veröffentlicht...' : 'Frage veröffentlichen'}
-              </ThemedText>
-            </TouchableOpacity>
-          </ThemedView>
-        ) : (
-          // Liste der Beiträge
-          <>
-            <View style={styles.searchContainer}>
-              <View style={styles.searchInputContainer}>
-                <IconSymbol name="magnifyingglass" size={20} color={theme.tabIconDefault} />
-                <TextInput
-                  style={[styles.searchInput, { color: theme.text }]}
-                  placeholder="Suche in der Community..."
-                  placeholderTextColor={theme.tabIconDefault}
-                  value={searchQuery}
-                  onChangeText={setSearchQuery}
-                />
-                {searchQuery.length > 0 && (
-                  <TouchableOpacity onPress={() => setSearchQuery('')}>
-                    <IconSymbol name="xmark.circle.fill" size={20} color={theme.tabIconDefault} />
-                  </TouchableOpacity>
-                )}
-              </View>
-            </View>
-
-            {/* Tag-Filter */}
-            <TagFilter
-              selectedTagIds={selectedFilterTagIds}
-              onTagsChange={async (tagIds) => {
-                // Setze den Filter und speichere ihn
-                setSelectedFilterTagIds(tagIds);
-                // Speichere den Filter in AsyncStorage
-                await saveFilterToStorage(tagIds);
-                // Lade die Beiträge neu
-                loadPosts();
-              }}
-            />
-
-            {isLoading && !isRefreshing ? (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color={theme.accent} />
-                <ThemedText style={styles.loadingText}>Beiträge werden geladen...</ThemedText>
-              </View>
-            ) : (
-              <FlatList
-                data={filteredPosts}
-                renderItem={renderPostItem}
-                keyExtractor={item => item.id}
-                contentContainerStyle={styles.postsList}
-                showsVerticalScrollIndicator={false}
-                refreshControl={
-                  <RefreshControl
-                    refreshing={isRefreshing}
-                    onRefresh={onRefresh}
-                    colors={[theme.accent]}
-                    tintColor={theme.accent}
-                  />
-                }
-                ListEmptyComponent={
-                  <ThemedView style={styles.emptyState} lightColor={theme.card} darkColor={theme.card}>
-                    <IconSymbol name="bubble.left.and.bubble.right" size={40} color={theme.tabIconDefault} />
-                    <ThemedText style={styles.emptyStateText}>
-                      {searchQuery ? 'Keine Beiträge gefunden' : 'Noch keine Beiträge'}
-                    </ThemedText>
-                    <ThemedText style={styles.emptyStateSubtext}>
-                      {searchQuery ? 'Ändere deine Suchanfrage oder stelle eine neue Frage' : 'Stelle die erste Frage in der Community'}
-                    </ThemedText>
-                  </ThemedView>
-                }
+    <TouchableWithoutFeedback onPress={dismissKeyboard}>
+      <ThemedBackground style={styles.backgroundImage}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
+        >
+          <SafeAreaView style={styles.container}>
+            <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
+            
+            <View style={styles.overlayContainer}>
+              <Header 
+                title="Community" 
+                subtitle="Teile und entdecke Erfahrungen" 
               />
-            )}
-
-            <View style={styles.floatingButtonsContainer}>
-              <TouchableOpacity
-                style={[styles.floatingAddButton, { backgroundColor: theme.accent }]}
-                onPress={() => setShowAddForm(true)}
+              
+              <TouchableOpacity 
+                style={styles.bellButton}
+                onPress={() => router.push('/notifications' as any)}
               >
-                <IconSymbol name="text.bubble" size={20} color="#FFFFFF" />
-                <ThemedText style={styles.floatingButtonText}>Frage</ThemedText>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.floatingPollButton, { backgroundColor: '#FF9F9F' }]}
-                onPress={() => setShowAddPollForm(true)}
-              >
-                <IconSymbol name="chart.bar" size={20} color="#FFFFFF" />
-                <ThemedText style={styles.floatingButtonText}>Umfrage</ThemedText>
+                <IconSymbol 
+                  name="bell.fill" 
+                  size={24} 
+                  color={theme.tabIconDefault} 
+                />
+                <NotificationBadge refreshTrigger={refreshNotificationBadge} />
               </TouchableOpacity>
             </View>
-          </>
-        )}
-      </SafeAreaView>
-    </ThemedBackground>
+
+            {/* Benachrichtigungen */}
+            {showNotifications ? (
+              <ThemedView style={styles.notificationsContainer} lightColor={theme.card} darkColor={theme.card}>
+                <View style={styles.notificationsHeader}>
+                  <ThemedText style={styles.notificationsTitle}>Benachrichtigungen</ThemedText>
+                  <TouchableOpacity 
+                    style={styles.viewAllButton}
+                    onPress={() => {
+                      // Schließe Dropdown und navigiere zur vollen Notifications-Seite
+                      setShowNotifications(false);
+                      const notificationsRoute = '/notifications';
+                      if (router.canGoBack()) {
+                        router.push(notificationsRoute as any);
+                      } else {
+                        router.replace(notificationsRoute as any);
+                      }
+                    }}
+                  >
+                    <ThemedText style={[styles.viewAllText, { color: theme.accent }]}>
+                      Alle ansehen
+                    </ThemedText>
+                  </TouchableOpacity>
+                </View>
+                <NotificationsList onNotificationUpdate={handleNotificationUpdate} />
+              </ThemedView>
+            ) : (
+              <>
+                {/* Formular zum Erstellen einer Umfrage */}
+                {showPollForm && selectedPostForPoll && (
+                  <CreatePollForm
+                    postId={selectedPostForPoll}
+                    onPollCreated={handlePollCreated}
+                    onCancel={() => {
+                      setShowPollForm(false);
+                      setSelectedPostForPoll(null);
+                    }}
+                  />
+                )}
+
+                {showAddPollForm ? (
+                  // Formular zum Erstellen einer Umfrage
+                  <CreatePollPost
+                    onPollCreated={() => {
+                      setShowAddPollForm(false);
+                      loadPosts();
+                    }}
+                    onCancel={() => setShowAddPollForm(false)}
+                  />
+                ) : showAddForm ? (
+                  // Formular zum Erstellen eines neuen Beitrags
+                  <ThemedView style={styles.addFormContainer} lightColor={theme.card} darkColor={theme.card}>
+                    <View style={styles.formHeader}>
+                      <ThemedText style={styles.formTitle}>Neue Frage stellen</ThemedText>
+                      <View style={{ flexDirection: 'row' }}>
+                        <TouchableOpacity
+                          style={{ marginRight: 12 }}
+                          onPress={dismissKeyboard}
+                        >
+                          <IconSymbol name="keyboard.chevron.compact.down" size={24} color={theme.tabIconDefault} />
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={() => setShowAddForm(false)}>
+                          <IconSymbol name="xmark.circle.fill" size={24} color={theme.tabIconDefault} />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+
+                    <TextInput
+                      style={[
+                        styles.postInput,
+                        {
+                          color: theme.text,
+                          backgroundColor: colorScheme === 'dark' ? theme.cardDark : '#F5F5F5'
+                        }
+                      ]}
+                      placeholder="Was möchtest du fragen?"
+                      placeholderTextColor={theme.tabIconDefault}
+                      value={newPostContent}
+                      onChangeText={setNewPostContent}
+                      multiline
+                      numberOfLines={5}
+                    />
+
+                    {/* Bild-Upload-Bereich */}
+                    {postImage ? (
+                      <View style={styles.imagePreviewContainer}>
+                        <Image source={{ uri: postImage }} style={styles.imagePreview} />
+                        <TouchableOpacity
+                          style={styles.removeImageButton}
+                          onPress={removeImage}
+                        >
+                          <IconSymbol name="xmark.circle.fill" size={24} color="#FFFFFF" />
+                        </TouchableOpacity>
+                      </View>
+                    ) : (
+                      <TouchableOpacity
+                        style={styles.imageUploadButton}
+                        onPress={pickImage}
+                      >
+                        <IconSymbol name="photo" size={20} color={theme.accent} />
+                        <ThemedText style={styles.imageUploadText}>Bild hinzufügen</ThemedText>
+                      </TouchableOpacity>
+                    )}
+
+                    {/* Tag-Auswahl */}
+                    <TagSelector
+                      selectedTagIds={selectedTagIds}
+                      onTagsChange={setSelectedTagIds}
+                    />
+
+                    <View style={styles.anonymousOption}>
+                      <TouchableOpacity
+                        style={styles.checkboxContainer}
+                        onPress={() => setIsAnonymousPost(!isAnonymousPost)}
+                      >
+                        <View style={[
+                          styles.checkbox,
+                          isAnonymousPost && styles.checkboxChecked,
+                          !isAnonymousPost && { backgroundColor: colorScheme === 'dark' ? theme.cardDark : '#F5F5F5' }
+                        ]}>
+                          {isAnonymousPost && <IconSymbol name="checkmark" size={14} color="#FFFFFF" />}
+                        </View>
+                        <ThemedText style={styles.checkboxLabel}>Anonym</ThemedText>
+                      </TouchableOpacity>
+                    </View>
+
+                    <TouchableOpacity
+                      style={[styles.addButton, { backgroundColor: theme.accent }]}
+                      onPress={handleCreatePost}
+                      disabled={isLoading}
+                    >
+                      <ThemedText style={styles.addButtonText}>
+                        {isLoading ? 'Wird veröffentlicht...' : 'Frage veröffentlichen'}
+                      </ThemedText>
+                    </TouchableOpacity>
+                  </ThemedView>
+                ) : (
+                  // Liste der Beiträge
+                  <>
+                    <View style={styles.searchContainer}>
+                      <ThemedView
+                        style={styles.searchInputContainer}
+                        lightColor="#FFFFFF"
+                        darkColor={theme.cardDark}
+                      >
+                        <IconSymbol name="magnifyingglass" size={20} color={theme.tabIconDefault} />
+                        <TextInput
+                          style={[styles.searchInput, { color: theme.text }]}
+                          placeholder="Suche in der Community..."
+                          placeholderTextColor={theme.tabIconDefault}
+                          value={searchQuery}
+                          onChangeText={setSearchQuery}
+                        />
+                        {searchQuery.length > 0 && (
+                          <TouchableOpacity onPress={() => setSearchQuery('')}>
+                            <IconSymbol name="xmark.circle.fill" size={20} color={theme.tabIconDefault} />
+                          </TouchableOpacity>
+                        )}
+                      </ThemedView>
+                    </View>
+
+                    {/* Tag-Filter */}
+                    <TagFilter
+                      selectedTagIds={selectedFilterTagIds}
+                      onTagsChange={async (tagIds) => {
+                        // Setze den Filter und speichere ihn
+                        setSelectedFilterTagIds(tagIds);
+                        // Speichere den Filter in AsyncStorage
+                        await saveFilterToStorage(tagIds);
+                        // Lade die Beiträge neu
+                        loadPosts();
+                      }}
+                    />
+
+                    {isLoading && !isRefreshing ? (
+                      <View style={styles.loadingContainer}>
+                        <ActivityIndicator size="large" color={theme.accent} />
+                        <ThemedText style={styles.loadingText}>Beiträge werden geladen...</ThemedText>
+                      </View>
+                    ) : (
+                      <FlatList
+                        data={filteredPosts}
+                        renderItem={renderPostItem}
+                        keyExtractor={item => item.id}
+                        contentContainerStyle={styles.postsList}
+                        showsVerticalScrollIndicator={false}
+                        refreshControl={
+                          <RefreshControl
+                            refreshing={isRefreshing}
+                            onRefresh={onRefresh}
+                            colors={[theme.accent]}
+                            tintColor={theme.accent}
+                          />
+                        }
+                        ListEmptyComponent={
+                          <ThemedView style={styles.emptyState} lightColor={theme.card} darkColor={theme.card}>
+                            <IconSymbol name="bubble.left.and.bubble.right" size={40} color={theme.tabIconDefault} />
+                            <ThemedText style={styles.emptyStateText}>
+                              {searchQuery ? 'Keine Beiträge gefunden' : 'Noch keine Beiträge'}
+                            </ThemedText>
+                            <ThemedText style={styles.emptyStateSubtext}>
+                              {searchQuery ? 'Ändere deine Suchanfrage oder stelle eine neue Frage' : 'Stelle die erste Frage in der Community'}
+                            </ThemedText>
+                          </ThemedView>
+                        }
+                      />
+                    )}
+
+                    <View style={styles.floatingButtonsContainer}>
+                      {showFloatingButtons ? (
+                        <>
+                          <TouchableOpacity
+                            style={[styles.floatingAddButton, { backgroundColor: theme.accent }]}
+                            onPress={() => {
+                              setShowAddForm(true);
+                              toggleFloatingButtons(false);
+                            }}
+                          >
+                            <IconSymbol name="text.bubble" size={20} color="#FFFFFF" />
+                            <ThemedText style={styles.floatingButtonText}>Frage</ThemedText>
+                          </TouchableOpacity>
+                          
+                          <TouchableOpacity
+                            style={[styles.floatingPollButton, { backgroundColor: '#FF9F9F' }]}
+                            onPress={() => {
+                              setShowAddPollForm(true);
+                              toggleFloatingButtons(false);
+                            }}
+                          >
+                            <IconSymbol name="chart.bar" size={20} color="#FFFFFF" />
+                            <ThemedText style={styles.floatingButtonText}>Umfrage</ThemedText>
+                          </TouchableOpacity>
+
+                          <TouchableOpacity
+                            style={[styles.floatingProfileButton, { backgroundColor: '#9775FA' }]}
+                            onPress={() => {
+                              router.push('/community-profile' as any);
+                              toggleFloatingButtons(false);
+                            }}
+                          >
+                            <IconSymbol name="person.fill" size={20} color="#FFFFFF" />
+                            <ThemedText style={styles.floatingButtonText}>Profil</ThemedText>
+                          </TouchableOpacity>
+                        </>
+                      ) : null}
+                      
+                      <TouchableOpacity
+                        style={[styles.floatingMainButton, { backgroundColor: Colors[colorScheme].tint }]}
+                        onPress={() => toggleFloatingButtons(!showFloatingButtons)}
+                      >
+                        <Animated.View 
+                          style={{ 
+                            transform: [{ 
+                              rotate: rotateAnimation.interpolate({
+                                inputRange: [0, 1],
+                                outputRange: ['0deg', '45deg']
+                              }) 
+                            }] 
+                          }}
+                        >
+                          <IconSymbol name="plus" size={24} color="#FFFFFF" />
+                        </Animated.View>
+                      </TouchableOpacity>
+                    </View>
+                  </>
+                )}
+              </>
+            )}
+          </SafeAreaView>
+        </KeyboardAvoidingView>
+      </ThemedBackground>
+    </TouchableWithoutFeedback>
   );
 }
 
@@ -772,6 +1275,44 @@ const styles = StyleSheet.create({
   backgroundImage: {
     flex: 1,
     paddingHorizontal: 16,
+  },
+  overlayContainer: {
+    width: '100%',
+    position: 'relative',
+  },
+  bellButton: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    padding: 8,
+    zIndex: 10,
+  },
+  notificationsContainer: {
+    flex: 1,
+    borderRadius: 12,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  notificationsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 12,
+  },
+  notificationsTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  viewAllButton: {
+    padding: 8,
+  },
+  viewAllText: {
+    fontSize: 14,
+    fontWeight: 'bold',
   },
   header: {
     flexDirection: 'row',
@@ -791,7 +1332,6 @@ const styles = StyleSheet.create({
   searchInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 8,
@@ -853,7 +1393,6 @@ const styles = StyleSheet.create({
   postActions: {
     flexDirection: 'row',
     borderTopWidth: 1,
-    borderTopColor: '#EFEFEF',
     paddingTop: 12,
   },
   actionButton: {
@@ -870,7 +1409,6 @@ const styles = StyleSheet.create({
     marginTop: 12,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#EFEFEF',
   },
   commentsTitle: {
     fontSize: 14,
@@ -878,7 +1416,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   commentItem: {
-    backgroundColor: '#F9F9F9',
     borderRadius: 8,
     padding: 12,
     marginBottom: 8,
@@ -907,12 +1444,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#EFEFEF',
     paddingTop: 12,
   },
   addCommentInput: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
     borderRadius: 20,
     paddingHorizontal: 12,
     paddingVertical: 8,
@@ -974,7 +1509,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   postInput: {
-    backgroundColor: '#F5F5F5',
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
@@ -1026,7 +1560,6 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     borderWidth: 1,
     borderColor: '#CCCCCC',
-    backgroundColor: '#F5F5F5',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 8,
@@ -1060,7 +1593,6 @@ const styles = StyleSheet.create({
   createPollButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F5F5F5',
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 20,
@@ -1072,10 +1604,59 @@ const styles = StyleSheet.create({
   },
   floatingButtonsContainer: {
     position: 'absolute',
-    bottom: 100, // Höhere Position als zuvor (war 20)
+    bottom: 90, // Exakt gleiche Höhe wie Alltag-Tab
     right: 20,
     flexDirection: 'column',
     alignItems: 'flex-end',
+    zIndex: 100,
+  },
+  // Styles für Bild-Upload
+  imagePreviewContainer: {
+    marginBottom: 16,
+    borderRadius: 8,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  imagePreview: {
+    width: '100%',
+    height: 200,
+    borderRadius: 8,
+  },
+  removeImageButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderRadius: 15,
+    padding: 4,
+  },
+  imageUploadButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.1)',
+    borderStyle: 'dashed',
+  },
+  imageUploadText: {
+    marginLeft: 8,
+    fontSize: 14,
+    color: '#888',
+  },
+  postImageContainer: {
+    marginVertical: 12,
+    borderRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: '#F5F5F5',
+  },
+  postImage: {
+    width: '100%',
+    height: 200,
+    borderRadius: 8,
+    backgroundColor: '#F5F5F5',
   },
   floatingPollButton: {
     flexDirection: 'row',
@@ -1083,6 +1664,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 24,
+    marginBottom: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
@@ -1095,11 +1677,23 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginLeft: 8,
   },
+  floatingMainButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
+    marginTop: 12, // Some space above the main button when other buttons are shown
+  },
   pollPostContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 12,
-    backgroundColor: '#F9F9F9',
     borderRadius: 8,
     padding: 12,
   },
@@ -1112,11 +1706,11 @@ const styles = StyleSheet.create({
   },
   contentTouchable: {
     marginBottom: 12,
-    backgroundColor: '#FAFAFA',
     borderRadius: 8,
     padding: 12,
     borderWidth: 1,
     borderColor: '#EFEFEF',
+    backgroundColor: '#FAFAFA',
   },
   tapHint: {
     fontSize: 12,
@@ -1124,5 +1718,91 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     marginTop: 4,
     fontStyle: 'italic',
+  },
+  expandedContent: {
+    marginTop: 12,
+  },
+  replyContainer: {
+    marginTop: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#EFEFEF',
+    borderRadius: 8,
+    backgroundColor: '#F9F9F9',
+  },
+  replyInput: {
+    flex: 1,
+    borderRadius: 20,
+    padding: 12,
+    fontSize: 14,
+    minHeight: 40,
+  },
+  replyActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  anonymousReplyOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  replyButtonsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  cancelReplyButton: {
+    padding: 8,
+    marginRight: 8,
+    paddingHorizontal: 6,
+  },
+  cancelReplyText: {
+    color: '#888',
+    fontSize: 12,
+  },
+  sendReplyButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+  },
+  sendReplyText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  nestedCommentsContainer: {
+    marginTop: 12,
+    marginBottom: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 12,
+    borderLeftWidth: 2,
+    borderLeftColor: '#EFEFEF',
+  },
+  nestedCommentsTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginBottom: 8,
+    marginLeft: 8,
+  },
+  nestedCommentItem: {
+    padding: 12,
+    marginBottom: 8,
+    borderRadius: 8,
+  },
+  followButton: {
+    marginLeft: 8,
+  },
+  floatingProfileButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 24,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
   },
 });

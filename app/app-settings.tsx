@@ -9,8 +9,8 @@ import { ThemedBackground } from '@/components/ThemedBackground';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useRouter, Stack } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
-import { BackButton } from '@/components/BackButton';
 import { getAppSettings, saveAppSettings, AppSettings } from '@/lib/supabase';
+import Header from '@/components/Header';
 
 export default function AppSettingsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -97,15 +97,7 @@ export default function AppSettingsScreen() {
           <StatusBar hidden={true} />
           <View style={styles.container}>
             <ScrollView contentContainerStyle={styles.scrollContent}>
-              <View style={styles.header}>
-                <View style={styles.backButtonContainer}>
-                  <BackButton />
-                </View>
-                <ThemedText type="title" style={styles.title}>
-                  App-Einstellungen
-                </ThemedText>
-              </View>
-
+              <Header title="App-Einstellungen" showBackButton={true} />
               {isLoading ? (
                 <View style={styles.loadingContainer}>
                   <ActivityIndicator size="large" color={theme.accent} />
@@ -330,29 +322,14 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    padding: 16,
+    paddingHorizontal: 0,
+    paddingTop: 0,
   },
   scrollContent: {
     paddingBottom: 40,
+    paddingHorizontal: 0,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
-    justifyContent: 'center',
-    position: 'relative',
-  },
-  backButtonContainer: {
-    position: 'absolute',
-    left: 0,
-    zIndex: 10,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#7D5A50',
-    textAlign: 'center',
-  },
+
   loadingContainer: {
     padding: 20,
     alignItems: 'center',
@@ -363,20 +340,20 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   section: {
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
+    marginHorizontal: 16,    // <<< HINZUFÜGEN/ÄNDERN
+    borderRadius: 15,        // <<< ÄNDERN (war z.B. 16)
+    padding: 15,             // <<< ÄNDERN (war z.B. 16)
+    marginBottom: 20,        // <<< ÄNDERN (war z.B. 16)
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
-    elevation: 2,
+    elevation: 3,            // <<< ÄNDERN (war z.B. 2)
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    marginBottom: 16,
-    color: '#7D5A50',
+    marginBottom: 10,
   },
   settingItem: {
     flexDirection: 'row',

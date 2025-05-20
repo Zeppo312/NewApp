@@ -3,7 +3,7 @@ import { View, StyleSheet, Text, ScrollView, TouchableOpacity, Dimensions, Alert
 import { Ionicons } from '@expo/vector-icons';
 import { ThemedText } from './ThemedText';
 import { ThemedView } from './ThemedView';
-import { Colors } from '@/constants/Colors';
+import { Colors, QualityColors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 
 // Typ für die Wehen-Daten
@@ -22,21 +22,22 @@ type VerticalContractionTimelineProps = {
   lightColor?: string;
   darkColor?: string;
   onDelete?: (id: string) => void;
+  onEdit?: (id: string, intensity: string) => void;
 };
 
 // Funktion zur Bestimmung der Farbe basierend auf der Intensität
 const getIntensityColor = (intensity: string | null): string => {
-  if (!intensity) return '#D0D0D0'; // Hellgrau für unbekannte Intensität
+  if (!intensity) return QualityColors.unknown; // Hellgrau für unbekannte Intensität
 
   switch (intensity.toLowerCase()) {
     case 'schwach':
-      return '#A8D8A8'; // Pastellgrün für schwache Intensität
+      return QualityColors.good; // Pastellgrün für schwache Intensität
     case 'mittel':
-      return '#FFD8A8'; // Apricot für mittlere Intensität
+      return QualityColors.medium; // Apricot für mittlere Intensität
     case 'stark':
-      return '#FF9A8A'; // Korallrot für hohe Intensität
+      return QualityColors.bad; // Korallrot für hohe Intensität
     default:
-      return '#D0D0D0'; // Hellgrau für unbekannte Intensität
+      return QualityColors.unknown; // Hellgrau für unbekannte Intensität
   }
 };
 
@@ -84,7 +85,7 @@ const formatInterval = (seconds: number): string => {
   } else {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
+    return `${mins}min ${secs}s`;
   }
 };
 
@@ -92,7 +93,8 @@ const VerticalContractionTimeline: React.FC<VerticalContractionTimelineProps> = 
   contractions,
   lightColor = '#FFFFFF',
   darkColor = '#333333',
-  onDelete
+  onDelete,
+  onEdit
 }) => {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
@@ -160,6 +162,39 @@ const VerticalContractionTimeline: React.FC<VerticalContractionTimelineProps> = 
     );
   };
 
+  // Funktion zum Bearbeiten der Intensität einer Wehe
+  const handleEdit = (id: string) => {
+    if (!onEdit) return;
+
+    // Finde die Wehe mit der angegebenen ID
+    const contraction = contractions.find(c => c.id === id);
+    if (!contraction) return;
+
+    // Zeige einen Dialog zur Auswahl der Intensität
+    Alert.alert(
+      'Intensität bearbeiten',
+      'Wähle die neue Intensität der Wehe:',
+      [
+        {
+          text: '🟢 Schwach',
+          onPress: () => onEdit(id, 'schwach')
+        },
+        {
+          text: '🟠 Mittel',
+          onPress: () => onEdit(id, 'mittel')
+        },
+        {
+          text: '🔴 Stark',
+          onPress: () => onEdit(id, 'stark')
+        },
+        {
+          text: 'Abbrechen',
+          style: 'cancel'
+        }
+      ]
+    );
+  };
+
   return (
     <ThemedView style={styles.container} lightColor={lightColor} darkColor={darkColor}>
       <ThemedText style={styles.title}>Wehenverlauf</ThemedText>
@@ -217,7 +252,7 @@ const VerticalContractionTimeline: React.FC<VerticalContractionTimelineProps> = 
                             <View style={styles.cardHeader}>
                               <View style={styles.cardTitleContainer}>
                                 <ThemedText style={styles.cardTitle}>
-                                  Wehe #{contractions.length - contractions.findIndex(c => c.id === contraction.id)}
+                                  Wehe #{dayContractions.length - index}
                                 </ThemedText>
                                 {contraction.intensity && (
                                   <View style={[
@@ -243,7 +278,7 @@ const VerticalContractionTimeline: React.FC<VerticalContractionTimelineProps> = 
                               <View style={styles.detailRow}>
                                 <ThemedText style={styles.detailLabel}>Abstand:</ThemedText>
                                 <ThemedText style={styles.detailValue}>
-                                  {contraction.interval ? formatInterval(contraction.interval) : '--:--'}
+                                  {contraction.interval && contraction.interval > 0 ? formatInterval(contraction.interval) : '--:--'}
                                 </ThemedText>
                               </View>
 
@@ -265,9 +300,24 @@ const VerticalContractionTimeline: React.FC<VerticalContractionTimelineProps> = 
                                     </View>
                                   )}
 
-                                  {/* Lösch-Button - nur in aufgeklappter Karte anzeigen */}
-                                  {onDelete && (
-                                    <View style={styles.deleteButtonContainer}>
+                                  {/* Aktions-Buttons - nur in aufgeklappter Karte anzeigen */}
+                                  <View style={styles.actionButtonsContainer}>
+                                    {/* Bearbeiten-Button */}
+                                    {onEdit && (
+                                      <TouchableOpacity
+                                        style={styles.editButton}
+                                        onPress={(e) => {
+                                          e.stopPropagation(); // Verhindert, dass der Klick die Karte erweitert
+                                          handleEdit(contraction.id);
+                                        }}
+                                      >
+                                        <Ionicons name="pencil-outline" size={16} color="#4A90E2" />
+                                        <ThemedText style={styles.editButtonText}>Bearb.</ThemedText>
+                                      </TouchableOpacity>
+                                    )}
+
+                                    {/* Lösch-Button */}
+                                    {onDelete && (
                                       <TouchableOpacity
                                         style={styles.deleteButton}
                                         onPress={(e) => {
@@ -275,11 +325,11 @@ const VerticalContractionTimeline: React.FC<VerticalContractionTimelineProps> = 
                                           handleDelete(contraction.id);
                                         }}
                                       >
-                                        <Ionicons name="trash-outline" size={18} color="#FF6B6B" />
-                                        <ThemedText style={styles.deleteButtonText}>Löschen</ThemedText>
+                                        <Ionicons name="trash-outline" size={16} color="#FF6B6B" />
+                                        <ThemedText style={styles.deleteButtonText}>Lösch.</ThemedText>
                                       </TouchableOpacity>
-                                    </View>
-                                  )}
+                                    )}
+                                  </View>
                                 </View>
                               )}
                             </View>
@@ -405,6 +455,32 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginRight: 8,
   },
+  actionButtonsContainer: {
+    marginTop: 16,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 10, // Abstand zwischen den Buttons
+  },
+  editButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    backgroundColor: 'rgba(74, 144, 226, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(74, 144, 226, 0.3)',
+    flex: 1, // Nimmt gleichen Platz ein wie der Lösch-Button
+    maxWidth: '45%', // Begrenzt die Breite auf 45% des Containers
+  },
+  editButtonText: {
+    color: '#4A90E2',
+    fontWeight: 'bold',
+    fontSize: 13,
+    marginLeft: 4,
+  },
   deleteButtonContainer: {
     marginTop: 16,
     alignItems: 'center',
@@ -413,18 +489,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
     borderRadius: 20,
     backgroundColor: 'rgba(255, 107, 107, 0.1)',
     borderWidth: 1,
     borderColor: 'rgba(255, 107, 107, 0.3)',
+    flex: 1, // Nimmt gleichen Platz ein wie der Bearbeiten-Button
+    maxWidth: '45%', // Begrenzt die Breite auf 45% des Containers
   },
   deleteButtonText: {
     color: '#FF6B6B',
     fontWeight: 'bold',
-    fontSize: 14,
-    marginLeft: 6,
+    fontSize: 13,
+    marginLeft: 4,
   },
   intensityBadge: {
     paddingHorizontal: 8,

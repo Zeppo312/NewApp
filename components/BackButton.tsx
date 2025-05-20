@@ -1,8 +1,10 @@
 import React from 'react';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
 import { ThemedText } from './ThemedText';
+import { ThemedView } from './ThemedView';
 import { IconSymbol } from './ui/IconSymbol';
 import { useRouter } from 'expo-router';
+import { useColorScheme } from '@/hooks/useColorScheme';
 
 interface BackButtonProps {
   onPress?: () => void;
@@ -16,6 +18,7 @@ export const BackButton: React.FC<BackButtonProps> = ({
   showLabel = false
 }) => {
   const router = useRouter();
+  const colorScheme = useColorScheme();
 
   const handlePress = () => {
     if (onPress) {
@@ -31,22 +34,30 @@ export const BackButton: React.FC<BackButtonProps> = ({
       style={styles.backButton}
       onPress={handlePress}
     >
-      <IconSymbol name="chevron.left" size={24} color="#E57373" />
-      {showLabel && label && (
-        <ThemedText style={styles.backButtonText}>
-          {label}
-        </ThemedText>
-      )}
+      <ThemedView
+        style={styles.backButtonInner}
+        lightColor="rgba(255, 255, 255, 0.9)"
+        darkColor="rgba(50, 50, 50, 0.9)"
+      >
+        <IconSymbol name="chevron.left" size={24} color="#E57373" />
+        {showLabel && label && (
+          <ThemedText style={styles.backButtonText}>
+            {label}
+          </ThemedText>
+        )}
+      </ThemedView>
     </TouchableOpacity>
   );
 };
 
 const styles = StyleSheet.create({
   backButton: {
+    alignSelf: 'flex-start',
+  },
+  backButtonInner: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
@@ -54,7 +65,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 2,
-    alignSelf: 'flex-start',
     flexDirection: 'row',
   },
   backButtonText: {

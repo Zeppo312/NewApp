@@ -233,6 +233,45 @@ export const getDailyEntries = async (type?: string, date?: Date) => {
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
+    // Verwenden der verbesserten RPC-Funktion, wenn verfügbar
+    try {
+      // Versuche, die Einträge mit Synchronisierungsinformationen abzurufen
+      const { data: syncData, error: syncError } = await supabase.rpc('get_daily_entries_with_sync_info', {
+        p_user_id: userData.user.id,
+        p_date: date ? date.toISOString() : null
+      });
+
+      if (!syncError && syncData) {
+        console.log('Retrieved daily entries with sync info:', syncData);
+
+        // Filtern nach Typ, wenn angegeben
+        let filteredEntries = syncData.entries;
+        if (type && filteredEntries) {
+          filteredEntries = filteredEntries.filter((entry: any) => entry.entryType === type);
+        }
+
+        // Konvertiere die Daten in das erwartete Format
+        const formattedEntries = filteredEntries.map((entry: any) => ({
+          id: entry.id,
+          user_id: userData.user.id,
+          entry_date: entry.entryDate,
+          entry_type: entry.entryType,
+          start_time: entry.startTime,
+          end_time: entry.endTime,
+          notes: entry.notes
+        }));
+
+        return {
+          data: formattedEntries,
+          error: null,
+          syncInfo: syncData.syncInfo
+        };
+      }
+    } catch (rpcError) {
+      console.warn('RPC function not available, falling back to standard query:', rpcError);
+    }
+
+    // Fallback: Standard-Abfrage verwenden
     let query = supabase
       .from('baby_daily')
       .select('*')
@@ -272,28 +311,85 @@ export const saveDailyEntry = async (entry: DailyEntry) => {
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
+    console.log('Saving daily entry:', entry);
+
     let result;
 
     if (entry.id) {
-      // Wenn ein ID vorhanden ist, aktualisieren wir den Eintrag
-      result = await supabase
-        .from('baby_daily')
-        .update({
-          ...entry,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', entry.id)
-        .eq('user_id', userData.user.id);
-    } else {
-      // Wenn keine ID vorhanden ist, erstellen wir einen neuen Eintrag
-      result = await supabase
-        .from('baby_daily')
-        .insert({
-          user_id: userData.user.id,
-          ...entry,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
+      // Wenn ein ID vorhanden ist, aktualisieren wir den Eintrag mit Synchronisation
+      console.log('Updating existing entry with ID:', entry.id);
+      try {
+        // Verwenden der verbesserten RPC-Funktion für die Synchronisation
+        result = await supabase.rpc('update_daily_entry_and_sync', {
+          p_user_id: userData.user.id,
+          p_entry_id: entry.id,
+          p_entry_date: entry.entry_date,
+          p_entry_type: entry.entry_type,
+          p_start_time: entry.start_time,
+          p_end_time: entry.end_time,
+          p_notes: entry.notes
         });
+
+        console.log('Entry updated with sync, result:', result);
+      } catch (rpcError) {
+        console.warn('RPC function not available, falling back to standard update:', rpcError);
+
+        // Fallback: Standard-Update verwenden
+        result = await supabase
+          .from('baby_daily')
+          .update({
+            ...entry,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', entry.id)
+          .eq('user_id', userData.user.id);
+      }
+    } else {
+      // Wenn keine ID vorhanden ist, erstellen wir einen neuen Eintrag mit Synchronisation
+      console.log('Creating new entry with data:', {
+        user_id: userData.user.id,
+        entry_date: entry.entry_date,
+        entry_type: entry.entry_type,
+        start_time: entry.start_time,
+        end_time: entry.end_time,
+        notes: entry.notes
+      });
+
+      try {
+        // Verwenden der verbesserten RPC-Funktion für die Synchronisation
+        result = await supabase.rpc('add_daily_entry_and_sync', {
+          p_user_id: userData.user.id,
+          p_entry_date: entry.entry_date,
+          p_entry_type: entry.entry_type,
+          p_start_time: entry.start_time,
+          p_end_time: entry.end_time,
+          p_notes: entry.notes
+        });
+
+        console.log('Entry created with sync, result:', result);
+      } catch (rpcError) {
+        console.warn('RPC function not available, falling back to standard insert:', rpcError);
+
+        // Fallback: Standard-Insert verwenden
+        result = await supabase
+          .from('baby_daily')
+          .insert({
+            user_id: userData.user.id,
+            entry_date: entry.entry_date,
+            entry_type: entry.entry_type,
+            start_time: entry.start_time,
+            end_time: entry.end_time,
+            notes: entry.notes,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          });
+      }
+    }
+
+    if (result.error) {
+      console.error('Error saving daily entry:', result.error);
+    } else {
+      console.log('Entry saved successfully, result:', result);
     }
 
     return { data: result.data, error: result.error };
@@ -308,13 +404,36 @@ export const deleteDailyEntry = async (id: string) => {
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
-    const { data, error } = await supabase
-      .from('baby_daily')
-      .delete()
-      .eq('id', id)
-      .eq('user_id', userData.user.id);
+    console.log('Deleting daily entry with ID:', id);
 
-    return { data, error };
+    let result;
+
+    try {
+      // Verwenden der verbesserten RPC-Funktion für die Synchronisation
+      result = await supabase.rpc('delete_daily_entry_and_sync', {
+        p_user_id: userData.user.id,
+        p_entry_id: id
+      });
+
+      console.log('Entry deleted with sync, result:', result);
+    } catch (rpcError) {
+      console.warn('RPC function not available, falling back to standard delete:', rpcError);
+
+      // Fallback: Standard-Delete verwenden
+      result = await supabase
+        .from('baby_daily')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', userData.user.id);
+    }
+
+    if (result.error) {
+      console.error('Error deleting daily entry:', result.error);
+    } else {
+      console.log('Entry deleted successfully');
+    }
+
+    return { data: result.data, error: result.error };
   } catch (err) {
     console.error('Failed to delete daily entry:', err);
     return { data: null, error: err };
@@ -551,4 +670,103 @@ export const getPhaseProgress = async (phaseId: string) => {
     console.error('Failed to calculate phase progress:', err);
     return { progress: 0, completedCount: 0, totalCount: 0, error: err };
   }
+};
+
+export const getDailyEntriesForDateRange = async (startDate: Date, endDate: Date) => {
+  try {
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
+
+    console.log('Fetching entries from', startDate.toISOString(), 'to', endDate.toISOString());
+
+    // Versuche zuerst die RPC-Funktion zu verwenden
+    try {
+      const { data: rpcData, error: rpcError } = await supabase.rpc('get_daily_entries_for_date_range', {
+        p_user_id: userData.user.id,
+        p_start_date: startDate.toISOString(),
+        p_end_date: endDate.toISOString()
+      });
+
+      if (!rpcError && rpcData) {
+        console.log('Retrieved daily entries with RPC:', rpcData.length);
+        return { data: rpcData, error: null };
+      }
+    } catch (rpcError) {
+      console.warn('RPC function not available, falling back to standard query:', rpcError);
+    }
+
+    // Fallback: Standard-Abfrage
+    const { data, error } = await supabase
+      .from('baby_daily')
+      .select('*')
+      .eq('user_id', userData.user.id)
+      .gte('entry_date', startDate.toISOString())
+      .lte('entry_date', endDate.toISOString())
+      .order('entry_date', { ascending: true });
+
+    if (error) {
+      console.error('Error fetching daily entries for date range:', error);
+      return { data: null, error };
+    }
+
+    console.log('Retrieved daily entries with standard query:', data?.length);
+    return { data, error: null };
+  } catch (err) {
+    console.error('Failed to get daily entries for date range:', err);
+    return { data: null, error: err };
+  }
+};
+
+// Berechne Statistiken für Alltags-Einträge
+export const calculateDailyStats = (entries: DailyEntry[]) => {
+  const stats: Record<string, {
+    feeding: number;
+    diaper: number;
+    sleep: number;
+    other: number;
+    sleepDuration: number;
+  }> = {};
+
+  entries.forEach(entry => {
+    if (!entry.start_time) return;
+
+    // Extrahiere das Datum ohne Uhrzeit
+    const dateStr = new Date(entry.start_time).toISOString().split('T')[0];
+
+    // Initialisiere Statistiken für diesen Tag, falls noch nicht vorhanden
+    if (!stats[dateStr]) {
+      stats[dateStr] = {
+        feeding: 0,
+        diaper: 0,
+        sleep: 0,
+        other: 0,
+        sleepDuration: 0
+      };
+    }
+
+    // Zähle den Eintrag basierend auf dem Typ
+    switch (entry.entry_type) {
+      case 'feeding':
+        stats[dateStr].feeding++;
+        break;
+      case 'diaper':
+        stats[dateStr].diaper++;
+        break;
+      case 'sleep':
+        stats[dateStr].sleep++;
+        // Berechne Schlafdauer, wenn End-Zeit vorhanden ist
+        if (entry.end_time) {
+          const start = new Date(entry.start_time);
+          const end = new Date(entry.end_time);
+          const durationMinutes = Math.round((end.getTime() - start.getTime()) / (1000 * 60));
+          stats[dateStr].sleepDuration += durationMinutes;
+        }
+        break;
+      case 'other':
+        stats[dateStr].other++;
+        break;
+    }
+  });
+
+  return stats;
 };

@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { View, TouchableOpacity, StyleSheet, Animated, Easing } from 'react-native';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 
-type ActivityType = 'feeding' | 'sleep' | 'diaper' | 'other';
+type ActivityType = 'feeding' | 'diaper' | 'other';
 
 interface ActivitySelectorProps {
   visible: boolean;
@@ -13,7 +13,6 @@ const ActivitySelector: React.FC<ActivitySelectorProps> = ({ visible, onSelect }
   // Animation values for each button
   const animations = {
     feeding: new Animated.Value(0),
-    sleep: new Animated.Value(0),
     diaper: new Animated.Value(0),
     other: new Animated.Value(0),
   };
@@ -21,28 +20,22 @@ const ActivitySelector: React.FC<ActivitySelectorProps> = ({ visible, onSelect }
   // Start animations when visible changes
   useEffect(() => {
     if (visible) {
-      // Animate buttons in sequence with slight delay - from bottom to top
+      // Animate buttons in sequence with slight delay - von unten nach oben
       Animated.stagger(70, [
-        // Start with the bottom button (other) and move up
+        // Reihenfolge angepasst, um mit der Anzeige übereinzustimmen (Wickeln, Füttern, Sonstiges)
         Animated.timing(animations.other, {
           toValue: 1,
           duration: 200,
           useNativeDriver: true,
           easing: Easing.out(Easing.back(1.5)),
         }),
-        Animated.timing(animations.diaper, {
-          toValue: 1,
-          duration: 200,
-          useNativeDriver: true,
-          easing: Easing.out(Easing.back(1.5)),
-        }),
-        Animated.timing(animations.sleep, {
-          toValue: 1,
-          duration: 200,
-          useNativeDriver: true,
-          easing: Easing.out(Easing.back(1.5)),
-        }),
         Animated.timing(animations.feeding, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+          easing: Easing.out(Easing.back(1.5)),
+        }),
+        Animated.timing(animations.diaper, {
           toValue: 1,
           duration: 200,
           useNativeDriver: true,
@@ -57,12 +50,12 @@ const ActivitySelector: React.FC<ActivitySelectorProps> = ({ visible, onSelect }
 
   if (!visible) return null;
 
-  // Calculate transforms for each button - vertical arrangement directly above the plus button
+  // Calculate transforms for each button - vertical arrangement
   const getAnimatedStyle = (animation: Animated.Value, index: number) => {
-    // Calculate position in vertical line - starting from the bottom (plus button position)
+    // Calculate position in vertical line
     const translateY = animation.interpolate({
       inputRange: [0, 1],
-      outputRange: [0, -60 - index * 60], // Vertical offset increases with index, starting right above the plus button
+      outputRange: [0, -index * 60], // Reduzierter Abstand zwischen den Buttons
     });
 
     const scale = animation.interpolate({
@@ -83,39 +76,31 @@ const ActivitySelector: React.FC<ActivitySelectorProps> = ({ visible, onSelect }
 
   return (
     <View style={styles.container}>
-      <Animated.View style={[styles.button, getAnimatedStyle(animations.feeding, 0)]}>
+      {/* Reihenfolge der Buttons angepasst, um mit dem Screenshot übereinzustimmen */}
+      <Animated.View style={[styles.button, getAnimatedStyle(animations.diaper, 0)]}>
         <TouchableOpacity
-          style={[styles.iconButton, { backgroundColor: '#FF9800' }]}
-          onPress={() => onSelect('feeding')}
-        >
-          <IconSymbol name="drop.fill" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
-      </Animated.View>
-
-      <Animated.View style={[styles.button, getAnimatedStyle(animations.sleep, 1)]}>
-        <TouchableOpacity
-          style={[styles.iconButton, { backgroundColor: '#5C6BC0' }]}
-          onPress={() => onSelect('sleep')}
-        >
-          <IconSymbol name="moon.fill" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
-      </Animated.View>
-
-      <Animated.View style={[styles.button, getAnimatedStyle(animations.diaper, 2)]}>
-        <TouchableOpacity
-          style={[styles.iconButton, { backgroundColor: '#4CAF50' }]}
+          style={[styles.iconButton, { backgroundColor: '#4CAF50' }]} // Grün für Wickeln
           onPress={() => onSelect('diaper')}
         >
-          <IconSymbol name="heart.fill" size={24} color="#FFFFFF" />
+          <IconSymbol name="heart.fill" size={28} color="#FFFFFF" />
         </TouchableOpacity>
       </Animated.View>
 
-      <Animated.View style={[styles.button, getAnimatedStyle(animations.other, 3)]}>
+      <Animated.View style={[styles.button, getAnimatedStyle(animations.feeding, 1)]}>
         <TouchableOpacity
-          style={[styles.iconButton, { backgroundColor: '#9C27B0' }]}
+          style={[styles.iconButton, { backgroundColor: '#FF9800' }]} // Orange für Füttern
+          onPress={() => onSelect('feeding')}
+        >
+          <IconSymbol name="drop.fill" size={28} color="#FFFFFF" />
+        </TouchableOpacity>
+      </Animated.View>
+
+      <Animated.View style={[styles.button, getAnimatedStyle(animations.other, 2)]}>
+        <TouchableOpacity
+          style={[styles.iconButton, { backgroundColor: '#9C27B0' }]} // Lila für Sonstiges
           onPress={() => onSelect('other')}
         >
-          <IconSymbol name="star.fill" size={24} color="#FFFFFF" />
+          <IconSymbol name="star.fill" size={28} color="#FFFFFF" />
         </TouchableOpacity>
       </Animated.View>
     </View>
@@ -125,26 +110,25 @@ const ActivitySelector: React.FC<ActivitySelectorProps> = ({ visible, onSelect }
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 60,
-    height: 300, // Erhöht, um Platz für die Buttons zu schaffen
+    bottom: 70, // Positioniert näher am FAB
+    right: 30, // Gleiche Position wie der FAB
+    width: 70,
+    height: 250, // Reduzierte Höhe, da ein Button weniger
     alignItems: 'center',
-    justifyContent: 'flex-end', // Ausrichtung am unteren Ende
+    justifyContent: 'center', // Zentriert die Buttons
     zIndex: 998,
   },
   button: {
     position: 'absolute',
-    width: 50,
-    height: 50,
+    width: 56,
+    height: 56,
     alignItems: 'center',
     justifyContent: 'center',
-    right: 5, // Zentriert über dem Plus-Button
   },
   iconButton: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',

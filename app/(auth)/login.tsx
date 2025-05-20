@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { StyleSheet, TouchableOpacity, View, TextInput, KeyboardAvoidingView, Platform, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { router, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
+import { ThemedBackground } from '@/components/ThemedBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/contexts/AuthContext';
@@ -281,177 +282,176 @@ export default function LoginScreen() {
     }
   };
 
-
-
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
-    >
-      <SafeAreaView style={styles.safeArea}>
-      <StatusBar hidden={true} />
-        <ScrollView contentContainerStyle={styles.scrollContent}>
-          <ThemedView
-            style={styles.container}
-            lightColor={theme.background}
-            darkColor={theme.background}
-          >
-            <View style={styles.logoContainer}>
-              <ThemedText type="title" style={styles.appTitle} lightColor={theme.text} darkColor={theme.text}>
-                Wehen-Tracker
-              </ThemedText>
-              <ThemedText style={styles.appSubtitle} lightColor={theme.text} darkColor={theme.text}>
-                Für werdende Mamas
-              </ThemedText>
-            </View>
-
-            <ThemedView style={styles.formContainer} lightColor={theme.card} darkColor={theme.card}>
-              <ThemedText type="subtitle" style={styles.formTitle} lightColor={theme.text} darkColor={theme.text}>
-                Anmelden
-              </ThemedText>
-
-              {error ? (
-                <ThemedView style={styles.errorContainer} lightColor="#FFEBEE" darkColor="#3E2723">
-                  <ThemedText style={styles.errorText} lightColor="#B71C1C" darkColor="#FFCDD2">
-                    {error}
-                  </ThemedText>
-                </ThemedView>
-              ) : null}
-
-              <View style={styles.inputContainer}>
-                <ThemedText style={styles.inputLabel} lightColor={theme.text} darkColor={theme.text}>
-                  E-Mail
+    <>
+      <Stack.Screen options={{ headerShown: false }} />
+      <ThemedBackground style={styles.backgroundImage} resizeMode="repeat">
+        <KeyboardAvoidingView
+          style={styles.container}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+        >
+          <SafeAreaView style={styles.safeArea}>
+            <StatusBar hidden={true} />
+            <ScrollView contentContainerStyle={styles.scrollContent}>
+              <View style={styles.logoContainer}>
+                <ThemedText type="title" style={styles.appTitle}>
+                  Lotti Baby
                 </ThemedText>
-                <TextInput
-                  style={[
-                    styles.input,
-                    {
-                      backgroundColor: colorScheme === 'dark' ? '#362E28' : '#FFFFFF',
-                      color: colorScheme === 'dark' ? '#FFF8F0' : '#7D5A50',
-                      borderColor: colorScheme === 'dark' ? '#7D6A5A' : '#EFE1CF'
-                    }
-                  ]}
-                  placeholder="deine@email.de"
-                  placeholderTextColor={colorScheme === 'dark' ? '#A68A7B' : '#C8B6A6'}
-                  value={email}
-                  onChangeText={setEmail}
-                  autoCapitalize="none"
-                  keyboardType="email-address"
-                />
+                <ThemedText style={styles.appSubtitle}>
+                  Für werdende Eltern
+                </ThemedText>
               </View>
 
-              <View style={styles.inputContainer}>
-                <ThemedText style={styles.inputLabel} lightColor={theme.text} darkColor={theme.text}>
-                  Passwort
+              <ThemedView style={styles.formContainer} lightColor={theme.card} darkColor={theme.card}>
+                <ThemedText type="subtitle" style={styles.formTitle}>
+                  Anmelden
                 </ThemedText>
-                <TextInput
-                  style={[
-                    styles.input,
-                    {
-                      backgroundColor: colorScheme === 'dark' ? '#362E28' : '#FFFFFF',
-                      color: colorScheme === 'dark' ? '#FFF8F0' : '#7D5A50',
-                      borderColor: colorScheme === 'dark' ? '#7D6A5A' : '#EFE1CF'
-                    }
-                  ]}
-                  placeholder="••••••••"
-                  placeholderTextColor={colorScheme === 'dark' ? '#A68A7B' : '#C8B6A6'}
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry
-                />
-              </View>
 
-              <TouchableOpacity
-                style={[styles.button, styles.loginButton, isLoading && styles.buttonDisabled]}
-                onPress={handleAuth}
-                disabled={isLoading}
-              >
-                <ThemedText style={styles.buttonText}>
-                  {isLoading ? (isRegistering ? 'Registrieren...' : 'Anmelden...') : (isRegistering ? 'Registrieren' : 'Anmelden')}
-                </ThemedText>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.button, styles.demoButton]}
-                onPress={handleDemoLogin}
-                disabled={isLoading}
-              >
-                <ThemedText style={styles.buttonText}>
-                  Demo-Modus
-                </ThemedText>
-              </TouchableOpacity>
-
-              {isRegistering && (
-                <View style={styles.inputContainer}>
-                  <TouchableOpacity
-                    style={styles.invitationToggle}
-                    onPress={() => setShowInvitationField(!showInvitationField)}
-                    disabled={isLoading}
-                  >
-                    <ThemedText style={styles.invitationToggleText} lightColor={theme.accent} darkColor={theme.accent}>
-                      {showInvitationField ? 'Ohne Einladungscode fortfahren' : 'Ich habe einen Einladungscode'}
+                {error ? (
+                  <ThemedView style={styles.errorContainer} lightColor="#FFEBEE" darkColor="#3E2723">
+                    <ThemedText style={styles.errorText} lightColor="#B71C1C" darkColor="#FFCDD2">
+                      {error}
                     </ThemedText>
-                  </TouchableOpacity>
+                  </ThemedView>
+                ) : null}
 
-                  {showInvitationField && (
-                    <>
-                      <ThemedText style={styles.inputLabel} lightColor={theme.text} darkColor={theme.text}>
-                        Einladungscode (optional)
-                      </ThemedText>
-                      <TextInput
-                        style={[
-                          styles.input,
-                          {
-                            backgroundColor: colorScheme === 'dark' ? '#362E28' : '#FFFFFF',
-                            color: colorScheme === 'dark' ? '#FFF8F0' : '#7D5A50',
-                            borderColor: colorScheme === 'dark' ? '#7D6A5A' : '#EFE1CF'
-                          }
-                        ]}
-                        placeholder="Einladungscode eingeben"
-                        placeholderTextColor={colorScheme === 'dark' ? '#A68A7B' : '#C8B6A6'}
-                        value={invitationCode}
-                        onChangeText={setInvitationCode}
-                        autoCapitalize="characters"
-                      />
-                    </>
-                  )}
+                <View style={styles.inputContainer}>
+                  <ThemedText style={styles.inputLabel}>
+                    E-Mail
+                  </ThemedText>
+                  <TextInput
+                    style={[
+                      styles.input,
+                      {
+                        backgroundColor: colorScheme === 'dark' ? '#362E28' : '#FFFFFF',
+                        color: colorScheme === 'dark' ? '#FFF8F0' : '#7D5A50',
+                        borderColor: colorScheme === 'dark' ? '#7D6A5A' : '#EFE1CF'
+                      }
+                    ]}
+                    placeholder="deine@email.de"
+                    placeholderTextColor={colorScheme === 'dark' ? '#A68A7B' : '#C8B6A6'}
+                    value={email}
+                    onChangeText={setEmail}
+                    autoCapitalize="none"
+                    keyboardType="email-address"
+                  />
                 </View>
-              )}
 
-              <TouchableOpacity
-                style={styles.switchModeButton}
-                onPress={() => {
-                  setIsRegistering(!isRegistering);
-                  setShowInvitationField(false);
-                  setInvitationCode('');
-                }}
-                disabled={isLoading}
-              >
-                <ThemedText style={styles.switchModeText} lightColor={theme.accent} darkColor={theme.accent}>
-                  {isRegistering ? 'Bereits ein Konto? Anmelden' : 'Noch kein Konto? Registrieren'}
-                </ThemedText>
-              </TouchableOpacity>
-            </ThemedView>
-          </ThemedView>
-        </ScrollView>
-      </SafeAreaView>
-    </KeyboardAvoidingView>
+                <View style={styles.inputContainer}>
+                  <ThemedText style={styles.inputLabel}>
+                    Passwort
+                  </ThemedText>
+                  <TextInput
+                    style={[
+                      styles.input,
+                      {
+                        backgroundColor: colorScheme === 'dark' ? '#362E28' : '#FFFFFF',
+                        color: colorScheme === 'dark' ? '#FFF8F0' : '#7D5A50',
+                        borderColor: colorScheme === 'dark' ? '#7D6A5A' : '#EFE1CF'
+                      }
+                    ]}
+                    placeholder="••••••••"
+                    placeholderTextColor={colorScheme === 'dark' ? '#A68A7B' : '#C8B6A6'}
+                    value={password}
+                    onChangeText={setPassword}
+                    secureTextEntry
+                  />
+                </View>
+
+                <TouchableOpacity
+                  style={[styles.button, styles.loginButton, isLoading && styles.buttonDisabled]}
+                  onPress={handleAuth}
+                  disabled={isLoading}
+                >
+                  <ThemedText style={styles.buttonText}>
+                    {isLoading ? (isRegistering ? 'Registrieren...' : 'Anmelden...') : (isRegistering ? 'Registrieren' : 'Anmelden')}
+                  </ThemedText>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.button, styles.demoButton]}
+                  onPress={handleDemoLogin}
+                  disabled={isLoading}
+                >
+                  <ThemedText style={styles.buttonText}>
+                    Demo-Modus
+                  </ThemedText>
+                </TouchableOpacity>
+
+                {isRegistering && (
+                  <View style={styles.inputContainer}>
+                    <TouchableOpacity
+                      style={styles.invitationToggle}
+                      onPress={() => setShowInvitationField(!showInvitationField)}
+                      disabled={isLoading}
+                    >
+                      <ThemedText style={styles.invitationToggleText} lightColor={theme.accent} darkColor={theme.accent}>
+                        {showInvitationField ? 'Ohne Einladungscode fortfahren' : 'Ich habe einen Einladungscode'}
+                      </ThemedText>
+                    </TouchableOpacity>
+
+                    {showInvitationField && (
+                      <>
+                        <ThemedText style={styles.inputLabel}>
+                          Einladungscode (optional)
+                        </ThemedText>
+                        <TextInput
+                          style={[
+                            styles.input,
+                            {
+                              backgroundColor: colorScheme === 'dark' ? '#362E28' : '#FFFFFF',
+                              color: colorScheme === 'dark' ? '#FFF8F0' : '#7D5A50',
+                              borderColor: colorScheme === 'dark' ? '#7D6A5A' : '#EFE1CF'
+                            }
+                          ]}
+                          placeholder="Einladungscode eingeben"
+                          placeholderTextColor={colorScheme === 'dark' ? '#A68A7B' : '#C8B6A6'}
+                          value={invitationCode}
+                          onChangeText={setInvitationCode}
+                          autoCapitalize="characters"
+                        />
+                      </>
+                    )}
+                  </View>
+                )}
+
+                <TouchableOpacity
+                  style={styles.switchModeButton}
+                  onPress={() => {
+                    setIsRegistering(!isRegistering);
+                    setShowInvitationField(false);
+                    setInvitationCode('');
+                  }}
+                  disabled={isLoading}
+                >
+                  <ThemedText style={styles.switchModeText} lightColor={theme.accent} darkColor={theme.accent}>
+                    {isRegistering ? 'Bereits ein Konto? Anmelden' : 'Noch kein Konto? Registrieren'}
+                  </ThemedText>
+                </TouchableOpacity>
+              </ThemedView>
+            </ScrollView>
+          </SafeAreaView>
+        </KeyboardAvoidingView>
+      </ThemedBackground>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
+  backgroundImage: {
+    flex: 1,
+  },
   safeArea: {
     flex: 1,
-    backgroundColor: Colors.light.background,
   },
   container: {
     flex: 1,
-    padding: 16,
   },
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
+    padding: 16,
   },
   logoContainer: {
     alignItems: 'center',
@@ -519,50 +519,6 @@ const styles = StyleSheet.create({
   loginButton: {
     backgroundColor: Colors.light.success,
     marginTop: 24,
-  },
-  magicLinkButton: {
-    backgroundColor: '#9C27B0', // Lila für Magic Link
-    marginTop: 16,
-  },
-  socialButtonsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 16,
-  },
-  socialButton: {
-    flex: 1,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginHorizontal: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  googleButton: {
-    backgroundColor: '#DB4437', // Google Rot
-  },
-  appleButton: {
-    backgroundColor: '#000000', // Apple Schwarz
-  },
-  facebookButton: {
-    backgroundColor: '#4267B2', // Facebook Blau
-  },
-  socialButtonText: {
-    color: 'white',
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
-  phoneButton: {
-    backgroundColor: '#2196F3', // Blau für Telefon
-    marginTop: 16,
-  },
-  anonymousButton: {
-    backgroundColor: '#757575', // Grau für anonym
-    marginTop: 16,
   },
   demoButton: {
     backgroundColor: Colors.light.accent,

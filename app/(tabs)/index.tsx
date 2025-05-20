@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { StyleSheet, TouchableOpacity, ScrollView, Alert, View, StatusBar, SafeAreaView, ActivityIndicator } from 'react-native';
+import { StyleSheet, TouchableOpacity, ScrollView, Alert, View, StatusBar, SafeAreaView, ActivityIndicator, AppState, Platform, ImageBackground, RefreshControl } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedBackground } from '@/components/ThemedBackground';
@@ -7,7 +7,19 @@ import VerticalContractionTimeline from '@/components/VerticalContractionTimelin
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/contexts/AuthContext';
-import { saveContraction, getContractions, deleteContraction, syncAllExistingContractions, getLinkedUsersWithDetails } from '@/lib/supabase';
+import { saveContraction, getContractions, deleteContraction, updateContraction, syncAllExistingContractions, getLinkedUsersWithDetails } from '@/lib/supabase';
+import * as Notifications from 'expo-notifications';
+import * as Device from 'expo-device';
+import { 
+  startContractionTimer, 
+  stopContractionTimer, 
+  getContractionTimerState, 
+  setupNotifications,
+  setupDynamicIsland,
+  ContractionTimerData,
+  formatTime as formatBackgroundTime
+} from '@/lib/background-tasks';
+import Header from '@/components/Header';
 
 type Contraction = {
   id: string;
@@ -31,6 +43,8 @@ export default function HomeScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const { user } = useAuth();
+  const appState = useRef(AppState.currentState);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Hilfsfunktion zur Generierung einer eindeutigen ID
   const generateUniqueId = (): string => {
@@ -38,23 +52,80 @@ export default function HomeScreen() {
     return `${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
   };
 
+  // Initialize background tasks and notifications
+  useEffect(() => {
+    const initBackgroundServices = async () => {
+      await setupNotifications();
+      
+      if (Platform.OS === 'ios') {
+        await setupDynamicIsland();
+      }
+      
+      // Check if timer is already running in background
+      const timerState = await getContractionTimerState();
+      if (timerState.isRunning) {
+        // Resume timer
+        setTimerRunning(true);
+        setElapsedTime(timerState.elapsedTime);
+        
+        // Create a current contraction object
+        const startTimeDate = new Date(timerState.startTime);
+        setCurrentContraction({
+          id: generateUniqueId(),
+          startTime: startTimeDate,
+          endTime: null,
+          duration: null,
+          interval: null,
+          intensity: null
+        });
+      }
+    };
+    
+    initBackgroundServices();
+    
+    // Setup notification response handler
+    const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
+      if (response.actionIdentifier === 'stop') {
+        // User tapped "Stop" button in notification
+        stopContraction();
+      }
+    });
+    
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
   // Start a new contraction
-  const startContraction = () => {
+  const startContraction = async () => {
+    // Aktuelle Zeit für die neue Wehe
+    const now = new Date();
+
+    // Berechne das Intervall zur vorherigen Wehe (falls vorhanden)
+    let interval = null;
+    if (contractions.length > 0) {
+      // Wir nehmen die neueste Wehe (contractions[0]), da die Liste nach Startzeit sortiert ist (neueste zuerst)
+      const lastContraction = contractions[0];
+      // Berechne den Abstand in Sekunden zwischen der aktuellen Zeit und der Startzeit der letzten Wehe
+      interval = Math.floor((now.getTime() - new Date(lastContraction.startTime).getTime()) / 1000);
+    }
+
     const newContraction: Contraction = {
       id: generateUniqueId(),
-      startTime: new Date(),
+      startTime: now,
       endTime: null,
       duration: null,
-      interval: contractions.length > 0
-        ? Math.floor((Date.now() - new Date(contractions[0].startTime).getTime()) / 1000)
-        : null,
+      interval: interval,
       intensity: null // Wird später beim Beenden der Wehe gesetzt
     };
 
-    console.log('Starting new contraction with ID:', newContraction.id);
+    console.log('Starting new contraction with ID:', newContraction.id, 'interval:', interval);
     setCurrentContraction(newContraction);
     setTimerRunning(true);
     setElapsedTime(0);
+    
+    // Start background timer
+    await startContractionTimer();
   };
 
   // Funktion zum Anzeigen des Intensitäts-Dialogs mit Buttons
@@ -154,7 +225,10 @@ export default function HomeScreen() {
   const stopContraction = async () => {
     if (currentContraction) {
       const endTime = new Date();
-      const duration = Math.floor((endTime.getTime() - new Date(currentContraction.startTime).getTime()) / 1000);
+      
+      // Get final timer data from background
+      const timerData = await stopContractionTimer();
+      const duration = timerData.elapsedTime;
 
       const completedContraction: Contraction = {
         ...currentContraction,
@@ -171,6 +245,60 @@ export default function HomeScreen() {
       showIntensityDialog(completedContraction);
     }
   };
+
+  // Handle app state changes (background/foreground)
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (
+        appState.current.match(/inactive|background/) &&
+        nextAppState === 'active'
+      ) {
+        // App has come to the foreground
+        const updateTimerFromBackground = async () => {
+          if (timerRunning) {
+            const timerState = await getContractionTimerState();
+            setElapsedTime(timerState.elapsedTime);
+          }
+        };
+        
+        updateTimerFromBackground();
+      }
+      
+      appState.current = nextAppState;
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [timerRunning]);
+
+  // Timer effect - only for UI updates when app is in foreground
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout | null = null;
+    
+    if (timerRunning) {
+      intervalId = setInterval(async () => {
+        if (Platform.OS === 'ios' && Device.isDevice) {
+          // On real iOS devices, get time from background service
+          const timerState = await getContractionTimerState();
+          setElapsedTime(timerState.elapsedTime);
+        } else {
+          // For other platforms or simulator, increment locally
+          setElapsedTime(prev => prev + 1);
+        }
+      }, 1000) as unknown as NodeJS.Timeout;
+      
+      timerRef.current = intervalId;
+    } else if (timerRef.current) {
+      clearInterval(timerRef.current);
+    }
+
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [timerRunning]);
 
   // Überprüft, ob die Wehen auf einen fortgeschrittenen Geburtsbeginn hindeuten
   const checkContractionWarning = (newContraction: Contraction, existingContractions: Contraction[]) => {
@@ -212,19 +340,13 @@ export default function HomeScreen() {
     }
   };
 
-  // Format seconds to mm:ss
+  // Format time as MM:SS
   const formatTime = (seconds: number): string => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    return formatBackgroundTime(seconds);
   };
 
-
-
-
-
   // Funktion zum Löschen einer Wehe
-  const handleDeleteContraction = (contractionId: string) => {
+  const handleDeleteContraction = async (contractionId: string) => {
     console.log('Handling delete for contraction ID:', contractionId);
 
     // Wir führen die Löschung direkt aus, da der Bestätigungsdialog bereits in der ContractionItem-Komponente angezeigt wird
@@ -283,6 +405,67 @@ export default function HomeScreen() {
     }
   };
 
+  // Funktion zum Bearbeiten der Intensität einer Wehe
+  const handleEditContractionIntensity = async (contractionId: string, newIntensity: string) => {
+    console.log('Handling edit for contraction ID:', contractionId, 'new intensity:', newIntensity);
+
+    try {
+      // Prüfen, ob die ID ein gültiges Format hat
+      if (!contractionId || typeof contractionId !== 'string') {
+        console.error('Invalid contraction ID:', contractionId);
+        Alert.alert('Fehler', 'Ungültige Wehen-ID. Bitte versuchen Sie es erneut.');
+        return;
+      }
+
+      // Finde die Wehe in der lokalen Liste
+      const contractionToUpdate = contractions.find(c => c.id === contractionId);
+      if (!contractionToUpdate) {
+        console.error('Contraction not found in local state:', contractionId);
+        Alert.alert('Fehler', 'Die Wehe konnte nicht gefunden werden.');
+        return;
+      }
+
+      // Optimistische UI-Aktualisierung
+      setContractions(prevContractions =>
+        prevContractions.map(c => {
+          if (c.id === contractionId) {
+            return { ...c, intensity: newIntensity };
+          }
+          return c;
+        })
+      );
+
+      console.log('Sending update request to Supabase for ID:', contractionId);
+
+      // In Supabase aktualisieren
+      const { data, error } = await updateContraction(contractionId, { intensity: newIntensity });
+
+      if (error) {
+        console.error('Error updating contraction:', error);
+
+        // Detailliertere Fehlermeldung
+        let errorMessage = 'Wehe konnte nicht aktualisiert werden.';
+        if (error.message) {
+          errorMessage += ` Grund: ${error.message}`;
+          console.error('Detailed error message:', error.message);
+        }
+
+        Alert.alert('Fehler', errorMessage);
+
+        // Bei Fehler die Wehen neu laden
+        loadContractions();
+      } else {
+        console.log('Successfully updated contraction with ID:', contractionId);
+        Alert.alert('Erfolg', 'Die Intensität der Wehe wurde erfolgreich aktualisiert.');
+      }
+    } catch (err) {
+      console.error('Failed to update contraction:', err);
+      // Bei Fehler die Wehen neu laden
+      Alert.alert('Fehler', `Ein unerwarteter Fehler ist aufgetreten: ${err instanceof Error ? err.message : 'Unbekannter Fehler'}`);
+      loadContractions();
+    }
+  };
+
   // Funktion zum Laden der Wehen aus Supabase
   const loadContractions = async () => {
     if (!user) return;
@@ -308,6 +491,29 @@ export default function HomeScreen() {
           intensity: c.intensity
         }));
 
+        // Sortieren der Wehen nach Startzeit (neueste zuerst)
+        formattedContractions.sort((a, b) => b.startTime.getTime() - a.startTime.getTime());
+
+        // Berechne die Intervalle zwischen den Wehen, falls sie nicht korrekt gesetzt sind
+        for (let i = 0; i < formattedContractions.length - 1; i++) {
+          const currentContraction = formattedContractions[i];
+          const nextContraction = formattedContractions[i + 1];
+
+          // Wenn das Intervall nicht gesetzt ist oder 0 ist, berechne es neu
+          if (!currentContraction.interval || currentContraction.interval <= 0) {
+            // Berechne den Abstand zwischen der aktuellen und der nächsten Wehe
+            const intervalInSeconds = Math.floor(
+              (currentContraction.startTime.getTime() - nextContraction.startTime.getTime()) / 1000
+            );
+
+            // Setze das Intervall, wenn es positiv ist
+            if (intervalInSeconds > 0) {
+              currentContraction.interval = intervalInSeconds;
+              console.log(`Recalculated interval for contraction ${currentContraction.id}: ${intervalInSeconds}s`);
+            }
+          }
+        }
+
         setContractions(formattedContractions);
 
         // Speichern der Synchronisierungsinformationen
@@ -322,8 +528,6 @@ export default function HomeScreen() {
       setIsLoading(false);
     }
   };
-
-
 
   // Funktion zum Laden der verknüpften Benutzer
   const loadLinkedUsers = async () => {
@@ -414,142 +618,142 @@ export default function HomeScreen() {
     }
   }, [user]);
 
-  // Timer effect
-  useEffect(() => {
-    if (timerRunning) {
-      timerRef.current = setInterval(() => {
-        setElapsedTime(prev => prev + 1);
-      }, 1000);
-    } else if (timerRef.current) {
-      clearInterval(timerRef.current);
-    }
-
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
-    };
-  }, [timerRunning]);
-
-
-
-
-
-
-
-
-
-  // Keine Bildschirmabmessungen mehr nötig, da ThemedBackground diese intern verwaltet
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await loadContractions();
+    setIsRefreshing(false);
+  };
 
   return (
-    <ThemedBackground style={styles.backgroundImage}>
+    <ThemedBackground style={styles.background}>
       <SafeAreaView style={styles.safeArea}>
-        <StatusBar hidden={true} />
-        <View style={styles.container}>
-        <ScrollView contentContainerStyle={styles.scrollContent}>
-          {/* Header with title - moved down for better visibility */}
-          <View style={styles.header}>
-            <ThemedText type="title" style={styles.headerTitle} lightColor="#5C4033" darkColor="#F2E6DD">
-              Wehen-Tracker
-            </ThemedText>
-            <ThemedText style={styles.headerSubtitle} lightColor="#5C4033" darkColor="#F2E6DD">
-              Für werdende Mamas
-            </ThemedText>
-          </View>
+        <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
+        
+        <Header 
+          title="Wehen-Tracker" 
+          subtitle="Verfolge deine Wehen bis zur Geburt" 
+        />
 
-          {/* Timer Section - improved for better visibility */}
-          <ThemedView style={styles.timerSection} lightColor="rgba(255, 255, 255, 0.8)" darkColor="rgba(50, 50, 50, 0.8)">
-            <ThemedView
-              style={[styles.timerDisplay, {borderColor: theme.timerBorder, overflow: 'visible'}]}
-              lightColor={theme.timerBackground}
-              darkColor={theme.timerBackground}
-            >
-              <ThemedText
-                style={styles.timerText}
-                lightColor={theme.timerText}
-                darkColor={theme.timerText}
-              >
-                {formatTime(elapsedTime)}
-              </ThemedText>
-            </ThemedView>
-
-            <ThemedView style={styles.buttonContainer}>
-              {!timerRunning ? (
-                <TouchableOpacity
-                  style={[styles.button, styles.startButton]}
-                  onPress={startContraction}
-                >
-                  <ThemedText style={styles.buttonText}>Wehe Starten</ThemedText>
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity
-                  style={[styles.button, styles.stopButton]}
-                  onPress={stopContraction}
-                >
-                  <ThemedText style={styles.buttonText}>Wehe Beenden</ThemedText>
-                </TouchableOpacity>
-              )}
-            </ThemedView>
-          </ThemedView>
-
-          {/* Contractions History */}
-          <ThemedView style={styles.historySection} lightColor="transparent" darkColor="transparent">
-            <View style={styles.historyHeader}>
-              <ThemedText
-                type="subtitle"
-                style={styles.historyTitle}
-                lightColor="#5C4033"
-                darkColor="#F2E6DD"
-              >
-                Wehen Verlauf
-              </ThemedText>
+        <ScrollView
+          style={styles.container}
+          contentContainerStyle={styles.scrollView}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={handleRefresh}
+              colors={[theme.tint]}
+              tintColor={theme.tint}
+            />
+          }
+        >
+          {isSyncing && (
+            <View style={styles.syncingContainer}>
+              <ActivityIndicator color={theme.accent} size="small" />
+              <ThemedText style={styles.syncingText}>Synchronisiere...</ThemedText>
             </View>
-
-            {/* Synchronisierungsinfo anzeigen */}
-            {linkedUsers.length > 0 && (
-              <ThemedView style={styles.syncInfoContainer} lightColor="rgba(255, 255, 255, 0.8)" darkColor="rgba(50, 50, 50, 0.8)">
-                <ThemedText style={styles.syncInfoText} lightColor="#5C4033" darkColor="#F2E6DD">
-                  Deine Wehen werden automatisch mit {linkedUsers.map(user => user.firstName).join(', ')} synchronisiert.
-                </ThemedText>
-              </ThemedView>
-            )}
-
-            {/* Visualisierung der Wehen */}
-            {!isLoading && contractions.length > 0 && (
-              <VerticalContractionTimeline
-                contractions={contractions}
-                lightColor="rgba(255, 255, 255, 0.8)"
-                darkColor="rgba(50, 50, 50, 0.8)"
-                onDelete={handleDeleteContraction}
-              />
-            )}
-
-            {isLoading || isSyncing ? (
+          )}
+          
+          <View style={styles.container}>
+            <ThemedView style={styles.timerSection} lightColor="rgba(255, 255, 255, 0.8)" darkColor="rgba(50, 50, 50, 0.8)">
               <ThemedView
-                style={styles.emptyState}
-                lightColor={theme.card}
-                darkColor={theme.card}
+                style={[styles.timerDisplay, {borderColor: theme.timerBorder, overflow: 'visible'}]}
+                lightColor={theme.timerBackground}
+                darkColor={theme.timerBackground}
               >
-                <ActivityIndicator size="large" color={theme.accent} />
-                <ThemedText style={{marginTop: 10}} lightColor={theme.text} darkColor={theme.text}>
-                  {isSyncing ? 'Wehen werden synchronisiert...' : 'Wehen werden geladen...'}
+                <ThemedText
+                  style={styles.timerText}
+                  lightColor={theme.timerText}
+                  darkColor={theme.timerText}
+                >
+                  {formatTime(elapsedTime)}
                 </ThemedText>
+                {timerRunning && (
+                  <ThemedText
+                    style={styles.timerRunningText}
+                    lightColor={theme.textTertiary}
+                    darkColor={theme.textTertiary}
+                  >
+                    Timer läuft auch im Hintergrund weiter
+                  </ThemedText>
+                )}
               </ThemedView>
-            ) : contractions.length === 0 ? (
-              <ThemedView
-                style={styles.emptyState}
-                lightColor={theme.card}
-                darkColor={theme.card}
-              >
-                <ThemedText lightColor={theme.text} darkColor={theme.text}>
-                  Noch keine Wehen aufgezeichnet
+
+              <ThemedView style={styles.buttonContainer}>
+                {!timerRunning ? (
+                  <TouchableOpacity
+                    style={[styles.button, styles.startButton]}
+                    onPress={startContraction}
+                  >
+                    <ThemedText style={styles.buttonText}>Wehe Starten</ThemedText>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    style={[styles.button, styles.stopButton]}
+                    onPress={stopContraction}
+                  >
+                    <ThemedText style={styles.buttonText}>Wehe Beenden</ThemedText>
+                  </TouchableOpacity>
+                )}
+              </ThemedView>
+            </ThemedView>
+
+            <ThemedView style={styles.historySection} lightColor="transparent" darkColor="transparent">
+              <View style={styles.historyHeader}>
+                <ThemedText
+                  type="subtitle"
+                  style={styles.historyTitle}
+                  lightColor="#5C4033"
+                  darkColor="#F2E6DD"
+                >
+                  Wehen Verlauf
                 </ThemedText>
-              </ThemedView>
-            ) : null}
-          </ThemedView>
+              </View>
+
+              {linkedUsers.length > 0 && (
+                <ThemedView style={styles.syncInfoContainer} lightColor="rgba(255, 255, 255, 0.8)" darkColor="rgba(50, 50, 50, 0.8)">
+                  <ThemedText style={styles.syncInfoText} lightColor="#5C4033" darkColor="#F2E6DD">
+                    Deine Wehen werden automatisch mit {linkedUsers.map(user => user.firstName).join(', ')} synchronisiert.
+                  </ThemedText>
+                </ThemedView>
+              )}
+
+              {!isLoading && contractions.length > 0 && (
+                <VerticalContractionTimeline
+                  contractions={contractions}
+                  lightColor="rgba(255, 255, 255, 0.8)"
+                  darkColor="rgba(50, 50, 50, 0.8)"
+                  onDelete={handleDeleteContraction}
+                  onEdit={handleEditContractionIntensity}
+                />
+              )}
+
+              {isLoading || isSyncing ? (
+                <ThemedView
+                  style={styles.emptyState}
+                  lightColor={theme.card}
+                  darkColor={theme.card}
+                >
+                  <ActivityIndicator size="large" color={theme.accent} />
+                  <ThemedText style={{marginTop: 10}} lightColor={theme.text} darkColor={theme.text}>
+                    {isSyncing ? 'Wehen werden synchronisiert...' : 'Wehen werden geladen...'}
+                  </ThemedText>
+                </ThemedView>
+              ) : contractions.length === 0 ? (
+                <ThemedView
+                  style={styles.emptyState}
+                  lightColor={theme.card}
+                  darkColor={theme.card}
+                >
+                  <ThemedText lightColor={theme.text} darkColor={theme.text}>
+                    Noch keine Wehen aufgezeichnet
+                  </ThemedText>
+                </ThemedView>
+              ) : null}
+            </ThemedView>
+          </View>
         </ScrollView>
-      </View>
-    </SafeAreaView>
+      </SafeAreaView>
     </ThemedBackground>
   );
 }
@@ -593,20 +797,17 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
   },
-  backgroundImage: {
+  background: {
     flex: 1,
-    width: '100%',
-    height: '100%',
   },
   safeArea: {
     flex: 1,
-    backgroundColor: 'transparent', // Transparent background to show the image
   },
   container: {
     flex: 1,
     padding: 16,
   },
-  scrollContent: {
+  scrollView: {
     paddingBottom: 40,
     paddingTop: 30, // Add more padding at the top for better visibility
   },
@@ -629,7 +830,7 @@ const styles = StyleSheet.create({
   timerSection: {
     alignItems: 'center',
     marginBottom: 10, // Increased margin
-    borderRadius: 24, // More rounded corners
+    borderRadius: 30, // More rounded corners
     padding: 5, // More padding
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
@@ -670,6 +871,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: '100%',
     marginTop: 10, // Add some margin at the top
+    borderRadius: 40,
+    backgroundColor: 'transparent',
   },
   button: {
     paddingVertical: 16, // Taller buttons
@@ -682,7 +885,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
     shadowRadius: 4,
-    elevation: 3,
+    elevation: 5,
   },
   startButton: {
     backgroundColor: Colors.light.success,
@@ -816,5 +1019,25 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: 'bold',
     padding: 10,
+  },
+  timerRunningText: {
+    fontSize: 14,
+    fontStyle: 'italic',
+    marginTop: 10,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  syncingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 10,
+  },
+  syncingText: {
+    marginLeft: 10,
   },
 });

@@ -1,16 +1,26 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, TextInput, Alert, ImageBackground, SafeAreaView, StatusBar, FlatList } from 'react-native';
+import { StyleSheet, View, TouchableOpacity, Alert, SafeAreaView, StatusBar, FlatList, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/contexts/AuthContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { ThemedBackground } from '@/components/ThemedBackground';
 import { getDailyEntries, saveDailyEntry, deleteDailyEntry, DailyEntry } from '@/lib/baby';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import ActivitySelector from '@/components/ActivitySelector';
 import ActivityInputModal from '@/components/ActivityInputModal';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import TimelineView from '@/components/TimelineView';
+import ActivityCard from '@/components/ActivityCard';
+import WeekScroller from '@/components/WeekScroller';
+import ViewDropdown from '@/components/ViewDropdown';
+import EmptyState from '@/components/EmptyState';
+import DailySummary from '@/components/DailySummary';
+import { syncAllExistingDailyEntries } from '@/lib/syncDailyEntries';
+import { subscribeToDailyEntries } from '@/lib/realtime';
+import Header from '@/components/Header';
 
 export default function DailyOldScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -20,37 +30,143 @@ export default function DailyOldScreen() {
 
   const [entries, setEntries] = useState<DailyEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [activeTab, setActiveTab] = useState<'all' | 'diaper' | 'sleep' | 'feeding'>('all');
+  // Filtertabs wurden entfernt
 
   // State for activity selector and modal
   const [showActivitySelector, setShowActivitySelector] = useState(false);
   const [showInputModal, setShowInputModal] = useState(false);
-  const [selectedActivityType, setSelectedActivityType] = useState<'feeding' | 'sleep' | 'diaper' | 'other'>('feeding');
+  const [selectedActivityType, setSelectedActivityType] = useState<'feeding' | 'diaper' | 'other'>('feeding');
 
+  // State für die verschiedenen Ansichten
+  const [viewType, setViewType] = useState<'day' | 'timeline' | 'week'>('day');
+
+  // useEffect für das Laden der Einträge bei Änderung des Datums
   useEffect(() => {
     if (user) {
       loadEntries();
+      // Synchronisiere Alltag-Einträge beim Laden der Seite
+      syncDailyEntries();
     } else {
       setIsLoading(false);
     }
-  }, [user, activeTab, selectedDate]);
+  }, [user, selectedDate]);
 
+  // useEffect für das Abonnieren von Echtzeit-Updates
+  useEffect(() => {
+    let unsubscribe: (() => void) | null = null;
+
+    if (user) {
+      // Abonniere Änderungen an der baby_daily Tabelle
+      unsubscribe = subscribeToDailyEntries(
+        user.id,
+        // Callback für neue Einträge
+        (payload) => {
+          console.log('New daily entry received:', payload);
+          // Lade die Einträge neu, wenn ein neuer Eintrag hinzugefügt wurde
+          loadEntries();
+
+          // Zeige eine Benachrichtigung, wenn der Eintrag von einem anderen Benutzer stammt
+          if (payload.new && payload.new.user_id !== user.id) {
+            Alert.alert(
+              'Neuer Eintrag',
+              'Ein neuer Alltag-Eintrag wurde von einem verbundenen Benutzer hinzugefügt.',
+              [{ text: 'OK' }]
+            );
+          }
+        },
+        // Callback für aktualisierte Einträge
+        (payload) => {
+          console.log('Daily entry updated:', payload);
+          // Lade die Einträge neu, wenn ein Eintrag aktualisiert wurde
+          loadEntries();
+        },
+        // Callback für gelöschte Einträge
+        (payload) => {
+          console.log('Daily entry deleted:', payload);
+          // Lade die Einträge neu, wenn ein Eintrag gelöscht wurde
+          loadEntries();
+        }
+      );
+    }
+
+    // Cleanup-Funktion
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
+  }, [user]);
+
+  // Synchronisiere Alltag-Einträge mit verbundenen Nutzern
+  const syncDailyEntries = async () => {
+    try {
+      console.log('Starting daily entries sync...');
+      setIsLoading(true);
+
+      const result = await syncAllExistingDailyEntries();
+      console.log('Daily entries sync result:', result);
+
+      if (result.success) {
+        // Wenn Einträge synchronisiert wurden, lade die Einträge neu
+        loadEntries();
+
+        // Zeige Erfolgsmeldung, wenn Einträge synchronisiert wurden
+        if (result.syncedCount && result.syncedCount > 0) {
+          const linkedUserNames = result.linkedUsers
+            .map((user: any) => user.firstName)
+            .join(', ');
+
+          Alert.alert(
+            'Synchronisierung',
+            `Deine Alltag-Einträge wurden mit ${linkedUserNames} synchronisiert.`
+          );
+        }
+      }
+    } catch (err) {
+      console.error('Error syncing daily entries:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+
+
+  // Funktion zum Laden der Einträge
   const loadEntries = async () => {
     try {
       setIsLoading(true);
-      const type = activeTab === 'all' ? undefined : activeTab;
-      const { data, error } = await getDailyEntries(type, selectedDate);
+      console.log('Loading entries for date:', selectedDate);
+
+      // Keine Filterung nach Typ mehr
+      const { data, error } = await getDailyEntries(undefined, selectedDate);
       if (error) {
         console.error('Error loading daily entries:', error);
       } else if (data) {
+        console.log(`Loaded ${data.length} entries`);
         setEntries(data);
       }
     } catch (err) {
       console.error('Failed to load daily entries:', err);
     } finally {
       setIsLoading(false);
+      setRefreshing(false); // Beende das Refreshing, wenn die Daten geladen sind
+    }
+  };
+
+  // Funktion für Pull-to-Refresh
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      // Synchronisiere Alltag-Einträge
+      await syncDailyEntries();
+      // Lade die Einträge neu
+      await loadEntries();
+    } catch (error) {
+      console.error('Error during refresh:', error);
+      setRefreshing(false);
     }
   };
 
@@ -76,7 +192,12 @@ export default function DailyOldScreen() {
         console.error('Error saving daily entry:', error);
         Alert.alert('Fehler', 'Der Eintrag konnte nicht gespeichert werden.');
       } else {
-        loadEntries(); // Neu laden, um den neuen Eintrag anzuzeigen
+        // Zeige Erfolgsmeldung
+        Alert.alert('Erfolg', 'Eintrag erfolgreich gespeichert.');
+
+        // Lade die Einträge neu
+        // Hinweis: Die Echtzeit-Funktionalität wird automatisch den Eintrag bei allen verbundenen Benutzern aktualisieren
+        loadEntries();
       }
     } catch (err) {
       console.error('Failed to save daily entry:', err);
@@ -103,7 +224,12 @@ export default function DailyOldScreen() {
                 console.error('Error deleting daily entry:', error);
                 Alert.alert('Fehler', 'Der Eintrag konnte nicht gelöscht werden.');
               } else {
-                loadEntries(); // Neu laden, um den gelöschten Eintrag zu entfernen
+                // Zeige Erfolgsmeldung
+                Alert.alert('Erfolg', 'Eintrag erfolgreich gelöscht.');
+
+                // Lade die Einträge neu
+                // Hinweis: Die Echtzeit-Funktionalität wird automatisch den Eintrag bei allen verbundenen Benutzern aktualisieren
+                loadEntries();
               }
             }
           }
@@ -115,15 +241,20 @@ export default function DailyOldScreen() {
     }
   };
 
-  const handleDateChange = (event: any, selectedDate?: Date) => {
+  const handleDateChange = (_event: any, selectedDate?: Date) => {
     setShowDatePicker(false);
     if (selectedDate) {
       setSelectedDate(selectedDate);
     }
   };
 
+  // Handler für Ansichtswechsel
+  const handleViewChange = (newViewType: 'day' | 'timeline' | 'week') => {
+    setViewType(newViewType);
+  };
+
   // Handle activity selection
-  const handleActivitySelect = (type: 'feeding' | 'sleep' | 'diaper' | 'other') => {
+  const handleActivitySelect = (type: 'feeding' | 'diaper' | 'other') => {
     setSelectedActivityType(type);
     setShowActivitySelector(false);
     setShowInputModal(true);
@@ -134,223 +265,137 @@ export default function DailyOldScreen() {
     setShowActivitySelector(!showActivitySelector);
   };
 
-  const getEntryTypeIcon = (type: string) => {
-    switch (type) {
-      case 'diaper':
-        return <IconSymbol name="heart.fill" size={24} color="#4CAF50" />;
-      case 'sleep':
-        return <IconSymbol name="moon.fill" size={24} color="#5C6BC0" />;
-      case 'feeding':
-        return <IconSymbol name="drop.fill" size={24} color="#FF9800" />;
-      default:
-        return <IconSymbol name="star.fill" size={24} color="#9C27B0" />;
-    }
-  };
-
-  const formatTime = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-  };
-
-  const renderEntry = ({ item }: { item: DailyEntry }) => {
+  // Rendere die Ansichtsauswahl mit dem Dropdown
+  const renderViewSelector = () => {
     return (
-      <ThemedView style={styles.entryCard} lightColor={theme.card} darkColor={theme.card}>
-        <View style={styles.entryHeader}>
-          <View style={styles.typeContainer}>
-            {getEntryTypeIcon(item.entry_type)}
-            <ThemedText style={styles.entryType}>
-              {item.entry_type === 'diaper' ? 'Wickeln' :
-               item.entry_type === 'sleep' ? 'Schlafen' :
-               item.entry_type === 'feeding' ? 'Füttern' : 'Sonstiges'}
-            </ThemedText>
-          </View>
-
-          <TouchableOpacity
-            style={styles.deleteButton}
-            onPress={() => item.id && handleDeleteEntry(item.id)}
-          >
-            <IconSymbol name="trash" size={20} color="#FF6B6B" />
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.timeContainer}>
-          <ThemedText style={styles.timeText}>
-            {item.start_time && formatTime(item.start_time)}
-            {item.end_time && ` - ${formatTime(item.end_time)}`}
-          </ThemedText>
-        </View>
-
-        {item.notes && (
-          <ThemedText style={styles.entryNotes}>
-            {item.notes}
-          </ThemedText>
-        )}
-      </ThemedView>
+      <ViewDropdown activeView={viewType} onViewChange={handleViewChange} />
     );
   };
 
+  // Rendere die entsprechende Ansicht basierend auf viewType
+  const renderContent = () => {
+    switch (viewType) {
+      case 'day':
+        return (
+          <>
+            <DailySummary entries={entries} />
+
+            <FlatList
+              data={entries}
+              renderItem={({ item }) => (
+                <ActivityCard entry={item} onDelete={handleDeleteEntry} />
+              )}
+              keyExtractor={(item) => item.id || Math.random().toString()}
+              contentContainerStyle={styles.entriesContainer}
+              ListEmptyComponent={
+                <EmptyState type="day" />
+              }
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={onRefresh}
+                  colors={['#7D5A50']}
+                  tintColor={theme.text}
+                  title="Aktualisiere..."
+                  titleColor={theme.text}
+                />
+              }
+            />
+          </>
+        );
+      case 'timeline':
+        return (
+          <>
+            <DailySummary entries={entries} />
+            {entries.length > 0 ? (
+              <TimelineView
+                entries={entries}
+                onDeleteEntry={handleDeleteEntry}
+                refreshControl={
+                  <RefreshControl
+                    refreshing={refreshing}
+                    onRefresh={onRefresh}
+                    colors={['#7D5A50']}
+                    tintColor={theme.text}
+                    title="Aktualisiere..."
+                    titleColor={theme.text}
+                  />
+                }
+              />
+            ) : (
+              <EmptyState type="timeline" />
+            )}
+          </>
+        );
+      case 'week':
+        return (
+          <>
+            <DailySummary entries={entries} />
+            <WeekScroller selectedDate={selectedDate} onDateSelect={setSelectedDate} />
+            {entries.length === 0 && (
+              <View style={styles.emptyOverlay}>
+                <EmptyState type="week" message="Keine Einträge in dieser Woche vorhanden." />
+              </View>
+            )}
+          </>
+        );
+
+      default:
+        return null;
+    }
+  };
+
   return (
-    <ImageBackground
-      source={require('@/assets/images/Background_Hell.png')}
-      style={styles.backgroundImage}
-      resizeMode="repeat"
-    >
-      <SafeAreaView style={styles.container}>
-      <StatusBar hidden={true} />
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => router.push('/(tabs)/home')}
-          >
-            <IconSymbol name="chevron.left" size={24} color="#E57373" />
-          </TouchableOpacity>
+    <ThemedBackground style={styles.container}>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <SafeAreaView style={{ flex: 1 }}>
+          <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
+          
+          <Header 
+            title="Alltag" 
+            subtitle="Dokumentiere den Tagesablauf deines Babys" 
+          />
+          
+          {/* Ansichtsauswahl */}
+          {renderViewSelector()}
 
-          <ThemedText type="title" style={styles.title}>
-            Alltag
-          </ThemedText>
+          {/* Hauptinhalt */}
+          {renderContent()}
 
-          {/* Plus-Button wurde nach unten rechts verschoben */}
-          <View style={{width: 40}} />
-        </View>
-
-        <View style={styles.dateSelector}>
-          <TouchableOpacity
-            style={styles.dateButton}
-            onPress={() => {
-              const prevDate = new Date(selectedDate);
-              prevDate.setDate(prevDate.getDate() - 1);
-              setSelectedDate(prevDate);
-            }}
-          >
-            <IconSymbol name="chevron.left" size={20} color={theme.text} />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.dateDisplay}
-            onPress={() => setShowDatePicker(true)}
-          >
-            <ThemedText style={styles.dateText}>
-              {selectedDate.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })}
-            </ThemedText>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.dateButton}
-            onPress={() => {
-              const nextDate = new Date(selectedDate);
-              nextDate.setDate(nextDate.getDate() + 1);
-              setSelectedDate(nextDate);
-            }}
-          >
-            <IconSymbol name="chevron.right" size={20} color={theme.text} />
-          </TouchableOpacity>
-
+          {/* DateTimePicker */}
           {showDatePicker && (
             <DateTimePicker
               value={selectedDate}
               mode="date"
               display="default"
               onChange={handleDateChange}
-              maximumDate={new Date()}
             />
           )}
-        </View>
 
-        <View style={styles.tabContainer}>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'all' && styles.activeTab]}
-            onPress={() => setActiveTab('all')}
-          >
-            <ThemedText
-              style={[styles.tabText, activeTab === 'all' && styles.activeTabText]}
-              lightColor={activeTab === 'all' ? '#FFFFFF' : theme.text}
-              darkColor={activeTab === 'all' ? '#FFFFFF' : theme.text}
-            >
-              Alle
-            </ThemedText>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'feeding' && styles.activeTab]}
-            onPress={() => setActiveTab('feeding')}
-          >
-            <ThemedText
-              style={[styles.tabText, activeTab === 'feeding' && styles.activeTabText]}
-              lightColor={activeTab === 'feeding' ? '#FFFFFF' : theme.text}
-              darkColor={activeTab === 'feeding' ? '#FFFFFF' : theme.text}
-            >
-              Füttern
-            </ThemedText>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'sleep' && styles.activeTab]}
-            onPress={() => setActiveTab('sleep')}
-          >
-            <ThemedText
-              style={[styles.tabText, activeTab === 'sleep' && styles.activeTabText]}
-              lightColor={activeTab === 'sleep' ? '#FFFFFF' : theme.text}
-              darkColor={activeTab === 'sleep' ? '#FFFFFF' : theme.text}
-            >
-              Schlafen
-            </ThemedText>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'diaper' && styles.activeTab]}
-            onPress={() => setActiveTab('diaper')}
-          >
-            <ThemedText
-              style={[styles.tabText, activeTab === 'diaper' && styles.activeTabText]}
-              lightColor={activeTab === 'diaper' ? '#FFFFFF' : theme.text}
-              darkColor={activeTab === 'diaper' ? '#FFFFFF' : theme.text}
-            >
-              Wickeln
-            </ThemedText>
-          </TouchableOpacity>
-        </View>
-
-        {/* Activity Input Modal */}
-        <ActivityInputModal
-          visible={showInputModal}
-          activityType={selectedActivityType}
-          onClose={() => setShowInputModal(false)}
-          onSave={handleSaveEntry}
-        />
-
-        <FlatList
-          data={entries}
-          renderItem={renderEntry}
-          keyExtractor={(item) => item.id || Math.random().toString()}
-          contentContainerStyle={styles.entriesContainer}
-          ListEmptyComponent={
-            <ThemedView style={styles.emptyContainer} lightColor={theme.cardLight} darkColor={theme.cardDark}>
-              <ThemedText style={styles.emptyText}>
-                Keine Einträge für diesen Tag vorhanden. Tippe auf das Plus-Symbol, um einen neuen Eintrag zu erstellen.
-              </ThemedText>
-            </ThemedView>
-          }
-        />
-
-        {/* Activity Selector */}
-        <ActivitySelector
-          visible={showActivitySelector}
-          onSelect={handleActivitySelect}
-        />
-
-        {/* Floating Action Button (FAB) unten rechts */}
-        <TouchableOpacity
-          style={styles.fab}
-          onPress={toggleActivitySelector}
-        >
-          <IconSymbol
-            name={showActivitySelector ? "xmark" : "plus"}
-            size={24}
-            color="#FFFFFF"
+          {/* ActivitySelector Modal */}
+          <ActivitySelector
+            visible={showActivitySelector}
+            onSelect={handleActivitySelect}
           />
-        </TouchableOpacity>
-      </SafeAreaView>
-    </ImageBackground>
+
+          {/* ActivityInputModal */}
+          <ActivityInputModal
+            visible={showInputModal}
+            activityType={selectedActivityType}
+            onClose={() => setShowInputModal(false)}
+            onSave={handleSaveEntry}
+          />
+
+          {/* Plus-Button (FAB) */}
+          <TouchableOpacity 
+            style={[styles.fab, { backgroundColor: Colors[colorScheme].tint }]}
+            onPress={toggleActivitySelector}
+          >
+            <IconSymbol name="plus" size={28} color="#FFFFFF" />
+          </TouchableOpacity>
+        </SafeAreaView>
+      </GestureHandlerRootView>
+    </ThemedBackground>
   );
 }
 
@@ -366,42 +411,43 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 20,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    marginBottom: 5,
   },
   backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: 'rgba(255, 255, 255, 0.9)',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 10,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
-    shadowRadius: 3,
+    shadowRadius: 2,
     elevation: 2,
   },
   title: {
-    fontSize: 28,
+    fontSize: 24,
     flex: 1,
     textAlign: 'center',
   },
   fab: {
     position: 'absolute',
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: '#7D5A50',
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#FF9500', // Akzentfarbe (entspricht dem Community-Tab)
     justifyContent: 'center',
     alignItems: 'center',
-    bottom: 90, // Weiter nach oben verschoben, um nicht von der Navigationsleiste verdeckt zu werden
-    right: 30,
+    bottom: 90, // Exakt gleiche Höhe wie Community-Tab
+    right: 20, // Genau gleicher horizontaler Abstand wie in Community
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
-    shadowRadius: 3,
+    shadowRadius: 4,
     elevation: 5,
     zIndex: 999,
   },
@@ -409,48 +455,28 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 20,
-    marginHorizontal: 20,
+    marginTop: 5,
+    marginBottom: 10,
+    marginHorizontal: 16,
   },
   dateButton: {
-    padding: 10,
-    borderRadius: 10,
+    padding: 8,
+    borderRadius: 8,
     backgroundColor: 'rgba(125, 90, 80, 0.1)',
   },
   dateDisplay: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     marginHorizontal: 10,
-    borderRadius: 10,
+    borderRadius: 8,
     backgroundColor: 'rgba(125, 90, 80, 0.1)',
   },
   dateText: {
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontSize: 15,
+    fontWeight: '600',
   },
-  tabContainer: {
-    flexDirection: 'row',
-    marginHorizontal: 20,
-    marginTop: 15,
-    borderRadius: 10,
-    overflow: 'hidden',
-    backgroundColor: 'rgba(125, 90, 80, 0.1)',
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 10,
-    alignItems: 'center',
-  },
-  activeTab: {
-    backgroundColor: '#7D5A50',
-  },
-  tabText: {
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  activeTabText: {
-    color: '#FFFFFF',
-  },
+  // Tabs wurden in separate Komponente ausgelagert
+  // Styles wurden in separate Komponenten ausgelagert
   newEntryCard: {
     margin: 20,
     padding: 20,
@@ -523,58 +549,48 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   entriesContainer: {
-    padding: 20,
+    padding: 16,
     paddingTop: 0,
-    paddingBottom: 40,
+    paddingBottom: 100, // Platz für den FAB
   },
-  entryCard: {
-    padding: 15,
+  // Karten-Styles wurden in separate Komponente ausgelagert
+  emptyContainer: {
+    padding: 16,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 16,
+  },
+  emptyText: {
+    fontSize: 15,
+    textAlign: 'center',
+    lineHeight: 22,
+    color: '#666666',
+  },
+  emptyOverlay: {
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
     borderRadius: 15,
-    marginBottom: 15,
+    padding: 20,
+    margin: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
   },
-  entryHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  typeContainer: {
+  addEntryButton: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginTop: 16,
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: 'rgba(125, 90, 80, 0.1)',
   },
-  entryType: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginLeft: 10,
-  },
-  deleteButton: {
-    padding: 5,
-  },
-  timeContainer: {
-    marginBottom: 10,
-  },
-  timeText: {
+  addEntryText: {
+    marginLeft: 8,
     fontSize: 14,
-  },
-  entryNotes: {
-    fontSize: 16,
-    lineHeight: 24,
-  },
-  emptyContainer: {
-    padding: 20,
-    borderRadius: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 20,
-  },
-  emptyText: {
-    fontSize: 16,
-    textAlign: 'center',
-    lineHeight: 24,
+    color: '#7D5A50',
   },
 });

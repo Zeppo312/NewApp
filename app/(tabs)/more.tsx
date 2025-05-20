@@ -9,6 +9,7 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
+import Header from '@/components/Header';
 
 export default function MoreScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -74,15 +75,43 @@ export default function MoreScreen() {
     );
   };
 
+  // Wechsel zur Babyansicht
+  const handleSwitchToBabyView = () => {
+    Alert.alert(
+      "Zur Babyansicht wechseln",
+      "Möchtest du wirklich zur Babyansicht wechseln?",
+      [
+        {
+          text: "Abbrechen",
+          style: "cancel"
+        },
+        {
+          text: "Ja, wechseln",
+          onPress: async () => {
+            try {
+              await setIsBabyBorn(true);
+              Alert.alert("Erfolg", "Du bist jetzt in der Babyansicht.");
+            } catch (error) {
+              console.error('Error switching to baby view:', error);
+              Alert.alert("Fehler", "Es ist ein Fehler aufgetreten. Bitte versuche es später erneut.");
+            }
+          }
+        }
+      ]
+    );
+  };
+
   return (
     <ThemedBackground style={styles.backgroundImage}>
       <SafeAreaView style={styles.container}>
        <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
+        
+        <Header 
+          title="Mehr" 
+          subtitle="Einstellungen und weitere Funktionen" 
+        />
+        
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
-          <ThemedText type="title" style={styles.title}>
-            Mehr
-          </ThemedText>
-
           <ThemedView style={styles.section} lightColor={theme.card} darkColor={theme.card}>
             <ThemedText style={styles.sectionTitle}>
               Baby & Familie
@@ -229,6 +258,27 @@ export default function MoreScreen() {
               <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
             </TouchableOpacity>
 
+            {/* Zur Babyansicht wechseln (nur vor der Geburt anzeigen) */}
+            {!isBabyBorn && (
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={handleSwitchToBabyView}
+              >
+                <View style={styles.menuItemIcon}>
+                  <IconSymbol name="arrow.forward" size={24} color="#3A9E8C" />
+                </View>
+                <View style={styles.menuItemContent}>
+                  <ThemedText style={styles.menuItemTitle}>
+                    Zur Babyansicht wechseln
+                  </ThemedText>
+                  <ThemedText style={styles.menuItemDescription}>
+                    Wechsle zur Ansicht nach der Geburt
+                  </ThemedText>
+                </View>
+                <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
+              </TouchableOpacity>
+            )}
+
             {/* Zurück zur Schwangerschaftsansicht (nur nach der Geburt anzeigen) */}
             {isBabyBorn && (
               <TouchableOpacity
@@ -320,9 +370,10 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   title: {
-    fontSize: 28,
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 20,
     textAlign: 'center',
-    marginVertical: 20,
   },
   section: {
     borderRadius: 15,
