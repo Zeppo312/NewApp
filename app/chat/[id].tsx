@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, FlatList, Platform, ActivityIndicator, Keyboard, Dimensions } from 'react-native';
+import { StyleSheet, View, Text, TextInput, TouchableOpacity, FlatList, Platform, ActivityIndicator, Keyboard, Dimensions, KeyboardAvoidingView, InputAccessoryView } from 'react-native';
 import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
@@ -38,6 +38,12 @@ export default function ChatScreen() {
   const [loading, setLoading] = useState(true);
   const [otherUserName, setOtherUserName] = useState('Benutzer');
   const [sending, setSending] = useState(false);
+  
+  // Für die InputAccessoryView auf iOS
+  const inputAccessoryViewID = "uniqueID";
+  
+  // Ref für die ScrollView, um zum Ende zu scrollen
+  const scrollViewRef = useRef<KeyboardAwareScrollView>(null);
   
   // Lade die Chatnachrichten
   useEffect(() => {
@@ -259,63 +265,104 @@ export default function ChatScreen() {
   
   return (
     <ThemedBackground style={styles.backgroundContainer}>
-      <SafeAreaView edges={['top', 'left', 'right']} style={styles.container}>
-        <Stack.Screen options={{ headerShown: false }} />
-        
-        <Header 
-          title="Chat" 
-          subtitle={otherUserName}
-          onBackPress={() => router.back()}
-        />
-        
-        <View style={styles.chatContainer}>
-          {loading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={theme.accent} />
-              <ThemedText style={styles.loadingText}>Nachrichten werden geladen...</ThemedText>
-            </View>
-          ) : (
-            <KeyboardAwareScrollView
-              style={styles.keyboardAwareScrollView}
-              contentContainerStyle={styles.scrollViewContent}
-              keyboardShouldPersistTaps="handled"
-              enableOnAndroid={true}
-              enableAutomaticScroll={true}
-              extraScrollHeight={80}
-              extraHeight={Platform.OS === 'ios' ? 100 : 60}
-              keyboardOpeningTime={300}
-            >
-              {messages.map(item => renderMessageItem({ item }))}
-              <View style={{ height: 120 }} />
-            </KeyboardAwareScrollView>
-          )}
-        </View>
-      </SafeAreaView>
-      
-      {/* Texteingabefeld außerhalb der SafeAreaView für direkte Position über der Tastatur */}
-      <View style={styles.inputContainerWrapper}>
-        <ThemedView style={styles.inputContainer} lightColor="#F5F5F5" darkColor="#1E1E1E">
-          <TextInput
-            style={[styles.input, { color: theme.text }]}
-            placeholder="Nachricht schreiben..."
-            placeholderTextColor="#999"
-            value={newMessage}
-            onChangeText={setNewMessage}
-            multiline
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.keyboardAvoidView}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
+      >
+        <SafeAreaView edges={['top', 'left', 'right']} style={styles.container}>
+          <Stack.Screen options={{ headerShown: false }} />
+          
+          <Header 
+            title="Chat" 
+            subtitle={otherUserName}
+            onBackPress={() => router.back()}
           />
-          <TouchableOpacity
-            style={[styles.sendButton, { backgroundColor: theme.accent }]}
-            onPress={sendMessage}
-            disabled={sending || !newMessage.trim()}
-          >
-            {sending ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
+          
+          <View style={styles.chatContainer}>
+            {loading ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color={theme.accent} />
+                <ThemedText style={styles.loadingText}>Nachrichten werden geladen...</ThemedText>
+              </View>
             ) : (
-              <IconSymbol name="paperplane.fill" size={20} color="#FFFFFF" />
+              <KeyboardAwareScrollView
+                ref={scrollViewRef}
+                style={styles.keyboardAwareScrollView}
+                contentContainerStyle={styles.scrollViewContent}
+                keyboardShouldPersistTaps="handled"
+                enableOnAndroid={true}
+                enableAutomaticScroll={Platform.OS === 'android'}
+                extraScrollHeight={Platform.OS === 'android' ? 80 : 0}
+                keyboardOpeningTime={0}
+                onContentSizeChange={() => {
+                  // Scroll zum Ende der Nachrichten
+                  scrollViewRef.current?.scrollToEnd();
+                }}
+              >
+                {messages.map(item => renderMessageItem({ item }))}
+              </KeyboardAwareScrollView>
             )}
-          </TouchableOpacity>
-        </ThemedView>
-      </View>
+          </View>
+          
+          {/* Input-Container für Android im KeyboardAvoidingView */}
+          {Platform.OS === 'android' && (
+            <View style={styles.inputContainerWrapper}>
+              <ThemedView style={styles.inputContainer} lightColor="#F5F5F5" darkColor="#1E1E1E">
+                <TextInput
+                  style={[styles.input, { color: theme.text }]}
+                  placeholder="Nachricht schreiben..."
+                  placeholderTextColor="#999"
+                  value={newMessage}
+                  onChangeText={setNewMessage}
+                  multiline
+                />
+                <TouchableOpacity
+                  style={[styles.sendButton, { backgroundColor: theme.accent }]}
+                  onPress={sendMessage}
+                  disabled={sending || !newMessage.trim()}
+                >
+                  {sending ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <IconSymbol name="paperplane.fill" size={20} color="#FFFFFF" />
+                  )}
+                </TouchableOpacity>
+              </ThemedView>
+            </View>
+          )}
+        </SafeAreaView>
+      </KeyboardAvoidingView>
+      
+      {/* Input-Container als InputAccessoryView für iOS */}
+      {Platform.OS === 'ios' && (
+        <InputAccessoryView nativeID={inputAccessoryViewID}>
+          <View style={styles.iosInputContainerWrapper}>
+            <ThemedView style={styles.inputContainer} lightColor="#F5F5F5" darkColor="#1E1E1E">
+              <TextInput
+                style={[styles.input, { color: theme.text }]}
+                placeholder="Nachricht schreiben..."
+                placeholderTextColor="#999"
+                value={newMessage}
+                onChangeText={setNewMessage}
+                multiline
+                inputAccessoryViewID={inputAccessoryViewID}
+              />
+              <TouchableOpacity
+                style={[styles.sendButton, { backgroundColor: theme.accent }]}
+                onPress={sendMessage}
+                disabled={sending || !newMessage.trim()}
+              >
+                {sending ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <IconSymbol name="paperplane.fill" size={20} color="#FFFFFF" />
+                )}
+              </TouchableOpacity>
+            </ThemedView>
+          </View>
+        </InputAccessoryView>
+      )}
     </ThemedBackground>
   );
 }
@@ -338,7 +385,7 @@ const styles = StyleSheet.create({
   },
   scrollViewContent: {
     padding: 16,
-    paddingBottom: 120, // Extra Platz für das Eingabefeld
+    paddingBottom: Platform.OS === 'android' ? 80 : 20, // Extra Platz für das Eingabefeld auf Android
   },
   inputContainerWrapper: {
     position: 'absolute',
@@ -425,5 +472,19 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  keyboardAvoidView: {
+    flex: 1,
+  },
+  iosInputContainerWrapper: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    backgroundColor: '#E9E0D1',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0, 0, 0, 0.1)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
   },
 }); 

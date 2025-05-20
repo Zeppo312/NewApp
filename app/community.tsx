@@ -982,19 +982,6 @@ export default function CommunityScreen() {
               />
               
               <TouchableOpacity
-                style={styles.chatButton}
-                onPress={() =>
-                  router.push({ pathname: '/notifications', params: { tab: 'messages' } } as any)
-                }
-              >
-                <IconSymbol
-                  name="bubble.left.and.bubble.right.fill"
-                  size={24}
-                  color={theme.tabIconDefault}
-                />
-              </TouchableOpacity>
-
-              <TouchableOpacity
                 style={styles.bellButton}
                 onPress={() => router.push('/notifications' as any)}
               >
@@ -1249,6 +1236,17 @@ export default function CommunityScreen() {
                             <IconSymbol name="person.fill" size={20} color="#FFFFFF" />
                             <ThemedText style={styles.floatingButtonText}>Profil</ThemedText>
                           </TouchableOpacity>
+                          
+                          <TouchableOpacity
+                            style={[styles.floatingChatButton, { backgroundColor: '#5D9CEC' }]}
+                            onPress={() => {
+                              router.push('/notifications' as any);
+                              toggleFloatingButtons(false);
+                            }}
+                          >
+                            <IconSymbol name="bubble.left.and.bubble.right.fill" size={20} color="#FFFFFF" />
+                            <ThemedText style={styles.floatingButtonText}>Chat</ThemedText>
+                          </TouchableOpacity>
                         </>
                       ) : null}
                       
@@ -1292,13 +1290,6 @@ const styles = StyleSheet.create({
   overlayContainer: {
     width: '100%',
     position: 'relative',
-  },
-  chatButton: {
-    position: 'absolute',
-    top: 16,
-    right: 56,
-    padding: 8,
-    zIndex: 10,
   },
   bellButton: {
     position: 'absolute',
@@ -1813,6 +1804,19 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   floatingProfileButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 24,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  floatingChatButton: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 10,
