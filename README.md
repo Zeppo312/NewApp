@@ -83,7 +83,7 @@ Das Projekt verwendet einen Master-Branch für die Hauptentwicklung. Wenn Sie Co
 
 Für detaillierte Anweisungen zur Einrichtung von Supabase für dieses Projekt, siehe die Datei `SUPABASE_SETUP.md`.
 
-In the output, you'll find options to open the app in a
+When you run `expo start`, you can open the app in:
 
 - [development build](https://docs.expo.dev/develop/development-builds/introduction/)
 - [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
