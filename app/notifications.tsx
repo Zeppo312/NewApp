@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { StyleSheet, View, TouchableOpacity, FlatList, ActivityIndicator, Text, SafeAreaView, RefreshControl } from 'react-native';
-import { Stack, router } from 'expo-router';
+import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedBackground } from '@/components/ThemedBackground';
@@ -35,11 +35,26 @@ const TABS = {
 };
 
 export default function NotificationsScreen() {
+  const { tab } = useLocalSearchParams();
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const { user } = useAuth();
 
-  const [activeTab, setActiveTab] = useState(TABS.MESSAGES);
+  const initialTab = Array.isArray(tab) ? tab[0] : tab;
+  const [activeTab, setActiveTab] = useState(
+    initialTab === 'activity'
+      ? TABS.ACTIVITY
+      : initialTab === 'comments'
+      ? TABS.COMMENTS
+      : TABS.MESSAGES
+  );
+
+  // Aktualisiere den aktiven Tab, wenn sich der Query-Parameter ändert
+  useEffect(() => {
+    if (initialTab === 'activity') setActiveTab(TABS.ACTIVITY);
+    else if (initialTab === 'comments') setActiveTab(TABS.COMMENTS);
+    else if (initialTab === 'messages') setActiveTab(TABS.MESSAGES);
+  }, [initialTab]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [messages, setMessages] = useState<DirectMessage[]>([]);
   const [loading, setLoading] = useState(true);

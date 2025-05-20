@@ -981,14 +981,27 @@ export default function CommunityScreen() {
                 subtitle="Teile und entdecke Erfahrungen" 
               />
               
-              <TouchableOpacity 
+              <TouchableOpacity
+                style={styles.chatButton}
+                onPress={() =>
+                  router.push({ pathname: '/notifications', params: { tab: 'messages' } } as any)
+                }
+              >
+                <IconSymbol
+                  name="bubble.left.and.bubble.right.fill"
+                  size={24}
+                  color={theme.tabIconDefault}
+                />
+              </TouchableOpacity>
+
+              <TouchableOpacity
                 style={styles.bellButton}
                 onPress={() => router.push('/notifications' as any)}
               >
-                <IconSymbol 
-                  name="bell.fill" 
-                  size={24} 
-                  color={theme.tabIconDefault} 
+                <IconSymbol
+                  name="bell.fill"
+                  size={24}
+                  color={theme.tabIconDefault}
                 />
                 <NotificationBadge refreshTrigger={refreshNotificationBadge} />
               </TouchableOpacity>
@@ -1279,6 +1292,13 @@ const styles = StyleSheet.create({
   overlayContainer: {
     width: '100%',
     position: 'relative',
+  },
+  chatButton: {
+    position: 'absolute',
+    top: 16,
+    right: 56,
+    padding: 8,
+    zIndex: 10,
   },
   bellButton: {
     position: 'absolute',

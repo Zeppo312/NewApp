@@ -63,11 +63,21 @@ Nach den Änderungen an der Synchronisierungsfunktionalität für die Alltag-Ein
 
 5. **Überprüfen Sie den Update-Status**
 
-   Nach dem Erstellen des Updates können Sie den Status in der Expo-Webkonsole überprüfen oder mit dem folgenden Befehl:
+Nach dem Erstellen des Updates können Sie den Status in der Expo-Webkonsole überprüfen oder mit dem folgenden Befehl:
 
-   ```bash
-   eas update:list
-   ```
+```bash
+eas update:list
+```
+
+## Chat-Button Update
+
+Um die neue Chat-Funktion schnell zu testen, führen Sie einfach das Skript
+`eas-update-chat.sh` aus:
+
+```bash
+./eas-update-chat.sh
+```
+
 
 ## Testen des Updates
 
