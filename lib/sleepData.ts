@@ -768,13 +768,16 @@ export async function loadSleepEntries(): Promise<{
     if (error) {
       console.error('loadSleepEntries: Datenbankfehler:', error);
       return { success: false, error: error.message };
+    }
+
+    if (data) {
       console.log('loadSleepEntries: Erster Eintrag:', JSON.stringify(data[0], null, 2));
-      
+
       // Zähle eigene und geteilte Einträge
       const ownEntries = data.filter(entry => entry.user_id === userData.user.id);
       const sharedWithMe = data.filter(entry => entry.shared_with_user_id === userData.user.id);
       console.log(`loadSleepEntries: ${ownEntries.length} eigene Einträge, ${sharedWithMe.length} mit mir geteilte Einträge`);
-      
+
       // Registriere alle Benutzer, für die wir Namen auflösen müssen
       const otherUserIds = new Set<string>();
       data.forEach(entry => {
