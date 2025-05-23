@@ -15,7 +15,7 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { BabyStatusProvider } from '@/contexts/BabyStatusContext';
 import { ThemeProvider as AppThemeProvider } from '@/contexts/ThemeContext';
-import { checkForNewNotifications, registerBackgroundNotificationTask, BACKGROUND_NOTIFICATION_TASK } from '@/lib/notificationService';
+import { checkForNewNotifications, registerBackgroundNotificationTask, BACKGROUND_NOTIFICATION_TASK, setupNotificationListeners } from '@/lib/notificationService';
 
 // Importieren der Meilenstein-Task-Definition
 import { defineMilestoneCheckerTask } from '@/tasks/milestoneCheckerTask';
@@ -62,6 +62,13 @@ function RootLayoutNav() {
       registerBackgroundNotificationTask().catch(error => {
         console.error('Fehler beim Registrieren des Benachrichtigungs-Hintergrundtasks:', error);
       });
+      
+      // Setup Notification Listeners für Navigation
+      const cleanup = setupNotificationListeners((notification) => {
+        console.log('Benachrichtigung in App erhalten:', notification);
+      });
+      
+      return cleanup;
     }
   }, [user]);
 

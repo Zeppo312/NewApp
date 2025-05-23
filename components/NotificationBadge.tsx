@@ -56,16 +56,36 @@ export const NotificationBadge: React.FC<NotificationBadgeProps> = ({
     if (!user) return;
     
     try {
-      const { data, error } = await supabase.rpc('get_unread_notification_count', {
-        user_id_param: user.id
-      });
+      // Community-Benachrichtigungen zählen
+      const { data: notificationData, error: notificationError } = await supabase
+        .from('community_notifications')
+        .select('id', { count: 'exact' })
+        .eq('user_id', user.id)
+        .eq('is_read', false);
       
-      if (error) {
-        console.error('Error fetching notification count:', error);
-        return;
+      if (notificationError) {
+        console.error('Error fetching notification count:', notificationError);
       }
       
-      setCount(data || 0);
+      // Direktnachrichten zählen
+      const { data: messageData, error: messageError } = await supabase
+        .from('direct_messages')
+        .select('id', { count: 'exact' })
+        .eq('receiver_id', user.id)
+        .eq('is_read', false);
+      
+      if (messageError) {
+        console.error('Error fetching message count:', messageError);
+      }
+      
+      // Beide Zähler addieren
+      const notificationCount = notificationData?.length || 0;
+      const messageCount = messageData?.length || 0;
+      const totalCount = notificationCount + messageCount;
+      
+      console.log(`Notification Badge: ${notificationCount} notifications + ${messageCount} messages = ${totalCount} total`);
+      
+      setCount(totalCount);
     } catch (err) {
       console.error('Error in notification count fetch:', err);
     }
@@ -82,7 +102,7 @@ export const NotificationBadge: React.FC<NotificationBadgeProps> = ({
     timerRef.current = setInterval(fetchNotificationCount, 5000) as unknown as number;
     
     // Echtzeit-Updates abonnieren für neue Benachrichtigungen
-    const subscription = supabase
+    const notificationsSubscription = supabase
       .channel('notifications_count')
       .on('postgres_changes', {
         event: '*',
@@ -95,13 +115,28 @@ export const NotificationBadge: React.FC<NotificationBadgeProps> = ({
       })
       .subscribe();
     
+    // Echtzeit-Updates abonnieren für neue Direktnachrichten
+    const messagesSubscription = supabase
+      .channel('direct_messages_count')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'direct_messages',
+        filter: `receiver_id=eq.${user.id}`
+      }, () => {
+        // Bei neuen Nachrichten den Zähler sofort aktualisieren
+        fetchNotificationCount();
+      })
+      .subscribe();
+    
     return () => {
       // Cleanup
       if (timerRef.current) {
         clearInterval(timerRef.current);
         timerRef.current = null;
       }
-      supabase.removeChannel(subscription);
+      supabase.removeChannel(notificationsSubscription);
+      supabase.removeChannel(messagesSubscription);
     };
   }, [user]);
   

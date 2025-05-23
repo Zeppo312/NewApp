@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, Share, Alert, ImageBackground, SafeAreaView, ActivityIndicator, StatusBar, TextInput } from 'react-native';
+import { StyleSheet, ScrollView, View, TouchableOpacity, Share, Alert, SafeAreaView, ActivityIndicator, StatusBar, TextInput } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
+import { ThemedBackground } from '@/components/ThemedBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/contexts/AuthContext';
@@ -125,18 +126,17 @@ export default function AccountLinkingScreen() {
   };
 
   return (
-    <ImageBackground
-      source={require('@/assets/images/Background_Hell.png')}
-      style={styles.backgroundImage}
-      resizeMode="repeat"
-    >
+    <ThemedBackground style={{flex: 1}}>
       <SafeAreaView style={styles.container}>
-        <StatusBar hidden={true} />
+        <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
+        
+        <Header title="Accounts verknüpfen" showBackButton={true} />
+        
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
-         <Header title="Accounts verknüpfen" showBackButton={true} />
-
           {isLoading ? (
-            <ActivityIndicator size="large" color={theme.accent} />
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={theme.accent} />
+            </View>
           ) : (
             <>
               <ThemedView style={styles.section} lightColor={theme.card} darkColor={theme.card}>
@@ -265,7 +265,7 @@ export default function AccountLinkingScreen() {
           )}
         </ScrollView>
       </SafeAreaView>
-    </ImageBackground>
+    </ThemedBackground>
   );
 }
 
@@ -273,17 +273,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  backgroundImage: {
-    flex: 1,
-    width: '100%',
-  },
   scrollView: {
     flex: 1,
   },
   contentContainer: {
-    paddingHorizontal: 0,
+    padding: 20,
     paddingBottom: 40,
-    paddingTop: 0,
   },
  
   backButton: {
@@ -427,5 +422,10 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     opacity: 0.7,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

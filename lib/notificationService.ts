@@ -124,7 +124,8 @@ export function navigateToNotificationTarget(type: string, referenceId: string) 
   try {
     switch (type) {
       case 'message':
-        // Öffne den Chat mit dieser Nachricht
+      case 'direct_message':
+        // Öffne den Chat mit diesem Benutzer
         router.push(`/chat/${referenceId}` as any);
         break;
         
@@ -204,12 +205,18 @@ export function setupNotificationListeners(
     // Daten aus der Benachrichtigung extrahieren
     const data = response.notification.request.content.data as any;
     const notificationId = data?.notificationId as string;
+    const messageId = data?.messageId as string;
     const type = data?.type as string;
     const referenceId = data?.referenceId as string;
     
     // Benachrichtigung als gelesen markieren
     if (notificationId) {
       markNotificationAsRead(notificationId);
+    }
+    
+    // Direktnachricht als gelesen markieren
+    if (messageId && type === 'direct_message') {
+      markDirectMessageAsRead(messageId);
     }
     
     // Zur entsprechenden Ansicht navigieren
@@ -241,6 +248,22 @@ async function markNotificationAsRead(notificationId: string) {
   }
 }
 
+// Direktnachricht als gelesen markieren
+async function markDirectMessageAsRead(messageId: string) {
+  try {
+    const { error } = await supabase
+      .from('direct_messages')
+      .update({ is_read: true })
+      .eq('id', messageId);
+      
+    if (error) {
+      console.error('Fehler beim Markieren der Direktnachricht als gelesen:', error);
+    }
+  } catch (error) {
+    console.error('Fehler beim Markieren der Direktnachricht als gelesen:', error);
+  }
+}
+
 // Benachrichtigungen manuell im Hintergrund überprüfen
 export async function checkForNewNotifications() {
   try {
@@ -262,11 +285,27 @@ export async function checkForNewNotifications() {
       return;
     }
 
-    console.log(`${notifications?.length || 0} ungelesene Benachrichtigungen gefunden`);
+    // Abrufen ungelesener Direktnachrichten
+    const { data: directMessages, error: messageError } = await supabase
+      .from('direct_messages')
+      .select('*')
+      .eq('receiver_id', userData.user.id)
+      .eq('is_read', false)
+      .order('created_at', { ascending: false });
 
-    // Lokale Benachrichtigungen für ungelesene Einträge anzeigen
-    if (notifications && notifications.length > 0) {
-      notifications.forEach(async (notification) => {
+    if (messageError) {
+      console.error('Fehler beim Abrufen neuer Direktnachrichten:', messageError);
+    }
+
+    const allNotifications = notifications || [];
+    const allMessages = directMessages || [];
+
+    console.log(`${allNotifications.length} ungelesene Benachrichtigungen gefunden`);
+    console.log(`${allMessages.length} ungelesene Direktnachrichten gefunden`);
+
+    // Lokale Benachrichtigungen für ungelesene Community-Benachrichtigungen anzeigen
+    if (allNotifications.length > 0) {
+      allNotifications.forEach(async (notification) => {
         // Absenderinformationen abrufen
         const { data: sender } = await supabase
           .from('profiles')
@@ -312,6 +351,43 @@ export async function checkForNewNotifications() {
               notificationId: notification.id,
               type: notification.type,
               referenceId: notification.reference_id
+            },
+          },
+          trigger: null, // Sofort anzeigen
+        });
+      });
+    }
+
+    // Lokale Benachrichtigungen für ungelesene Direktnachrichten anzeigen
+    if (allMessages.length > 0) {
+      allMessages.forEach(async (message) => {
+        // Absenderinformationen abrufen
+        const { data: sender } = await supabase
+          .from('profiles')
+          .select('first_name, last_name')
+          .eq('id', message.sender_id)
+          .single();
+
+        const senderName = sender 
+          ? `${sender.first_name || ''} ${sender.last_name || ''}`.trim() || 'Jemand'
+          : 'Jemand';
+        
+        const title = `Neue Nachricht von ${senderName}`;
+        const body = message.content.length > 50 
+          ? message.content.substring(0, 47) + '...'
+          : message.content;
+
+        console.log(`Sende Direktnachrichten-Benachrichtigung: ${title} - ${body}`);
+
+        // Lokale Benachrichtigung anzeigen
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title,
+            body,
+            data: { 
+              messageId: message.id,
+              type: 'direct_message',
+              referenceId: message.sender_id // Navigiere zum Chat mit dem Absender
             },
           },
           trigger: null, // Sofort anzeigen

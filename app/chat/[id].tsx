@@ -1,5 +1,19 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, FlatList, Platform, ActivityIndicator, Keyboard, Dimensions, KeyboardAvoidingView, InputAccessoryView } from 'react-native';
+import { 
+  StyleSheet, 
+  View, 
+  Text, 
+  TextInput, 
+  TouchableOpacity, 
+  FlatList, 
+  Platform, 
+  ActivityIndicator, 
+  Keyboard, 
+  KeyboardAvoidingView,
+  InputAccessoryView,
+  LayoutChangeEvent,
+  SafeAreaView as RNSafeAreaView
+} from 'react-native';
 import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
@@ -11,8 +25,11 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import Header from '@/components/Header';
 import { createNotification } from '@/lib/community';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+
+// Annahmen für die Höhenberechnung des Eingabefelds
+const INPUT_APPROX_LINE_HEIGHT = 24; // Geschätzte Zeilenhöhe bei fontSize 16
+const INPUT_VERTICAL_PADDING = 20;   // Zusätzliches vertikales Padding
 
 // Nachrichtentyp-Definition
 interface Message {
@@ -32,18 +49,26 @@ export default function ChatScreen() {
   const theme = Colors[colorScheme];
   const { user } = useAuth();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   
   const [messages, setMessages] = useState<Message[]>([]);
+  const [toolbarHeight, setToolbarHeight] = useState(60); // Standardhöhe für die Toolbar
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [otherUserName, setOtherUserName] = useState('Benutzer');
   const [sending, setSending] = useState(false);
+  const [inputHeight, setInputHeight] = useState(40);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const maxInputLines = 3; // Maximale Anzahl von Zeilen im Textfeld
   
-  // Für die InputAccessoryView auf iOS
-  const inputAccessoryViewID = "uniqueID";
+  // Refs
+  const flatListRef = useRef<FlatList>(null);
   
-  // Ref für die ScrollView, um zum Ende zu scrollen
-  const scrollViewRef = useRef<KeyboardAwareScrollView>(null);
+  // Toolbar-Höhe messen
+  const handleToolbarLayout = (event: LayoutChangeEvent) => {
+    const { height } = event.nativeEvent.layout;
+    setToolbarHeight(height);
+  };
   
   // Lade die Chatnachrichten
   useEffect(() => {
@@ -131,6 +156,36 @@ export default function ChatScreen() {
     };
   }, [user, userId]);
   
+  // Zum Ende der Liste scrollen, wenn neue Nachrichten kommen und Tastatur-Status überwachen
+  useEffect(() => {
+    const keyboardDidShowListener = Keyboard.addListener(
+      'keyboardDidShow',
+      () => {
+        setKeyboardVisible(true);
+        if (flatListRef.current && messages.length > 0) {
+          flatListRef.current.scrollToEnd({ animated: true });
+        }
+      }
+    );
+    
+    const keyboardDidHideListener = Keyboard.addListener(
+      'keyboardDidHide',
+      () => {
+        setKeyboardVisible(false);
+      }
+    );
+
+    return () => {
+      keyboardDidShowListener.remove();
+      keyboardDidHideListener.remove();
+    };
+  }, [messages]);
+  
+  // Berechne die maximale Höhe basierend auf maxInputLines Zeilen
+  const calculateMaxInputHeight = () => {
+    return INPUT_APPROX_LINE_HEIGHT * maxInputLines + INPUT_VERTICAL_PADDING;
+  };
+  
   // Sende eine neue Nachricht
   const sendMessage = async () => {
     if (!newMessage.trim() || !user || !userId) return;
@@ -174,44 +229,24 @@ export default function ChatScreen() {
       // Lokale Nachrichtenliste aktualisieren
       if (data && data.length > 0) {
         setMessages(prev => [...prev, data[0] as Message]);
+        
+        // Zum Ende scrollen
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd();
+        }, 100);
       }
       
       // Benachrichtigung für den Empfänger erstellen
       try {
-        // Benachrichtigung erstellen
         await createNotification(
           userId,               // Empfänger-ID
           'message',            // Benachrichtigungstyp
           user.id,              // Referenz-ID (Absender-ID)
           `${senderName} hat dir eine Nachricht gesendet` // Benachrichtigungstext
         );
-        
-        console.log('Benachrichtigung für neue Nachricht erstellt');
       } catch (notificationError) {
         console.error('Fehler beim Erstellen der Nachrichtenbenachrichtigung:', notificationError);
       }
-      
-      // Kurze Verzögerung und dann Chat aktualisieren
-      setTimeout(async () => {
-        try {
-          if (!user || !userId) return;
-          
-          // Nachrichten erneut laden
-          const { data: refreshedData, error: refreshError } = await supabase
-            .from('direct_messages')
-            .select('*')
-            .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
-            .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
-            .order('created_at', { ascending: true })
-            .limit(50);
-            
-          if (refreshError) throw refreshError;
-          setMessages(refreshedData || []);
-          
-        } catch (refreshError) {
-          console.error('Fehler beim Aktualisieren der Nachrichten:', refreshError);
-        }
-      }, 500); // 0.5 Sekunden verzögern
       
     } catch (error) {
       console.error('Fehler beim Senden der Nachricht:', error);
@@ -263,146 +298,166 @@ export default function ChatScreen() {
     );
   };
   
-  return (
-    <ThemedBackground style={styles.backgroundContainer}>
-      <KeyboardAvoidingView 
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.keyboardAvoidView}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
+  // Render-Funktion für die Toolbar
+  const renderToolbar = () => (
+    <View 
+      style={[
+        styles.inputContainerWrapper,
+        { backgroundColor: theme.background },
+        Platform.OS === 'ios' && { paddingBottom: insets.bottom },
+        keyboardVisible && styles.inputContainerWrapperKeyboardVisible
+      ]}
+      onLayout={handleToolbarLayout}
+    >
+      <TextInput
+        style={[
+          styles.input,
+          { 
+            color: theme.text,
+            height: Math.min(calculateMaxInputHeight(), Math.max(40, inputHeight))
+          }
+        ]}
+        placeholder="Nachricht schreiben..."
+        placeholderTextColor="#999"
+        value={newMessage}
+        onChangeText={setNewMessage}
+        multiline
+        onContentSizeChange={(e) => {
+          const height = e.nativeEvent.contentSize.height;
+          setInputHeight(height);
+        }}
+      />
+      <TouchableOpacity
+        style={[styles.sendButton, { backgroundColor: theme.accent }]}
+        onPress={sendMessage}
+        disabled={sending || !newMessage.trim()}
       >
-        <SafeAreaView edges={['top', 'left', 'right']} style={styles.container}>
-          <Stack.Screen options={{ headerShown: false }} />
-          
+        {sending ? (
+          <ActivityIndicator size="small" color="#FFFFFF" />
+        ) : (
+          <IconSymbol name="paperplane.fill" size={20} color="#FFFFFF" />
+        )}
+      </TouchableOpacity>
+    </View>
+  );
+
+  return (
+    <ThemedBackground style={styles.container}>
+      <Stack.Screen options={{ headerShown: false }} />
+      
+      <KeyboardAvoidingView 
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+      >
+      <SafeAreaView edges={['top']} style={styles.container}>
+        <View style={styles.mainContainer}>
           <Header 
-            title="Chat" 
-            subtitle={otherUserName}
+            title={otherUserName}
             onBackPress={() => router.back()}
           />
           
-          <View style={styles.chatContainer}>
-            {loading ? (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color={theme.accent} />
-                <ThemedText style={styles.loadingText}>Nachrichten werden geladen...</ThemedText>
-              </View>
-            ) : (
-              <KeyboardAwareScrollView
-                ref={scrollViewRef}
-                style={styles.keyboardAwareScrollView}
-                contentContainerStyle={styles.scrollViewContent}
-                keyboardShouldPersistTaps="handled"
-                enableOnAndroid={true}
-                enableAutomaticScroll={Platform.OS === 'android'}
-                extraScrollHeight={Platform.OS === 'android' ? 80 : 0}
-                keyboardOpeningTime={0}
-                onContentSizeChange={() => {
-                  // Scroll zum Ende der Nachrichten
-                  scrollViewRef.current?.scrollToEnd();
-                }}
-              >
-                {messages.map(item => renderMessageItem({ item }))}
-              </KeyboardAwareScrollView>
-            )}
-          </View>
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={theme.accent} />
+              <ThemedText style={styles.loadingText}>
+                Nachrichten werden geladen...
+              </ThemedText>
+            </View>
+          ) : (
+            <FlatList
+              ref={flatListRef}
+              data={messages}
+              renderItem={renderMessageItem}
+              keyExtractor={item => item.id}
+              style={styles.messagesList}
+              contentContainerStyle={[
+                styles.messagesContainer,
+                { paddingBottom: toolbarHeight + insets.bottom }
+              ]}
+              onContentSizeChange={() => {
+                if (messages.length > 0) {
+                  flatListRef.current?.scrollToEnd({ animated: true });
+                }
+              }}
+              onLayout={() => {
+                if (messages.length > 0) {
+                  flatListRef.current?.scrollToEnd({ animated: false });
+                }
+              }}
+            />
+          )}
           
-          {/* Input-Container für Android im KeyboardAvoidingView */}
-          {Platform.OS === 'android' && (
-            <View style={styles.inputContainerWrapper}>
-              <ThemedView style={styles.inputContainer} lightColor="#F5F5F5" darkColor="#1E1E1E">
-                <TextInput
-                  style={[styles.input, { color: theme.text }]}
-                  placeholder="Nachricht schreiben..."
-                  placeholderTextColor="#999"
-                  value={newMessage}
-                  onChangeText={setNewMessage}
-                  multiline
-                />
-                <TouchableOpacity
-                  style={[styles.sendButton, { backgroundColor: theme.accent }]}
-                  onPress={sendMessage}
-                  disabled={sending || !newMessage.trim()}
-                >
-                  {sending ? (
-                    <ActivityIndicator size="small" color="#FFFFFF" />
-                  ) : (
-                    <IconSymbol name="paperplane.fill" size={20} color="#FFFFFF" />
-                  )}
-                </TouchableOpacity>
-              </ThemedView>
+          {/* Plattformspezifisches Rendering */}
+          {Platform.OS === 'ios' ? (
+            <View style={[
+              styles.toolbarContainer,
+              keyboardVisible && styles.toolbarContainerKeyboardVisible
+            ]}>
+              {renderToolbar()}
+            </View>
+          ) : (
+            <View style={[
+              styles.androidToolbarContainer,
+              keyboardVisible && styles.androidToolbarContainerKeyboardVisible
+            ]}>
+              {renderToolbar()}
             </View>
           )}
-        </SafeAreaView>
+        </View>
+      </SafeAreaView>
       </KeyboardAvoidingView>
-      
-      {/* Input-Container als InputAccessoryView für iOS */}
-      {Platform.OS === 'ios' && (
-        <InputAccessoryView nativeID={inputAccessoryViewID}>
-          <View style={styles.iosInputContainerWrapper}>
-            <ThemedView style={styles.inputContainer} lightColor="#F5F5F5" darkColor="#1E1E1E">
-              <TextInput
-                style={[styles.input, { color: theme.text }]}
-                placeholder="Nachricht schreiben..."
-                placeholderTextColor="#999"
-                value={newMessage}
-                onChangeText={setNewMessage}
-                multiline
-                inputAccessoryViewID={inputAccessoryViewID}
-              />
-              <TouchableOpacity
-                style={[styles.sendButton, { backgroundColor: theme.accent }]}
-                onPress={sendMessage}
-                disabled={sending || !newMessage.trim()}
-              >
-                {sending ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <IconSymbol name="paperplane.fill" size={20} color="#FFFFFF" />
-                )}
-              </TouchableOpacity>
-            </ThemedView>
-          </View>
-        </InputAccessoryView>
-      )}
     </ThemedBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  backgroundContainer: {
-    flex: 1,
-    height: '100%',
-  },
   container: {
     flex: 1,
+    justifyContent: 'space-between',
   },
-  chatContainer: {
+  mainContainer: {
     flex: 1,
-    position: 'relative',
+    display: 'flex',
+    flexDirection: 'column',
   },
-  keyboardAwareScrollView: {
+  messagesContainer: {
+    flexGrow: 1,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+  },
+  messagesList: {
     flex: 1,
-    width: '100%',
-  },
-  scrollViewContent: {
-    padding: 16,
-    paddingBottom: Platform.OS === 'android' ? 80 : 20, // Extra Platz für das Eingabefeld auf Android
+    paddingBottom: 16,
   },
   inputContainerWrapper: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    paddingHorizontal: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
     paddingVertical: 8,
-    backgroundColor: '#E9E0D1',
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(0, 0, 0, 0.1)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 5,
-    zIndex: 999,
+    backgroundColor: '#F2F2F2',
+  },
+  input: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    fontSize: 16,
+    marginRight: 8,
+    maxHeight: 120,
+  },
+  sendButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#007AFF',
+  },
+  androidToolbarContainer: {
+    backgroundColor: '#F2F2F2',
+    paddingBottom: 4,
   },
   loadingContainer: {
     flex: 1,
@@ -448,43 +503,17 @@ const styles = StyleSheet.create({
   otherTimeText: {
     color: 'rgba(100, 100, 100, 0.7)',
   },
-  inputContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 24,
-    alignItems: 'center',
+  toolbarContainer: {
+    backgroundColor: '#F2F2F2',
+    paddingBottom: 4,
   },
-  input: {
-    flex: 1,
-    borderRadius: 20,
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    minHeight: 40,
-    maxHeight: 100,
-    fontSize: 16,
-    marginRight: 8,
+  inputContainerWrapperKeyboardVisible: {
+    paddingBottom: 4,
   },
-  sendButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
+  toolbarContainerKeyboardVisible: {
+    paddingBottom: 2,
   },
-  keyboardAvoidView: {
-    flex: 1,
-  },
-  iosInputContainerWrapper: {
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    backgroundColor: '#E9E0D1',
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(0, 0, 0, 0.1)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+  androidToolbarContainerKeyboardVisible: {
+    paddingBottom: 2,
   },
 }); 

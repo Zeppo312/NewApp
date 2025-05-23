@@ -36,7 +36,7 @@ const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <View style={[styles.header, { paddingTop: 10 }]}>
+    <View style={styles.header}>
       {/* Linker Bereich */}
       <View style={styles.sideContainer}>
         {showBackButton && (

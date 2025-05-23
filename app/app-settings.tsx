@@ -7,7 +7,7 @@ import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { useRouter, Stack } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { getAppSettings, saveAppSettings, AppSettings } from '@/lib/supabase';
 import Header from '@/components/Header';
@@ -90,244 +90,233 @@ export default function AppSettingsScreen() {
   };
 
   return (
-    <>
-      <Stack.Screen options={{ headerShown: false }} />
-      <ThemedBackground style={styles.backgroundImage}>
-        <SafeAreaView style={styles.safeArea}>
-          <StatusBar hidden={true} />
-          <View style={styles.container}>
-            <ScrollView contentContainerStyle={styles.scrollContent}>
-              <Header title="App-Einstellungen" showBackButton={true} />
-              {isLoading ? (
-                <View style={styles.loadingContainer}>
-                  <ActivityIndicator size="large" color={theme.accent} />
-                  <ThemedText style={styles.loadingText}>Einstellungen werden geladen...</ThemedText>
-                </View>
-              ) : settings ? (
-                <>
-                  {/* Erscheinungsbild-Einstellungen */}
-                  <ThemedView style={styles.section} lightColor={theme.card} darkColor={theme.card}>
-                    <ThemedText style={styles.sectionTitle}>Erscheinungsbild</ThemedText>
+    <ThemedBackground style={{flex: 1}}>
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
+        
+        <Header title="App-Einstellungen" showBackButton={true} />
+        
+        <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
+          {isLoading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={theme.accent} />
+              <ThemedText style={styles.loadingText}>Einstellungen werden geladen...</ThemedText>
+            </View>
+          ) : settings ? (
+            <>
+              {/* Erscheinungsbild-Einstellungen */}
+              <ThemedView style={styles.section} lightColor={theme.card} darkColor={theme.card}>
+                <ThemedText style={styles.sectionTitle}>Erscheinungsbild</ThemedText>
 
-                    <View style={styles.settingItem}>
-                      <View style={styles.settingInfo}>
-                        <IconSymbol name="sun.max" size={24} color={theme.accent} />
-                        <ThemedText style={styles.settingText}>Helles Design</ThemedText>
-                      </View>
-                      <TouchableOpacity
-                        style={[
-                          styles.themeButton,
-                          themePreference === 'light' && styles.selectedThemeButton
-                        ]}
-                        onPress={() => handleChangeTheme('light')}
-                        disabled={isSaving}
-                      >
-                        <ThemedText
-                          style={[
-                            styles.themeButtonText,
-                            themePreference === 'light' && styles.selectedThemeButtonText
-                          ]}
-                        >
-                          {themePreference === 'light' && '✓'}
-                        </ThemedText>
-                      </TouchableOpacity>
-                    </View>
-
-                    <View style={styles.settingItem}>
-                      <View style={styles.settingInfo}>
-                        <IconSymbol name="moon" size={24} color={theme.accent} />
-                        <ThemedText style={styles.settingText}>Dunkles Design</ThemedText>
-                      </View>
-                      <TouchableOpacity
-                        style={[
-                          styles.themeButton,
-                          themePreference === 'dark' && styles.selectedThemeButton
-                        ]}
-                        onPress={() => handleChangeTheme('dark')}
-                        disabled={isSaving}
-                      >
-                        <ThemedText
-                          style={[
-                            styles.themeButtonText,
-                            themePreference === 'dark' && styles.selectedThemeButtonText
-                          ]}
-                        >
-                          {themePreference === 'dark' && '✓'}
-                        </ThemedText>
-                      </TouchableOpacity>
-                    </View>
-
-                    <View style={styles.settingItem}>
-                      <View style={styles.settingInfo}>
-                        <IconSymbol name="gearshape" size={24} color={theme.accent} />
-                        <ThemedText style={styles.settingText}>Systemeinstellung</ThemedText>
-                      </View>
-                      <TouchableOpacity
-                        style={[
-                          styles.themeButton,
-                          themePreference === 'system' && styles.selectedThemeButton
-                        ]}
-                        onPress={() => handleChangeTheme('system')}
-                        disabled={isSaving}
-                      >
-                        <ThemedText
-                          style={[
-                            styles.themeButtonText,
-                            themePreference === 'system' && styles.selectedThemeButtonText
-                          ]}
-                        >
-                          {themePreference === 'system' && '✓'}
-                        </ThemedText>
-                      </TouchableOpacity>
-                    </View>
-                  </ThemedView>
-
-                  {/* Benachrichtigungen-Einstellungen */}
-                  <ThemedView style={styles.section} lightColor={theme.card} darkColor={theme.card}>
-                    <ThemedText style={styles.sectionTitle}>Benachrichtigungen</ThemedText>
-
-                    <View style={styles.settingItem}>
-                      <View style={styles.settingInfo}>
-                        <IconSymbol name="bell" size={24} color={theme.accent} />
-                        <View>
-                          <ThemedText style={styles.settingText}>Benachrichtigungen aktivieren</ThemedText>
-                          <ThemedText style={styles.settingDescription}>
-                            Erhalte wichtige Erinnerungen und Updates
-                          </ThemedText>
-                        </View>
-                      </View>
-                      <Switch
-                        value={settings.notifications_enabled}
-                        onValueChange={handleToggleNotifications}
-                        disabled={isSaving}
-                        trackColor={{ false: '#D1D1D6', true: '#9DBEBB' }}
-                        thumbColor={settings.notifications_enabled ? '#FFFFFF' : '#F4F4F4'}
-                        ios_backgroundColor="#D1D1D6"
-                      />
-                    </View>
-                  </ThemedView>
-
-                  {/* Über die App */}
-                  <ThemedView style={styles.section} lightColor={theme.card} darkColor={theme.card}>
-                    <ThemedText style={styles.sectionTitle}>Über die App</ThemedText>
-
-                    <View style={styles.settingItem}>
-                      <View style={styles.settingInfo}>
-                        <IconSymbol name="info.circle" size={24} color={theme.accent} />
-                        <ThemedText style={styles.settingText}>Version</ThemedText>
-                      </View>
-                      <ThemedText style={styles.versionText}>1.0.0</ThemedText>
-                    </View>
-
-                    <TouchableOpacity style={styles.settingItem}>
-                      <View style={styles.settingInfo}>
-                        <IconSymbol name="doc.text" size={24} color={theme.accent} />
-                        <ThemedText style={styles.settingText}>Datenschutzerklärung</ThemedText>
-                      </View>
-                      <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
-                    </TouchableOpacity>
-
-                    <TouchableOpacity style={styles.settingItem}>
-                      <View style={styles.settingInfo}>
-                        <IconSymbol name="doc.text" size={24} color={theme.accent} />
-                        <ThemedText style={styles.settingText}>Impressum</ThemedText>
-                      </View>
-                      <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
-                    </TouchableOpacity>
-                  </ThemedView>
-
-                  {/* Daten verwalten */}
-                  <ThemedView style={styles.section} lightColor={theme.card} darkColor={theme.card}>
-                    <ThemedText style={styles.sectionTitle}>Daten verwalten</ThemedText>
-
-                    <TouchableOpacity style={styles.settingItem}>
-                      <View style={styles.settingInfo}>
-                        <IconSymbol name="arrow.down.doc" size={24} color={theme.accent} />
-                        <View>
-                          <ThemedText style={styles.settingText}>Daten exportieren</ThemedText>
-                          <ThemedText style={styles.settingDescription}>
-                            Exportiere deine Daten als Backup
-                          </ThemedText>
-                        </View>
-                      </View>
-                      <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={[styles.settingItem, styles.dangerItem]}
-                      onPress={() => {
-                        Alert.alert(
-                          'Daten löschen',
-                          'Möchtest du wirklich alle deine Daten löschen? Diese Aktion kann nicht rückgängig gemacht werden.',
-                          [
-                            { text: 'Abbrechen', style: 'cancel' },
-                            {
-                              text: 'Löschen',
-                              style: 'destructive',
-                              onPress: () => {
-                                // Hier würde die Funktion zum Löschen aller Daten aufgerufen werden
-                                Alert.alert('Info', 'Diese Funktion ist noch nicht implementiert.');
-                              }
-                            }
-                          ]
-                        );
-                      }}
-                    >
-                      <View style={styles.settingInfo}>
-                        <IconSymbol name="trash" size={24} color="#FF6B6B" />
-                        <View>
-                          <ThemedText style={[styles.settingText, styles.dangerText]}>Alle Daten löschen</ThemedText>
-                          <ThemedText style={styles.settingDescription}>
-                            Lösche alle deine gespeicherten Daten
-                          </ThemedText>
-                        </View>
-                      </View>
-                      <IconSymbol name="chevron.right" size={20} color="#FF6B6B" />
-                    </TouchableOpacity>
-                  </ThemedView>
-                </>
-              ) : (
-                <ThemedView style={styles.errorContainer} lightColor={theme.card} darkColor={theme.card}>
-                  <IconSymbol name="exclamationmark.triangle" size={40} color="#FF6B6B" />
-                  <ThemedText style={styles.errorText}>
-                    Einstellungen konnten nicht geladen werden
-                  </ThemedText>
+                <View style={styles.settingItem}>
+                  <View style={styles.settingInfo}>
+                    <IconSymbol name="sun.max" size={24} color={theme.accent} />
+                    <ThemedText style={styles.settingText}>Helles Design</ThemedText>
+                  </View>
                   <TouchableOpacity
-                    style={[styles.retryButton, { backgroundColor: theme.accent }]}
-                    onPress={loadSettings}
+                    style={[
+                      styles.themeButton,
+                      themePreference === 'light' && styles.selectedThemeButton
+                    ]}
+                    onPress={() => handleChangeTheme('light')}
+                    disabled={isSaving}
                   >
-                    <ThemedText style={styles.retryButtonText}>
-                      Erneut versuchen
+                    <ThemedText
+                      style={[
+                        styles.themeButtonText,
+                        themePreference === 'light' && styles.selectedThemeButtonText
+                      ]}
+                    >
+                      {themePreference === 'light' && '✓'}
                     </ThemedText>
                   </TouchableOpacity>
-                </ThemedView>
-              )}
-            </ScrollView>
-          </View>
-        </SafeAreaView>
-      </ThemedBackground>
-    </>
+                </View>
+
+                <View style={styles.settingItem}>
+                  <View style={styles.settingInfo}>
+                    <IconSymbol name="moon" size={24} color={theme.accent} />
+                    <ThemedText style={styles.settingText}>Dunkles Design</ThemedText>
+                  </View>
+                  <TouchableOpacity
+                    style={[
+                      styles.themeButton,
+                      themePreference === 'dark' && styles.selectedThemeButton
+                    ]}
+                    onPress={() => handleChangeTheme('dark')}
+                    disabled={isSaving}
+                  >
+                    <ThemedText
+                      style={[
+                        styles.themeButtonText,
+                        themePreference === 'dark' && styles.selectedThemeButtonText
+                      ]}
+                    >
+                      {themePreference === 'dark' && '✓'}
+                    </ThemedText>
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.settingItem}>
+                  <View style={styles.settingInfo}>
+                    <IconSymbol name="gearshape" size={24} color={theme.accent} />
+                    <ThemedText style={styles.settingText}>Systemeinstellung</ThemedText>
+                  </View>
+                  <TouchableOpacity
+                    style={[
+                      styles.themeButton,
+                      themePreference === 'system' && styles.selectedThemeButton
+                    ]}
+                    onPress={() => handleChangeTheme('system')}
+                    disabled={isSaving}
+                  >
+                    <ThemedText
+                      style={[
+                        styles.themeButtonText,
+                        themePreference === 'system' && styles.selectedThemeButtonText
+                      ]}
+                    >
+                      {themePreference === 'system' && '✓'}
+                    </ThemedText>
+                  </TouchableOpacity>
+                </View>
+              </ThemedView>
+
+              {/* Benachrichtigungen-Einstellungen */}
+              <ThemedView style={styles.section} lightColor={theme.card} darkColor={theme.card}>
+                <ThemedText style={styles.sectionTitle}>Benachrichtigungen</ThemedText>
+
+                <View style={styles.settingItem}>
+                  <View style={styles.settingInfo}>
+                    <IconSymbol name="bell" size={24} color={theme.accent} />
+                    <View>
+                      <ThemedText style={styles.settingText}>Benachrichtigungen aktivieren</ThemedText>
+                      <ThemedText style={styles.settingDescription}>
+                        Erhalte wichtige Erinnerungen und Updates
+                      </ThemedText>
+                    </View>
+                  </View>
+                  <Switch
+                    value={settings.notifications_enabled}
+                    onValueChange={handleToggleNotifications}
+                    disabled={isSaving}
+                    trackColor={{ false: '#D1D1D6', true: '#9DBEBB' }}
+                    thumbColor={settings.notifications_enabled ? '#FFFFFF' : '#F4F4F4'}
+                    ios_backgroundColor="#D1D1D6"
+                  />
+                </View>
+              </ThemedView>
+
+              {/* Über die App */}
+              <ThemedView style={styles.section} lightColor={theme.card} darkColor={theme.card}>
+                <ThemedText style={styles.sectionTitle}>Über die App</ThemedText>
+
+                <View style={styles.settingItem}>
+                  <View style={styles.settingInfo}>
+                    <IconSymbol name="info.circle" size={24} color={theme.accent} />
+                    <ThemedText style={styles.settingText}>Version</ThemedText>
+                  </View>
+                  <ThemedText style={styles.versionText}>1.0.0</ThemedText>
+                </View>
+
+                <TouchableOpacity style={styles.settingItem}>
+                  <View style={styles.settingInfo}>
+                    <IconSymbol name="doc.text" size={24} color={theme.accent} />
+                    <ThemedText style={styles.settingText}>Datenschutzerklärung</ThemedText>
+                  </View>
+                  <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.settingItem}>
+                  <View style={styles.settingInfo}>
+                    <IconSymbol name="doc.text" size={24} color={theme.accent} />
+                    <ThemedText style={styles.settingText}>Impressum</ThemedText>
+                  </View>
+                  <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
+                </TouchableOpacity>
+              </ThemedView>
+
+              {/* Daten verwalten */}
+              <ThemedView style={styles.section} lightColor={theme.card} darkColor={theme.card}>
+                <ThemedText style={styles.sectionTitle}>Daten verwalten</ThemedText>
+
+                <TouchableOpacity style={styles.settingItem}>
+                  <View style={styles.settingInfo}>
+                    <IconSymbol name="arrow.down.doc" size={24} color={theme.accent} />
+                    <View>
+                      <ThemedText style={styles.settingText}>Daten exportieren</ThemedText>
+                      <ThemedText style={styles.settingDescription}>
+                        Exportiere deine Daten als Backup
+                      </ThemedText>
+                    </View>
+                  </View>
+                  <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.settingItem, styles.dangerItem]}
+                  onPress={() => {
+                    Alert.alert(
+                      'Daten löschen',
+                      'Möchtest du wirklich alle deine Daten löschen? Diese Aktion kann nicht rückgängig gemacht werden.',
+                      [
+                        { text: 'Abbrechen', style: 'cancel' },
+                        {
+                          text: 'Löschen',
+                          style: 'destructive',
+                          onPress: () => {
+                            // Hier würde die Funktion zum Löschen aller Daten aufgerufen werden
+                            Alert.alert('Info', 'Diese Funktion ist noch nicht implementiert.');
+                          }
+                        }
+                      ]
+                    );
+                  }}
+                >
+                  <View style={styles.settingInfo}>
+                    <IconSymbol name="trash" size={24} color="#FF6B6B" />
+                    <View>
+                      <ThemedText style={[styles.settingText, styles.dangerText]}>Alle Daten löschen</ThemedText>
+                      <ThemedText style={styles.settingDescription}>
+                        Lösche alle deine gespeicherten Daten
+                      </ThemedText>
+                    </View>
+                  </View>
+                  <IconSymbol name="chevron.right" size={20} color="#FF6B6B" />
+                </TouchableOpacity>
+              </ThemedView>
+            </>
+          ) : (
+            <ThemedView style={styles.errorContainer} lightColor={theme.card} darkColor={theme.card}>
+              <IconSymbol name="exclamationmark.triangle" size={40} color="#FF6B6B" />
+              <ThemedText style={styles.errorText}>
+                Einstellungen konnten nicht geladen werden
+              </ThemedText>
+              <TouchableOpacity
+                style={[styles.retryButton, { backgroundColor: theme.accent }]}
+                onPress={loadSettings}
+              >
+                <ThemedText style={styles.retryButtonText}>
+                  Erneut versuchen
+                </ThemedText>
+              </TouchableOpacity>
+            </ThemedView>
+          )}
+        </ScrollView>
+      </SafeAreaView>
+    </ThemedBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  backgroundImage: {
-    flex: 1,
-    width: '100%',
-    height: '100%',
-  },
-  safeArea: {
-    flex: 1,
-    backgroundColor: 'transparent',
-  },
   container: {
     flex: 1,
-    paddingHorizontal: 0,
-    paddingTop: 0,
   },
-  scrollContent: {
+  scrollView: {
+    flex: 1,
+  },
+  contentContainer: {
+    padding: 20,
     paddingBottom: 40,
-    paddingHorizontal: 0,
   },
 
   loadingContainer: {

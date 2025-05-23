@@ -981,14 +981,14 @@ export default function CommunityScreen() {
                 subtitle="Teile und entdecke Erfahrungen" 
               />
               
-              <TouchableOpacity
+              <TouchableOpacity 
                 style={styles.bellButton}
                 onPress={() => router.push('/notifications' as any)}
               >
-                <IconSymbol
-                  name="bell.fill"
-                  size={24}
-                  color={theme.tabIconDefault}
+                <IconSymbol 
+                  name="bell.fill" 
+                  size={24} 
+                  color={theme.tabIconDefault} 
                 />
                 <NotificationBadge refreshTrigger={refreshNotificationBadge} />
               </TouchableOpacity>
@@ -1250,8 +1250,8 @@ export default function CommunityScreen() {
                         </>
                       ) : null}
                       
-                      <TouchableOpacity
-                        style={[styles.floatingMainButton, { backgroundColor: Colors[colorScheme].tint }]}
+                        <TouchableOpacity
+                          style={[styles.floatingMainButton, { backgroundColor: Colors[colorScheme].tint }]}
                         onPress={() => toggleFloatingButtons(!showFloatingButtons)}
                       >
                         <Animated.View 
@@ -1266,7 +1266,7 @@ export default function CommunityScreen() {
                         >
                           <IconSymbol name="plus" size={24} color="#FFFFFF" />
                         </Animated.View>
-                      </TouchableOpacity>
+                        </TouchableOpacity>
                     </View>
                   </>
                 )}

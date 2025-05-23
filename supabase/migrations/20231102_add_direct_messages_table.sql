@@ -48,7 +48,7 @@ CREATE INDEX direct_messages_sender_idx ON direct_messages(sender_id);
 CREATE INDEX direct_messages_receiver_idx ON direct_messages(receiver_id);
 CREATE INDEX direct_messages_created_at_idx ON direct_messages(created_at);
 
--- Funktion zum Benachrichtigen über neue Nachrichten
+-- Funktion wird bei neuen Direktnachrichten aufgerufen
 CREATE OR REPLACE FUNCTION notify_new_direct_message()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -56,6 +56,24 @@ BEGIN
   -- Im Hintergrund können wir Push-Benachrichtigungen auslösen
   
   -- Ein Webhook oder eine Serverless-Funktion könnte hier aufgerufen werden
+  -- Für lokale Benachrichtigungen erstellen wir eine Benachrichtigung in der community_notifications Tabelle
+  INSERT INTO community_notifications (
+    user_id,
+    sender_id,
+    type,
+    content,
+    reference_id,
+    created_at,
+    is_read
+  ) VALUES (
+    NEW.receiver_id,
+    NEW.sender_id,
+    'message',
+    SUBSTRING(NEW.content, 1, 100),
+    NEW.sender_id, -- Referenz auf den Absender für Navigation
+    NEW.created_at,
+    FALSE
+  );
   
   RETURN NEW;
 END;
