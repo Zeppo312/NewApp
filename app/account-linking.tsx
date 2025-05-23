@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, Share, Alert, SafeAreaView, ActivityIndicator, StatusBar, TextInput } from 'react-native';
+import { StyleSheet, ScrollView, View, TouchableOpacity, Share, Alert, ActivityIndicator, StatusBar, TextInput } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedBackground } from '@/components/ThemedBackground';
@@ -127,7 +128,7 @@ export default function AccountLinkingScreen() {
 
   return (
     <ThemedBackground style={{flex: 1}}>
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView edges={['top']} style={styles.container}>
         <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
         
         <Header title="Accounts verknüpfen" showBackButton={true} />

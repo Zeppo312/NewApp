@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, TextInput, Alert, SafeAreaView, StatusBar, Platform, Switch, ActivityIndicator } from 'react-native';
+import { StyleSheet, ScrollView, View, TouchableOpacity, TextInput, Alert, StatusBar, Platform, Switch, ActivityIndicator } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedBackground } from '@/components/ThemedBackground';
@@ -286,7 +287,7 @@ export default function ProfilScreen() {
   if (isLoading) {
     return (
       <ThemedBackground>
-        <SafeAreaView style={{ flex: 1 }}>
+        <SafeAreaView edges={['top']} style={{ flex: 1 }}>
           <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
           <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
             <ActivityIndicator size="large" color={theme.accent} />
@@ -301,7 +302,7 @@ export default function ProfilScreen() {
 
   return (
     <ThemedBackground style={{flex: 1}}>
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView edges={['top']} style={styles.container}>
         <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
         
         <Header title="Profil" showBackButton={true} />
