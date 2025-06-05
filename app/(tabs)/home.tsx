@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, Text, SafeAreaView, StatusBar, Image, ActivityIndicator, RefreshControl } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { StyleSheet, ScrollView, View, TouchableOpacity, Text, SafeAreaView, StatusBar, Image, RefreshControl, Animated } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
@@ -43,6 +44,25 @@ export default function HomeScreen() {
   const [dailyTip, setDailyTip] = useState("");
   const [userName, setUserName] = useState("");
   const [refreshing, setRefreshing] = useState(false);
+  const skeletonAnim = useRef(new Animated.Value(0.3)).current;
+  const contentOpacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(skeletonAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
+        Animated.timing(skeletonAnim, { toValue: 0.3, duration: 800, useNativeDriver: true })
+      ])
+    ).start();
+  }, []);
+
+  useEffect(() => {
+    if (!isLoading) {
+      Animated.timing(contentOpacity, { toValue: 1, duration: 500, useNativeDriver: true }).start();
+    } else {
+      contentOpacity.setValue(0);
+    }
+  }, [isLoading]);
 
   useEffect(() => {
     if (user) {
@@ -260,6 +280,40 @@ export default function HomeScreen() {
     );
   };
 
+  const renderGreetingSkeleton = () => {
+    const baseColor = colorScheme === 'dark' ? '#444' : '#E0E0E0';
+    return (
+      <View style={styles.greetingContainer}>
+        <View style={styles.greetingHeader}>
+          <View style={{ flex: 1 }}>
+            <Animated.View style={[styles.skeletonLine, { width: 150, backgroundColor: baseColor, opacity: skeletonAnim }]} />
+            <Animated.View style={[styles.skeletonLine, { width: 100, backgroundColor: baseColor, opacity: skeletonAnim }]} />
+          </View>
+          <Animated.View style={[styles.skeletonAvatar, { backgroundColor: baseColor, opacity: skeletonAnim }]} />
+        </View>
+        <Animated.View style={[styles.skeletonLine, { height: 40, borderRadius: 10, backgroundColor: baseColor, opacity: skeletonAnim }]} />
+      </View>
+    );
+  };
+
+  const renderSummarySkeleton = () => {
+    const baseColor = colorScheme === 'dark' ? '#444' : '#E0E0E0';
+    return (
+      <View style={styles.summaryContainer}>
+        <Animated.View style={[styles.skeletonLine, { width: 180, backgroundColor: baseColor, opacity: skeletonAnim }]} />
+        <View style={[styles.statsContainer, { marginTop: 16 }]}>
+          {[1, 2, 3].map((i) => (
+            <View key={i} style={styles.statItem}>
+              <Animated.View style={[styles.skeletonStatCircle, { backgroundColor: baseColor, opacity: skeletonAnim }]} />
+              <Animated.View style={[styles.skeletonLine, { width: 20, height: 16, backgroundColor: baseColor, opacity: skeletonAnim }]} />
+              <Animated.View style={[styles.skeletonLine, { width: 60, height: 12, backgroundColor: baseColor, opacity: skeletonAnim }]} />
+            </View>
+          ))}
+        </View>
+      </View>
+    );
+  };
+
   // Rendere die Schnellzugriff-Karten
   const renderQuickAccessCards = () => {
     return (
@@ -269,74 +323,86 @@ export default function HomeScreen() {
         </ThemedText>
 
         <View style={styles.cardsGrid}>
-          <TouchableOpacity
-            style={[styles.card, { backgroundColor: 'rgba(157, 190, 187, 0.9)' }]}
-            onPress={() => router.push('/diary-entries')}
-          >
-            <View style={styles.iconContainer}>
-              <IconSymbol name="book.fill" size={40} color="#FFFFFF" />
-            </View>
-            <ThemedText style={styles.cardTitle}>Tagebuch</ThemedText>
-            <ThemedText style={styles.cardDescription}>Erinnere besondere Momente</ThemedText>
+          <TouchableOpacity style={styles.card} onPress={() => router.push('/diary-entries')}>
+            <LinearGradient
+              colors={['rgba(157, 190, 187, 0.9)', 'rgba(157, 190, 187, 0.7)']}
+              style={styles.cardGradient}
+            >
+              <View style={styles.iconContainer}>
+                <IconSymbol name="book.fill" size={40} color="#FFFFFF" />
+              </View>
+              <ThemedText style={styles.cardTitle}>Tagebuch</ThemedText>
+              <ThemedText style={styles.cardDescription}>Erinnere besondere Momente</ThemedText>
+            </LinearGradient>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.card, { backgroundColor: 'rgba(233, 201, 182, 0.9)' }]}
-            onPress={() => router.push('/(tabs)/baby')}
-          >
-            <View style={styles.iconContainer}>
-              <IconSymbol name="person.fill" size={40} color="#FFFFFF" />
-            </View>
-            <ThemedText style={styles.cardTitle}>Mein Baby</ThemedText>
-            <ThemedText style={styles.cardDescription}>Alle Infos & Entwicklungen</ThemedText>
+          <TouchableOpacity style={styles.card} onPress={() => router.push('/(tabs)/baby')}>
+            <LinearGradient
+              colors={['rgba(233, 201, 182, 0.9)', 'rgba(233, 201, 182, 0.7)']}
+              style={styles.cardGradient}
+            >
+              <View style={styles.iconContainer}>
+                <IconSymbol name="person.fill" size={40} color="#FFFFFF" />
+              </View>
+              <ThemedText style={styles.cardTitle}>Mein Baby</ThemedText>
+              <ThemedText style={styles.cardDescription}>Alle Infos & Entwicklungen</ThemedText>
+            </LinearGradient>
           </TouchableOpacity>
 
           {currentPhase && (
-            <TouchableOpacity
-              style={[styles.card, { backgroundColor: 'rgba(125, 90, 80, 0.7)' }]}
-              onPress={() => router.push('/(tabs)/diary')}
-            >
-              <View style={styles.iconContainer}>
-                <IconSymbol name="chart.bar.fill" size={40} color="#FFFFFF" />
-              </View>
-              <ThemedText style={styles.cardTitle}>Entwicklung</ThemedText>
-              <ThemedText style={styles.cardDescription}>
-                Phase {currentPhase.baby_development_phases?.phase_number || 1}
-              </ThemedText>
+            <TouchableOpacity style={styles.card} onPress={() => router.push('/(tabs)/diary')}>
+              <LinearGradient
+                colors={['rgba(125, 90, 80, 0.7)', 'rgba(125, 90, 80, 0.5)']}
+                style={styles.cardGradient}
+              >
+                <View style={styles.iconContainer}>
+                  <IconSymbol name="chart.bar.fill" size={40} color="#FFFFFF" />
+                </View>
+                <ThemedText style={styles.cardTitle}>Entwicklung</ThemedText>
+                <ThemedText style={styles.cardDescription}>
+                  Phase {currentPhase.baby_development_phases?.phase_number || 1}
+                </ThemedText>
+              </LinearGradient>
             </TouchableOpacity>
           )}
 
-          <TouchableOpacity
-            style={[styles.card, { backgroundColor: 'rgba(125, 90, 80, 0.7)' }]}
-            onPress={() => router.push('/(tabs)/daily_old')}
-          >
-            <View style={styles.iconContainer}>
-              <IconSymbol name="list.bullet" size={40} color="#FFFFFF" />
-            </View>
-            <ThemedText style={styles.cardTitle}>Alltag</ThemedText>
-            <ThemedText style={styles.cardDescription}>Tagesaktivitäten verwalten</ThemedText>
+          <TouchableOpacity style={styles.card} onPress={() => router.push('/(tabs)/daily_old')}>
+            <LinearGradient
+              colors={['rgba(125, 90, 80, 0.7)', 'rgba(125, 90, 80, 0.5)']}
+              style={styles.cardGradient}
+            >
+              <View style={styles.iconContainer}>
+                <IconSymbol name="list.bullet" size={40} color="#FFFFFF" />
+              </View>
+              <ThemedText style={styles.cardTitle}>Alltag</ThemedText>
+              <ThemedText style={styles.cardDescription}>Tagesaktivitäten verwalten</ThemedText>
+            </LinearGradient>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.card, { backgroundColor: 'rgba(255, 107, 107, 0.7)' }]}
-            onPress={() => router.push('/(tabs)/selfcare')}
-          >
-            <View style={styles.iconContainer}>
-              <IconSymbol name="heart.fill" size={40} color="#FFFFFF" />
-            </View>
-            <ThemedText style={styles.cardTitle}>Mama Selfcare</ThemedText>
-            <ThemedText style={styles.cardDescription}>Nimm dir Zeit für dich</ThemedText>
+          <TouchableOpacity style={styles.card} onPress={() => router.push('/(tabs)/selfcare')}>
+            <LinearGradient
+              colors={['rgba(255, 107, 107, 0.7)', 'rgba(255, 107, 107, 0.5)']}
+              style={styles.cardGradient}
+            >
+              <View style={styles.iconContainer}>
+                <IconSymbol name="heart.fill" size={40} color="#FFFFFF" />
+              </View>
+              <ThemedText style={styles.cardTitle}>Mama Selfcare</ThemedText>
+              <ThemedText style={styles.cardDescription}>Nimm dir Zeit für dich</ThemedText>
+            </LinearGradient>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.card, { backgroundColor: 'rgba(100, 150, 255, 0.7)' }]}
-            onPress={() => router.push('/(tabs)/babyweather')}
-          >
-            <View style={styles.iconContainer}>
-              <IconSymbol name="cloud.sun.fill" size={40} color="#FFFFFF" />
-            </View>
-            <ThemedText style={styles.cardTitle}>Babywetter</ThemedText>
-            <ThemedText style={styles.cardDescription}>Aktuelle Wetterinfos</ThemedText>
+          <TouchableOpacity style={styles.card} onPress={() => router.push('/(tabs)/babyweather')}>
+            <LinearGradient
+              colors={['rgba(100, 150, 255, 0.7)', 'rgba(100, 150, 255, 0.5)']}
+              style={styles.cardGradient}
+            >
+              <View style={styles.iconContainer}>
+                <IconSymbol name="cloud.sun.fill" size={40} color="#FFFFFF" />
+              </View>
+              <ThemedText style={styles.cardTitle}>Babywetter</ThemedText>
+              <ThemedText style={styles.cardDescription}>Aktuelle Wetterinfos</ThemedText>
+            </LinearGradient>
           </TouchableOpacity>
         </View>
       </View>
@@ -348,13 +414,17 @@ export default function HomeScreen() {
       <SafeAreaView style={styles.container}>
       <StatusBar hidden={true} />
         {isLoading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={theme.accent} />
-            <ThemedText style={styles.loadingText}>Lade deine persönliche Übersicht...</ThemedText>
-          </View>
+          <ScrollView
+            style={styles.scrollView}
+            contentContainerStyle={styles.contentContainer}
+          >
+            {renderGreetingSkeleton()}
+            {renderSummarySkeleton()}
+            {renderQuickAccessCards()}
+          </ScrollView>
         ) : (
-          <ScrollView 
-            style={styles.scrollView} 
+          <Animated.ScrollView
+            style={[styles.scrollView, { opacity: contentOpacity }]}
             contentContainerStyle={styles.contentContainer}
             refreshControl={
               <RefreshControl
@@ -370,7 +440,7 @@ export default function HomeScreen() {
             {renderGreetingSection()}
             {renderDailySummary()}
             {renderQuickAccessCards()}
-          </ScrollView>
+          </Animated.ScrollView>
         )}
       </SafeAreaView>
     </ThemedBackground>
@@ -508,13 +578,17 @@ const styles = StyleSheet.create({
   card: {
     width: '48%',
     borderRadius: 16,
-    padding: 16,
+    overflow: 'hidden',
     marginBottom: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 4,
     elevation: 2,
+  },
+  cardGradient: {
+    flex: 1,
+    padding: 16,
     alignItems: 'center',
   },
   iconContainer: {
@@ -542,5 +616,25 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#FFFFFF',
     textAlign: 'center',
+  },
+  // Skeleton styles
+  skeletonLine: {
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#CCCCCC',
+    marginBottom: 8,
+  },
+  skeletonAvatar: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#CCCCCC',
+  },
+  skeletonStatCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#CCCCCC',
+    marginBottom: 6,
   },
 });
