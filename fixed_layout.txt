@@ -1,0 +1,128 @@
+import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import { useFonts } from 'expo-font';
+import { Stack } from 'expo-router';
+import * as SplashScreen from 'expo-splash-screen';
+import { StatusBar } from 'expo-status-bar';
+import { useEffect, useState } from 'react';
+import { View, ActivityIndicator, Text } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import 'react-native-reanimated';
+
+import { useColorScheme } from '@/hooks/useColorScheme';
+import { AuthProvider, useAuth } from '@/contexts/AuthContext';
+import { BabyStatusProvider } from '@/contexts/BabyStatusContext';
+import { ThemeProvider as AppThemeProvider } from '@/contexts/ThemeContext';
+
+// Prevent the splash screen from auto-hiding before asset loading is complete.
+SplashScreen.preventAutoHideAsync();
+
+// Wrapper-Komponente, die den AuthProvider verwendet
+function RootLayoutNav() {
+  const colorScheme = useColorScheme();
+  const { loading } = useAuth();
+  const [initialRoute, setInitialRoute] = useState<string | null>(null);
+
+  // Wir verwenden jetzt die index.tsx Datei als Einstiegspunkt, die die Weiterleitung basierend auf dem Auth-Status übernimmt
+  useEffect(() => {
+    if (!loading) {
+      console.log('Layout: Auth loading complete, setting initial route');
+      // Wir setzen die initiale Route auf den Root-Pfad, der dann zur richtigen Route weiterleitet
+      setInitialRoute('index');
+    }
+  }, [loading]);
+
+  // Zeige einen Ladeindikator, während der Authentifizierungsstatus geprüft wird
+  if (loading || !initialRoute) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFFFF' }}>
+        <ActivityIndicator size="large" color="#E9C9B6" />
+        <View style={{ marginTop: 20 }}>
+          <Text style={{ marginTop: 10, color: '#7D5A50' }}>Lade...</Text>
+          <StatusBar hidden={true} />
+        </View>
+      </View>
+    );
+  }
+
+  // Wenn der Benutzer angemeldet ist, zur Hauptapp navigieren, sonst zum Login-Screen
+  return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+        <Stack initialRouteName={initialRoute}>
+        <Stack.Screen name="index" options={{ headerShown: false }} />
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+        <Stack.Screen name="diary-entries" options={{ headerShown: false }} />
+        <Stack.Screen name="mini-wiki" options={{ headerShown: false }} />
+        <Stack.Screen name="faq" options={{ headerShown: false }} />
+        <Stack.Screen name="community" options={{ headerShown: false }} />
+        <Stack.Screen name="pregnancy-stats" options={{ headerShown: false }} />
+        <Stack.Screen name="+not-found" />
+        <Stack.Screen name="auth/callback" options={{ headerShown: false }} />
+      </Stack>
+      <StatusBar hidden={true} />
+    </ThemeProvider>
+    </GestureHandlerRootView>
+  );
+}
+
+// Hauptkomponente, die den AuthProvider einrichtet
+export default function RootLayout() {
+  const [loaded] = useFonts({
+    SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
+  });
+  const [appIsReady, setAppIsReady] = useState(false);
+
+  // Vorbereiten der App
+  useEffect(() => {
+    async function prepare() {
+      try {
+        // Warten, bis die Schriftarten geladen sind
+        if (loaded) {
+
+          // Simulierte Verzögerung, um sicherzustellen, dass alles bereit ist
+          await new Promise(resolve => setTimeout(resolve, 500));
+
+          // App ist bereit
+          setAppIsReady(true);
+        }
+      } catch (e) {
+        console.warn('Error preparing app:', e);
+      }
+    }
+
+    prepare();
+  }, [loaded]);
+
+  // Ausblenden des Splash-Screens, wenn die App bereit ist
+  useEffect(() => {
+    if (appIsReady) {
+      try {
+        SplashScreen.hideAsync();
+      } catch (error) {
+        console.error('Error hiding splash screen:', error);
+      }
+    }
+  }, [appIsReady]);
+
+  // Anzeigen eines Ladeindikators, wenn die App noch nicht bereit ist
+  if (!appIsReady) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFFFF' }}>
+        <ActivityIndicator size="large" color="#E9C9B6" />
+        <Text style={{ marginTop: 10, color: '#7D5A50' }}>App wird geladen...</Text>
+      </View>
+    );
+  }
+
+  // Umschließen der App mit dem AuthProvider und BabyStatusProvider
+  return (
+    <AuthProvider>
+      <AppThemeProvider>
+        <BabyStatusProvider>
+          <RootLayoutNav />
+        </BabyStatusProvider>
+      </AppThemeProvider>
+    </AuthProvider>
+  );
+}

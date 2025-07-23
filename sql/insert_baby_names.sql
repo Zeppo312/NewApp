@@ -1,0 +1,307 @@
+-- Erstelle eine Tabelle für Babynamen, falls sie noch nicht existiert
+CREATE TABLE IF NOT EXISTS baby_names (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  name TEXT NOT NULL,
+  meaning TEXT NOT NULL,
+  origin TEXT NOT NULL,
+  gender TEXT NOT NULL CHECK (gender IN ('male', 'female', 'unisex')),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+
+  -- Stelle sicher, dass jeder Name nur einmal vorkommt
+  CONSTRAINT unique_name UNIQUE (name)
+);
+
+-- Funktion, um doppelte Namen zu überspringen
+CREATE OR REPLACE FUNCTION insert_baby_name(
+  p_name TEXT,
+  p_meaning TEXT,
+  p_origin TEXT,
+  p_gender TEXT
+) RETURNS VOID AS $$
+BEGIN
+  INSERT INTO baby_names (name, meaning, origin, gender)
+  VALUES (p_name, p_meaning, p_origin, p_gender)
+  ON CONFLICT (name) DO NOTHING;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Jungennamen (100 Namen)
+DO $$
+BEGIN
+  PERFORM insert_baby_name
+('Noah', 'Ruhe, Trost', 'Hebräisch', 'male'),
+('Leon', 'Löwe', 'Lateinisch', 'male'),
+('Paul', 'Der Kleine, der Bescheidene', 'Lateinisch', 'male'),
+('Ben', 'Sohn', 'Hebräisch', 'male'),
+('Finn', 'Der Blonde, der Helle', 'Irisch', 'male'),
+('Felix', 'Der Glückliche', 'Lateinisch', 'male'),
+('Jonas', 'Taube', 'Hebräisch', 'male'),
+('Luis', 'Ruhmvoller Kämpfer', 'Germanisch', 'male'),
+('Luca', 'Der Leuchtende', 'Italienisch', 'male'),
+('Elias', 'Mein Gott ist Jahwe', 'Hebräisch', 'male'),
+('Maximilian', 'Der Größte', 'Lateinisch', 'male'),
+('Henry', 'Herrscher des Hauses', 'Germanisch', 'male'),
+('Theo', 'Gottesgeschenk', 'Griechisch', 'male'),
+('Anton', 'Der Unschätzbare', 'Lateinisch', 'male'),
+('Jakob', 'Der Fersenschleicher', 'Hebräisch', 'male'),
+('Emil', 'Der Eifrige', 'Lateinisch', 'male'),
+('Oskar', 'Göttlicher Speer', 'Altnordisch', 'male'),
+('Vincent', 'Der Siegende', 'Lateinisch', 'male'),
+('David', 'Der Geliebte', 'Hebräisch', 'male'),
+('Matteo', 'Geschenk Gottes', 'Italienisch', 'male'),
+('Samuel', 'Von Gott erhört', 'Hebräisch', 'male'),
+('Lukas', 'Der Leuchtende', 'Griechisch', 'male'),
+('Jonathan', 'Geschenk Gottes', 'Hebräisch', 'male'),
+('Julian', 'Der Junge', 'Lateinisch', 'male'),
+('Leo', 'Löwe', 'Lateinisch', 'male'),
+('Liam', 'Beschützer', 'Irisch', 'male'),
+('Moritz', 'Der Dunkle', 'Lateinisch', 'male'),
+('Niklas', 'Sieg des Volkes', 'Griechisch', 'male'),
+('Philipp', 'Pferdefreund', 'Griechisch', 'male'),
+('Rafael', 'Gott hat geheilt', 'Hebräisch', 'male'),
+('Alexander', 'Der Beschützer', 'Griechisch', 'male'),
+('Erik', 'Der Ehrfurchtgebietende', 'Altnordisch', 'male'),
+('Fabian', 'Der Bohnenanbauer', 'Lateinisch', 'male'),
+('Gabriel', 'Gottes Stärke', 'Hebräisch', 'male'),
+('Hannes', 'Gott ist gnädig', 'Hebräisch', 'male'),
+('Jannik', 'Gott ist gnädig', 'Hebräisch', 'male'),
+('Konstantin', 'Der Beständige', 'Lateinisch', 'male'),
+('Lennard', 'Stark wie ein Löwe', 'Germanisch', 'male'),
+('Matthias', 'Geschenk Gottes', 'Hebräisch', 'male'),
+('Nils', 'Der Siegreiche', 'Altnordisch', 'male'),
+('Ole', 'Der Vorfahre', 'Altnordisch', 'male'),
+('Quentin', 'Der Fünfte', 'Lateinisch', 'male'),
+('Richard', 'Der mächtige Herrscher', 'Germanisch', 'male'),
+('Simon', 'Der Erhörte', 'Hebräisch', 'male'),
+('Till', 'Der Mächtige', 'Germanisch', 'male'),
+('Valentin', 'Der Starke, Gesunde', 'Lateinisch', 'male'),
+('Wilhelm', 'Entschlossener Beschützer', 'Germanisch', 'male'),
+('Xaver', 'Der neue Hausherr', 'Baskisch', 'male'),
+('Yannis', 'Gott ist gnädig', 'Griechisch', 'male'),
+('Zacharias', 'Gott gedenkt', 'Hebräisch', 'male'),
+('Aaron', 'Der Erleuchtete', 'Hebräisch', 'male'),
+('Bruno', 'Der Braune', 'Germanisch', 'male'),
+('Christian', 'Der Anhänger Christi', 'Griechisch', 'male'),
+('Damian', 'Der Zähmende', 'Griechisch', 'male'),
+('Erich', 'Der Ehrfurchtgebietende', 'Altnordisch', 'male'),
+('Florian', 'Der Blühende', 'Lateinisch', 'male'),
+('Gregor', 'Der Wachsame', 'Griechisch', 'male'),
+('Hugo', 'Der Verständige', 'Germanisch', 'male'),
+('Ivo', 'Eibenholz', 'Germanisch', 'male'),
+('Jan', 'Gott ist gnädig', 'Hebräisch', 'male'),
+('Karl', 'Der Freie', 'Germanisch', 'male'),
+('Ludwig', 'Der berühmte Kämpfer', 'Germanisch', 'male'),
+('Martin', 'Dem Kriegsgott geweiht', 'Lateinisch', 'male'),
+('Nico', 'Sieg des Volkes', 'Griechisch', 'male'),
+('Otto', 'Der Besitzende', 'Germanisch', 'male'),
+('Peter', 'Der Fels', 'Griechisch', 'male'),
+('Quirin', 'Der Speerträger', 'Lateinisch', 'male'),
+('Robert', 'Der Ruhmreiche', 'Germanisch', 'male'),
+('Stefan', 'Der Gekrönte', 'Griechisch', 'male'),
+('Thomas', 'Der Zwilling', 'Aramäisch', 'male'),
+('Ulrich', 'Der Erbreiche', 'Germanisch', 'male'),
+('Viktor', 'Der Sieger', 'Lateinisch', 'male'),
+('Walter', 'Der Herrschende', 'Germanisch', 'male'),
+('Xander', 'Der Beschützer', 'Griechisch', 'male'),
+('Yorick', 'Der Landwirt', 'Germanisch', 'male'),
+('Zeno', 'Geschenk des Zeus', 'Griechisch', 'male'),
+('Adam', 'Der aus Erde Geschaffene', 'Hebräisch', 'male'),
+('Bastian', 'Der Verehrte', 'Griechisch', 'male'),
+('Cedric', 'Kriegshäuptling', 'Keltisch', 'male'),
+('Daniel', 'Gott ist mein Richter', 'Hebräisch', 'male'),
+('Eduard', 'Hüter des Reichtums', 'Altenglisch', 'male'),
+('Frederik', 'Der Friedensreiche', 'Germanisch', 'male'),
+('Georg', 'Der Landmann', 'Griechisch', 'male'),
+('Hendrik', 'Herrscher des Hauses', 'Germanisch', 'male'),
+('Ingo', 'Sohn des Gottes Ing', 'Germanisch', 'male'),
+('Johannes', 'Gott ist gnädig', 'Hebräisch', 'male'),
+('Kilian', 'Der Kämpfer', 'Gälisch', 'male'),
+('Lorenz', 'Der mit Lorbeer Bekränzte', 'Lateinisch', 'male'),
+('Michael', 'Wer ist wie Gott?', 'Hebräisch', 'male'),
+('Noel', 'Weihnachten', 'Französisch', 'male'),
+('Oliver', 'Der Friedensbringer', 'Lateinisch', 'male'),
+('Patrick', 'Der Adlige', 'Lateinisch', 'male'),
+
+-- Mädchennamen (100 Namen)
+('Emma', 'Die Große, die Starke', 'Germanisch', 'female'),
+('Mia', 'Mein', 'Italienisch', 'female'),
+('Hannah', 'Die Anmutige', 'Hebräisch', 'female'),
+('Emilia', 'Die Eifrige, die Fleißige', 'Lateinisch', 'female'),
+('Lina', 'Die Zarte, die Milde', 'Arabisch', 'female'),
+('Sophie', 'Die Weise', 'Griechisch', 'female'),
+('Lena', 'Die Strahlende, die Leuchtende', 'Griechisch', 'female'),
+('Marie', 'Die Widerspenstige', 'Hebräisch', 'female'),
+('Lea', 'Die Löwin', 'Hebräisch', 'female'),
+('Leonie', 'Die Löwin', 'Lateinisch', 'female'),
+('Charlotte', 'Die Freie', 'Französisch', 'female'),
+('Amelie', 'Die Tüchtige', 'Germanisch', 'female'),
+('Clara', 'Die Strahlende, die Berühmte', 'Lateinisch', 'female'),
+('Anna', 'Die Anmutige', 'Hebräisch', 'female'),
+('Luisa', 'Die Kämpferin', 'Germanisch', 'female'),
+('Johanna', 'Gott ist gnädig', 'Hebräisch', 'female'),
+('Laura', 'Die Lorbeergekrönte', 'Lateinisch', 'female'),
+('Nele', 'Die Strahlende', 'Friesisch', 'female'),
+('Ida', 'Die Fleißige', 'Germanisch', 'female'),
+('Lilly', 'Die Lilie', 'Lateinisch', 'female'),
+('Ella', 'Die Schöne', 'Germanisch', 'female'),
+('Sophia', 'Die Weise', 'Griechisch', 'female'),
+('Mathilda', 'Die mächtige Kämpferin', 'Germanisch', 'female'),
+('Mila', 'Die Liebe', 'Slawisch', 'female'),
+('Klara', 'Die Strahlende, die Berühmte', 'Lateinisch', 'female'),
+('Lara', 'Die Berühmte', 'Lateinisch', 'female'),
+('Lia', 'Die Anmutige', 'Hebräisch', 'female'),
+('Emily', 'Die Fleißige', 'Lateinisch', 'female'),
+('Frieda', 'Die Friedvolle', 'Germanisch', 'female'),
+('Greta', 'Die Perle', 'Germanisch', 'female'),
+('Amalia', 'Die Tüchtige', 'Germanisch', 'female'),
+('Antonia', 'Die Unschätzbare', 'Lateinisch', 'female'),
+('Bella', 'Die Schöne', 'Italienisch', 'female'),
+('Carla', 'Die Freie', 'Germanisch', 'female'),
+('Diana', 'Die Göttliche', 'Lateinisch', 'female'),
+('Elena', 'Die Strahlende', 'Griechisch', 'female'),
+('Fiona', 'Die Weiße', 'Gälisch', 'female'),
+('Giulia', 'Die Jugendliche', 'Lateinisch', 'female'),
+('Helena', 'Die Strahlende', 'Griechisch', 'female'),
+('Isabell', 'Gott ist Vollkommenheit', 'Hebräisch', 'female'),
+('Jasmin', 'Die Jasminblüte', 'Persisch', 'female'),
+('Katharina', 'Die Reine', 'Griechisch', 'female'),
+('Lotta', 'Die Freie', 'Germanisch', 'female'),
+('Maja', 'Die Große', 'Hebräisch', 'female'),
+('Nora', 'Die Ehrenvolle', 'Arabisch', 'female'),
+('Olivia', 'Die Friedvolle', 'Lateinisch', 'female'),
+('Paula', 'Die Kleine', 'Lateinisch', 'female'),
+('Rosa', 'Die Rose', 'Lateinisch', 'female'),
+('Sarah', 'Die Fürstin', 'Hebräisch', 'female'),
+('Theresa', 'Die Jägerin', 'Griechisch', 'female'),
+('Valentina', 'Die Starke', 'Lateinisch', 'female'),
+('Viktoria', 'Die Siegerin', 'Lateinisch', 'female'),
+('Zoe', 'Das Leben', 'Griechisch', 'female'),
+('Alina', 'Die Edle', 'Griechisch', 'female'),
+('Bianca', 'Die Weiße', 'Italienisch', 'female'),
+('Celina', 'Die Himmlische', 'Lateinisch', 'female'),
+('Daria', 'Die Besitzerin', 'Persisch', 'female'),
+('Elisa', 'Gott ist mein Eid', 'Hebräisch', 'female'),
+('Franka', 'Die Freie', 'Germanisch', 'female'),
+('Gina', 'Die Königliche', 'Italienisch', 'female'),
+('Hanna', 'Die Anmutige', 'Hebräisch', 'female'),
+('Ina', 'Die Reine', 'Germanisch', 'female'),
+('Julia', 'Die Jugendliche', 'Lateinisch', 'female'),
+('Karla', 'Die Freie', 'Germanisch', 'female'),
+('Leni', 'Die Strahlende', 'Griechisch', 'female'),
+('Marlene', 'Die Berühmte', 'Hebräisch', 'female'),
+('Nina', 'Die Anmutige', 'Russisch', 'female'),
+('Odette', 'Die Reiche', 'Germanisch', 'female'),
+('Patricia', 'Die Adlige', 'Lateinisch', 'female'),
+('Romy', 'Die Römerin', 'Lateinisch', 'female'),
+('Stella', 'Der Stern', 'Lateinisch', 'female'),
+('Tilda', 'Die mächtige Kämpferin', 'Germanisch', 'female'),
+('Uta', 'Die Reiche', 'Germanisch', 'female'),
+('Vera', 'Die Wahrhaftige', 'Russisch', 'female'),
+('Wilma', 'Die Entschlossene', 'Germanisch', 'female'),
+('Xenia', 'Die Gastfreundliche', 'Griechisch', 'female'),
+('Yvonne', 'Die Eibe', 'Germanisch', 'female'),
+('Zara', 'Die Prinzessin', 'Arabisch', 'female'),
+('Adele', 'Die Edle', 'Germanisch', 'female'),
+('Bettina', 'Die Göttliche', 'Hebräisch', 'female'),
+('Celine', 'Die Himmlische', 'Französisch', 'female'),
+('Dorothea', 'Geschenk Gottes', 'Griechisch', 'female'),
+('Eleonora', 'Gott ist mein Licht', 'Griechisch', 'female'),
+('Franziska', 'Die Freie', 'Lateinisch', 'female'),
+('Gabriela', 'Die Starke Gottes', 'Hebräisch', 'female'),
+('Heidi', 'Die Edle', 'Germanisch', 'female'),
+('Irene', 'Die Friedvolle', 'Griechisch', 'female'),
+('Josephine', 'Gott fügt hinzu', 'Hebräisch', 'female'),
+('Kira', 'Die Herrscherin', 'Persisch', 'female'),
+('Larissa', 'Die Fröhliche', 'Griechisch', 'female'),
+('Melina', 'Die Honigfarbene', 'Griechisch', 'female'),
+('Natalie', 'Die am Weihnachtstag Geborene', 'Lateinisch', 'female'),
+('Ophelia', 'Die Helferin', 'Griechisch', 'female'),
+('Paulina', 'Die Kleine', 'Lateinisch', 'female'),
+('Ronja', 'Die Friedvolle', 'Nordisch', 'female'),
+('Selina', 'Die Himmlische', 'Griechisch', 'female'),
+('Tabea', 'Die Gazelle', 'Aramäisch', 'female'),
+
+-- Unisex-Namen (50 Namen)
+('Alex', 'Der Beschützer', 'Griechisch', 'unisex'),
+('Charlie', 'Die Freie', 'Germanisch', 'unisex'),
+('Robin', 'Der Glänzende', 'Germanisch', 'unisex'),
+('Kim', 'Der Kühne', 'Englisch', 'unisex'),
+('Noel', 'Weihnachten', 'Französisch', 'unisex'),
+('Luca', 'Der Leuchtende', 'Italienisch', 'unisex'),
+('Mika', 'Wer ist wie Gott?', 'Hebräisch', 'unisex'),
+('Elia', 'Mein Gott ist Jahwe', 'Hebräisch', 'unisex'),
+('Jona', 'Taube', 'Hebräisch', 'unisex'),
+('Toni', 'Die Unschätzbare', 'Lateinisch', 'unisex'),
+('Jamie', 'Der Fersenschleicher', 'Hebräisch', 'unisex'),
+('Casey', 'Der Wachsame', 'Irisch', 'unisex'),
+('Jordan', 'Der Herabfließende', 'Hebräisch', 'unisex'),
+('Quinn', 'Der Weise', 'Irisch', 'unisex'),
+('Sascha', 'Der Beschützer', 'Griechisch', 'unisex'),
+('Taylor', 'Der Schneider', 'Englisch', 'unisex'),
+('Nico', 'Sieg des Volkes', 'Griechisch', 'unisex'),
+('Kaya', 'Der Ruhende', 'Türkisch', 'unisex'),
+('Alexis', 'Der Beschützer', 'Griechisch', 'unisex'),
+('Morgan', 'Der Meeresbewohner', 'Walisisch', 'unisex'),
+('Ari', 'Der Löwe', 'Hebräisch', 'unisex'),
+('Avery', 'Elfenherrscher', 'Altenglisch', 'unisex'),
+('Bailey', 'Amtmann', 'Englisch', 'unisex'),
+('Cameron', 'Die krumme Nase', 'Schottisch', 'unisex'),
+('Dakota', 'Freund, Verbündeter', 'Sioux', 'unisex'),
+('Eden', 'Wonne, Vergnügen', 'Hebräisch', 'unisex'),
+('Finley', 'Der helle Krieger', 'Schottisch', 'unisex'),
+('Gray', 'Der Graue', 'Englisch', 'unisex'),
+('Hayden', 'Der Heide', 'Altenglisch', 'unisex'),
+('Indigo', 'Indigoblau', 'Griechisch', 'unisex'),
+('Jesse', 'Geschenk', 'Hebräisch', 'unisex'),
+('Kai', 'Meer', 'Hawaiianisch', 'unisex'),
+('Lee', 'Beschützer', 'Altenglisch', 'unisex'),
+('Marley', 'Angenehme Wiese', 'Altenglisch', 'unisex'),
+('Neo', 'Der Neue', 'Griechisch', 'unisex'),
+('Oakley', 'Eichenwiese', 'Altenglisch', 'unisex'),
+('Parker', 'Parkwächter', 'Altenglisch', 'unisex'),
+('Reese', 'Begeisterung', 'Walisisch', 'unisex'),
+('Sage', 'Weise', 'Lateinisch', 'unisex'),
+('Tatum', 'Fröhlicher Bringer', 'Altenglisch', 'unisex'),
+('Uri', 'Mein Licht', 'Hebräisch', 'unisex'),
+('Val', 'Stark, gesund', 'Lateinisch', 'unisex'),
+('Winter', 'Die kalte Jahreszeit', 'Altenglisch', 'unisex'),
+('Xen', 'Gastfreundlich', 'Griechisch', 'unisex'),
+('Yael', 'Steinbock', 'Hebräisch', 'unisex'),
+('Zen', 'Meditation', 'Japanisch', 'unisex'),
+('Ash', 'Esche', 'Altenglisch', 'unisex'),
+('Blake', 'Dunkel, schwarz', 'Altenglisch', 'unisex'),
+('Corey', 'Aus der Höhlung', 'Gälisch', 'unisex'),
+('Drew', 'Starker Kämpfer', 'Griechisch', 'unisex');
+
+-- Erstelle eine Row Level Security Policy, damit alle Benutzer die Namen sehen können
+ALTER TABLE baby_names ENABLE ROW LEVEL SECURITY;
+
+-- Policy für Lesen (SELECT) - Alle können lesen
+CREATE POLICY "Anyone can view baby names"
+  ON baby_names
+  FOR SELECT
+  USING (true);
+
+-- Policy für Einfügen (INSERT) - Nur Administratoren können Namen hinzufügen
+CREATE POLICY "Only admins can add baby names"
+  ON baby_names
+  FOR INSERT
+  WITH CHECK (auth.uid() IN (
+    SELECT id FROM auth.users WHERE email = 'admin@example.com'
+  ));
+
+-- Policy für Aktualisieren (UPDATE) - Nur Administratoren können Namen aktualisieren
+CREATE POLICY "Only admins can update baby names"
+  ON baby_names
+  FOR UPDATE
+  USING (auth.uid() IN (
+    SELECT id FROM auth.users WHERE email = 'admin@example.com'
+  ));
+
+-- Policy für Löschen (DELETE) - Nur Administratoren können Namen löschen
+CREATE POLICY "Only admins can delete baby names"
+  ON baby_names
+  FOR DELETE
+  USING (auth.uid() IN (
+    SELECT id FROM auth.users WHERE email = 'admin@example.com'
+  ));

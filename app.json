@@ -1,0 +1,113 @@
+{
+  "expo": {
+    "name": "Lotti Baby",
+    "slug": "LottiBaby",
+    "version": "1.0.1",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "myapp",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+    "supportsTablet": true,
+    "bundleIdentifier": "com.LottiBaby.app",
+  "infoPlist": {
+    
+    "NSCalendarsUsageDescription": "Diese App benötigt Zugriff auf deinen Kalender, um Termine zu synchronisieren.",
+    "NSRemindersUsageDescription": "Diese App benötigt Zugriff auf deine Erinnerungen, um Termine zu synchronisieren.",
+
+    
+    "NSLocationWhenInUseUsageDescription": "Benötigt, um dir wetterbasierte Kleidungsempfehlungen für dein Baby anzuzeigen.",
+    "NSLocationAlwaysAndWhenInUseUsageDescription": "Benötigt, um dich bei Wetteränderungen auch im Hintergrund zu informieren.",
+
+    
+    "UIBackgroundModes": [
+      "processing",
+      "fetch",
+      "remote-notification"
+    ],
+    
+    "NSSupportsLiveActivities": true,
+    "NSSupportsLiveActivitiesFrequentUpdates": true,
+
+    
+    "BGTaskSchedulerPermittedIdentifiers": [
+      "com.LottiBaby.app.backgroundfetch"
+    ],
+
+    "ITSAppUsesNonExemptEncryption": false
+  }
+}
+,
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "permissions": [
+        "READ_CALENDAR",
+        "WRITE_CALENDAR",
+        "FOREGROUND_SERVICE",
+        "WAKE_LOCK",
+        "android.permission.READ_CALENDAR",
+        "android.permission.WRITE_CALENDAR",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.WAKE_LOCK"
+      ],
+      "package": "com.LottiBaby.app"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-calendar",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff"
+        }
+      ],
+      "expo-font",
+      "expo-web-browser",
+      "expo-background-fetch",
+      "expo-task-manager",
+      "expo-notifications",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification-icon.png",
+          "color": "#ffffff"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "d7120520-e4ff-4967-a797-627a2cb3680b"
+      }
+    },
+    "owner": "janzeppi",
+    "runtimeVersion": "1.0.0",
+    "updates": {
+      "url": "https://u.expo.dev/d7120520-e4ff-4967-a797-627a2cb3680b",
+      "enabled": true,
+      "fallbackToCacheTimeout": 0,
+      "checkAutomatically": "ON_LOAD",
+      "codeSigningMetadata": {
+        "alg": "rsa-v1_5-sha256",
+        "keyid": "main"
+      }
+    }
+  }
+}
