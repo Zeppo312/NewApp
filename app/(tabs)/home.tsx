@@ -189,8 +189,8 @@ export default function HomeScreen() {
           style={styles.liquidGlassBackground}
         >
           <ThemedView style={[styles.greetingContainer, styles.liquidGlassContainer]} 
-                     lightColor="rgba(255, 255, 255, 0.3)" 
-                     darkColor="rgba(255, 255, 255, 0.3)">
+                     lightColor="rgba(255, 255, 255, 0.45)" 
+                     darkColor="rgba(255, 255, 255, 0.35)">
             <View style={styles.greetingHeader}>
               <View>
                 <ThemedText style={[styles.greeting, styles.liquidGlassText, { color: colorScheme === 'dark' ? '#FFFFFF' : '#1a1a1a' }]}>
@@ -227,7 +227,7 @@ export default function HomeScreen() {
                            lightColor="rgba(157, 190, 187, 0.4)" 
                            darkColor="rgba(157, 190, 187, 0.3)">
                   <IconSymbol name="lightbulb.fill" size={20} color={colorScheme === 'dark' ? '#FFD700' : Colors.light.success} />
-                  <ThemedText style={[styles.tipText, styles.liquidGlassTipText]}>
+                  <ThemedText style={[styles.tipText, styles.liquidGlassTipText, { color: colorScheme === 'dark' ? 'rgba(255, 255, 255, 0.95)' : 'rgba(26, 26, 26, 0.9)' }]}>
                     {dailyTip}
                   </ThemedText>
                 </ThemedView>
@@ -256,8 +256,8 @@ export default function HomeScreen() {
           style={styles.liquidGlassBackground}
         >
                      <ThemedView style={[styles.summaryContainer, styles.liquidGlassContainer]} 
-                      lightColor="rgba(255, 255, 255, 0.3)" 
-                      darkColor="rgba(255, 255, 255, 0.3)">
+                      lightColor="rgba(255, 255, 255, 0.45)" 
+                      darkColor="rgba(255, 255, 255, 0.35)">
             <View style={styles.sectionTitleContainer}>
               <ThemedText style={[styles.sectionTitle, styles.liquidGlassText, { color: colorScheme === 'dark' ? '#FFFFFF' : '#1a1a1a' }]}>
                 Dein Tag im Überblick
@@ -653,12 +653,12 @@ const styles = StyleSheet.create({
 
   // Stats with Liquid Glass Enhancement
   liquidGlassStatItem: {
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     borderRadius: 16,
     padding: 16,
     marginHorizontal: 4,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.15)',
+    borderColor: 'rgba(255, 255, 255, 0.25)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
@@ -666,7 +666,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   liquidGlassStatIcon: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: 'rgba(255, 255, 255, 0.35)',
     borderRadius: 20,
     padding: 12,
     marginBottom: 8,
@@ -759,9 +759,9 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   liquidGlassIconContainer: {
-    backgroundColor: 'rgba(255, 255, 255, 0.6)',
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.4)',
+    borderColor: 'rgba(255, 255, 255, 0.6)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
