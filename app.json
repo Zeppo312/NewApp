@@ -8,6 +8,7 @@
     "scheme": "myapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "jsEngine": "hermes",
     "ios": {
     "supportsTablet": true,
     "bundleIdentifier": "com.LottiBaby.app",
@@ -54,7 +55,9 @@
         "android.permission.RECEIVE_BOOT_COMPLETED",
         "android.permission.WAKE_LOCK"
       ],
-      "package": "com.LottiBaby.app"
+      "package": "com.LottiBaby.app",
+      "enableHermes": true,
+      "enableProguardInReleaseBuilds": true
     },
     "web": {
       "bundler": "metro",
