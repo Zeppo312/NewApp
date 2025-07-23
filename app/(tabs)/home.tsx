@@ -189,8 +189,8 @@ export default function HomeScreen() {
           style={styles.liquidGlassBackground}
         >
           <ThemedView style={[styles.greetingContainer, styles.liquidGlassContainer]} 
-                     lightColor="rgba(255, 255, 255, 0.25)" 
-                     darkColor="rgba(0, 0, 0, 0.25)">
+                     lightColor="rgba(255, 255, 255, 0.45)" 
+                     darkColor="rgba(255, 255, 255, 0.15)">
             <View style={styles.greetingHeader}>
               <View>
                 <ThemedText style={[styles.greeting, styles.liquidGlassText, { color: colorScheme === 'dark' ? '#FFFFFF' : '#1a1a1a' }]}>
@@ -255,9 +255,9 @@ export default function HomeScreen() {
           tint={colorScheme === 'dark' ? 'dark' : 'light'} 
           style={styles.liquidGlassBackground}
         >
-          <ThemedView style={[styles.summaryContainer, styles.liquidGlassContainer]} 
-                     lightColor="rgba(255, 255, 255, 0.25)" 
-                     darkColor="rgba(0, 0, 0, 0.25)">
+                     <ThemedView style={[styles.summaryContainer, styles.liquidGlassContainer]} 
+                      lightColor="rgba(255, 255, 255, 0.45)" 
+                      darkColor="rgba(255, 255, 255, 0.15)">
             <View style={styles.sectionTitleContainer}>
               <ThemedText style={[styles.sectionTitle, styles.liquidGlassText]}>
                 Dein Tag im Überblick
@@ -319,9 +319,9 @@ export default function HomeScreen() {
               tint={colorScheme === 'dark' ? 'dark' : 'light'} 
               style={styles.liquidGlassCardBackground}
             >
-              <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(157, 190, 187, 0.6)' }]}>
+              <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(157, 190, 187, 0.5)' }]}>
                 <View style={[styles.iconContainer, styles.liquidGlassIconContainer]}>
-                  <IconSymbol name="cup.and.saucer.fill" size={40} color="#FFFFFF" />
+                  <IconSymbol name="cup.and.saucer.fill" size={28} color="#FFFFFF" />
                 </View>
                 <ThemedText style={[styles.cardTitle, styles.liquidGlassCardTitle]}>Mahlzeiten</ThemedText>
                 <ThemedText style={[styles.cardDescription, styles.liquidGlassCardDescription]}>Stillen & Füttern verwalten</ThemedText>
@@ -339,9 +339,9 @@ export default function HomeScreen() {
               tint={colorScheme === 'dark' ? 'dark' : 'light'} 
               style={styles.liquidGlassCardBackground}
             >
-              <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(233, 201, 182, 0.6)' }]}>
+              <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(233, 201, 182, 0.5)' }]}>
                 <View style={[styles.iconContainer, styles.liquidGlassIconContainer]}>
-                  <IconSymbol name="person.fill" size={40} color="#FFFFFF" />
+                  <IconSymbol name="person.fill" size={28} color="#FFFFFF" />
                 </View>
                 <ThemedText style={[styles.cardTitle, styles.liquidGlassCardTitle]}>Mein Baby</ThemedText>
                 <ThemedText style={[styles.cardDescription, styles.liquidGlassCardDescription]}>Alle Infos & Entwicklungen</ThemedText>
@@ -351,50 +351,86 @@ export default function HomeScreen() {
 
           {currentPhase && (
             <TouchableOpacity
-              style={[styles.card, { backgroundColor: 'rgba(125, 90, 80, 0.7)' }]}
+              style={styles.liquidGlassCardWrapper}
               onPress={() => router.push('/(tabs)/diary')}
+              activeOpacity={0.9}
             >
-              <View style={styles.iconContainer}>
-                <IconSymbol name="chart.bar.fill" size={40} color="#FFFFFF" />
-              </View>
-              <ThemedText style={styles.cardTitle}>Entwicklung</ThemedText>
-              <ThemedText style={styles.cardDescription}>
-                Phase {currentPhase.baby_development_phases?.phase_number || 1}
-              </ThemedText>
+              <BlurView 
+                intensity={70} 
+                tint={colorScheme === 'dark' ? 'dark' : 'light'} 
+                style={styles.liquidGlassCardBackground}
+              >
+                <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(125, 90, 80, 0.5)' }]}>
+                  <View style={[styles.iconContainer, styles.liquidGlassIconContainer]}>
+                    <IconSymbol name="chart.bar.fill" size={28} color="#FFFFFF" />
+                  </View>
+                  <ThemedText style={[styles.cardTitle, styles.liquidGlassCardTitle]}>Entwicklung</ThemedText>
+                  <ThemedText style={[styles.cardDescription, styles.liquidGlassCardDescription]}>
+                    Phase {currentPhase.baby_development_phases?.phase_number || 1}
+                  </ThemedText>
+                </View>
+              </BlurView>
             </TouchableOpacity>
           )}
 
           <TouchableOpacity
-            style={[styles.card, { backgroundColor: 'rgba(125, 90, 80, 0.7)' }]}
+            style={styles.liquidGlassCardWrapper}
             onPress={() => router.push('/(tabs)/daily_old')}
+            activeOpacity={0.9}
           >
-            <View style={styles.iconContainer}>
-              <IconSymbol name="list.bullet" size={40} color="#FFFFFF" />
-            </View>
-            <ThemedText style={styles.cardTitle}>Alltag</ThemedText>
-            <ThemedText style={styles.cardDescription}>Tagesaktivitäten verwalten</ThemedText>
+            <BlurView 
+              intensity={70} 
+              tint={colorScheme === 'dark' ? 'dark' : 'light'} 
+              style={styles.liquidGlassCardBackground}
+            >
+              <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(125, 90, 80, 0.5)' }]}>
+                <View style={[styles.iconContainer, styles.liquidGlassIconContainer]}>
+                  <IconSymbol name="list.bullet" size={28} color="#FFFFFF" />
+                </View>
+                <ThemedText style={[styles.cardTitle, styles.liquidGlassCardTitle]}>Alltag</ThemedText>
+                <ThemedText style={[styles.cardDescription, styles.liquidGlassCardDescription]}>Tagesaktivitäten verwalten</ThemedText>
+              </View>
+            </BlurView>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.card, { backgroundColor: 'rgba(255, 107, 107, 0.7)' }]}
+            style={styles.liquidGlassCardWrapper}
             onPress={() => router.push('/(tabs)/selfcare')}
+            activeOpacity={0.9}
           >
-            <View style={styles.iconContainer}>
-              <IconSymbol name="heart.fill" size={40} color="#FFFFFF" />
-            </View>
-            <ThemedText style={styles.cardTitle}>Mama Selfcare</ThemedText>
-            <ThemedText style={styles.cardDescription}>Nimm dir Zeit für dich</ThemedText>
+            <BlurView 
+              intensity={70} 
+              tint={colorScheme === 'dark' ? 'dark' : 'light'} 
+              style={styles.liquidGlassCardBackground}
+            >
+              <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(255, 107, 107, 0.5)' }]}>
+                <View style={[styles.iconContainer, styles.liquidGlassIconContainer]}>
+                  <IconSymbol name="heart.fill" size={28} color="#FFFFFF" />
+                </View>
+                <ThemedText style={[styles.cardTitle, styles.liquidGlassCardTitle]}>Mama Selfcare</ThemedText>
+                <ThemedText style={[styles.cardDescription, styles.liquidGlassCardDescription]}>Nimm dir Zeit für dich</ThemedText>
+              </View>
+            </BlurView>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.card, { backgroundColor: 'rgba(100, 150, 255, 0.7)' }]}
+            style={styles.liquidGlassCardWrapper}
             onPress={() => router.push('/(tabs)/babyweather')}
+            activeOpacity={0.9}
           >
-            <View style={styles.iconContainer}>
-              <IconSymbol name="cloud.sun.fill" size={40} color="#FFFFFF" />
-            </View>
-            <ThemedText style={styles.cardTitle}>Babywetter</ThemedText>
-            <ThemedText style={styles.cardDescription}>Aktuelle Wetterinfos</ThemedText>
+            <BlurView 
+              intensity={70} 
+              tint={colorScheme === 'dark' ? 'dark' : 'light'} 
+              style={styles.liquidGlassCardBackground}
+            >
+              <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(100, 150, 255, 0.5)' }]}>
+                <View style={[styles.iconContainer, styles.liquidGlassIconContainer]}>
+                  <IconSymbol name="cloud.sun.fill" size={28} color="#FFFFFF" />
+                </View>
+                <ThemedText style={[styles.cardTitle, styles.liquidGlassCardTitle]}>Babywetter</ThemedText>
+                <ThemedText style={[styles.cardDescription, styles.liquidGlassCardDescription]}>Aktuelle Wetterinfos</ThemedText>
+              </View>
+            </BlurView>
           </TouchableOpacity>
         </View>
       </View>
@@ -681,11 +717,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
+    alignItems: 'stretch',
   },
 
   // Liquid Glass Cards
   liquidGlassCardWrapper: {
-    width: '48%',
+    width: '32%',
     marginBottom: 16,
     borderRadius: 20,
     overflow: 'hidden',
@@ -696,8 +733,10 @@ const styles = StyleSheet.create({
   },
   card: {
     borderRadius: 20,
-    padding: 20,
+    padding: 16,
     alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 120,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.2)',
     shadowColor: '#000',
@@ -710,12 +749,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   iconContainer: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 8,
   },
   liquidGlassIconContainer: {
     backgroundColor: 'rgba(255, 255, 255, 0.25)',
@@ -728,9 +767,9 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   cardTitle: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: 'bold',
-    marginBottom: 6,
+    marginBottom: 4,
     textAlign: 'center',
   },
   liquidGlassCardTitle: {
@@ -739,9 +778,9 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
   },
   cardDescription: {
-    fontSize: 12,
+    fontSize: 11,
     textAlign: 'center',
-    lineHeight: 16,
+    lineHeight: 14,
   },
   liquidGlassCardDescription: {
     color: 'rgba(255, 255, 255, 0.8)',
