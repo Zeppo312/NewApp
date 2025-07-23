@@ -189,8 +189,8 @@ export default function HomeScreen() {
           style={styles.liquidGlassBackground}
         >
           <ThemedView style={[styles.greetingContainer, styles.liquidGlassContainer]} 
-                     lightColor="rgba(255, 255, 255, 0.5)" 
-                     darkColor="rgba(255, 255, 255, 0.5)">
+                     lightColor="rgba(255, 255, 255, 0.3)" 
+                     darkColor="rgba(255, 255, 255, 0.3)">
             <View style={styles.greetingHeader}>
               <View>
                 <ThemedText style={[styles.greeting, styles.liquidGlassText, { color: colorScheme === 'dark' ? '#FFFFFF' : '#1a1a1a' }]}>
@@ -256,8 +256,8 @@ export default function HomeScreen() {
           style={styles.liquidGlassBackground}
         >
                      <ThemedView style={[styles.summaryContainer, styles.liquidGlassContainer]} 
-                      lightColor="rgba(255, 255, 255, 0.5)" 
-                      darkColor="rgba(255, 255, 255, 0.5)">
+                      lightColor="rgba(255, 255, 255, 0.3)" 
+                      darkColor="rgba(255, 255, 255, 0.3)">
             <View style={styles.sectionTitleContainer}>
               <ThemedText style={[styles.sectionTitle, styles.liquidGlassText, { color: colorScheme === 'dark' ? '#FFFFFF' : '#1a1a1a' }]}>
                 Dein Tag im Überblick
