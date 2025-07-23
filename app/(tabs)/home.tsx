@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useCallback } from 'react';
 import { StyleSheet, ScrollView, View, TouchableOpacity, Text, SafeAreaView, StatusBar, Image, ActivityIndicator, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/ThemedText';
@@ -9,8 +9,7 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { getBabyInfo, getDiaryEntries, getCurrentPhase, getPhaseProgress, getMilestonesByPhase, getDailyEntries } from '@/lib/baby';
-import { supabase } from '@/lib/supabase';
+import { useUserProfile, useBabyData, useDiaryData, useDailySummary, useDailyTip, useOptimizedRefresh } from '@/hooks/useOptimizedData';
 
 // Tägliche Tipps für Mamas
 const dailyTips = [
@@ -33,104 +32,26 @@ export default function HomeScreen() {
   const { isBabyBorn } = useBabyStatus();
   const router = useRouter();
 
-  const [babyInfo, setBabyInfo] = useState<any>(null);
-  const [diaryEntries, setDiaryEntries] = useState<any[]>([]);
-  const [dailyEntries, setDailyEntries] = useState<any[]>([]);
-  const [currentPhase, setCurrentPhase] = useState<any>(null);
-  const [phaseProgress, setPhaseProgress] = useState<any>(null);
-  const [milestones, setMilestones] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [dailyTip, setDailyTip] = useState("");
-  const [userName, setUserName] = useState("");
-  const [refreshing, setRefreshing] = useState(false);
+  // Optimierte Hooks verwenden
+  const { profile, loading: profileLoading, refetch: refetchProfile } = useUserProfile();
+  const { babyInfo, currentPhase, phaseProgress, milestones, loading: babyLoading, refetch: refetchBaby } = useBabyData();
+  const { diaryEntries, dailyEntries, loading: diaryLoading, refetch: refetchDiary } = useDiaryData(5);
+  
+  // Memoized computations
+  const dailyTip = useDailyTip(dailyTips);
+  const dailyStats = useDailySummary(dailyEntries);
+  const userName = useMemo(() => profile?.first_name || 'Mama', [profile?.first_name]);
+  const isLoading = useMemo(() => profileLoading || babyLoading || diaryLoading, [profileLoading, babyLoading, diaryLoading]);
+  
+  // Optimized refresh
+  const { refreshing, onRefresh } = useOptimizedRefresh([
+    refetchProfile,
+    refetchBaby,
+    refetchDiary
+  ]);
 
-  useEffect(() => {
-    if (user) {
-      loadData();
-      // Wähle einen zufälligen Tipp für den Tag
-      const randomTip = dailyTips[Math.floor(Math.random() * dailyTips.length)];
-      setDailyTip(randomTip);
-    } else {
-      setIsLoading(false);
-    }
-  }, [user]);
-
-  // Funktion für Pull-to-Refresh
-  const onRefresh = async () => {
-    setRefreshing(true);
-    try {
-      // Lade die Daten neu
-      await loadData();
-      // Wähle einen neuen zufälligen Tipp
-      const randomTip = dailyTips[Math.floor(Math.random() * dailyTips.length)];
-      setDailyTip(randomTip);
-    } catch (error) {
-      console.error('Error during refresh:', error);
-    } finally {
-      setRefreshing(false);
-    }
-  };
-
-  const loadData = async () => {
-    try {
-      if (!refreshing) {
-        setIsLoading(true);
-      }
-
-      // Benutzernamen laden
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('first_name')
-        .eq('id', user?.id)
-        .single();
-
-      if (profileError) {
-        console.error('Error loading user profile:', profileError);
-      } else if (profileData && profileData.first_name) {
-        setUserName(profileData.first_name);
-      }
-
-      // Baby-Informationen laden
-      const { data: babyData } = await getBabyInfo();
-      setBabyInfo(babyData);
-
-      // Tagebucheinträge laden (nur die neuesten 5)
-      const { data: diaryData } = await getDiaryEntries();
-      if (diaryData) {
-        setDiaryEntries(diaryData.slice(0, 5));
-      }
-
-      // Alltags-Einträge für heute laden
-      const today = new Date();
-      const { data: dailyData } = await getDailyEntries(undefined, today);
-      if (dailyData) {
-        setDailyEntries(dailyData);
-      }
-
-      // Aktuelle Entwicklungsphase laden
-      const { data: phaseData } = await getCurrentPhase();
-      if (phaseData) {
-        setCurrentPhase(phaseData);
-
-        // Fortschritt für die aktuelle Phase berechnen
-        const { progress, completedCount, totalCount } = await getPhaseProgress(phaseData.phase_id);
-        setPhaseProgress({ progress, completedCount, totalCount });
-
-        // Meilensteine für die aktuelle Phase laden
-        const { data: milestonesData } = await getMilestonesByPhase(phaseData.phase_id);
-        if (milestonesData) {
-          setMilestones(milestonesData);
-        }
-      }
-    } catch (err) {
-      console.error('Failed to load home data:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Formatiere das aktuelle Datum
-  const formatDate = () => {
+  // Memoized helper functions
+  const formatDate = useMemo(() => {
     const options: Intl.DateTimeFormatOptions = {
       weekday: 'long',
       year: 'numeric',
@@ -138,57 +59,19 @@ export default function HomeScreen() {
       day: 'numeric'
     };
     return new Date().toLocaleDateString('de-DE', options);
-  };
+  }, []);
 
-  // Berechne die Anzahl der heutigen Mahlzeiten
-  const getTodayFeedings = () => {
-    return dailyEntries.filter(entry => entry.entry_type === 'feeding').length;
-  };
-
-  // Berechne die Anzahl der heutigen Windelwechsel
-  const getTodayDiaperChanges = () => {
-    return dailyEntries.filter(entry => entry.entry_type === 'diaper').length;
-  };
-
-  // Berechne die Anzahl der heutigen Einträge (für Referenz, wird nicht mehr angezeigt)
-  const getTodayEntries = () => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    return diaryEntries.filter(entry => {
-      const entryDate = new Date(entry.entry_date);
-      entryDate.setHours(0, 0, 0, 0);
-      return entryDate.getTime() === today.getTime();
-    }).length;
-  };
-
-  // Berechne die Anzahl der heute erreichten Meilensteine (für Referenz, wird nicht mehr angezeigt)
-  const getTodayMilestones = () => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    return milestones.filter(milestone => {
-      if (!milestone.completion_date) return false;
-      const completionDate = new Date(milestone.completion_date);
-      completionDate.setHours(0, 0, 0, 0);
-      return completionDate.getTime() === today.getTime();
-    }).length;
-  };
-
-  // Rendere den Begrüßungsbereich
-  const renderGreetingSection = () => {
-    // Verwende den Benutzernamen aus der profiles-Tabelle
-    const displayName = userName || 'Mama';
-
+  // Memoized render functions for better performance
+  const renderGreetingSection = useCallback(() => {
     return (
       <ThemedView style={styles.greetingContainer} lightColor={theme.cardLight} darkColor={theme.cardDark}>
         <View style={styles.greetingHeader}>
           <View>
             <ThemedText style={[styles.greeting, { color: colorScheme === 'dark' ? '#E9C9B6' : '#6b4c3b' }]}>
-              Hallo {displayName}!
+              Hallo {userName}!
             </ThemedText>
             <ThemedText style={styles.dateText}>
-              {formatDate()}
+              {formatDate}
             </ThemedText>
           </View>
 
@@ -214,13 +97,9 @@ export default function HomeScreen() {
         </ThemedView>
       </ThemedView>
     );
-  };
+  }, [userName, formatDate, babyInfo?.photo_url, dailyTip, theme, colorScheme]);
 
-  // Rendere die Tagesübersicht
-  const renderDailySummary = () => {
-    const todayFeedings = getTodayFeedings();
-    const todayDiaperChanges = getTodayDiaperChanges();
-
+  const renderDailySummary = useCallback(() => {
     return (
       <TouchableOpacity
         onPress={() => router.push('/(tabs)/daily_old')}
@@ -237,13 +116,13 @@ export default function HomeScreen() {
           <View style={styles.statsContainer}>
             <View style={styles.statItem}>
               <IconSymbol name="drop.fill" size={24} color="#FF9800" />
-              <ThemedText style={styles.statValue}>{todayFeedings}</ThemedText>
+              <ThemedText style={styles.statValue}>{dailyStats.todayFeedings}</ThemedText>
               <ThemedText style={styles.statLabel}>Mahlzeiten</ThemedText>
             </View>
 
             <View style={styles.statItem}>
               <IconSymbol name="heart.fill" size={24} color="#4CAF50" />
-              <ThemedText style={styles.statValue}>{todayDiaperChanges}</ThemedText>
+              <ThemedText style={styles.statValue}>{dailyStats.todayDiaperChanges}</ThemedText>
               <ThemedText style={styles.statLabel}>Windelwechsel</ThemedText>
             </View>
 
@@ -258,10 +137,9 @@ export default function HomeScreen() {
         </ThemedView>
       </TouchableOpacity>
     );
-  };
+  }, [router, theme, dailyStats, currentPhase, phaseProgress]);
 
-  // Rendere die Schnellzugriff-Karten
-  const renderQuickAccessCards = () => {
+  const renderQuickAccessCards = useCallback(() => {
     return (
       <View style={styles.cardsSection}>
         <ThemedText style={styles.cardsSectionTitle}>
@@ -341,7 +219,7 @@ export default function HomeScreen() {
         </View>
       </View>
     );
-  };
+  }, [router, currentPhase]);
 
   return (
     <ThemedBackground style={styles.backgroundImage}>

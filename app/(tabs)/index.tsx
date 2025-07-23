@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { StyleSheet, TouchableOpacity, ScrollView, Alert, View, StatusBar, SafeAreaView, ActivityIndicator, AppState, Platform, ImageBackground, RefreshControl } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
@@ -20,6 +20,7 @@ import {
   formatTime as formatBackgroundTime
 } from '@/lib/background-tasks';
 import Header from '@/components/Header';
+import { CacheManager } from '@/lib/optimizedDatabase';
 
 type Contraction = {
   id: string;
@@ -39,18 +40,67 @@ export default function HomeScreen() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncInfo, setSyncInfo] = useState<any>(null);
   const [linkedUsers, setLinkedUsers] = useState<any[]>([]);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const appState = useRef(AppState.currentState);
+  
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const { user } = useAuth();
-  const appState = useRef(AppState.currentState);
-  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Hilfsfunktion zur Generierung einer eindeutigen ID
-  const generateUniqueId = (): string => {
-    // Kombiniere Zeitstempel mit einer zufälligen Zahl für mehr Eindeutigkeit
+  // Memoized helper functions
+  const generateUniqueId = useCallback((): string => {
     return `${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
-  };
+  }, []);
+
+  // Optimized data loading with caching
+  const loadContractions = useCallback(async () => {
+    if (!user) {
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      const { data, error } = await getContractions();
+      
+      if (error) {
+        console.error('Error loading contractions:', error);
+        Alert.alert('Fehler', 'Wehen konnten nicht geladen werden.');
+      } else if (data) {
+        const formattedContractions: Contraction[] = data.map((item: any) => ({
+          id: item.id,
+          startTime: new Date(item.start_time),
+          endTime: item.end_time ? new Date(item.end_time) : null,
+          duration: item.duration,
+          interval: item.interval,
+          intensity: item.intensity
+        }));
+        setContractions(formattedContractions);
+      }
+    } catch (err) {
+      console.error('Failed to load contractions:', err);
+      Alert.alert('Fehler', 'Ein unerwarteter Fehler beim Laden der Wehen ist aufgetreten.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [user]);
+
+  // Optimized refresh function
+  const onRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      await Promise.all([
+        loadContractions(),
+        CacheManager.clearCache()
+      ]);
+    } catch (error) {
+      console.error('Error during refresh:', error);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [loadContractions]);
 
   // Initialize background tasks and notifications
   useEffect(() => {

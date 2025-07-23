@@ -92,6 +92,11 @@
     "experiments": {
       "typedRoutes": true
     },
+    "optimization": {
+      "asyncStorageStrategy": "batch",
+      "bundleSize": "minimal",
+      "preloadFonts": true
+    },
     "extra": {
       "router": {
         "origin": false

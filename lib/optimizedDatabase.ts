@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import OptimizedStorage from './optimizedStorage';
 
 // Cache configuration
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
@@ -23,7 +23,7 @@ class CacheManager {
       timestamp: Date.now(),
     };
     try {
-      await AsyncStorage.setItem(key, JSON.stringify(cacheEntry));
+      await OptimizedStorage.setObject(key, cacheEntry);
     } catch (error) {
       console.warn('Failed to cache data:', error);
     }
@@ -31,14 +31,13 @@ class CacheManager {
 
   private static async getCache<T>(key: string): Promise<T | null> {
     try {
-      const cached = await AsyncStorage.getItem(key);
-      if (!cached) return null;
+      const cacheEntry = await OptimizedStorage.getObject<CacheEntry<T>>(key);
+      if (!cacheEntry) return null;
 
-      const cacheEntry: CacheEntry<T> = JSON.parse(cached);
       const isExpired = Date.now() - cacheEntry.timestamp > CACHE_DURATION;
 
       if (isExpired) {
-        await AsyncStorage.removeItem(key);
+        await OptimizedStorage.removeItem(key);
         return null;
       }
 
@@ -52,7 +51,7 @@ class CacheManager {
   static async clearCache(): Promise<void> {
     try {
       const keys = Object.values(CACHE_KEYS);
-      await AsyncStorage.multiRemove(keys);
+      await OptimizedStorage.multiRemove(keys);
     } catch (error) {
       console.warn('Failed to clear cache:', error);
     }
@@ -131,7 +130,7 @@ class CacheManager {
   // Invalidate specific cache
   static async invalidateCache(key: string): Promise<void> {
     try {
-      await AsyncStorage.removeItem(key);
+      await OptimizedStorage.removeItem(key);
     } catch (error) {
       console.warn('Failed to invalidate cache:', error);
     }

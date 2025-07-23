@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { StyleSheet, View, SafeAreaView, StatusBar, TouchableOpacity, ScrollView, ActivityIndicator, Alert, RefreshControl, Platform, ToastAndroid, Animated } from 'react-native';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
@@ -16,6 +16,7 @@ import { pregnancyPartnerInfo } from '@/constants/PregnancyPartnerInfo';
 import { pregnancySymptoms } from '@/constants/PregnancySymptoms';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
+import { useUserProfile, useDailyTip, usePregnancyWeek, useOptimizedRefresh } from '@/hooks/useOptimizedData';
 
 // Tägliche Tipps für Schwangere
 const dailyTips = [
@@ -64,23 +65,54 @@ export default function PregnancyHomeScreen() {
   const { user } = useAuth();
   const { isBabyBorn, setIsBabyBorn } = useBabyStatus();
 
+  // Optimized hooks
+  const { profile, loading: profileLoading, refetch: refetchProfile } = useUserProfile();
+  const dailyTip = useDailyTip(dailyTips);
+
   const [dueDate, setDueDate] = useState<Date | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [userName, setUserName] = useState('');
-  const [currentWeek, setCurrentWeek] = useState<number | null>(null);
-  const [currentDay, setCurrentDay] = useState<number | null>(null);
   const [debugCounter, setDebugCounter] = useState<number>(0);
-  const [refreshing, setRefreshing] = useState(false);
 
   // Animation für Erfolgsmeldung
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const [updateSuccess, setUpdateSuccess] = useState(false);
 
+  // Memoized computations
+  const userName = useMemo(() => profile?.first_name || '', [profile?.first_name]);
+  const pregnancyWeekData = usePregnancyWeek(dueDate);
+  const { currentWeek, currentDay, isOverdue, overdueDays } = pregnancyWeekData;
+
+  // Optimized data loading
+  const loadUserData = useCallback(async () => {
+    if (!user) return;
+    
+    try {
+      setIsLoading(true);
+      const { data: dueDateData, error } = await getDueDateWithLinkedUsers();
+      
+      if (error) {
+        console.error('Error loading due date:', error);
+      } else if (dueDateData?.due_date) {
+        setDueDate(new Date(dueDateData.due_date));
+      }
+    } catch (err) {
+      console.error('Failed to load user data:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [user]);
+
+  // Optimized refresh
+  const { refreshing, onRefresh } = useOptimizedRefresh([
+    refetchProfile,
+    loadUserData
+  ]);
+
   useEffect(() => {
     if (user) {
       loadUserData();
     }
-  }, [user]);
+  }, [loadUserData]);
 
   // Hilfsfunktion zur Protokollierung mit Zeitstempel
   const logWithTimestamp = (message: string) => {
