@@ -189,8 +189,8 @@ export default function HomeScreen() {
           style={styles.liquidGlassBackground}
         >
           <ThemedView style={[styles.greetingContainer, styles.liquidGlassContainer]} 
-                     lightColor="rgba(255, 255, 255, 0.35)" 
-                     darkColor="rgba(255, 255, 255, 0.25)">
+                     lightColor="rgba(255, 255, 255, 0.25)" 
+                     darkColor="rgba(255, 255, 255, 0.2)">
             <View style={styles.greetingHeader}>
               <View>
                 <ThemedText style={[styles.greeting, styles.liquidGlassText, { color: colorScheme === 'dark' ? '#FFFFFF' : '#1a1a1a' }]}>
@@ -256,8 +256,8 @@ export default function HomeScreen() {
           style={styles.liquidGlassBackground}
         >
                      <ThemedView style={[styles.summaryContainer, styles.liquidGlassContainer]} 
-                      lightColor="rgba(255, 255, 255, 0.35)" 
-                      darkColor="rgba(255, 255, 255, 0.25)">
+                      lightColor="rgba(255, 255, 255, 0.25)" 
+                      darkColor="rgba(255, 255, 255, 0.2)">
             <View style={styles.sectionTitleContainer}>
               <ThemedText style={[styles.sectionTitle, styles.liquidGlassText, { color: colorScheme === 'dark' ? '#FFFFFF' : '#1a1a1a' }]}>
                 Dein Tag im Überblick
@@ -270,7 +270,7 @@ export default function HomeScreen() {
             <View style={styles.statsContainer}>
               <View style={[styles.statItem, styles.liquidGlassStatItem]}>
                 <View style={styles.liquidGlassStatIcon}>
-                  <IconSymbol name="drop.fill" size={24} color="#FF9800" />
+                  <IconSymbol name="drop.fill" size={18} color="#FF9800" />
                 </View>
                 <ThemedText style={[styles.statValue, styles.liquidGlassStatValue, { 
                   color: colorScheme === 'dark' ? '#FFFFFF' : '#1a1a1a',
@@ -283,7 +283,7 @@ export default function HomeScreen() {
 
               <View style={[styles.statItem, styles.liquidGlassStatItem]}>
                 <View style={styles.liquidGlassStatIcon}>
-                  <IconSymbol name="heart.fill" size={24} color="#4CAF50" />
+                  <IconSymbol name="heart.fill" size={18} color="#4CAF50" />
                 </View>
                 <ThemedText style={[styles.statValue, styles.liquidGlassStatValue, { 
                   color: colorScheme === 'dark' ? '#FFFFFF' : '#1a1a1a',
@@ -297,7 +297,7 @@ export default function HomeScreen() {
               {currentPhase && phaseProgress && (
                 <View style={[styles.statItem, styles.liquidGlassStatItem]}>
                   <View style={styles.liquidGlassStatIcon}>
-                    <IconSymbol name="moon.fill" size={24} color="#6366f1" />
+                    <IconSymbol name="moon.fill" size={18} color="#6366f1" />
                   </View>
                   <ThemedText style={[styles.statValue, styles.liquidGlassStatValue, { 
                     color: colorScheme === 'dark' ? '#FFFFFF' : '#1a1a1a',
@@ -522,7 +522,7 @@ const styles = StyleSheet.create({
   liquidGlassBackground: {
     borderRadius: 20,
     overflow: 'hidden',
-    backgroundColor: 'rgba(255, 255, 255, 0.4)', // Weißer für besseren Glaseffekt
+    backgroundColor: 'rgba(255, 255, 255, 0.25)', // Noch durchsichtiger
   },
   liquidGlassContainer: {
     borderRadius: 20,
@@ -682,9 +682,9 @@ const styles = StyleSheet.create({
   },
   liquidGlassStatIcon: {
     backgroundColor: 'rgba(255, 255, 255, 0.35)',
-    borderRadius: 20,
-    padding: 12,
-    marginBottom: 8,
+    borderRadius: 16,
+    padding: 8,
+    marginBottom: 12,
     alignSelf: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
@@ -694,7 +694,7 @@ const styles = StyleSheet.create({
   },
   liquidGlassStatValue: {
     color: 'rgba(255, 255, 255, 0.95)',
-    fontSize: 34,
+    fontSize: 28,
     fontWeight: '900',
     textAlign: 'center',
     letterSpacing: -1,
