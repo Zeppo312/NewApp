@@ -189,8 +189,8 @@ export default function HomeScreen() {
           style={styles.liquidGlassBackground}
         >
           <ThemedView style={[styles.greetingContainer, styles.liquidGlassContainer]} 
-                     lightColor="rgba(255, 255, 255, 0.45)" 
-                     darkColor="rgba(255, 255, 255, 0.35)">
+                     lightColor="rgba(255, 255, 255, 0.35)" 
+                     darkColor="rgba(255, 255, 255, 0.25)">
             <View style={styles.greetingHeader}>
               <View>
                 <ThemedText style={[styles.greeting, styles.liquidGlassText, { color: colorScheme === 'dark' ? '#FFFFFF' : '#1a1a1a' }]}>
@@ -256,8 +256,8 @@ export default function HomeScreen() {
           style={styles.liquidGlassBackground}
         >
                      <ThemedView style={[styles.summaryContainer, styles.liquidGlassContainer]} 
-                      lightColor="rgba(255, 255, 255, 0.45)" 
-                      darkColor="rgba(255, 255, 255, 0.35)">
+                      lightColor="rgba(255, 255, 255, 0.35)" 
+                      darkColor="rgba(255, 255, 255, 0.25)">
             <View style={styles.sectionTitleContainer}>
               <ThemedText style={[styles.sectionTitle, styles.liquidGlassText, { color: colorScheme === 'dark' ? '#FFFFFF' : '#1a1a1a' }]}>
                 Dein Tag im Überblick
@@ -272,7 +272,12 @@ export default function HomeScreen() {
                 <View style={styles.liquidGlassStatIcon}>
                   <IconSymbol name="drop.fill" size={24} color="#FF9800" />
                 </View>
-                <ThemedText style={[styles.statValue, styles.liquidGlassStatValue, { color: colorScheme === 'dark' ? '#FFFFFF' : '#1a1a1a' }]}>{todayFeedings}</ThemedText>
+                <ThemedText style={[styles.statValue, styles.liquidGlassStatValue, { 
+                  color: colorScheme === 'dark' ? '#FFFFFF' : '#1a1a1a',
+                  textShadowColor: colorScheme === 'dark' ? 'rgba(0, 0, 0, 0.5)' : 'rgba(255, 255, 255, 0.8)',
+                  textShadowOffset: { width: 0, height: 1 },
+                  textShadowRadius: 2,
+                }]}>{todayFeedings}</ThemedText>
                 <ThemedText style={[styles.statLabel, styles.liquidGlassStatLabel, { color: colorScheme === 'dark' ? 'rgba(255, 255, 255, 0.85)' : 'rgba(26, 26, 26, 0.85)' }]}>Essen</ThemedText>
               </View>
 
@@ -280,7 +285,12 @@ export default function HomeScreen() {
                 <View style={styles.liquidGlassStatIcon}>
                   <IconSymbol name="heart.fill" size={24} color="#4CAF50" />
                 </View>
-                <ThemedText style={[styles.statValue, styles.liquidGlassStatValue, { color: colorScheme === 'dark' ? '#FFFFFF' : '#1a1a1a' }]}>{todayDiaperChanges}</ThemedText>
+                <ThemedText style={[styles.statValue, styles.liquidGlassStatValue, { 
+                  color: colorScheme === 'dark' ? '#FFFFFF' : '#1a1a1a',
+                  textShadowColor: colorScheme === 'dark' ? 'rgba(0, 0, 0, 0.5)' : 'rgba(255, 255, 255, 0.8)',
+                  textShadowOffset: { width: 0, height: 1 },
+                  textShadowRadius: 2,
+                }]}>{todayDiaperChanges}</ThemedText>
                 <ThemedText style={[styles.statLabel, styles.liquidGlassStatLabel, { color: colorScheme === 'dark' ? 'rgba(255, 255, 255, 0.85)' : 'rgba(26, 26, 26, 0.85)' }]}>Windeln</ThemedText>
               </View>
 
@@ -289,7 +299,12 @@ export default function HomeScreen() {
                   <View style={styles.liquidGlassStatIcon}>
                     <IconSymbol name="moon.fill" size={24} color="#6366f1" />
                   </View>
-                  <ThemedText style={[styles.statValue, styles.liquidGlassStatValue, { color: colorScheme === 'dark' ? '#FFFFFF' : '#1a1a1a' }]}>0m</ThemedText>
+                  <ThemedText style={[styles.statValue, styles.liquidGlassStatValue, { 
+                    color: colorScheme === 'dark' ? '#FFFFFF' : '#1a1a1a',
+                    textShadowColor: colorScheme === 'dark' ? 'rgba(0, 0, 0, 0.5)' : 'rgba(255, 255, 255, 0.8)',
+                    textShadowOffset: { width: 0, height: 1 },
+                    textShadowRadius: 2,
+                  }]}>0m</ThemedText>
                   <ThemedText style={[styles.statLabel, styles.liquidGlassStatLabel, { color: colorScheme === 'dark' ? 'rgba(255, 255, 255, 0.85)' : 'rgba(26, 26, 26, 0.85)' }]}>Schlaf</ThemedText>
                 </View>
               )}
@@ -507,7 +522,7 @@ const styles = StyleSheet.create({
   liquidGlassBackground: {
     borderRadius: 20,
     overflow: 'hidden',
-    backgroundColor: 'rgba(255, 255, 255, 0.2)', // 80% durchsichtig (20% Opazität)
+    backgroundColor: 'rgba(255, 255, 255, 0.4)', // Weißer für besseren Glaseffekt
   },
   liquidGlassContainer: {
     borderRadius: 20,
@@ -653,12 +668,12 @@ const styles = StyleSheet.create({
 
   // Stats with Liquid Glass Enhancement
   liquidGlassStatItem: {
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
     borderRadius: 16,
     padding: 16,
     marginHorizontal: 4,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.25)',
+    borderColor: 'rgba(255, 255, 255, 0.4)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
@@ -679,10 +694,13 @@ const styles = StyleSheet.create({
   },
   liquidGlassStatValue: {
     color: 'rgba(255, 255, 255, 0.95)',
-    fontSize: 32,
-    fontWeight: '800',
+    fontSize: 34,
+    fontWeight: '900',
     textAlign: 'center',
     letterSpacing: -1,
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   liquidGlassStatLabel: {
     color: 'rgba(255, 255, 255, 0.85)',
