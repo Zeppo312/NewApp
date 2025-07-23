@@ -189,8 +189,8 @@ export default function HomeScreen() {
           style={styles.liquidGlassBackground}
         >
           <ThemedView style={[styles.greetingContainer, styles.liquidGlassContainer]} 
-                     lightColor="rgba(255, 255, 255, 0.85)" 
-                     darkColor="rgba(255, 255, 255, 0.3)">
+                     lightColor="rgba(255, 255, 255, 0.5)" 
+                     darkColor="rgba(255, 255, 255, 0.2)">
             <View style={styles.greetingHeader}>
               <View>
                 <ThemedText style={[styles.greeting, styles.liquidGlassText, { color: colorScheme === 'dark' ? '#FFFFFF' : '#1a1a1a' }]}>
@@ -256,8 +256,8 @@ export default function HomeScreen() {
           style={styles.liquidGlassBackground}
         >
                      <ThemedView style={[styles.summaryContainer, styles.liquidGlassContainer]} 
-                      lightColor="rgba(255, 255, 255, 0.85)" 
-                      darkColor="rgba(255, 255, 255, 0.3)">
+                      lightColor="rgba(255, 255, 255, 0.5)" 
+                      darkColor="rgba(255, 255, 255, 0.2)">
             <View style={styles.sectionTitleContainer}>
               <ThemedText style={[styles.sectionTitle, styles.liquidGlassText]}>
                 Dein Tag im Überblick
@@ -319,7 +319,7 @@ export default function HomeScreen() {
               tint={colorScheme === 'dark' ? 'dark' : 'light'} 
               style={styles.liquidGlassCardBackground}
             >
-              <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(157, 190, 187, 0.3)' }]}>
+              <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(157, 190, 187, 0.2)' }]}>
                 <View style={[styles.iconContainer, styles.liquidGlassIconContainer]}>
                   <IconSymbol name="cup.and.saucer.fill" size={24} color="#FFFFFF" />
                 </View>
@@ -339,7 +339,7 @@ export default function HomeScreen() {
               tint={colorScheme === 'dark' ? 'dark' : 'light'} 
               style={styles.liquidGlassCardBackground}
             >
-              <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(233, 201, 182, 0.3)' }]}>
+              <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(233, 201, 182, 0.2)' }]}>
                 <View style={[styles.iconContainer, styles.liquidGlassIconContainer]}>
                   <IconSymbol name="person.fill" size={24} color="#FFFFFF" />
                 </View>
@@ -360,7 +360,7 @@ export default function HomeScreen() {
                 tint={colorScheme === 'dark' ? 'dark' : 'light'} 
                 style={styles.liquidGlassCardBackground}
               >
-                <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(125, 90, 80, 0.3)' }]}>
+                <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(125, 90, 80, 0.2)' }]}>
                   <View style={[styles.iconContainer, styles.liquidGlassIconContainer]}>
                     <IconSymbol name="chart.bar.fill" size={24} color="#FFFFFF" />
                   </View>
@@ -383,7 +383,7 @@ export default function HomeScreen() {
               tint={colorScheme === 'dark' ? 'dark' : 'light'} 
               style={styles.liquidGlassCardBackground}
             >
-              <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(125, 90, 80, 0.3)' }]}>
+              <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(125, 90, 80, 0.2)' }]}>
                 <View style={[styles.iconContainer, styles.liquidGlassIconContainer]}>
                   <IconSymbol name="list.bullet" size={24} color="#FFFFFF" />
                 </View>
@@ -403,7 +403,7 @@ export default function HomeScreen() {
               tint={colorScheme === 'dark' ? 'dark' : 'light'} 
               style={styles.liquidGlassCardBackground}
             >
-              <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(255, 107, 107, 0.3)' }]}>
+              <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(255, 107, 107, 0.2)' }]}>
                 <View style={[styles.iconContainer, styles.liquidGlassIconContainer]}>
                   <IconSymbol name="heart.fill" size={24} color="#FFFFFF" />
                 </View>
@@ -423,7 +423,7 @@ export default function HomeScreen() {
               tint={colorScheme === 'dark' ? 'dark' : 'light'} 
               style={styles.liquidGlassCardBackground}
             >
-              <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(100, 150, 255, 0.3)' }]}>
+              <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(100, 150, 255, 0.2)' }]}>
                 <View style={[styles.iconContainer, styles.liquidGlassIconContainer]}>
                   <IconSymbol name="cloud.sun.fill" size={24} color="#FFFFFF" />
                 </View>
@@ -507,7 +507,7 @@ const styles = StyleSheet.create({
   liquidGlassBackground: {
     borderRadius: 20,
     overflow: 'hidden',
-    backgroundColor: 'rgba(255, 255, 255, 0.6)', // Weißer, wie im Screenshot
+    backgroundColor: 'rgba(255, 255, 255, 0.3)', // Transparenter
   },
   liquidGlassContainer: {
     borderRadius: 20,
@@ -740,7 +740,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: 150,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.4)',
+    borderColor: 'rgba(255, 255, 255, 0.2)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
@@ -759,9 +759,9 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   liquidGlassIconContainer: {
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    backgroundColor: 'rgba(255, 255, 255, 0.6)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.5)',
+    borderColor: 'rgba(255, 255, 255, 0.4)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
