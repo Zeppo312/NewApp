@@ -9,6 +9,7 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { TablerIcon } from '@/components/ui/TablerIcon';
 import { getBabyInfo, getDiaryEntries, getCurrentPhase, getPhaseProgress, getMilestonesByPhase, getDailyEntries } from '@/lib/baby';
 import { supabase } from '@/lib/supabase';
 import { BlurView } from 'expo-blur';
@@ -270,7 +271,7 @@ export default function HomeScreen() {
             <View style={styles.statsContainer}>
               <View style={[styles.statItem, styles.liquidGlassStatItem]}>
                 <View style={styles.liquidGlassStatIcon}>
-                  <Text style={{ fontSize: 30 }}>🥄</Text>
+                  <TablerIcon name="tools-kitchen-2" size={28} color="rgba(168, 196, 193, 0.9)" />
                 </View>
                 <ThemedText style={[styles.statValue, styles.liquidGlassStatValue, { 
                   color: '#000000',
@@ -283,7 +284,7 @@ export default function HomeScreen() {
 
               <View style={[styles.statItem, styles.liquidGlassStatItem]}>
                 <View style={styles.liquidGlassStatIcon}>
-                  <Text style={{ fontSize: 30 }}>💩</Text>
+                  <TablerIcon name="diaper" size={28} color="rgba(255, 215, 180, 0.9)" />
                 </View>
                 <ThemedText style={[styles.statValue, styles.liquidGlassStatValue, { 
                   color: '#000000',
@@ -297,7 +298,7 @@ export default function HomeScreen() {
               {currentPhase && phaseProgress && (
                 <View style={[styles.statItem, styles.liquidGlassStatItem]}>
                   <View style={styles.liquidGlassStatIcon}>
-                    <Text style={{ fontSize: 30 }}>🛏️</Text>
+                    <TablerIcon name="bed" size={28} color="rgba(220, 200, 255, 0.9)" />
                   </View>
                   <ThemedText style={[styles.statValue, styles.liquidGlassStatValue, { 
                     color: '#000000',
@@ -515,37 +516,39 @@ const styles = StyleSheet.create({
   // Liquid Glass styles - Core Components
   liquidGlassWrapper: {
     position: 'relative',
-    marginBottom: 20,
-    borderRadius: 20,
+    marginBottom: 16,
+    borderRadius: 22,
     overflow: 'hidden',
   },
   liquidGlassBackground: {
-    borderRadius: 20,
+    borderRadius: 22,
     overflow: 'hidden',
     backgroundColor: 'rgba(255, 255, 255, 0.25)', // Noch durchsichtiger
   },
   liquidGlassContainer: {
-    borderRadius: 20,
+    borderRadius: 22,
     backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 14,
     elevation: 8,
   },
 
   // Begrüßungsbereich - Liquid Glass Design
   greetingContainer: {
-    padding: 24,
+    paddingTop: 24,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
     backgroundColor: 'transparent',
   },
   greetingHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 12,
   },
   greeting: {
     fontSize: 28,
@@ -588,25 +591,25 @@ const styles = StyleSheet.create({
 
   // Tip Container - Enhanced Liquid Glass
   tipContainerWrapper: {
-    marginTop: 16,
-    borderRadius: 16,
+    marginTop: 12,
+    borderRadius: 18,
     overflow: 'hidden',
     backgroundColor: 'rgba(168, 196, 193, 0.45)',
   },
   tipContainerBlur: {
-    borderRadius: 16,
+    borderRadius: 18,
     overflow: 'hidden',
   },
   tipContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
+    padding: 14,
     backgroundColor: 'transparent',
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.4)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
   },
   liquidGlassTipContainer: {
-    borderRadius: 16,
+    borderRadius: 18,
   },
   tipText: {
     fontSize: 14,
@@ -621,14 +624,14 @@ const styles = StyleSheet.create({
 
   // Tagesübersicht - Liquid Glass Design
   summaryContainer: {
-    padding: 24,
+    padding: 20,
     backgroundColor: 'transparent',
   },
   sectionTitleContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 16,
   },
   sectionTitle: {
     fontSize: 20,
@@ -671,34 +674,37 @@ const styles = StyleSheet.create({
   // Stats with Liquid Glass Enhancement
   liquidGlassStatItem: {
     backgroundColor: 'rgba(255, 255, 255, 0.28)',
-    borderRadius: 16,
-    padding: 16,
-    marginHorizontal: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+    borderRadius: 18,
+    padding: 12,
+    marginHorizontal: 6,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
-    minHeight: 95,
-    justifyContent: 'space-between',
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 5,
+    minHeight: 85,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   liquidGlassStatIcon: {
-    backgroundColor: 'rgba(255, 255, 255, 0.25)',
-    borderRadius: 20,
-    padding: 10,
-    marginBottom: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    borderRadius: 25,
+    padding: 12,
+    marginBottom: 8,
     alignSelf: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 6,
     width: 50,
     height: 50,
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.9)',
   },
   liquidGlassStatValue: {
     color: 'rgba(255, 255, 255, 0.95)',
@@ -734,12 +740,12 @@ const styles = StyleSheet.create({
 
   // Quick Access Cards Section
   cardsSection: {
-    marginBottom: 20,
+    marginBottom: 16,
   },
   cardsSectionTitle: {
     fontSize: 20,
     fontWeight: '700',
-    marginBottom: 20,
+    marginBottom: 16,
     textAlign: 'center',
     color: 'rgba(85, 60, 55, 0.95)',
     letterSpacing: -0.3,
@@ -754,27 +760,27 @@ const styles = StyleSheet.create({
   // Liquid Glass Cards
   liquidGlassCardWrapper: {
     width: '48%',
-    marginBottom: 16,
-    borderRadius: 20,
+    marginBottom: 14,
+    borderRadius: 22,
     overflow: 'hidden',
   },
   liquidGlassCardBackground: {
-    borderRadius: 20,
+    borderRadius: 22,
     overflow: 'hidden',
   },
   card: {
-    borderRadius: 20,
-    padding: 16,
+    borderRadius: 22,
+    padding: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 150,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.15)',
+    minHeight: 140,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    elevation: 4,
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 5,
   },
   liquidGlassCard: {
     backgroundColor: 'transparent',
