@@ -770,3 +770,57 @@ export const calculateDailyStats = (entries: DailyEntry[]) => {
 
   return stats;
 };
+
+// Neue Funktion für Feeding Events
+export interface FeedingEvent {
+  id?: string;
+  user_id?: string;
+  baby_id?: string;
+  type: 'breast' | 'bottle' | 'solids';
+  start_time: string;
+  end_time?: string;
+  volume_ml?: number;
+  side?: 'left' | 'right' | 'both';
+  note?: string;
+}
+
+export const saveFeedingEvent = async (feedingData: FeedingEvent) => {
+  try {
+    const userData = await supabase.auth.getUser();
+    if (!userData.data.user) {
+      return { data: null, error: new Error('User not authenticated') };
+    }
+
+    // Get current baby_id from user profile or use a default
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('baby_id')
+      .eq('id', userData.data.user.id)
+      .single();
+
+    const payload = {
+      ...feedingData,
+      user_id: userData.data.user.id,
+      baby_id: profile?.baby_id || userData.data.user.id, // fallback to user_id
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    const { data, error } = await supabase
+      .from('feeding_events')
+      .insert([payload])
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error saving feeding event:', error);
+      return { data: null, error };
+    }
+
+    console.log('Feeding event saved successfully:', data);
+    return { data, error: null };
+  } catch (err) {
+    console.error('Failed to save feeding event:', err);
+    return { data: null, error: err };
+  }
+};
