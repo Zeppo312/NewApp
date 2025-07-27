@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, TouchableOpacity, Alert, SafeAreaView, StatusBar, FlatList, RefreshControl, ScrollView, Dimensions } from 'react-native';
+import { StyleSheet, View, TouchableOpacity, Alert, SafeAreaView, StatusBar, FlatList, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/ThemedText';
 import { Colors } from '@/constants/Colors';
@@ -9,13 +9,18 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { getDailyEntries, saveDailyEntry, deleteDailyEntry, DailyEntry } from '@/lib/baby';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import ActivitySelector from '@/components/ActivitySelector';
 import ActivityInputModal from '@/components/ActivityInputModal';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import TimelineView from '@/components/TimelineView';
+import ActivityCard from '@/components/ActivityCard';
+import WeekScroller from '@/components/WeekScroller';
+import ViewDropdown from '@/components/ViewDropdown';
+import EmptyState from '@/components/EmptyState';
+import DailySummary from '@/components/DailySummary';
 import { syncAllExistingDailyEntries } from '@/lib/syncDailyEntries';
 import { subscribeToDailyEntries } from '@/lib/realtime';
-import { BlurView } from 'expo-blur';
-
-const { width: screenWidth } = Dimensions.get('window');
+import Header from '@/components/Header';
 
 export default function DailyOldScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -28,21 +33,21 @@ export default function DailyOldScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
+  // Filtertabs wurden entfernt
 
-  // State for activity input modal
+  // State for activity selector and modal
+  const [showActivitySelector, setShowActivitySelector] = useState(false);
   const [showInputModal, setShowInputModal] = useState(false);
   const [selectedActivityType, setSelectedActivityType] = useState<'feeding' | 'diaper' | 'other'>('feeding');
 
-  // State für Zeitraum-Selektor
-  const [timeRange, setTimeRange] = useState<'Tag' | 'Woche' | 'Monat'>('Tag');
-
-  // State für Quick Actions Pager
-  const [activeQuickActionPage, setActiveQuickActionPage] = useState(0);
+  // State für die verschiedenen Ansichten
+  const [viewType, setViewType] = useState<'day' | 'timeline' | 'week'>('day');
 
   // useEffect für das Laden der Einträge bei Änderung des Datums
   useEffect(() => {
     if (user) {
       loadEntries();
+      // Synchronisiere Alltag-Einträge beim Laden der Seite
       syncDailyEntries();
     } else {
       setIsLoading(false);
@@ -54,11 +59,16 @@ export default function DailyOldScreen() {
     let unsubscribe: (() => void) | null = null;
 
     if (user) {
+      // Abonniere Änderungen an der baby_daily Tabelle
       unsubscribe = subscribeToDailyEntries(
         user.id,
+        // Callback für neue Einträge
         (payload) => {
           console.log('New daily entry received:', payload);
+          // Lade die Einträge neu, wenn ein neuer Eintrag hinzugefügt wurde
           loadEntries();
+
+          // Zeige eine Benachrichtigung, wenn der Eintrag von einem anderen Benutzer stammt
           if (payload.new && payload.new.user_id !== user.id) {
             Alert.alert(
               'Neuer Eintrag',
@@ -67,17 +77,22 @@ export default function DailyOldScreen() {
             );
           }
         },
+        // Callback für aktualisierte Einträge
         (payload) => {
           console.log('Daily entry updated:', payload);
+          // Lade die Einträge neu, wenn ein Eintrag aktualisiert wurde
           loadEntries();
         },
+        // Callback für gelöschte Einträge
         (payload) => {
           console.log('Daily entry deleted:', payload);
+          // Lade die Einträge neu, wenn ein Eintrag gelöscht wurde
           loadEntries();
         }
       );
     }
 
+    // Cleanup-Funktion
     return () => {
       if (unsubscribe) {
         unsubscribe();
@@ -85,6 +100,7 @@ export default function DailyOldScreen() {
     };
   }, [user]);
 
+  // Synchronisiere Alltag-Einträge mit verbundenen Nutzern
   const syncDailyEntries = async () => {
     try {
       console.log('Starting daily entries sync...');
@@ -94,7 +110,10 @@ export default function DailyOldScreen() {
       console.log('Daily entries sync result:', result);
 
       if (result.success) {
+        // Wenn Einträge synchronisiert wurden, lade die Einträge neu
         loadEntries();
+
+        // Zeige Erfolgsmeldung, wenn Einträge synchronisiert wurden
         if (result.syncedCount && result.syncedCount > 0) {
           const linkedUserNames = result.linkedUsers
             .map((user: any) => user.firstName)
@@ -113,11 +132,15 @@ export default function DailyOldScreen() {
     }
   };
 
+
+
+  // Funktion zum Laden der Einträge
   const loadEntries = async () => {
     try {
       setIsLoading(true);
       console.log('Loading entries for date:', selectedDate);
 
+      // Keine Filterung nach Typ mehr
       const { data, error } = await getDailyEntries(undefined, selectedDate);
       if (error) {
         console.error('Error loading daily entries:', error);
@@ -129,14 +152,17 @@ export default function DailyOldScreen() {
       console.error('Failed to load daily entries:', err);
     } finally {
       setIsLoading(false);
-      setRefreshing(false);
+      setRefreshing(false); // Beende das Refreshing, wenn die Daten geladen sind
     }
   };
 
+  // Funktion für Pull-to-Refresh
   const onRefresh = async () => {
     setRefreshing(true);
     try {
+      // Synchronisiere Alltag-Einträge
       await syncDailyEntries();
+      // Lade die Einträge neu
       await loadEntries();
     } catch (error) {
       console.error('Error during refresh:', error);
@@ -152,6 +178,7 @@ export default function DailyOldScreen() {
     duration: number;
   }) => {
     try {
+      // Create a new entry with the current date
       const newEntry: DailyEntry = {
         entry_date: selectedDate.toISOString(),
         entry_type: entryData.entry_type,
@@ -165,7 +192,11 @@ export default function DailyOldScreen() {
         console.error('Error saving daily entry:', error);
         Alert.alert('Fehler', 'Der Eintrag konnte nicht gespeichert werden.');
       } else {
+        // Zeige Erfolgsmeldung
         Alert.alert('Erfolg', 'Eintrag erfolgreich gespeichert.');
+
+        // Lade die Einträge neu
+        // Hinweis: Die Echtzeit-Funktionalität wird automatisch den Eintrag bei allen verbundenen Benutzern aktualisieren
         loadEntries();
       }
     } catch (err) {
@@ -193,7 +224,11 @@ export default function DailyOldScreen() {
                 console.error('Error deleting daily entry:', error);
                 Alert.alert('Fehler', 'Der Eintrag konnte nicht gelöscht werden.');
               } else {
+                // Zeige Erfolgsmeldung
                 Alert.alert('Erfolg', 'Eintrag erfolgreich gelöscht.');
+
+                // Lade die Einträge neu
+                // Hinweis: Die Echtzeit-Funktionalität wird automatisch den Eintrag bei allen verbundenen Benutzern aktualisieren
                 loadEntries();
               }
             }
@@ -213,221 +248,102 @@ export default function DailyOldScreen() {
     }
   };
 
-  // Quick Action Handler
-  const handleQuickAction = (type: 'feeding' | 'diaper' | 'other', subType?: string) => {
+  // Handler für Ansichtswechsel
+  const handleViewChange = (newViewType: 'day' | 'timeline' | 'week') => {
+    setViewType(newViewType);
+  };
+
+  // Handle activity selection
+  const handleActivitySelect = (type: 'feeding' | 'diaper' | 'other') => {
     setSelectedActivityType(type);
+    setShowActivitySelector(false);
     setShowInputModal(true);
   };
 
-  // Berechne Statistiken
-  const getStatistics = () => {
-    const today = new Date();
-    const todayEntries = entries.filter(entry => {
-      if (!entry.entry_date) return false;
-      const entryDate = new Date(entry.entry_date);
-      return entryDate.toDateString() === today.toDateString();
-    });
-
-    const feedingCount = todayEntries.filter(entry => entry.entry_type === 'feeding').length;
-    const diaperCount = todayEntries.filter(entry => entry.entry_type === 'diaper').length;
-
-    const lastDiaper = todayEntries
-      .filter(entry => entry.entry_type === 'diaper' && entry.start_time)
-      .sort((a, b) => new Date(b.start_time!).getTime() - new Date(a.start_time!).getTime())[0];
-
-    return {
-      feedingCount,
-      diaperCount,
-      lastDiaper: lastDiaper && lastDiaper.start_time ? new Date(lastDiaper.start_time).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : 'Nie'
-    };
+  // Toggle activity selector
+  const toggleActivitySelector = () => {
+    setShowActivitySelector(!showActivitySelector);
   };
 
-  const stats = getStatistics();
-
-  // Rendere Header
-  const renderHeader = () => (
-    <View style={styles.header}>
-      <TouchableOpacity 
-        style={styles.backButton}
-        onPress={() => router.back()}
-      >
-        <IconSymbol name="chevron.left" size={24} color="#4A332E" />
-      </TouchableOpacity>
-      
-      <View style={styles.titleContainer}>
-        <ThemedText style={styles.title}>Unser Tag</ThemedText>
-        <ThemedText style={styles.subtitle}>Euer Tag – voller kleiner Meilensteine ✨</ThemedText>
-      </View>
-      
-      <View style={styles.headerSpacer} />
-    </View>
-  );
-
-  // Rendere Zeitraum-Selektor
-  const renderTimeRangeSelector = () => (
-    <View style={styles.timeRangeContainer}>
-      {(['Tag', 'Woche', 'Monat'] as const).map((range) => (
-        <TouchableOpacity
-          key={range}
-          style={[
-            styles.timeRangeButton,
-            timeRange === range && styles.activeTimeRangeButton
-          ]}
-          onPress={() => setTimeRange(range)}
-        >
-          <ThemedText style={[
-            styles.timeRangeText,
-            timeRange === range && styles.activeTimeRangeText
-          ]}>
-            {range}
-          </ThemedText>
-        </TouchableOpacity>
-      ))}
-    </View>
-  );
-
-  // Rendere Quick Actions
-  const renderQuickActions = () => {
-    const quickActionsData = [
-      [
-        { icon: '👩‍🍼', label: 'Stillen', type: 'feeding' as const, subType: 'breastfeeding' },
-        { icon: '🍼', label: 'Fläschchen', type: 'feeding' as const, subType: 'bottle' },
-        { icon: '🥄', label: 'Beikost', type: 'feeding' as const, subType: 'solid' }
-      ],
-      [
-        { icon: '💧', label: 'Nass', type: 'diaper' as const, subType: 'wet' },
-        { icon: '💩', label: 'Voll', type: 'diaper' as const, subType: 'dirty' },
-        { icon: '🌊', label: 'Beides', type: 'diaper' as const, subType: 'both' }
-      ]
-    ];
-
+  // Rendere die Ansichtsauswahl mit dem Dropdown
+  const renderViewSelector = () => {
     return (
-      <View style={styles.quickActionsContainer}>
-        <ScrollView
-          horizontal
-          pagingEnabled
-          showsHorizontalScrollIndicator={false}
-          onMomentumScrollEnd={(event) => {
-            const pageIndex = Math.round(event.nativeEvent.contentOffset.x / screenWidth);
-            setActiveQuickActionPage(pageIndex);
-          }}
-        >
-          {quickActionsData.map((page, pageIndex) => (
-            <View key={pageIndex} style={[styles.quickActionsPage, { width: screenWidth }]}>
-              {page.map((action, actionIndex) => (
-                <TouchableOpacity
-                  key={actionIndex}
-                  style={styles.quickActionButton}
-                  onPress={() => handleQuickAction(action.type, action.subType)}
-                >
-                  <View style={styles.liquidGlassWrapper}>
-                    <BlurView 
-                      intensity={25} 
-                      tint={colorScheme === 'dark' ? 'dark' : 'light'} 
-                      style={styles.liquidGlassBackground}
-                    >
-                      <View style={styles.quickActionCircle}>
-                        <ThemedText style={styles.emojiIcon}>{action.icon}</ThemedText>
-                      </View>
-                    </BlurView>
-                  </View>
-                  <ThemedText style={styles.quickActionLabel}>{action.label}</ThemedText>
-                </TouchableOpacity>
-              ))}
-            </View>
-          ))}
-        </ScrollView>
-        
-        {/* Page Indicator */}
-        <View style={styles.pageIndicator}>
-          {quickActionsData.map((_, index) => (
-            <View
-              key={index}
-              style={[
-                styles.pageIndicatorDot,
-                activeQuickActionPage === index && styles.activePageIndicatorDot
-              ]}
-            />
-          ))}
-        </View>
-      </View>
+      <ViewDropdown activeView={viewType} onViewChange={handleViewChange} />
     );
   };
 
-  // Rendere Kennzahlen-Karten
-  const renderStatCards = () => (
-    <View style={styles.statCardsContainer}>
-      <View style={[styles.statCard, styles.feedingCard]}>
-        <View style={styles.statCardHeader}>
-          <IconSymbol name="cup.and.saucer" size={20} color="#4A332E" />
-          <ThemedText style={styles.statCardTitle}>Fütterung</ThemedText>
-        </View>
-        <ThemedText style={styles.statCardNumber}>{stats.feedingCount}</ThemedText>
-        <ThemedText style={styles.statCardSubtext}>
-          {stats.feedingCount}x Stillen • 0x Flasche
-        </ThemedText>
-      </View>
+  // Rendere die entsprechende Ansicht basierend auf viewType
+  const renderContent = () => {
+    switch (viewType) {
+      case 'day':
+        return (
+          <>
+            <DailySummary entries={entries} />
 
-      <View style={[styles.statCard, styles.diaperCard]}>
-        <View style={styles.statCardHeader}>
-          <IconSymbol name="repeat" size={20} color="#4A332E" />
-          <ThemedText style={styles.statCardTitle}>Wickeln</ThemedText>
-        </View>
-        <ThemedText style={styles.statCardNumber}>{stats.diaperCount}</ThemedText>
-        <ThemedText style={styles.statCardSubtext}>
-          Letzter: {stats.lastDiaper}
-        </ThemedText>
-      </View>
-    </View>
-  );
+            <FlatList
+              data={entries}
+              renderItem={({ item }) => (
+                <ActivityCard entry={item} onDelete={handleDeleteEntry} />
+              )}
+              keyExtractor={(item) => item.id || Math.random().toString()}
+              contentContainerStyle={styles.entriesContainer}
+              ListEmptyComponent={
+                <EmptyState type="day" />
+              }
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={onRefresh}
+                  colors={['#7D5A50']}
+                  tintColor={theme.text}
+                  title="Aktualisiere..."
+                  titleColor={theme.text}
+                />
+              }
+            />
+          </>
+        );
+      case 'timeline':
+        return (
+          <>
+            <DailySummary entries={entries} />
+            {entries.length > 0 ? (
+              <TimelineView
+                entries={entries}
+                onDeleteEntry={handleDeleteEntry}
+                refreshControl={
+                  <RefreshControl
+                    refreshing={refreshing}
+                    onRefresh={onRefresh}
+                    colors={['#7D5A50']}
+                    tintColor={theme.text}
+                    title="Aktualisiere..."
+                    titleColor={theme.text}
+                  />
+                }
+              />
+            ) : (
+              <EmptyState type="timeline" />
+            )}
+          </>
+        );
+      case 'week':
+        return (
+          <>
+            <DailySummary entries={entries} />
+            <WeekScroller selectedDate={selectedDate} onDateSelect={setSelectedDate} />
+            {entries.length === 0 && (
+              <View style={styles.emptyOverlay}>
+                <EmptyState type="week" message="Keine Einträge in dieser Woche vorhanden." />
+              </View>
+            )}
+          </>
+        );
 
-  // Rendere Timeline
-  const renderTimeline = () => (
-    <View style={styles.timelineContainer}>
-      <ThemedText style={styles.timelineTitle}>Timeline</ThemedText>
-      
-      {entries.length > 0 ? (
-        entries
-          .filter(entry => entry.start_time)
-          .sort((a, b) => new Date(b.start_time!).getTime() - new Date(a.start_time!).getTime())
-          .slice(0, 5)
-          .map((entry, index) => (
-            <View key={entry.id || index} style={styles.timelineEntry}>
-              <ThemedText style={styles.timelineIcon}>
-                {entry.entry_type === 'feeding' ? '👩‍🍼' : 
-                 entry.entry_type === 'diaper' ? '💧' : '📝'}
-              </ThemedText>
-              <ThemedText style={styles.timelineText}>
-                {entry.entry_type === 'feeding' ? 'Stillen' :
-                 entry.entry_type === 'diaper' ? 'Wickeln' : 'Sonstiges'}
-              </ThemedText>
-              <ThemedText style={styles.timelineTime}>
-                {entry.start_time ? new Date(entry.start_time).toLocaleTimeString('de-DE', { 
-                  hour: '2-digit', 
-                  minute: '2-digit' 
-                }) : '--:--'}
-              </ThemedText>
-            </View>
-          ))
-      ) : (
-        <View style={styles.emptyTimeline}>
-          <ThemedText style={styles.emptyTimelineText}>
-            Noch keine Einträge für heute vorhanden.
-          </ThemedText>
-        </View>
-      )}
-    </View>
-  );
-
-  // Rendere Tagesanalyse
-  const renderDayAnalysis = () => (
-    <View style={styles.dayAnalysisContainer}>
-      <ThemedText style={styles.dayAnalysisTitle}>Tagesanalyse kompakt</ThemedText>
-      <View style={styles.progressTrack}>
-        <View style={[styles.progressFill, { width: '30%' }]} />
-      </View>
-    </View>
-  );
+      default:
+        return null;
+    }
+  };
 
   return (
     <ThemedBackground style={styles.container}>
@@ -435,26 +351,16 @@ export default function DailyOldScreen() {
         <SafeAreaView style={{ flex: 1 }}>
           <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
           
-          <ScrollView 
-            style={styles.scrollView}
-            refreshControl={
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={onRefresh}
-                colors={['#8458DC']}
-                tintColor="#8458DC"
-                title="Aktualisiere..."
-                titleColor="#4A332E"
-              />
-            }
-          >
-            {renderHeader()}
-            {renderTimeRangeSelector()}
-            {renderQuickActions()}
-            {renderStatCards()}
-            {renderTimeline()}
-            {renderDayAnalysis()}
-          </ScrollView>
+          <Header 
+            title="Alltag" 
+            subtitle="Dokumentiere den Tagesablauf deines Babys" 
+          />
+          
+          {/* Ansichtsauswahl */}
+          {renderViewSelector()}
+
+          {/* Hauptinhalt */}
+          {renderContent()}
 
           {/* DateTimePicker */}
           {showDatePicker && (
@@ -466,6 +372,12 @@ export default function DailyOldScreen() {
             />
           )}
 
+          {/* ActivitySelector Modal */}
+          <ActivitySelector
+            visible={showActivitySelector}
+            onSelect={handleActivitySelect}
+          />
+
           {/* ActivityInputModal */}
           <ActivityInputModal
             visible={showInputModal}
@@ -473,6 +385,14 @@ export default function DailyOldScreen() {
             onClose={() => setShowInputModal(false)}
             onSave={handleSaveEntry}
           />
+
+          {/* Plus-Button (FAB) */}
+          <TouchableOpacity 
+            style={[styles.fab, { backgroundColor: Colors[colorScheme].tint }]}
+            onPress={toggleActivitySelector}
+          >
+            <IconSymbol name="plus" size={28} color="#FFFFFF" />
+          </TouchableOpacity>
         </SafeAreaView>
       </GestureHandlerRootView>
     </ThemedBackground>
@@ -482,287 +402,195 @@ export default function DailyOldScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F2EB',
   },
-  scrollView: {
+  backgroundImage: {
     flex: 1,
+    width: '100%',
   },
-
-  // Header Styles
   header: {
-    height: 80,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: 16,
     paddingTop: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    marginBottom: 5,
   },
   backButton: {
-    width: 44,
-    height: 44,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  titleContainer: {
-    flex: 1,
-    alignItems: 'center',
+    marginRight: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   title: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#4A332E',
+    fontSize: 24,
+    flex: 1,
     textAlign: 'center',
   },
-  subtitle: {
-    fontSize: 12,
-    fontWeight: '400',
-    color: '#8C7569',
-    marginTop: 2,
-    textAlign: 'center',
-  },
-  headerSpacer: {
-    width: 44,
-  },
-
-  // Zeitraum-Selektor Styles
-  timeRangeContainer: {
-    marginTop: 16,
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingHorizontal: 16,
-  },
-  timeRangeButton: {
-    height: 32,
-    paddingHorizontal: 16,
-    borderRadius: 16,
-    backgroundColor: '#E5E0D9',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  activeTimeRangeButton: {
-    backgroundColor: '#8458DC',
-  },
-  timeRangeText: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#4A332E',
-  },
-  activeTimeRangeText: {
-    color: '#FFFFFF',
-  },
-
-  // Quick Actions Styles
-  quickActionsContainer: {
-    height: 120,
-    marginTop: 16,
-  },
-  quickActionsPage: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-  },
-  quickActionButton: {
-    alignItems: 'center',
-  },
-  liquidGlassWrapper: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    overflow: 'hidden',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 6,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-  },
-  liquidGlassBackground: {
+  fab: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    borderRadius: 44,
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
-  },
-  quickActionCircle: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#FF9500', // Akzentfarbe (entspricht dem Community-Tab)
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    bottom: 90, // Exakt gleiche Höhe wie Community-Tab
+    right: 20, // Genau gleicher horizontaler Abstand wie in Community
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.3,
     shadowRadius: 4,
-    elevation: 3,
+    elevation: 5,
+    zIndex: 999,
   },
-  emojiIcon: {
-    fontSize: 32,
-  },
-  quickActionLabel: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#2C1810',
-    marginTop: 8,
-    textAlign: 'center',
-    textShadowColor: 'rgba(255, 255, 255, 0.9)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.6)',
-    overflow: 'hidden',
-  },
-  pageIndicator: {
+  dateSelector: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    height: 16,
-    marginTop: 8,
+    marginTop: 5,
+    marginBottom: 10,
+    marginHorizontal: 16,
   },
-  pageIndicatorDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#CCCCCC',
-    marginHorizontal: 4,
+  dateButton: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: 'rgba(125, 90, 80, 0.1)',
   },
-  activePageIndicatorDot: {
-    backgroundColor: '#8458DC',
-  },
-
-  // Kennzahlen-Karten Styles
-  statCardsContainer: {
-    marginTop: 24,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  dateDisplay: {
     paddingHorizontal: 16,
+    paddingVertical: 8,
+    marginHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: 'rgba(125, 90, 80, 0.1)',
   },
-  statCard: {
-    flex: 1,
-    marginHorizontal: 4,
-    padding: 16,
-    borderRadius: 16,
+  dateText: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  // Tabs wurden in separate Komponente ausgelagert
+  // Styles wurden in separate Komponenten ausgelagert
+  newEntryCard: {
+    margin: 20,
+    padding: 20,
+    borderRadius: 15,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
-    elevation: 2,
+    elevation: 3,
   },
-  feedingCard: {
-    backgroundColor: 'rgba(212, 158, 158, 0.2)',
+  typeSelector: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 15,
   },
-  diaperCard: {
-    backgroundColor: 'rgba(173, 205, 226, 0.2)',
+  typeButton: {
+    alignItems: 'center',
+    padding: 10,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: 'transparent',
+    width: '22%',
   },
-  statCardHeader: {
+  selectedTypeButton: {
+    borderColor: '#7D5A50',
+    backgroundColor: 'rgba(125, 90, 80, 0.1)',
+  },
+  typeButtonText: {
+    fontSize: 12,
+    marginTop: 5,
+    textAlign: 'center',
+  },
+  timeInputContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 15,
+  },
+  timeInput: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
   },
-  statCardTitle: {
-    fontSize: 14,
-    fontWeight: '400',
-    color: '#4A332E',
-    marginLeft: 4,
-  },
-  statCardNumber: {
-    fontSize: 48,
-    fontWeight: '600',
-    color: '#4A332E',
-    textAlign: 'center',
-    marginVertical: 8,
-  },
-  statCardSubtext: {
-    fontSize: 12,
-    fontWeight: '400',
-    color: '#8C7569',
-    textAlign: 'center',
-    marginTop: 4,
-  },
-
-  // Timeline Styles
-  timelineContainer: {
-    marginTop: 24,
-    paddingHorizontal: 16,
-  },
-  timelineTitle: {
+  timeLabel: {
     fontSize: 16,
-    fontWeight: '500',
-    color: '#4A332E',
-    marginBottom: 8,
+    marginRight: 10,
   },
-  timelineEntry: {
-    padding: 8,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
-    marginBottom: 8,
-    flexDirection: 'row',
+  notesInput: {
+    borderWidth: 1,
+    borderColor: '#CCCCCC',
+    borderRadius: 10,
+    padding: 15,
+    fontSize: 16,
+    minHeight: 80,
+    textAlignVertical: 'top',
+    marginBottom: 15,
+  },
+  saveButton: {
+    backgroundColor: '#7D5A50',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 10,
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 2,
   },
-  timelineIcon: {
-    fontSize: 24,
-    marginRight: 12,
-  },
-  timelineText: {
+  saveButtonText: {
     fontSize: 16,
-    fontWeight: '400',
-    color: '#4A332E',
-    flex: 1,
+    fontWeight: 'bold',
   },
-  timelineTime: {
-    fontSize: 14,
-    fontWeight: '400',
-    color: '#8C7569',
+  entriesContainer: {
+    padding: 16,
+    paddingTop: 0,
+    paddingBottom: 100, // Platz für den FAB
   },
-  emptyTimeline: {
-    padding: 20,
+  // Karten-Styles wurden in separate Komponente ausgelagert
+  emptyContainer: {
+    padding: 16,
+    borderRadius: 10,
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
-    borderRadius: 8,
+    justifyContent: 'center',
+    marginTop: 16,
   },
-  emptyTimelineText: {
-    fontSize: 14,
-    color: '#8C7569',
+  emptyText: {
+    fontSize: 15,
     textAlign: 'center',
+    lineHeight: 22,
+    color: '#666666',
   },
-
-  // Tagesanalyse Styles
-  dayAnalysisContainer: {
-    marginTop: 24,
-    paddingHorizontal: 16,
-    marginBottom: 40,
+  emptyOverlay: {
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 15,
+    padding: 20,
+    margin: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  dayAnalysisTitle: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#4A332E',
-    marginBottom: 8,
+  addEntryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 16,
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: 'rgba(125, 90, 80, 0.1)',
   },
-  progressTrack: {
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#E5E0D9',
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: 12,
-    backgroundColor: '#8458DC',
+  addEntryText: {
+    marginLeft: 8,
+    fontSize: 14,
+    color: '#7D5A50',
   },
 });
