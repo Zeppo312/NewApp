@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   SafeAreaView,
   View,
@@ -10,6 +10,8 @@ import {
   StatusBar,
   Alert,
   ScrollView,
+  Animated,
+  Dimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Colors } from '@/constants/Colors';
@@ -24,7 +26,8 @@ import {
   saveDailyEntry,
   deleteDailyEntry,
   DailyEntry,
-  saveFeedingEvent, //  NEU: eigenes Insert in feeding_events
+  saveFeedingEvent,
+  updateFeedingEventEnd, // NEU: für Timer-Stop
 } from '@/lib/baby';
 import { syncAllExistingDailyEntries } from '@/lib/syncDailyEntries';
 import { subscribeToDailyEntries } from '@/lib/realtime';
@@ -40,6 +43,13 @@ import WeekScroller from '@/components/WeekScroller';
 import TimelineView from '@/components/TimelineView';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 
+// ▸ CRUD MANAGERS ------------------------------------------------------------
+import { FeedingEventManager, FeedingEventData } from '@/components/FeedingEventManager';
+import { DiaperEventManager, DiaperEventData } from '@/components/DiaperEventManager';
+import { SupabaseErrorHandler } from '@/lib/errorHandler';
+import { ConnectionStatus } from '@/components/ConnectionStatus';
+import { DebugPanel } from '@/components/DebugPanel';
+
 // ▸ TYPE ALIASES -------------------------------------------------------------
 type QuickActionType =
   | 'feeding_breast'
@@ -48,6 +58,112 @@ type QuickActionType =
   | 'diaper_wet'
   | 'diaper_dirty'
   | 'diaper_both';
+
+const { width: screenWidth } = Dimensions.get('window');
+
+// ▸ DATE SPIDER COMPONENT ===================================================
+const DateSpider: React.FC<{ date: Date; visible: boolean }> = ({ date, visible }) => {
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const translateAnim = useRef(new Animated.Value(-10)).current;
+
+  useEffect(() => {
+    if (visible) {
+      // Fade in
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.timing(translateAnim, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+      ]).start();
+
+      // Auto hide after 5 seconds
+      const timer = setTimeout(() => {
+        Animated.parallel([
+          Animated.timing(fadeAnim, {
+            toValue: 0,
+            duration: 300,
+            useNativeDriver: true,
+          }),
+          Animated.timing(translateAnim, {
+            toValue: -10,
+            duration: 300,
+            useNativeDriver: true,
+          }),
+        ]).start();
+      }, 5000);
+
+      return () => clearTimeout(timer);
+    }
+  }, [visible, fadeAnim, translateAnim]);
+
+  return (
+    <Animated.View
+      style={[
+        s.dateSpider,
+        {
+          opacity: fadeAnim,
+          transform: [{ translateY: translateAnim }],
+        },
+      ]}
+    >
+      <Text style={s.dateSpiderText}>
+        {date.toLocaleDateString('de-DE', {
+          weekday: 'long',
+          day: '2-digit',
+          month: 'long',
+        })}
+      </Text>
+    </Animated.View>
+  );
+};
+
+
+
+// ▸ TIMER BANNER COMPONENT ==================================================
+const TimerBanner: React.FC<{
+  timer: { id: string; type: string; start: number } | null;
+  onStop: () => void;
+}> = ({ timer, onStop }) => {
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    if (!timer) return;
+
+    const interval = setInterval(() => {
+      setElapsed(Math.floor((Date.now() - timer.start) / 1000));
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [timer]);
+
+  if (!timer) return null;
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  return (
+    <View style={s.timerBanner}>
+      <View style={s.timerContent}>
+        <Text style={s.timerType}>
+          {timer.type === 'BREAST' ? '🤱 Stillen' : '🍼 Fläschchen'}
+        </Text>
+        <Text style={s.timerTime}>{formatTime(elapsed)}</Text>
+      </View>
+      <TouchableOpacity style={s.timerStopButton} onPress={onStop}>
+        <IconSymbol name="stop.circle.fill" size={24} color="#fff" />
+      </TouchableOpacity>
+    </View>
+  );
+};
 
 // ▸ MAIN COMPONENT ===========================================================
 export default function DailyScreen() {
@@ -63,6 +179,14 @@ export default function DailyScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [selectedTab, setSelectedTab] = useState<'day' | 'week' | 'month'>('day');
+  const [showDateSpider, setShowDateSpider] = useState(true);
+
+  // Timer State
+  const [activeTimer, setActiveTimer] = useState<{
+    id: string;
+    type: 'BOTTLE' | 'BREAST';
+    start: number;
+  } | null>(null);
 
   // Quick‑Action → Modal -----------------------------------------------------
   const [showInputModal, setShowInputModal] = useState(false);
@@ -81,6 +205,11 @@ export default function DailyScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDate]);
 
+  // Show DateSpider when tab changes
+  useEffect(() => {
+    setShowDateSpider(true);
+  }, [selectedTab]);
+
   // Realtime subscription to Supabase changes
   useEffect(() => {
     const unsubscribe = subscribeToDailyEntries(
@@ -96,26 +225,39 @@ export default function DailyScreen() {
   // DATA I/O
   // -------------------------------------------------------------------------
   const loadEntries = async () => {
-    try {
-      setIsLoading(true);
-      const { data, error } = await getDailyEntries(undefined, selectedDate);
-      if (error) throw error;
-      setEntries(data ?? []);
-    } catch (err) {
-      console.error('Error loading entries', err);
-      Alert.alert('Fehler', 'Einträge konnten nicht geladen werden.');
-    } finally {
-      setIsLoading(false);
-      setRefreshing(false);
+    setIsLoading(true);
+    
+    const result = await SupabaseErrorHandler.executeWithHandling(
+      async () => {
+        const { data, error } = await getDailyEntries(undefined, selectedDate);
+        if (error) throw error;
+        return data ?? [];
+      },
+      'LoadDailyEntries',
+      true,
+      2
+    );
+
+    if (result.success) {
+      setEntries(result.data!);
+    } else {
+      setEntries([]);
     }
+
+    setIsLoading(false);
+    setRefreshing(false);
   };
 
   const syncDailyEntries = async () => {
-    try {
-      await syncAllExistingDailyEntries();
-    } catch (err) {
-      console.error('Sync error', err);
-    }
+    await SupabaseErrorHandler.executeWithHandling(
+      async () => {
+        await syncAllExistingDailyEntries();
+        return true;
+      },
+      'SyncDailyEntries',
+      false, // Don't show user errors for sync
+      1
+    );
   };
 
   // -------------------------------------------------------------------------
@@ -140,46 +282,129 @@ export default function DailyScreen() {
   };
 
   const handleSaveEntry = async (payload: any) => {
-    try {
-      // 1) spezifische Feeding‑Events direkt in feeding_events ablegen
-      if (selectedActivityType === 'feeding') {
-        const { error } = await saveFeedingEvent(payload); // erwartet { baby_id, type, start_time, volume_ml, side, note }
-        if (error) throw error;
+    console.log('💾 Saving entry with payload:', payload);
+    console.log('💾 Activity type:', selectedActivityType);
+    console.log('💾 Sub type:', selectedSubType);
+
+    // 1) Feeding Events mit FeedingEventManager
+    if (selectedActivityType === 'feeding') {
+      const feedingData: FeedingEventData = {
+        type: selectedSubType as 'feeding_breast' | 'feeding_bottle' | 'feeding_solids',
+        volume_ml: payload.volume_ml,
+        side: payload.side,
+        note: payload.note,
+        date: (payload.date as Date) || selectedDate,
+      };
+
+      const result = await FeedingEventManager.createFeedingEvent(feedingData);
+      
+      if (!result.success) {
+        console.error('Feeding event error:', result.error);
+        Alert.alert('Fehler', String(result.error ?? 'Fehler beim Speichern der Fütterung'));
+        return;
       }
 
-      // 2) sonst in die generische daily‑Tabelle
-      if (selectedActivityType !== 'feeding') {
-        const { error } = await saveDailyEntry(payload);
-        if (error) throw error;
+      // Start timer for breast/bottle feeding
+      if (selectedSubType === 'feeding_breast' || selectedSubType === 'feeding_bottle') {
+        const timerType = selectedSubType === 'feeding_breast' ? 'BREAST' : 'BOTTLE';
+        setActiveTimer({
+          id: result.id || `temp_${Date.now()}`,
+          type: timerType,
+          start: Date.now(),
+        });
       }
 
-      setShowInputModal(false);
-      loadEntries();
-    } catch (err) {
-      console.error('Save error', err);
-      Alert.alert('Fehler', 'Eintrag konnte nicht gespeichert werden.');
+      Alert.alert('Erfolg', 'Fütterungseintrag erfolgreich gespeichert! 🍼');
     }
+
+    // 2) Diaper Events mit DiaperEventManager
+    else if (selectedActivityType === 'diaper') {
+      const diaperData: DiaperEventData = {
+        type: selectedSubType as 'diaper_wet' | 'diaper_dirty' | 'diaper_both',
+        note: payload.note,
+        date: (payload.date as Date) || selectedDate,
+      };
+
+      const result = await DiaperEventManager.createDiaperEvent(diaperData);
+      
+      if (!result.success) {
+        console.error('Feeding event error:', result.error);
+        Alert.alert('Fehler', String(result.error ?? 'Fehler beim Speichern der Fütterung'));
+        return;
+      }
+
+      Alert.alert('Erfolg', 'Wickeleintrag erfolgreich gespeichert! 💧');
+    }
+
+    // 3) Andere Events (fallback zum alten System)
+    else {
+      const result = await SupabaseErrorHandler.executeWithHandling(
+        async () => {
+          const { data, error } = await saveDailyEntry(payload);
+          if (error) throw error;
+          return data;
+        },
+        'SaveOtherEntry',
+        true,
+        2
+      );
+
+      if (!result.success) {
+        console.error('Feeding event error:', result.error);
+        Alert.alert('Fehler', String(result.error ?? 'Fehler beim Speichern der Fütterung'));
+        return;
+      }
+
+      Alert.alert('Erfolg', 'Eintrag erfolgreich gespeichert! ✅');
+    }
+
+    setShowInputModal(false);
+    loadEntries();
+  };
+
+  const handleTimerStop = async () => {
+    if (!activeTimer) return;
+
+    const result = await FeedingEventManager.stopFeedingTimer(activeTimer.id);
+    
+    if (!result.success) {
+      console.error('Other entry error:', result.error);
+      Alert.alert('Fehler', result.error || 'Unbekannter Fehler beim Speichern');
+      return;
+    }
+
+    setActiveTimer(null);
+    loadEntries();
+    Alert.alert('Erfolg', 'Timer erfolgreich gestoppt! ⏹️');
   };
 
   const handleDeleteEntry = async (id: string) => {
-    Alert.alert('Eintrag löschen', 'Möchtest du diesen Eintrag wirklich löschen?', [
-      { text: 'Abbrechen', style: 'cancel' },
-      {
-        text: 'Löschen',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            const { error } = await deleteDailyEntry(id);
-            if (error) throw error;
+    console.log('🗑️ Attempting to delete entry:', id);
+    
+    Alert.alert(
+      'Eintrag löschen',
+      'Möchtest du diesen Eintrag wirklich löschen?',
+      [
+        { text: 'Abbrechen', style: 'cancel' },
+        {
+          text: 'Löschen',
+          style: 'destructive',
+          onPress: async () => {
+            const result = await DiaperEventManager.deleteDiaperEvent(id);
+            
+            if (!result.success) {
+              return; // Error already handled by ErrorHandler
+            }
+
             loadEntries();
-          } catch (err) {
-            console.error('Delete error', err);
-            Alert.alert('Fehler', 'Eintrag konnte nicht gelöscht werden.');
+            Alert.alert('Erfolg', 'Eintrag erfolgreich gelöscht! 🗑️');
           }
-        },
-      },
-    ]);
+        }
+      ]
+    );
   };
+
+
 
   // -------------------------------------------------------------------------
   // RENDERERS – SMALL UI PIECES
@@ -205,13 +430,7 @@ export default function DailyScreen() {
       <TouchableOpacity style={s.navButton} onPress={() => changeRelativeDate(-1)}>
         <IconSymbol name="chevron.left" size={20} color={theme.text} />
       </TouchableOpacity>
-      <View style={s.dateDisplay}>
-        <Text style={s.dateText}>{selectedDate.toLocaleDateString('de-DE', {
-          weekday: 'short',
-          day: '2-digit',
-          month: '2-digit',
-        })}</Text>
-      </View>
+      <DateSpider date={selectedDate} visible={showDateSpider} />
       <TouchableOpacity style={s.navButton} onPress={() => changeRelativeDate(1)}>
         <IconSymbol name="chevron.right" size={20} color={theme.text} />
       </TouchableOpacity>
@@ -227,40 +446,61 @@ export default function DailyScreen() {
     { action: 'diaper_both', label: 'Beides', icon: '💧💩' },
   ];
 
-  const QuickActions = () => (
-    <ScrollView 
-      horizontal 
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={s.quickScrollContainer}
-      style={s.quickScrollView}
-    >
-      {quickBtns.map((btn) => (
-        <TouchableOpacity
-          key={btn.action}
-          style={s.circleButton}
-          onPress={() => handleQuickActionPress(btn.action)}
-        >
-          <Text style={s.circleEmoji}>{btn.icon}</Text>
-          <Text style={s.circleLabel}>{btn.label}</Text>
-        </TouchableOpacity>
-      ))}
-    </ScrollView>
-  );
+  const QuickActionRow = () => {
+    const renderQuickButton = ({ item }: { item: typeof quickBtns[0] }) => (
+      <TouchableOpacity
+        style={s.circleButton}
+        onPress={() => handleQuickActionPress(item.action)}
+      >
+        <Text style={s.circleEmoji}>{item.icon}</Text>
+        <Text style={s.circleLabel}>{item.label}</Text>
+      </TouchableOpacity>
+    );
 
-  const KPISection = () => (
-    <View style={s.kpiRow}>
-      <View style={[s.kpiCard, { backgroundColor: 'rgba(249, 224, 230, 0.6)' }]}>
-        <Text style={s.kpiTitle}>Fütterung</Text>
-        <Text style={s.kpiValue}>{entries.filter((e) => e.entry_type === 'feeding').length}</Text>
-        <Text style={s.kpiSub}>Stillen/Flasche</Text>
+    return (
+      <View style={s.quickActionSection}>
+        <FlatList
+          data={quickBtns}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          renderItem={renderQuickButton}
+          keyExtractor={(item) => item.action}
+          contentContainerStyle={s.quickScrollContainer}
+          ItemSeparatorComponent={() => <View style={{ width: 16 }} />}
+        />
       </View>
-      <View style={[s.kpiCard, { backgroundColor: 'rgba(235, 236, 237, 0.6)' }]}>
-        <Text style={s.kpiTitle}>Wickeln</Text>
-        <Text style={s.kpiValue}>{entries.filter((e) => e.entry_type === 'diaper').length}</Text>
-        <Text style={s.kpiSub}>Letzter: –</Text>
+    );
+  };
+
+  const KPISection = () => {
+    const feedingEntries = entries.filter((e) => e.entry_type === 'feeding');
+    const diaperEntries = entries.filter((e) => e.entry_type === 'diaper');
+    
+    // Get last diaper change time
+    const lastDiaperEntry = diaperEntries
+      .sort((a, b) => new Date(b.entry_date).getTime() - new Date(a.entry_date).getTime())[0];
+    const lastDiaperTime = lastDiaperEntry 
+      ? new Date(lastDiaperEntry.entry_date).toLocaleTimeString('de-DE', { 
+          hour: '2-digit', 
+          minute: '2-digit' 
+        })
+      : '–';
+
+    return (
+      <View style={s.kpiRow}>
+        <View style={[s.kpiCard, { backgroundColor: 'rgba(249, 224, 230, 0.9)' }]}>
+          <Text style={s.kpiTitle}>Fütterung</Text>
+          <Text style={s.kpiValue}>{feedingEntries.length}</Text>
+          <Text style={s.kpiSub}>Stillen/Flasche</Text>
+        </View>
+        <View style={[s.kpiCard, { backgroundColor: 'rgba(235, 236, 237, 0.9)' }]}>
+          <Text style={s.kpiTitle}>Wickeln</Text>
+          <Text style={s.kpiValue}>{diaperEntries.length}</Text>
+          <Text style={s.kpiSub}>Letzter: {lastDiaperTime}</Text>
+        </View>
       </View>
-    </View>
-  );
+    );
+  };
 
   // -------------------------------------------------------------------------
   // MAIN RENDER BODY
@@ -271,40 +511,56 @@ export default function DailyScreen() {
         <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
 
         <Header title="Unser Tag" subtitle="Euer Tag – voller kleiner Meilensteine ✨" />
+        
+        <ConnectionStatus showAlways={false} autoCheck={true} onRetry={loadEntries} />
+        
+        <TimerBanner timer={activeTimer} onStop={handleTimerStop} />
+        
+        <DebugPanel />
 
-        <TopTabs />
-        <DateNavigator />
-        {selectedTab === 'day' && <QuickActions />}
-        <KPISection />
+        <ScrollView 
+          style={s.scrollContainer}
+          contentContainerStyle={s.scrollContent}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={() => setRefreshing(true)} />
+          }
+        >
+          <TopTabs />
+          <DateNavigator />
+          
+          {selectedTab === 'day' && (
+            <>
+              <QuickActionRow />
+              <KPISection />
+              
+              <View style={s.entriesSection}>
+                {entries.map((item) => (
+                  <ActivityCard 
+                    key={item.id ?? Math.random().toString()} 
+                    entry={item} 
+                    onDelete={handleDeleteEntry} 
+                  />
+                ))}
+                {entries.length === 0 && <EmptyState type="day" />}
+              </View>
+            </>
+          )}
 
-        {/* -------- View specific content -------------------------------- */}
-        {selectedTab === 'day' && (
-          <FlatList
-            data={entries}
-            keyExtractor={(item) => item.id ?? Math.random().toString()}
-            renderItem={({ item }) => (
-              <ActivityCard entry={item} onDelete={handleDeleteEntry} />
-            )}
-            ListEmptyComponent={<EmptyState type="day" />}
-            contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 120 }}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => setRefreshing(true)} />}
-          />
-        )}
+          {selectedTab === 'week' && (
+            <WeekScroller selectedDate={selectedDate} onDateSelect={setSelectedDate} />
+          )}
 
-        {selectedTab === 'week' && (
-          <WeekScroller selectedDate={selectedDate} onDateSelect={setSelectedDate} />
-        )}
+          {selectedTab === 'month' && (
+            <View style={s.emptyOverlay}>
+              <EmptyState type="timeline" message="Monatsansicht folgt bald ✨" />
+            </View>
+          )}
+        </ScrollView>
 
-        {selectedTab === 'month' && (
-          <View style={s.emptyOverlay}>
-            <EmptyState type="timeline" message="Monatsansicht folgt bald ✨" />
-          </View>
-        )}
-
-        {/* Floating Action Button (öffnet generischen Selector) */}
+        {/* Floating Action Button */}
         <TouchableOpacity
           style={[s.fab, { backgroundColor: Colors[colorScheme].tint }]}
-          onPress={() => handleQuickActionPress('feeding_breast') /* default */}
+          onPress={() => handleQuickActionPress('feeding_breast')}
         >
           <IconSymbol name="plus" size={28} color="#fff" />
         </TouchableOpacity>
@@ -334,6 +590,55 @@ const s = StyleSheet.create({
     flex: 1,
     width: '100%',
   },
+  scrollContainer: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 140,
+  },
+  // ----- DateSpider --------------------------------------------------------
+  dateSpider: {
+    backgroundColor: 'rgba(136, 84, 208, 0.15)',
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 16,
+    marginHorizontal: 14,
+  },
+  dateSpiderText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#8854d0',
+    textAlign: 'center',
+  },
+  // ----- Timer Banner ------------------------------------------------------
+  timerBanner: {
+    backgroundColor: '#8854d0',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    marginHorizontal: 16,
+    marginVertical: 8,
+    borderRadius: 12,
+  },
+  timerContent: {
+    flex: 1,
+  },
+  timerType: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  timerTime: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  timerStopButton: {
+    padding: 8,
+  },
   // ----- Tabs --------------------------------------------------------------
   topTabsContainer: {
     flexDirection: 'row',
@@ -342,18 +647,18 @@ const s = StyleSheet.create({
     marginTop: 8,
   },
   topTab: {
-    paddingHorizontal: 22,
-    paddingVertical: 6,
+    paddingHorizontal: 32,
+    paddingVertical: 8,
     borderRadius: 50,
-    backgroundColor: 'rgba(0,0,0,0.05)',
+    backgroundColor: 'rgba(136, 84, 208, 0.15)',
   },
   activeTopTab: {
     backgroundColor: '#8854d0',
   },
   topTabText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#666',
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#6c6c6c',
   },
   activeTopTabText: {
     color: '#fff',
@@ -370,54 +675,51 @@ const s = StyleSheet.create({
     borderRadius: 30,
     backgroundColor: 'rgba(0,0,0,0.05)',
   },
-  dateDisplay: {
-    marginHorizontal: 14,
-    paddingHorizontal: 24,
-    paddingVertical: 10,
-    borderRadius: 14,
-    backgroundColor: 'rgba(0,0,0,0.05)',
-  },
-  dateText: {
-    fontSize: 17,
-    fontWeight: '600',
-  },
   // ----- Quick Actions -----------------------------------------------------
-  quickScrollView: {
+  quickActionSection: {
     marginTop: 28,
   },
   quickScrollContainer: {
-    paddingHorizontal: 20,
-    gap: 16,
+    paddingHorizontal: 30,
+    gap: 20,
   },
   circleButton: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
-    backgroundColor: 'rgba(0,0,0,0.04)',
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: 'rgba(255,255,255,0.35)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   circleEmoji: {
-    fontSize: 26,
+    fontSize: 28,
   },
   circleLabel: {
     marginTop: 6,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600',
     textAlign: 'center',
+    color: '#4a4a4a',
   },
+
   // ----- KPI Cards ---------------------------------------------------------
   kpiRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
     marginVertical: 26,
+    paddingHorizontal: 16,
   },
   kpiCard: {
-    width: '42%',
-    borderRadius: 18,
+    width: '45%',
+    borderRadius: 20,
     paddingVertical: 26,
     paddingHorizontal: 14,
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 3,
   },
   kpiTitle: {
     fontSize: 15,
@@ -432,6 +734,10 @@ const s = StyleSheet.create({
     marginTop: 6,
     fontSize: 13,
     textAlign: 'center',
+  },
+  // ----- Entries Section ---------------------------------------------------
+  entriesSection: {
+    paddingHorizontal: 16,
   },
   // ----- FAB ---------------------------------------------------------------
   fab: {

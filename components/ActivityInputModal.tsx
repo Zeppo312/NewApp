@@ -1,27 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Modal,
-  StyleSheet,
-  TouchableOpacity,
-  TextInput,
-  TouchableWithoutFeedback,
-  Keyboard,
-  Platform,
-  ScrollView,
-  Text
-} from 'react-native';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
-import { IconSymbol } from '@/components/ui/IconSymbol';
-import { Colors } from '@/constants/Colors';
-import { useColorScheme } from '@/hooks/useColorScheme';
+import { View, Modal, StyleSheet, TouchableOpacity, Text, TouchableWithoutFeedback, Keyboard, Platform, ScrollView, TextInput, LayoutAnimation, UIManager } from 'react-native';
+import { BlurView } from 'expo-blur';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import SuccessSplashScreen from './SuccessSplashScreen';
 
+// Typ-Definitionen
 type ActivityType = 'feeding' | 'diaper' | 'other';
 type FeedingType = 'breast' | 'bottle' | 'solids';
 type DiaperType = 'wet' | 'dirty' | 'both';
+type BreastSide = 'left' | 'right' | 'both';
 
+// Props-Interface
 interface ActivityInputModalProps {
   visible: boolean;
   activityType: ActivityType;
@@ -37,51 +26,99 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   initialSubType,
   date,
   onClose,
-  onSave
+  onSave,
 }) => {
-  const colorScheme = useColorScheme() ?? 'light';
-  const theme = Colors[colorScheme];
+  // Theme und Farben
+  const theme = {
+    background: '#F4F1ED',
+    modalBackground: 'rgba(255, 255, 255, 0.95)', // Brighter background
+    text: '#333333', // Dark text for contrast
+    textSecondary: '#888888', // Lighter gray for subtitles
+    primary: '#4A90E2', // Solid blue for selected bottle
+    accent: '#E5B9A0',  // Warm orange for save button
+    lightGray: 'rgba(230, 230, 230, 0.8)', // Light gray for unselected buttons
+    mediumGray: 'rgba(220, 220, 220, 0.5)',
+    green: '#4CAF50', // Solid green
+    orange: '#F5A623',
+    purple: '#9B59B6', // Solid purple
+  };
 
   // States
   const [startTime, setStartTime] = useState(new Date());
   const [notes, setNotes] = useState('');
-  const [showStartTimePicker, setShowStartTimePicker] = useState(false);
+  const [isNotesVisible, setNotesVisible] = useState(false);
+  const [showSuccessSplash, setShowSuccessSplash] = useState(false);
   
-  // Feeding specific states
-  const [feedingType, setFeedingType] = useState<FeedingType>('breast');
-  const [volumeMl, setVolumeMl] = useState('');
-  const [breastSide, setBreastSide] = useState<'left' | 'right' | 'both'>('left');
-  
-  // Diaper specific states
+  // Feeding States
+  const [feedingType, setFeedingType] = useState<FeedingType>('bottle');
+  const [volumeMl, setVolumeMl] = useState(120);
+  const [breastSide, setBreastSide] = useState<BreastSide>('left');
+
+  // Diaper States
   const [diaperType, setDiaperType] = useState<DiaperType>('wet');
 
-  // Reset state when modal opens
+  // Enable LayoutAnimation for Android
+  if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+  }
+
+  // Effekt zum Zurücksetzen der Werte bei Sichtbarkeit
   useEffect(() => {
     if (visible) {
       const now = date || new Date();
       setStartTime(now);
       setNotes('');
-      setVolumeMl('');
+      setNotesVisible(false);
       
-      // Set initial type based on initialSubType
-      if (initialSubType) {
-        if (initialSubType === 'feeding_breast') setFeedingType('breast');
-        else if (initialSubType === 'feeding_bottle') setFeedingType('bottle');
-        else if (initialSubType === 'feeding_solids') setFeedingType('solids');
-        else if (initialSubType === 'diaper_wet') setDiaperType('wet');
-        else if (initialSubType === 'diaper_dirty') setDiaperType('dirty');
-        else if (initialSubType === 'diaper_both') setDiaperType('both');
-      }
+      // Standardwerte setzen
+      setFeedingType('bottle');
+      setVolumeMl(120);
+      setBreastSide('left');
+      setDiaperType('wet');
+      
+      // Hier könnten initialSubType ausgewertet werden
     }
   }, [visible, initialSubType, date]);
 
-  const handleStartTimeChange = (event: any, selectedDate?: Date) => {
-    setShowStartTimePicker(false);
-    if (selectedDate) {
-      setStartTime(selectedDate);
+  // Speicherfunktion
+  const handleSave = () => {
+    let data: any = {
+        date: startTime,
+        note: notes,
+    };
+
+    if (activityType === 'feeding') {
+        data = {
+            ...data,
+            feeding_type: feedingType,
+            volume_ml: feedingType === 'bottle' ? volumeMl : null,
+            side: feedingType === 'breast' ? breastSide.toUpperCase() : null,
+        };
+    } else if (activityType === 'diaper') {
+        data = {
+            ...data,
+            type: diaperType,
+        };
     }
+    
+    onSave(data);
+    setShowSuccessSplash(true);
   };
 
+  const handleSplashFinish = () => {
+    setShowSuccessSplash(false);
+    onClose();
+  };
+
+  const getButtonColor = (type: FeedingType) => {
+    switch (type) {
+      case 'breast': return theme.purple;
+      case 'bottle': return theme.primary;
+      case 'solids': return theme.green;
+      default: return theme.lightGray;
+    }
+  };
+  
   const getModalTitle = () => {
     switch (activityType) {
       case 'feeding': return 'Neue Fütterung';
@@ -90,41 +127,90 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
     }
   };
 
-  const handleSave = () => {
-    if (activityType === 'feeding') {
-      onSave({
-        type: feedingType,
-        start_time: startTime.toISOString(),
-        volume_ml: volumeMl ? parseInt(volumeMl) : null,
-        side: feedingType === 'breast' ? breastSide : null,
-        note: notes,
-      });
-    } else if (activityType === 'diaper') {
-      onSave({
-        entry_type: 'diaper',
-        entry_date: startTime.toISOString(),
-        start_time: startTime.toISOString(),
-        notes: `${diaperType}${notes ? ` - ${notes}` : ''}`,
-      });
-    } else {
-      onSave({
-        entry_type: activityType,
-        entry_date: startTime.toISOString(),
-        start_time: startTime.toISOString(),
-        notes: notes,
-      });
-    }
+  // --- RENDER FUNKTIONEN ---
+
+  const renderHeader = () => (
+    <View style={styles.header}>
+      <TouchableOpacity style={[styles.headerButton, { backgroundColor: theme.lightGray }]} onPress={onClose}>
+        <Text style={styles.closeHeaderButtonText}>✕</Text>
+      </TouchableOpacity>
+      <View style={styles.headerCenter}>
+        <Text style={[styles.modalTitle, { color: theme.text }]}>{getModalTitle()}</Text>
+        <Text style={[styles.modalSubtitle, { color: theme.textSecondary }]}>Details eingeben</Text>
+      </View>
+      <TouchableOpacity 
+        style={[styles.headerButton, { backgroundColor: theme.accent }]} 
+        onPress={handleSave}
+      >
+        <Text style={styles.saveHeaderButtonText}>✓</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  const renderBreastSideSelector = () => (
+    <View style={styles.sideSelectorContainer}>
+      {(['left', 'right', 'both'] as BreastSide[]).map((side) => (
+        <TouchableOpacity
+          key={side}
+          style={[
+            styles.sideSelectorButton,
+            { backgroundColor: theme.lightGray },
+            breastSide === side && { backgroundColor: theme.purple, },
+          ]}
+          onPress={() => setBreastSide(side)}
+        >
+          <Text style={[styles.sideSelectorButtonText, { color: breastSide === side ? '#FFFFFF' : theme.text }]}>
+            {side === 'left' ? 'Links' : side === 'right' ? 'Rechts' : 'Beide'}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+
+
+
+  const renderVolumeControl = () => {
+    const quickVolumes = [60, 90, 120, 150, 180];
+    return (
+      <View style={{width: '100%', alignItems: 'center'}}>
+        <Text style={[styles.sectionTitle, { color: theme.text }]}>🥛 Menge (ml)</Text>
+        <View style={styles.volumeStepperContainer}>
+          <TouchableOpacity style={styles.stepperButton} onPress={() => setVolumeMl(v => Math.max(0, v - 10))}>
+            <Text style={styles.stepperButtonText}>-</Text>
+          </TouchableOpacity>
+          <View style={styles.volumeDisplay}>
+            <Text style={[styles.volumeText, { color: theme.text }]}>{volumeMl}</Text>
+            <Text style={[styles.volumeUnit, { color: theme.textSecondary }]}> ml</Text>
+          </View>
+          <TouchableOpacity style={styles.stepperButton} onPress={() => setVolumeMl(v => v + 10)}>
+            <Text style={styles.stepperButtonText}>+</Text>
+          </TouchableOpacity>
+        </View>
+        <View style={styles.quickVolumeGrid}>
+          {quickVolumes.map((vol) => (
+            <TouchableOpacity
+              key={vol}
+              style={[
+                styles.quickVolumeButton, 
+                { backgroundColor: theme.lightGray },
+                volumeMl === vol && { backgroundColor: theme.mediumGray }
+              ]}
+              onPress={() => setVolumeMl(vol)}
+            >
+              <Text style={[styles.quickVolumeText, { color: theme.text }]}>{vol}ml</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+    );
   };
 
-  const renderFeedingOptions = () => (
+  const renderFeedingSection = () => (
     <View style={styles.section}>
-      <View style={styles.sectionHeader}>
-        <ThemedText style={styles.sectionTitle}>🍼 Art der Fütterung</ThemedText>
-      </View>
-      
+      <Text style={[styles.sectionTitle, { color: theme.text }]}>🍼 Art der Fütterung</Text>
       <View style={styles.optionsGrid}>
         {[
-          { type: 'breast', label: 'Brust', icon: '👶' },
+          { type: 'breast', label: 'Brust', icon: '🤱' },
           { type: 'bottle', label: 'Flasche', icon: '🍼' },
           { type: 'solids', label: 'Beikost', icon: '🥄' },
         ].map((option) => (
@@ -132,80 +218,42 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
             key={option.type}
             style={[
               styles.optionButton,
-              feedingType === option.type && styles.selectedOption,
-              { backgroundColor: feedingType === option.type ? '#4CAF50' : 'rgba(0,0,0,0.05)' }
+              { backgroundColor: theme.lightGray },
+              feedingType === option.type && { backgroundColor: getButtonColor(option.type as FeedingType) }
             ]}
             onPress={() => setFeedingType(option.type as FeedingType)}
           >
             <Text style={styles.optionIcon}>{option.icon}</Text>
-            <ThemedText style={[
-              styles.optionLabel,
-              { color: feedingType === option.type ? '#FFFFFF' : theme.text }
-            ]}>
+            <Text style={[styles.optionLabel, { color: feedingType === option.type ? '#FFFFFF' : theme.text }]}>
               {option.label}
-            </ThemedText>
+            </Text>
           </TouchableOpacity>
         ))}
       </View>
-
-      {feedingType === 'solids' && (
-        <View style={styles.infoBox}>
-          <View style={styles.infoIconContainer}>
-            <ThemedText style={styles.infoIcon}>ℹ️</ThemedText>
+      <View style={styles.contentContainer}>
+        {feedingType === 'bottle' && renderVolumeControl()}
+        {feedingType === 'breast' && (
+          <View style={{width: '100%', alignItems: 'center'}}>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>🤱 Seite</Text>
+            {renderBreastSideSelector()}
+            <Text style={[styles.infoText, {marginTop: 20}]}>Wähle die Seite, auf der gestillt wurde.</Text>
           </View>
-          <ThemedText style={styles.infoText}>
-            Verwenden Sie das Notizfeld für weitere Details über die Beikost
-          </ThemedText>
-        </View>
-      )}
-
-      {feedingType === 'bottle' && (
-        <View style={styles.inputGroup}>
-          <ThemedText style={styles.inputLabel}>Menge (ml):</ThemedText>
-          <TextInput
-            style={[styles.textInput, { color: theme.text, borderColor: theme.border }]}
-            value={volumeMl}
-            onChangeText={setVolumeMl}
-            placeholder="z.B. 120"
-            placeholderTextColor={theme.tabIconDefault}
-            keyboardType="numeric"
-          />
-        </View>
-      )}
-
-      {feedingType === 'breast' && (
-        <View style={styles.inputGroup}>
-          <ThemedText style={styles.inputLabel}>Seite:</ThemedText>
-          <View style={styles.sideSelector}>
-            {['left', 'right', 'both'].map((side) => (
-              <TouchableOpacity
-                key={side}
-                style={[
-                  styles.sideButton,
-                  breastSide === side && styles.selectedSideButton
-                ]}
-                onPress={() => setBreastSide(side as any)}
-              >
-                <ThemedText style={[
-                  styles.sideButtonText,
-                  { color: breastSide === side ? '#FFFFFF' : theme.text }
-                ]}>
-                  {side === 'left' ? 'Links' : side === 'right' ? 'Rechts' : 'Beide'}
-                </ThemedText>
-              </TouchableOpacity>
-            ))}
+        )}
+        {feedingType === 'solids' && (
+          <View style={{width: '100%', alignItems: 'center', paddingTop: 20}}>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>🥦 Beikost</Text>
+            <Text style={[styles.infoText, {marginTop: 10}]}>
+              Weitere Details zur Beikost folgen in Kürze.
+            </Text>
           </View>
-        </View>
-      )}
+        )}
+      </View>
     </View>
   );
 
-  const renderDiaperOptions = () => (
+  const renderDiaperSection = () => (
     <View style={styles.section}>
-      <View style={styles.sectionHeader}>
-        <ThemedText style={styles.sectionTitle}>💧 Art der Windel</ThemedText>
-      </View>
-      
+      <Text style={[styles.sectionTitle, { color: theme.text }]}>💧 Art der Windel</Text>
       <View style={styles.optionsGrid}>
         {[
           { type: 'wet', label: 'Nass', icon: '💧' },
@@ -216,280 +264,292 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
             key={option.type}
             style={[
               styles.optionButton,
-              diaperType === option.type && styles.selectedOption,
-              { backgroundColor: diaperType === option.type ? '#2196F3' : 'rgba(0,0,0,0.05)' }
+              { backgroundColor: theme.lightGray },
+              diaperType === option.type && { backgroundColor: theme.primary }
             ]}
             onPress={() => setDiaperType(option.type as DiaperType)}
           >
             <Text style={styles.optionIcon}>{option.icon}</Text>
-            <ThemedText style={[
-              styles.optionLabel,
-              { color: diaperType === option.type ? '#FFFFFF' : theme.text }
-            ]}>
+            <Text style={[styles.optionLabel, { color: diaperType === option.type ? '#FFFFFF' : theme.text }]}>
               {option.label}
-            </ThemedText>
+            </Text>
           </TouchableOpacity>
         ))}
       </View>
+      <Text style={[styles.infoText, {marginTop: 20}]}>Wähle aus, was auf die Windel zutrifft.</Text>
     </View>
   );
 
+  const toggleNotes = () => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setNotesVisible(!isNotesVisible);
+  };
+
+  const renderNotes = () => (
+      <View style={styles.section}>
+         <TouchableOpacity style={styles.notesHeader} onPress={toggleNotes}>
+           <Text style={[styles.sectionTitle, { color: theme.text, marginBottom: 0 }]}>📝 Notizen</Text>
+           <Text style={{ fontSize: 20, transform: [{ rotate: isNotesVisible ? '90deg' : '0deg' }] }}>›</Text>
+         </TouchableOpacity>
+         {isNotesVisible && (
+            <TextInput
+                style={[styles.notesInput, { color: theme.text, backgroundColor: theme.lightGray }]}
+                value={notes}
+                onChangeText={setNotes}
+                placeholder="Details hinzufügen..."
+                placeholderTextColor={theme.textSecondary}
+                multiline
+            />
+         )}
+      </View>
+  );
+
   return (
-    <Modal
-      visible={visible}
-      transparent={true}
-      animationType="slide"
-      onRequestClose={onClose}
-    >
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <View style={styles.modalOverlay}>
-          <ThemedView style={[styles.modalContent, { backgroundColor: 'rgba(255,255,255,0.95)' }]}>
-            {/* Header */}
-            <View style={styles.header}>
-              <TouchableOpacity style={styles.headerButton} onPress={onClose}>
-                <ThemedText style={styles.headerButtonText}>✕</ThemedText>
-              </TouchableOpacity>
-              
-              <View style={styles.headerCenter}>
-                <ThemedText style={styles.modalTitle}>{getModalTitle()}</ThemedText>
-                <ThemedText style={styles.modalSubtitle}>Details eingeben</ThemedText>
-              </View>
-              
-              <TouchableOpacity style={[styles.headerButton, styles.saveHeaderButton]} onPress={handleSave}>
-                <ThemedText style={styles.saveHeaderButtonText}>✓</ThemedText>
-              </TouchableOpacity>
-            </View>
+    <Modal visible={visible} transparent={true} animationType="slide" onRequestClose={onClose}>
+      <View style={styles.modalOverlay}>
+        {/* This empty view allows closing the modal by tapping the background */}
+        <TouchableWithoutFeedback onPress={onClose}>
+            <View style={StyleSheet.absoluteFill} />
+        </TouchableWithoutFeedback>
 
-            <ScrollView style={styles.scrollContent} showsVerticalScrollIndicator={false}>
-              {/* Content based on activity type */}
-              {activityType === 'feeding' && renderFeedingOptions()}
-              {activityType === 'diaper' && renderDiaperOptions()}
-
-              {/* Time Section */}
-              <View style={styles.section}>
-                <TouchableOpacity
-                  style={styles.timeSelector}
-                  onPress={() => setShowStartTimePicker(true)}
-                >
-                  <ThemedText style={styles.timeLabel}>Uhrzeit:</ThemedText>
-                  <ThemedText style={styles.timeValue}>
-                    {startTime.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
-                  </ThemedText>
-                </TouchableOpacity>
-              </View>
-
-              {showStartTimePicker && (
-                <DateTimePicker
-                  value={startTime}
-                  mode="time"
-                  display="default"
-                  onChange={handleStartTimeChange}
-                />
-              )}
-
-              {/* Notes Section */}
-              <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                  <ThemedText style={styles.sectionTitle}>📝 Notizen</ThemedText>
-                </View>
-                <TextInput
-                  style={[styles.notesInput, { color: theme.text, borderColor: theme.border }]}
-                  value={notes}
-                  onChangeText={setNotes}
-                  placeholder="Zusätzliche Informationen..."
-                  placeholderTextColor={theme.tabIconDefault}
-                  multiline
-                  numberOfLines={3}
-                />
-              </View>
+        <BlurView
+            style={styles.modalContent}
+            tint="extraLight" // Use a brighter tint
+            intensity={80} // Slightly less intense blur
+        >
+            {renderHeader()}
+            <ScrollView showsVerticalScrollIndicator={false}>
+                {/* This wrapper ensures keyboard dismiss works inside the scroll view */}
+                <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+                    <View style={{width: '100%', alignItems: 'center'}}>
+                        {activityType === 'feeding' && renderFeedingSection()}
+                        {activityType === 'diaper' && renderDiaperSection()}
+                        {renderNotes()}
+                    </View>
+                </TouchableWithoutFeedback>
             </ScrollView>
-          </ThemedView>
-        </View>
-      </TouchableWithoutFeedback>
+        </BlurView>
+      </View>
+      <SuccessSplashScreen 
+        visible={showSuccessSplash} 
+        onFinish={handleSplashFinish} 
+        backgroundColor={theme.accent} 
+      />
     </Modal>
   );
 };
 
+// --- STYLES ---
+
 const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 50,
-    paddingHorizontal: 20,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0, 0, 0, 0.4)', // Dimming backdrop
   },
   modalContent: {
-    borderRadius: 20,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    elevation: 10,
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
     width: '100%',
-    maxHeight: '85%',
-    minHeight: 400,
+    height: '85%',
+    maxHeight: 700,
+    minHeight: 650,
+    overflow: 'hidden',
+    padding: 20,
+    paddingBottom: 40,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 20,
+    marginBottom: 25,
   },
   headerButton: {
-    padding: 5,
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 22,
   },
-  headerButtonText: {
-    fontSize: 24,
+  closeHeaderButtonText: {
+    fontSize: 20,
+    fontWeight: '400',
+    color: '#888888',
   },
   headerCenter: {
     alignItems: 'center',
   },
   modalTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: 'bold',
   },
   modalSubtitle: {
     fontSize: 14,
-    color: '#888',
-    marginTop: 4,
+    marginTop: 2,
   },
   saveHeaderButton: {
-    backgroundColor: '#4CAF50',
-    paddingVertical: 8,
-    paddingHorizontal: 15,
-    borderRadius: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 5,
   },
   saveHeaderButtonText: {
-    fontSize: 18,
+    fontSize: 22,
     color: '#FFFFFF',
     fontWeight: 'bold',
   },
-  scrollContent: {
-    flex: 1,
-    paddingBottom: 20,
-  },
   section: {
-    marginBottom: 20,
-  },
-  sectionHeader: {
-    marginBottom: 10,
+    marginBottom: 30,
+    width: '100%',
+    alignItems: 'center',
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 10,
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 20,
+    width: '90%',
+    textAlign: 'left',
   },
   optionsGrid: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-around',
-    marginBottom: 10,
+    justifyContent: 'center',
+    width: '100%',
+    paddingHorizontal: 10,
   },
   optionButton: {
-    width: '30%',
-    minHeight: 80,
-    borderRadius: 10,
-    justifyContent: 'center',
+    flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 5,
-    padding: 8,
-  },
-  selectedOption: {
-    borderWidth: 2,
-    borderColor: '#4CAF50', // Example color for selected
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    borderRadius: 20,
+    justifyContent: 'center',
+    marginHorizontal: 5,
+    minHeight: 50,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
   },
   optionIcon: {
-    fontSize: 28,
-    marginBottom: 5,
+    fontSize: 30,
+    marginBottom: 8,
   },
   optionLabel: {
-    fontSize: 12,
+    fontSize: 14,
+    fontWeight: '500',
     textAlign: 'center',
   },
-  infoBox: {
-    backgroundColor: '#E0F2F7',
-    borderRadius: 10,
-    padding: 15,
-    marginTop: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  infoIconContainer: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: '#B0E0E6',
+  contentContainer: {
+    minHeight: 180, // Feste Höhe, um Springen zu verhindern
     justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 10,
+    paddingTop: 10,
   },
-  infoIcon: {
-    fontSize: 18,
-  },
-  infoText: {
-    fontSize: 14,
-    color: '#333',
-  },
-  inputGroup: {
-    marginTop: 10,
-  },
-  inputLabel: {
-    fontSize: 16,
-    marginBottom: 5,
-    fontWeight: '500',
-  },
-  textInput: {
-    borderWidth: 1,
-    borderRadius: 10,
-    padding: 12,
-    fontSize: 16,
-    backgroundColor: '#F0F0F0',
-  },
-  sideSelector: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginTop: 5,
-  },
-  sideButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 15,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#CCCCCC',
-  },
-  selectedSideButton: {
-    borderColor: '#4CAF50',
-    borderWidth: 2,
-  },
-  sideButtonText: {
-    fontSize: 14,
-  },
-  notesInput: {
-    borderWidth: 1,
-    borderRadius: 10,
-    padding: 12,
-    fontSize: 16,
-    backgroundColor: '#F0F0F0',
-    minHeight: 100,
-    textAlignVertical: 'top',
-  },
-  timeSelector: {
+  volumeStepperContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#E0F2F7',
-    borderRadius: 10,
-    padding: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    borderRadius: 30,
+    paddingVertical: 5,
+    paddingHorizontal: 20,
+    width: '90%',
+    minHeight: 70,
   },
-  timeLabel: {
-    fontSize: 16,
-    fontWeight: '500',
+  stepperButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'white',
   },
-  timeValue: {
-    fontSize: 18,
+  stepperButtonText: {
+    fontSize: 24,
+    color: '#333',
     fontWeight: 'bold',
+  },
+  volumeDisplay: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'center',
+    flex: 1,
+  },
+  volumeText: {
+    fontSize: 36,
+    fontWeight: 'bold',
+  },
+  volumeUnit: {
+    fontSize: 18,
+    marginLeft: 5,
+    marginBottom: 5,
+  },
+  quickVolumeGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    marginTop: 15,
+    width: '90%',
+  },
+  quickVolumeButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 18,
+    margin: 5,
+  },
+  quickVolumeText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  sideSelectorContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    width: '90%',
+    marginTop: 10,
+  },
+  sideSelectorButton: {
+    flex: 1,
+    paddingVertical: 18,
+    borderRadius: 20,
+    marginHorizontal: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 60,
+  },
+  sideSelectorButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  infoText: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    marginTop: 10,
+  },
+  notesHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '100%',
+  },
+  chevron: {
+    fontSize: 24,
+    color: '#888',
+  },
+  chevronUp: {
+    transform: [{ rotate: '180deg' }],
+  },
+  notesInput: {
+    height: 100,
+    textAlignVertical: 'top',
+    padding: 15,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    borderRadius: 15,
+    backgroundColor: 'rgba(240, 240, 240, 0.9)',
+    width: '100%',
+    marginTop: 10,
   },
 });
 

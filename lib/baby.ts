@@ -771,17 +771,19 @@ export const calculateDailyStats = (entries: DailyEntry[]) => {
   return stats;
 };
 
-// Neue Funktion für Feeding Events
+// Feeding Events Interface - matches database schema exactly
 export interface FeedingEvent {
   id?: string;
   user_id?: string;
   baby_id?: string;
-  type: 'breast' | 'bottle' | 'solids';
-  start_time: string;
-  end_time?: string;
-  volume_ml?: number;
-  side?: 'left' | 'right' | 'both';
-  note?: string;
+  type: 'BREAST' | 'BOTTLE' | 'SOLIDS'; // matches public.feeding_type
+  start_time: string; // timestamp with time zone
+  end_time?: string; // timestamp with time zone
+  volume_ml?: number; // integer
+  side?: 'LEFT' | 'RIGHT' | 'BOTH'; // matches public.breast_side
+  note?: string; // text
+  created_at?: string;
+  updated_at?: string;
 }
 
 export const saveFeedingEvent = async (feedingData: FeedingEvent) => {
@@ -821,6 +823,37 @@ export const saveFeedingEvent = async (feedingData: FeedingEvent) => {
     return { data, error: null };
   } catch (err) {
     console.error('Failed to save feeding event:', err);
+    return { data: null, error: err };
+  }
+};
+
+export const updateFeedingEventEnd = async (id: string, endTime: Date) => {
+  try {
+    const userData = await supabase.auth.getUser();
+    if (!userData.data.user) {
+      return { data: null, error: new Error('User not authenticated') };
+    }
+
+    const { data, error } = await supabase
+      .from('feeding_events')
+      .update({ 
+        end_time: endTime.toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .eq('user_id', userData.data.user.id)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error updating feeding event end time:', error);
+      return { data: null, error };
+    }
+
+    console.log('Feeding event end time updated successfully:', data);
+    return { data, error: null };
+  } catch (err) {
+    console.error('Failed to update feeding event end time:', err);
     return { data: null, error: err };
   }
 };
