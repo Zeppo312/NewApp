@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import * as Sentry from '@sentry/react-native';
 
 // Typen für die Baby-Informationen
 export interface BabyInfo {
@@ -28,6 +29,26 @@ export interface DailyEntry {
   entry_date: string;
   entry_type: 'diaper' | 'sleep' | 'feeding' | 'other';
   start_time?: string;
+  end_time?: string;
+  notes?: string;
+  // Optional fields used when coming from baby_care_events
+  diaper_type?: 'wet' | 'dirty' | 'both';
+  feeding_type?: 'breast' | 'bottle' | 'solids';
+  volume_ml?: number;
+  side?: 'left' | 'right' | 'both';
+  source_table?: 'baby_daily' | 'baby_care_events';
+}
+
+export interface CareEvent {
+  id?: string;
+  user_id?: string;
+  baby_id?: string;
+  event_type: 'diaper' | 'feeding';
+  diaper_type?: 'wet' | 'dirty' | 'both';
+  feeding_type?: 'breast' | 'bottle' | 'solids';
+  volume_ml?: number;
+  side?: 'left' | 'right' | 'both';
+  start_time: string;
   end_time?: string;
   notes?: string;
 }
@@ -785,13 +806,25 @@ export interface FeedingEvent {
 }
 
 export const saveFeedingEvent = async (feedingData: FeedingEvent) => {
+  // Legacy helper that now proxies to saveCareEvent
+  return saveCareEvent({
+    event_type: 'feeding',
+    feeding_type: feedingData.type,
+    start_time: feedingData.start_time,
+    end_time: feedingData.end_time,
+    volume_ml: feedingData.volume_ml,
+    side: feedingData.side,
+    notes: feedingData.note,
+  });
+};
+
+export const saveCareEvent = async (event: CareEvent) => {
   try {
     const userData = await supabase.auth.getUser();
     if (!userData.data.user) {
       return { data: null, error: new Error('User not authenticated') };
     }
 
-    // Get current baby_id from user profile or use a default
     const { data: profile } = await supabase
       .from('profiles')
       .select('baby_id')
@@ -799,28 +832,138 @@ export const saveFeedingEvent = async (feedingData: FeedingEvent) => {
       .single();
 
     const payload = {
-      ...feedingData,
+      ...event,
       user_id: userData.data.user.id,
-      baby_id: profile?.baby_id || userData.data.user.id, // fallback to user_id
+      baby_id: profile?.baby_id || userData.data.user.id,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
 
     const { data, error } = await supabase
-      .from('feeding_events')
+      .from('baby_care_events')
       .insert([payload])
       .select()
       .single();
 
     if (error) {
-      console.error('Error saving feeding event:', error);
+      console.error('Error saving care event:', error);
+      Sentry.captureException(error);
       return { data: null, error };
     }
 
-    console.log('Feeding event saved successfully:', data);
     return { data, error: null };
   } catch (err) {
-    console.error('Failed to save feeding event:', err);
-    return { data: null, error: err };
+    console.error('Failed to save care event:', err);
+    Sentry.captureException(err);
+    return { data: null, error: err as any };
   }
 };
+
+export const deleteCareEvent = async (id: string) => {
+  try {
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
+
+    const { data, error } = await supabase
+      .from('baby_care_events')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', userData.user.id);
+
+    if (error) {
+      Sentry.captureException(error);
+    }
+    return { data, error };
+  } catch (err) {
+    console.error('Failed to delete care event:', err);
+    Sentry.captureException(err);
+    return { data: null, error: err as any };
+  }
+};
+
+export const getCareEvents = async (date?: Date) => {
+  try {
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
+
+    let query = supabase.from('baby_care_events').select('*');
+
+    if (date) {
+      const startOfDay = new Date(date);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(date);
+      endOfDay.setHours(23, 59, 59, 999);
+      query = query
+        .gte('start_time', startOfDay.toISOString())
+        .lte('start_time', endOfDay.toISOString());
+    }
+
+    const { data, error } = await query.order('start_time', { ascending: false });
+    if (error) {
+      console.error('Error fetching care events:', error);
+      Sentry.captureException(error);
+      return { data: null, error };
+    }
+
+    const mapped = data.map(ev => ({
+      id: ev.id,
+      entry_date: ev.start_time,
+      entry_type: ev.event_type,
+      start_time: ev.start_time,
+      end_time: ev.end_time,
+      notes: ev.notes ?? ev.note,
+      diaper_type: ev.diaper_type,
+      feeding_type: ev.feeding_type,
+      volume_ml: ev.volume_ml,
+      side: ev.side,
+      source_table: 'baby_care_events' as const,
+    }));
+
+    return { data: mapped, error: null };
+  } catch (err) {
+    console.error('Failed to get care events:', err);
+    Sentry.captureException(err);
+    return { data: null, error: err as any };
+  }
+};
+
+export const updateCareEvent = async (
+  id: string,
+  updates: Partial<CareEvent>
+) => {
+  try {
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
+
+    const payload = {
+      ...updates,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { data, error } = await supabase
+      .from('baby_care_events')
+      .update(payload)
+      .eq('id', id)
+      .eq('user_id', userData.user.id)
+      .select()
+      .single();
+
+    if (error) {
+      Sentry.captureException(error);
+    }
+
+    return { data, error };
+  } catch (err) {
+    console.error('Failed to update care event:', err);
+    Sentry.captureException(err);
+    return { data: null, error: err as any };
+  }
+};
+
+export const completeCareEvent = async (
+  id: string,
+  additional?: Partial<CareEvent>
+) => {
+  return updateCareEvent(id, { end_time: new Date().toISOString(), ...(additional || {}) });
+};
+

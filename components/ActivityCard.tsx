@@ -12,9 +12,10 @@ import { LinearGradient } from 'expo-linear-gradient';
 interface ActivityCardProps {
   entry: DailyEntry;
   onDelete: (id: string) => void;
+  onStop?: (id: string) => void;
 }
 
-const ActivityCard: React.FC<ActivityCardProps> = ({ entry, onDelete }) => {
+const ActivityCard: React.FC<ActivityCardProps> = ({ entry, onDelete, onStop }) => {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const [expanded, setExpanded] = useState(false);
@@ -130,6 +131,28 @@ const ActivityCard: React.FC<ActivityCardProps> = ({ entry, onDelete }) => {
     ? calculateDuration(entry.start_time!, entry.end_time)
     : 0;
 
+  const [elapsed, setElapsed] = useState(() =>
+    entry.end_time
+      ? calculateDuration(entry.start_time!, entry.end_time) * 60
+      : Math.floor((Date.now() - new Date(entry.start_time!).getTime()) / 1000)
+  );
+
+  useEffect(() => {
+    if (!entry.end_time) {
+      const id = setInterval(() => {
+        setElapsed(Math.floor((Date.now() - new Date(entry.start_time!).getTime()) / 1000));
+      }, 1000);
+      return () => clearInterval(id);
+    }
+  }, [entry.end_time, entry.start_time]);
+
+  const formatSeconds = (sec: number) => {
+    const hours = Math.floor(sec / 3600);
+    const minutes = Math.floor((sec % 3600) / 60);
+    const seconds = sec % 60;
+    return `${hours.toString().padStart(2,'0')}:${minutes.toString().padStart(2,'0')}:${seconds.toString().padStart(2,'0')}`;
+  };
+
   // Rendere Swipe-Aktionen
   const renderRightActions = (
     progress: Animated.AnimatedInterpolation<number>,
@@ -226,6 +249,19 @@ const ActivityCard: React.FC<ActivityCardProps> = ({ entry, onDelete }) => {
                     </>
                   )}
                 </View>
+                {entry.entry_type === 'feeding' && !entry.end_time && (
+                  <View style={styles.activeRow}>
+                    <ThemedText style={styles.activeTimer}>{formatSeconds(elapsed)}</ThemedText>
+                    {onStop && entry.id && (
+                      <TouchableOpacity
+                        style={styles.stopButton}
+                        onPress={() => onStop(entry.id!)}
+                      >
+                        <ThemedText style={styles.stopButtonText}>Stop</ThemedText>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                )}
               </View>
             </View>
 
@@ -343,6 +379,27 @@ const styles = StyleSheet.create({
   duration: {
     fontSize: 13,
     color: '#666666',
+  },
+  activeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+    gap: 8,
+  },
+  activeTimer: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FF9800',
+  },
+  stopButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    backgroundColor: '#FF9800',
+    borderRadius: 8,
+  },
+  stopButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
   },
   notesContainer: {
     overflow: 'hidden',

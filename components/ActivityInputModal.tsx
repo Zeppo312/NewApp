@@ -93,18 +93,19 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   const handleSave = () => {
     if (activityType === 'feeding') {
       onSave({
-        type: feedingType,
+        event_type: 'feeding',
+        feeding_type: feedingType,
         start_time: startTime.toISOString(),
         volume_ml: volumeMl ? parseInt(volumeMl) : null,
         side: feedingType === 'breast' ? breastSide : null,
-        note: notes,
+        notes: notes,
       });
     } else if (activityType === 'diaper') {
       onSave({
-        entry_type: 'diaper',
-        entry_date: startTime.toISOString(),
+        event_type: 'diaper',
+        diaper_type: diaperType,
         start_time: startTime.toISOString(),
-        notes: `${diaperType}${notes ? ` - ${notes}` : ''}`,
+        notes: notes,
       });
     } else {
       onSave({

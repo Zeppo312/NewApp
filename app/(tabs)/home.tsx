@@ -10,7 +10,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { TablerIcon } from '@/components/ui/TablerIcon';
-import { getBabyInfo, getDiaryEntries, getCurrentPhase, getPhaseProgress, getMilestonesByPhase, getDailyEntries } from '@/lib/baby';
+import { getBabyInfo, getDiaryEntries, getCurrentPhase, getPhaseProgress, getMilestonesByPhase, getDailyEntries, getCareEvents } from '@/lib/baby';
 import { supabase } from '@/lib/supabase';
 import { BlurView } from 'expo-blur';
 
@@ -105,8 +105,14 @@ export default function HomeScreen() {
       // Alltags-Einträge für heute laden
       const today = new Date();
       const { data: dailyData } = await getDailyEntries(undefined, today);
-      if (dailyData) {
-        setDailyEntries(dailyData);
+      const { data: careData } = await getCareEvents(today);
+      if (dailyData || careData) {
+        const merged = [...(dailyData ?? []), ...(careData ?? [])].sort(
+          (a, b) =>
+            new Date(b.start_time ?? b.entry_date).getTime() -
+            new Date(a.start_time ?? a.entry_date).getTime()
+        );
+        setDailyEntries(merged);
       }
 
       // Aktuelle Entwicklungsphase laden
