@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Modal, StyleSheet, TouchableOpacity, Text, TouchableWithoutFeedback, Keyboard, Platform, ScrollView, TextInput, LayoutAnimation, UIManager } from 'react-native';
 import { BlurView } from 'expo-blur';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import SuccessSplashScreen from './SuccessSplashScreen';
+
 
 // Typ-Definitionen
 type ActivityType = 'feeding' | 'diaper' | 'other';
@@ -47,7 +47,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   const [startTime, setStartTime] = useState(new Date());
   const [notes, setNotes] = useState('');
   const [isNotesVisible, setNotesVisible] = useState(false);
-  const [showSuccessSplash, setShowSuccessSplash] = useState(false);
+
   
   // Feeding States
   const [feedingType, setFeedingType] = useState<FeedingType>('bottle');
@@ -102,13 +102,10 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
     }
     
     onSave(data);
-    setShowSuccessSplash(true);
-  };
-
-  const handleSplashFinish = () => {
-    setShowSuccessSplash(false);
     onClose();
   };
+
+
 
   const getButtonColor = (type: FeedingType) => {
     switch (type) {
@@ -330,11 +327,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
             </ScrollView>
         </BlurView>
       </View>
-      <SuccessSplashScreen 
-        visible={showSuccessSplash} 
-        onFinish={handleSplashFinish} 
-        backgroundColor={theme.accent} 
-      />
+
     </Modal>
   );
 };

@@ -180,6 +180,7 @@ export default function DailyScreen() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [selectedTab, setSelectedTab] = useState<'day' | 'week' | 'month'>('day');
   const [showDateSpider, setShowDateSpider] = useState(true);
+  const fadeAnim = useRef(new Animated.Value(0)).current; // For date nav fade
 
   // Timer State
   const [activeTimer, setActiveTimer] = useState<{
@@ -205,10 +206,26 @@ export default function DailyScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDate]);
 
-  // Show DateSpider when tab changes
+  // Date-Nav fade-in and auto-fade-out logic
   useEffect(() => {
-    setShowDateSpider(true);
-  }, [selectedTab]);
+    // Fade in
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+
+    // Auto hide after 5 seconds
+    const timer = setTimeout(() => {
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 500, // Slower fade-out
+        useNativeDriver: true,
+      }).start();
+    }, 5000);
+
+    return () => clearTimeout(timer);
+  }, [selectedDate, fadeAnim]); // Re-trigger on date change
 
   // Realtime subscription to Supabase changes
   useEffect(() => {
@@ -430,7 +447,25 @@ export default function DailyScreen() {
       <TouchableOpacity style={s.navButton} onPress={() => changeRelativeDate(-1)}>
         <IconSymbol name="chevron.left" size={20} color={theme.text} />
       </TouchableOpacity>
-      <DateSpider date={selectedDate} visible={showDateSpider} />
+                <Animated.View style={{ opacity: fadeAnim }}>
+            <TouchableOpacity
+              onPress={() => changeRelativeDate(-1)}
+              style={s.navButton}
+            >
+              <IconSymbol name="chevron.left" size={22} color={theme.text} />
+            </TouchableOpacity>
+          </Animated.View>
+
+          <DateSpider date={selectedDate} visible={showDateSpider} />
+
+          <Animated.View style={{ opacity: fadeAnim }}>
+            <TouchableOpacity
+              onPress={() => changeRelativeDate(1)}
+              style={s.navButton}
+            >
+              <IconSymbol name="chevron.right" size={22} color={theme.text} />
+            </TouchableOpacity>
+          </Animated.View>
       <TouchableOpacity style={s.navButton} onPress={() => changeRelativeDate(1)}>
         <IconSymbol name="chevron.right" size={20} color={theme.text} />
       </TouchableOpacity>
@@ -687,9 +722,18 @@ const s = StyleSheet.create({
     width: 96,
     height: 96,
     borderRadius: 48,
-    backgroundColor: 'rgba(255,255,255,0.35)',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)', // Even more transparent
     alignItems: 'center',
     justifyContent: 'center',
+    // Add border for glass edge effect
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)', // Softer border
+    // Add subtle shadow for depth
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.15,
+    shadowRadius: 15,
+    elevation: 6,
   },
   circleEmoji: {
     fontSize: 28,
