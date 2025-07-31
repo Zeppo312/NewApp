@@ -45,11 +45,12 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   // States
   const [startTime, setStartTime] = useState(new Date());
   const [notes, setNotes] = useState('');
+  const [showNotes, setShowNotes] = useState(false);
   const [showStartTimePicker, setShowStartTimePicker] = useState(false);
   
   // Feeding specific states
   const [feedingType, setFeedingType] = useState<FeedingType>('breast');
-  const [volumeMl, setVolumeMl] = useState('');
+  const [volumeMl, setVolumeMl] = useState(0);
   const [breastSide, setBreastSide] = useState<'left' | 'right' | 'both'>('left');
   
   // Diaper specific states
@@ -61,7 +62,8 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
       const now = date || new Date();
       setStartTime(now);
       setNotes('');
-      setVolumeMl('');
+      setShowNotes(false);
+      setVolumeMl(0);
       
       // Set initial type based on initialSubType
       if (initialSubType) {
@@ -95,7 +97,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
       onSave({
         type: feedingType,
         start_time: startTime.toISOString(),
-        volume_ml: volumeMl ? parseInt(volumeMl) : null,
+        volume_ml: volumeMl || null,
         side: feedingType === 'breast' ? breastSide : null,
         note: notes,
       });
@@ -116,35 +118,55 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
     }
   };
 
+  const OptionButton = ({
+    emoji,
+    label,
+    selected,
+    tint,
+    onPress,
+  }: {
+    emoji: string;
+    label: string;
+    selected: boolean;
+    tint: string;
+    onPress: () => void;
+  }) => (
+    <TouchableOpacity
+      style={[
+        styles.optionBtn,
+        {
+          backgroundColor: selected ? tint : '#F2F2F4',
+        },
+      ]}
+      onPress={onPress}
+    >
+      <Text style={[styles.optionEmoji, { color: selected ? '#fff' : theme.text }]}>{emoji}</Text>
+      <ThemedText style={[styles.optionLabel, { color: selected ? '#fff' : theme.text }]}>
+        {label}
+      </ThemedText>
+    </TouchableOpacity>
+  );
+
   const renderFeedingOptions = () => (
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
         <ThemedText style={styles.sectionTitle}>🍼 Art der Fütterung</ThemedText>
       </View>
-      
-      <View style={styles.optionsGrid}>
+
+      <View style={styles.optionRow}>
         {[
-          { type: 'breast', label: 'Brust', icon: '👶' },
-          { type: 'bottle', label: 'Flasche', icon: '🍼' },
-          { type: 'solids', label: 'Beikost', icon: '🥄' },
+          { type: 'breast', label: 'Brust', icon: '🤱', tint: '#AF52DE' },
+          { type: 'bottle', label: 'Flasche', icon: '🍼', tint: '#0A84FF' },
+          { type: 'solids', label: 'Beikost', icon: '🥄', tint: '#34C759' },
         ].map((option) => (
-          <TouchableOpacity
+          <OptionButton
             key={option.type}
-            style={[
-              styles.optionButton,
-              feedingType === option.type && styles.selectedOption,
-              { backgroundColor: feedingType === option.type ? '#4CAF50' : 'rgba(0,0,0,0.05)' }
-            ]}
+            emoji={option.icon}
+            label={option.label}
+            selected={feedingType === option.type}
+            tint={option.tint}
             onPress={() => setFeedingType(option.type as FeedingType)}
-          >
-            <Text style={styles.optionIcon}>{option.icon}</Text>
-            <ThemedText style={[
-              styles.optionLabel,
-              { color: feedingType === option.type ? '#FFFFFF' : theme.text }
-            ]}>
-              {option.label}
-            </ThemedText>
-          </TouchableOpacity>
+          />
         ))}
       </View>
 
@@ -161,15 +183,23 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
 
       {feedingType === 'bottle' && (
         <View style={styles.inputGroup}>
-          <ThemedText style={styles.inputLabel}>Menge (ml):</ThemedText>
-          <TextInput
-            style={[styles.textInput, { color: theme.text, borderColor: theme.border }]}
-            value={volumeMl}
-            onChangeText={setVolumeMl}
-            placeholder="z.B. 120"
-            placeholderTextColor={theme.tabIconDefault}
-            keyboardType="numeric"
-          />
+          <ThemedText style={styles.inputLabel}>🥛 Menge (ml)</ThemedText>
+          <View style={styles.stepper}>
+            <TouchableOpacity style={styles.stepBtn} onPress={() => setVolumeMl(Math.max(0, volumeMl - 30))}>
+              <Text style={styles.stepBtnText}>-</Text>
+            </TouchableOpacity>
+            <Text style={styles.stepValue}>{volumeMl} ml</Text>
+            <TouchableOpacity style={styles.stepBtn} onPress={() => setVolumeMl(volumeMl + 30)}>
+              <Text style={styles.stepBtnText}>+</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.presetRow}>
+            {[60, 90, 120, 150, 180].map(v => (
+              <TouchableOpacity key={v} style={styles.presetChip} onPress={() => setVolumeMl(v)}>
+                <Text style={styles.presetChipText}>{v}ml</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
       )}
 
@@ -206,29 +236,20 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
         <ThemedText style={styles.sectionTitle}>💧 Art der Windel</ThemedText>
       </View>
       
-      <View style={styles.optionsGrid}>
+      <View style={styles.optionRow}>
         {[
-          { type: 'wet', label: 'Nass', icon: '💧' },
-          { type: 'dirty', label: 'Voll', icon: '💩' },
-          { type: 'both', label: 'Beides', icon: '💧💩' },
+          { type: 'wet', label: 'Nass', icon: '💧', tint: '#0A84FF' },
+          { type: 'dirty', label: 'Voll', icon: '💩', tint: '#8A4E2C' },
+          { type: 'both', label: 'Beides', icon: '💧💩', tint: '#0A84FF' },
         ].map((option) => (
-          <TouchableOpacity
+          <OptionButton
             key={option.type}
-            style={[
-              styles.optionButton,
-              diaperType === option.type && styles.selectedOption,
-              { backgroundColor: diaperType === option.type ? '#2196F3' : 'rgba(0,0,0,0.05)' }
-            ]}
+            emoji={option.icon}
+            label={option.label}
+            selected={diaperType === option.type}
+            tint={option.tint}
             onPress={() => setDiaperType(option.type as DiaperType)}
-          >
-            <Text style={styles.optionIcon}>{option.icon}</Text>
-            <ThemedText style={[
-              styles.optionLabel,
-              { color: diaperType === option.type ? '#FFFFFF' : theme.text }
-            ]}>
-              {option.label}
-            </ThemedText>
-          </TouchableOpacity>
+          />
         ))}
       </View>
     </View>
@@ -243,7 +264,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
     >
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <View style={styles.modalOverlay}>
-          <ThemedView style={[styles.modalContent, { backgroundColor: 'rgba(255,255,255,0.95)' }]}>
+          <ThemedView style={styles.modalContent}>
             {/* Header */}
             <View style={styles.header}>
               <TouchableOpacity style={styles.headerButton} onPress={onClose}>
@@ -289,18 +310,22 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
 
               {/* Notes Section */}
               <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                  <ThemedText style={styles.sectionTitle}>📝 Notizen</ThemedText>
-                </View>
-                <TextInput
-                  style={[styles.notesInput, { color: theme.text, borderColor: theme.border }]}
-                  value={notes}
-                  onChangeText={setNotes}
-                  placeholder="Zusätzliche Informationen..."
-                  placeholderTextColor={theme.tabIconDefault}
-                  multiline
-                  numberOfLines={3}
-                />
+                <TouchableOpacity style={styles.notesRow} onPress={() => setShowNotes(true)}>
+                  <Text style={styles.optionIcon}>📝</Text>
+                  <ThemedText style={styles.notesRowLabel}>Notizen</ThemedText>
+                  <IconSymbol name="chevron.right" size={20} color={theme.text} />
+                </TouchableOpacity>
+                {showNotes && (
+                  <TextInput
+                    style={[styles.notesInput, { color: theme.text, borderColor: theme.border }]}
+                    value={notes}
+                    onChangeText={setNotes}
+                    placeholder="Zusätzliche Informationen..."
+                    placeholderTextColor={theme.tabIconDefault}
+                    multiline
+                    numberOfLines={3}
+                  />
+                )}
               </View>
             </ScrollView>
           </ThemedView>
@@ -314,22 +339,21 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
+    justifyContent: 'flex-end',
     alignItems: 'center',
-    paddingVertical: 50,
-    paddingHorizontal: 20,
+    paddingVertical: 30,
   },
   modalContent: {
-    borderRadius: 20,
-    padding: 20,
+    borderRadius: 22,
+    padding: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
     elevation: 10,
-    width: '100%',
+    width: '92%',
     maxHeight: '85%',
-    minHeight: 400,
+    backgroundColor: 'rgba(255,255,255,0.95)',
   },
   header: {
     flexDirection: 'row',
@@ -338,33 +362,36 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   headerButton: {
-    padding: 5,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#E5E5EA',
   },
   headerButtonText: {
-    fontSize: 24,
+    fontSize: 20,
+    color: '#1C1C1E',
   },
   headerCenter: {
     alignItems: 'center',
   },
   modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 22,
+    fontWeight: '600',
   },
   modalSubtitle: {
-    fontSize: 14,
-    color: '#888',
-    marginTop: 4,
+    fontSize: 13,
+    color: '#8E8E93',
+    marginTop: 2,
   },
   saveHeaderButton: {
-    backgroundColor: '#4CAF50',
-    paddingVertical: 8,
-    paddingHorizontal: 15,
-    borderRadius: 10,
+    backgroundColor: '#FFC4A6',
   },
   saveHeaderButtonText: {
-    fontSize: 18,
-    color: '#FFFFFF',
-    fontWeight: 'bold',
+    fontSize: 20,
+    color: '#fff',
+    fontWeight: '600',
   },
   scrollContent: {
     flex: 1,
@@ -381,32 +408,29 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 10,
   },
-  optionsGrid: {
+  optionRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-around',
+    justifyContent: 'space-between',
     marginBottom: 10,
   },
-  optionButton: {
-    width: '30%',
-    minHeight: 80,
-    borderRadius: 10,
-    justifyContent: 'center',
+  optionBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 14,
+    flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 5,
-    padding: 8,
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
   },
-  selectedOption: {
-    borderWidth: 2,
-    borderColor: '#4CAF50', // Example color for selected
-  },
-  optionIcon: {
-    fontSize: 28,
-    marginBottom: 5,
+  optionEmoji: {
+    fontSize: 20,
   },
   optionLabel: {
-    fontSize: 12,
-    textAlign: 'center',
+    fontSize: 15,
+    fontWeight: '600',
   },
   infoBox: {
     backgroundColor: '#E0F2F7',
@@ -490,6 +514,66 @@ const styles = StyleSheet.create({
   timeValue: {
     fontSize: 18,
     fontWeight: 'bold',
+  },
+  stepper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    paddingHorizontal: 12,
+    height: 56,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+  },
+  stepBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#E5E5EA',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepBtnText: {
+    fontSize: 20,
+    fontWeight: '600',
+  },
+  stepValue: {
+    fontSize: 30,
+    fontWeight: '700',
+  },
+  presetRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 12,
+  },
+  presetChip: {
+    paddingHorizontal: 12,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#E5E5EA',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  presetChipText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  notesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F2F2F4',
+    borderRadius: 14,
+    padding: 12,
+  },
+  notesRowLabel: {
+    flex: 1,
+    marginLeft: 8,
+    fontSize: 17,
+    fontWeight: '600',
   },
 });
 
