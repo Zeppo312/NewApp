@@ -7,7 +7,7 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/contexts/AuthContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { ThemedBackground } from '@/components/ThemedBackground';
-import { getDailyEntries, saveDailyEntry, deleteDailyEntry, DailyEntry } from '@/lib/baby';
+import { getCareEntries, saveCareEntry, deleteCareEntry, CareEntry } from '@/lib/care';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import ActivitySelector from '@/components/ActivitySelector';
 import ActivityInputModal from '@/components/ActivityInputModal';
@@ -28,7 +28,7 @@ export default function DailyOldScreen() {
   const { user } = useAuth();
   const router = useRouter();
 
-  const [entries, setEntries] = useState<DailyEntry[]>([]);
+  const [entries, setEntries] = useState<CareEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -141,7 +141,7 @@ export default function DailyOldScreen() {
       console.log('Loading entries for date:', selectedDate);
 
       // Keine Filterung nach Typ mehr
-      const { data, error } = await getDailyEntries(undefined, selectedDate);
+      const { data, error } = await getCareEntries(selectedDate);
       if (error) {
         console.error('Error loading daily entries:', error);
       } else if (data) {
@@ -176,18 +176,25 @@ export default function DailyOldScreen() {
     end_time?: string;
     notes?: string;
     duration: number;
+    diaper_type?: 'wet' | 'poop' | 'both';
+    feeding_type?: 'breast' | 'bottle' | 'solid';
+    breast_side?: 'left' | 'right' | 'both';
+    bottle_amount?: number;
   }) => {
     try {
-      // Create a new entry with the current date
-      const newEntry: DailyEntry = {
+      const newEntry: CareEntry = {
         entry_date: selectedDate.toISOString(),
-        entry_type: entryData.entry_type,
+        entry_type: entryData.entry_type as 'feeding' | 'diaper',
         start_time: entryData.start_time,
         end_time: entryData.end_time,
-        notes: entryData.notes || ''
+        notes: entryData.notes || '',
+        diaper_type: entryData.diaper_type,
+        feeding_type: entryData.feeding_type,
+        breast_side: entryData.breast_side,
+        bottle_amount: entryData.bottle_amount
       };
 
-      const { error } = await saveDailyEntry(newEntry);
+      const { error } = await saveCareEntry(newEntry);
       if (error) {
         console.error('Error saving daily entry:', error);
         Alert.alert('Fehler', 'Der Eintrag konnte nicht gespeichert werden.');
@@ -219,7 +226,7 @@ export default function DailyOldScreen() {
             text: 'Löschen',
             style: 'destructive',
             onPress: async () => {
-              const { error } = await deleteDailyEntry(id);
+              const { error } = await deleteCareEntry(id);
               if (error) {
                 console.error('Error deleting daily entry:', error);
                 Alert.alert('Fehler', 'Der Eintrag konnte nicht gelöscht werden.');

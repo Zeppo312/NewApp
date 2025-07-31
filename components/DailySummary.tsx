@@ -5,10 +5,10 @@ import { ThemedView } from '@/components/ThemedView';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { DailyEntry } from '@/lib/baby';
+import { CareEntry } from '@/lib/care';
 
 interface DailySummaryProps {
-  entries: DailyEntry[];
+  entries: CareEntry[];
 }
 
 const DailySummary: React.FC<DailySummaryProps> = ({ entries }) => {

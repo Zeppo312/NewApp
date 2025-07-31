@@ -5,10 +5,10 @@ import { ThemedView } from '@/components/ThemedView';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { DailyEntry } from '@/lib/baby';
+import { CareEntry } from '@/lib/care';
 
 interface TimelineViewProps {
-  entries: DailyEntry[];
+  entries: CareEntry[];
   onDeleteEntry: (id: string) => void;
   refreshControl?: React.ReactElement;
 }
@@ -24,7 +24,7 @@ const TimelineView: React.FC<TimelineViewProps> = ({ entries, onDeleteEntry, ref
   });
 
   // Gruppiere Einträge nach Stunden
-  const groupedEntries: Record<string, DailyEntry[]> = {};
+  const groupedEntries: Record<string, CareEntry[]> = {};
 
   sortedEntries.forEach(entry => {
     if (!entry.start_time) return;

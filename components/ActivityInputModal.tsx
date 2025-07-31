@@ -28,6 +28,10 @@ interface ActivityInputModalProps {
     end_time?: string;
     notes?: string;
     duration: number;
+    diaper_type?: 'wet' | 'poop' | 'both';
+    feeding_type?: 'breast' | 'bottle' | 'solid';
+    breast_side?: 'left' | 'right' | 'both';
+    bottle_amount?: number;
   }) => void;
 }
 
@@ -45,6 +49,10 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   const [notes, setNotes] = useState('');
   const [showStartTimePicker, setShowStartTimePicker] = useState(false);
   const [showNotesField, setShowNotesField] = useState(false);
+  const [diaperType, setDiaperType] = useState<'wet' | 'poop' | 'both'>('wet');
+  const [feedingType, setFeedingType] = useState<'breast' | 'bottle' | 'solid'>('breast');
+  const [breastSide, setBreastSide] = useState<'left' | 'right' | 'both'>('both');
+  const [bottleAmount, setBottleAmount] = useState('');
 
   // Reset state when modal opens
   useEffect(() => {
@@ -54,6 +62,10 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
       setEndTime(now); // Setze Ende gleich Start, da keine Dauer mehr benötigt wird
       setNotes('');
       setShowNotesField(false); // Reset notes field visibility
+      setDiaperType('wet');
+      setFeedingType('breast');
+      setBreastSide('both');
+      setBottleAmount('');
     }
   }, [visible]);
 
@@ -87,7 +99,11 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
       start_time: startTime.toISOString(),
       end_time: endTime.toISOString(),
       notes: notes,
-      duration: 0 // Feste Dauer auf 0 setzen
+      duration: 0, // Feste Dauer auf 0 setzen
+      diaper_type: activityType === 'diaper' ? diaperType : undefined,
+      feeding_type: activityType === 'feeding' ? feedingType : undefined,
+      breast_side: activityType === 'feeding' && feedingType === 'breast' ? breastSide : undefined,
+      bottle_amount: activityType === 'feeding' && feedingType === 'bottle' ? parseInt(bottleAmount) || 0 : undefined
     });
     onClose();
   };
@@ -133,6 +149,71 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
                   display="default"
                   onChange={handleStartTimeChange}
                 />
+              )}
+
+              {activityType === 'diaper' && (
+                <View style={styles.optionRow}>
+                  {(['wet','poop','both'] as const).map(type => (
+                    <TouchableOpacity
+                      key={type}
+                      style={[
+                        styles.optionButton,
+                        diaperType === type && styles.optionButtonActive
+                      ]}
+                      onPress={() => setDiaperType(type)}
+                    >
+                      <ThemedText>{type === 'wet' ? 'Nass' : type === 'poop' ? 'Voll' : 'Beides'}</ThemedText>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+
+              {activityType === 'feeding' && (
+                <>
+                  <View style={styles.optionRow}>
+                    {(['breast','bottle','solid'] as const).map(type => (
+                      <TouchableOpacity
+                        key={type}
+                        style={[
+                          styles.optionButton,
+                          feedingType === type && styles.optionButtonActive
+                        ]}
+                        onPress={() => setFeedingType(type)}
+                      >
+                        <ThemedText>
+                          {type === 'breast' ? 'Stillen' : type === 'bottle' ? 'Flasche' : 'Beikost'}
+                        </ThemedText>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  {feedingType === 'breast' && (
+                    <View style={styles.optionRow}>
+                      {(['left','right','both'] as const).map(side => (
+                        <TouchableOpacity
+                          key={side}
+                          style={[
+                            styles.optionButton,
+                            breastSide === side && styles.optionButtonActive
+                          ]}
+                          onPress={() => setBreastSide(side)}
+                        >
+                          <ThemedText>
+                            {side === 'left' ? 'Links' : side === 'right' ? 'Rechts' : 'Beides'}
+                          </ThemedText>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+                  {feedingType === 'bottle' && (
+                    <TextInput
+                      style={[styles.notesInput, { marginTop: 10 }]}
+                      value={bottleAmount}
+                      onChangeText={setBottleAmount}
+                      placeholder="Menge in ml"
+                      keyboardType="number-pad"
+                    />
+                  )}
+                </>
               )}
 
               {/* "Notiz hinzufügen" Button - nur anzeigen, wenn das Notizfeld nicht sichtbar ist */}
@@ -271,6 +352,22 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginLeft: 8,
     fontWeight: '500',
+  },
+  optionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginVertical: 10,
+  },
+  optionButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: '#CCCCCC',
+    borderRadius: 8,
+  },
+  optionButtonActive: {
+    backgroundColor: 'rgba(125,90,80,0.1)',
+    borderColor: '#7D5A50',
   },
 });
 

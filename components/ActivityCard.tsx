@@ -5,12 +5,12 @@ import { ThemedView } from '@/components/ThemedView';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { DailyEntry } from '@/lib/baby';
+import { CareEntry } from '@/lib/care';
 import { Swipeable } from 'react-native-gesture-handler';
 import { LinearGradient } from 'expo-linear-gradient';
 
 interface ActivityCardProps {
-  entry: DailyEntry;
+  entry: CareEntry;
   onDelete: (id: string) => void;
 }
 

@@ -15,18 +15,18 @@ import { ThemedView } from '@/components/ThemedView';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { DailyEntry } from '@/lib/baby';
+import { CareEntry } from '@/lib/care';
 import { LinearGradient } from 'expo-linear-gradient';
 
 interface AnimatedTimelineViewProps {
-  entries: DailyEntry[];
+  entries: CareEntry[];
   onDeleteEntry?: (id: string) => void;
 }
 
 const AnimatedTimelineView: React.FC<AnimatedTimelineViewProps> = ({ entries, onDeleteEntry }) => {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
-  const [selectedEntry, setSelectedEntry] = useState<DailyEntry | null>(null);
+  const [selectedEntry, setSelectedEntry] = useState<CareEntry | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [timelineHeight, setTimelineHeight] = useState(0);
   const scrollViewRef = useRef<ScrollView>(null);
