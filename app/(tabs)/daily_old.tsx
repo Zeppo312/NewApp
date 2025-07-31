@@ -24,7 +24,10 @@ import {
   saveDailyEntry,
   deleteDailyEntry,
   DailyEntry,
-  saveFeedingEvent, //  NEU: eigenes Insert in feeding_events
+  saveCareEvent,
+  getCareEvents,
+  deleteCareEvent,
+  completeCareEvent,
 } from '@/lib/baby';
 import { syncAllExistingDailyEntries } from '@/lib/syncDailyEntries';
 import { subscribeToDailyEntries } from '@/lib/realtime';
@@ -100,7 +103,17 @@ export default function DailyScreen() {
       setIsLoading(true);
       const { data, error } = await getDailyEntries(undefined, selectedDate);
       if (error) throw error;
-      setEntries(data ?? []);
+
+      const { data: careData, error: careErr } = await getCareEvents(selectedDate);
+      if (careErr) throw careErr;
+
+      const merged = [...(data ?? []), ...(careData ?? [])].sort(
+        (a, b) =>
+          new Date(b.start_time ?? b.entry_date).getTime() -
+          new Date(a.start_time ?? a.entry_date).getTime()
+      );
+
+      setEntries(merged);
     } catch (err) {
       console.error('Error loading entries', err);
       Alert.alert('Fehler', 'Einträge konnten nicht geladen werden.');
@@ -141,14 +154,10 @@ export default function DailyScreen() {
 
   const handleSaveEntry = async (payload: any) => {
     try {
-      // 1) spezifische Feeding‑Events direkt in feeding_events ablegen
-      if (selectedActivityType === 'feeding') {
-        const { error } = await saveFeedingEvent(payload); // erwartet { baby_id, type, start_time, volume_ml, side, note }
+      if (selectedActivityType === 'feeding' || selectedActivityType === 'diaper') {
+        const { error } = await saveCareEvent(payload);
         if (error) throw error;
-      }
-
-      // 2) sonst in die generische daily‑Tabelle
-      if (selectedActivityType !== 'feeding') {
+      } else {
         const { error } = await saveDailyEntry(payload);
         if (error) throw error;
       }
@@ -169,8 +178,13 @@ export default function DailyScreen() {
         style: 'destructive',
         onPress: async () => {
           try {
-            const { error } = await deleteDailyEntry(id);
-            if (error) throw error;
+            // Versuche zunächst, im care table zu löschen
+            const { error: careErr } = await deleteCareEvent(id);
+            if (careErr) {
+              // Falls nicht vorhanden, aus baby_daily löschen
+              const { error } = await deleteDailyEntry(id);
+              if (error) throw error;
+            }
             loadEntries();
           } catch (err) {
             console.error('Delete error', err);
@@ -179,6 +193,17 @@ export default function DailyScreen() {
         },
       },
     ]);
+  };
+
+  const handleStopCareEntry = async (id: string) => {
+    try {
+      const { error } = await completeCareEvent(id);
+      if (error) throw error;
+      loadEntries();
+    } catch (err) {
+      console.error('Stop error', err);
+      Alert.alert('Fehler', 'Eintrag konnte nicht beendet werden.');
+    }
   };
 
   // -------------------------------------------------------------------------
@@ -283,7 +308,11 @@ export default function DailyScreen() {
             data={entries}
             keyExtractor={(item) => item.id ?? Math.random().toString()}
             renderItem={({ item }) => (
-              <ActivityCard entry={item} onDelete={handleDeleteEntry} />
+              <ActivityCard
+                entry={item}
+                onDelete={handleDeleteEntry}
+                onStop={handleStopCareEntry}
+              />
             )}
             ListEmptyComponent={<EmptyState type="day" />}
             contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 120 }}
