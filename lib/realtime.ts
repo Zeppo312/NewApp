@@ -16,7 +16,7 @@ export const subscribeToDailyEntries = (
 ) => {
   console.log(`Subscribing to daily entries for user ${userId}`);
 
-  // Abonniere Änderungen an der baby_daily Tabelle
+  // Abonniere Änderungen an den Tabellen
   const channel = supabase.channel('daily-entries-changes')
     .on(
       'postgres_changes',
@@ -75,6 +75,57 @@ export const subscribeToDailyEntries = (
         };
 
         // Prüfe, ob der Benutzer verknüpft ist
+        checkIfLinked();
+      }
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'baby_care_events',
+      },
+      (payload) => {
+        console.log('Received realtime update:', payload);
+        const isForCurrentUser = payload.new?.user_id === userId;
+        const checkIfLinked = async () => {
+          if (!isForCurrentUser && payload.new) {
+            try {
+              const { data } = await supabase.rpc('get_linked_users_with_info', {
+                p_user_id: userId
+              });
+
+              if (data?.success && data.linkedUsers) {
+                const isLinked = data.linkedUsers.some(
+                  (user: any) => user.userId === payload.new.user_id
+                );
+
+                if (isLinked) {
+                  handleEvent(payload);
+                }
+              }
+            } catch (error) {
+              console.error('Error checking if user is linked:', error);
+            }
+          } else if (isForCurrentUser) {
+            handleEvent(payload);
+          }
+        };
+
+        const handleEvent = (payload: any) => {
+          switch (payload.eventType) {
+            case 'INSERT':
+              if (onInsert) onInsert(payload);
+              break;
+            case 'UPDATE':
+              if (onUpdate) onUpdate(payload);
+              break;
+            case 'DELETE':
+              if (onDelete) onDelete(payload);
+              break;
+          }
+        };
+
         checkIfLinked();
       }
     )
