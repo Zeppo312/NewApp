@@ -25,6 +25,7 @@ function BabySizeContent() {
   const [babyData, setBabyData] = useState<BabySizeData | null>(null);
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
+  const styles = createStyles(theme);
 
   useEffect(() => {
     // Finde die Daten für die aktuelle Woche
@@ -88,14 +89,14 @@ function BabySizeContent() {
                 <ThemedText style={styles.statLabel} lightColor="#888" darkColor={theme.textTertiary}>Größe</ThemedText>
                 <ThemedText style={styles.statValue}>{babyData.length}</ThemedText>
               </View>
-              <View style={[styles.statDivider, { backgroundColor: colorScheme === 'dark' ? theme.border : '#E0E0E0' }]} />
+              <View style={[styles.statDivider, { backgroundColor: theme.border }]} />
               <View style={styles.statItem}>
                 <ThemedText style={styles.statLabel} lightColor="#888" darkColor={theme.textTertiary}>Gewicht</ThemedText>
                 <ThemedText style={styles.statValue}>{babyData.weight}</ThemedText>
               </View>
             </View>
 
-            <View style={[styles.descriptionContainer, { borderTopColor: colorScheme === 'dark' ? theme.border : '#F0F0F0' }]}>
+            <View style={[styles.descriptionContainer, { borderTopColor: theme.border }]}>
               <ThemedText style={styles.descriptionTitle}>Entwicklung diese Woche</ThemedText>
               <ThemedText style={styles.descriptionText} lightColor="#444" darkColor={theme.textSecondary}>{babyData.description}</ThemedText>
             </View>
@@ -113,7 +114,7 @@ function BabySizeContent() {
                   key={data.week}
                   style={[
                     styles.weekButton,
-                    { backgroundColor: colorScheme === 'dark' ? theme.cardDark : '#F5F5F5' },
+                    { backgroundColor: colorScheme === 'dark' ? theme.cardDark : theme.cardLight },
                     data.week === babyData.week && styles.selectedWeekButton
                   ]}
                   onPress={() => router.setParams({ week: data.week.toString() })}
@@ -136,7 +137,8 @@ function BabySizeContent() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(theme: typeof Colors.light) {
+  return StyleSheet.create({
   backgroundImage: {
     flex: 1,
     width: '100%',
@@ -222,7 +224,7 @@ const styles = StyleSheet.create({
   },
   statDivider: {
     width: 1,
-    backgroundColor: '#E0E0E0',
+    backgroundColor: theme.border,
     marginHorizontal: 16,
   },
   statLabel: {
@@ -236,7 +238,7 @@ const styles = StyleSheet.create({
   descriptionContainer: {
     paddingTop: 16,
     borderTopWidth: 1,
-    borderTopColor: '#F0F0F0',
+    borderTopColor: theme.border,
   },
   descriptionTitle: {
     fontSize: 16,
@@ -283,4 +285,5 @@ const styles = StyleSheet.create({
   selectedWeekButtonText: {
     color: 'white',
   },
-});
+  });
+}

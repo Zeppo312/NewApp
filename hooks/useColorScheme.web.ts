@@ -14,8 +14,17 @@ export function useColorScheme() {
   const colorScheme = useRNColorScheme();
 
   if (hasHydrated) {
-    return colorScheme;
+    // Swap the detected color scheme so light mode users see the dark theme and
+    // vice versa.
+    if (colorScheme === 'light') {
+      return 'dark';
+    }
+    if (colorScheme === 'dark') {
+      return 'light';
+    }
+    return 'light';
   }
 
-  return 'light';
+  // Default to the inverted light theme before hydration.
+  return 'dark';
 }
