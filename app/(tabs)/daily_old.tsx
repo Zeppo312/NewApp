@@ -63,55 +63,9 @@ const { width: screenWidth } = Dimensions.get('window');
 
 // ▸ DATE SPIDER COMPONENT ===================================================
 const DateSpider: React.FC<{ date: Date; visible: boolean }> = ({ date, visible }) => {
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const translateAnim = useRef(new Animated.Value(-10)).current;
-
-  useEffect(() => {
-    if (visible) {
-      // Fade in
-      Animated.parallel([
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-        Animated.timing(translateAnim, {
-          toValue: 0,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-      ]).start();
-
-      // Auto hide after 5 seconds
-      const timer = setTimeout(() => {
-        Animated.parallel([
-          Animated.timing(fadeAnim, {
-            toValue: 0,
-            duration: 300,
-            useNativeDriver: true,
-          }),
-          Animated.timing(translateAnim, {
-            toValue: -10,
-            duration: 300,
-            useNativeDriver: true,
-          }),
-        ]).start();
-      }, 5000);
-
-      return () => clearTimeout(timer);
-    }
-  }, [visible, fadeAnim, translateAnim]);
-
+  if (!visible) return null;
   return (
-    <Animated.View
-      style={[
-        s.dateSpider,
-        {
-          opacity: fadeAnim,
-          transform: [{ translateY: translateAnim }],
-        },
-      ]}
-    >
+    <View style={s.dateSpider}>
       <Text style={s.dateSpiderText}>
         {date.toLocaleDateString('de-DE', {
           weekday: 'long',
@@ -119,7 +73,7 @@ const DateSpider: React.FC<{ date: Date; visible: boolean }> = ({ date, visible 
           month: 'long',
         })}
       </Text>
-    </Animated.View>
+    </View>
   );
 };
 
@@ -179,25 +133,18 @@ export default function DailyScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [selectedTab, setSelectedTab] = useState<'day' | 'week' | 'month'>('day');
-  const [showDateSpider, setShowDateSpider] = useState(true);
-  const fadeAnim = useRef(new Animated.Value(0)).current; // For date nav fade
-
-  // Timer State
+  const [showInputModal, setShowInputModal] = useState(false);
+  const [showDateNav, setShowDateNav] = useState(true);
+  const fadeNavAnim = useRef(new Animated.Value(1)).current;
+  const hideNavTimeout = useRef<NodeJS.Timeout | null>(null);
+  
   const [activeTimer, setActiveTimer] = useState<{
     id: string;
     type: 'BOTTLE' | 'BREAST';
     start: number;
   } | null>(null);
-
-  // Quick‑Action → Modal -----------------------------------------------------
-  const [showInputModal, setShowInputModal] = useState(false);
-  const [selectedActivityType, setSelectedActivityType] =
-    useState<'feeding' | 'diaper' | 'other'>('feeding');
-  const [selectedSubType, setSelectedSubType] = useState<QuickActionType | null>(
-    null,
-  );
-
-  // -------------------------------------------------------------------------
+  const [selectedActivityType, setSelectedActivityType] = useState<'feeding' | 'diaper' | 'other'>('feeding');
+  const [selectedSubType, setSelectedSubType] = useState<QuickActionType | null>(null);
   // EFFECTS
   // -------------------------------------------------------------------------
   useEffect(() => {
@@ -209,7 +156,7 @@ export default function DailyScreen() {
   // Date-Nav fade-in and auto-fade-out logic
   useEffect(() => {
     // Fade in
-    Animated.timing(fadeAnim, {
+    Animated.timing(fadeNavAnim, {
       toValue: 1,
       duration: 300,
       useNativeDriver: true,
@@ -217,15 +164,40 @@ export default function DailyScreen() {
 
     // Auto hide after 5 seconds
     const timer = setTimeout(() => {
-      Animated.timing(fadeAnim, {
+      Animated.timing(fadeNavAnim, {
         toValue: 0,
         duration: 500, // Slower fade-out
         useNativeDriver: true,
-      }).start();
-    }, 5000);
+      }).start(() => setShowDateNav(false));
+    }, 5000) as unknown as NodeJS.Timeout;
 
     return () => clearTimeout(timer);
-  }, [selectedDate, fadeAnim]); // Re-trigger on date change
+  }, [selectedDate, fadeNavAnim]); // Re-trigger on date change
+
+  // Show nav and tag when date changes or user interacts
+  const triggerShowDateNav = () => {
+    setShowDateNav(true);
+    Animated.timing(fadeNavAnim, {
+      toValue: 1,
+      duration: 200,
+      useNativeDriver: true,
+    }).start();
+    if (hideNavTimeout.current) clearTimeout(hideNavTimeout.current);
+    hideNavTimeout.current = setTimeout(() => {
+      Animated.timing(fadeNavAnim, {
+        toValue: 0,
+        duration: 400,
+        useNativeDriver: true,
+      }).start(() => setShowDateNav(false));
+    }, 5000) as unknown as NodeJS.Timeout;
+  };
+
+  useEffect(() => {
+    triggerShowDateNav();
+    return () => {
+      if (hideNavTimeout.current) clearTimeout(hideNavTimeout.current);
+    };
+  }, [selectedDate]);
 
   // Realtime subscription to Supabase changes
   useEffect(() => {
@@ -421,8 +393,6 @@ export default function DailyScreen() {
     );
   };
 
-
-
   // -------------------------------------------------------------------------
   // RENDERERS – SMALL UI PIECES
   // -------------------------------------------------------------------------
@@ -432,7 +402,10 @@ export default function DailyScreen() {
         <TouchableOpacity
           key={tab}
           style={[s.topTab, selectedTab === tab && s.activeTopTab]}
-          onPress={() => setSelectedTab(tab)}
+          onPress={() => {
+            setSelectedTab(tab);
+            if (tab === 'day') triggerShowDateNav();
+          }}
         >
           <Text style={[s.topTabText, selectedTab === tab && s.activeTopTabText]}>
             {tab === 'day' ? 'Tag' : tab === 'week' ? 'Woche' : 'Monat'}
@@ -443,33 +416,23 @@ export default function DailyScreen() {
   );
 
   const DateNavigator = () => (
-    <View style={s.dateNav}>
-      <TouchableOpacity style={s.navButton} onPress={() => changeRelativeDate(-1)}>
-        <IconSymbol name="chevron.left" size={20} color={theme.text} />
+    <Animated.View style={[s.dateNav, { opacity: fadeNavAnim }]}> 
+      <TouchableOpacity
+        style={s.navButton}
+        onPress={() => { changeRelativeDate(-1); triggerShowDateNav(); }}
+        activeOpacity={0.7}
+      >
+        <IconSymbol name="chevron.left" size={22} color={theme.text} />
       </TouchableOpacity>
-                <Animated.View style={{ opacity: fadeAnim }}>
-            <TouchableOpacity
-              onPress={() => changeRelativeDate(-1)}
-              style={s.navButton}
-            >
-              <IconSymbol name="chevron.left" size={22} color={theme.text} />
-            </TouchableOpacity>
-          </Animated.View>
-
-          <DateSpider date={selectedDate} visible={showDateSpider} />
-
-          <Animated.View style={{ opacity: fadeAnim }}>
-            <TouchableOpacity
-              onPress={() => changeRelativeDate(1)}
-              style={s.navButton}
-            >
-              <IconSymbol name="chevron.right" size={22} color={theme.text} />
-            </TouchableOpacity>
-          </Animated.View>
-      <TouchableOpacity style={s.navButton} onPress={() => changeRelativeDate(1)}>
-        <IconSymbol name="chevron.right" size={20} color={theme.text} />
+      <DateSpider date={selectedDate} visible={showDateNav} />
+      <TouchableOpacity
+        style={s.navButton}
+        onPress={() => { changeRelativeDate(1); triggerShowDateNav(); }}
+        activeOpacity={0.7}
+      >
+        <IconSymbol name="chevron.right" size={22} color={theme.text} />
       </TouchableOpacity>
-    </View>
+    </Animated.View>
   );
 
   const quickBtns: { icon: string; label: string; action: QuickActionType }[] = [
@@ -561,8 +524,35 @@ export default function DailyScreen() {
           }
         >
           <TopTabs />
-          <DateNavigator />
-          
+          {showDateNav && (
+            <Animated.View style={{ opacity: fadeNavAnim }}>
+              <View style={{ alignItems: 'center' }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <TouchableOpacity
+                    style={s.navButton}
+                    onPress={() => { changeRelativeDate(-1); triggerShowDateNav(); }}
+                    activeOpacity={0.7}
+                  >
+                    <IconSymbol name="chevron.left" size={22} color={theme.text} />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    activeOpacity={0.7}
+                    onPress={triggerShowDateNav}
+                  >
+                    <DateSpider date={selectedDate} visible={true} />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={s.navButton}
+                    onPress={() => { changeRelativeDate(1); triggerShowDateNav(); }}
+                    activeOpacity={0.7}
+                  >
+                    <IconSymbol name="chevron.right" size={22} color={theme.text} />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </Animated.View>
+          )}
+
           {selectedTab === 'day' && (
             <>
               <QuickActionRow />
