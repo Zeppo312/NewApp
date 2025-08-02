@@ -1,0 +1,7 @@
+npm ERR! code 127
+npm ERR! path /Users/janzeppenfeld/Downloads/NewApp-master/node_modules/@sentry/cli
+npm ERR! command failed
+npm ERR! command sh -c node ./scripts/install.js
+npm ERR! sh: node: command not found
+
+npm ERR! A complete log of this run can be found in: /Users/janzeppenfeld/.npm/_logs/2025-08-01T04_51_50_243Z-debug-0.log

@@ -9,34 +9,25 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-    "supportsTablet": true,
-    "bundleIdentifier": "com.LottiBaby.app",
-  "infoPlist": {
-    
-    "NSCalendarsUsageDescription": "Diese App benötigt Zugriff auf deinen Kalender, um Termine zu synchronisieren.",
-    "NSRemindersUsageDescription": "Diese App benötigt Zugriff auf deine Erinnerungen, um Termine zu synchronisieren.",
-
-    
-    "NSLocationWhenInUseUsageDescription": "Benötigt, um dir wetterbasierte Kleidungsempfehlungen für dein Baby anzuzeigen.",
-    "NSLocationAlwaysAndWhenInUseUsageDescription": "Benötigt, um dich bei Wetteränderungen auch im Hintergrund zu informieren.",
-
-    
-    "UIBackgroundModes": [
-      "processing",
-      "fetch",
-      "remote-notification"
-    ],
-    
-    "NSSupportsLiveActivities": true,
-    "NSSupportsLiveActivitiesFrequentUpdates": true,
-
-    
-    "BGTaskSchedulerPermittedIdentifiers": [
-      "com.LottiBaby.app.backgroundfetch"
-    ],
-
-    "ITSAppUsesNonExemptEncryption": false
-  }
+      "supportsTablet": true,
+      "bundleIdentifier": "com.LottiBaby.app",
+      "infoPlist": {
+        "NSCalendarsUsageDescription": "Diese App benötigt Zugriff auf deinen Kalender, um Termine zu synchronisieren.",
+        "NSRemindersUsageDescription": "Diese App benötigt Zugriff auf deine Erinnerungen, um Termine zu synchronisieren.",
+        "NSLocationWhenInUseUsageDescription": "Benötigt, um dir wetterbasierte Kleidungsempfehlungen für dein Baby anzuzeigen.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Benötigt, um dich bei Wetteränderungen auch im Hintergrund zu informieren.",
+        "UIBackgroundModes": [
+          "processing",
+          "fetch",
+          "remote-notification"
+        ],
+        "NSSupportsLiveActivities": true,
+        "NSSupportsLiveActivitiesFrequentUpdates": true,
+        "BGTaskSchedulerPermittedIdentifiers": [
+          "com.LottiBaby.app.backgroundfetch"
+        ],
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -82,6 +73,14 @@
         {
           "icon": "./assets/images/notification-icon.png",
           "color": "#ffffff"
+        }
+      ],
+      [
+        "@sentry/react-native/expo",
+        {
+          "url": "https://sentry.io/",
+          "project": "lotti-baby",
+          "organization": "jan-zeppenfeld"
         }
       ]
     ],

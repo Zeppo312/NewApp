@@ -1,6 +1,8 @@
-const { getDefaultConfig } = require('expo/metro-config');
+const {
+  getSentryExpoConfig
+} = require("@sentry/react-native/metro");
 
-const config = getDefaultConfig(__dirname);
+const config = getSentryExpoConfig(__dirname);
 
 // Nutze node-libs-browser für die Node.js Polyfills
 config.resolver.extraNodeModules = {
@@ -15,4 +17,4 @@ config.resolver.extraNodeModules = {
   zlib: require.resolve('node-libs-browser/mock/empty.js')
 };
 
-module.exports = config; 
+module.exports = config;

@@ -167,7 +167,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
 
 
   const renderVolumeControl = () => {
-    const quickVolumes = [60, 90, 120, 150, 180];
+    const quickVolumes = [60, 90, 120, 150, 180, 210];
     return (
       <View style={{width: '100%', alignItems: 'center'}}>
         <Text style={[styles.sectionTitle, { color: theme.text }]}>🥛 Menge (ml)</Text>
@@ -188,13 +188,12 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
             <TouchableOpacity
               key={vol}
               style={[
-                styles.quickVolumeButton, 
-                { backgroundColor: theme.lightGray },
-                volumeMl === vol && { backgroundColor: theme.mediumGray }
+                styles.quickVolumeButton,
+                { backgroundColor: volumeMl === vol ? theme.primary : theme.lightGray },
               ]}
               onPress={() => setVolumeMl(vol)}
             >
-              <Text style={[styles.quickVolumeText, { color: theme.text }]}>{vol}ml</Text>
+              <Text style={[styles.quickVolumeText, { color: volumeMl === vol ? '#fff' : theme.text }]}>{vol}ml</Text>
             </TouchableOpacity>
           ))}
         </View>
