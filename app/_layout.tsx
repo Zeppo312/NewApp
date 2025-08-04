@@ -9,7 +9,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
-import * as BackgroundFetch from 'expo-background-fetch';
+
 
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
@@ -46,10 +46,10 @@ TaskManager.defineTask(BACKGROUND_NOTIFICATION_TASK, async () => {
   try {
     console.log('Führe Benachrichtigungs-Hintergrundtask aus...');
     await checkForNewNotifications();
-    return BackgroundFetch.BackgroundFetchResult.NewData;
+    return "newData";
   } catch (error) {
     console.error('Error in background notification task:', error);
-    return BackgroundFetch.BackgroundFetchResult.Failed;
+    return "failed";
   }
 });
 

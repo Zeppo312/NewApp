@@ -11,46 +11,35 @@ import {
   Alert,
   ScrollView,
   Animated,
-  Dimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
-
-// ▸ THEMED BACKGROUND --------------------------------------------------------
 import { ThemedBackground } from '@/components/ThemedBackground';
 
-// ▸ DATA + HELPERS -----------------------------------------------------------
 import {
   getDailyEntries,
   saveDailyEntry,
-  deleteDailyEntry,
   DailyEntry,
-  saveFeedingEvent,
-  updateFeedingEventEnd, // NEU: für Timer-Stop
 } from '@/lib/baby';
 import { syncAllExistingDailyEntries } from '@/lib/syncDailyEntries';
 import { subscribeToDailyEntries } from '@/lib/realtime';
 
-// ▸ REUSABLE COMPONENTS ------------------------------------------------------
 import Header from '@/components/Header';
 import ActivityCard from '@/components/ActivityCard';
 import EmptyState from '@/components/EmptyState';
 import ActivityInputModal from '@/components/ActivityInputModal';
-import ActivitySelector from '@/components/ActivitySelector';
-import DailySummary from '@/components/DailySummary';
 import WeekScroller from '@/components/WeekScroller';
-import TimelineView from '@/components/TimelineView';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 
-// ▸ CRUD MANAGERS ------------------------------------------------------------
 import { FeedingEventManager, FeedingEventData } from '@/components/FeedingEventManager';
 import { DiaperEventManager, DiaperEventData } from '@/components/DiaperEventManager';
 import { SupabaseErrorHandler } from '@/lib/errorHandler';
 import { ConnectionStatus } from '@/components/ConnectionStatus';
 import { DebugPanel } from '@/components/DebugPanel';
 
-// ▸ TYPE ALIASES -------------------------------------------------------------
+import { BlurView } from 'expo-blur';
+
 type QuickActionType =
   | 'feeding_breast'
   | 'feeding_bottle'
@@ -59,43 +48,58 @@ type QuickActionType =
   | 'diaper_dirty'
   | 'diaper_both';
 
-const { width: screenWidth } = Dimensions.get('window');
+// Reusable GlassCard using expo-blur
+function GlassCard({
+  children,
+  style,
+  intensity = 22,
+  overlayColor = 'rgba(255,255,255,0.22)',
+  borderColor = 'rgba(255,255,255,0.55)',
+}: {
+  children: React.ReactNode;
+  style?: any;
+  intensity?: number;          // 0..100
+  overlayColor?: string;       // tint-like overlay
+  borderColor?: string;        // per-card border nuance
+}) {
+  return (
+    <View style={[s.glassContainer, { borderColor }, style]}>
+      <BlurView style={StyleSheet.absoluteFill} intensity={intensity} tint="light" />
+      <View style={[s.glassOverlay, { backgroundColor: overlayColor }]} />
+      {children}
+    </View>
+  );
+}
 
-// ▸ DATE SPIDER COMPONENT ===================================================
+// DateSpider as glass pill
 const DateSpider: React.FC<{ date: Date; visible: boolean }> = ({ date, visible }) => {
   if (!visible) return null;
   return (
-    <View style={s.dateSpider}>
-      <Text style={s.dateSpiderText}>
-        {date.toLocaleDateString('de-DE', {
-          weekday: 'long',
-          day: '2-digit',
-          month: 'long',
-        })}
-      </Text>
+    <View style={s.dateSpiderWrap}>
+      <GlassCard style={s.dateSpiderCard} intensity={18} overlayColor="rgba(255,255,255,0.18)">
+        <Text style={s.dateSpiderText}>
+          {date.toLocaleDateString('de-DE', {
+            weekday: 'long',
+            day: '2-digit',
+            month: 'long',
+          })}
+        </Text>
+      </GlassCard>
     </View>
   );
 };
 
-
-
-// ▸ TIMER BANNER COMPONENT ==================================================
+// Timer Banner (glass)
 const TimerBanner: React.FC<{
   timer: { id: string; type: string; start: number } | null;
   onStop: () => void;
 }> = ({ timer, onStop }) => {
   const [elapsed, setElapsed] = useState(0);
-
   useEffect(() => {
     if (!timer) return;
-
-    const interval = setInterval(() => {
-      setElapsed(Math.floor((Date.now() - timer.start) / 1000));
-    }, 1000);
-
+    const interval = setInterval(() => setElapsed(Math.floor((Date.now() - timer.start) / 1000)), 1000);
     return () => clearInterval(interval);
   }, [timer]);
-
   if (!timer) return null;
 
   const formatTime = (seconds: number) => {
@@ -105,29 +109,25 @@ const TimerBanner: React.FC<{
   };
 
   return (
-    <View style={s.timerBanner}>
-      <View style={s.timerContent}>
-        <Text style={s.timerType}>
+    <GlassCard style={[s.timerBanner, { paddingVertical: 12, paddingHorizontal: 16 }]} intensity={24}>
+      <View style={{ flex: 1 }}>
+        <Text style={[s.timerType, { color: '#5e3db3' }]}>
           {timer.type === 'BREAST' ? '🤱 Stillen' : '🍼 Fläschchen'}
         </Text>
-        <Text style={s.timerTime}>{formatTime(elapsed)}</Text>
+        <Text style={[s.timerTime, { color: '#2c2c2c' }]}>{formatTime(elapsed)}</Text>
       </View>
       <TouchableOpacity style={s.timerStopButton} onPress={onStop}>
-        <IconSymbol name="stop.circle.fill" size={24} color="#fff" />
+        <IconSymbol name="stop.circle.fill" size={28} color="#5e3db3" />
       </TouchableOpacity>
-    </View>
+    </GlassCard>
   );
 };
 
-// ▸ MAIN COMPONENT ===========================================================
 export default function DailyScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const router = useRouter();
 
-  // -------------------------------------------------------------------------
-  // LOCAL STATE
-  // -------------------------------------------------------------------------
   const [entries, setEntries] = useState<DailyEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -137,58 +137,39 @@ export default function DailyScreen() {
   const [showDateNav, setShowDateNav] = useState(true);
   const fadeNavAnim = useRef(new Animated.Value(1)).current;
   const hideNavTimeout = useRef<NodeJS.Timeout | null>(null);
-  
+
   const [activeTimer, setActiveTimer] = useState<{
     id: string;
     type: 'BOTTLE' | 'BREAST';
     start: number;
   } | null>(null);
+
   const [selectedActivityType, setSelectedActivityType] = useState<'feeding' | 'diaper' | 'other'>('feeding');
   const [selectedSubType, setSelectedSubType] = useState<QuickActionType | null>(null);
-  // EFFECTS
-  // -------------------------------------------------------------------------
+
   useEffect(() => {
     loadEntries();
     syncDailyEntries();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDate]);
 
-  // Date-Nav fade-in and auto-fade-out logic
   useEffect(() => {
-    // Fade in
-    Animated.timing(fadeNavAnim, {
-      toValue: 1,
-      duration: 300,
-      useNativeDriver: true,
-    }).start();
-
-    // Auto hide after 5 seconds
+    Animated.timing(fadeNavAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
     const timer = setTimeout(() => {
-      Animated.timing(fadeNavAnim, {
-        toValue: 0,
-        duration: 500, // Slower fade-out
-        useNativeDriver: true,
-      }).start(() => setShowDateNav(false));
+      Animated.timing(fadeNavAnim, { toValue: 0, duration: 500, useNativeDriver: true }).start(() =>
+        setShowDateNav(false),
+      );
     }, 5000) as unknown as NodeJS.Timeout;
-
     return () => clearTimeout(timer);
-  }, [selectedDate, fadeNavAnim]); // Re-trigger on date change
+  }, [selectedDate, fadeNavAnim]);
 
-  // Show nav and tag when date changes or user interacts
   const triggerShowDateNav = () => {
     setShowDateNav(true);
-    Animated.timing(fadeNavAnim, {
-      toValue: 1,
-      duration: 200,
-      useNativeDriver: true,
-    }).start();
+    Animated.timing(fadeNavAnim, { toValue: 1, duration: 200, useNativeDriver: true }).start();
     if (hideNavTimeout.current) clearTimeout(hideNavTimeout.current);
     hideNavTimeout.current = setTimeout(() => {
-      Animated.timing(fadeNavAnim, {
-        toValue: 0,
-        duration: 400,
-        useNativeDriver: true,
-      }).start(() => setShowDateNav(false));
+      Animated.timing(fadeNavAnim, { toValue: 0, duration: 400, useNativeDriver: true }).start(() =>
+        setShowDateNav(false),
+      );
     }, 5000) as unknown as NodeJS.Timeout;
   };
 
@@ -199,23 +180,13 @@ export default function DailyScreen() {
     };
   }, [selectedDate]);
 
-  // Realtime subscription to Supabase changes
   useEffect(() => {
-    const unsubscribe = subscribeToDailyEntries(
-      'dummy', // userId placeholder since it's handled server-side
-      () => loadEntries(),
-      () => loadEntries(),
-      () => loadEntries(),
-    );
+    const unsubscribe = subscribeToDailyEntries('dummy', () => loadEntries(), () => loadEntries(), () => loadEntries());
     return () => unsubscribe?.();
   }, []);
 
-  // -------------------------------------------------------------------------
-  // DATA I/O
-  // -------------------------------------------------------------------------
   const loadEntries = async () => {
     setIsLoading(true);
-    
     const result = await SupabaseErrorHandler.executeWithHandling(
       async () => {
         const { data, error } = await getDailyEntries(undefined, selectedDate);
@@ -226,13 +197,8 @@ export default function DailyScreen() {
       true,
       2
     );
-
-    if (result.success) {
-      setEntries(result.data!);
-    } else {
-      setEntries([]);
-    }
-
+    if (result.success) setEntries(result.data!);
+    else setEntries([]);
     setIsLoading(false);
     setRefreshing(false);
   };
@@ -244,38 +210,23 @@ export default function DailyScreen() {
         return true;
       },
       'SyncDailyEntries',
-      false, // Don't show user errors for sync
+      false,
       1
     );
   };
 
-  // -------------------------------------------------------------------------
-  // HANDLERS – NAVIGATION & UI
-  // -------------------------------------------------------------------------
   const changeRelativeDate = (days: number) =>
-    setSelectedDate(
-      new Date(selectedDate.getTime() + days * 24 * 60 * 60 * 1000),
-    );
+    setSelectedDate(new Date(selectedDate.getTime() + days * 24 * 60 * 60 * 1000));
 
   const handleQuickActionPress = (action: QuickActionType) => {
-    // map subtype to generic activity type ➜ steuert Felder/Masken im Modal
-    if (action.startsWith('feeding')) {
-      setSelectedActivityType('feeding');
-    } else if (action.startsWith('diaper')) {
-      setSelectedActivityType('diaper');
-    } else {
-      setSelectedActivityType('other');
-    }
+    if (action.startsWith('feeding')) setSelectedActivityType('feeding');
+    else if (action.startsWith('diaper')) setSelectedActivityType('diaper');
+    else setSelectedActivityType('other');
     setSelectedSubType(action);
     setShowInputModal(true);
   };
 
   const handleSaveEntry = async (payload: any) => {
-    console.log('💾 Saving entry with payload:', payload);
-    console.log('💾 Activity type:', selectedActivityType);
-    console.log('💾 Sub type:', selectedSubType);
-
-    // 1) Feeding Events mit FeedingEventManager
     if (selectedActivityType === 'feeding') {
       const feedingData: FeedingEventData = {
         type: selectedSubType as 'feeding_breast' | 'feeding_bottle' | 'feeding_solids',
@@ -284,49 +235,29 @@ export default function DailyScreen() {
         note: payload.note,
         date: (payload.date as Date) || selectedDate,
       };
-
       const result = await FeedingEventManager.createFeedingEvent(feedingData);
-      
       if (!result.success) {
-        console.error('Feeding event error:', result.error);
         Alert.alert('Fehler', String(result.error ?? 'Fehler beim Speichern der Fütterung'));
         return;
       }
-
-      // Start timer for breast/bottle feeding
       if (selectedSubType === 'feeding_breast' || selectedSubType === 'feeding_bottle') {
         const timerType = selectedSubType === 'feeding_breast' ? 'BREAST' : 'BOTTLE';
-        setActiveTimer({
-          id: result.id || `temp_${Date.now()}`,
-          type: timerType,
-          start: Date.now(),
-        });
+        setActiveTimer({ id: result.id || `temp_${Date.now()}`, type: timerType, start: Date.now() });
       }
-
-      Alert.alert('Erfolg', 'Fütterungseintrag erfolgreich gespeichert! 🍼');
-    }
-
-    // 2) Diaper Events mit DiaperEventManager
-    else if (selectedActivityType === 'diaper') {
+      Alert.alert('Erfolg', 'Fütterungseintrag gespeichert! 🍼');
+    } else if (selectedActivityType === 'diaper') {
       const diaperData: DiaperEventData = {
         type: selectedSubType as 'diaper_wet' | 'diaper_dirty' | 'diaper_both',
         note: payload.note,
         date: (payload.date as Date) || selectedDate,
       };
-
       const result = await DiaperEventManager.createDiaperEvent(diaperData);
-      
       if (!result.success) {
-        console.error('Feeding event error:', result.error);
-        Alert.alert('Fehler', String(result.error ?? 'Fehler beim Speichern der Fütterung'));
+        Alert.alert('Fehler', String(result.error ?? 'Fehler beim Speichern'));
         return;
       }
-
-      Alert.alert('Erfolg', 'Wickeleintrag erfolgreich gespeichert! 💧');
-    }
-
-    // 3) Andere Events (fallback zum alten System)
-    else {
+      Alert.alert('Erfolg', 'Wickeleintrag gespeichert! 💧');
+    } else {
       const result = await SupabaseErrorHandler.executeWithHandling(
         async () => {
           const { data, error } = await saveDailyEntry(payload);
@@ -337,102 +268,63 @@ export default function DailyScreen() {
         true,
         2
       );
-
       if (!result.success) {
-        console.error('Feeding event error:', result.error);
-        Alert.alert('Fehler', String(result.error ?? 'Fehler beim Speichern der Fütterung'));
+        Alert.alert('Fehler', String(result.error ?? 'Fehler beim Speichern'));
         return;
       }
-
-      Alert.alert('Erfolg', 'Eintrag erfolgreich gespeichert! ✅');
+      Alert.alert('Erfolg', 'Eintrag gespeichert! ✅');
     }
-
     setShowInputModal(false);
     loadEntries();
   };
 
   const handleTimerStop = async () => {
     if (!activeTimer) return;
-
     const result = await FeedingEventManager.stopFeedingTimer(activeTimer.id);
-    
     if (!result.success) {
-      console.error('Other entry error:', result.error);
-      Alert.alert('Fehler', result.error || 'Unbekannter Fehler beim Speichern');
+      Alert.alert('Fehler', result.error || 'Unbekannter Fehler');
       return;
     }
-
     setActiveTimer(null);
     loadEntries();
-    Alert.alert('Erfolg', 'Timer erfolgreich gestoppt! ⏹️');
+    Alert.alert('Erfolg', 'Timer gestoppt! ⏹️');
   };
 
   const handleDeleteEntry = async (id: string) => {
-    console.log('🗑️ Attempting to delete entry:', id);
-    
-    Alert.alert(
-      'Eintrag löschen',
-      'Möchtest du diesen Eintrag wirklich löschen?',
-      [
-        { text: 'Abbrechen', style: 'cancel' },
-        {
-          text: 'Löschen',
-          style: 'destructive',
-          onPress: async () => {
-            const result = await DiaperEventManager.deleteDiaperEvent(id);
-            
-            if (!result.success) {
-              return; // Error already handled by ErrorHandler
-            }
-
-            loadEntries();
-            Alert.alert('Erfolg', 'Eintrag erfolgreich gelöscht! 🗑️');
-          }
-        }
-      ]
-    );
+    Alert.alert('Eintrag löschen', 'Möchtest du diesen Eintrag wirklich löschen?', [
+      { text: 'Abbrechen', style: 'cancel' },
+      {
+        text: 'Löschen',
+        style: 'destructive',
+        onPress: async () => {
+          const result = await DiaperEventManager.deleteDiaperEvent(id);
+          if (!result.success) return;
+          loadEntries();
+          Alert.alert('Erfolg', 'Eintrag gelöscht! 🗑️');
+        },
+      },
+    ]);
   };
 
-  // -------------------------------------------------------------------------
-  // RENDERERS – SMALL UI PIECES
-  // -------------------------------------------------------------------------
   const TopTabs = () => (
     <View style={s.topTabsContainer}>
       {(['day', 'week', 'month'] as const).map((tab) => (
-        <TouchableOpacity
-          key={tab}
-          style={[s.topTab, selectedTab === tab && s.activeTopTab]}
-          onPress={() => {
-            setSelectedTab(tab);
-            if (tab === 'day') triggerShowDateNav();
-          }}
-        >
-          <Text style={[s.topTabText, selectedTab === tab && s.activeTopTabText]}>
-            {tab === 'day' ? 'Tag' : tab === 'week' ? 'Woche' : 'Monat'}
-          </Text>
-        </TouchableOpacity>
+        <GlassCard key={tab} style={[s.topTab, selectedTab === tab && s.activeTopTab]} intensity={18}>
+          <TouchableOpacity
+            style={s.topTabInner}
+            onPress={() => {
+              setSelectedTab(tab);
+              if (tab === 'day') triggerShowDateNav();
+            }}
+            activeOpacity={0.85}
+          >
+            <Text style={[s.topTabText, selectedTab === tab && s.activeTopTabText]}>
+              {tab === 'day' ? 'Tag' : tab === 'week' ? 'Woche' : 'Monat'}
+            </Text>
+          </TouchableOpacity>
+        </GlassCard>
       ))}
     </View>
-  );
-
-  const DateNavigator = () => (
-    <Animated.View style={[s.dateNav, { opacity: fadeNavAnim }]}> 
-      <TouchableOpacity
-        style={s.navButton}
-        onPress={() => { changeRelativeDate(-1); triggerShowDateNav(); }}
-        activeOpacity={0.7}
-      >
-        <IconSymbol name="chevron.left" size={22} color={theme.text} />
-      </TouchableOpacity>
-      <DateSpider date={selectedDate} visible={showDateNav} />
-      <TouchableOpacity
-        style={s.navButton}
-        onPress={() => { changeRelativeDate(1); triggerShowDateNav(); }}
-        activeOpacity={0.7}
-      >
-        <IconSymbol name="chevron.right" size={22} color={theme.text} />
-      </TouchableOpacity>
-    </Animated.View>
   );
 
   const quickBtns: { icon: string; label: string; action: QuickActionType }[] = [
@@ -446,15 +338,18 @@ export default function DailyScreen() {
 
   const QuickActionRow = () => {
     const renderQuickButton = ({ item }: { item: typeof quickBtns[0] }) => (
-      <TouchableOpacity
+      <GlassCard
         style={s.circleButton}
-        onPress={() => handleQuickActionPress(item.action)}
+        intensity={26}
+        overlayColor="rgba(255,255,255,0.26)"
+        borderColor="rgba(255,255,255,0.65)"
       >
-        <Text style={s.circleEmoji}>{item.icon}</Text>
-        <Text style={s.circleLabel}>{item.label}</Text>
-      </TouchableOpacity>
+        <TouchableOpacity style={s.circleInner} onPress={() => handleQuickActionPress(item.action)} activeOpacity={0.9}>
+          <Text style={s.circleEmoji}>{item.icon}</Text>
+          <Text style={s.circleLabel}>{item.label}</Text>
+        </TouchableOpacity>
+      </GlassCard>
     );
-
     return (
       <View style={s.quickActionSection}>
         <FlatList
@@ -462,9 +357,15 @@ export default function DailyScreen() {
           horizontal
           showsHorizontalScrollIndicator={false}
           renderItem={renderQuickButton}
-          keyExtractor={(item) => item.action}
+          keyExtractor={(_, i) => String(i)}
           contentContainerStyle={s.quickScrollContainer}
           ItemSeparatorComponent={() => <View style={{ width: 16 }} />}
+          decelerationRate="fast"
+          scrollEventThrottle={16}
+          snapToInterval={112} // 96 Breite + 16 Separator
+          // Wenn du 104px runde Buttons willst:
+          // - stelle circleButton width/height auf 104, borderRadius 52
+          // - setze snapToInterval auf 120
         />
       </View>
     );
@@ -473,124 +374,94 @@ export default function DailyScreen() {
   const KPISection = () => {
     const feedingEntries = entries.filter((e) => e.entry_type === 'feeding');
     const diaperEntries = entries.filter((e) => e.entry_type === 'diaper');
-    
-    // Get last diaper change time
+
+    const bottleCount = feedingEntries.filter((f: any) => f.sub_type === 'feeding_bottle').length;
+    const breastCount = feedingEntries.filter((f: any) => f.sub_type === 'feeding_breast').length;
+
     const lastDiaperEntry = diaperEntries
       .sort((a, b) => new Date(b.entry_date).getTime() - new Date(a.entry_date).getTime())[0];
-    const lastDiaperTime = lastDiaperEntry 
-      ? new Date(lastDiaperEntry.entry_date).toLocaleTimeString('de-DE', { 
-          hour: '2-digit', 
-          minute: '2-digit' 
-        })
-      : '–';
+
+    const lastDiaperTime = lastDiaperEntry
+      ? new Date(lastDiaperEntry.entry_date).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
+      : 'Nie';
 
     return (
       <View style={s.kpiRow}>
-        <View style={[s.kpiCard, { backgroundColor: 'rgba(249, 224, 230, 0.9)' }]}>
-          <Text style={s.kpiTitle}>Fütterung</Text>
-          <Text style={s.kpiValue}>{feedingEntries.length}</Text>
-          <Text style={s.kpiSub}>Stillen/Flasche</Text>
-        </View>
-        <View style={[s.kpiCard, { backgroundColor: 'rgba(235, 236, 237, 0.9)' }]}>
-          <Text style={s.kpiTitle}>Wickeln</Text>
-          <Text style={s.kpiValue}>{diaperEntries.length}</Text>
+        <GlassCard
+          style={s.kpiCard}
+          intensity={24}
+          overlayColor="rgba(94, 61, 179, 0.13)"
+          borderColor="rgba(94, 61, 179, 0.35)"
+        >
+          <View style={s.kpiHeaderRow}>
+            <Text style={s.kpiEmoji}>🍼</Text>
+            <Text style={s.kpiTitle}>Fütterung</Text>
+          </View>
+          <Text style={[s.kpiValue, s.kpiValueCentered]}>{feedingEntries.length}</Text>
+          <Text style={s.kpiSub}>{breastCount}× Stillen • {bottleCount}× Flasche</Text>
+        </GlassCard>
+
+        <GlassCard
+          style={s.kpiCard}
+          intensity={24}
+          overlayColor="rgba(94, 61, 179, 0.08)"
+          borderColor="rgba(94, 61, 179, 0.22)"
+        >
+          <View style={s.kpiHeaderRow}>
+            <Text style={s.kpiEmoji}>🧷</Text>
+            <Text style={s.kpiTitle}>Wickeln</Text>
+          </View>
+          <Text style={[s.kpiValue, s.kpiValueCentered]}>{diaperEntries.length}</Text>
           <Text style={s.kpiSub}>Letzter: {lastDiaperTime}</Text>
-        </View>
+        </GlassCard>
       </View>
     );
   };
 
-  // -------------------------------------------------------------------------
-  // MAIN RENDER BODY
-  // -------------------------------------------------------------------------
   return (
     <ThemedBackground style={s.backgroundImage}>
       <SafeAreaView style={s.container}>
         <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
 
         <Header title="Unser Tag" subtitle="Euer Tag – voller kleiner Meilensteine ✨" />
-        
+
         <ConnectionStatus showAlways={false} autoCheck={true} onRetry={loadEntries} />
-        
+
         <TimerBanner timer={activeTimer} onStop={handleTimerStop} />
-        
+
         <DebugPanel />
 
-        <ScrollView 
+        <ScrollView
           style={s.scrollContainer}
           contentContainerStyle={s.scrollContent}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={() => setRefreshing(true)} />
-          }
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => setRefreshing(true)} />}
         >
           <TopTabs />
-          {showDateNav && (
-            <Animated.View style={{ opacity: fadeNavAnim }}>
-              <View style={{ alignItems: 'center' }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <TouchableOpacity
-                    style={s.navButton}
-                    onPress={() => { changeRelativeDate(-1); triggerShowDateNav(); }}
-                    activeOpacity={0.7}
-                  >
-                    <IconSymbol name="chevron.left" size={22} color={theme.text} />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    activeOpacity={0.7}
-                    onPress={triggerShowDateNav}
-                  >
-                    <DateSpider date={selectedDate} visible={true} />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={s.navButton}
-                    onPress={() => { changeRelativeDate(1); triggerShowDateNav(); }}
-                    activeOpacity={0.7}
-                  >
-                    <IconSymbol name="chevron.right" size={22} color={theme.text} />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </Animated.View>
-          )}
 
-          {selectedTab === 'day' && (
-            <>
-              <QuickActionRow />
-              <KPISection />
-              
-              <View style={s.entriesSection}>
-                {entries.map((item) => (
-                  <ActivityCard 
-                    key={item.id ?? Math.random().toString()} 
-                    entry={item} 
-                    onDelete={handleDeleteEntry} 
-                  />
-                ))}
-                {entries.length === 0 && <EmptyState type="day" />}
-              </View>
-            </>
-          )}
+          <>
+            <QuickActionRow />
 
-          {selectedTab === 'week' && (
-            <WeekScroller selectedDate={selectedDate} onDateSelect={setSelectedDate} />
-          )}
+            <Text style={s.sectionTitle}>Kennzahlen</Text>
+            <KPISection />
 
-          {selectedTab === 'month' && (
-            <View style={s.emptyOverlay}>
-              <EmptyState type="timeline" message="Monatsansicht folgt bald ✨" />
+            <Text style={[s.sectionTitle, { marginTop: 4 }]}>Timeline</Text>
+
+            <View style={s.entriesSection}>
+              {entries.map((item) => (
+                <ActivityCard key={item.id ?? Math.random().toString()} entry={item} onDelete={handleDeleteEntry} />
+              ))}
+              {entries.length === 0 && <EmptyState type="day" message="Noch keine Aktivitäten heute 🤍" />}
             </View>
-          )}
+          </>
         </ScrollView>
 
-        {/* Floating Action Button */}
         <TouchableOpacity
-          style={[s.fab, { backgroundColor: Colors[colorScheme].tint }]}
+          style={[s.fab, { backgroundColor: 'rgba(94, 61, 179, 0.9)' }]}
           onPress={() => handleQuickActionPress('feeding_breast')}
         >
           <IconSymbol name="plus" size={28} color="#fff" />
         </TouchableOpacity>
 
-        {/* Modals */}
         <ActivityInputModal
           visible={showInputModal}
           activityType={selectedActivityType}
@@ -604,176 +475,111 @@ export default function DailyScreen() {
   );
 }
 
-// =============================================================================
-// STYLES
-// =============================================================================
 const s = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  backgroundImage: {
-    flex: 1,
-    width: '100%',
-  },
-  scrollContainer: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingBottom: 140,
-  },
-  // ----- DateSpider --------------------------------------------------------
-  dateSpider: {
-    backgroundColor: 'rgba(136, 84, 208, 0.15)',
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    borderRadius: 16,
-    marginHorizontal: 14,
-  },
-  dateSpiderText: {
+  container: { flex: 1 },
+  backgroundImage: { flex: 1, width: '100%' },
+  scrollContainer: { flex: 1 },
+  scrollContent: { paddingBottom: 140 },
+
+  sectionTitle: {
+    marginTop: 18,
+    marginBottom: 8,
+    paddingHorizontal: 16,
     fontSize: 14,
-    fontWeight: '600',
-    color: '#8854d0',
-    textAlign: 'center',
+    fontWeight: '700',
+    color: '#6b6b6b',
   },
-  // ----- Timer Banner ------------------------------------------------------
+
+  // Glass base
+  glassContainer: {
+    borderRadius: 18,
+    overflow: 'hidden',
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 20,
+    elevation: 8,
+  },
+  glassOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+  },
+
+  // Date spider
+  dateSpiderWrap: { paddingHorizontal: 14 },
+  dateSpiderCard: { paddingHorizontal: 18, paddingVertical: 8, borderRadius: 16 },
+  dateSpiderText: { fontSize: 14, fontWeight: '700', color: '#5e3db3', textAlign: 'center' },
+
+  // Timer Banner
   timerBanner: {
-    backgroundColor: '#8854d0',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
     marginHorizontal: 16,
     marginVertical: 8,
-    borderRadius: 12,
+    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  timerContent: {
-    flex: 1,
-  },
-  timerType: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  timerTime: {
-    color: '#fff',
-    fontSize: 20,
-    fontWeight: '700',
-    marginTop: 2,
-  },
-  timerStopButton: {
-    padding: 8,
-  },
-  // ----- Tabs --------------------------------------------------------------
+  timerType: { fontSize: 14, fontWeight: '700' },
+  timerTime: { fontSize: 22, fontWeight: '800', marginTop: 2 },
+  timerStopButton: { padding: 6 },
+
+  // Tabs (glass pills)
   topTabsContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 12,
-    marginTop: 8,
+    gap: 10,
+    marginTop: 6,
   },
   topTab: {
-    paddingHorizontal: 32,
-    paddingVertical: 8,
-    borderRadius: 50,
-    backgroundColor: 'rgba(136, 84, 208, 0.15)',
+    borderRadius: 20,
+    overflow: 'hidden',
+    borderWidth: 1,
   },
-  activeTopTab: {
-    backgroundColor: '#8854d0',
-  },
-  topTabText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#6c6c6c',
-  },
-  activeTopTabText: {
-    color: '#fff',
-  },
-  // ----- Date Navigator ----------------------------------------------------
-  dateNav: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 12,
-  },
-  navButton: {
-    padding: 8,
-    borderRadius: 30,
-    backgroundColor: 'rgba(0,0,0,0.05)',
-  },
-  // ----- Quick Actions -----------------------------------------------------
-  quickActionSection: {
-    marginTop: 28,
-  },
-  quickScrollContainer: {
-    paddingHorizontal: 30,
-    gap: 20,
-  },
+  topTabInner: { paddingHorizontal: 18, paddingVertical: 6 },
+  activeTopTab: { borderColor: 'rgba(94,61,179,0.65)' },
+  topTabText: { fontSize: 13, fontWeight: '700', color: '#5d5d5d' },
+  activeTopTabText: { color: '#5e3db3' },
+
+  // Quick actions as round glass buttons
+  quickActionSection: { marginTop: 16 },
+  quickScrollContainer: { paddingHorizontal: 16 },
   circleButton: {
     width: 96,
     height: 96,
-    borderRadius: 48,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)', // Even more transparent
-    alignItems: 'center',
-    justifyContent: 'center',
-    // Add border for glass edge effect
+    borderRadius: 48, // fully round
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)', // Softer border
-    // Add subtle shadow for depth
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.15,
-    shadowRadius: 15,
-    elevation: 6,
+    overflow: 'hidden',
   },
-  circleEmoji: {
-    fontSize: 28,
-  },
-  circleLabel: {
-    marginTop: 6,
-    fontSize: 14,
-    fontWeight: '600',
-    textAlign: 'center',
-    color: '#4a4a4a',
-  },
+  circleInner: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 8 },
+  circleEmoji: { fontSize: 26 },
+  circleLabel: { marginTop: 6, fontSize: 13, fontWeight: '700', color: '#4a4a4a' },
 
-  // ----- KPI Cards ---------------------------------------------------------
+  // KPI glass cards
   kpiRow: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginVertical: 26,
+    justifyContent: 'space-between',
+    marginTop: 8,
     paddingHorizontal: 16,
   },
   kpiCard: {
-    width: '45%',
+    width: '48%',
     borderRadius: 20,
-    paddingVertical: 26,
+    paddingVertical: 18,
     paddingHorizontal: 14,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 3,
+    borderWidth: 1,
+    overflow: 'hidden',
   },
-  kpiTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  kpiValue: {
-    fontSize: 40,
-    fontWeight: '800',
-  },
-  kpiSub: {
-    marginTop: 6,
-    fontSize: 13,
-    textAlign: 'center',
-  },
-  // ----- Entries Section ---------------------------------------------------
-  entriesSection: {
-    paddingHorizontal: 16,
-  },
-  // ----- FAB ---------------------------------------------------------------
+  kpiHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
+  kpiEmoji: { fontSize: 14, marginRight: 6 },
+  kpiTitle: { fontSize: 14, fontWeight: '700', color: '#393939' },
+  kpiValue: { fontSize: 34, fontWeight: '800', color: '#5e3db3' },
+kpiValueCentered: { textAlign: 'center', width: '100%' },
+  kpiSub: { marginTop: 6, fontSize: 12, color: '#5a5a5a' },
+
+  // Entries
+  entriesSection: { paddingHorizontal: 16, marginTop: 8 },
+
+  // FAB
   fab: {
     position: 'absolute',
     bottom: 100,
@@ -783,15 +589,10 @@ const s = StyleSheet.create({
     borderRadius: 29,
     alignItems: 'center',
     justifyContent: 'center',
-    elevation: 4,
+    elevation: 8,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.2,
-    shadowRadius: 4,
-  },
-  // ----- Empty overlay (month placeholder) ---------------------------------
-  emptyOverlay: {
-    marginTop: 40,
-    alignItems: 'center',
+    shadowRadius: 16,
   },
 });

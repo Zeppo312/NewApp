@@ -1,5 +1,5 @@
 import * as TaskManager from 'expo-task-manager';
-import * as BackgroundFetch from 'expo-background-fetch';
+
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
@@ -22,7 +22,7 @@ TaskManager.defineTask(CONTRACTION_TIMER_TASK, async () => {
     // Get current timer data
     const storedDataStr = await AsyncStorage.getItem(CONTRACTION_TIMER_KEY);
     if (!storedDataStr) {
-      return BackgroundFetch.BackgroundFetchResult.NoData;
+      return "noData";
     }
 
     const timerData: ContractionTimerData = JSON.parse(storedDataStr);
@@ -44,13 +44,13 @@ TaskManager.defineTask(CONTRACTION_TIMER_TASK, async () => {
       // Update notification
       await updateTimerNotification(updatedTimerData);
       
-      return BackgroundFetch.BackgroundFetchResult.NewData;
+      return "newData";
     }
     
-    return BackgroundFetch.BackgroundFetchResult.NoData;
+    return "noData";
   } catch (error) {
     console.error('Error in background task:', error);
-    return BackgroundFetch.BackgroundFetchResult.Failed;
+    return "failed";
   }
 });
 
@@ -62,18 +62,6 @@ export const formatTime = (seconds: number): string => {
 };
 
 // Register the background fetch
-export const registerBackgroundFetch = async () => {
-  try {
-    await BackgroundFetch.registerTaskAsync(CONTRACTION_TIMER_TASK, {
-      minimumInterval: 15, // 15 seconds minimum
-      stopOnTerminate: false,
-      startOnBoot: true,
-    });
-    console.log('Background fetch task registered');
-  } catch (error) {
-    console.error('Background fetch registration failed:', error);
-  }
-};
 
 // Setup notifications
 export const setupNotifications = async () => {

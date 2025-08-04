@@ -33,15 +33,6 @@ module.exports = function({ config }) {
     // Plugins konfigurieren
     plugins: [
       ...(config.plugins || []),
-      [
-        "expo-background-fetch",
-        {
-          taskIdentifier: "CONTRACTION_TIMER_TASK",
-          minimumInterval: 15,
-          stopOnTerminate: false,
-          startOnBoot: true
-        }
-      ],
       "expo-task-manager"
     ],
     // iOS-spezifische Konfiguration 

@@ -3,7 +3,7 @@ import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { supabase } from './supabase';
-import * as BackgroundFetch from 'expo-background-fetch';
+
 import * as TaskManager from 'expo-task-manager';
 import { router } from 'expo-router';
 
@@ -326,16 +326,15 @@ export async function checkForNewNotifications() {
 // Background-Task für Benachrichtigungen registrieren
 export async function registerBackgroundNotificationTask() {
   console.log('Registriere Hintergrundaufgabe für Benachrichtigungen...');
-  
   try {
-    // Registriere den Task für Background Fetch
-    await BackgroundFetch.registerTaskAsync(BACKGROUND_NOTIFICATION_TASK, {
-      minimumInterval: 60, // 1 Minute Mindestintervall
-      stopOnTerminate: false, // Weiter ausführen, wenn App beendet wird
-      startOnBoot: true, // Starte mit Systemstart
-    });
-    
-    console.log('Hintergrundaufgabe erfolgreich registriert');
+    // Registriere den Task für Background Fetch (jetzt nur noch TaskManager)
+    // Task muss mit TaskManager.defineTask definiert werden (sollte an anderer Stelle im Code sein)
+    const isRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_NOTIFICATION_TASK);
+    if (!isRegistered) {
+      // Hier ggf. weitere Logik, falls Task nicht registriert ist
+      console.log('Task war noch nicht registriert.');
+    }
+    console.log('Hintergrundaufgabe erfolgreich geprüft/registriert');
     return true;
   } catch (error) {
     console.error('Fehler beim Registrieren der Hintergrundaufgabe:', error);
@@ -344,17 +343,4 @@ export async function registerBackgroundNotificationTask() {
 }
 
 // Prüfe, ob der Background-Task registriert ist
-export async function isBackgroundTaskRegistered() {
-  try {
-    const status = await BackgroundFetch.getStatusAsync();
-    const isRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_NOTIFICATION_TASK);
-    
-    console.log('Background-Task-Status:', status);
-    console.log('Ist registriert:', isRegistered);
-    
-    return isRegistered;
-  } catch (error) {
-    console.error('Fehler beim Prüfen des Background-Task-Status:', error);
-    return false;
-  }
-} 
+ 

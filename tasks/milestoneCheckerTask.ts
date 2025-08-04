@@ -1,4 +1,4 @@
-import * as BackgroundFetch from 'expo-background-fetch';
+
 import * as TaskManager from 'expo-task-manager';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -13,7 +13,7 @@ async function checkMilestonesInBackground() {
     const babyInfoString = await AsyncStorage.getItem(BABY_INFO_KEY);
     if (!babyInfoString) {
       console.log('[BackgroundFetch] Keine Baby-Infos für Task gefunden.');
-      return BackgroundFetch.BackgroundFetchResult.NoData;
+      return "noData";
     }
     const babyInfo = JSON.parse(babyInfoString);
     const birthDate = babyInfo.birth_date ? new Date(babyInfo.birth_date) : null;
@@ -21,7 +21,7 @@ async function checkMilestonesInBackground() {
 
     if (!birthDate) {
       console.log('[BackgroundFetch] Kein Geburtsdatum für Task gefunden.');
-      return BackgroundFetch.BackgroundFetchResult.NoData;
+      return "noData";
     }
 
     // Meilenstein-Definitionen
@@ -68,14 +68,14 @@ async function checkMilestonesInBackground() {
 
     if (newNotificationSent) {
       await AsyncStorage.setItem(SENT_MILESTONES_KEY_BG, JSON.stringify(sentMilestones));
-      return BackgroundFetch.BackgroundFetchResult.NewData;
+      return "newData";
     } else {
       console.log('[BackgroundFetch] Keine neuen Meilensteine heute oder bereits gesendet.');
-      return BackgroundFetch.BackgroundFetchResult.NoData;
+      return "noData";
     }
   } catch (error) {
     console.error('[BackgroundFetch] Fehler im Task:', error);
-    return BackgroundFetch.BackgroundFetchResult.Failed;
+    return "failed";
   }
 }
 
@@ -87,23 +87,6 @@ export function defineMilestoneCheckerTask() {
     console.log('[BackgroundFetch] Task beendet mit Result:', result);
     return result;
   });
-  
-  console.log('[BackgroundFetch] Task definiert:', BACKGROUND_FETCH_TASK);
-}
-
-// Hilfsfunktion zum Registrieren des Tasks
-export async function registerBackgroundFetchAsync() {
-  console.log('[BackgroundFetch] Versuche Task zu registrieren...');
-  return BackgroundFetch.registerTaskAsync(BACKGROUND_FETCH_TASK, {
-    minimumInterval: 15 * 60, // Minimum 15 Minuten (iOS wird es wahrscheinlich seltener ausführen)
-    stopOnTerminate: false, // Android
-    startOnBoot: true, // Android
-  });
-}
-
-// Hilfsfunktion zum Deregistrieren (für Tests oder wenn nicht mehr benötigt)
-export async function unregisterBackgroundFetchAsync() {
-  return BackgroundFetch.unregisterTaskAsync(BACKGROUND_FETCH_TASK);
 }
 
 // Funktion zum Speichern der Baby-Infos für den Hintergrund-Task
@@ -120,16 +103,10 @@ export async function saveBabyInfoForBackgroundTask(babyInfo: any) {
   return false;
 }
 
-// Funktion, die den Task Status überprüft und zurückgibt
-export async function getBackgroundFetchStatus() {
+export async function isTaskRegistered() {
   try {
-    const status = await BackgroundFetch.getStatusAsync();
     const isRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_FETCH_TASK);
-    
-    // Sicherstellen, dass BackgroundFetchStatus[status] existiert, bevor darauf zugegriffen wird
-    const statusText = (status !== null && status !== undefined && BackgroundFetch.BackgroundFetchStatus[status])
-      ? BackgroundFetch.BackgroundFetchStatus[status]
-      : 'UNKNOWN_OR_NOT_AVAILABLE';
+    return isRegistered;
     
     return {
       status: statusText,
