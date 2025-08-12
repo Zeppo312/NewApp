@@ -36,7 +36,7 @@ const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <View style={[styles.header, { paddingTop: 10 }]}>
+    <View style={[styles.header, { paddingTop: 14 }]}>
       {/* Linker Bereich */}
       <View style={styles.sideContainer}>
         {showBackButton && (
@@ -70,7 +70,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingBottom: 8,
+    paddingBottom: 6,
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     backgroundColor: 'transparent',
@@ -91,15 +91,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   title: {
-    fontSize: 20,
-    fontWeight: '600',
+    fontSize: 22,
+    fontWeight: '700',
     color: '#7D5A50',
     textAlign: 'center',
   },
   subtitle: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#A8978E',
-    marginTop: 2,
+    marginTop: 3,
     textAlign: 'center',
   },
   rightContent: {

@@ -128,18 +128,35 @@ const ActivityCard: React.FC<ActivityCardProps> = ({ entry, onDelete, onEdit }) 
     }
   };
 
-  // Rendere Hintergrundfarbe basierend auf Aktivitätstyp
-  const getActivityColor = (type: string, opacity: number = 0.1) => {
-    switch (type) {
-      case 'diaper':
-        return `rgba(76, 175, 80, ${opacity})`;
-      case 'sleep':
-        return `rgba(92, 107, 192, ${opacity})`;
-      case 'feeding':
-        return `rgba(255, 152, 0, ${opacity})`;
-      default:
-        return `rgba(156, 39, 176, ${opacity})`;
+  // Farb-Tint je nach Subtyp (wie Quick Buttons)
+  const getTypeTint = () => {
+    // Defaults (neutral)
+    let color = '#5E3DB3';
+    // Feeding
+    if (entry.entry_type === 'feeding') {
+      if (entry.feeding_type === 'BREAST') color = '#8E4EC6';
+      else if (entry.feeding_type === 'BOTTLE') color = '#4A90E2';
+      else if (entry.feeding_type === 'SOLIDS') color = '#F5A623'; // Beikost Orange
     }
+    // Diaper
+    if (entry.entry_type === 'diaper') {
+      if (entry.diaper_type === 'WET') color = '#3498DB'; // Blau
+      else if (entry.diaper_type === 'DIRTY') color = '#8E5A2B'; // Braun
+      else if (entry.diaper_type === 'BOTH') color = '#38A169'; // Grün
+    }
+    // Convert hex to rgba with given alpha
+    const toRgba = (hex: string, a: number) => {
+      const h = hex.replace('#','');
+      const r = parseInt(h.substring(0,2),16);
+      const g = parseInt(h.substring(2,4),16);
+      const b = parseInt(h.substring(4,6),16);
+      return `rgba(${r},${g},${b},${a})`;
+    };
+    return {
+      bg: toRgba(color, 0.22),
+      border: toRgba(color, 0.35),
+      accent: color,
+    };
   };
 
   // Rendere Akzentfarbe basierend auf Aktivitätstyp
@@ -203,17 +220,18 @@ const ActivityCard: React.FC<ActivityCardProps> = ({ entry, onDelete, onEdit }) 
       >
         <TouchableOpacity
           activeOpacity={0.9}
-          onPress={() => setExpanded(!expanded)}
+          onPress={() => onEdit && onEdit(entry)}
           onPressIn={() => setPressed(true)}
           onPressOut={() => setPressed(false)}
           delayPressIn={0}
-          onLongPress={() => onEdit && onEdit(entry)}
         >
-          <View style={[styles.card, expanded && styles.expandedCard]}>
+          {(() => { const tint = getTypeTint(); return (
+          <View style={[styles.card, expanded && styles.expandedCard, { borderColor: tint.border }] }>
             <BlurView intensity={25} tint={colorScheme === 'dark' ? 'dark' : 'light'} style={StyleSheet.absoluteFillObject} />
-            <LinearGradient colors={[ 'rgba(255,255,255,0.20)', 'rgba(255,255,255,0.10)' ]} style={StyleSheet.absoluteFillObject} />
+            <View style={[StyleSheet.absoluteFillObject as any, { backgroundColor: tint.bg }]} />
+            <LinearGradient colors={[ 'rgba(255,255,255,0.18)', 'rgba(255,255,255,0.10)' ]} style={StyleSheet.absoluteFillObject} />
             <View style={styles.cardHeader}>
-              <View style={styles.iconContainer}><ThemedText style={{fontSize: 20}}>{detail.emoji}</ThemedText></View>
+              <View style={[styles.iconContainer, { marginTop: 6 }]}><ThemedText style={{fontSize: 20}}>{detail.emoji}</ThemedText></View>
 
               <View style={styles.titleContainer}>
                 <View style={styles.titleRow}>
@@ -247,7 +265,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({ entry, onDelete, onEdit }) 
                     </View>
                   )}
 
-                  {duration > 0 && (
+                 {duration > 0 && (
                     <View style={[styles.timePill, { marginLeft: 6, backgroundColor: 'rgba(94,61,179,0.18)', borderColor: 'rgba(94,61,179,0.35)' }]}>
                       <ThemedText style={[styles.timePillText, { fontWeight: '700' }]}>{duration} Min</ThemedText>
                     </View>
@@ -255,95 +273,18 @@ const ActivityCard: React.FC<ActivityCardProps> = ({ entry, onDelete, onEdit }) 
                 </View>
               </View>
             </View>
-
-            {/* Animierter Notizbereich */}
-            <Animated.View
-              style={[
-                styles.notesContainer,
-                {
-                  maxHeight: expandAnimation.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [0, 600]
-                  }),
-                  opacity: expandAnimation,
-                  marginTop: expandAnimation.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [0, 8]
-                  })
-                }
-              ]}
-            >
-              <Animated.View
-                style={[
-                  styles.divider,
-                  { opacity: expandAnimation }
-                ]}
-              />
-              <View style={styles.detailRow}> 
-                <ThemedText style={styles.detailLabel}>Notizen</ThemedText>
-                <ThemedText style={styles.detailValue}>{entry.notes || '–'}</ThemedText>
-              </View>
-
-              {entry.entry_type === 'feeding' && (
-                <>
-                  <View style={styles.detailRow}>
-                    <ThemedText style={styles.detailLabel}>Art</ThemedText>
-                    <ThemedText style={styles.detailValue}>{translateFeedingType(entry.feeding_type)}</ThemedText>
-                  </View>
-                  {entry.feeding_type === 'BREAST' && (
-                    <View style={styles.detailRow}>
-                      <ThemedText style={styles.detailLabel}>Seite</ThemedText>
-                      <ThemedText style={styles.detailValue}>{translateBreastSide(entry.feeding_side)}</ThemedText>
-                    </View>
-                  )}
-                  {entry.feeding_type === 'BOTTLE' && (
-                    <View style={styles.detailRow}>
-                      <ThemedText style={styles.detailLabel}>Menge</ThemedText>
-                      <ThemedText style={styles.detailValue}>{entry.feeding_volume_ml ? `${entry.feeding_volume_ml} ml` : '–'}</ThemedText>
-                    </View>
-                  )}
-                </>
-              )}
-
-              {entry.entry_type === 'diaper' && (
-                <View style={styles.detailRow}>
-                  <ThemedText style={styles.detailLabel}>Typ</ThemedText>
-                  <ThemedText style={styles.detailValue}>{translateDiaperType(entry.diaper_type)}</ThemedText>
-                </View>
-              )}
-
-              <View style={styles.actionRow}>
-                {onEdit && (
-                  <TouchableOpacity style={styles.actionBtn} onPress={() => onEdit(entry)}>
-                    <IconSymbol name="pencil" size={16} color="#fff" />
-                    <ThemedText style={styles.actionBtnText}>Bearbeiten</ThemedText>
-                  </TouchableOpacity>
-                )}
-                <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#FF6B6B' }]} onPress={() => entry.id && onDelete(entry.id)}>
-                  <IconSymbol name="trash" size={16} color="#fff" />
-                  <ThemedText style={styles.actionBtnText}>Löschen</ThemedText>
-                </TouchableOpacity>
-              </View>
-            </Animated.View>
+            {/* Kein Expand mehr – Details werden im Modal bearbeitet */}
 
             {/* Farbiger Akzent am linken Rand */}
             <View
               style={[
                 styles.colorAccent,
-                { backgroundColor: getActivityAccentColor(entry.entry_type) }
+                { backgroundColor: getTypeTint().accent }
               ]}
             />
 
-            {/* Indikator für expandierte Karte */}
-            {expanded && (
-              <View
-                style={[
-                  styles.expandedIndicator,
-                  { backgroundColor: getActivityAccentColor(entry.entry_type) }
-                ]}
-              />
-            )}
           </View>
+          ); })()}
         </TouchableOpacity>
       </Animated.View>
     </Swipeable>
@@ -376,7 +317,6 @@ const styles = StyleSheet.create({
   },
   iconContainer: {
     marginRight: 12,
-    marginTop: 2,
   },
   titleContainer: {
     flex: 1,

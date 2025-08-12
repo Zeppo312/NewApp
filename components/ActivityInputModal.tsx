@@ -61,8 +61,8 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
     accent: '#E5B9A0',  // Warm orange for save button
     lightGray: 'rgba(230, 230, 230, 0.8)', // Light gray for unselected buttons
     mediumGray: 'rgba(220, 220, 220, 0.5)',
-    green: '#4CAF50', // Solid green
-    orange: '#F5A623',
+    green: '#38A169', // Solid green for BOTH
+    orange: '#F5A623', // Orange for Beikost
     purple: '#9B59B6', // Solid purple
   };
 
@@ -220,7 +220,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
     switch (type) {
       case 'breast': return theme.purple;
       case 'bottle': return theme.primary;
-      case 'solids': return theme.green;
+      case 'solids': return theme.orange; // Beikost in Orange
       default: return theme.lightGray;
     }
   };
@@ -370,7 +370,10 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
             style={[
               styles.optionButton,
               { backgroundColor: theme.lightGray },
-              diaperType === option.type && { backgroundColor: theme.primary }
+              diaperType === option.type && {
+                backgroundColor:
+                  option.type === 'wet' ? '#3498DB' : option.type === 'dirty' ? '#8E5A2B' : theme.green,
+              }
             ]}
             onPress={() => setDiaperType(option.type as DiaperType)}
           >

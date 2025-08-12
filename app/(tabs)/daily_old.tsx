@@ -153,6 +153,13 @@ export default function DailyScreen() {
   const [selectedActivityType, setSelectedActivityType] = useState<'feeding' | 'diaper' | 'other'>('feeding');
   const [selectedSubType, setSelectedSubType] = useState<QuickActionType | null>(null);
   const [editingEntry, setEditingEntry] = useState<DailyEntry | null>(null);
+  const [splashVisible, setSplashVisible] = useState(false);
+  const [splashBg, setSplashBg] = useState<string>('rgba(0,0,0,0.6)');
+  const [splashEmoji, setSplashEmoji] = useState<string>('✅');
+  const [splashText, setSplashText] = useState<string>('Gespeichert');
+  const splashAnim = useRef(new Animated.Value(0)).current;
+  const splashEmojiAnim = useRef(new Animated.Value(0.9)).current;
+  const splashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (selectedTab === 'week') {
@@ -324,6 +331,11 @@ export default function DailyScreen() {
     else if (action.startsWith('diaper')) setSelectedActivityType('diaper');
     else setSelectedActivityType('other');
     setSelectedSubType(action);
+    // Preselect modal fields by subtype
+    if (action === 'feeding_breast') setEditingEntry({} as any);
+    if (action === 'feeding_bottle') setEditingEntry({} as any);
+    if (action === 'feeding_solids') setEditingEntry({} as any);
+    if (action === 'diaper_wet' || action === 'diaper_dirty' || action === 'diaper_both') setEditingEntry({} as any);
     setShowInputModal(true);
   };
 
@@ -338,11 +350,8 @@ export default function DailyScreen() {
         selectedSubType === 'feeding_bottle' ? 'BOTTLE' :
         'SOLIDS';
       let data, error;
-      // Wenn initialData.id vorhanden ist, updaten
-      const editing = (ActivityInputModal as any)?.initialData?.id; // not directly accessible here; infer via subtype match
-      const candidate = entries.find((e) => (e as any).sub_type === selectedSubType);
-      if (candidate?.id) {
-        const res = await updateBabyCareEntry(candidate.id, {
+      if (editingEntry?.id) {
+        const res = await updateBabyCareEntry(editingEntry.id, {
           start_time: payload.start_time,
           end_time: payload.end_time ?? null,
           notes: payload.notes ?? null,
@@ -371,16 +380,19 @@ export default function DailyScreen() {
         const timerType = selectedSubType === 'feeding_breast' ? 'BREAST' : 'BOTTLE';
         setActiveTimer({ id: data?.id || `temp_${Date.now()}`, type: timerType, start: Date.now() });
       }
-      Alert.alert('Erfolg', 'Fütterungseintrag gespeichert! 🍼');
+      showSuccessSplash(
+        selectedSubType === 'feeding_breast' ? '#8E4EC6' : selectedSubType === 'feeding_bottle' ? '#4A90E2' : '#F5A623',
+        selectedSubType === 'feeding_breast' ? '🤱' : selectedSubType === 'feeding_bottle' ? '🍼' : '🥄',
+        'Fütterung gespeichert'
+      );
     } else if (selectedActivityType === 'diaper') {
       const diaperType =
         selectedSubType === 'diaper_wet' ? 'WET' :
         selectedSubType === 'diaper_dirty' ? 'DIRTY' :
         'BOTH';
       let error;
-      const candidate = entries.find((e) => (e as any).sub_type === selectedSubType);
-      if (candidate?.id) {
-        const res = await updateBabyCareEntry(candidate.id, {
+      if (editingEntry?.id) {
+        const res = await updateBabyCareEntry(editingEntry.id, {
           start_time: payload.start_time,
           end_time: payload.end_time ?? null,
           notes: payload.notes ?? null,
@@ -401,12 +413,46 @@ export default function DailyScreen() {
         Alert.alert('Fehler', String((error as any)?.message ?? error ?? 'Fehler beim Speichern'));
         return;
       }
-      Alert.alert('Erfolg', 'Wickeleintrag gespeichert! 💧');
+      showSuccessSplash(
+        diaperType === 'WET' ? '#3498DB' : diaperType === 'DIRTY' ? '#8E5A2B' : '#38A169',
+        diaperType === 'WET' ? '💧' : diaperType === 'DIRTY' ? '💩' : '💧💩',
+        'Wickeln gespeichert'
+      );
     } else {
       Alert.alert('Hinweis', 'Sonstige Einträge sind in der neuen Ansicht nicht verfügbar.');
     }
     setShowInputModal(false);
+    setEditingEntry(null);
     loadEntries();
+  };
+
+  const showSuccessSplash = (hex: string, emoji: string, text: string) => {
+    const rgba = (h: string, a: number) => {
+      const c = h.replace('#','');
+      const r = parseInt(c.substring(0,2),16);
+      const g = parseInt(c.substring(2,4),16);
+      const b = parseInt(c.substring(4,6),16);
+      return `rgba(${r},${g},${b},${a})`;
+    };
+    setSplashBg(rgba(hex, 0.9));
+    setSplashEmoji(emoji);
+    setSplashText(text);
+    setSplashVisible(true);
+    // reset and animate in
+    splashAnim.setValue(0);
+    Animated.timing(splashAnim, { toValue: 1, duration: 250, useNativeDriver: true }).start();
+    splashEmojiAnim.setValue(0.9);
+    Animated.sequence([
+      Animated.timing(splashEmojiAnim, { toValue: 1.1, duration: 220, useNativeDriver: true }),
+      Animated.spring(splashEmojiAnim, { toValue: 1, useNativeDriver: true })
+    ]).start();
+    // clear previous timer
+    if (splashTimerRef.current) clearTimeout(splashTimerRef.current);
+    splashTimerRef.current = setTimeout(() => {
+      Animated.timing(splashAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start(() => {
+        setSplashVisible(false);
+      });
+    }, 3000);
   };
 
   const handleTimerStop = async () => {
@@ -865,7 +911,7 @@ export default function DailyScreen() {
               <Text style={s.sectionTitle}>Kennzahlen</Text>
               <KPISection />
 
-              <Text style={[s.sectionTitle, { marginTop: 4 }]}>Timeline</Text>
+            <Text style={[s.sectionTitle, { marginTop: 4 }]}>Timeline</Text>
 
               <View style={s.entriesSection}>
                 {entries.map((item) => (
@@ -888,12 +934,7 @@ export default function DailyScreen() {
           )}
         </ScrollView>
 
-        <TouchableOpacity
-          style={[s.fab, { backgroundColor: 'rgba(94, 61, 179, 0.9)' }]}
-          onPress={() => handleQuickActionPress('feeding_breast')}
-        >
-          <IconSymbol name="plus" size={28} color="#fff" />
-        </TouchableOpacity>
+        {/* FAB entfernt wie gewünscht */}
 
         <ActivityInputModal
           visible={showInputModal}
@@ -902,7 +943,7 @@ export default function DailyScreen() {
           date={selectedDate}
           onClose={() => { setShowInputModal(false); setEditingEntry(null); }}
           onSave={handleSaveEntry}
-          initialData={editingEntry ? {
+          initialData={editingEntry && editingEntry.id ? {
             id: editingEntry.id!,
             feeding_type: (editingEntry as any).feeding_type as any,
             feeding_volume_ml: (editingEntry as any).feeding_volume_ml ?? null,
@@ -911,9 +952,28 @@ export default function DailyScreen() {
             notes: editingEntry.notes ?? null,
             start_time: editingEntry.start_time!,
             end_time: editingEntry.end_time ?? null,
-          } : undefined}
+          } : (selectedSubType ? {
+            // Preselect fields from quick actions
+            feeding_type: selectedSubType === 'feeding_breast' ? 'BREAST' : selectedSubType === 'feeding_bottle' ? 'BOTTLE' : selectedSubType === 'feeding_solids' ? 'SOLIDS' : undefined,
+            diaper_type: selectedSubType === 'diaper_wet' ? 'WET' : selectedSubType === 'diaper_dirty' ? 'DIRTY' : selectedSubType === 'diaper_both' ? 'BOTH' : undefined,
+            start_time: new Date().toISOString(),
+          } : undefined)}
         />
       </SafeAreaView>
+      {splashVisible && (
+        <Animated.View
+          style={[
+            s.splashOverlay,
+            { opacity: splashAnim, backgroundColor: splashBg, transform: [{ scale: splashAnim.interpolate({ inputRange: [0, 1], outputRange: [1.02, 1] }) }] },
+          ]}
+          pointerEvents="auto"
+        >
+          <Animated.Text style={[s.splashEmoji, { transform: [{ scale: splashEmojiAnim }] }]}>
+            {splashEmoji}
+          </Animated.Text>
+          <Text style={s.splashText}>{splashText}</Text>
+        </Animated.View>
+      )}
     </ThemedBackground>
   );
 }
@@ -957,7 +1017,8 @@ const s = StyleSheet.create({
   // Timer Banner
   timerBanner: {
     marginHorizontal: 16,
-    marginVertical: 8,
+    marginTop: 8,
+    marginBottom: 0,
     borderRadius: 16,
     flexDirection: 'row',
     alignItems: 'center',
@@ -1191,5 +1252,26 @@ kpiValueCentered: { textAlign: 'center', width: '100%' },
     color: '#5E3DB3',
     marginBottom: 12,
     paddingHorizontal: 4,
+  },
+  splashOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 9999,
+  },
+  splashEmoji: {
+    fontSize: 72,
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  splashText: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#fff',
+    textAlign: 'center',
   },
 });
