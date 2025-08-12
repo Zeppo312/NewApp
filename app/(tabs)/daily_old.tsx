@@ -16,6 +16,7 @@ import { useRouter } from 'expo-router';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { ThemedBackground } from '@/components/ThemedBackground';
+import { LinearGradient } from 'expo-linear-gradient';
 
 import { DailyEntry } from '@/lib/baby';
 import {
@@ -160,6 +161,10 @@ export default function DailyScreen() {
   const splashAnim = useRef(new Animated.Value(0)).current;
   const splashEmojiAnim = useRef(new Animated.Value(0.9)).current;
   const splashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [splashTitle, setSplashTitle] = useState<string>('');
+  const [splashSubtitle, setSplashSubtitle] = useState<string>('');
+  const [splashStatus, setSplashStatus] = useState<string>('');
+  const [splashHint, setSplashHint] = useState<string>('');
 
   useEffect(() => {
     if (selectedTab === 'week') {
@@ -380,7 +385,7 @@ export default function DailyScreen() {
       showSuccessSplash(
         feedingType === 'BREAST' ? '#8E4EC6' : feedingType === 'BOTTLE' ? '#4A90E2' : '#F5A623',
         feedingType === 'BREAST' ? '🤱' : feedingType === 'BOTTLE' ? '🍼' : '🥄',
-        'Fütterung gespeichert'
+        feedingType === 'BREAST' ? 'feeding_breast' : feedingType === 'BOTTLE' ? 'feeding_bottle' : 'feeding_solids'
       );
     } else if (selectedActivityType === 'diaper') {
       const diaperType = (payload.diaper_type as 'WET' | 'DIRTY' | 'BOTH' | undefined) ?? undefined;
@@ -410,7 +415,7 @@ export default function DailyScreen() {
       showSuccessSplash(
         diaperType === 'WET' ? '#3498DB' : diaperType === 'DIRTY' ? '#8E5A2B' : '#38A169',
         diaperType === 'WET' ? '💧' : diaperType === 'DIRTY' ? '💩' : '💧💩',
-        'Wickeln gespeichert'
+        diaperType === 'WET' ? 'diaper_wet' : diaperType === 'DIRTY' ? 'diaper_dirty' : 'diaper_both'
       );
     } else {
       Alert.alert('Hinweis', 'Sonstige Einträge sind in der neuen Ansicht nicht verfügbar.');
@@ -420,7 +425,7 @@ export default function DailyScreen() {
     loadEntries();
   };
 
-  const showSuccessSplash = (hex: string, emoji: string, text: string) => {
+  const showSuccessSplash = (hex: string, emoji: string, kind: string) => {
     const rgba = (h: string, a: number) => {
       const c = h.replace('#','');
       const r = parseInt(c.substring(0,2),16);
@@ -428,9 +433,34 @@ export default function DailyScreen() {
       const b = parseInt(c.substring(4,6),16);
       return `rgba(${r},${g},${b},${a})`;
     };
-    setSplashBg(rgba(hex, 0.9));
+    setSplashBg(rgba(hex, 1));
     setSplashEmoji(emoji);
-    setSplashText(text);
+    // Texte je Kontext
+    if (kind === 'feeding_breast') {
+      setSplashTitle('Stillen läuft');
+      setSplashSubtitle('Nimm dir Zeit. Genieße diese besonderen Momente.');
+      setSplashStatus('Wird gestartet...');
+      setSplashHint('Du gibst deinem Baby alles, was es braucht 💕');
+      setSplashText('');
+    } else if (kind === 'feeding_bottle') {
+      setSplashTitle('Fläschchen läuft');
+      setSplashSubtitle('Ganz in Ruhe – du machst das super.');
+      setSplashStatus('Wird gestartet...');
+      setSplashHint('Nähe und Ernährung – perfekt kombiniert 🤍');
+      setSplashText('');
+    } else if (kind === 'feeding_solids') {
+      setSplashTitle('Beikost gespeichert');
+      setSplashSubtitle('Jeder Löffel ein kleiner Fortschritt.');
+      setSplashStatus('');
+      setSplashHint('Weiter so – ihr wachst gemeinsam!');
+      setSplashText('');
+    } else {
+      setSplashTitle('Wickeln gespeichert');
+      setSplashSubtitle('Alles frisch – wohlfühlen ist wichtig.');
+      setSplashStatus('');
+      setSplashHint('Danke für deine liebevolle Fürsorge ✨');
+      setSplashText('');
+    }
     setSplashVisible(true);
     // reset and animate in
     splashAnim.setValue(0);
@@ -956,16 +986,26 @@ export default function DailyScreen() {
       </SafeAreaView>
       {splashVisible && (
         <Animated.View
-          style={[
-            s.splashOverlay,
-            { opacity: splashAnim, backgroundColor: splashBg, transform: [{ scale: splashAnim.interpolate({ inputRange: [0, 1], outputRange: [1.02, 1] }) }] },
-          ]}
+          style={[s.splashOverlay, { opacity: splashAnim }]}
           pointerEvents="auto"
         >
-          <Animated.Text style={[s.splashEmoji, { transform: [{ scale: splashEmojiAnim }] }]}>
-            {splashEmoji}
-          </Animated.Text>
-          <Text style={s.splashText}>{splashText}</Text>
+          <LinearGradient
+            colors={[splashBg, splashBg]}
+            style={StyleSheet.absoluteFillObject as any}
+          />
+          <View style={s.splashCenterCard}>
+            <Animated.View style={[s.splashEmojiRing, { transform: [{ scale: splashEmojiAnim }] }]}>
+              <Text style={s.splashEmoji}>{splashEmoji}</Text>
+            </Animated.View>
+            {!!s.splashTitle && <Text style={s.splashTitle}>{splashTitle}</Text>}
+            {splashSubtitle ? <Text style={s.splashSubtitle}>{splashSubtitle}</Text> : null}
+            {splashStatus ? <Text style={s.splashStatus}>{splashStatus}</Text> : null}
+            {splashHint ? (
+              <View style={s.splashHintCard}>
+                <Text style={s.splashHintText}>♡  {splashHint}</Text>
+              </View>
+            ) : null}
+          </View>
         </Animated.View>
       )}
     </ThemedBackground>
@@ -1261,11 +1301,65 @@ kpiValueCentered: { textAlign: 'center', width: '100%' },
     fontSize: 72,
     textAlign: 'center',
     marginBottom: 10,
+    color: '#fff',
   },
   splashText: {
     fontSize: 20,
     fontWeight: '800',
     color: '#fff',
     textAlign: 'center',
+  },
+  splashCenterCard: {
+    width: '100%',
+    paddingHorizontal: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  splashTitle: {
+    fontSize: 34,
+    fontWeight: '800',
+    color: '#fff',
+    textAlign: 'center',
+    marginTop: 8,
+    textShadowColor: 'rgba(0,0,0,0.18)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 6,
+  },
+  splashSubtitle: {
+    marginTop: 16,
+    fontSize: 18,
+    lineHeight: 26,
+    color: 'rgba(255,255,255,0.95)',
+    textAlign: 'center',
+  },
+  splashStatus: {
+    marginTop: 30,
+    fontSize: 16,
+    color: 'rgba(255,255,255,0.9)',
+  },
+  splashHintCard: {
+    marginTop: 24,
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    borderColor: 'rgba(255,255,255,0.35)',
+    borderWidth: 1,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderRadius: 18,
+  },
+  splashHintText: {
+    color: '#fff',
+    fontSize: 16,
+    textAlign: 'center',
+    fontWeight: '700',
+  },
+  splashEmojiRing: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.7)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.08)'
   },
 });
