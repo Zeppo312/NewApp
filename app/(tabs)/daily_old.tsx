@@ -345,10 +345,7 @@ export default function DailyScreen() {
     console.log('handleSaveEntry - selectedSubType:', selectedSubType);
     
     if (selectedActivityType === 'feeding') {
-      const feedingType =
-        selectedSubType === 'feeding_breast' ? 'BREAST' :
-        selectedSubType === 'feeding_bottle' ? 'BOTTLE' :
-        'SOLIDS';
+      const feedingType = (payload.feeding_type as 'BREAST' | 'BOTTLE' | 'SOLIDS' | undefined) ?? undefined;
       let data, error;
       if (editingEntry?.id) {
         const res = await updateBabyCareEntry(editingEntry.id, {
@@ -376,20 +373,17 @@ export default function DailyScreen() {
         Alert.alert('Fehler', String((error as any)?.message ?? error ?? 'Fehler beim Speichern der Fütterung'));
         return;
       }
-      if (selectedSubType === 'feeding_breast' || selectedSubType === 'feeding_bottle') {
-        const timerType = selectedSubType === 'feeding_breast' ? 'BREAST' : 'BOTTLE';
+      if (feedingType === 'BREAST' || feedingType === 'BOTTLE') {
+        const timerType = feedingType;
         setActiveTimer({ id: data?.id || `temp_${Date.now()}`, type: timerType, start: Date.now() });
       }
       showSuccessSplash(
-        selectedSubType === 'feeding_breast' ? '#8E4EC6' : selectedSubType === 'feeding_bottle' ? '#4A90E2' : '#F5A623',
-        selectedSubType === 'feeding_breast' ? '🤱' : selectedSubType === 'feeding_bottle' ? '🍼' : '🥄',
+        feedingType === 'BREAST' ? '#8E4EC6' : feedingType === 'BOTTLE' ? '#4A90E2' : '#F5A623',
+        feedingType === 'BREAST' ? '🤱' : feedingType === 'BOTTLE' ? '🍼' : '🥄',
         'Fütterung gespeichert'
       );
     } else if (selectedActivityType === 'diaper') {
-      const diaperType =
-        selectedSubType === 'diaper_wet' ? 'WET' :
-        selectedSubType === 'diaper_dirty' ? 'DIRTY' :
-        'BOTH';
+      const diaperType = (payload.diaper_type as 'WET' | 'DIRTY' | 'BOTH' | undefined) ?? undefined;
       let error;
       if (editingEntry?.id) {
         const res = await updateBabyCareEntry(editingEntry.id, {
