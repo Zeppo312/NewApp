@@ -17,14 +17,16 @@ import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { ThemedBackground } from '@/components/ThemedBackground';
 
+import { DailyEntry } from '@/lib/baby';
 import {
-  getDailyEntries,
-  getDailyEntriesForDateRange,
-  saveDailyEntry,
-  DailyEntry,
-} from '@/lib/baby';
-import { syncAllExistingDailyEntries } from '@/lib/syncDailyEntries';
-import { subscribeToDailyEntries } from '@/lib/realtime';
+  addBabyCareEntry,
+  getBabyCareEntriesForDate,
+  getBabyCareEntriesForDateRange,
+  getBabyCareEntriesForMonth,
+  deleteBabyCareEntry,
+  stopBabyCareEntryTimer,
+  updateBabyCareEntry,
+} from '@/lib/supabase';
 
 import Header from '@/components/Header';
 import ActivityCard from '@/components/ActivityCard';
@@ -33,8 +35,7 @@ import ActivityInputModal from '@/components/ActivityInputModal';
 import WeekScroller from '@/components/WeekScroller';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 
-import { FeedingEventManager, FeedingEventData } from '@/components/FeedingEventManager';
-import { DiaperEventManager, DiaperEventData } from '@/components/DiaperEventManager';
+// Removed old managers; using unified baby_care_entries
 import { SupabaseErrorHandler } from '@/lib/errorHandler';
 import { ConnectionStatus } from '@/components/ConnectionStatus';
 import { DebugPanel } from '@/components/DebugPanel';
@@ -113,7 +114,7 @@ const TimerBanner: React.FC<{
     <GlassCard style={[s.timerBanner, { paddingVertical: 12, paddingHorizontal: 16 }]} intensity={24}>
       <View style={{ flex: 1 }}>
         <Text style={[s.timerType, { color: '#5e3db3' }]}>
-          {timer.type === 'BREAST' ? '🤱 Stillen' : '🍼 Fläschchen'}
+          {timer.type === 'BREAST' ? '🤱 Stillen' : '🍼 Fläschchen'} • läuft seit {new Date(timer.start).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
         </Text>
         <Text style={[s.timerTime, { color: '#2c2c2c' }]}>{formatTime(elapsed)}</Text>
       </View>
@@ -131,10 +132,12 @@ export default function DailyScreen() {
 
   const [entries, setEntries] = useState<DailyEntry[]>([]);
   const [weekEntries, setWeekEntries] = useState<DailyEntry[]>([]);
+  const [monthEntries, setMonthEntries] = useState<DailyEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [selectedWeekDate, setSelectedWeekDate] = useState(new Date()); // Separate state for week view
+  const [selectedMonthDate, setSelectedMonthDate] = useState(new Date()); // Separate state for month view
   const [selectedTab, setSelectedTab] = useState<'day' | 'week' | 'month'>('day');
   const [showInputModal, setShowInputModal] = useState(false);
   const [showDateNav, setShowDateNav] = useState(true);
@@ -149,22 +152,30 @@ export default function DailyScreen() {
 
   const [selectedActivityType, setSelectedActivityType] = useState<'feeding' | 'diaper' | 'other'>('feeding');
   const [selectedSubType, setSelectedSubType] = useState<QuickActionType | null>(null);
+  const [editingEntry, setEditingEntry] = useState<DailyEntry | null>(null);
 
   useEffect(() => {
     if (selectedTab === 'week') {
       loadWeekEntries();
+    } else if (selectedTab === 'month') {
+      loadMonthEntries();
     } else {
       loadEntries();
     }
-    syncDailyEntries();
   }, [selectedDate, selectedTab]);
 
-  // Separate effect for week data loading
+  // Separate effects for week/month data loading
   useEffect(() => {
     if (selectedTab === 'week') {
       loadWeekEntries();
     }
   }, [selectedWeekDate, selectedTab]);
+
+  useEffect(() => {
+    if (selectedTab === 'month') {
+      loadMonthEntries();
+    }
+  }, [selectedMonthDate, selectedTab]);
 
   // Helper functions for week view
   const getWeekStart = (date: Date) => {
@@ -220,18 +231,44 @@ export default function DailyScreen() {
     };
   }, [selectedDate]);
 
-  useEffect(() => {
-    const unsubscribe = subscribeToDailyEntries('dummy', () => loadEntries(), () => loadEntries(), () => loadEntries());
-    return () => unsubscribe?.();
-  }, []);
+  // Realtime subscription removed for simplicity; list refreshes on actions
+
+  const mapCareToDaily = (rows: any[]): DailyEntry[] =>
+    rows.map((r) => ({
+      id: r.id,
+      entry_date: r.start_time,
+      entry_type: r.entry_type,
+      start_time: r.start_time,
+      end_time: r.end_time ?? null,
+      notes: r.notes ?? null,
+      feeding_type: r.feeding_type ?? undefined,
+      feeding_volume_ml: r.feeding_volume_ml ?? undefined,
+      feeding_side: r.feeding_side ?? undefined,
+      diaper_type: r.diaper_type ?? undefined,
+      // helper for KPI (not part of type, accessed as any):
+      sub_type:
+        r.entry_type === 'feeding'
+          ? r.feeding_type === 'BREAST'
+            ? 'feeding_breast'
+            : r.feeding_type === 'BOTTLE'
+            ? 'feeding_bottle'
+            : 'feeding_solids'
+          : r.entry_type === 'diaper'
+          ? r.diaper_type === 'WET'
+            ? 'diaper_wet'
+            : r.diaper_type === 'DIRTY'
+            ? 'diaper_dirty'
+            : 'diaper_both'
+          : undefined,
+    } as unknown as DailyEntry));
 
   const loadEntries = async () => {
     setIsLoading(true);
     const result = await SupabaseErrorHandler.executeWithHandling(
       async () => {
-        const { data, error } = await getDailyEntries(undefined, selectedDate);
+        const { data, error } = await getBabyCareEntriesForDate(selectedDate);
         if (error) throw error;
-        return data ?? [];
+        return mapCareToDaily(data ?? []);
       },
       'LoadDailyEntries',
       true,
@@ -249,9 +286,9 @@ export default function DailyScreen() {
     
     const result = await SupabaseErrorHandler.executeWithHandling(
       async () => {
-        const { data, error } = await getDailyEntriesForDateRange(weekStart, weekEnd);
+        const { data, error } = await getBabyCareEntriesForDateRange(weekStart, weekEnd);
         if (error) throw error;
-        return data ?? [];
+        return mapCareToDaily(data ?? []);
       },
       'LoadWeekEntries',
       true,
@@ -261,17 +298,23 @@ export default function DailyScreen() {
     setIsLoading(false);
   };
 
-  const syncDailyEntries = async () => {
-    await SupabaseErrorHandler.executeWithHandling(
+  const loadMonthEntries = async () => {
+    setIsLoading(true);
+    const result = await SupabaseErrorHandler.executeWithHandling(
       async () => {
-        await syncAllExistingDailyEntries();
-        return true;
+        const { data, error } = await getBabyCareEntriesForMonth(selectedMonthDate);
+        if (error) throw error;
+        return mapCareToDaily(data ?? []);
       },
-      'SyncDailyEntries',
-      false,
-      1
+      'LoadMonthEntries',
+      true,
+      2
     );
+    if (result.success) setMonthEntries(result.data!);
+    setIsLoading(false);
   };
+
+  const syncDailyEntries = async () => {};
 
   const changeRelativeDate = (days: number) =>
     setSelectedDate(new Date(selectedDate.getTime() + days * 24 * 60 * 60 * 1000));
@@ -290,51 +333,77 @@ export default function DailyScreen() {
     console.log('handleSaveEntry - selectedSubType:', selectedSubType);
     
     if (selectedActivityType === 'feeding') {
-      const feedingData: FeedingEventData = {
-        type: selectedSubType as 'feeding_breast' | 'feeding_bottle' | 'feeding_solids',
-        volume_ml: payload.feeding_volume_ml, // Updated to match new payload format
-        side: payload.feeding_side, // Updated to match new payload format (keep uppercase)
-        note: payload.notes, // Updated to match new payload format
-        date: new Date(payload.start_time) || selectedDate, // Updated to match new payload format
-      };
-      const result = await FeedingEventManager.createFeedingEvent(feedingData);
-      if (!result.success) {
-        Alert.alert('Fehler', String(result.error ?? 'Fehler beim Speichern der Fütterung'));
+      const feedingType =
+        selectedSubType === 'feeding_breast' ? 'BREAST' :
+        selectedSubType === 'feeding_bottle' ? 'BOTTLE' :
+        'SOLIDS';
+      let data, error;
+      // Wenn initialData.id vorhanden ist, updaten
+      const editing = (ActivityInputModal as any)?.initialData?.id; // not directly accessible here; infer via subtype match
+      const candidate = entries.find((e) => (e as any).sub_type === selectedSubType);
+      if (candidate?.id) {
+        const res = await updateBabyCareEntry(candidate.id, {
+          start_time: payload.start_time,
+          end_time: payload.end_time ?? null,
+          notes: payload.notes ?? null,
+          feeding_type: feedingType,
+          feeding_volume_ml: payload.feeding_volume_ml ?? null,
+          feeding_side: payload.feeding_side ?? null,
+        });
+        data = res.data; error = res.error;
+      } else {
+        const res = await addBabyCareEntry({
+          entry_type: 'feeding',
+          start_time: payload.start_time,
+          end_time: payload.end_time ?? null,
+          notes: payload.notes ?? null,
+          feeding_type: feedingType,
+          feeding_volume_ml: payload.feeding_volume_ml ?? null,
+          feeding_side: payload.feeding_side ?? null,
+        });
+        data = res.data; error = res.error;
+      }
+      if (error) {
+        Alert.alert('Fehler', String((error as any)?.message ?? error ?? 'Fehler beim Speichern der Fütterung'));
         return;
       }
       if (selectedSubType === 'feeding_breast' || selectedSubType === 'feeding_bottle') {
         const timerType = selectedSubType === 'feeding_breast' ? 'BREAST' : 'BOTTLE';
-        setActiveTimer({ id: result.id || `temp_${Date.now()}`, type: timerType, start: Date.now() });
+        setActiveTimer({ id: data?.id || `temp_${Date.now()}`, type: timerType, start: Date.now() });
       }
       Alert.alert('Erfolg', 'Fütterungseintrag gespeichert! 🍼');
     } else if (selectedActivityType === 'diaper') {
-      const diaperData: DiaperEventData = {
-        type: selectedSubType as 'diaper_wet' | 'diaper_dirty' | 'diaper_both',
-        note: payload.notes, // Updated to match new payload format
-        date: new Date(payload.start_time) || selectedDate, // Updated to match new payload format
-      };
-      const result = await DiaperEventManager.createDiaperEvent(diaperData);
-      if (!result.success) {
-        Alert.alert('Fehler', String(result.error ?? 'Fehler beim Speichern'));
+      const diaperType =
+        selectedSubType === 'diaper_wet' ? 'WET' :
+        selectedSubType === 'diaper_dirty' ? 'DIRTY' :
+        'BOTH';
+      let error;
+      const candidate = entries.find((e) => (e as any).sub_type === selectedSubType);
+      if (candidate?.id) {
+        const res = await updateBabyCareEntry(candidate.id, {
+          start_time: payload.start_time,
+          end_time: payload.end_time ?? null,
+          notes: payload.notes ?? null,
+          diaper_type: diaperType,
+        });
+        error = res.error;
+      } else {
+        const res = await addBabyCareEntry({
+          entry_type: 'diaper',
+          start_time: payload.start_time,
+          end_time: payload.end_time ?? null,
+          notes: payload.notes ?? null,
+          diaper_type: diaperType,
+        });
+        error = res.error;
+      }
+      if (error) {
+        Alert.alert('Fehler', String((error as any)?.message ?? error ?? 'Fehler beim Speichern'));
         return;
       }
       Alert.alert('Erfolg', 'Wickeleintrag gespeichert! 💧');
     } else {
-      const result = await SupabaseErrorHandler.executeWithHandling(
-        async () => {
-          const { data, error } = await saveDailyEntry(payload);
-          if (error) throw error;
-          return data;
-        },
-        'SaveOtherEntry',
-        true,
-        2
-      );
-      if (!result.success) {
-        Alert.alert('Fehler', String(result.error ?? 'Fehler beim Speichern'));
-        return;
-      }
-      Alert.alert('Erfolg', 'Eintrag gespeichert! ✅');
+      Alert.alert('Hinweis', 'Sonstige Einträge sind in der neuen Ansicht nicht verfügbar.');
     }
     setShowInputModal(false);
     loadEntries();
@@ -342,9 +411,9 @@ export default function DailyScreen() {
 
   const handleTimerStop = async () => {
     if (!activeTimer) return;
-    const result = await FeedingEventManager.stopFeedingTimer(activeTimer.id);
-    if (!result.success) {
-      Alert.alert('Fehler', result.error || 'Unbekannter Fehler');
+    const { error } = await stopBabyCareEntryTimer(activeTimer.id);
+    if (error) {
+      Alert.alert('Fehler', String((error as any)?.message ?? error ?? 'Unbekannter Fehler'));
       return;
     }
     setActiveTimer(null);
@@ -359,8 +428,8 @@ export default function DailyScreen() {
         text: 'Löschen',
         style: 'destructive',
         onPress: async () => {
-          const result = await DiaperEventManager.deleteDiaperEvent(id);
-          if (!result.success) return;
+          const { error } = await deleteBabyCareEntry(id);
+          if (error) return;
           loadEntries();
           Alert.alert('Erfolg', 'Eintrag gelöscht! 🗑️');
         },
@@ -506,9 +575,8 @@ export default function DailyScreen() {
                 ]}
                 onPress={() => {
                   setSelectedDate(day);
-                  // Keep the week context when switching to day view
+                  // Stay in week view; keep week context
                   setSelectedWeekDate(selectedWeekDate);
-                  setSelectedTab('day');
                 }}
               >
                 <GlassCard
@@ -616,6 +684,108 @@ export default function DailyScreen() {
     );
   };
 
+  const MonthView = () => {
+    // Build month grid, starting from Monday
+    const baseDate = new Date(selectedMonthDate.getFullYear(), selectedMonthDate.getMonth(), 1);
+    const startDay = (baseDate.getDay() + 6) % 7; // convert Sun(0)→6, Mon(1)→0
+    const daysInMonth = new Date(selectedMonthDate.getFullYear(), selectedMonthDate.getMonth() + 1, 0).getDate();
+
+    const cells: { date: Date | null }[] = [];
+    for (let i = 0; i < startDay; i++) cells.push({ date: null });
+    for (let d = 1; d <= daysInMonth; d++) {
+      cells.push({ date: new Date(selectedMonthDate.getFullYear(), selectedMonthDate.getMonth(), d) });
+    }
+    while (cells.length % 7 !== 0) cells.push({ date: null });
+
+    const getCountsForDate = (date: Date) => {
+      const str = date.toISOString().split('T')[0];
+      const items = monthEntries.filter((e) => new Date(e.entry_date).toISOString().split('T')[0] === str);
+      return {
+        feeding: items.filter((e) => e.entry_type === 'feeding').length,
+        diaper: items.filter((e) => e.entry_type === 'diaper').length,
+      };
+    };
+
+    const goPrevMonth = () => {
+      const d = new Date(selectedMonthDate);
+      d.setMonth(d.getMonth() - 1);
+      setSelectedMonthDate(d);
+    };
+    const goNextMonth = () => {
+      const d = new Date(selectedMonthDate);
+      d.setMonth(d.getMonth() + 1);
+      setSelectedMonthDate(d);
+    };
+
+    const weekdayLabels = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+
+    return (
+      <View style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
+        <View style={s.weekNavigationContainer}>
+          <TouchableOpacity style={s.weekNavButton} onPress={goPrevMonth}>
+            <Text style={s.weekNavButtonText}>‹</Text>
+          </TouchableOpacity>
+          <View style={s.weekHeaderCenter}>
+            <Text style={s.weekHeaderTitle}>
+              {selectedMonthDate.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' })}
+            </Text>
+          </View>
+          <TouchableOpacity style={s.weekNavButton} onPress={goNextMonth}>
+            <Text style={s.weekNavButtonText}>›</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Weekday header */}
+        <View style={[s.weekCalendar, { marginBottom: 8 }]}>
+          {weekdayLabels.map((w) => (
+            <Text key={w} style={[s.weekDayName, { flex: 1, textAlign: 'center' }]}>{w}</Text>
+          ))}
+        </View>
+
+        {/* Month grid */}
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+          {cells.map((cell, idx) => {
+            const isEmpty = !cell.date;
+            const isToday = cell.date && cell.date.toDateString() === new Date().toDateString();
+            const counts = cell.date ? getCountsForDate(cell.date) : { feeding: 0, diaper: 0 };
+            return (
+              <View key={idx} style={{ width: `${100 / 7}%`, padding: 4 }}>
+                {isEmpty ? (
+                  <View style={{ height: 64 }} />
+                ) : (
+                  <GlassCard
+                    style={{ alignItems: 'center', paddingVertical: 8 }}
+                    intensity={isToday ? 28 : 18}
+                    overlayColor={isToday ? 'rgba(94,61,179,0.16)' : 'rgba(255,255,255,0.12)'}
+                    borderColor={isToday ? 'rgba(94,61,179,0.5)' : 'rgba(255,255,255,0.3)'}
+                  >
+                    <Text style={{ fontWeight: '700', color: isToday ? '#5E3DB3' : '#333' }}>
+                      {cell.date!.getDate()}
+                    </Text>
+                    <View style={{ flexDirection: 'row', marginTop: 6 }}>
+                      {counts.feeding > 0 && (
+                        <View style={s.statBadge}>
+                          <Text style={s.statEmoji}>🍼</Text>
+                          <Text style={s.statCount}>{counts.feeding}</Text>
+                        </View>
+                      )}
+                      {counts.diaper > 0 && (
+                        <View style={[s.statBadge, { marginLeft: 4 }]}>
+                          <Text style={s.statEmoji}>💧</Text>
+                          <Text style={s.statCount}>{counts.diaper}</Text>
+                        </View>
+                      )}
+                    </View>
+                  </GlassCard>
+                )}
+              </View>
+            );
+          })}
+        </View>
+      </View>
+    );
+  };
+
   const KPISection = () => {
     const currentEntries = selectedTab === 'week' ? weekEntries : entries;
     const feedingEntries = currentEntries.filter((e) => e.entry_type === 'feeding');
@@ -687,10 +857,7 @@ export default function DailyScreen() {
           {selectedTab === 'week' ? (
             <WeekView />
           ) : selectedTab === 'month' ? (
-            <View style={{ padding: 20, alignItems: 'center' }}>
-              <Text style={s.sectionTitle}>Monatsansicht</Text>
-              <Text style={{ color: '#666', textAlign: 'center' }}>Monatsansicht kommt bald! 📅</Text>
-            </View>
+            <MonthView />
           ) : (
             <>
               <QuickActionRow />
@@ -702,7 +869,18 @@ export default function DailyScreen() {
 
               <View style={s.entriesSection}>
                 {entries.map((item) => (
-                  <ActivityCard key={item.id ?? Math.random().toString()} entry={item} onDelete={handleDeleteEntry} />
+                  <ActivityCard
+                    key={item.id ?? Math.random().toString()}
+                    entry={item}
+                    onDelete={handleDeleteEntry}
+                    onEdit={(entry) => {
+                      setEditingEntry(entry);
+                      if (entry.entry_type === 'feeding') setSelectedActivityType('feeding');
+                      else if (entry.entry_type === 'diaper') setSelectedActivityType('diaper');
+                      setSelectedSubType((entry as any).sub_type ?? null);
+                      setShowInputModal(true);
+                    }}
+                  />
                 ))}
                 {entries.length === 0 && <EmptyState type="day" message="Noch keine Aktivitäten heute 🤍" />}
               </View>
@@ -722,8 +900,18 @@ export default function DailyScreen() {
           activityType={selectedActivityType}
           initialSubType={selectedSubType}
           date={selectedDate}
-          onClose={() => setShowInputModal(false)}
+          onClose={() => { setShowInputModal(false); setEditingEntry(null); }}
           onSave={handleSaveEntry}
+          initialData={editingEntry ? {
+            id: editingEntry.id!,
+            feeding_type: (editingEntry as any).feeding_type as any,
+            feeding_volume_ml: (editingEntry as any).feeding_volume_ml ?? null,
+            feeding_side: (editingEntry as any).feeding_side as any,
+            diaper_type: (editingEntry as any).diaper_type as any,
+            notes: editingEntry.notes ?? null,
+            start_time: editingEntry.start_time!,
+            end_time: editingEntry.end_time ?? null,
+          } : undefined}
         />
       </SafeAreaView>
     </ThemedBackground>

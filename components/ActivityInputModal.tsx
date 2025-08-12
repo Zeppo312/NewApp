@@ -14,6 +14,7 @@ import {
   UIManager,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 
 // Typ-Definitionen
 type ActivityType = 'feeding' | 'diaper' | 'other';
@@ -28,7 +29,17 @@ interface ActivityInputModalProps {
   initialSubType?: string | null;
   date?: Date;
   onClose: () => void;
-  onSave: (data: any) => void; // data ist DB-ready für baby_daily
+  onSave: (data: any) => void; // data ist DB-ready für baby_care_entries
+  initialData?: Partial<{
+    id: string;
+    feeding_type: 'BREAST' | 'BOTTLE' | 'SOLIDS';
+    feeding_volume_ml: number | null;
+    feeding_side: 'LEFT' | 'RIGHT' | 'BOTH' | null;
+    diaper_type: 'WET' | 'DIRTY' | 'BOTH' | null;
+    notes: string | null;
+    start_time: string;
+    end_time: string | null;
+  }>;
 }
 
 const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
@@ -38,6 +49,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   date,
   onClose,
   onSave,
+  initialData,
 }) => {
   // Theme und Farben
   const theme = {
@@ -56,6 +68,8 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
 
   // States
   const [startTime, setStartTime] = useState(new Date());
+  const [endTime, setEndTime] = useState<Date | null>(null);
+  const [isEndTimeVisible, setEndTimeVisible] = useState(false);
   const [notes, setNotes] = useState('');
   const [isNotesVisible, setNotesVisible] = useState(false);
 
@@ -76,27 +90,38 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   useEffect(() => {
     if (visible) {
       const now = date || new Date();
-      setStartTime(now);
-      setNotes('');
+      setStartTime(initialData?.start_time ? new Date(initialData.start_time) : now);
+      setEndTime(initialData?.end_time ? new Date(initialData.end_time) : null);
+      setEndTimeVisible(!!initialData?.end_time);
+      setNotes(initialData?.notes ?? '');
       setNotesVisible(false);
       
       // Standardwerte setzen
-      setFeedingType('bottle');
-      setVolumeMl(120);
-      setBreastSide('left');
-      setDiaperType('wet');
+      if (activityType === 'feeding') {
+        if (initialData?.feeding_type === 'BREAST') setFeedingType('breast');
+        else if (initialData?.feeding_type === 'SOLIDS') setFeedingType('solids');
+        else setFeedingType('bottle');
+        setVolumeMl(initialData?.feeding_volume_ml ?? 120);
+        setBreastSide(
+          initialData?.feeding_side === 'RIGHT' ? 'right' : initialData?.feeding_side === 'BOTH' ? 'both' : 'left'
+        );
+      } else if (activityType === 'diaper') {
+        setDiaperType(
+          initialData?.diaper_type === 'DIRTY' ? 'dirty' : initialData?.diaper_type === 'BOTH' ? 'both' : 'wet'
+        );
+      }
       
       // Hier könnten initialSubType ausgewertet werden
     }
-  }, [visible, initialSubType, date]);
+  }, [visible, initialSubType, date, initialData, activityType]);
 
-  // Speichern: Payload für baby_daily
+  // Speichern: Payload für baby_care_entries
   const handleSave = () => {
     const entryDateISO = startTime.toISOString();
     const base = {
-      entry_type: activityType,           // 'feeding' | 'diaper' | 'other'
-      entry_date: entryDateISO,
+      entry_type: activityType,           // 'feeding' | 'diaper'
       start_time: entryDateISO,
+      end_time: endTime ? endTime.toISOString() : null as string | null,
       notes: notes || null,
     };
 
@@ -136,6 +161,60 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
     onSave(payload);
     onClose();
   };
+
+  const adjustTime = (setter: (d: Date) => void, target: Date, deltaMinutes: number) => {
+    const d = new Date(target);
+    d.setMinutes(d.getMinutes() + deltaMinutes);
+    setter(d);
+  };
+
+  const renderTimeSection = () => (
+    <View style={styles.section}>
+      <Text style={[styles.sectionTitle, { color: theme.text }]}>⏱ Zeit</Text>
+      <View style={styles.timeCard}>
+        <BlurView intensity={20} tint="light" style={StyleSheet.absoluteFill} />
+        <LinearGradient colors={[ 'rgba(255,255,255,0.22)', 'rgba(255,255,255,0.12)' ]} style={StyleSheet.absoluteFill} />
+
+        <View style={styles.timeRow}> 
+          <Text style={[styles.timeLabel, { color: theme.textSecondary }]}>Start</Text>
+          <View style={styles.timeControls}>
+            <TouchableOpacity accessibilityLabel="Start minus 5 Minuten" style={styles.roundStepper} onPress={() => adjustTime(setStartTime, startTime, -5)}>
+              <Text style={styles.roundStepperText}>-5</Text>
+            </TouchableOpacity>
+            <View style={styles.timePill}>
+              <Text style={styles.timePillText}>
+                {startTime.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
+              </Text>
+            </View>
+            <TouchableOpacity accessibilityLabel="Start plus 5 Minuten" style={styles.roundStepper} onPress={() => adjustTime(setStartTime, startTime, +5)}>
+              <Text style={styles.roundStepperText}>+5</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <View style={[styles.timeRow, { marginTop: 12 }] }>
+          <TouchableOpacity accessibilityLabel="Ende hinzufügen" onPress={() => setEndTimeVisible(!isEndTimeVisible)}>
+            <Text style={[styles.timeLabel, { color: theme.textSecondary }]}>{isEndTimeVisible ? 'Ende' : 'Ende hinzufügen'}</Text>
+          </TouchableOpacity>
+          {isEndTimeVisible && (
+            <View style={styles.timeControls}>
+              <TouchableOpacity accessibilityLabel="Ende minus 5 Minuten" style={styles.roundStepper} onPress={() => setEndTime((prev) => prev ? new Date(prev.getTime() - 5*60000) : new Date(startTime.getTime() + 5*60000))}>
+                <Text style={styles.roundStepperText}>-5</Text>
+              </TouchableOpacity>
+              <View style={styles.timePill}>
+                <Text style={styles.timePillText}>
+                  {(endTime || startTime).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
+                </Text>
+              </View>
+              <TouchableOpacity accessibilityLabel="Ende plus 5 Minuten" style={styles.roundStepper} onPress={() => setEndTime((prev) => (prev ? new Date(prev.getTime() + 5*60000) : new Date(startTime.getTime() + 5*60000)))}>
+                <Text style={styles.roundStepperText}>+5</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      </View>
+    </View>
+  );
 
   const getButtonColor = (type: FeedingType) => {
     switch (type) {
@@ -350,6 +429,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
                     <View style={{width: '100%', alignItems: 'center'}}>
                         {activityType === 'feeding' && renderFeedingSection()}
                         {activityType === 'diaper' && renderDiaperSection()}
+                        {renderTimeSection()}
                         {renderNotes()}
                     </View>
                 </TouchableWithoutFeedback>
@@ -501,6 +581,64 @@ const styles = StyleSheet.create({
   volumeText: {
     fontSize: 36,
     fontWeight: 'bold',
+  },
+  timeCard: {
+    width: '90%',
+    borderRadius: 18,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+    padding: 12,
+  },
+  timeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  timeLabel: {
+    fontSize: 14,
+    flex: 1,
+  },
+  timeControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  timeText: {
+    fontSize: 18,
+    width: 60,
+    textAlign: 'center',
+  },
+  timePill: {
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderColor: 'rgba(255,255,255,0.35)',
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  timePillText: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  roundStepper: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  roundStepperText: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#333',
   },
   volumeUnit: {
     fontSize: 18,

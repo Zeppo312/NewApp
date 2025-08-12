@@ -78,6 +78,7 @@ export type Contraction = {
   duration: number | null; // in seconds
   interval: number | null; // time since last contraction in seconds
   intensity: string | null; // Stärke der Wehe (schwach, mittel, stark)
+  notes?: string | null;
   created_at: string;
 };
 
@@ -112,6 +113,24 @@ export type Geburtsplan = {
   structured_data?: GeburtsplanData;
   created_at: string;
   updated_at: string;
+};
+
+// Einheitliche Tabelle für Füttern/Windeln (baby_care_entries)
+export type BabyCareEntry = {
+  id?: string;
+  user_id?: string;
+  entry_type: 'feeding' | 'diaper';
+  start_time: string; // ISO
+  end_time?: string | null; // ISO
+  notes?: string | null;
+  // Feeding-spezifisch
+  feeding_type?: 'BREAST' | 'BOTTLE' | 'SOLIDS' | null;
+  feeding_volume_ml?: number | null;
+  feeding_side?: 'LEFT' | 'RIGHT' | 'BOTH' | null;
+  // Diaper-spezifisch
+  diaper_type?: 'WET' | 'DIRTY' | 'BOTH' | null;
+  created_at?: string;
+  updated_at?: string;
 };
 
 // Hilfsfunktionen für die Authentifizierung
@@ -204,6 +223,153 @@ export const signInAnonymously = async () => {
     password: Math.random().toString(36).substring(2),
   });
   return { data, error };
+};
+
+// Einfügen in die einheitliche Tabelle baby_care_entries
+export const addBabyCareEntry = async (entry: BabyCareEntry) => {
+  try {
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
+
+    const payload = {
+      user_id: userData.user.id,
+      entry_type: entry.entry_type,
+      start_time: entry.start_time,
+      end_time: entry.end_time ?? null,
+      notes: entry.notes ?? null,
+      feeding_type: entry.feeding_type ?? null,
+      feeding_volume_ml: entry.feeding_volume_ml ?? null,
+      feeding_side: entry.feeding_side ?? null,
+      diaper_type: entry.diaper_type ?? null,
+    };
+
+    const { data, error } = await supabase
+      .from('baby_care_entries')
+      .insert(payload)
+      .select()
+      .single();
+
+    return { data, error };
+  } catch (err) {
+    return { data: null, error: err };
+  }
+};
+
+export const getBabyCareEntriesForDate = async (date: Date) => {
+  try {
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
+
+    const startOfDay = new Date(date);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(date);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const { data, error } = await supabase
+      .from('baby_care_entries')
+      .select('*')
+      .eq('user_id', userData.user.id)
+      .gte('start_time', startOfDay.toISOString())
+      .lte('start_time', endOfDay.toISOString())
+      .order('start_time', { ascending: false });
+
+    return { data, error };
+  } catch (err) {
+    return { data: null, error: err };
+  }
+};
+
+export const getBabyCareEntriesForDateRange = async (startDate: Date, endDate: Date) => {
+  try {
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
+
+    const { data, error } = await supabase
+      .from('baby_care_entries')
+      .select('*')
+      .eq('user_id', userData.user.id)
+      .gte('start_time', startDate.toISOString())
+      .lte('start_time', endDate.toISOString())
+      .order('start_time', { ascending: true });
+
+    return { data, error };
+  } catch (err) {
+    return { data: null, error: err };
+  }
+};
+
+export const deleteBabyCareEntry = async (id: string) => {
+  try {
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) return { error: new Error('Nicht angemeldet') };
+
+    const { error } = await supabase
+      .from('baby_care_entries')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', userData.user.id);
+    return { error };
+  } catch (err) {
+    return { error: err };
+  }
+};
+
+export const stopBabyCareEntryTimer = async (id: string) => {
+  try {
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) return { error: new Error('Nicht angemeldet') };
+
+    const { data, error } = await supabase
+      .from('baby_care_entries')
+      .update({ end_time: new Date().toISOString(), updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .eq('user_id', userData.user.id)
+      .select()
+      .single();
+    return { data, error };
+  } catch (err) {
+    return { data: null, error: err };
+  }
+};
+
+export const getBabyCareEntriesForMonth = async (date: Date) => {
+  const first = new Date(date.getFullYear(), date.getMonth(), 1, 0, 0, 0, 0);
+  const last = new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
+  return getBabyCareEntriesForDateRange(first, last);
+};
+
+export const updateBabyCareEntry = async (
+  id: string,
+  updates: Partial<BabyCareEntry>
+) => {
+  try {
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
+
+    // Only allow certain fields to be updated
+    const payload = {
+      start_time: updates.start_time,
+      end_time: updates.end_time ?? null,
+      notes: updates.notes ?? null,
+      feeding_type: updates.feeding_type ?? null,
+      feeding_volume_ml: updates.feeding_volume_ml ?? null,
+      feeding_side: updates.feeding_side ?? null,
+      diaper_type: updates.diaper_type ?? null,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { data, error } = await supabase
+      .from('baby_care_entries')
+      .update(payload)
+      .eq('id', id)
+      .eq('user_id', userData.user.id)
+      .select()
+      .single();
+
+    return { data, error };
+  } catch (err) {
+    return { data: null, error: err };
+  }
 };
 
 export const signOut = async () => {

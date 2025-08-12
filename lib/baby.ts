@@ -30,6 +30,11 @@ export interface DailyEntry {
   start_time?: string;
   end_time?: string;
   notes?: string;
+  // Optional detailed fields for unified baby care entries
+  feeding_type?: 'BREAST' | 'BOTTLE' | 'SOLIDS';
+  feeding_volume_ml?: number | null;
+  feeding_side?: 'LEFT' | 'RIGHT' | 'BOTH' | null;
+  diaper_type?: 'WET' | 'DIRTY' | 'BOTH' | null;
 }
 
 // Typen für Entwicklungsphasen
