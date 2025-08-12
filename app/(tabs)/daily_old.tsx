@@ -19,6 +19,7 @@ import { ThemedBackground } from '@/components/ThemedBackground';
 
 import {
   getDailyEntries,
+  getDailyEntriesForDateRange,
   saveDailyEntry,
   DailyEntry,
 } from '@/lib/baby';
@@ -129,9 +130,11 @@ export default function DailyScreen() {
   const router = useRouter();
 
   const [entries, setEntries] = useState<DailyEntry[]>([]);
+  const [weekEntries, setWeekEntries] = useState<DailyEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [selectedWeekDate, setSelectedWeekDate] = useState(new Date()); // Separate state for week view
   const [selectedTab, setSelectedTab] = useState<'day' | 'week' | 'month'>('day');
   const [showInputModal, setShowInputModal] = useState(false);
   const [showDateNav, setShowDateNav] = useState(true);
@@ -148,9 +151,46 @@ export default function DailyScreen() {
   const [selectedSubType, setSelectedSubType] = useState<QuickActionType | null>(null);
 
   useEffect(() => {
-    loadEntries();
+    if (selectedTab === 'week') {
+      loadWeekEntries();
+    } else {
+      loadEntries();
+    }
     syncDailyEntries();
-  }, [selectedDate]);
+  }, [selectedDate, selectedTab]);
+
+  // Separate effect for week data loading
+  useEffect(() => {
+    if (selectedTab === 'week') {
+      loadWeekEntries();
+    }
+  }, [selectedWeekDate, selectedTab]);
+
+  // Helper functions for week view
+  const getWeekStart = (date: Date) => {
+    const d = new Date(date);
+    const day = d.getDay();
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Monday as first day
+    return new Date(d.setDate(diff));
+  };
+
+  const getWeekEnd = (date: Date) => {
+    const weekStart = getWeekStart(date);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+    return weekEnd;
+  };
+
+  const getWeekDays = (date: Date) => {
+    const weekStart = getWeekStart(date);
+    const days = [];
+    for (let i = 0; i < 7; i++) {
+      const day = new Date(weekStart);
+      day.setDate(weekStart.getDate() + i);
+      days.push(day);
+    }
+    return days;
+  };
 
   useEffect(() => {
     Animated.timing(fadeNavAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
@@ -198,9 +238,27 @@ export default function DailyScreen() {
       2
     );
     if (result.success) setEntries(result.data!);
-    else setEntries([]);
     setIsLoading(false);
     setRefreshing(false);
+  };
+
+  const loadWeekEntries = async () => {
+    setIsLoading(true);
+    const weekStart = getWeekStart(selectedWeekDate);
+    const weekEnd = getWeekEnd(selectedWeekDate);
+    
+    const result = await SupabaseErrorHandler.executeWithHandling(
+      async () => {
+        const { data, error } = await getDailyEntriesForDateRange(weekStart, weekEnd);
+        if (error) throw error;
+        return data ?? [];
+      },
+      'LoadWeekEntries',
+      true,
+      2
+    );
+    if (result.success) setWeekEntries(result.data!);
+    setIsLoading(false);
   };
 
   const syncDailyEntries = async () => {
@@ -227,13 +285,17 @@ export default function DailyScreen() {
   };
 
   const handleSaveEntry = async (payload: any) => {
+    console.log('handleSaveEntry - Received payload:', JSON.stringify(payload, null, 2));
+    console.log('handleSaveEntry - selectedActivityType:', selectedActivityType);
+    console.log('handleSaveEntry - selectedSubType:', selectedSubType);
+    
     if (selectedActivityType === 'feeding') {
       const feedingData: FeedingEventData = {
         type: selectedSubType as 'feeding_breast' | 'feeding_bottle' | 'feeding_solids',
-        volume_ml: payload.volume_ml,
-        side: payload.side,
-        note: payload.note,
-        date: (payload.date as Date) || selectedDate,
+        volume_ml: payload.feeding_volume_ml, // Updated to match new payload format
+        side: payload.feeding_side, // Updated to match new payload format (keep uppercase)
+        note: payload.notes, // Updated to match new payload format
+        date: new Date(payload.start_time) || selectedDate, // Updated to match new payload format
       };
       const result = await FeedingEventManager.createFeedingEvent(feedingData);
       if (!result.success) {
@@ -248,8 +310,8 @@ export default function DailyScreen() {
     } else if (selectedActivityType === 'diaper') {
       const diaperData: DiaperEventData = {
         type: selectedSubType as 'diaper_wet' | 'diaper_dirty' | 'diaper_both',
-        note: payload.note,
-        date: (payload.date as Date) || selectedDate,
+        note: payload.notes, // Updated to match new payload format
+        date: new Date(payload.start_time) || selectedDate, // Updated to match new payload format
       };
       const result = await DiaperEventManager.createDiaperEvent(diaperData);
       if (!result.success) {
@@ -371,9 +433,193 @@ export default function DailyScreen() {
     );
   };
 
-  const KPISection = () => {
+  // Week navigation functions
+  const goToPreviousWeek = () => {
+    const newWeekDate = new Date(selectedWeekDate);
+    newWeekDate.setDate(selectedWeekDate.getDate() - 7);
+    setSelectedWeekDate(newWeekDate);
+  };
+
+  const goToNextWeek = () => {
+    const newWeekDate = new Date(selectedWeekDate);
+    newWeekDate.setDate(selectedWeekDate.getDate() + 7);
+    setSelectedWeekDate(newWeekDate);
+  };
+
+  const goToCurrentWeek = () => {
+    setSelectedWeekDate(new Date());
+  };
+
+  const WeekView = () => {
+    const weekDays = getWeekDays(selectedWeekDate);
+    const dayNames = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+
+    const getEntriesForDay = (date: Date) => {
+      const dateStr = date.toISOString().split('T')[0];
+      return weekEntries.filter(entry => {
+        const entryDateStr = new Date(entry.entry_date).toISOString().split('T')[0];
+        return entryDateStr === dateStr;
+      });
+    };
+
+    const getDayStats = (date: Date) => {
+      const dayEntries = getEntriesForDay(date);
+      const feedingCount = dayEntries.filter(e => e.entry_type === 'feeding').length;
+      const diaperCount = dayEntries.filter(e => e.entry_type === 'diaper').length;
+      return { feedingCount, diaperCount, total: dayEntries.length };
+    };
+
+    return (
+      <View style={s.weekViewContainer}>
+        {/* Week Navigation Header */}
+        <View style={s.weekNavigationContainer}>
+          <TouchableOpacity style={s.weekNavButton} onPress={goToPreviousWeek}>
+            <Text style={s.weekNavButtonText}>‹</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity style={s.weekHeaderCenter} onPress={goToCurrentWeek}>
+            <Text style={s.weekHeaderTitle}>Wochenübersicht</Text>
+            <Text style={s.weekHeaderSubtitle}>
+              {getWeekStart(selectedWeekDate).toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })} - {getWeekEnd(selectedWeekDate).toLocaleDateString('de-DE', { day: 'numeric', month: 'short', year: 'numeric' })}
+            </Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity style={s.weekNavButton} onPress={goToNextWeek}>
+            <Text style={s.weekNavButtonText}>›</Text>
+          </TouchableOpacity>
+        </View>
+        
+        {/* Week Calendar */}
+        <View style={s.weekCalendar}>
+          {weekDays.map((day, index) => {
+            const stats = getDayStats(day);
+            const isToday = day.toDateString() === new Date().toDateString();
+            const isSelected = day.toDateString() === selectedDate.toDateString();
+            
+            return (
+              <TouchableOpacity
+                key={index}
+                style={[
+                  s.weekDayCard,
+                  isToday && s.todayCard,
+                  isSelected && s.selectedDayCard
+                ]}
+                onPress={() => {
+                  setSelectedDate(day);
+                  // Keep the week context when switching to day view
+                  setSelectedWeekDate(selectedWeekDate);
+                  setSelectedTab('day');
+                }}
+              >
+                <GlassCard
+                  style={s.weekDayInner}
+                  intensity={isSelected ? 35 : 20}
+                  overlayColor={isSelected ? 'rgba(94, 61, 179, 0.2)' : 'rgba(255,255,255,0.15)'}
+                  borderColor={isToday ? 'rgba(94, 61, 179, 0.6)' : 'rgba(255,255,255,0.3)'}
+                >
+                  <Text style={[s.weekDayName, isSelected && s.selectedDayText]}>
+                    {dayNames[index]}
+                  </Text>
+                  <Text style={[s.weekDayNumber, isSelected && s.selectedDayText]}>
+                    {day.getDate()}
+                  </Text>
+                  
+                  {stats.total > 0 && (
+                    <View style={s.dayStatsContainer}>
+                      {stats.feedingCount > 0 && (
+                        <View style={s.statBadge}>
+                          <Text style={s.statEmoji}>🍼</Text>
+                          <Text style={s.statCount}>{stats.feedingCount}</Text>
+                        </View>
+                      )}
+                      {stats.diaperCount > 0 && (
+                        <View style={s.statBadge}>
+                          <Text style={s.statEmoji}>💧</Text>
+                          <Text style={s.statCount}>{stats.diaperCount}</Text>
+                        </View>
+                      )}
+                    </View>
+                  )}
+                </GlassCard>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {/* Week Summary */}
+        <WeekSummary entries={weekEntries} />
+        
+        {/* Week Entries Timeline */}
+        <Text style={[s.sectionTitle, { marginTop: 20 }]}>Wochenverlauf</Text>
+        <View style={s.weekEntriesContainer}>
+          {weekDays.map((day, dayIndex) => {
+            const dayEntries = getEntriesForDay(day);
+            if (dayEntries.length === 0) return null;
+            
+            return (
+              <View key={dayIndex} style={s.daySection}>
+                <Text style={s.daySectionTitle}>
+                  {day.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'short' })}
+                </Text>
+                {dayEntries.map((entry) => (
+                  <ActivityCard 
+                    key={entry.id ?? Math.random().toString()} 
+                    entry={entry} 
+                    onDelete={handleDeleteEntry}
+                  />
+                ))}
+              </View>
+            );
+          })}
+          {weekEntries.length === 0 && (
+            <EmptyState type="week" message="Noch keine Aktivitäten diese Woche 📅" />
+          )}
+        </View>
+      </View>
+    );
+  };
+
+  const WeekSummary = ({ entries }: { entries: DailyEntry[] }) => {
     const feedingEntries = entries.filter((e) => e.entry_type === 'feeding');
     const diaperEntries = entries.filter((e) => e.entry_type === 'diaper');
+    
+    const totalFeedings = feedingEntries.length;
+    const totalDiapers = diaperEntries.length;
+    const avgFeedingsPerDay = totalFeedings / 7;
+    const avgDiapersPerDay = totalDiapers / 7;
+
+    return (
+      <View style={s.weekSummaryContainer}>
+        <GlassCard
+          style={s.weekSummaryCard}
+          intensity={24}
+          overlayColor="rgba(94, 61, 179, 0.1)"
+          borderColor="rgba(94, 61, 179, 0.3)"
+        >
+          <Text style={s.weekSummaryTitle}>Wochenzusammenfassung</Text>
+          <View style={s.weekSummaryStats}>
+            <View style={s.weekStat}>
+              <Text style={s.weekStatEmoji}>🍼</Text>
+              <Text style={s.weekStatNumber}>{totalFeedings}</Text>
+              <Text style={s.weekStatLabel}>Fütterungen</Text>
+              <Text style={s.weekStatAvg}>⌀ {avgFeedingsPerDay.toFixed(1)}/Tag</Text>
+            </View>
+            <View style={s.weekStat}>
+              <Text style={s.weekStatEmoji}>💧</Text>
+              <Text style={s.weekStatNumber}>{totalDiapers}</Text>
+              <Text style={s.weekStatLabel}>Windeln</Text>
+              <Text style={s.weekStatAvg}>⌀ {avgDiapersPerDay.toFixed(1)}/Tag</Text>
+            </View>
+          </View>
+        </GlassCard>
+      </View>
+    );
+  };
+
+  const KPISection = () => {
+    const currentEntries = selectedTab === 'week' ? weekEntries : entries;
+    const feedingEntries = currentEntries.filter((e) => e.entry_type === 'feeding');
+    const diaperEntries = currentEntries.filter((e) => e.entry_type === 'diaper');
 
     const bottleCount = feedingEntries.filter((f: any) => f.sub_type === 'feeding_bottle').length;
     const breastCount = feedingEntries.filter((f: any) => f.sub_type === 'feeding_breast').length;
@@ -438,21 +684,30 @@ export default function DailyScreen() {
         >
           <TopTabs />
 
-          <>
-            <QuickActionRow />
-
-            <Text style={s.sectionTitle}>Kennzahlen</Text>
-            <KPISection />
-
-            <Text style={[s.sectionTitle, { marginTop: 4 }]}>Timeline</Text>
-
-            <View style={s.entriesSection}>
-              {entries.map((item) => (
-                <ActivityCard key={item.id ?? Math.random().toString()} entry={item} onDelete={handleDeleteEntry} />
-              ))}
-              {entries.length === 0 && <EmptyState type="day" message="Noch keine Aktivitäten heute 🤍" />}
+          {selectedTab === 'week' ? (
+            <WeekView />
+          ) : selectedTab === 'month' ? (
+            <View style={{ padding: 20, alignItems: 'center' }}>
+              <Text style={s.sectionTitle}>Monatsansicht</Text>
+              <Text style={{ color: '#666', textAlign: 'center' }}>Monatsansicht kommt bald! 📅</Text>
             </View>
-          </>
+          ) : (
+            <>
+              <QuickActionRow />
+
+              <Text style={s.sectionTitle}>Kennzahlen</Text>
+              <KPISection />
+
+              <Text style={[s.sectionTitle, { marginTop: 4 }]}>Timeline</Text>
+
+              <View style={s.entriesSection}>
+                {entries.map((item) => (
+                  <ActivityCard key={item.id ?? Math.random().toString()} entry={item} onDelete={handleDeleteEntry} />
+                ))}
+                {entries.length === 0 && <EmptyState type="day" message="Noch keine Aktivitäten heute 🤍" />}
+              </View>
+            </>
+          )}
         </ScrollView>
 
         <TouchableOpacity
@@ -594,5 +849,159 @@ kpiValueCentered: { textAlign: 'center', width: '100%' },
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.2,
     shadowRadius: 16,
+  },
+
+  // Week View Styles
+  weekViewContainer: {
+    paddingHorizontal: 16,
+  },
+  weekNavigationContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+    paddingHorizontal: 8,
+  },
+  weekNavButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  weekNavButtonText: {
+    fontSize: 24,
+    color: '#5E3DB3',
+    fontWeight: 'bold',
+  },
+  weekHeaderCenter: {
+    flex: 1,
+    alignItems: 'center',
+    marginHorizontal: 16,
+  },
+  weekHeaderTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 4,
+  },
+  weekHeaderSubtitle: {
+    fontSize: 12,
+    color: '#666',
+  },
+  weekCalendar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+    paddingHorizontal: 8,
+  },
+  weekDayCard: {
+    flex: 1,
+    marginHorizontal: 2,
+  },
+  todayCard: {
+    // Additional styling for today's card
+  },
+  selectedDayCard: {
+    // Additional styling for selected day card
+  },
+  weekDayInner: {
+    padding: 12,
+    alignItems: 'center',
+    minHeight: 80,
+  },
+  weekDayName: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#666',
+    marginBottom: 4,
+  },
+  weekDayNumber: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 8,
+  },
+  selectedDayText: {
+    color: '#5E3DB3',
+  },
+  dayStatsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+  },
+  statBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(94, 61, 179, 0.1)',
+    borderRadius: 8,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    marginHorizontal: 1,
+  },
+  statEmoji: {
+    fontSize: 10,
+    marginRight: 2,
+  },
+  statCount: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#5E3DB3',
+  },
+  weekSummaryContainer: {
+    marginBottom: 20,
+  },
+  weekSummaryCard: {
+    padding: 20,
+    marginHorizontal: 16,
+  },
+  weekSummaryTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  weekSummaryStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  weekStat: {
+    alignItems: 'center',
+  },
+  weekStatEmoji: {
+    fontSize: 24,
+    marginBottom: 8,
+  },
+  weekStatNumber: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 4,
+  },
+  weekStatLabel: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 4,
+  },
+  weekStatAvg: {
+    fontSize: 10,
+    color: '#999',
+  },
+  weekEntriesContainer: {
+    paddingHorizontal: 16,
+  },
+  daySection: {
+    marginBottom: 20,
+  },
+  daySectionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#5E3DB3',
+    marginBottom: 12,
+    paddingHorizontal: 4,
   },
 });

@@ -1,8 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { View, Modal, StyleSheet, TouchableOpacity, Text, TouchableWithoutFeedback, Keyboard, Platform, ScrollView, TextInput, LayoutAnimation, UIManager } from 'react-native';
+import {
+  View,
+  Modal,
+  StyleSheet,
+  TouchableOpacity,
+  Text,
+  TouchableWithoutFeedback,
+  Keyboard,
+  Platform,
+  ScrollView,
+  TextInput,
+  LayoutAnimation,
+  UIManager,
+} from 'react-native';
 import { BlurView } from 'expo-blur';
-import DateTimePicker from '@react-native-community/datetimepicker';
-
 
 // Typ-Definitionen
 type ActivityType = 'feeding' | 'diaper' | 'other';
@@ -17,7 +28,7 @@ interface ActivityInputModalProps {
   initialSubType?: string | null;
   date?: Date;
   onClose: () => void;
-  onSave: (data: any) => void;
+  onSave: (data: any) => void; // data ist DB-ready für baby_daily
 }
 
 const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
@@ -48,7 +59,6 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   const [notes, setNotes] = useState('');
   const [isNotesVisible, setNotesVisible] = useState(false);
 
-  
   // Feeding States
   const [feedingType, setFeedingType] = useState<FeedingType>('bottle');
   const [volumeMl, setVolumeMl] = useState(120);
@@ -80,32 +90,52 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
     }
   }, [visible, initialSubType, date]);
 
-  // Speicherfunktion
+  // Speichern: Payload für baby_daily
   const handleSave = () => {
-    let data: any = {
-        date: startTime,
-        note: notes,
+    const entryDateISO = startTime.toISOString();
+    const base = {
+      entry_type: activityType,           // 'feeding' | 'diaper' | 'other'
+      entry_date: entryDateISO,
+      start_time: entryDateISO,
+      notes: notes || null,
     };
 
+    let payload: any = base;
+
     if (activityType === 'feeding') {
-        data = {
-            ...data,
-            feeding_type: feedingType,
-            volume_ml: feedingType === 'bottle' ? volumeMl : null,
-            side: feedingType === 'breast' ? breastSide.toUpperCase() : null,
-        };
+      const feeding_type =
+        feedingType === 'breast' ? 'BREAST' :
+        feedingType === 'bottle' ? 'BOTTLE' :
+        'SOLIDS';
+
+      const feeding_side =
+        feedingType === 'breast'
+          ? (breastSide === 'left' ? 'LEFT' : breastSide === 'right' ? 'RIGHT' : 'BOTH')
+          : null;
+
+      payload = {
+        ...base,
+        feeding_type,
+        feeding_volume_ml: feedingType === 'bottle' ? volumeMl : null,
+        feeding_side,
+      };
     } else if (activityType === 'diaper') {
-        data = {
-            ...data,
-            type: diaperType,
-        };
+      const diaper_type =
+        diaperType === 'wet' ? 'WET' :
+        diaperType === 'dirty' ? 'DIRTY' :
+        'BOTH';
+
+      payload = {
+        ...base,
+        diaper_type,
+      };
     }
-    
-    onSave(data);
+    // other: nur base + notes
+
+    console.log('ActivityInputModal - Sending payload:', JSON.stringify(payload, null, 2));
+    onSave(payload);
     onClose();
   };
-
-
 
   const getButtonColor = (type: FeedingType) => {
     switch (type) {

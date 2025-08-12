@@ -800,6 +800,10 @@ export const saveFeedingEvent = async (feedingData: FeedingEvent) => {
       .eq('id', userData.data.user.id)
       .single();
 
+    console.log('🍼 Profile data:', profile);
+    console.log('🍼 User ID:', userData.data.user.id);
+    console.log('🍼 Baby ID from profile:', profile?.baby_id);
+
     const payload = {
       ...feedingData,
       user_id: userData.data.user.id,
@@ -807,6 +811,8 @@ export const saveFeedingEvent = async (feedingData: FeedingEvent) => {
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
+
+    console.log('🍼 Final payload for database:', JSON.stringify(payload, null, 2));
 
     const { data, error } = await supabase
       .from('feeding_events')
