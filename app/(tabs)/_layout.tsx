@@ -39,6 +39,14 @@ export default function TabLayout() {
       }}>
       {/* VERSTECKTE TABS - diese werden in keiner der Ansichten in der Tab-Leiste angezeigt */}
       <Tabs.Screen
+        name="feeding-stats"
+        options={{
+          title: 'Mahlzeiten',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="chart.pie.fill" color={color} />,
+          href: null, // Nicht in der Navigationsleiste anzeigen
+        }}
+      />
+      <Tabs.Screen
         name="diary"
         options={{
           title: 'Entwicklungssprünge',

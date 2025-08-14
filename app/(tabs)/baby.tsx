@@ -16,7 +16,7 @@ import { BackButton } from '@/components/BackButton';
 import Header from '@/components/Header';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { registerBackgroundFetchAsync, saveBabyInfoForBackgroundTask, getBackgroundFetchStatus } from '@/tasks/milestoneCheckerTask';
+import { defineMilestoneCheckerTask, saveBabyInfoForBackgroundTask, isTaskRegistered } from '@/tasks/milestoneCheckerTask';
 
 export default function BabyScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -49,11 +49,13 @@ export default function BabyScreen() {
     try {
       const { status: existingStatus } = await Notifications.getPermissionsAsync();
       if (existingStatus === 'granted') {
-        await registerBackgroundFetchAsync();
-        console.log('Hintergrund-Task für Meilensteine registriert.');
+        // Definiere Task (Registrierung erfolgt in App-Scope; hier stellen wir sicher, dass sie definiert ist)
+        defineMilestoneCheckerTask();
+        console.log('Hintergrund-Task für Meilensteine definiert.');
         
-        // Status prüfen und speichern
-        const status = await getBackgroundFetchStatus();
+        // Status prüfen und speichern (einfacher Check)
+        const registered = await isTaskRegistered();
+        const status: { status: string; isRegistered: boolean } = { status: registered ? 'REGISTERED' : 'NOT_REGISTERED', isRegistered: !!registered };
         setBackgroundTaskStatus(status);
         console.log('Background Fetch Status:', status);
       } else {
@@ -203,11 +205,13 @@ export default function BabyScreen() {
   };
 
   return (
+    <>
+    <Stack.Screen options={{ headerShown: false }} />
     <ThemedBackground style={styles.container}>
       <SafeAreaView style={{ flex: 1 }}>
         <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
         
-        <Header title="Mein Baby" showBackButton={true} />
+        <Header title="Mein Baby" subtitle="Alle Infos & Einstellungen" />
         
         <ScrollView 
           style={styles.scrollView}
@@ -425,6 +429,7 @@ export default function BabyScreen() {
         </ScrollView>
       </SafeAreaView>
     </ThemedBackground>
+    </>
   );
 }
 

@@ -408,10 +408,10 @@ export default function PregnancyHomeScreen() {
           <ThemedView style={styles.greetingContainer} lightColor={theme.card} darkColor={theme.card}>
             <View style={styles.greetingHeader}>
               <View>
-                <ThemedText style={[styles.greeting, { color: colorScheme === 'dark' ? '#E9C9B6' : '#6b4c3b' }]}>
+                <ThemedText style={styles.greeting} lightColor="#7D5A50" darkColor="#7D5A50">
                   Hallo {userName ? userName : 'Mama'}!
                 </ThemedText>
-                <ThemedText style={styles.dateText}>
+                <ThemedText style={styles.dateText} lightColor="#7D5A50" darkColor="#7D5A50">
                   {new Date().toLocaleDateString('de-DE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
                 </ThemedText>
               </View>
@@ -425,7 +425,7 @@ export default function PregnancyHomeScreen() {
 
             <ThemedView style={styles.tipContainer} lightColor="rgba(157, 190, 187, 0.3)" darkColor="rgba(157, 190, 187, 0.2)">
               <IconSymbol name="lightbulb.fill" size={20} color={Colors.light.success} />
-              <ThemedText style={styles.tipText}>
+              <ThemedText style={styles.tipText} lightColor="#7D5A50" darkColor="#7D5A50">
                 {dailyTips[Math.floor(Math.random() * dailyTips.length)]}
               </ThemedText>
             </ThemedView>
@@ -470,7 +470,7 @@ export default function PregnancyHomeScreen() {
           >
             <ThemedView style={styles.summaryContainer} lightColor={theme.card} darkColor={theme.card}>
               <View style={styles.sectionTitleContainer}>
-                <ThemedText style={styles.sectionTitle}>
+                <ThemedText style={styles.sectionTitle} lightColor="#7D5A50" darkColor="#7D5A50">
                   Dein Tag im Überblick
                 </ThemedText>
                 <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
@@ -480,7 +480,7 @@ export default function PregnancyHomeScreen() {
                 <View style={styles.statItem}>
                   <IconSymbol name="calendar" size={24} color="#FF9800" />
                   <ThemedText style={styles.statValue}>{currentWeek || 0}</ThemedText>
-                  <ThemedText style={styles.statLabel}>SSW</ThemedText>
+                  <ThemedText style={styles.statLabel} lightColor="#7D5A50" darkColor="#7D5A50">SSW</ThemedText>
                 </View>
 
                 <View style={styles.statItem}>
@@ -492,7 +492,7 @@ export default function PregnancyHomeScreen() {
                         ? "2" 
                         : "3"}
                   </ThemedText>
-                  <ThemedText style={styles.statLabel}>Trimester</ThemedText>
+                  <ThemedText style={styles.statLabel} lightColor="#7D5A50" darkColor="#7D5A50">Trimester</ThemedText>
                 </View>
 
                 <View style={styles.statItem}>
@@ -502,7 +502,7 @@ export default function PregnancyHomeScreen() {
                       ? Math.min(100, Math.round((currentWeek / 40) * 100)) 
                       : 0}%
                   </ThemedText>
-                  <ThemedText style={styles.statLabel}>Fortschritt</ThemedText>
+                  <ThemedText style={styles.statLabel} lightColor="#7D5A50" darkColor="#7D5A50">Fortschritt</ThemedText>
                 </View>
               </View>
             </ThemedView>
@@ -510,36 +510,36 @@ export default function PregnancyHomeScreen() {
 
           {/* Post-Pregnancy Preview Section */}
           <ThemedView style={styles.postPregnancyContainer} lightColor={theme.card} darkColor={theme.card}>
-            <ThemedText style={styles.sectionTitle}>Nach der Geburt</ThemedText>
+            <ThemedText style={styles.sectionTitle} lightColor="#7D5A50" darkColor="#7D5A50">Nach der Geburt</ThemedText>
             
             <View style={styles.postPregnancyContent}>
               <View style={styles.postPregnancyImageContainer}>
                 <IconSymbol name="figure.and.child.holdinghands" size={60} color="#9DBEBB" />
               </View>
               
-              <ThemedText style={styles.postPregnancyDescription}>
+              <ThemedText style={styles.postPregnancyDescription} lightColor="#7D5A50" darkColor="#7D5A50">
                 Lotti Baby begleitet dich auch nach der Schwangerschaft! Tracke die Entwicklung deines Babys, erstelle Meilensteine und behalte wichtige Termine im Blick.
               </ThemedText>
               
               <View style={styles.postPregnancyFeatures}>
                 <View style={styles.postPregnancyFeatureItem}>
                   <IconSymbol name="chart.line.uptrend.xyaxis" size={22} color="#E9C9B6" />
-                  <ThemedText style={styles.featureText}>Wachstumstracker</ThemedText>
+                  <ThemedText style={styles.featureText} lightColor="#7D5A50" darkColor="#7D5A50">Wachstumstracker</ThemedText>
                 </View>
                 
                 <View style={styles.postPregnancyFeatureItem}>
                   <IconSymbol name="calendar.badge.clock" size={22} color="#E9C9B6" />
-                  <ThemedText style={styles.featureText}>Schlafprotokolle</ThemedText>
+                  <ThemedText style={styles.featureText} lightColor="#7D5A50" darkColor="#7D5A50">Schlafprotokolle</ThemedText>
                 </View>
                 
                 <View style={styles.postPregnancyFeatureItem}>
                   <IconSymbol name="fork.knife" size={22} color="#E9C9B6" />
-                  <ThemedText style={styles.featureText}>Ernährungstagebuch</ThemedText>
+                  <ThemedText style={styles.featureText} lightColor="#7D5A50" darkColor="#7D5A50">Ernährungstagebuch</ThemedText>
                 </View>
                 
                 <View style={styles.postPregnancyFeatureItem}>
                   <IconSymbol name="photo.on.rectangle.angled" size={22} color="#E9C9B6" />
-                  <ThemedText style={styles.featureText}>Meilenstein-Fotos</ThemedText>
+                  <ThemedText style={styles.featureText} lightColor="#7D5A50" darkColor="#7D5A50">Meilenstein-Fotos</ThemedText>
                 </View>
               </View>
             </View>
@@ -547,7 +547,7 @@ export default function PregnancyHomeScreen() {
 
           {/* Schnellzugriff-Buttons */}
           <View style={styles.cardsSection}>
-            <ThemedText style={styles.sectionTitle}>Schnellzugriff</ThemedText>
+            <ThemedText style={styles.sectionTitle} lightColor="#7D5A50" darkColor="#7D5A50">Schnellzugriff</ThemedText>
 
             <View style={styles.cardsGrid}>
               <TouchableOpacity
@@ -557,8 +557,8 @@ export default function PregnancyHomeScreen() {
                 <View style={styles.iconContainer}>
                   <IconSymbol name="calendar" size={40} color="#FFFFFF" />
                 </View>
-                <ThemedText style={styles.cardTitle}>Countdown</ThemedText>
-                <ThemedText style={styles.cardDescription}>Dein Weg zur Geburt</ThemedText>
+                <ThemedText style={styles.cardTitle} lightColor="#FFFFFF" darkColor="#FFFFFF">Countdown</ThemedText>
+                <ThemedText style={styles.cardDescription} lightColor="#FFFFFF" darkColor="#FFFFFF">Dein Weg zur Geburt</ThemedText>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -568,8 +568,8 @@ export default function PregnancyHomeScreen() {
                 <View style={styles.iconContainer}>
                   <IconSymbol name="timer" size={40} color="#FFFFFF" />
                 </View>
-                <ThemedText style={styles.cardTitle}>Wehen-Tracker</ThemedText>
-                <ThemedText style={styles.cardDescription}>Wehen messen und verfolgen</ThemedText>
+                <ThemedText style={styles.cardTitle} lightColor="#FFFFFF" darkColor="#FFFFFF">Wehen-Tracker</ThemedText>
+                <ThemedText style={styles.cardDescription} lightColor="#FFFFFF" darkColor="#FFFFFF">Wehen messen und verfolgen</ThemedText>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -579,8 +579,8 @@ export default function PregnancyHomeScreen() {
                 <View style={styles.iconContainer}>
                   <IconSymbol name="checklist" size={40} color="#FFFFFF" />
                 </View>
-                <ThemedText style={styles.cardTitle}>Checkliste</ThemedText>
-                <ThemedText style={styles.cardDescription}>Kliniktasche vorbereiten</ThemedText>
+                <ThemedText style={styles.cardTitle} lightColor="#FFFFFF" darkColor="#FFFFFF">Checkliste</ThemedText>
+                <ThemedText style={styles.cardDescription} lightColor="#FFFFFF" darkColor="#FFFFFF">Kliniktasche vorbereiten</ThemedText>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -590,8 +590,8 @@ export default function PregnancyHomeScreen() {
                 <View style={styles.iconContainer}>
                   <IconSymbol name="doc.text.fill" size={40} color="#FFFFFF" />
                 </View>
-                <ThemedText style={styles.cardTitle}>Geburtsplan</ThemedText>
-                <ThemedText style={styles.cardDescription}>Wünsche für die Geburt</ThemedText>
+                <ThemedText style={styles.cardTitle} lightColor="#FFFFFF" darkColor="#FFFFFF">Geburtsplan</ThemedText>
+                <ThemedText style={styles.cardDescription} lightColor="#FFFFFF" darkColor="#FFFFFF">Wünsche für die Geburt</ThemedText>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -612,8 +612,8 @@ export default function PregnancyHomeScreen() {
                 <View style={styles.iconContainer}>
                   <IconSymbol name="person.text.rectangle" size={40} color="#FFFFFF" />
                 </View>
-                <ThemedText style={[styles.cardTitle, { fontSize: 15 }]}>Babynamen</ThemedText>
-                <ThemedText style={styles.cardDescription}>Finde den perfekten Namen</ThemedText>
+                <ThemedText style={[styles.cardTitle, { fontSize: 15 }]} lightColor="#FFFFFF" darkColor="#FFFFFF">Babynamen</ThemedText>
+                <ThemedText style={styles.cardDescription} lightColor="#FFFFFF" darkColor="#FFFFFF">Finde den perfekten Namen</ThemedText>
               </TouchableOpacity>
             </View>
           </View>
@@ -751,6 +751,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 16,
     textAlign: 'center',
+    color: '#7D5A50',
   },
   cardsSection: {
     marginBottom: 16,

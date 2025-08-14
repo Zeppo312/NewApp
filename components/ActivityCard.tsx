@@ -329,9 +329,10 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 16,
     fontWeight: '700',
-    textShadowColor: 'rgba(0,0,0,0.12)',
+    color: '#7D5A50',
+    textShadowColor: 'rgba(0,0,0,0.06)',
     textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+    textShadowRadius: 1,
   },
   timeRowTop: {
     flexDirection: 'row',

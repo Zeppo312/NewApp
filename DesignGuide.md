@@ -131,6 +131,15 @@ Headline: Medium weight
 Body: Regular → Medium für bessere Lesbarkeit
 ```
 
+### App-weite Farbregel für Typografie
+```
+Primärtext (alle Überschriften, Titel, Labels, Beschreibungen): #7D5A50
+Sekundärtext (Untertitel, Hinweise): #A8978E
+Dark Mode: Die oben genannten Farben bleiben identisch (keine automatische Aufhellung/Abdunklung),
+           um konsistente Markenwahrnehmung sicherzustellen.
+Kontrast auf Glass: Bei hinterlegten farbigen Cards bleibt Text weiß (#FFFFFF).
+```
+
 ### Vibrancy Levels
 ```
 Primary: Standard Text, maximaler Kontrast

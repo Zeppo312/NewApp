@@ -96,7 +96,8 @@ const DateSpider: React.FC<{ date: Date; visible: boolean }> = ({ date, visible 
 const TimerBanner: React.FC<{
   timer: { id: string; type: string; start: number } | null;
   onStop: () => void;
-}> = ({ timer, onStop }) => {
+  onCancel: () => void;
+}> = ({ timer, onStop, onCancel }) => {
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
     if (!timer) return;
@@ -117,11 +118,16 @@ const TimerBanner: React.FC<{
         <Text style={[s.timerType, { color: '#5e3db3' }]}>
           {timer.type === 'BREAST' ? '🤱 Stillen' : '🍼 Fläschchen'} • läuft seit {new Date(timer.start).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
         </Text>
-        <Text style={[s.timerTime, { color: '#2c2c2c' }]}>{formatTime(elapsed)}</Text>
+        <Text style={[s.timerTime, { color: '#7D5A50' }]}>{formatTime(elapsed)}</Text>
       </View>
-      <TouchableOpacity style={s.timerStopButton} onPress={onStop}>
-        <IconSymbol name="stop.circle.fill" size={28} color="#5e3db3" />
-      </TouchableOpacity>
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <TouchableOpacity style={s.timerCancelButton} onPress={onCancel}>
+          <IconSymbol name="xmark.circle" size={26} color="#a3a3a3" />
+        </TouchableOpacity>
+        <TouchableOpacity style={s.timerStopButton} onPress={onStop}>
+          <IconSymbol name="stop.circle.fill" size={28} color="#5e3db3" />
+        </TouchableOpacity>
+      </View>
     </GlassCard>
   );
 };
@@ -476,7 +482,7 @@ export default function DailyScreen() {
       Animated.timing(splashAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start(() => {
         setSplashVisible(false);
       });
-    }, 3000);
+    }, 4500);
   };
 
   const handleTimerStop = async () => {
@@ -913,7 +919,27 @@ export default function DailyScreen() {
 
         <ConnectionStatus showAlways={false} autoCheck={true} onRetry={loadEntries} />
 
-        <TimerBanner timer={activeTimer} onStop={handleTimerStop} />
+        <TimerBanner
+          timer={activeTimer}
+          onStop={handleTimerStop}
+          onCancel={async () => {
+            if (!activeTimer) return;
+            Alert.alert('Timer abbrechen', 'Willst du den laufenden Eintrag wirklich verwerfen?', [
+              { text: 'Nein', style: 'cancel' },
+              {
+                text: 'Ja, verwerfen',
+                style: 'destructive',
+                onPress: async () => {
+                  const { error } = await deleteBabyCareEntry(activeTimer.id);
+                  if (!error) {
+                    setActiveTimer(null);
+                    loadEntries();
+                  }
+                },
+              },
+            ]);
+          }}
+        />
 
         <DebugPanel />
 
@@ -932,10 +958,10 @@ export default function DailyScreen() {
             <>
               <QuickActionRow />
 
-              <Text style={s.sectionTitle}>Kennzahlen</Text>
+              <Text style={[s.sectionTitle, { textAlign: 'center' }]}>Kennzahlen</Text>
               <KPISection />
 
-            <Text style={[s.sectionTitle, { marginTop: 4 }]}>Timeline</Text>
+            <Text style={[s.sectionTitle, { marginTop: 4, textAlign: 'center' }]}>Timeline</Text>
 
               <View style={s.entriesSection}>
                 {entries.map((item) => (
@@ -1024,7 +1050,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 16,
     fontSize: 14,
     fontWeight: '700',
-    color: '#6b6b6b',
+    color: '#7D5A50',
   },
 
   // Glass base
@@ -1060,6 +1086,7 @@ const s = StyleSheet.create({
   timerType: { fontSize: 14, fontWeight: '700' },
   timerTime: { fontSize: 22, fontWeight: '800', marginTop: 2 },
   timerStopButton: { padding: 6 },
+  timerCancelButton: { padding: 6, marginRight: 6 },
 
   // Tabs (glass pills)
   topTabsContainer: {
@@ -1075,7 +1102,7 @@ const s = StyleSheet.create({
   },
   topTabInner: { paddingHorizontal: 18, paddingVertical: 6 },
   activeTopTab: { borderColor: 'rgba(94,61,179,0.65)' },
-  topTabText: { fontSize: 13, fontWeight: '700', color: '#5d5d5d' },
+  topTabText: { fontSize: 13, fontWeight: '700', color: '#7D5A50' },
   activeTopTabText: { color: '#5e3db3' },
 
   // Quick actions as round glass buttons
@@ -1090,7 +1117,7 @@ const s = StyleSheet.create({
   },
   circleInner: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 8 },
   circleEmoji: { fontSize: 26 },
-  circleLabel: { marginTop: 6, fontSize: 13, fontWeight: '700', color: '#4a4a4a' },
+  circleLabel: { marginTop: 6, fontSize: 13, fontWeight: '700', color: '#7D5A50' },
 
   // KPI glass cards
   kpiRow: {
@@ -1109,10 +1136,10 @@ const s = StyleSheet.create({
   },
   kpiHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
   kpiEmoji: { fontSize: 14, marginRight: 6 },
-  kpiTitle: { fontSize: 14, fontWeight: '700', color: '#393939' },
+  kpiTitle: { fontSize: 14, fontWeight: '700', color: '#7D5A50' },
   kpiValue: { fontSize: 34, fontWeight: '800', color: '#5e3db3' },
 kpiValueCentered: { textAlign: 'center', width: '100%' },
-  kpiSub: { marginTop: 6, fontSize: 12, color: '#5a5a5a' },
+  kpiSub: { marginTop: 6, fontSize: 12, color: '#7D5A50' },
 
   // Entries
   entriesSection: { paddingHorizontal: 16, marginTop: 8 },
@@ -1168,12 +1195,12 @@ kpiValueCentered: { textAlign: 'center', width: '100%' },
   weekHeaderTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#7D5A50',
     marginBottom: 4,
   },
   weekHeaderSubtitle: {
     fontSize: 12,
-    color: '#666',
+    color: '#7D5A50',
   },
   weekCalendar: {
     flexDirection: 'row',
@@ -1199,13 +1226,13 @@ kpiValueCentered: { textAlign: 'center', width: '100%' },
   weekDayName: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#666',
+    color: '#7D5A50',
     marginBottom: 4,
   },
   weekDayNumber: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#7D5A50',
     marginBottom: 8,
   },
   selectedDayText: {
@@ -1244,7 +1271,7 @@ kpiValueCentered: { textAlign: 'center', width: '100%' },
   weekSummaryTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#7D5A50',
     marginBottom: 16,
     textAlign: 'center',
   },
@@ -1262,12 +1289,12 @@ kpiValueCentered: { textAlign: 'center', width: '100%' },
   weekStatNumber: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#7D5A50',
     marginBottom: 4,
   },
   weekStatLabel: {
     fontSize: 12,
-    color: '#666',
+    color: '#7D5A50',
     marginBottom: 4,
   },
   weekStatAvg: {

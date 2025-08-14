@@ -487,10 +487,12 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 18,
     fontWeight: 'bold',
+    color: '#7D5A50',
   },
   modalSubtitle: {
     fontSize: 14,
     marginTop: 2,
+    color: '#A8978E',
   },
   saveHeaderButton: {
     shadowColor: '#000',

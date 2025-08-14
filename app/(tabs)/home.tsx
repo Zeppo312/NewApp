@@ -194,10 +194,10 @@ export default function HomeScreen() {
                      darkColor="rgba(255, 255, 255, 0.02)">
             <View style={styles.greetingHeader}>
               <View>
-                <ThemedText style={[styles.greeting, styles.liquidGlassText, { color: '#000000' }]}>
+                <ThemedText style={[styles.greeting, styles.liquidGlassText, { color: '#6B4C3B' }]}>
                   Hallo {displayName}!
                 </ThemedText>
-                <ThemedText style={[styles.dateText, styles.liquidGlassSecondaryText, { color: '#000000' }]}>
+                <ThemedText style={[styles.dateText, styles.liquidGlassSecondaryText, { color: '#6B4C3B' }]}>
                   {formatDate()}
                 </ThemedText>
               </View>
@@ -227,8 +227,8 @@ export default function HomeScreen() {
                 <ThemedView style={[styles.tipContainer, styles.liquidGlassTipContainer]} 
                            lightColor="rgba(168, 196, 193, 0.45)" 
                            darkColor="rgba(168, 196, 193, 0.45)">
-                  <IconSymbol name="lightbulb.fill" size={20} color={colorScheme === 'dark' ? '#FFD700' : Colors.light.success} />
-                  <ThemedText style={[styles.tipText, styles.liquidGlassTipText, { color: colorScheme === 'dark' ? 'rgba(255, 255, 255, 0.95)' : 'rgba(26, 26, 26, 0.9)' }]}>
+                  <IconSymbol name="lightbulb.fill" size={20} color={Colors.light.success} />
+                  <ThemedText style={[styles.tipText, styles.liquidGlassTipText, { color: '#6B4C3B' }]}>
                     {dailyTip}
                   </ThemedText>
                 </ThemedView>
@@ -260,53 +260,53 @@ export default function HomeScreen() {
                       lightColor="rgba(255, 255, 255, 0.04)" 
                       darkColor="rgba(255, 255, 255, 0.02)">
             <View style={styles.sectionTitleContainer}>
-              <ThemedText style={[styles.sectionTitle, styles.liquidGlassText, { color: '#000000' }]}>
+              <ThemedText style={[styles.sectionTitle, styles.liquidGlassText, { color: '#6B4C3B', fontSize: 22 }]}> 
                 Dein Tag im Überblick
               </ThemedText>
               <View style={styles.liquidGlassChevron}>
-                <IconSymbol name="chevron.right" size={20} color={colorScheme === 'dark' ? '#FFFFFF' : '#7D5A50'} />
+                <IconSymbol name="chevron.right" size={20} color="#6B4C3B" />
               </View>
             </View>
 
             <View style={styles.statsContainer}>
               <View style={[styles.statItem, styles.liquidGlassStatItem]}>
                 <View style={styles.liquidGlassStatIcon}>
-                  <TablerIcon name="tools-kitchen-2" size={28} color="rgba(168, 196, 193, 0.9)" />
+                  <Text style={styles.statEmoji}>🍼</Text>
                 </View>
                 <ThemedText style={[styles.statValue, styles.liquidGlassStatValue, { 
-                  color: '#000000',
+                  color: '#6B4C3B',
                   textShadowColor: 'rgba(255, 255, 255, 0.8)',
                   textShadowOffset: { width: 0, height: 1 },
                   textShadowRadius: 2,
                 }]}>{todayFeedings}</ThemedText>
-                <ThemedText style={[styles.statLabel, styles.liquidGlassStatLabel, { color: '#666666' }]}>Essen</ThemedText>
+                <ThemedText style={[styles.statLabel, styles.liquidGlassStatLabel, { color: '#6B4C3B' }]}>Essen</ThemedText>
               </View>
 
               <View style={[styles.statItem, styles.liquidGlassStatItem]}>
                 <View style={styles.liquidGlassStatIcon}>
-                  <TablerIcon name="diaper" size={28} color="rgba(255, 215, 180, 0.9)" />
+                  <Text style={styles.statEmoji}>💩</Text>
                 </View>
                 <ThemedText style={[styles.statValue, styles.liquidGlassStatValue, { 
-                  color: '#000000',
+                  color: '#6B4C3B',
                   textShadowColor: 'rgba(255, 255, 255, 0.8)',
                   textShadowOffset: { width: 0, height: 1 },
                   textShadowRadius: 2,
                 }]}>{todayDiaperChanges}</ThemedText>
-                <ThemedText style={[styles.statLabel, styles.liquidGlassStatLabel, { color: '#666666' }]}>Windeln</ThemedText>
+                <ThemedText style={[styles.statLabel, styles.liquidGlassStatLabel, { color: '#6B4C3B' }]}>Windeln</ThemedText>
               </View>
 
               {currentPhase && phaseProgress && (
                 <View style={[styles.statItem, styles.liquidGlassStatItem]}>
                   <View style={styles.liquidGlassStatIcon}>
-                    <TablerIcon name="bed" size={28} color="rgba(220, 200, 255, 0.9)" />
+                    <Text style={styles.statEmoji}>💤</Text>
                   </View>
                   <ThemedText style={[styles.statValue, styles.liquidGlassStatValue, { 
-                    color: '#000000',
+                    color: '#6B4C3B',
                     textShadowColor: 'rgba(255, 255, 255, 0.8)',
                     textShadowOffset: { width: 0, height: 1 },
                     textShadowRadius: 2,
                   }]}>0m</ThemedText>
-                  <ThemedText style={[styles.statLabel, styles.liquidGlassStatLabel, { color: '#666666' }]}>Schlaf</ThemedText>
+                  <ThemedText style={[styles.statLabel, styles.liquidGlassStatLabel, { color: '#6B4C3B' }]}>Schlaf</ThemedText>
                 </View>
               )}
             </View>
@@ -320,27 +320,27 @@ export default function HomeScreen() {
   const renderQuickAccessCards = () => {
     return (
       <View style={styles.cardsSection}>
-        <ThemedText style={[styles.cardsSectionTitle, styles.liquidGlassText, { color: '#000000' }]}>
+           <ThemedText style={[styles.cardsSectionTitle, styles.liquidGlassText, { color: '#7D5A50', fontSize: 22 }]}> 
           Schnellzugriff
         </ThemedText>
 
         <View style={styles.cardsGrid}>
           <TouchableOpacity
             style={styles.liquidGlassCardWrapper}
-            onPress={() => router.push('/diary-entries')}
+            onPress={() => router.push('/(tabs)/feeding-stats' as any)}
             activeOpacity={0.9}
           >
             <BlurView 
-              intensity={8} 
+              intensity={16} 
               tint={colorScheme === 'dark' ? 'dark' : 'light'} 
               style={styles.liquidGlassCardBackground}
             >
-              <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(168, 196, 193, 0.45)' }]}>
+              <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(168, 196, 193, 0.6)', borderColor: 'rgba(255, 255, 255, 0.35)' }]}>
                 <View style={[styles.iconContainer, { backgroundColor: 'rgba(168, 196, 193, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
                   <IconSymbol name="cup.and.saucer.fill" size={28} color="#FFFFFF" />
                 </View>
-                <ThemedText style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: '#000000', fontWeight: '700' }]}>Mahlzeiten</ThemedText>
-                <ThemedText style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: '#000000', fontWeight: '500' }]}>Stillen & Füttern verwalten</ThemedText>
+                <ThemedText style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: '#7D5A50', fontWeight: '700' }]}>Mahlzeiten</ThemedText>
+                <ThemedText style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: '#7D5A50', fontWeight: '500' }]}>Statistiken ansehen</ThemedText>
               </View>
             </BlurView>
           </TouchableOpacity>
@@ -351,16 +351,16 @@ export default function HomeScreen() {
             activeOpacity={0.9}
           >
             <BlurView 
-              intensity={8} 
+              intensity={16} 
               tint={colorScheme === 'dark' ? 'dark' : 'light'} 
               style={styles.liquidGlassCardBackground}
             >
-              <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(255, 190, 190, 0.45)' }]}>
+              <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(255, 190, 190, 0.6)', borderColor: 'rgba(255, 255, 255, 0.35)' }]}>
                 <View style={[styles.iconContainer, { backgroundColor: 'rgba(255, 140, 160, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
                   <IconSymbol name="person.fill" size={28} color="#FFFFFF" />
                 </View>
-                <ThemedText style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: '#000000', fontWeight: '700' }]}>Mein Baby</ThemedText>
-                <ThemedText style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: '#000000', fontWeight: '500' }]}>Alle Infos & Entwicklungen</ThemedText>
+                <ThemedText style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: '#7D5A50', fontWeight: '700' }]}>Mein Baby</ThemedText>
+                <ThemedText style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: '#7D5A50', fontWeight: '500' }]}>Alle Infos & Entwicklungen</ThemedText>
               </View>
             </BlurView>
           </TouchableOpacity>
@@ -372,16 +372,16 @@ export default function HomeScreen() {
                 activeOpacity={0.9}
               >
                 <BlurView 
-                  intensity={8} 
+                  intensity={16} 
                   tint={colorScheme === 'dark' ? 'dark' : 'light'} 
                   style={styles.liquidGlassCardBackground}
                 >
-                <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(220, 200, 255, 0.45)' }]}>
+                <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(220, 200, 255, 0.6)', borderColor: 'rgba(255, 255, 255, 0.35)' }]}>
                   <View style={[styles.iconContainer, { backgroundColor: 'rgba(200, 130, 220, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
                     <IconSymbol name="chart.bar.fill" size={28} color="#FFFFFF" />
                   </View>
-                                     <ThemedText style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: '#000000', fontWeight: '700' }]}>Entwicklung</ThemedText>
-                   <ThemedText style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: '#000000', fontWeight: '500' }]}>
+                 <ThemedText style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: '#7D5A50', fontWeight: '700' }]}>Entwicklung</ThemedText>
+                   <ThemedText style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: '#7D5A50', fontWeight: '500' }]}>
                      Phase {currentPhase.baby_development_phases?.phase_number || 1}
                    </ThemedText>
                 </View>
@@ -395,16 +395,16 @@ export default function HomeScreen() {
             activeOpacity={0.9}
           >
             <BlurView 
-              intensity={8} 
+              intensity={16} 
               tint={colorScheme === 'dark' ? 'dark' : 'light'} 
               style={styles.liquidGlassCardBackground}
             >
-              <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(255, 215, 180, 0.45)' }]}>
+              <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(255, 215, 180, 0.6)', borderColor: 'rgba(255, 255, 255, 0.35)' }]}>
                 <View style={[styles.iconContainer, { backgroundColor: 'rgba(255, 180, 130, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
                   <IconSymbol name="list.bullet" size={28} color="#FFFFFF" />
                 </View>
-                <ThemedText style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: '#000000', fontWeight: '700' }]}>Alltag</ThemedText>
-                <ThemedText style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: '#000000', fontWeight: '500' }]}>Tagesaktivitäten verwalten</ThemedText>
+                <ThemedText style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: '#7D5A50', fontWeight: '700' }]}>Alltag</ThemedText>
+                <ThemedText style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: '#7D5A50', fontWeight: '500' }]}>Tagesaktivitäten verwalten</ThemedText>
               </View>
             </BlurView>
           </TouchableOpacity>
@@ -415,16 +415,16 @@ export default function HomeScreen() {
             activeOpacity={0.9}
           >
             <BlurView 
-              intensity={8} 
+              intensity={16} 
               tint={colorScheme === 'dark' ? 'dark' : 'light'} 
               style={styles.liquidGlassCardBackground}
             >
-              <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(255, 210, 230, 0.45)' }]}>
+              <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(255, 210, 230, 0.6)', borderColor: 'rgba(255, 255, 255, 0.35)' }]}>
                 <View style={[styles.iconContainer, { backgroundColor: 'rgba(255, 160, 180, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
                   <IconSymbol name="heart.fill" size={28} color="#FFFFFF" />
                 </View>
-                <ThemedText style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: '#000000', fontWeight: '700' }]}>Mama Selfcare</ThemedText>
-                <ThemedText style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: '#000000', fontWeight: '500' }]}>Nimm dir Zeit für dich</ThemedText>
+                <ThemedText style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: '#7D5A50', fontWeight: '700' }]}>Mama Selfcare</ThemedText>
+                <ThemedText style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: '#7D5A50', fontWeight: '500' }]}>Nimm dir Zeit für dich</ThemedText>
               </View>
             </BlurView>
           </TouchableOpacity>
@@ -435,16 +435,16 @@ export default function HomeScreen() {
             activeOpacity={0.9}
           >
             <BlurView 
-              intensity={8} 
+              intensity={16} 
               tint={colorScheme === 'dark' ? 'dark' : 'light'} 
               style={styles.liquidGlassCardBackground}
             >
-              <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(200, 225, 255, 0.45)' }]}>
+              <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(200, 225, 255, 0.6)', borderColor: 'rgba(255, 255, 255, 0.35)' }]}>
                 <View style={[styles.iconContainer, { backgroundColor: 'rgba(140, 190, 255, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
                   <IconSymbol name="cloud.sun.fill" size={28} color="#FFFFFF" />
                 </View>
-                <ThemedText style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: '#000000', fontWeight: '700' }]}>Babywetter</ThemedText>
-                <ThemedText style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: '#000000', fontWeight: '500' }]}>Aktuelle Wetterinfos</ThemedText>
+                <ThemedText style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: '#7D5A50', fontWeight: '700' }]}>Babywetter</ThemedText>
+                <ThemedText style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: '#7D5A50', fontWeight: '500' }]}>Aktuelle Wetterinfos</ThemedText>
               </View>
             </BlurView>
           </TouchableOpacity>
@@ -674,9 +674,9 @@ const styles = StyleSheet.create({
   // Stats with Liquid Glass Enhancement
   liquidGlassStatItem: {
     backgroundColor: 'rgba(255, 255, 255, 0.28)',
-    borderRadius: 18,
-    padding: 12,
-    marginHorizontal: 6,
+    borderRadius: 16,
+    padding: 8,
+    marginHorizontal: 4,
     borderWidth: 1.5,
     borderColor: 'rgba(255, 255, 255, 0.4)',
     shadowColor: '#000',
@@ -684,27 +684,32 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 10,
     elevation: 5,
-    minHeight: 85,
+    minHeight: 66,
     justifyContent: 'center',
     alignItems: 'center',
   },
   liquidGlassStatIcon: {
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
-    borderRadius: 25,
-    padding: 12,
-    marginBottom: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 32,
+    padding: 14,
+    marginBottom: 6,
     alignSelf: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
     shadowRadius: 8,
     elevation: 6,
-    width: 50,
-    height: 50,
+    width: 64,
+    height: 64,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
     borderColor: 'rgba(255, 255, 255, 0.9)',
+  },
+  statEmoji: {
+    fontSize: 32,
+    lineHeight: 34,
+    textAlign: 'center',
   },
   liquidGlassStatValue: {
     color: 'rgba(255, 255, 255, 0.95)',
@@ -715,8 +720,9 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(0, 0, 0, 0.3)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
-    marginVertical: 8,
-    lineHeight: 28,
+    marginTop: 2,
+    marginBottom: 2,
+    lineHeight: 26,
   },
   liquidGlassStatLabel: {
     color: 'rgba(255, 255, 255, 0.85)',
@@ -744,10 +750,10 @@ const styles = StyleSheet.create({
   },
   cardsSectionTitle: {
     fontSize: 20,
-    fontWeight: '700',
+    fontWeight: '800',
     marginBottom: 16,
     textAlign: 'center',
-    color: 'rgba(85, 60, 55, 0.95)',
+    color: '#6B4C3B',
     letterSpacing: -0.3,
   },
   cardsGrid: {
@@ -770,10 +776,11 @@ const styles = StyleSheet.create({
   },
   card: {
     borderRadius: 22,
-    padding: 18,
+    padding: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 140,
+    minHeight: 128,
+    height: 140,
     borderWidth: 1.5,
     borderColor: 'rgba(255, 255, 255, 0.25)',
     shadowColor: '#000',
@@ -786,9 +793,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   iconContainer: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 54,
+    height: 54,
+    borderRadius: 27,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 10,
@@ -804,8 +811,8 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   cardTitle: {
-    fontSize: 14,
-    fontWeight: 'bold',
+    fontSize: 16,
+    fontWeight: '800',
     marginBottom: 4,
     textAlign: 'center',
   },
