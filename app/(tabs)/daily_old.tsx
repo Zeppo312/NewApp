@@ -16,7 +16,6 @@ import { useRouter } from 'expo-router';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { ThemedBackground } from '@/components/ThemedBackground';
-import { ThemedText } from '@/components/ThemedText';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { DailyEntry } from '@/lib/baby';
@@ -99,7 +98,6 @@ const TimerBanner: React.FC<{
   onStop: () => void;
   onCancel: () => void;
 }> = ({ timer, onStop, onCancel }) => {
-  const colorScheme = useColorScheme() ?? 'light';
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
     if (!timer) return;
@@ -120,7 +118,7 @@ const TimerBanner: React.FC<{
         <Text style={[s.timerType, { color: '#5e3db3' }]}>
           {timer.type === 'BREAST' ? '🤱 Stillen' : '🍼 Fläschchen'} • läuft seit {new Date(timer.start).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
         </Text>
-        <Text style={[s.timerTime, { color: Colors[colorScheme].textBrand }]}>{formatTime(elapsed)}</Text>
+        <Text style={[s.timerTime, { color: '#7D5A50' }]}>{formatTime(elapsed)}</Text>
       </View>
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
         <TouchableOpacity style={s.timerCancelButton} onPress={onCancel}>
@@ -527,11 +525,9 @@ export default function DailyScreen() {
             }}
             activeOpacity={0.85}
           >
-            <ThemedText style={[s.topTabText, selectedTab === tab && s.activeTopTabText]} 
-                       lightColor={Colors.light.textBrand} 
-                       darkColor={Colors.dark.textBrand}>
+            <Text style={[s.topTabText, selectedTab === tab && s.activeTopTabText]}>
               {tab === 'day' ? 'Tag' : tab === 'week' ? 'Woche' : 'Monat'}
-            </ThemedText>
+            </Text>
           </TouchableOpacity>
         </GlassCard>
       ))}
@@ -557,11 +553,7 @@ export default function DailyScreen() {
       >
         <TouchableOpacity style={s.circleInner} onPress={() => handleQuickActionPress(item.action)} activeOpacity={0.9}>
           <Text style={s.circleEmoji}>{item.icon}</Text>
-          <ThemedText style={s.circleLabel} 
-                     lightColor={Colors.light.textBrand} 
-                     darkColor={Colors.dark.textBrand}>
-            {item.label}
-          </ThemedText>
+          <Text style={s.circleLabel}>{item.label}</Text>
         </TouchableOpacity>
       </GlassCard>
     );
@@ -631,16 +623,10 @@ export default function DailyScreen() {
           </TouchableOpacity>
           
           <TouchableOpacity style={s.weekHeaderCenter} onPress={goToCurrentWeek}>
-            <ThemedText style={s.weekHeaderTitle} 
-                       lightColor={Colors.light.textBrand} 
-                       darkColor={Colors.dark.textBrand}>
-              Wochenübersicht
-            </ThemedText>
-            <ThemedText style={s.weekHeaderSubtitle} 
-                       lightColor={Colors.light.textSecondary} 
-                       darkColor={Colors.dark.textSecondary}>
+            <Text style={s.weekHeaderTitle}>Wochenübersicht</Text>
+            <Text style={s.weekHeaderSubtitle}>
               {getWeekStart(selectedWeekDate).toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })} - {getWeekEnd(selectedWeekDate).toLocaleDateString('de-DE', { day: 'numeric', month: 'short', year: 'numeric' })}
-            </ThemedText>
+            </Text>
           </TouchableOpacity>
           
           <TouchableOpacity style={s.weekNavButton} onPress={goToNextWeek}>
@@ -675,16 +661,12 @@ export default function DailyScreen() {
                   overlayColor={isSelected ? 'rgba(94, 61, 179, 0.2)' : 'rgba(255,255,255,0.20)'}
                   borderColor={isToday ? 'rgba(94, 61, 179, 0.6)' : 'rgba(255,255,255,0.3)'}
                 >
-                  <ThemedText style={[s.weekDayName, isSelected && s.selectedDayText]} 
-                             lightColor={Colors.light.textSecondary} 
-                             darkColor={Colors.dark.textSecondary}>
+                  <Text style={[s.weekDayName, isSelected && s.selectedDayText]}>
                     {dayNames[index]}
-                  </ThemedText>
-                  <ThemedText style={[s.weekDayNumber, isSelected && s.selectedDayText]} 
-                             lightColor={Colors.light.textBrand} 
-                             darkColor={Colors.dark.textBrand}>
+                  </Text>
+                  <Text style={[s.weekDayNumber, isSelected && s.selectedDayText]}>
                     {day.getDate()}
-                  </ThemedText>
+                  </Text>
                   
                   {stats.total > 0 && (
                     <View style={s.dayStatsContainer}>
@@ -712,11 +694,7 @@ export default function DailyScreen() {
         <WeekSummary entries={weekEntries} />
         
         {/* Week Entries Timeline */}
-        <ThemedText style={[s.sectionTitle, { marginTop: 20 }]} 
-                   lightColor={Colors.light.textBrand} 
-                   darkColor={Colors.dark.textBrand}>
-          Wochenverlauf
-        </ThemedText>
+        <Text style={[s.sectionTitle, { marginTop: 20 }]}>Wochenverlauf</Text>
         <View style={s.weekEntriesContainer}>
           {weekDays.map((day, dayIndex) => {
             const dayEntries = getEntriesForDay(day);
@@ -762,38 +740,18 @@ export default function DailyScreen() {
           overlayColor="rgba(94, 61, 179, 0.1)"
           borderColor="rgba(94, 61, 179, 0.3)"
         >
-          <ThemedText style={s.weekSummaryTitle} 
-                     lightColor={Colors.light.textBrand} 
-                     darkColor={Colors.dark.textBrand}>
-            Wochenzusammenfassung
-          </ThemedText>
+          <Text style={s.weekSummaryTitle}>Wochenzusammenfassung</Text>
           <View style={s.weekSummaryStats}>
             <View style={s.weekStat}>
               <Text style={s.weekStatEmoji}>🍼</Text>
-              <ThemedText style={s.weekStatNumber} 
-                         lightColor={Colors.light.textBrand} 
-                         darkColor={Colors.dark.textBrand}>
-                {totalFeedings}
-              </ThemedText>
-              <ThemedText style={s.weekStatLabel} 
-                         lightColor={Colors.light.textSecondary} 
-                         darkColor={Colors.dark.textSecondary}>
-                Fütterungen
-              </ThemedText>
+              <Text style={s.weekStatNumber}>{totalFeedings}</Text>
+              <Text style={s.weekStatLabel}>Fütterungen</Text>
               <Text style={s.weekStatAvg}>⌀ {avgFeedingsPerDay.toFixed(1)}/Tag</Text>
             </View>
             <View style={s.weekStat}>
               <Text style={s.weekStatEmoji}>💧</Text>
-              <ThemedText style={s.weekStatNumber} 
-                         lightColor={Colors.light.textBrand} 
-                         darkColor={Colors.dark.textBrand}>
-                {totalDiapers}
-              </ThemedText>
-              <ThemedText style={s.weekStatLabel} 
-                         lightColor={Colors.light.textSecondary} 
-                         darkColor={Colors.dark.textSecondary}>
-                Windeln
-              </ThemedText>
+              <Text style={s.weekStatNumber}>{totalDiapers}</Text>
+              <Text style={s.weekStatLabel}>Windeln</Text>
               <Text style={s.weekStatAvg}>⌀ {avgDiapersPerDay.toFixed(1)}/Tag</Text>
             </View>
           </View>
@@ -929,18 +887,10 @@ export default function DailyScreen() {
         >
           <View style={s.kpiHeaderRow}>
             <Text style={s.kpiEmoji}>🍼</Text>
-            <ThemedText style={s.kpiTitle} 
-                       lightColor={Colors.light.textBrand} 
-                       darkColor={Colors.dark.textBrand}>
-              Fütterung
-            </ThemedText>
+            <Text style={s.kpiTitle}>Fütterung</Text>
           </View>
           <Text style={[s.kpiValue, s.kpiValueCentered]}>{feedingEntries.length}</Text>
-          <ThemedText style={s.kpiSub} 
-                     lightColor={Colors.light.textSecondary} 
-                     darkColor={Colors.dark.textSecondary}>
-            {breastCount}× Stillen • {bottleCount}× Flasche
-          </ThemedText>
+          <Text style={s.kpiSub}>{breastCount}× Stillen • {bottleCount}× Flasche</Text>
         </GlassCard>
 
         <GlassCard
@@ -951,18 +901,10 @@ export default function DailyScreen() {
         >
           <View style={s.kpiHeaderRow}>
             <Text style={s.kpiEmoji}>🧷</Text>
-            <ThemedText style={s.kpiTitle} 
-                       lightColor={Colors.light.textBrand} 
-                       darkColor={Colors.dark.textBrand}>
-              Wickeln
-            </ThemedText>
+            <Text style={s.kpiTitle}>Wickeln</Text>
           </View>
           <Text style={[s.kpiValue, s.kpiValueCentered]}>{diaperEntries.length}</Text>
-          <ThemedText style={s.kpiSub} 
-                     lightColor={Colors.light.textSecondary} 
-                     darkColor={Colors.dark.textSecondary}>
-            Letzter: {lastDiaperTime}
-          </ThemedText>
+          <Text style={s.kpiSub}>Letzter: {lastDiaperTime}</Text>
         </GlassCard>
       </View>
     );
@@ -1016,18 +958,10 @@ export default function DailyScreen() {
             <>
               <QuickActionRow />
 
-              <ThemedText style={[s.sectionTitle, { textAlign: 'center' }]} 
-                         lightColor={Colors.light.textBrand} 
-                         darkColor={Colors.dark.textBrand}>
-                Kennzahlen
-              </ThemedText>
+              <Text style={[s.sectionTitle, { textAlign: 'center' }]}>Kennzahlen</Text>
               <KPISection />
 
-              <ThemedText style={[s.sectionTitle, { marginTop: 4, textAlign: 'center' }]} 
-                         lightColor={Colors.light.textBrand} 
-                         darkColor={Colors.dark.textBrand}>
-                Timeline
-              </ThemedText>
+            <Text style={[s.sectionTitle, { marginTop: 4, textAlign: 'center' }]}>Timeline</Text>
 
               <View style={s.entriesSection}>
                 {entries.map((item) => (
@@ -1116,6 +1050,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 16,
     fontSize: 14,
     fontWeight: '700',
+    color: '#7D5A50',
   },
 
   // Glass base
@@ -1167,7 +1102,7 @@ const s = StyleSheet.create({
   },
   topTabInner: { paddingHorizontal: 18, paddingVertical: 6 },
   activeTopTab: { borderColor: 'rgba(94,61,179,0.65)' },
-  topTabText: { fontSize: 13, fontWeight: '700' },
+  topTabText: { fontSize: 13, fontWeight: '700', color: '#7D5A50' },
   activeTopTabText: { color: '#5e3db3' },
 
   // Quick actions as round glass buttons
@@ -1182,7 +1117,7 @@ const s = StyleSheet.create({
   },
   circleInner: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 8 },
   circleEmoji: { fontSize: 26 },
-  circleLabel: { marginTop: 6, fontSize: 13, fontWeight: '700' },
+  circleLabel: { marginTop: 6, fontSize: 13, fontWeight: '700', color: '#7D5A50' },
 
   // KPI glass cards
   kpiRow: {
@@ -1201,10 +1136,10 @@ const s = StyleSheet.create({
   },
   kpiHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
   kpiEmoji: { fontSize: 14, marginRight: 6 },
-  kpiTitle: { fontSize: 14, fontWeight: '700' },
+  kpiTitle: { fontSize: 14, fontWeight: '700', color: '#7D5A50' },
   kpiValue: { fontSize: 34, fontWeight: '800', color: '#5e3db3' },
 kpiValueCentered: { textAlign: 'center', width: '100%' },
-  kpiSub: { marginTop: 6, fontSize: 12 },
+  kpiSub: { marginTop: 6, fontSize: 12, color: '#7D5A50' },
 
   // Entries
   entriesSection: { paddingHorizontal: 16, marginTop: 8 },
@@ -1260,10 +1195,12 @@ kpiValueCentered: { textAlign: 'center', width: '100%' },
   weekHeaderTitle: {
     fontSize: 16,
     fontWeight: 'bold',
+    color: '#7D5A50',
     marginBottom: 4,
   },
   weekHeaderSubtitle: {
     fontSize: 12,
+    color: '#7D5A50',
   },
   weekCalendar: {
     flexDirection: 'row',
@@ -1289,11 +1226,13 @@ kpiValueCentered: { textAlign: 'center', width: '100%' },
   weekDayName: {
     fontSize: 12,
     fontWeight: '600',
+    color: '#7D5A50',
     marginBottom: 4,
   },
   weekDayNumber: {
     fontSize: 18,
     fontWeight: 'bold',
+    color: '#7D5A50',
     marginBottom: 8,
   },
   selectedDayText: {
@@ -1332,6 +1271,7 @@ kpiValueCentered: { textAlign: 'center', width: '100%' },
   weekSummaryTitle: {
     fontSize: 16,
     fontWeight: 'bold',
+    color: '#7D5A50',
     marginBottom: 16,
     textAlign: 'center',
   },
@@ -1349,10 +1289,12 @@ kpiValueCentered: { textAlign: 'center', width: '100%' },
   weekStatNumber: {
     fontSize: 20,
     fontWeight: 'bold',
+    color: '#7D5A50',
     marginBottom: 4,
   },
   weekStatLabel: {
     fontSize: 12,
+    color: '#7D5A50',
     marginBottom: 4,
   },
   weekStatAvg: {
