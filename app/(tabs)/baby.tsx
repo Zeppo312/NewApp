@@ -205,13 +205,12 @@ export default function BabyScreen() {
   };
 
   return (
-    <>
-    <Stack.Screen options={{ headerShown: false }} />
     <ThemedBackground style={styles.container}>
       <SafeAreaView style={{ flex: 1 }}>
+        <Stack.Screen options={{ headerShown: false }} />
         <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
         
-        <Header title="Mein Baby" subtitle="Alle Infos & Einstellungen" />
+        <Header title="Mein Baby" subtitle="Alle Infos & Einstellungen" showBackButton />
         
         <ScrollView 
           style={styles.scrollView}
@@ -429,7 +428,6 @@ export default function BabyScreen() {
         </ScrollView>
       </SafeAreaView>
     </ThemedBackground>
-    </>
   );
 }
 

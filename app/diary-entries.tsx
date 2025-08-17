@@ -10,6 +10,7 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { getDiaryEntries, saveDiaryEntry, deleteDiaryEntry, DiaryEntry, getBabyInfo } from '@/lib/baby';
 import * as ImagePicker from 'expo-image-picker';
 import { router, Stack } from 'expo-router';
+import Header from '@/components/Header';
 
 export default function DiaryEntriesScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -278,28 +279,20 @@ export default function DiaryEntriesScreen() {
     <ThemedBackground style={styles.backgroundImage}>
       <SafeAreaView style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
-      <StatusBar hidden={true} />
-        <View style={styles.titleContainer}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => router.back()}
-          >
-            <IconSymbol name="chevron.left" size={24} color={theme.text} />
-          </TouchableOpacity>
-          {babyPhoto && (
-            <Image source={{ uri: babyPhoto }} style={styles.babyPhoto} />
-          )}
-          <ThemedText type="title" style={styles.title}>
-            {babyName ? `${babyName.split(' ')[0]}s Tagebuch` : 'Tagebuch'}
-          </ThemedText>
-          <View style={styles.spacer} />
-          <TouchableOpacity
-            style={styles.addButton}
-            onPress={() => setShowNewEntry(true)}
-          >
-            <IconSymbol name="plus" size={24} color={theme.text} />
-          </TouchableOpacity>
-        </View>
+      <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
+        
+        <Header 
+          title={babyName ? `${babyName.split(' ')[0]}s Tagebuch` : 'Tagebuch'} 
+          showBackButton 
+          rightContent={
+            <TouchableOpacity
+              style={styles.addButton}
+              onPress={() => setShowNewEntry(true)}
+            >
+              <IconSymbol name="plus" size={24} color={theme.text} />
+            </TouchableOpacity>
+          }
+        />
 
         <View style={styles.filterContainer}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -487,31 +480,6 @@ const styles = StyleSheet.create({
   backgroundImage: {
     flex: 1,
     width: '100%',
-  },
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    marginTop: 10,
-  },
-  backButton: {
-    padding: 8,
-    marginRight: 8,
-  },
-  spacer: {
-    flex: 1,
-  },
-  babyPhoto: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    marginRight: 8,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold',
   },
   addButton: {
     padding: 8,

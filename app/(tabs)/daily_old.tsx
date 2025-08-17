@@ -55,9 +55,9 @@ type QuickActionType =
 function GlassCard({
   children,
   style,
-  intensity = 22,
-  overlayColor = 'rgba(255,255,255,0.22)',
-  borderColor = 'rgba(255,255,255,0.55)',
+  intensity = 26,
+  overlayColor = 'rgba(255,255,255,0.30)',
+  borderColor = 'rgba(255,255,255,0.65)',
 }: {
   children: React.ReactNode;
   style?: any;
@@ -79,7 +79,7 @@ const DateSpider: React.FC<{ date: Date; visible: boolean }> = ({ date, visible 
   if (!visible) return null;
   return (
     <View style={s.dateSpiderWrap}>
-      <GlassCard style={s.dateSpiderCard} intensity={18} overlayColor="rgba(255,255,255,0.18)">
+      <GlassCard style={s.dateSpiderCard} intensity={22} overlayColor="rgba(255,255,255,0.24)">
         <Text style={s.dateSpiderText}>
           {date.toLocaleDateString('de-DE', {
             weekday: 'long',
@@ -113,7 +113,7 @@ const TimerBanner: React.FC<{
   };
 
   return (
-    <GlassCard style={[s.timerBanner, { paddingVertical: 12, paddingHorizontal: 16 }]} intensity={24}>
+    <GlassCard style={[s.timerBanner, { paddingVertical: 12, paddingHorizontal: 16 }]} intensity={28}>
       <View style={{ flex: 1 }}>
         <Text style={[s.timerType, { color: '#5e3db3' }]}>
           {timer.type === 'BREAST' ? '🤱 Stillen' : '🍼 Fläschchen'} • läuft seit {new Date(timer.start).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
@@ -516,7 +516,7 @@ export default function DailyScreen() {
   const TopTabs = () => (
     <View style={s.topTabsContainer}>
       {(['day', 'week', 'month'] as const).map((tab) => (
-        <GlassCard key={tab} style={[s.topTab, selectedTab === tab && s.activeTopTab]} intensity={18}>
+        <GlassCard key={tab} style={[s.topTab, selectedTab === tab && s.activeTopTab]} intensity={22}>
           <TouchableOpacity
             style={s.topTabInner}
             onPress={() => {
@@ -547,9 +547,9 @@ export default function DailyScreen() {
     const renderQuickButton = ({ item }: { item: typeof quickBtns[0] }) => (
       <GlassCard
         style={s.circleButton}
-        intensity={26}
-        overlayColor="rgba(255,255,255,0.26)"
-        borderColor="rgba(255,255,255,0.65)"
+        intensity={30}
+        overlayColor="rgba(255,255,255,0.32)"
+        borderColor="rgba(255,255,255,0.70)"
       >
         <TouchableOpacity style={s.circleInner} onPress={() => handleQuickActionPress(item.action)} activeOpacity={0.9}>
           <Text style={s.circleEmoji}>{item.icon}</Text>
@@ -657,8 +657,8 @@ export default function DailyScreen() {
               >
                 <GlassCard
                   style={s.weekDayInner}
-                  intensity={isSelected ? 35 : 20}
-                  overlayColor={isSelected ? 'rgba(94, 61, 179, 0.2)' : 'rgba(255,255,255,0.15)'}
+                  intensity={isSelected ? 35 : 24}
+                  overlayColor={isSelected ? 'rgba(94, 61, 179, 0.2)' : 'rgba(255,255,255,0.20)'}
                   borderColor={isToday ? 'rgba(94, 61, 179, 0.6)' : 'rgba(255,255,255,0.3)'}
                 >
                   <Text style={[s.weekDayName, isSelected && s.selectedDayText]}>
@@ -1066,7 +1066,7 @@ const s = StyleSheet.create({
   },
   glassOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(255,255,255,0.22)',
+    backgroundColor: 'rgba(255,255,255,0.30)',
   },
 
   // Date spider

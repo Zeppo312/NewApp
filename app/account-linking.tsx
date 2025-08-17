@@ -132,8 +132,8 @@ export default function AccountLinkingScreen() {
     >
       <SafeAreaView style={styles.container}>
         <StatusBar hidden={true} />
+        <Header title="Accounts verknüpfen" showBackButton />
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
-         <Header title="Accounts verknüpfen" showBackButton={true} />
 
           {isLoading ? (
             <ActivityIndicator size="large" color={theme.accent} />
@@ -283,7 +283,7 @@ const styles = StyleSheet.create({
   contentContainer: {
     paddingHorizontal: 0,
     paddingBottom: 40,
-    paddingTop: 0,
+    paddingTop: 16,
   },
  
   backButton: {

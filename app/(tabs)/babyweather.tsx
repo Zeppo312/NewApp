@@ -10,6 +10,8 @@ import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import * as Location from 'expo-location';
 import { getWeatherByCoordinates, getWeatherByZipCode, getMockWeatherData, WeatherData, getWeatherByCity } from '@/lib/weatherService';
 import { API_KEYS } from '@/lib/config';
+import { Stack } from 'expo-router';
+import Header from '@/components/Header';
 
 // Funktion zum Laden der Bilder
 const getClothingImage = (imageName: string | null) => {
@@ -194,7 +196,7 @@ interface HeaderProps {
   metaCards: {title: string, content: string, icon: any}[];
 }
 
-const Header: React.FC<HeaderProps> = ({ 
+const BabyWeatherHeader: React.FC<HeaderProps> = ({ 
   colorScheme, 
   showBabyInfo, 
   setShowBabyInfo, 
@@ -223,18 +225,12 @@ const Header: React.FC<HeaderProps> = ({
   
   return (
     <>
-      <View style={styles.header}>
-        <ThemedText type="title" style={styles.title}>
-          Babywetter
-        </ThemedText>
-        
-        <TouchableOpacity 
-          style={styles.infoButton}
-          onPress={() => setShowBabyInfo(!showBabyInfo)}
-        >
-          <IconSymbol name="info.circle" size={22} color={theme.textSecondary} />
-        </TouchableOpacity>
-      </View>
+      <TouchableOpacity 
+        style={styles.infoButton}
+        onPress={() => setShowBabyInfo(!showBabyInfo)}
+      >
+        <IconSymbol name="info.circle" size={22} color={theme.textSecondary} />
+      </TouchableOpacity>
 
       {/* Informations-Popup für Baby-Daten */}
       {showBabyInfo && (
@@ -467,8 +463,8 @@ const Header: React.FC<HeaderProps> = ({
   );
 };
 
-// Memoize the Header to prevent unnecessary rerenders
-const MemoHeader = React.memo(Header);
+// Memoize the BabyWeatherHeader to prevent unnecessary rerenders
+const MemoHeader = React.memo(BabyWeatherHeader);
 
 export default function BabyWeatherScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -964,11 +960,15 @@ export default function BabyWeatherScreen() {
   );
 
   return (
-    <ThemedBackground style={styles.backgroundImage}>
-      <SafeAreaView style={styles.container}>
-        <StatusBar hidden={true} />
-        
-        {!isLoading && !errorMessage && weatherData ? (
+    <>
+      <Stack.Screen options={{ headerShown: false }} />
+      <ThemedBackground style={styles.backgroundImage}>
+        <SafeAreaView style={styles.container}>
+          <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
+          
+          <Header title="Babywetter" showBackButton />
+          
+          {!isLoading && !errorMessage && weatherData ? (
           <FlatList
             ListHeaderComponent={
               <MemoHeader 
@@ -1038,8 +1038,9 @@ export default function BabyWeatherScreen() {
             />
           </ScrollView>
         )}
-      </SafeAreaView>
-    </ThemedBackground>
+        </SafeAreaView>
+      </ThemedBackground>
+    </>
   );
 }
 
@@ -1147,18 +1148,7 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 40,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
-    position: 'relative',
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#7D5A50',
-  },
+
   loadingContainer: {
     padding: 40,
     alignItems: 'center',
@@ -1503,8 +1493,10 @@ const styles = StyleSheet.create({
   },
   infoButton: {
     position: 'absolute',
-    right: 0,
+    right: 16,
+    top: 14,
     padding: 5,
+    zIndex: 10,
   },
   infoCard: {
     borderRadius: 15,

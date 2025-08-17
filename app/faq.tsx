@@ -5,10 +5,11 @@ import { ThemedView } from '@/components/ThemedView';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { useRouter } from 'expo-router';
+import { useRouter, Stack } from 'expo-router';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { getFaqCategories, getFaqEntries, FaqCategory, FaqEntry } from '@/lib/supabase/faq';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Header from '@/components/Header';
 
 // Lokale Erweiterung des FaqCategory-Typs für die UI
 interface Category extends FaqCategory {
@@ -138,31 +139,17 @@ export default function FaqScreen() {
   };
 
   return (
-    <ThemedBackground
-      style={styles.backgroundImage}
-      resizeMode="repeat"
-    >
-      <SafeAreaView style={styles.container}>
-      <StatusBar hidden={true} />
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => router.back()}
-          >
-            <ThemedView
-              style={styles.backButtonInner}
-              lightColor="rgba(255, 255, 255, 0.9)"
-              darkColor="rgba(50, 50, 50, 0.9)"
-            >
-              <IconSymbol name="chevron.left" size={20} color={theme.tabIconDefault} />
-              <ThemedText style={styles.backButtonText}>Zurück</ThemedText>
-            </ThemedView>
-          </TouchableOpacity>
-
-          <ThemedText style={styles.title}>
-            Häufige Fragen
-          </ThemedText>
-        </View>
+    <>
+      <Stack.Screen options={{ headerShown: false }} />
+      <ThemedBackground
+        style={styles.backgroundImage}
+        resizeMode="repeat"
+      >
+        <SafeAreaView style={styles.container}>
+          <StatusBar hidden={true} />
+          
+          <Header title="Häufige Fragen" showBackButton />
+          
 
         {isLoading ? (
           // Ladeindikator
@@ -251,8 +238,9 @@ export default function FaqScreen() {
             />
           </>
         )}
-      </SafeAreaView>
-    </ThemedBackground>
+        </SafeAreaView>
+      </ThemedBackground>
+    </>
   );
 }
 
@@ -264,38 +252,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 16,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingTop: 16,
-    paddingBottom: 8,
-  },
-  backButton: {
-    marginRight: 16,
-  },
-  backButtonInner: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 20,
-    textAlign: 'center',
-    width: '100%',
-  },
-  backButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
+
   // Ladeindikator und Fehleranzeige
   loadingContainer: {
     flex: 1,

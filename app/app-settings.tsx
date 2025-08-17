@@ -96,8 +96,8 @@ export default function AppSettingsScreen() {
         <SafeAreaView style={styles.safeArea}>
           <StatusBar hidden={true} />
           <View style={styles.container}>
+            <Header title="App-Einstellungen" showBackButton />
             <ScrollView contentContainerStyle={styles.scrollContent}>
-              <Header title="App-Einstellungen" showBackButton={true} />
               {isLoading ? (
                 <View style={styles.loadingContainer}>
                   <ActivityIndicator size="large" color={theme.accent} />
@@ -328,6 +328,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: 40,
     paddingHorizontal: 0,
+    paddingTop: 16,
   },
 
   loadingContainer: {

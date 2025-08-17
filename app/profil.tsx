@@ -290,7 +290,7 @@ export default function ProfilScreen() {
         <SafeAreaView style={styles.safeArea}>
           <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
           
-          <Header title="Profil" showBackButton={true} />
+          <Header title="Profil" showBackButton />
           
           <ScrollView contentContainerStyle={styles.scrollContainer}>
 

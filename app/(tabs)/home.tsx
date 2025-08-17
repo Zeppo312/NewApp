@@ -185,7 +185,7 @@ export default function HomeScreen() {
     return (
       <View style={styles.liquidGlassWrapper}>
         <BlurView 
-          intensity={10} 
+          intensity={22} 
           tint={colorScheme === 'dark' ? 'dark' : 'light'} 
           style={styles.liquidGlassBackground}
         >
@@ -220,7 +220,7 @@ export default function HomeScreen() {
 
             <View style={styles.tipContainerWrapper}>
               <BlurView 
-                intensity={8} 
+                intensity={14} 
                 tint={colorScheme === 'dark' ? 'dark' : 'light'} 
                 style={styles.tipContainerBlur}
               >
@@ -252,7 +252,7 @@ export default function HomeScreen() {
         style={styles.liquidGlassWrapper}
       >
         <BlurView 
-          intensity={10} 
+          intensity={22} 
           tint={colorScheme === 'dark' ? 'dark' : 'light'} 
           style={styles.liquidGlassBackground}
         >
@@ -269,44 +269,53 @@ export default function HomeScreen() {
             </View>
 
             <View style={styles.statsContainer}>
-              <View style={[styles.statItem, styles.liquidGlassStatItem]}>
+              <View style={[styles.statItem, styles.liquidGlassStatItem, { 
+                backgroundColor: 'rgba(94, 61, 179, 0.13)', 
+                borderColor: 'rgba(94, 61, 179, 0.35)' 
+              }]}>
                 <View style={styles.liquidGlassStatIcon}>
                   <Text style={styles.statEmoji}>🍼</Text>
                 </View>
                 <ThemedText style={[styles.statValue, styles.liquidGlassStatValue, { 
-                  color: '#6B4C3B',
+                  color: '#5E3DB3',
                   textShadowColor: 'rgba(255, 255, 255, 0.8)',
                   textShadowOffset: { width: 0, height: 1 },
                   textShadowRadius: 2,
                 }]}>{todayFeedings}</ThemedText>
-                <ThemedText style={[styles.statLabel, styles.liquidGlassStatLabel, { color: '#6B4C3B' }]}>Essen</ThemedText>
+                <ThemedText style={[styles.statLabel, styles.liquidGlassStatLabel, { color: '#7D5A50' }]}>Essen</ThemedText>
               </View>
 
-              <View style={[styles.statItem, styles.liquidGlassStatItem]}>
+              <View style={[styles.statItem, styles.liquidGlassStatItem, { 
+                backgroundColor: 'rgba(94, 61, 179, 0.08)', 
+                borderColor: 'rgba(94, 61, 179, 0.22)' 
+              }]}>
                 <View style={styles.liquidGlassStatIcon}>
                   <Text style={styles.statEmoji}>💩</Text>
                 </View>
                 <ThemedText style={[styles.statValue, styles.liquidGlassStatValue, { 
-                  color: '#6B4C3B',
+                  color: '#5E3DB3',
                   textShadowColor: 'rgba(255, 255, 255, 0.8)',
                   textShadowOffset: { width: 0, height: 1 },
                   textShadowRadius: 2,
                 }]}>{todayDiaperChanges}</ThemedText>
-                <ThemedText style={[styles.statLabel, styles.liquidGlassStatLabel, { color: '#6B4C3B' }]}>Windeln</ThemedText>
+                <ThemedText style={[styles.statLabel, styles.liquidGlassStatLabel, { color: '#7D5A50' }]}>Windeln</ThemedText>
               </View>
 
               {currentPhase && phaseProgress && (
-                <View style={[styles.statItem, styles.liquidGlassStatItem]}>
+                <View style={[styles.statItem, styles.liquidGlassStatItem, { 
+                  backgroundColor: 'rgba(94, 61, 179, 0.05)', 
+                  borderColor: 'rgba(94, 61, 179, 0.15)' 
+                }]}>
                   <View style={styles.liquidGlassStatIcon}>
                     <Text style={styles.statEmoji}>💤</Text>
                   </View>
                   <ThemedText style={[styles.statValue, styles.liquidGlassStatValue, { 
-                    color: '#6B4C3B',
+                    color: '#5E3DB3',
                     textShadowColor: 'rgba(255, 255, 255, 0.8)',
                     textShadowOffset: { width: 0, height: 1 },
                     textShadowRadius: 2,
                   }]}>0m</ThemedText>
-                  <ThemedText style={[styles.statLabel, styles.liquidGlassStatLabel, { color: '#6B4C3B' }]}>Schlaf</ThemedText>
+                  <ThemedText style={[styles.statLabel, styles.liquidGlassStatLabel, { color: '#7D5A50' }]}>Schlaf</ThemedText>
                 </View>
               )}
             </View>
@@ -331,7 +340,7 @@ export default function HomeScreen() {
             activeOpacity={0.9}
           >
             <BlurView 
-              intensity={16} 
+              intensity={24} 
               tint={colorScheme === 'dark' ? 'dark' : 'light'} 
               style={styles.liquidGlassCardBackground}
             >
@@ -351,7 +360,7 @@ export default function HomeScreen() {
             activeOpacity={0.9}
           >
             <BlurView 
-              intensity={16} 
+              intensity={24} 
               tint={colorScheme === 'dark' ? 'dark' : 'light'} 
               style={styles.liquidGlassCardBackground}
             >
@@ -372,7 +381,7 @@ export default function HomeScreen() {
                 activeOpacity={0.9}
               >
                 <BlurView 
-                  intensity={16} 
+                  intensity={24} 
                   tint={colorScheme === 'dark' ? 'dark' : 'light'} 
                   style={styles.liquidGlassCardBackground}
                 >
@@ -395,7 +404,7 @@ export default function HomeScreen() {
             activeOpacity={0.9}
           >
             <BlurView 
-              intensity={16} 
+              intensity={24} 
               tint={colorScheme === 'dark' ? 'dark' : 'light'} 
               style={styles.liquidGlassCardBackground}
             >
@@ -415,7 +424,7 @@ export default function HomeScreen() {
             activeOpacity={0.9}
           >
             <BlurView 
-              intensity={16} 
+              intensity={24} 
               tint={colorScheme === 'dark' ? 'dark' : 'light'} 
               style={styles.liquidGlassCardBackground}
             >
@@ -523,7 +532,7 @@ const styles = StyleSheet.create({
   liquidGlassBackground: {
     borderRadius: 22,
     overflow: 'hidden',
-    backgroundColor: 'rgba(255, 255, 255, 0.25)', // Noch durchsichtiger
+    backgroundColor: 'rgba(255, 255, 255, 0.35)', // stärkerer Frostglas-Effekt
   },
   liquidGlassContainer: {
     borderRadius: 22,
@@ -673,7 +682,7 @@ const styles = StyleSheet.create({
 
   // Stats with Liquid Glass Enhancement
   liquidGlassStatItem: {
-    backgroundColor: 'rgba(255, 255, 255, 0.28)',
+    backgroundColor: 'rgba(255, 255, 255, 0.34)',
     borderRadius: 16,
     padding: 8,
     marginHorizontal: 4,

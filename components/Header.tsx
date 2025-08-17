@@ -36,9 +36,9 @@ const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <View style={[styles.header, { paddingTop: 14 }]}>
-      {/* Linker Bereich */}
-      <View style={styles.sideContainer}>
+    <View style={styles.header}>
+      {/* Linker Bereich - absolut positioniert */}
+      <View style={[styles.sideContainer, styles.left]}>
         {showBackButton && (
           <TouchableOpacity 
             style={styles.backButton}
@@ -50,17 +50,17 @@ const Header: React.FC<HeaderProps> = ({
         )}
       </View>
       
-      {/* Mittlerer Bereich - immer zentriert */}
-      <View style={styles.titleContainer}>
+      {/* Mittlerer Bereich - immer bildschirmmittig */}
+      <View style={styles.titleContainer} pointerEvents="none">
         <ThemedText style={styles.title}>{title}</ThemedText>
         {subtitle && (
           <ThemedText style={styles.subtitle}>{subtitle}</ThemedText>
         )}
       </View>
       
-      {/* Rechter Bereich */}
-      <View style={styles.sideContainer}>
-        {rightContent && rightContent}
+      {/* Rechter Bereich - absolut positioniert */}
+      <View style={[styles.sideContainer, styles.right]}>
+        {rightContent}
       </View>
     </View>
   );
@@ -70,23 +70,38 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
+    paddingTop: 14,
     paddingBottom: 6,
-    justifyContent: 'space-between',
+    justifyContent: 'center', // Titel echte Bildschirmmitte
     paddingHorizontal: 16,
     backgroundColor: 'transparent',
     marginBottom: 0,
   },
   sideContainer: {
-    width: 24,
-    alignItems: 'center',
+    position: 'absolute',
+    top: 14, // gleiche Paddinghöhe wie oben
+    bottom: 6,
     justifyContent: 'center',
-    height: '100%',
+    alignItems: 'center',
+  },
+  left: {
+    left: 16,
+    width: 44,
+    height: 44, // gutes Tap-Target
+  },
+  right: {
+    right: 16,
+    minWidth: 44,
+    height: 44,
   },
   backButton: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
     padding: 0,
   },
   titleContainer: {
-    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },

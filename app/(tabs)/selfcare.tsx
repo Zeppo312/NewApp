@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, ScrollView, View, TouchableOpacity, TextInput, Alert, ImageBackground, SafeAreaView, StatusBar, FlatList } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, Stack } from 'expo-router';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { Colors } from '@/constants/Colors';
@@ -8,6 +8,7 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/contexts/AuthContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { supabase } from '@/lib/supabase';
+import Header from '@/components/Header';
 
 // Typen für die Stimmungen
 type MoodType = 'great' | 'good' | 'okay' | 'bad' | 'awful';
@@ -238,28 +239,18 @@ export default function SelfcareScreen() {
   };
 
   return (
-    <ImageBackground
-      source={require('@/assets/images/Background_Hell.png')}
-      style={styles.backgroundImage}
-      resizeMode="repeat"
-    >
-      <SafeAreaView style={styles.container}>
-      <StatusBar hidden={true} />
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => router.push('/(tabs)/home')}
-          >
-            <IconSymbol name="chevron.left" size={24} color={theme.text} />
-            <ThemedText style={styles.backButtonText}>Zurück</ThemedText>
-          </TouchableOpacity>
-
-          <ThemedText type="title" style={styles.title}>
-            Mama Selfcare
-          </ThemedText>
-
-          <View style={styles.headerRight} />
-        </View>
+    <>
+      <Stack.Screen options={{ headerShown: false }} />
+      <ImageBackground
+        source={require('@/assets/images/Background_Hell.png')}
+        style={styles.backgroundImage}
+        resizeMode="repeat"
+      >
+        <SafeAreaView style={styles.container}>
+          <StatusBar hidden={true} />
+          
+          <Header title="Mama Selfcare" showBackButton />
+          
 
         <ScrollView
           style={styles.scrollView}
@@ -465,9 +456,10 @@ export default function SelfcareScreen() {
               Speichern
             </ThemedText>
           </TouchableOpacity>
-        </ScrollView>
-      </SafeAreaView>
-    </ImageBackground>
+          </ScrollView>
+        </SafeAreaView>
+      </ImageBackground>
+    </>
   );
 }
 
@@ -479,30 +471,7 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 20,
-  },
-  backButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 5,
-  },
-  backButtonText: {
-    fontSize: 16,
-    marginLeft: 5,
-  },
-  title: {
-    fontSize: 28,
-    flex: 1,
-    textAlign: 'center',
-  },
-  headerRight: {
-    width: 50,
-  },
+
   scrollView: {
     flex: 1,
   },

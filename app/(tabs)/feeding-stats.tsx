@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { SafeAreaView, View, StyleSheet, Text, TouchableOpacity, ScrollView, Animated } from 'react-native';
+import { SafeAreaView, View, StyleSheet, Text, TouchableOpacity, ScrollView, Animated, StatusBar, ViewStyle, TextStyle, ImageStyle } from 'react-native';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import Header from '@/components/Header';
 import { Colors } from '@/constants/Colors';
@@ -12,7 +12,7 @@ import { Stack } from 'expo-router';
 
 type FeedType = 'BREAST' | 'BOTTLE' | 'SOLIDS';
 
-function GlassCard({ children, style, intensity = 24, overlayColor = 'rgba(255,255,255,0.22)', borderColor = 'rgba(255,255,255,0.35)' }: { children: React.ReactNode; style?: any; intensity?: number; overlayColor?: string; borderColor?: string }) {
+function GlassCard({ children, style, intensity = 28, overlayColor = 'rgba(255,255,255,0.30)', borderColor = 'rgba(255,255,255,0.40)' }: { children: React.ReactNode; style?: any; intensity?: number; overlayColor?: string; borderColor?: string }) {
   return (
     <View style={[s.glassCard, { borderColor }, style]}>
       <BlurView style={StyleSheet.absoluteFill} intensity={intensity} tint="light" />
@@ -100,6 +100,8 @@ export default function FeedingStatsScreen() {
     <ThemedBackground style={s.bg}>
       <SafeAreaView style={s.container}>
         <Stack.Screen options={{ headerShown: false }} />
+        <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
+
         <Header title="Mahlzeiten" subtitle="Statistiken & Verläufe" showBackButton />
 
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 40 }}>
@@ -176,7 +178,36 @@ export default function FeedingStatsScreen() {
   );
 }
 
-const s = StyleSheet.create({
+const s = StyleSheet.create<{
+  bg: ViewStyle;
+  container: ViewStyle;
+  glassCard: ViewStyle;
+  tabsRow: ViewStyle;
+  tabBtn: ViewStyle;
+  tabInner: ViewStyle;
+  tabText: TextStyle;
+  tabActive: ViewStyle;
+  tabTextActive: TextStyle;
+  sectionTitle: TextStyle;
+  kpiRow: ViewStyle;
+  kpiCard: ViewStyle;
+  kpiTitle: TextStyle;
+  kpiValue: TextStyle;
+  kpiSub: TextStyle;
+  typeCard: ViewStyle;
+  typeEmoji: TextStyle;
+  typeValue: TextStyle;
+  typeLabel: TextStyle;
+  chartCard: ViewStyle;
+  chartRow: ViewStyle;
+  barWrap: ViewStyle;
+  bar: ViewStyle;
+  chartLabels: ViewStyle;
+  chartLabel: TextStyle;
+  metaCard: ViewStyle;
+  metaTitle: TextStyle;
+  metaValue: TextStyle;
+}>({
   bg: { flex: 1, width: '100%' },
   container: { flex: 1 },
   glassCard: {
@@ -211,7 +242,7 @@ const s = StyleSheet.create({
 
   chartCard: { marginHorizontal: 16, paddingVertical: 16, paddingHorizontal: 12 },
   chartRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', height: 60 },
-  barWrap: { width: (1 / 24) * (100 - 8) + '%', backgroundColor: 'rgba(125,90,80,0.06)', borderRadius: 4, marginHorizontal: 1, alignItems: 'center', justifyContent: 'flex-end' },
+  barWrap: { width: '3.67%', backgroundColor: 'rgba(125,90,80,0.06)', borderRadius: 4, marginHorizontal: 1, alignItems: 'center', justifyContent: 'flex-end' },
   bar: { width: 8, borderRadius: 4 },
   chartLabels: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 },
   chartLabel: { fontSize: 10, color: '#7D5A50' },

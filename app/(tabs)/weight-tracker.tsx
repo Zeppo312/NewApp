@@ -3,15 +3,15 @@ import { StyleSheet, View, ScrollView, TouchableOpacity, TextInput, Alert, Activ
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedBackground } from '@/components/ThemedBackground';
-import { BackButton } from '@/components/BackButton';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-// useRouter wird durch die BackButton-Komponente verwaltet
 import { LineChart } from 'react-native-chart-kit';
 import { Dimensions } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { saveWeightEntry, getWeightEntries, deleteWeightEntry, WeightEntry } from '@/lib/weight';
+import { Stack } from 'expo-router';
+import Header from '@/components/Header';
 
 export default function WeightTrackerScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -385,26 +385,22 @@ export default function WeightTrackerScreen() {
   const screenWidth = Dimensions.get('window').width;
 
   return (
-    <ThemedBackground
-      style={styles.backgroundImage}
-      resizeMode="repeat"
-    >
-      {/* SaveView Modal */}
-      {renderSaveView()}
+    <>
+      <Stack.Screen options={{ headerShown: false }} />
+      <ThemedBackground
+        style={styles.backgroundImage}
+        resizeMode="repeat"
+      >
+        {/* SaveView Modal */}
+        {renderSaveView()}
 
-      <SafeAreaView style={styles.safeArea}>
-        <StatusBar hidden={true} />
-        <View style={styles.container}>
-          <ScrollView contentContainerStyle={styles.scrollContent}>
-            <View style={styles.header}>
-              <View style={styles.backButtonContainer}>
-                <BackButton />
-              </View>
-
-              <ThemedText type="title" style={styles.title} lightColor="#5C4033" darkColor="#FFFFFF">
-                Gewichtskurve
-              </ThemedText>
-            </View>
+        <SafeAreaView style={styles.safeArea}>
+          <StatusBar hidden={true} />
+          
+          <Header title="Gewichtskurve" showBackButton />
+          
+          <View style={styles.container}>
+            <ScrollView contentContainerStyle={styles.scrollContent}>
 
             {isLoading && !showAddForm ? (
               <View style={styles.loadingContainer}>
@@ -419,20 +415,21 @@ export default function WeightTrackerScreen() {
                 {renderWeightEntries()}
               </>
             )}
-          </ScrollView>
+            </ScrollView>
 
-          {/* Floating Add Button - nur anzeigen, wenn nicht im Formular-Modus */}
-          {!showAddForm && !isLoading && (
-            <TouchableOpacity
-              style={[styles.floatingAddButton, { backgroundColor: theme.accent }]}
-              onPress={() => setShowAddForm(true)}
-            >
-              <IconSymbol name="plus" size={24} color="#FFFFFF" />
-            </TouchableOpacity>
-          )}
-        </View>
-      </SafeAreaView>
-    </ThemedBackground>
+            {/* Floating Add Button - nur anzeigen, wenn nicht im Formular-Modus */}
+            {!showAddForm && !isLoading && (
+              <TouchableOpacity
+                style={[styles.floatingAddButton, { backgroundColor: theme.accent }]}
+                onPress={() => setShowAddForm(true)}
+              >
+                <IconSymbol name="plus" size={24} color="#FFFFFF" />
+              </TouchableOpacity>
+            )}
+          </View>
+        </SafeAreaView>
+      </ThemedBackground>
+    </>
   );
 }
 
@@ -454,23 +451,7 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 40,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
-    justifyContent: 'center', // Zentriert den Inhalt horizontal
-    position: 'relative', // Für absolute Positionierung des Zurück-Buttons
-  },
-  // Zurück-Button-Styles werden jetzt in der BackButton-Komponente verwaltet
-  backButtonContainer: {
-    position: 'absolute',
-    left: 0,
-    zIndex: 10,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-  },
+
   saveViewContainer: {
     flex: 1,
     justifyContent: 'center',
