@@ -52,9 +52,17 @@ const Header: React.FC<HeaderProps> = ({
       
       {/* Mittlerer Bereich - immer bildschirmmittig */}
       <View style={styles.titleContainer} pointerEvents="none">
-        <ThemedText style={styles.title}>{title}</ThemedText>
+        <ThemedText style={styles.title} 
+                   lightColor={Colors.light.textBrand} 
+                   darkColor={Colors.dark.textBrand}>
+          {title}
+        </ThemedText>
         {subtitle && (
-          <ThemedText style={styles.subtitle}>{subtitle}</ThemedText>
+          <ThemedText style={styles.subtitle} 
+                     lightColor={Colors.light.textSecondary} 
+                     darkColor={Colors.dark.textSecondary}>
+            {subtitle}
+          </ThemedText>
         )}
       </View>
       
@@ -108,12 +116,10 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#7D5A50',
     textAlign: 'center',
   },
   subtitle: {
     fontSize: 13,
-    color: '#A8978E',
     marginTop: 3,
     textAlign: 'center',
   },

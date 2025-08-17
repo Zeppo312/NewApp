@@ -194,10 +194,14 @@ export default function HomeScreen() {
                      darkColor="rgba(255, 255, 255, 0.02)">
             <View style={styles.greetingHeader}>
               <View>
-                <ThemedText style={[styles.greeting, styles.liquidGlassText, { color: '#6B4C3B' }]}>
+                <ThemedText style={[styles.greeting, styles.liquidGlassText]} 
+                           lightColor={theme.textBrand} 
+                           darkColor={theme.textBrand}>
                   Hallo {displayName}!
                 </ThemedText>
-                <ThemedText style={[styles.dateText, styles.liquidGlassSecondaryText, { color: '#6B4C3B' }]}>
+                <ThemedText style={[styles.dateText, styles.liquidGlassSecondaryText]} 
+                           lightColor={theme.textBrand} 
+                           darkColor={theme.textBrand}>
                   {formatDate()}
                 </ThemedText>
               </View>
@@ -228,7 +232,9 @@ export default function HomeScreen() {
                            lightColor="rgba(168, 196, 193, 0.45)" 
                            darkColor="rgba(168, 196, 193, 0.45)">
                   <IconSymbol name="lightbulb.fill" size={20} color={Colors.light.success} />
-                  <ThemedText style={[styles.tipText, styles.liquidGlassTipText, { color: '#6B4C3B' }]}>
+                  <ThemedText style={[styles.tipText, styles.liquidGlassTipText]} 
+                             lightColor={theme.textBrand} 
+                             darkColor={theme.textBrand}>
                     {dailyTip}
                   </ThemedText>
                 </ThemedView>
@@ -260,11 +266,13 @@ export default function HomeScreen() {
                       lightColor="rgba(255, 255, 255, 0.04)" 
                       darkColor="rgba(255, 255, 255, 0.02)">
             <View style={styles.sectionTitleContainer}>
-              <ThemedText style={[styles.sectionTitle, styles.liquidGlassText, { color: '#6B4C3B', fontSize: 22 }]}> 
+              <ThemedText style={[styles.sectionTitle, styles.liquidGlassText, { fontSize: 22 }]} 
+                         lightColor={theme.textBrand} 
+                         darkColor={theme.textBrand}> 
                 Dein Tag im Überblick
               </ThemedText>
               <View style={styles.liquidGlassChevron}>
-                <IconSymbol name="chevron.right" size={20} color="#6B4C3B" />
+                <IconSymbol name="chevron.right" size={20} color={theme.textBrand} />
               </View>
             </View>
 

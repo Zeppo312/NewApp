@@ -13,9 +13,10 @@ const errorColor = '#FF6B6B'; // Soft red - for errors and delete actions
 
 // Text colors - Light mode
 const primaryTextLight = '#5C4033'; // Dark brown - for headings and important text (contrast ratio > 7:1)
-const secondaryTextLight = '#7D5A50'; // Softer brown - for normal text (contrast ratio > 4.5:1)
+const secondaryTextLight = '#8A6B61'; // Softer brown - for normal text (contrast ratio > 4.5:1)
 const tertiaryTextLight = '#9C8178'; // Lighter brown - for less important text (contrast ratio > 3:1)
 const disabledTextLight = '#B0A59E'; // Very light brown - for disabled text
+const brandTextLight = '#6B4C3B'; // Brand brown - for greetings and brand elements
 
 // Text colors - Dark mode
 const primaryTextDark = '#FFFFFF'; // Pure white - for headings and important text (contrast ratio > 10:1)
@@ -23,6 +24,7 @@ const secondaryTextDark = '#F8F0E5'; // Very light beige - for normal text (cont
 const tertiaryTextDark = '#E9D8C2'; // Lighter beige - for less important text (contrast ratio > 5:1)
 const disabledTextDark = '#B8A99A'; // Lighter muted beige - for disabled text (contrast ratio > 3:1)
 const accentTextDark = '#A5D6D9'; // Light turquoise - for highlights and accents (contrast ratio > 4.5:1)
+const brandTextDark = '#E9D8C2'; // Brand beige - for greetings and brand elements in dark mode
 
 // Legacy variables for backward compatibility
 const darkTextColor = secondaryTextLight;
@@ -32,6 +34,12 @@ const lightTextColor = primaryTextDark;
 export const CardBorder = '#E6E1DE';
 export const CardBg = '#F9F5F1';
 export const Shadow = { width: 0, height: 2, opacity: 0.1, radius: 3 };
+
+// Brand colors for easy access
+export const BrandColors = {
+  light: brandTextLight,
+  dark: brandTextDark,
+};
 
 // Qualitätsfarben für Wehen-/Schlaftracker
 export const QualityColors = {
@@ -49,6 +57,7 @@ export const Colors = {
     textSecondary: secondaryTextLight, // For normal text
     textTertiary: tertiaryTextLight, // For less important text
     textDisabled: disabledTextLight, // For disabled text
+    textBrand: brandTextLight, // For brand elements like greetings
 
     // Background colors
     background: '#FFF8F0', // Creamy white background
@@ -84,6 +93,7 @@ export const Colors = {
     textTertiary: tertiaryTextDark, // For less important text
     textDisabled: disabledTextDark, // For disabled text
     textAccent: accentTextDark, // For accent text and highlights
+    textBrand: brandTextDark, // For brand elements like greetings
 
     // Background colors
     background: '#2D2522', // Dark brown background
