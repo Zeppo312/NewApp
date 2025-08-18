@@ -9,6 +9,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { supabase } from '@/lib/supabase';
 import Header from '@/components/Header';
+import { useSmartBack } from '@/contexts/NavigationContext';
 
 // Typen für die Stimmungen
 type MoodType = 'great' | 'good' | 'okay' | 'bad' | 'awful';
@@ -77,6 +78,9 @@ export default function SelfcareScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const { user } = useAuth();
+  
+  // Set fallback route for smart back navigation
+  useSmartBack('/(tabs)/home');
   const router = useRouter();
 
   const [userName, setUserName] = useState<string>('');

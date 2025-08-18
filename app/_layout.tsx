@@ -15,6 +15,7 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { BabyStatusProvider } from '@/contexts/BabyStatusContext';
 import { ThemeProvider as AppThemeProvider } from '@/contexts/ThemeContext';
+import { NavigationProvider } from '@/contexts/NavigationContext';
 import { checkForNewNotifications, registerBackgroundNotificationTask, BACKGROUND_NOTIFICATION_TASK } from '@/lib/notificationService';
 
 // Importieren der Meilenstein-Task-Definition
@@ -206,9 +207,11 @@ export default Sentry.wrap(function RootLayout() {
   return (
     <AuthProvider>
       <AppThemeProvider>
-        <BabyStatusProvider>
-          <RootLayoutNav />
-        </BabyStatusProvider>
+        <NavigationProvider>
+          <BabyStatusProvider>
+            <RootLayoutNav />
+          </BabyStatusProvider>
+        </NavigationProvider>
       </AppThemeProvider>
     </AuthProvider>
   );

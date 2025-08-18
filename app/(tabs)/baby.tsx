@@ -14,6 +14,7 @@ import { supabase } from '@/lib/supabase';
 import { useRouter, Stack } from 'expo-router';
 import { BackButton } from '@/components/BackButton';
 import Header from '@/components/Header';
+import { useSmartBack } from '@/contexts/NavigationContext';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { defineMilestoneCheckerTask, saveBabyInfoForBackgroundTask, isTaskRegistered } from '@/tasks/milestoneCheckerTask';
@@ -23,6 +24,9 @@ export default function BabyScreen() {
   const theme = Colors[colorScheme];
   const { user } = useAuth();
   const router = useRouter();
+  
+  // Set fallback route for smart back navigation
+  useSmartBack('/(tabs)/home');
 
   const [babyInfo, setBabyInfo] = useState<BabyInfo>({});
   const [showDatePicker, setShowDatePicker] = useState(false);

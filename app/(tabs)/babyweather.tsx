@@ -12,6 +12,7 @@ import { getWeatherByCoordinates, getWeatherByZipCode, getMockWeatherData, Weath
 import { API_KEYS } from '@/lib/config';
 import { Stack } from 'expo-router';
 import Header from '@/components/Header';
+import { useSmartBack } from '@/contexts/NavigationContext';
 
 // Funktion zum Laden der Bilder
 const getClothingImage = (imageName: string | null) => {
@@ -470,6 +471,9 @@ export default function BabyWeatherScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const { isBabyBorn, babyAgeMonths, babyWeightPercentile } = useBabyStatus();
+  
+  // Set fallback route for smart back navigation
+  useSmartBack('/(tabs)/home');
 
   const zipCodeInputRef = useRef<TextInput>(null);
   const cityNameInputRef = useRef<TextInput>(null);

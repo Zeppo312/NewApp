@@ -7,6 +7,7 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { ThemedText } from '@/components/ThemedText';
+import { useNavigation } from '@/contexts/NavigationContext';
 
 export interface HeaderProps {
   title: string;
@@ -26,12 +27,14 @@ const Header: React.FC<HeaderProps> = ({
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const router = useRouter();
+  const navigation = useNavigation();
 
   const handleBackPress = () => {
     if (onBackPress) {
       onBackPress();
     } else {
-      router.back();
+      // Use smart navigation that tracks history
+      navigation.goBack();
     }
   };
 

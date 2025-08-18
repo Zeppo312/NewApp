@@ -9,6 +9,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { getBabyCareEntriesForDate, getBabyCareEntriesForDateRange, getBabyCareEntriesForMonth } from '@/lib/supabase';
 import { Stack } from 'expo-router';
+import { useSmartBack } from '@/contexts/NavigationContext';
 
 type FeedType = 'BREAST' | 'BOTTLE' | 'SOLIDS';
 
@@ -25,6 +26,9 @@ function GlassCard({ children, style, intensity = 28, overlayColor = 'rgba(255,2
 export default function FeedingStatsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
+  
+  // Set fallback route for smart back navigation
+  useSmartBack('/(tabs)/home');
 
   const [selectedTab, setSelectedTab] = useState<'day' | 'week' | 'month'>('day');
   const [selectedDate, setSelectedDate] = useState(new Date());
