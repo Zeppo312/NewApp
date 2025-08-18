@@ -135,11 +135,11 @@ export default function TabLayout() {
         }}
       />
       
-      {/* Tab 2/5: Alltag */}
+      {/* Tab 2/5: Unser Tag */}
       <Tabs.Screen
         name="daily_old"
         options={{
-          title: 'Alltag',
+          title: 'Unser Tag',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="list.bullet" color={color} />,
           href: isBabyBorn ? undefined : null, // Nur nach der Geburt anzeigen
         }}
