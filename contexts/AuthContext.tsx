@@ -4,6 +4,10 @@ import {
   supabase,
   signInWithEmail,
   signUpWithEmail,
+  signInWithApple,
+  resendOTPToken,
+  verifyOTPToken,
+  checkEmailVerification,
   signOut,
   checkSupabaseConnection,
   isSupabaseReady
@@ -17,6 +21,12 @@ type AuthContextType = {
   // E-Mail-Authentifizierung
   signInWithEmail: (email: string, password: string) => Promise<{ data?: any, error: any }>;
   signUpWithEmail: (email: string, password: string) => Promise<{ data?: any, error: any }>;
+  // Apple Sign-In
+  signInWithApple: () => Promise<{ data?: any, error: any }>;
+  // OTP-Verifikation
+  resendOTPToken: (email: string) => Promise<{ data?: any, error: any }>;
+  verifyOTPToken: (email: string, token: string) => Promise<{ data?: any, error: any }>;
+  checkEmailVerification: () => Promise<{ isVerified: boolean, user: any }>;
   // Abmeldung
   signOut: () => Promise<{ error: any }>;
 };
@@ -128,6 +138,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loading,
         signInWithEmail: handleSignInWithEmail,
         signUpWithEmail: handleSignUpWithEmail,
+        signInWithApple,
+        resendOTPToken,
+        verifyOTPToken,
+        checkEmailVerification,
         signOut: handleSignOut,
       }}
     >

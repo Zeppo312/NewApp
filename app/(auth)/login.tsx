@@ -22,7 +22,7 @@ export default function LoginScreen() {
   const [showInvitationField, setShowInvitationField] = useState(false);
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
-  const { signInWithEmail, signUpWithEmail } = useAuth();
+  const { signInWithEmail, signUpWithEmail, signInWithApple } = useAuth();
 
   // Funktion zum Abrufen des is_baby_born-Flags
   const checkIsBabyBorn = async (userId: string) => {
@@ -114,47 +114,21 @@ export default function LoginScreen() {
 
         // Wenn die Registrierung erfolgreich war
         if (data && data.user) {
-          // Wenn E-Mail-Bestätigung aktiviert ist
-          if (data.user.identities && data.user.identities.length === 0) {
-            Alert.alert(
-              'Bestätige deine E-Mail',
-              'Wir haben dir eine Bestätigungs-E-Mail gesendet. Bitte öffne den Link in der E-Mail, um deine Registrierung abzuschließen.',
-              [{ text: 'OK' }]
-            );
-          } else {
-            // Wenn ein Einladungscode eingegeben wurde, diesen einlösen
-            if (invitationCode.trim()) {
-              console.log('Redeeming invitation code:', invitationCode);
-              try {
-                const redeemResult = await redeemInvitationCode(data.user.id, invitationCode.trim());
-
-                if (!redeemResult.success) {
-                  console.error('Error redeeming invitation code:', redeemResult.error);
-                  Alert.alert(
-                    'Einladungscode ungültig',
-                    redeemResult.error?.message || 'Der Einladungscode konnte nicht eingelöst werden.'
-                  );
-                } else {
-                  console.log('Invitation code redeemed successfully:', redeemResult.linkData);
-                  Alert.alert(
-                    'Accounts verknüpft',
-                    'Dein Account wurde erfolgreich mit dem anderen Benutzer verknüpft.'
-                  );
-                }
-              } catch (redeemError) {
-                console.error('Exception redeeming invitation code:', redeemError);
-              }
-            }
-
-            // Nach erfolgreicher Registrierung zur Profil-Seite leiten, damit der Benutzer sein Profil vervollständigen kann
-            console.log('Registration successful, navigating to profile page for completion');
-            try {
-              router.replace('../getUserInfo');
-            } catch (navError) {
-              console.error('Navigation error:', navError);
-              router.navigate('../getUserInfo');
-            }
-          }
+          // Bei Supabase wird nach der Registrierung automatisch ein OTP gesendet
+          console.log('Registration successful, redirecting to OTP verification...');
+          router.replace({
+            pathname: './verify-otp',
+            params: { email: email }
+          });
+          return;
+        } else if (data && !data.user) {
+          // Registrierung erfolgreich, aber User muss OTP bestätigen
+          console.log('Registration pending OTP verification...');
+          router.replace({
+            pathname: './verify-otp', 
+            params: { email: email }
+          });
+          return;
         }
       } else {
         console.log('Signing in with email:', email);
@@ -199,6 +173,55 @@ export default function LoginScreen() {
           ? 'Registrierung fehlgeschlagen. Bitte versuche es erneut.'
           : 'Login fehlgeschlagen. Bitte versuche es erneut.');
       }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleAppleSignIn = async () => {
+    setError('');
+    setIsLoading(true);
+    
+    try {
+      console.log('Starting Apple Sign-In...');
+      const { data, error: appleError } = await signInWithApple();
+      
+      if (appleError) {
+        console.error('Apple Sign-In error:', appleError);
+        throw appleError;
+      }
+      
+      console.log('Apple Sign-In successful:', data);
+      
+      // Check if this is a new user or existing user
+      if (data && data.user) {
+        // Check if user profile exists and is complete
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('first_name, is_baby_born')
+          .eq('id', data.user.id)
+          .single();
+        
+        if (profileError && profileError.code !== 'PGRST116') {
+          console.error('Error checking profile:', profileError);
+        }
+        
+        // If profile is incomplete or doesn't exist, go to onboarding
+        if (!profileData || !profileData.first_name) {
+          console.log('New Apple user, redirecting to onboarding');
+          router.replace('../getUserInfo');
+        } else {
+          // Existing user, navigate based on baby status
+          await navigateBasedOnBabyBornFlag(data.user.id);
+        }
+      }
+    } catch (err: any) {
+      console.error('Apple Sign-In error:', err);
+      if (err.message?.includes('abgebrochen')) {
+        // User cancelled, don't show error
+        return;
+      }
+      setError(err.message || 'Apple Sign-In fehlgeschlagen');
     } finally {
       setIsLoading(false);
     }
@@ -369,6 +392,21 @@ export default function LoginScreen() {
                   </ThemedText>
                 </TouchableOpacity>
 
+                {Platform.OS === 'ios' && (
+                  <TouchableOpacity
+                    style={[styles.button, styles.appleButton]}
+                    onPress={handleAppleSignIn}
+                    disabled={isLoading}
+                  >
+                    <View style={styles.buttonContent}>
+                      <ThemedText style={styles.appleIcon}></ThemedText>
+                      <ThemedText style={styles.buttonText}>
+                        Mit Apple anmelden
+                      </ThemedText>
+                    </View>
+                  </TouchableOpacity>
+                )}
+
                 <TouchableOpacity
                   style={[styles.button, styles.demoButton]}
                   onPress={handleDemoLogin}
@@ -520,9 +558,23 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.light.success,
     marginTop: 24,
   },
+  appleButton: {
+    backgroundColor: '#000000',
+    marginTop: 16,
+  },
   demoButton: {
     backgroundColor: Colors.light.accent,
     marginTop: 16,
+  },
+  buttonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  appleIcon: {
+    fontSize: 18,
+    marginRight: 8,
+    color: 'white',
   },
   buttonDisabled: {
     opacity: 0.7,

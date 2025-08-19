@@ -144,6 +144,34 @@ export const signUpWithEmail = async (email: string, password: string) => {
   return { data, error };
 };
 
+// OTP-Token erneut senden
+export const resendOTPToken = async (email: string) => {
+  const { data, error } = await supabase.auth.resend({
+    type: 'signup',
+    email,
+  });
+  return { data, error };
+};
+
+// OTP-Token verifizieren
+export const verifyOTPToken = async (email: string, token: string) => {
+  const { data, error } = await supabase.auth.verifyOtp({
+    email,
+    token,
+    type: 'email',
+  });
+  return { data, error };
+};
+
+// Prüfung ob E-Mail verifiziert ist
+export const checkEmailVerification = async () => {
+  const { data: { user } } = await supabase.auth.getUser();
+  return {
+    isVerified: user?.email_confirmed_at ? true : false,
+    user,
+  };
+};
+
 export const signInWithEmail = async (email: string, password: string) => {
   const { data, error } = await supabase.auth.signInWithPassword({
     email,
@@ -203,10 +231,62 @@ export const signInWithGoogle = async () => {
 };
 
 export const signInWithApple = async () => {
-  const { data, error } = await supabase.auth.signInWithOAuth({
-    provider: 'apple',
-  });
-  return { data, error };
+  try {
+    // Import Apple Authentication (only available on iOS)
+    const AppleAuthentication = require('expo-apple-authentication');
+    
+    // Check if Apple Authentication is available
+    const isAvailable = await AppleAuthentication.isAvailableAsync();
+    if (!isAvailable) {
+      return { data: null, error: { message: 'Apple Sign-In ist auf diesem Gerät nicht verfügbar' } };
+    }
+
+    // Request Apple Authentication
+    const credential = await AppleAuthentication.signInAsync({
+      requestedScopes: [
+        AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+        AppleAuthentication.AppleAuthenticationScope.EMAIL,
+      ],
+    });
+
+    // Sign in with Supabase using the Apple credential
+    const { data, error } = await supabase.auth.signInWithIdToken({
+      provider: 'apple',
+      token: credential.identityToken!,
+      nonce: credential.nonce,
+    });
+
+    // If sign-in successful, create/update profile
+    if (data.user && !error) {
+      const { user } = data;
+      
+      // Extract name from Apple credential
+      const fullName = credential.fullName;
+      const firstName = fullName?.givenName || '';
+      const lastName = fullName?.familyName || '';
+      
+      // Update or create profile if we have name information
+      if (firstName || lastName) {
+        await supabase
+          .from('profiles')
+          .upsert({
+            id: user.id,
+            first_name: firstName,
+            last_name: lastName,
+            updated_at: new Date().toISOString(),
+          })
+          .select()
+          .single();
+      }
+    }
+
+    return { data, error };
+  } catch (error: any) {
+    if (error.code === 'ERR_REQUEST_CANCELED') {
+      return { data: null, error: { message: 'Apple Sign-In wurde abgebrochen' } };
+    }
+    return { data: null, error: { message: error.message || 'Apple Sign-In fehlgeschlagen' } };
+  }
 };
 
 export const signInWithFacebook = async () => {
