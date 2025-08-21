@@ -9,7 +9,7 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useRouter, Stack } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { getDoctorQuestions, saveDoctorQuestion, updateDoctorQuestion, deleteDoctorQuestion, DoctorQuestion } from '@/lib/supabase';
-import { BackButton } from '@/components/BackButton';
+import Header from '@/components/Header';
 
 export default function DoctorQuestionsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -188,18 +188,13 @@ export default function DoctorQuestionsScreen() {
     <>
       <Stack.Screen options={{ headerShown: false }} />
       <ThemedBackground style={styles.backgroundImage}>
-      <SafeAreaView style={styles.safeArea}>
-        <StatusBar hidden={true} />
-        <View style={styles.container}>
+        <SafeAreaView style={styles.safeArea}>
+          <StatusBar hidden={true} />
+          <Header 
+            title="Fragen für den Frauenarzt" 
+            showBackButton 
+          />
           <ScrollView contentContainerStyle={styles.scrollContent}>
-            <View style={styles.header}>
-              <View style={styles.backButtonContainer}>
-                <BackButton />
-              </View>
-              <ThemedText type="title" style={styles.title}>
-                Fragen für den Frauenarzt
-              </ThemedText>
-            </View>
 
             <ThemedView style={styles.inputContainer} lightColor={theme.card} darkColor={theme.card}>
               <ThemedText style={styles.inputLabel}>
@@ -355,9 +350,8 @@ export default function DoctorQuestionsScreen() {
               </View>
             )}
           </ScrollView>
-        </View>
-      </SafeAreaView>
-    </ThemedBackground>
+        </SafeAreaView>
+      </ThemedBackground>
     </>
   );
 }
@@ -372,30 +366,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'transparent',
   },
-  container: {
-    flex: 1,
-    padding: 16,
-  },
   scrollContent: {
+    padding: 16,
     paddingBottom: 40,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
-    justifyContent: 'center',
-    position: 'relative',
-  },
-  backButtonContainer: {
-    position: 'absolute',
-    left: 0,
-    zIndex: 10,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#7D5A50',
-    textAlign: 'center',
   },
   inputContainer: {
     borderRadius: 16,

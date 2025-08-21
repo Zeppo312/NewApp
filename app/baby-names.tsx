@@ -5,9 +5,9 @@ import { ThemedView } from '@/components/ThemedView';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { useRouter } from 'expo-router';
+import { useRouter, Stack } from 'expo-router';
 import { ThemedBackground } from '@/components/ThemedBackground';
-import { BackButton } from '@/components/BackButton';
+import Header from '@/components/Header';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -315,19 +315,17 @@ export default function BabyNamesScreen() {
   );
 
   return (
-    <ThemedBackground
-      style={styles.backgroundImage}
-      resizeMode="repeat"
-    >
-      <SafeAreaView style={styles.container}>
-      <StatusBar hidden={true} />
-        <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
-          {/* Zurück-Button */}
-          <BackButton onPress={() => router.back()} />
-
-          {/* Header */}
-          <ThemedText style={[styles.title, { fontSize: 26 }]}>Babynamen</ThemedText>
-          <ThemedText style={styles.subtitle}>Finde den perfekten Namen für dein Baby</ThemedText>
+    <>
+      <Stack.Screen options={{ headerShown: false }} />
+      <ThemedBackground style={styles.backgroundImage}>
+        <SafeAreaView style={styles.container}>
+          <StatusBar hidden={true} />
+          <Header 
+            title="Babynamen" 
+            subtitle="Finde den perfekten Namen für dein Baby"
+            showBackButton 
+          />
+          <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
 
           {/* Suchleiste */}
           <View style={styles.searchContainer}>
@@ -395,9 +393,10 @@ export default function BabyNamesScreen() {
               ))}
             </View>
           )}
-        </ScrollView>
-      </SafeAreaView>
-    </ThemedBackground>
+          </ScrollView>
+        </SafeAreaView>
+      </ThemedBackground>
+    </>
   );
 }
 
@@ -415,18 +414,6 @@ const styles = StyleSheet.create({
   contentContainer: {
     padding: 16,
     paddingBottom: 40,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 16,
-    textAlign: 'center',
-    marginBottom: 24,
   },
   searchContainer: {
     marginBottom: 16,

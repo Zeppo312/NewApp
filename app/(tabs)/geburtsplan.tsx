@@ -6,7 +6,6 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedBackground } from '@/components/ThemedBackground';
-import { BackButton } from '@/components/BackButton';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { supabase } from '@/lib/supabase';
@@ -274,24 +273,11 @@ export default function GeburtsplanScreen() {
         
         <Header 
           title="Geburtsplan" 
-          subtitle="Plane deine ideale Geburt" 
+          subtitle="Plane deine ideale Geburt"
+          showBackButton 
         />
         
-        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-          {/* Zurück-Button */}
-          <ThemedBackground
-            style={styles.backgroundImage}
-            resizeMode="repeat"
-          >
-            <SafeAreaView style={styles.container}>
-            <StatusBar hidden={true} />
-              <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
-                {/* Zurück-Button */}
-                <BackButton onPress={() => router.push('/(tabs)/countdown')} />
-
-                <ThemedText style={styles.title}>
-                  Geburtsplan
-                </ThemedText>
+        <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
 
                 <ThemedView style={styles.card} lightColor={theme.card} darkColor={theme.card}>
                   <ThemedText style={styles.cardText}>
@@ -429,9 +415,6 @@ export default function GeburtsplanScreen() {
                   <ThemedText style={styles.tipText}>• Medizinische Eingriffe: Welche akzeptierst du, welche nicht?</ThemedText>
                   <ThemedText style={styles.tipText}>• Nach der Geburt: Wünsche für die ersten Stunden mit deinem Baby</ThemedText>
                 </ThemedView>
-              </ScrollView>
-            </SafeAreaView>
-          </ThemedBackground>
         </ScrollView>
       </SafeAreaView>
     </ThemedBackground>
@@ -453,13 +436,6 @@ const createStyles = (theme: any) => StyleSheet.create({
     padding: 20,
     paddingBottom: 40,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 20,
-    textAlign: 'center',
-  },
-  // Zurück-Button-Styles werden jetzt in der BackButton-Komponente verwaltet
   card: {
     padding: 20,
     borderRadius: 15,
