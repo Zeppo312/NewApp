@@ -172,6 +172,10 @@ export default function DailyScreen() {
   const [splashStatus, setSplashStatus] = useState<string>('');
   const [splashHint, setSplashHint] = useState<string>('');
 
+  // Scroll animation for quick actions
+  const quickActionsScrollRef = useRef<FlatList>(null);
+  const scrollAnimation = useRef(new Animated.Value(0)).current;
+
   useEffect(() => {
     if (selectedTab === 'week') {
       loadWeekEntries();
@@ -194,6 +198,40 @@ export default function DailyScreen() {
       loadMonthEntries();
     }
   }, [selectedMonthDate, selectedTab]);
+
+  // Quick actions scroll hint animation - runs only once
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (quickActionsScrollRef.current) {
+        // Smooth scroll right to show hint
+        quickActionsScrollRef.current.scrollToOffset({
+          offset: 80,
+          animated: true,
+        });
+
+        // Then smoothly scroll back to start after a brief pause
+        setTimeout(() => {
+          if (quickActionsScrollRef.current) {
+            quickActionsScrollRef.current.scrollToOffset({
+              offset: 0,
+              animated: true,
+            });
+          }
+        }, 1000); // Brief pause for smooth flow
+      }
+    }, 2500); // Slightly longer initial delay
+
+    // Cleanup
+    return () => {
+      clearTimeout(timeoutId);
+      if (quickActionsScrollRef.current) {
+        quickActionsScrollRef.current.scrollToOffset({
+          offset: 0,
+          animated: false,
+        });
+      }
+    };
+  }, []);
 
   // Helper functions for week view
   const getWeekStart = (date: Date) => {
@@ -557,9 +595,13 @@ export default function DailyScreen() {
         </TouchableOpacity>
       </GlassCard>
     );
+
+
+
     return (
       <View style={s.quickActionSection}>
         <FlatList
+          ref={quickActionsScrollRef}
           data={quickBtns}
           horizontal
           showsHorizontalScrollIndicator={false}
