@@ -108,8 +108,20 @@ export default function HomeScreen() {
 
       // Alltags-Einträge für heute laden
       const today = new Date();
-      const { data: dailyData } = await getDailyEntries(undefined, today);
-      if (dailyData) {
+      const startOfDay = new Date(today);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(today);
+      endOfDay.setHours(23, 59, 59, 999);
+
+      const { data: dailyData, error: dailyError } = await supabase
+        .from('baby_care_entries')
+        .select('*')
+        .gte('start_time', startOfDay.toISOString())
+        .lte('start_time', endOfDay.toISOString())
+        .eq('user_id', user?.id)
+        .order('start_time', { ascending: false });
+
+      if (!dailyError && dailyData) {
         setDailyEntries(dailyData);
       }
 
@@ -188,6 +200,40 @@ export default function HomeScreen() {
     setShowInputModal(true);
   };
 
+  // Load only daily entries (for quick refresh after adding entries)
+  const loadDailyEntriesOnly = async () => {
+    try {
+      const today = new Date();
+      const startOfDay = new Date(today);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(today);
+      endOfDay.setHours(23, 59, 59, 999);
+
+      console.log('Loading daily entries for date:', today.toISOString());
+
+      // Direct query to baby_care_entries table to ensure fresh data
+      const { data: dailyData, error } = await supabase
+        .from('baby_care_entries')
+        .select('*')
+        .gte('start_time', startOfDay.toISOString())
+        .lte('start_time', endOfDay.toISOString())
+        .eq('user_id', user?.id)
+        .order('start_time', { ascending: false });
+
+      if (error) {
+        console.error('Error loading daily entries:', error);
+        return;
+      }
+
+      if (dailyData) {
+        console.log('Loaded daily entries:', dailyData.length, 'entries');
+        setDailyEntries(dailyData);
+      }
+    } catch (err) {
+      console.error('Failed to load daily entries:', err);
+    }
+  };
+
   // Handle save entry from modal
   const handleSaveEntry = async (payload: any) => {
     console.log('handleSaveEntry - Received payload:', JSON.stringify(payload, null, 2));
@@ -199,8 +245,8 @@ export default function HomeScreen() {
     setSelectedActivityType('feeding');
     setSelectedSubType(null);
 
-    // Reload data to show the new entry
-    await loadData();
+    // Quick reload of daily entries to show the new entry immediately
+    await loadDailyEntriesOnly();
   };
 
   // Rendere den Begrüßungsbereich
