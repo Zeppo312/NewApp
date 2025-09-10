@@ -13,6 +13,7 @@ import { TablerIcon } from '@/components/ui/TablerIcon';
 import { getBabyInfo, getDiaryEntries, getCurrentPhase, getPhaseProgress, getMilestonesByPhase, getDailyEntries } from '@/lib/baby';
 import { supabase } from '@/lib/supabase';
 import { BlurView } from 'expo-blur';
+import ActivityInputModal from '@/components/ActivityInputModal';
 
 // Tägliche Tipps für Mamas
 const dailyTips = [
@@ -45,6 +46,9 @@ export default function HomeScreen() {
   const [dailyTip, setDailyTip] = useState("");
   const [userName, setUserName] = useState("");
   const [refreshing, setRefreshing] = useState(false);
+  const [showInputModal, setShowInputModal] = useState(false);
+  const [selectedActivityType, setSelectedActivityType] = useState<'feeding' | 'diaper' | 'other'>('feeding');
+  const [selectedSubType, setSelectedSubType] = useState<string | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -177,6 +181,28 @@ export default function HomeScreen() {
     }).length;
   };
 
+  // Handle stat item press
+  const handleStatPress = (type: 'feeding' | 'diaper') => {
+    setSelectedActivityType(type);
+    setSelectedSubType(null);
+    setShowInputModal(true);
+  };
+
+  // Handle save entry from modal
+  const handleSaveEntry = async (payload: any) => {
+    console.log('handleSaveEntry - Received payload:', JSON.stringify(payload, null, 2));
+    console.log('handleSaveEntry - selectedActivityType:', selectedActivityType);
+    console.log('handleSaveEntry - selectedSubType:', selectedSubType);
+
+    // Close modal
+    setShowInputModal(false);
+    setSelectedActivityType('feeding');
+    setSelectedSubType(null);
+
+    // Reload data to show the new entry
+    await loadData();
+  };
+
   // Rendere den Begrüßungsbereich
   const renderGreetingSection = () => {
     // Verwende den Benutzernamen aus der profiles-Tabelle
@@ -269,37 +295,45 @@ export default function HomeScreen() {
             </View>
 
             <View style={styles.statsContainer}>
-              <View style={[styles.statItem, styles.liquidGlassStatItem, { 
-                backgroundColor: 'rgba(94, 61, 179, 0.13)', 
-                borderColor: 'rgba(94, 61, 179, 0.35)' 
-              }]}>
+              <TouchableOpacity
+                style={[styles.statItem, styles.liquidGlassStatItem, {
+                  backgroundColor: 'rgba(94, 61, 179, 0.13)',
+                  borderColor: 'rgba(94, 61, 179, 0.35)'
+                }]}
+                onPress={() => handleStatPress('feeding')}
+                activeOpacity={0.8}
+              >
                 <View style={styles.liquidGlassStatIcon}>
                   <Text style={styles.statEmoji}>🍼</Text>
                 </View>
-                <ThemedText style={[styles.statValue, styles.liquidGlassStatValue, { 
+                <ThemedText style={[styles.statValue, styles.liquidGlassStatValue, {
                   color: '#5E3DB3',
                   textShadowColor: 'rgba(255, 255, 255, 0.8)',
                   textShadowOffset: { width: 0, height: 1 },
                   textShadowRadius: 2,
                 }]}>{todayFeedings}</ThemedText>
                 <ThemedText style={[styles.statLabel, styles.liquidGlassStatLabel, { color: '#7D5A50' }]}>Essen</ThemedText>
-              </View>
+              </TouchableOpacity>
 
-              <View style={[styles.statItem, styles.liquidGlassStatItem, { 
-                backgroundColor: 'rgba(94, 61, 179, 0.08)', 
-                borderColor: 'rgba(94, 61, 179, 0.22)' 
-              }]}>
+              <TouchableOpacity
+                style={[styles.statItem, styles.liquidGlassStatItem, {
+                  backgroundColor: 'rgba(94, 61, 179, 0.08)',
+                  borderColor: 'rgba(94, 61, 179, 0.22)'
+                }]}
+                onPress={() => handleStatPress('diaper')}
+                activeOpacity={0.8}
+              >
                 <View style={styles.liquidGlassStatIcon}>
                   <Text style={styles.statEmoji}>💩</Text>
                 </View>
-                <ThemedText style={[styles.statValue, styles.liquidGlassStatValue, { 
+                <ThemedText style={[styles.statValue, styles.liquidGlassStatValue, {
                   color: '#5E3DB3',
                   textShadowColor: 'rgba(255, 255, 255, 0.8)',
                   textShadowOffset: { width: 0, height: 1 },
                   textShadowRadius: 2,
                 }]}>{todayDiaperChanges}</ThemedText>
                 <ThemedText style={[styles.statLabel, styles.liquidGlassStatLabel, { color: '#7D5A50' }]}>Windeln</ThemedText>
-              </View>
+              </TouchableOpacity>
 
               {currentPhase && phaseProgress && (
                 <View style={[styles.statItem, styles.liquidGlassStatItem, { 
@@ -491,6 +525,19 @@ export default function HomeScreen() {
             {renderQuickAccessCards()}
           </ScrollView>
         )}
+
+        <ActivityInputModal
+          visible={showInputModal}
+          activityType={selectedActivityType}
+          initialSubType={selectedSubType}
+          date={new Date()}
+          onClose={() => {
+            setShowInputModal(false);
+            setSelectedActivityType('feeding');
+            setSelectedSubType(null);
+          }}
+          onSave={handleSaveEntry}
+        />
       </SafeAreaView>
     </ThemedBackground>
   );

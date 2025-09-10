@@ -372,6 +372,29 @@ export default function DailyScreen() {
 
   const syncDailyEntries = async () => {};
 
+  const handleRefresh = async () => {
+    setRefreshing(true);
+
+    // Start loading entries
+    const loadPromise = loadEntries();
+
+    // Set maximum refresh time to 2 seconds
+    const timeoutPromise = new Promise<void>((resolve) => {
+      setTimeout(() => {
+        setRefreshing(false);
+        resolve();
+      }, 2000);
+    });
+
+    // Wait for either loading to complete or timeout
+    await Promise.race([loadPromise, timeoutPromise]);
+
+    // If loading completed before timeout, stop refreshing
+    if (!refreshing) {
+      setRefreshing(false);
+    }
+  };
+
   const changeRelativeDate = (days: number) =>
     setSelectedDate(new Date(selectedDate.getTime() + days * 24 * 60 * 60 * 1000));
 
@@ -988,7 +1011,7 @@ export default function DailyScreen() {
         <ScrollView
           style={s.scrollContainer}
           contentContainerStyle={s.scrollContent}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => setRefreshing(true)} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
         >
           <TopTabs />
 
