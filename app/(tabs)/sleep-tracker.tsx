@@ -29,6 +29,7 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import Header from '@/components/Header';
 import ActivityCard from '@/components/ActivityCard';
 import ActivityInputModal from '@/components/ActivityInputModal';
+// SplashOverlay Import entfernt - keine Popups
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { ProgressCircle } from '@/components/ProgressCircle';
@@ -82,8 +83,37 @@ const convertSleepToDailyEntry = (sleepEntry: ClassifiedSleepEntry): any => {
     return `${mins}m`;
   };
 
-  const getSleepEmoji = (quality?: SleepQuality, period?: SleepPeriod) => {
-    if (!quality) return period === 'day' ? '😴' : '💤';
+  // Bestimme Schlaftyp basierend auf Startzeit
+  const getSleepType = (startTime: string, durationMinutes?: number) => {
+    const date = new Date(startTime);
+    const hour = date.getHours();
+    
+    // Nickerchen: max 30 Minuten
+    if (durationMinutes && durationMinutes <= 30) {
+      return 'nickerchen';
+    }
+    
+    // Nachtschlaf: 18:00-06:00
+    if (hour >= 18 || hour <= 6) {
+      return 'nacht';
+    }
+    
+    // Mittagsschlaf: 12:00-14:00
+    if (hour >= 12 && hour <= 14) {
+      return 'mittag';
+    }
+    
+    // Tagschlaf: 06:01-17:59 (außer Mittagszeit)
+    return 'tag';
+  };
+
+  const getSleepEmoji = (sleepType: string, quality?: SleepQuality) => {
+    if (sleepType === 'nickerchen') return '😌';
+    if (sleepType === 'nacht') return '💤';
+    if (sleepType === 'mittag') return '😴';
+    if (sleepType === 'tag') return '☀️';
+    
+    // Fallback basierend auf Qualität
     switch (quality) {
       case 'good': return '😴';
       case 'medium': return '😐';
@@ -92,16 +122,29 @@ const convertSleepToDailyEntry = (sleepEntry: ClassifiedSleepEntry): any => {
     }
   };
 
-  const getSleepLabel = (quality?: SleepQuality, period?: SleepPeriod) => {
-    const periodText = period === 'day' ? 'Tagschlaf' : 'Nachtschlaf';
-    if (!quality) return periodText;
+  const getSleepLabel = (sleepType: string, quality?: SleepQuality) => {
+    let baseLabel = '';
+    
+    switch (sleepType) {
+      case 'nickerchen': baseLabel = 'Nickerchen'; break;
+      case 'nacht': baseLabel = 'Nachtschlaf'; break;
+      case 'mittag': baseLabel = 'Mittagsschlaf'; break;
+      case 'tag': baseLabel = 'Tagschlaf'; break;
+      default: baseLabel = 'Schlaf'; break;
+    }
+    
+    if (!quality) return baseLabel;
+    
     switch (quality) {
-      case 'good': return `Guter ${periodText}`;
-      case 'medium': return `Mittlerer ${periodText}`;
-      case 'bad': return `Schlechter ${periodText}`;
-      default: return periodText;
+      case 'good': return `Guter ${baseLabel}`;
+      case 'medium': return `Mittlerer ${baseLabel}`;
+      case 'bad': return `Schlechter ${baseLabel}`;
+      default: return baseLabel;
     }
   };
+
+  // Bestimme Schlaftyp basierend auf Startzeit und Dauer
+  const sleepType = getSleepType(sleepEntry.start_time, sleepEntry.duration_minutes);
 
   const notes = [];
   if (sleepEntry.quality) {
@@ -127,12 +170,12 @@ const convertSleepToDailyEntry = (sleepEntry: ClassifiedSleepEntry): any => {
     diaper_type: undefined,
     // Sleep-specific data
     sleep_quality: sleepEntry.quality,
-    sleep_period: sleepEntry.period,
+    sleep_type: sleepType,
     duration_minutes: sleepEntry.duration_minutes,
     // For ActivityCard compatibility
-    sub_type: `sleep_${sleepEntry.quality || 'unknown'}_${sleepEntry.period}`,
-    emoji: getSleepEmoji(sleepEntry.quality, sleepEntry.period),
-    label: getSleepLabel(sleepEntry.quality, sleepEntry.period)
+    sub_type: `sleep_${sleepEntry.quality || 'unknown'}_${sleepType}`,
+    emoji: getSleepEmoji(sleepType, sleepEntry.quality),
+    label: getSleepLabel(sleepType, sleepEntry.quality)
   };
 };
 
@@ -199,16 +242,30 @@ export default function SleepTrackerScreen() {
   const [selectedSubType, setSelectedSubType] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
 
+  // Splash System komplett entfernt - saubere Sleep-Tracker Implementierung
+
   // Sleep Modal States
   const [sleepModalData, setSleepModalData] = useState({
     start_time: new Date(),
     end_time: null as Date | null,
     quality: null as SleepQuality | null,
-    notes: '',
-    period: 'night' as 'day' | 'night'
+    notes: ''
   });
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
+
+  // Splash System wie in daily_old.tsx
+  const [splashVisible, setSplashVisible] = useState(false);
+  const [splashBg, setSplashBg] = useState<string>('rgba(0,0,0,0.6)');
+  const [splashEmoji, setSplashEmoji] = useState<string>('✅');
+  const [splashText, setSplashText] = useState<string>('Gespeichert');
+  const splashAnim = useRef(new Animated.Value(0)).current;
+  const splashEmojiAnim = useRef(new Animated.Value(0.9)).current;
+  const splashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [splashTitle, setSplashTitle] = useState<string>('');
+  const [splashSubtitle, setSplashSubtitle] = useState<string>('');
+  const [splashStatus, setSplashStatus] = useState<string>('');
+  const [splashHint, setSplashHint] = useState<string>('');
 
   // Animation refs
   const timerAnim = useRef(new Animated.Value(1)).current;
@@ -321,6 +378,14 @@ export default function SleepTrackerScreen() {
         const classifiedEntry = classifySleepEntry(entry);
         setActiveSleepEntry(classifiedEntry);
         await loadSleepData();
+
+        // Splash anzeigen
+        const period = new Date().getHours() >= 20 || new Date().getHours() < 10 ? 'night' : 'day';
+        showSuccessSplash(
+          '#87CEEB', // Baby blue
+          period === 'night' ? '🌙' : '😴',
+          period === 'night' ? 'sleep_start_night' : 'sleep_start_day'
+        );
       } else {
         Alert.alert('Fehler', error || 'Schlaftracking konnte nicht gestartet werden');
       }
@@ -339,6 +404,12 @@ export default function SleepTrackerScreen() {
       if (success) {
         setActiveSleepEntry(null);
         await loadSleepData();
+
+        // Splash anzeigen je nach Qualität
+        const splashKind = quality === 'good' ? 'sleep_stop_good' : quality === 'bad' ? 'sleep_stop_bad' : 'sleep_stop_medium';
+        const splashColor = quality === 'good' ? '#38A169' : quality === 'bad' ? '#E53E3E' : '#F5A623';
+        const splashEmoji = quality === 'good' ? '😴' : quality === 'bad' ? '😵' : '😐';
+        showSuccessSplash(splashColor, splashEmoji, splashKind);
       } else {
         Alert.alert('Fehler', error || 'Schlaftracking konnte nicht gestoppt werden');
       }
@@ -350,32 +421,53 @@ export default function SleepTrackerScreen() {
   // Handle save entry (compatible with SleepInputModal)
   const handleSaveEntry = async (payload: any) => {
     try {
-      if (!user?.id) return;
+      if (!user?.id) {
+        Alert.alert('Fehler', 'Benutzer nicht angemeldet');
+        return;
+      }
+
+      console.log('🔍 handleSaveEntry called with:', payload);
+      console.log('🔍 editingEntry:', editingEntry);
 
       // SleepInputModal sendet die Daten direkt als Objekt
       const sleepData = payload;
 
+      // Validierung der Daten
+      if (!sleepData.start_time) {
+        Alert.alert('Fehler', 'Startzeit ist erforderlich');
+        return;
+      }
+
       if (editingEntry?.id) {
+        console.log('🔄 Updating existing entry:', editingEntry.id);
         // Update existing entry
-        const { error } = await supabase
+        const { data, error } = await supabase
         .from('sleep_entries')
           .update({
             start_time: sleepData.start_time,
             end_time: sleepData.end_time ?? null,
             quality: sleepData.quality || null,
             notes: sleepData.notes ?? null,
-            period: sleepData.period || 'night',
             duration_minutes: sleepData.end_time
               ? Math.round((new Date(sleepData.end_time).getTime() - new Date(sleepData.start_time).getTime()) / 60000)
             : null
         })
-          .eq('id', editingEntry.id);
+          .eq('id', editingEntry.id)
+          .select();
 
-      if (error) throw error;
-        Alert.alert('Erfolg', 'Schlaf-Eintrag wurde aktualisiert! ✨');
+        if (error) {
+          console.error('❌ Update error:', error);
+          Alert.alert('Fehler beim Aktualisieren', `${error.message}\nCode: ${error.code || 'unknown'}`);
+          return;
+        }
+
+        console.log('✅ Entry updated successfully:', data);
+        // Splash anzeigen für Bearbeitung
+        showSuccessSplash('#4A90E2', '✏️', 'sleep_edit_save');
       } else {
+        console.log('➕ Creating new entry');
         // Create new entry
-      const { error } = await supabase
+        const { data, error } = await supabase
         .from('sleep_entries')
           .insert({
             user_id: user.id,
@@ -383,14 +475,21 @@ export default function SleepTrackerScreen() {
             end_time: sleepData.end_time ?? null,
             quality: sleepData.quality || null,
             notes: sleepData.notes ?? null,
-            period: sleepData.period || 'night',
             duration_minutes: sleepData.end_time
               ? Math.round((new Date(sleepData.end_time).getTime() - new Date(sleepData.start_time).getTime()) / 60000)
             : null
-          });
+          })
+          .select();
 
-      if (error) throw error;
-        Alert.alert('Erfolg', 'Schlaf-Eintrag wurde hinzugefügt! 💤');
+        if (error) {
+          console.error('❌ Insert error:', error);
+          Alert.alert('Fehler beim Speichern', `${error.message}\nCode: ${error.code || 'unknown'}\nHint: ${error.hint || 'keine'}`);
+          return;
+        }
+
+        console.log('✅ Entry created successfully:', data);
+        // Splash anzeigen für neuen Eintrag
+        showSuccessSplash('#8E4EC6', '💤', 'sleep_manual_save');
       }
 
       setShowInputModal(false);
@@ -399,15 +498,17 @@ export default function SleepTrackerScreen() {
         start_time: new Date(),
         end_time: null,
         quality: null,
-        notes: '',
-        period: 'night'
+        notes: ''
       });
       setShowStartPicker(false);
       setShowEndPicker(false);
       await loadSleepData();
     } catch (error) {
-      console.error('Save error:', error);
-      Alert.alert('Fehler', 'Eintrag konnte nicht gespeichert werden');
+      console.error('❌ Sleep entry save error:', error);
+      Alert.alert(
+        'Unerwarteter Fehler', 
+        `${error instanceof Error ? error.message : 'Unbekannter Fehler'}\n\nBitte versuche es erneut oder kontaktiere den Support.`
+      );
     }
   };
 
@@ -485,6 +586,85 @@ export default function SleepTrackerScreen() {
     }
   };
 
+  // Splash Funktion wie in daily_old.tsx
+  const showSuccessSplash = (hex: string, emoji: string, kind: string) => {
+    const rgba = (h: string, a: number) => {
+      const c = h.replace('#','');
+      const r = parseInt(c.substring(0,2),16);
+      const g = parseInt(c.substring(2,4),16);
+      const b = parseInt(c.substring(4,6),16);
+      return `rgba(${r},${g},${b},${a})`;
+    };
+    setSplashBg(rgba(hex, 1));
+    setSplashEmoji(emoji);
+    // Texte je Kontext - angepasst für Sleep
+    if (kind === 'sleep_start_night') {
+      setSplashTitle('Nachtschlaf läuft');
+      setSplashSubtitle('Gute Nacht, kleiner Schatz. Träum schön.');
+      setSplashStatus('Timer gestartet...');
+      setSplashHint('Du machst das großartig 🌙');
+      setSplashText('');
+    } else if (kind === 'sleep_start_day') {
+      setSplashTitle('Tagschlaf läuft');
+      setSplashSubtitle('Kuschel-Nap – Energie tanken.');
+      setSplashStatus('Timer gestartet...');
+      setSplashHint('Erholung ist wichtig 💤');
+      setSplashText('');
+    } else if (kind === 'sleep_stop_good') {
+      setSplashTitle('Schlaf beendet');
+      setSplashSubtitle('Guter Schlaf – perfekt erholt!');
+      setSplashStatus('');
+      setSplashHint('Ein weiterer Meilenstein heute ✨');
+      setSplashText('');
+    } else if (kind === 'sleep_stop_medium') {
+      setSplashTitle('Schlaf beendet');
+      setSplashSubtitle('Okay geschlafen – das ist völlig normal.');
+      setSplashStatus('');
+      setSplashHint('Jeder Schlaf ist wertvoll 💕');
+      setSplashText('');
+    } else if (kind === 'sleep_stop_bad') {
+      setSplashTitle('Schlaf beendet');
+      setSplashSubtitle('Unruhiger Schlaf – morgen wird besser.');
+      setSplashStatus('');
+      setSplashHint('Du gibst dein Bestes, das reicht 🤍');
+      setSplashText('');
+    } else if (kind === 'sleep_manual_save') {
+      setSplashTitle('Schlaf gespeichert');
+      setSplashSubtitle('Eintrag erfolgreich hinzugefügt.');
+      setSplashStatus('');
+      setSplashHint('Danke für die genaue Aufzeichnung 💕');
+      setSplashText('');
+    } else if (kind === 'sleep_edit_save') {
+      setSplashTitle('Schlaf aktualisiert');
+      setSplashSubtitle('Änderungen erfolgreich gespeichert.');
+      setSplashStatus('');
+      setSplashHint('Die Daten wurden aktualisiert ✏️');
+      setSplashText('');
+    } else {
+      setSplashTitle('Schlaf-Aktion');
+      setSplashSubtitle('Erfolgreich ausgeführt.');
+      setSplashStatus('');
+      setSplashHint('Alles in Ordnung ✅');
+      setSplashText('');
+    }
+    setSplashVisible(true);
+    // reset and animate in
+    splashAnim.setValue(0);
+    Animated.timing(splashAnim, { toValue: 1, duration: 250, useNativeDriver: true }).start();
+    splashEmojiAnim.setValue(0.9);
+    Animated.sequence([
+      Animated.timing(splashEmojiAnim, { toValue: 1.1, duration: 220, useNativeDriver: true }),
+      Animated.spring(splashEmojiAnim, { toValue: 1, useNativeDriver: true })
+    ]).start();
+    // clear previous timer
+    if (splashTimerRef.current) clearTimeout(splashTimerRef.current);
+    splashTimerRef.current = setTimeout(() => {
+      Animated.timing(splashAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start(() => {
+        setSplashVisible(false);
+      });
+    }, 4500);
+  };
+
   // Group entries by period
   const groupedEntries = sleepEntries.reduce((acc, entry) => {
     if (!acc[entry.period]) {
@@ -538,8 +718,6 @@ export default function SleepTrackerScreen() {
       q === 'good' ? 'rgba(56,161,105,0.25)' : q === 'medium' ? 'rgba(245,166,35,0.25)' : 'rgba(229,62,62,0.25)',
   });
 
-  // Sleep Input Modal Component
-  const SleepInputModal = () => {
     // Setze die Modal-Daten beim Öffnen
     useEffect(() => {
       if (showInputModal) {
@@ -549,8 +727,7 @@ export default function SleepTrackerScreen() {
             start_time: new Date(editingEntry.start_time),
             end_time: editingEntry.end_time ? new Date(editingEntry.end_time) : null,
             quality: editingEntry.quality,
-            notes: editingEntry.notes || '',
-            period: editingEntry.period
+          notes: editingEntry.notes || ''
           });
         } else {
           // Neuer Eintrag - setze Standardwerte
@@ -558,177 +735,12 @@ export default function SleepTrackerScreen() {
             start_time: new Date(),
             end_time: null,
             quality: null,
-            notes: '',
-            period: 'night'
+          notes: ''
           });
         }
       }
     }, [showInputModal, editingEntry]);
 
-    return (
-      <Modal visible={showInputModal} transparent animationType="fade" onRequestClose={() => setShowInputModal(false)}>
-        <View style={styles.modalBackdrop}>
-          <LiquidGlassCard style={styles.modalCard} intensity={28} overlayColor="rgba(255,255,255,0.18)" borderColor="rgba(255,255,255,0.6)">
-            <Text style={styles.modalTitle}>
-              {editingEntry ? 'Schlaf bearbeiten' : 'Schlaf hinzufügen'}
-            </Text>
-
-            <View style={styles.fieldRow}>
-              <Text style={styles.fieldLabel}>Startzeit</Text>
-              <TouchableOpacity style={styles.dateButton} onPress={() => setShowStartPicker(true)}>
-                <IconSymbol name="calendar" size={16} color="#7D5A50" />
-                <Text style={styles.dateButtonText}>
-                  {sleepModalData.start_time.toLocaleString('de-DE', {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    day: '2-digit',
-                    month: '2-digit'
-                  })}
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.fieldRow}>
-              <Text style={styles.fieldLabel}>Endzeit</Text>
-              <TouchableOpacity style={styles.dateButton} onPress={() => setShowEndPicker(true)}>
-                <IconSymbol name="calendar" size={16} color="#7D5A50" />
-                <Text style={styles.dateButtonText}>
-                  {sleepModalData.end_time
-                    ? sleepModalData.end_time.toLocaleString('de-DE', {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        day: '2-digit',
-                        month: '2-digit'
-                      })
-                    : 'Offen lassen'
-                  }
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.fieldRow}>
-              <Text style={styles.fieldLabel}>Schlafqualität</Text>
-              <View style={styles.qualityRow}>
-                {(['good','medium','bad'] as const).map(q => (
-                  <TouchableOpacity
-                    key={q}
-                    style={[styles.qualityPill, sleepModalData.quality === q && qualityPillActive(q)]}
-                    onPress={() => setSleepModalData(prev => ({ ...prev, quality: q }))}
-                  >
-                    <Text style={[styles.qualityPillText, sleepModalData.quality === q && styles.qualityPillTextActive]}>
-                      {q === 'good' ? '😴 Gut' : q === 'medium' ? '😐 Mittel' : '😵 Schlecht'}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-
-            <View style={styles.fieldRow}>
-              <Text style={styles.fieldLabel}>Schlafart</Text>
-              <View style={styles.periodRow}>
-                {(['night','day'] as const).map(p => (
-                  <TouchableOpacity
-                    key={p}
-                    style={[styles.periodPill, sleepModalData.period === p && styles.periodPillActive]}
-                    onPress={() => setSleepModalData(prev => ({ ...prev, period: p }))}
-                  >
-                    <Text style={[styles.periodPillText, sleepModalData.period === p && styles.periodPillTextActive]}>
-                      {p === 'night' ? '🌙 Nachtschlaf' : '☀️ Tagschlaf'}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-
-            <View style={styles.fieldRow}>
-              <Text style={styles.fieldLabel}>Notizen</Text>
-              <TextInput
-                style={styles.notesInput}
-                placeholder="Optionale Notizen..."
-                placeholderTextColor="#A8978E"
-                value={sleepModalData.notes}
-                onChangeText={notes => setSleepModalData(prev => ({ ...prev, notes }))}
-                multiline
-              />
-            </View>
-
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.cancelBtn]}
-                onPress={() => {
-                  setShowInputModal(false);
-                  setEditingEntry(null);
-                  setSleepModalData({
-                    start_time: new Date(),
-                    end_time: null,
-                    quality: null,
-                    notes: '',
-                    period: 'night'
-                  });
-                }}
-              >
-                <Text style={styles.modalButtonText}>Abbrechen</Text>
-              </TouchableOpacity>
-
-              {editingEntry && (
-                <TouchableOpacity
-                  style={[styles.modalButton, styles.deleteBtn]}
-                  onPress={() => {
-                    if (editingEntry.id) {
-                      handleDeleteEntry(editingEntry.id);
-                      setShowInputModal(false);
-                      setEditingEntry(null);
-                    }
-                  }}
-                >
-                  <Text style={[styles.modalButtonText, styles.deleteBtnText]}>Löschen</Text>
-                </TouchableOpacity>
-              )}
-
-              <TouchableOpacity
-                style={[styles.modalButton, styles.saveBtn]}
-                onPress={() => handleSaveEntry({
-                  start_time: sleepModalData.start_time.toISOString(),
-                  end_time: sleepModalData.end_time?.toISOString() || null,
-                  quality: sleepModalData.quality,
-                  notes: sleepModalData.notes,
-                  period: sleepModalData.period
-                })}
-              >
-                <Text style={[styles.modalButtonText, styles.saveBtnText]}>
-                  {editingEntry ? 'Aktualisieren' : 'Speichern'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </LiquidGlassCard>
-        </View>
-
-        {showStartPicker && (
-          <DateTimePicker
-            value={sleepModalData.start_time}
-            mode="datetime"
-            display={Platform.OS === 'ios' ? 'inline' : 'default'}
-            onChange={(_, date) => {
-              setShowStartPicker(false);
-              if (date) setSleepModalData(prev => ({ ...prev, start_time: date }));
-            }}
-          />
-        )}
-
-        {showEndPicker && (
-          <DateTimePicker
-            value={sleepModalData.end_time || new Date()}
-            mode="datetime"
-            display={Platform.OS === 'ios' ? 'inline' : 'default'}
-            onChange={(_, date) => {
-              setShowEndPicker(false);
-              if (date) setSleepModalData(prev => ({ ...prev, end_time: date }));
-            }}
-          />
-        )}
-      </Modal>
-    );
-  };
 
   // Top Tabs Component (exakt wie daily_old.tsx)
   const TopTabs = () => (
@@ -749,32 +761,65 @@ export default function SleepTrackerScreen() {
     </View>
   );
 
-  // Status Metrics Bar Component (Home.tsx style)
+  // Status Metrics Bar Component (Standard App-Layout)
   const StatusMetricsBar = () => (
-    <LiquidGlassCard style={styles.statusBar} intensity={22} overlayColor="rgba(168, 196, 193, 0.25)" borderColor="rgba(255, 255, 255, 0.6)">
-      <View style={styles.statusBarContent}>
-        <View style={[styles.statusMetric, styles.statusMetricPurple]}>
-          <IconSymbol name="moon.fill" size={16} color="#8E4EC6" />
-          <Text style={[styles.statusValue, { color: '#000000' }]}>{minutesToHMM(stats.totalMinutes)}</Text>
-          <Text style={styles.statusLabel}>Heute</Text>
-        </View>
-        <View style={[styles.statusMetric, styles.statusMetricAmber]}>
-          <IconSymbol name="zzz" size={16} color="#FF8C42" />
-          <Text style={[styles.statusValue, { color: '#000000' }]}>{stats.napsCount}</Text>
-          <Text style={styles.statusLabel}>Naps</Text>
-        </View>
-        <View style={[styles.statusMetric, styles.statusMetricGreen]}>
-          <IconSymbol name="clock.fill" size={16} color="#A8C4A2" />
-          <Text style={[styles.statusValue, { color: '#000000' }]}>{minutesToHMM(stats.longestStretch)}</Text>
-          <Text style={styles.statusLabel}>Längster</Text>
-        </View>
-        <View style={[styles.statusMetric, styles.statusMetricRed]}>
-          <IconSymbol name="chart.line.uptrend.xyaxis" size={16} color="#FF9B9B" />
-          <Text style={[styles.statusValue, { color: '#000000' }]}>{stats.score}%</Text>
-          <Text style={styles.statusLabel}>Score</Text>
-        </View>
+    <>
+      <View style={styles.kpiRow}>
+        <GlassCard
+          style={styles.kpiCard}
+          intensity={20}
+          overlayColor="rgba(142, 78, 198, 0.1)"
+          borderColor="rgba(142, 78, 198, 0.25)"
+        >
+          <View style={styles.kpiHeaderRow}>
+            <IconSymbol name="moon.fill" size={12} color="#8E4EC6" />
+            <Text style={styles.kpiTitle}>Heute</Text>
+          </View>
+          <Text style={[styles.kpiValue, styles.kpiValueCentered]}>{minutesToHMM(stats.totalMinutes)}</Text>
+        </GlassCard>
+
+        <GlassCard
+          style={styles.kpiCard}
+          intensity={20}
+          overlayColor="rgba(255, 140, 66, 0.1)"
+          borderColor="rgba(255, 140, 66, 0.25)"
+        >
+          <View style={styles.kpiHeaderRow}>
+            <IconSymbol name="zzz" size={12} color="#FF8C42" />
+            <Text style={styles.kpiTitle}>Naps</Text>
+          </View>
+          <Text style={[styles.kpiValue, styles.kpiValueCentered]}>{stats.napsCount}</Text>
+        </GlassCard>
       </View>
-    </LiquidGlassCard>
+
+      <View style={styles.kpiRow}>
+        <GlassCard
+          style={styles.kpiCard}
+          intensity={20}
+          overlayColor="rgba(168, 196, 162, 0.1)"
+          borderColor="rgba(168, 196, 162, 0.25)"
+        >
+          <View style={styles.kpiHeaderRow}>
+            <IconSymbol name="clock.fill" size={12} color="#A8C4A2" />
+            <Text style={styles.kpiTitle}>Längster</Text>
+          </View>
+          <Text style={[styles.kpiValue, styles.kpiValueCentered]}>{minutesToHMM(stats.longestStretch)}</Text>
+        </GlassCard>
+
+        <GlassCard
+          style={styles.kpiCard}
+          intensity={20}
+          overlayColor="rgba(255, 155, 155, 0.1)"
+          borderColor="rgba(255, 155, 155, 0.25)"
+        >
+          <View style={styles.kpiHeaderRow}>
+            <IconSymbol name="chart.line.uptrend.xyaxis" size={12} color="#FF9B9B" />
+            <Text style={styles.kpiTitle}>Score</Text>
+          </View>
+          <Text style={[styles.kpiValue, styles.kpiValueCentered]}>{stats.score}%</Text>
+        </GlassCard>
+      </View>
+    </>
   );
 
   // Central Timer Component (Baby Blue Circle Only)
@@ -986,13 +1031,13 @@ export default function SleepTrackerScreen() {
           </Animated.View>
 
           {/* Schlaferfassung Section */}
-          <Text style={[styles.sectionTitle, { textAlign: 'center' }]}>Schlaferfassung</Text>
+          <Text style={styles.sectionTitle}>Schlaferfassung</Text>
 
           {/* Action Buttons */}
           <ActionButtons />
 
           {/* Timeline Section */}
-          <Text style={[styles.sectionTitle, { textAlign: 'center' }]}>Timeline</Text>
+          <Text style={styles.sectionTitle}>Timeline</Text>
 
           {/* Sleep Entries - Timeline Style like daily_old.tsx */}
           <View style={styles.entriesSection}>
@@ -1027,8 +1072,248 @@ export default function SleepTrackerScreen() {
           </View>
         </ScrollView>
 
-        <SleepInputModal />
+        {/* Sleep Input Modal direkt hier rendern */}
+        <Modal 
+          visible={showInputModal} 
+          transparent={true} 
+          animationType="slide" 
+          onRequestClose={() => setShowInputModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            {/* Background tap to close */}
+            <TouchableOpacity 
+              style={StyleSheet.absoluteFill} 
+              onPress={() => setShowInputModal(false)}
+              activeOpacity={1}
+            />
+
+            <BlurView
+              style={styles.modalContent}
+              tint="extraLight"
+              intensity={80}
+            >
+              {/* Header */}
+              <View style={styles.header}>
+                <TouchableOpacity 
+                  style={styles.headerButton}
+                  onPress={() => setShowInputModal(false)}
+                >
+                  <Text style={styles.closeHeaderButtonText}>✕</Text>
+                </TouchableOpacity>
+
+                <View style={styles.headerCenter}>
+                  <Text style={styles.modalTitle}>
+                    {editingEntry ? 'Schlaf bearbeiten' : 'Schlaf hinzufügen'}
+                  </Text>
+                  <Text style={styles.modalSubtitle}>
+                    {editingEntry ? 'Daten anpassen' : 'Neuen Eintrag erstellen'}
+                  </Text>
+                </View>
+
+                <TouchableOpacity
+                  style={[styles.headerButton, styles.saveHeaderButton, { backgroundColor: '#8E4EC6' }]}
+                  onPress={() => handleSaveEntry({
+                    start_time: sleepModalData.start_time.toISOString(),
+                    end_time: sleepModalData.end_time?.toISOString() || null,
+                    quality: sleepModalData.quality,
+                    notes: sleepModalData.notes
+                  })}
+                >
+                  <Text style={styles.saveHeaderButtonText}>✓</Text>
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <TouchableOpacity activeOpacity={1} onPress={() => {}}>
+                  <View style={{width: '100%', alignItems: 'center'}}>
+                    
+                    {/* Zeit Sektion */}
+                    <View style={styles.section}>
+                      <Text style={styles.sectionTitle}>⏰ Zeitraum</Text>
+                      
+                      <View style={styles.timeRow}>
+                        <TouchableOpacity 
+                          style={styles.timeButton}
+                          onPress={() => setShowStartPicker(true)}
+                        >
+                          <Text style={styles.timeLabel}>Start</Text>
+                          <Text style={styles.timeValue}>
+                            {sleepModalData.start_time.toLocaleString('de-DE', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              day: '2-digit',
+                              month: '2-digit'
+                            })}
+                          </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity 
+                          style={styles.timeButton}
+                          onPress={() => setShowEndPicker(true)}
+                        >
+                          <Text style={styles.timeLabel}>Ende</Text>
+                          <Text style={styles.timeValue}>
+                            {sleepModalData.end_time
+                              ? sleepModalData.end_time.toLocaleString('de-DE', {
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                  day: '2-digit',
+                                  month: '2-digit'
+                                })
+                              : 'Offen'
+                            }
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+
+                      {/* DateTimePicker direkt im Modal - Zeit und Datum gleichzeitig */}
+                      {showStartPicker && (
+                        <View style={styles.datePickerContainer}>
+                          <DateTimePicker
+                            value={sleepModalData.start_time}
+                            mode="datetime"
+                            display={Platform.OS === 'ios' ? 'compact' : 'default'}
+                            onChange={(_, date) => {
+                              if (date) setSleepModalData(prev => ({ ...prev, start_time: date }));
+                            }}
+                            style={styles.dateTimePicker}
+                          />
+                          <View style={styles.datePickerActions}>
+                            <TouchableOpacity
+                              style={styles.datePickerCancel}
+                              onPress={() => setShowStartPicker(false)}
+                            >
+                              <Text style={styles.datePickerCancelText}>Fertig</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      )}
+
+                      {showEndPicker && (
+                        <View style={styles.datePickerContainer}>
+                          <DateTimePicker
+                            value={sleepModalData.end_time || new Date()}
+                            mode="datetime"
+                            display={Platform.OS === 'ios' ? 'compact' : 'default'}
+                            onChange={(_, date) => {
+                              if (date) setSleepModalData(prev => ({ ...prev, end_time: date }));
+                            }}
+                            style={styles.dateTimePicker}
+                          />
+                          <View style={styles.datePickerActions}>
+                            <TouchableOpacity
+                              style={styles.datePickerCancel}
+                              onPress={() => setShowEndPicker(false)}
+                            >
+                              <Text style={styles.datePickerCancelText}>Fertig</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      )}
+                    </View>
+
+
+                    {/* Qualität Sektion */}
+                    <View style={styles.section}>
+                      <Text style={styles.sectionTitle}>😴 Schlafqualität</Text>
+                      <View style={styles.optionsGrid}>
+                        {(['good','medium','bad'] as const).map(q => (
+                          <TouchableOpacity
+                            key={q}
+                            style={[
+                              styles.optionButton,
+                              { 
+                                backgroundColor: sleepModalData.quality === q 
+                                  ? (q === 'good' ? '#38A169' : q === 'medium' ? '#F5A623' : '#E53E3E')
+                                  : 'rgba(230, 230, 230, 0.8)',
+                                flex: 1,
+                                marginHorizontal: 3
+                              }
+                            ]}
+                            onPress={() => setSleepModalData(prev => ({ ...prev, quality: q }))}
+                          >
+                            <Text style={styles.optionIcon}>
+                              {q === 'good' ? '😴' : q === 'medium' ? '😐' : '😵'}
+                            </Text>
+                            <Text style={[
+                              styles.optionLabel,
+                              { 
+                                color: sleepModalData.quality === q ? '#FFFFFF' : '#333333'
+                              }
+                            ]}>
+                              {q === 'good' ? 'Gut' : q === 'medium' ? 'Mittel' : 'Schlecht'}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </View>
+
+                    {/* Notizen Sektion */}
+                    <View style={styles.section}>
+                      <Text style={styles.sectionTitle}>📝 Notizen</Text>
+                      <TextInput
+                        style={styles.notesInput}
+                        placeholder="Optionale Notizen zum Schlaf..."
+                        placeholderTextColor="#A8978E"
+                        value={sleepModalData.notes}
+                        onChangeText={notes => setSleepModalData(prev => ({ ...prev, notes }))}
+                        multiline
+                        numberOfLines={3}
+                      />
+                    </View>
+
+                    {/* Delete Button für Bearbeitung */}
+                    {editingEntry && (
+                      <View style={styles.section}>
+                        <TouchableOpacity
+                          style={[styles.deleteButton]}
+                          onPress={() => {
+                            if (editingEntry.id) {
+                              handleDeleteEntry(editingEntry.id);
+                              setShowInputModal(false);
+                              setEditingEntry(null);
+                            }
+                          }}
+                        >
+                          <Text style={styles.deleteButtonText}>🗑️ Eintrag löschen</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+
+                  </View>
+                </TouchableOpacity>
+              </ScrollView>
+            </BlurView>
+          </View>
+
+        </Modal>
       </SafeAreaView>
+
+      {/* Splash Popup wie in daily_old.tsx */}
+      {splashVisible && (
+        <Animated.View
+          style={[styles.splashOverlay, { opacity: splashAnim }]}
+          pointerEvents="none"
+        >
+          <LinearGradient
+            colors={[splashBg, splashBg]}
+            style={StyleSheet.absoluteFillObject as any}
+          />
+          <View style={styles.splashCenterCard}>
+            <Animated.View style={[styles.splashEmojiRing, { transform: [{ scale: splashEmojiAnim }] }]}>
+              <Text style={styles.splashEmoji}>{splashEmoji}</Text>
+            </Animated.View>
+            {splashTitle ? <Text style={styles.splashTitle}>{splashTitle}</Text> : null}
+            {splashSubtitle ? <Text style={styles.splashSubtitle}>{splashSubtitle}</Text> : null}
+            {splashStatus ? <Text style={styles.splashStatus}>{splashStatus}</Text> : null}
+            {splashHint ? (
+              <View style={styles.splashHintCard}>
+                <Text style={styles.splashHintText}>♡  {splashHint}</Text>
+              </View>
+            ) : null}
+          </View>
+        </Animated.View>
+      )}
     </ThemedBackground>
   );
 }
@@ -1039,56 +1324,62 @@ const styles = StyleSheet.create({
   scrollContainer: { flex: 1 },
   scrollContent: { paddingBottom: 140, paddingHorizontal: 20 },
 
-  // Status Bar (angepasst wie QuickActionRow in daily_old.tsx)
-  statusBar: {
-    marginHorizontal: 20,
-    marginTop: 16, // Wie quickActionSection in daily_old.tsx
-    marginBottom: 8,
-  },
-  statusBarContent: {
+  // KPI glass cards (Kompakt)
+  kpiRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 20, // Mehr Padding wie QuickActionRow
+    marginTop: 6,
     paddingHorizontal: 16,
+    marginBottom: 4,
   },
-  statusMetric: {
-    alignItems: 'center',
-    flex: 1,
-    paddingVertical: 8, // Mehr Padding für bessere Proportion
+  kpiCard: {
+    width: '48%',
     borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderWidth: 1,
+    overflow: 'hidden',
+    minHeight: 60,
   },
-  statusMetricPurple: {
-    backgroundColor: 'rgba(142, 78, 198, 0.15)',
+  kpiHeaderRow: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    marginBottom: 3,
   },
-  statusMetricAmber: {
-    backgroundColor: 'rgba(255, 140, 66, 0.15)',
-  },
-  statusMetricGreen: {
-    backgroundColor: 'rgba(168, 196, 162, 0.15)',
-  },
-  statusMetricRed: {
-    backgroundColor: 'rgba(255, 155, 155, 0.15)',
-  },
-  statusValue: {
-    fontSize: 18, // Etwas größer für bessere Lesbarkeit
-    fontWeight: '800',
-    marginTop: 4,
-  },
-  statusLabel: {
-    fontSize: 12, // Etwas größer wie QuickActionRow
+  kpiTitle: { 
+    fontSize: 11, 
+    fontWeight: '600', 
     color: '#7D5A50',
-    marginTop: 2,
+    marginLeft: 4,
+  },
+  kpiValue: { 
+    fontSize: 18, 
+    fontWeight: '800', 
+    color: '#5e3db3',
+    marginTop: 1,
+    letterSpacing: -0.5,
+  },
+  kpiValueCentered: { 
+    textAlign: 'center', 
+    width: '100%' 
+  },
+  kpiSub: { 
+    marginTop: 2, 
+    fontSize: 9, 
+    color: '#7D5A50',
+    textAlign: 'center',
+    opacity: 0.8,
   },
 
   // Central Timer (Baby Blue Circle Only)
   centralTimerContainer: {
     alignItems: 'center',
-    paddingVertical: 20,
-    marginBottom: 16,
+    paddingVertical: 8,
+    marginBottom: 8,
   },
   centralContainer: {
     alignItems: 'center',
-    paddingVertical: 20,
+    paddingVertical: 8,
     position: 'relative',
   },
   // Neu: Expliziter quadratischer Container für den Kreis
@@ -1195,6 +1486,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: '#7D5A50',
+    textAlign: 'center',
+    width: '100%',
   },
 
   // Top Tabs (exakt wie daily_old.tsx)
@@ -1405,142 +1698,283 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
-  // Sleep Modal Styles
-  modalBackdrop: {
+  // Sleep Modal Styles - wie ActivityInputModal
+  modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.25)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 20,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0, 0, 0, 0.4)', // Dimming backdrop
   },
-  modalCard: {
-    padding: 24,
+  modalContent: {
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
     width: '100%',
-    borderRadius: 22,
+    height: '85%',
+    maxHeight: 700,
+    minHeight: 650,
+    overflow: 'hidden',
+    padding: 20,
+    paddingBottom: 40,
   },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#7D5A50',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  fieldRow: {
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 12,
-    marginBottom: 16,
-    paddingHorizontal: 4,
+    marginBottom: 25,
   },
-  fieldLabel: {
-    fontSize: 14,
-    color: '#7D5A50',
-    fontWeight: '700',
-    flex: 1,
-  },
-  dateButton: {
-    flexDirection: 'row',
+  headerButton: {
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
     alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderRadius: 22,
   },
-  dateButtonText: {
+  closeHeaderButtonText: {
+    fontSize: 20,
+    fontWeight: '400',
+    color: '#888888',
+  },
+  headerCenter: {
+    alignItems: 'center',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
     color: '#7D5A50',
-    fontWeight: '700',
   },
-  qualityRow: {
-    flex: 2,
+  modalSubtitle: {
+    fontSize: 14,
+    marginTop: 2,
+    color: '#A8978E',
+  },
+  saveHeaderButton: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  saveHeaderButtonText: {
+    fontSize: 22,
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+  },
+  section: {
+    marginBottom: 30,
+    width: '100%',
+    alignItems: 'center',
+  },
+  sectionTitle: {
+    marginTop: 18,
+    marginBottom: 8,
+    paddingHorizontal: 20,
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#7D5A50',
+    textAlign: 'center',
+    width: '100%',
+  },
+  optionsGrid: {
     flexDirection: 'row',
-    gap: 8,
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
+    width: '100%',
+    paddingHorizontal: 10,
   },
-  qualityPill: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.35)',
+  optionButton: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    borderRadius: 20,
+    justifyContent: 'center',
+    marginHorizontal: 5,
+    minHeight: 80,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
   },
-  qualityPillText: {
-    color: '#7D5A50',
-    fontWeight: '700',
-    fontSize: 12,
+  optionIcon: {
+    fontSize: 30,
+    marginBottom: 8,
   },
-  qualityPillTextActive: {
-    color: '#7D5A50',
+  optionLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    textAlign: 'center',
   },
-  periodRow: {
-    flex: 2,
+  timeRow: {
     flexDirection: 'row',
-    gap: 8,
-    justifyContent: 'flex-end',
+    justifyContent: 'space-between',
+    width: '90%',
+    gap: 15,
   },
-  periodPill: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.35)',
+  timeButton: {
+    flex: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    borderRadius: 15,
+    padding: 15,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
   },
-  periodPillActive: {
-    backgroundColor: 'rgba(142, 78, 198, 0.25)',
-    borderColor: 'rgba(142, 78, 198, 0.5)',
-  },
-  periodPillText: {
-    color: '#7D5A50',
-    fontWeight: '700',
+  timeLabel: {
     fontSize: 12,
+    color: '#888888',
+    fontWeight: '600',
+    marginBottom: 5,
   },
-  periodPillTextActive: {
-    color: '#7D5A50',
+  timeValue: {
+    fontSize: 16,
+    color: '#333333',
+    fontWeight: 'bold',
   },
   notesInput: {
-    flex: 1,
+    width: '90%',
     minHeight: 80,
-    borderRadius: 12,
-    padding: 12,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    color: '#7D5A50',
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    borderRadius: 15,
+    padding: 15,
+    fontSize: 16,
+    color: '#333333',
     textAlignVertical: 'top',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
   },
-  modalActions: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 20,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.15)',
-  },
-  modalButton: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 14,
-    alignItems: 'center',
-  },
-  cancelBtn: {
-    backgroundColor: 'rgba(255,255,255,0.18)',
-  },
-  saveBtn: {
-    backgroundColor: '#5E3DB3',
-  },
-  deleteBtn: {
+  deleteButton: {
     backgroundColor: '#FF6B6B',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 15,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 5,
   },
-  modalButtonText: {
-    color: '#7D5A50',
+  deleteButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  
+  // DatePicker Styles - im Modal integriert
+  datePickerContainer: {
+    marginTop: 15,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 15,
+    padding: 15,
+    width: '90%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  dateTimePicker: {
+    width: '100%',
+    backgroundColor: 'transparent',
+  },
+  datePickerActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: 10,
+  },
+  datePickerCancel: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: '#8E4EC6',
+  },
+  datePickerCancelText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+
+  // Splash Styles wie in daily_old.tsx
+  splashOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 9999,
+  },
+  splashEmoji: {
+    fontSize: 72,
+    textAlign: 'center',
+    marginBottom: 10,
+    color: '#fff',
+  },
+  splashText: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#fff',
+    textAlign: 'center',
+  },
+  splashCenterCard: {
+    width: '100%',
+    paddingHorizontal: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  splashTitle: {
+    fontSize: 34,
+    fontWeight: '800',
+    color: '#fff',
+    textAlign: 'center',
+    marginTop: 8,
+    textShadowColor: 'rgba(0,0,0,0.18)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 6,
+  },
+  splashSubtitle: {
+    marginTop: 16,
+    fontSize: 18,
+    lineHeight: 26,
+    color: 'rgba(255,255,255,0.95)',
+    textAlign: 'center',
+  },
+  splashStatus: {
+    marginTop: 30,
+    fontSize: 16,
+    color: 'rgba(255,255,255,0.9)',
+    textAlign: 'center',
+  },
+  splashHintCard: {
+    marginTop: 24,
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    borderColor: 'rgba(255,255,255,0.35)',
+    borderWidth: 1,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderRadius: 18,
+  },
+  splashHintText: {
+    color: '#fff',
+    fontSize: 16,
+    textAlign: 'center',
     fontWeight: '700',
   },
-  saveBtnText: {
-    color: '#FFFFFF',
-  },
-  deleteBtnText: {
-    color: '#FFFFFF',
+  splashEmojiRing: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.7)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.08)'
   },
 
 });

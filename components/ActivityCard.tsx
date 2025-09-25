@@ -83,6 +83,14 @@ const ActivityCard: React.FC<ActivityCardProps> = ({ entry, onDelete, onEdit }) 
       if (entry.diaper_type === 'DIRTY') return { emoji: '💩', label: 'Voll' };
       return { emoji: '💧💩', label: 'Beides' };
     }
+    if (entry.entry_type === 'sleep') {
+      // Verwende die bereits berechneten Werte aus dem Sleep-Tracker
+      if (entry.emoji && entry.label) {
+        return { emoji: entry.emoji, label: entry.label };
+      }
+      // Fallback falls die Werte nicht gesetzt sind
+      return { emoji: '💤', label: 'Schlaf' };
+    }
     return { emoji: '⭐️', label: 'Sonstiges' };
   };
 
@@ -143,6 +151,16 @@ const ActivityCard: React.FC<ActivityCardProps> = ({ entry, onDelete, onEdit }) 
       if (entry.diaper_type === 'WET') color = '#3498DB'; // Blau
       else if (entry.diaper_type === 'DIRTY') color = '#8E5A2B'; // Braun
       else if (entry.diaper_type === 'BOTH') color = '#38A169'; // Grün
+    }
+    // Sleep
+    if (entry.entry_type === 'sleep') {
+      // Bestimme Farbe basierend auf Sleep-Typ
+      const sleepType = (entry as any).sleep_type;
+      if (sleepType === 'nacht') color = '#5C6BC0'; // Lila für Nachtschlaf
+      else if (sleepType === 'mittag') color = '#FF8C42'; // Orange für Mittagsschlaf
+      else if (sleepType === 'tag') color = '#FFB74D'; // Helles Orange für Tagschlaf
+      else if (sleepType === 'nickerchen') color = '#81C784'; // Grün für Nickerchen
+      else color = '#5C6BC0'; // Standard Schlaf-Farbe
     }
     // Convert hex to rgba with given alpha
     const toRgba = (hex: string, a: number) => {

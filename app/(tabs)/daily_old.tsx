@@ -1023,10 +1023,10 @@ export default function DailyScreen() {
             <>
               <QuickActionRow />
 
-              <Text style={[s.sectionTitle, { textAlign: 'center' }]}>Kennzahlen</Text>
+              <Text style={s.sectionTitle}>Kennzahlen</Text>
               <KPISection />
 
-            <Text style={[s.sectionTitle, { marginTop: 4, textAlign: 'center' }]}>Timeline</Text>
+              <Text style={s.sectionTitle}>Timeline</Text>
 
               <View style={s.entriesSection}>
                 {entries.map((item) => (
@@ -1078,7 +1078,7 @@ export default function DailyScreen() {
       {splashVisible && (
         <Animated.View
           style={[s.splashOverlay, { opacity: splashAnim }]}
-          pointerEvents="auto"
+          pointerEvents="none"
         >
           <LinearGradient
             colors={[splashBg, splashBg]}
@@ -1088,7 +1088,7 @@ export default function DailyScreen() {
             <Animated.View style={[s.splashEmojiRing, { transform: [{ scale: splashEmojiAnim }] }]}>
               <Text style={s.splashEmoji}>{splashEmoji}</Text>
             </Animated.View>
-            {!!s.splashTitle && <Text style={s.splashTitle}>{splashTitle}</Text>}
+            {splashTitle ? <Text style={s.splashTitle}>{splashTitle}</Text> : null}
             {splashSubtitle ? <Text style={s.splashSubtitle}>{splashSubtitle}</Text> : null}
             {splashStatus ? <Text style={s.splashStatus}>{splashStatus}</Text> : null}
             {splashHint ? (
@@ -1116,6 +1116,8 @@ const s = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: '#7D5A50',
+    textAlign: 'center',
+    width: '100%',
   },
 
   // Glass base
