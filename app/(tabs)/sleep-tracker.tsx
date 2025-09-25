@@ -972,30 +972,317 @@ export default function SleepTrackerScreen() {
     }
   };
 
-  const NextSleepWindow = () => {
-    const nextWindow = getNextSleepWindow();
-    
+  // Wochenansicht Component (Design Guide konform)
+  const WeekView = () => {
+    const weekDays = getWeekDays(new Date());
+    const weekStart = getWeekStart(new Date());
+    const weekEnd = getWeekEnd(new Date());
+
+    // Gruppiere Daten nach Tagen
+    const getEntriesForDay = (date: Date) => {
+      const dateStr = date.toISOString().split('T')[0];
+      return sleepEntries.filter(entry => {
+        const entryDateStr = new Date(entry.start_time).toISOString().split('T')[0];
+        return entryDateStr === dateStr;
+      });
+    };
+
+    const getDayStats = (date: Date) => {
+      const dayEntries = getEntriesForDay(date);
+      const nightSleep = dayEntries.filter(e => e.period === 'night');
+      const daySleep = dayEntries.filter(e => e.period === 'day');
+      const totalMinutes = dayEntries.reduce((sum, e) => sum + (e.duration_minutes || 0), 0);
+      const nightMinutes = nightSleep.reduce((sum, e) => sum + (e.duration_minutes || 0), 0);
+      const dayMinutes = daySleep.reduce((sum, e) => sum + (e.duration_minutes || 0), 0);
+
+      return { totalMinutes, nightMinutes, dayMinutes, count: dayEntries.length };
+    };
+
+    // Berechne Max-Höhe für Balkendiagramm
+    const maxMinutes = Math.max(...weekDays.map(day => getDayStats(day).totalMinutes), 480); // Min 8h
+
     return (
-      <View style={styles.liquidGlassWrapper}>
-        <BlurView intensity={22} tint="light" style={styles.liquidGlassBackground}>
-          <View style={[styles.liquidGlassContainer, styles.nextSleepCard]}>
-            <View style={styles.nextSleepContent}>
-              <View style={[styles.iconContainer, { backgroundColor: `${nextWindow.color === '#8E4EC6' ? 'rgba(142, 78, 198, 0.9)' : nextWindow.color === '#FF8C42' ? 'rgba(255, 140, 66, 0.9)' : 'rgba(255, 184, 77, 0.9)'}`, borderRadius: 30, padding: 8, marginBottom: 0, marginRight: 16, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.6)', shadowColor: 'rgba(255, 255, 255, 0.3)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.8, shadowRadius: 2, elevation: 4 }]}>
-                <IconSymbol name={nextWindow.icon as any} size={28} color="#FFFFFF" />
-              </View>
-              <View style={styles.nextSleepInfo}>
-                <Text style={[styles.nextSleepType, { color: '#6B4C3B', fontSize: 18, fontWeight: '700' }]}>{nextWindow.type}</Text>
-                <Text style={[styles.nextSleepTime, { color: '#7D5A50', fontSize: 16, fontWeight: '600' }]}>{nextWindow.time}</Text>
-              </View>
+      <View style={styles.weekViewContainer}>
+        {/* Week Navigation */}
+        <View style={styles.weekNavigationContainer}>
+          <TouchableOpacity style={styles.weekNavButton}>
+            <Text style={styles.weekNavButtonText}>‹</Text>
+          </TouchableOpacity>
+
+          <View style={styles.weekHeaderCenter}>
+            <Text style={styles.weekHeaderTitle}>Wochenübersicht</Text>
+            <Text style={styles.weekHeaderSubtitle}>
+              {weekStart.toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })} - {weekEnd.toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })}
+            </Text>
+          </View>
+
+          <TouchableOpacity style={styles.weekNavButton}>
+            <Text style={styles.weekNavButtonText}>›</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Balkendiagramm - Design Guide konform */}
+        <View style={styles.chartContainer}>
+          <Text style={styles.chartTitle}>Schlafzeiten dieser Woche</Text>
+          <View style={styles.chartArea}>
+            {weekDays.map((day, index) => {
+              const stats = getDayStats(day);
+              const totalHeight = maxMinutes > 0 ? (stats.totalMinutes / maxMinutes) * 120 : 0;
+              const nightHeight = stats.nightMinutes > 0 ? (stats.nightMinutes / maxMinutes) * 120 : 0;
+              const dayHeight = stats.dayMinutes > 0 ? (stats.dayMinutes / maxMinutes) * 120 : 0;
+
+              return (
+                <View key={index} style={styles.chartColumn}>
+                  <View style={styles.chartBarContainer}>
+                    {dayHeight > 0 && (
+                      <View style={[styles.chartBar, styles.chartBarDay, { height: dayHeight }]} />
+                    )}
+                    {nightHeight > 0 && (
+                      <View style={[styles.chartBar, styles.chartBarNight, { height: nightHeight }]} />
+                    )}
+                  </View>
+                  <Text style={styles.chartLabel}>
+                    {['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'][index]}
+                  </Text>
+                  <Text style={styles.chartValue}>
+                    {stats.totalMinutes > 0 ? minutesToHMM(stats.totalMinutes) : '0m'}
+                  </Text>
+                </View>
+              );
+            })}
+          </View>
+        </View>
+
+        {/* Wochenzusammenfassung - Design Guide konform */}
+        <LiquidGlassCard style={styles.weekSummaryCard}>
+          <Text style={styles.summaryTitle}>Wochenzusammenfassung</Text>
+          <View style={styles.summaryStats}>
+            <View style={styles.statItem}>
+              <Text style={styles.statEmoji}>🌙</Text>
+              <Text style={styles.statValue}>{Math.round(sleepEntries.filter(e => e.period === 'night').reduce((sum, e) => sum + (e.duration_minutes || 0), 0) / 60)}h</Text>
+              <Text style={styles.statLabel}>Nachtschlaf</Text>
+            </View>
+            <View style={styles.statItem}>
+              <Text style={styles.statEmoji}>☀️</Text>
+              <Text style={styles.statValue}>{Math.round(sleepEntries.filter(e => e.period === 'day').reduce((sum, e) => sum + (e.duration_minutes || 0), 0) / 60)}h</Text>
+              <Text style={styles.statLabel}>Tagschlaf</Text>
+            </View>
+            <View style={styles.statItem}>
+              <Text style={styles.statEmoji}>⭐</Text>
+              <Text style={styles.statValue}>{Math.round((sleepEntries.reduce((sum, e) => sum + (e.duration_minutes || 0), 0) / sleepEntries.length) / 60)}h</Text>
+              <Text style={styles.statLabel}>Ø pro Tag</Text>
             </View>
           </View>
-        </BlurView>
+        </LiquidGlassCard>
+
+        {/* Trend-Analyse - Design Guide konform */}
+        <LiquidGlassCard style={styles.trendCard}>
+          <Text style={styles.trendTitle}>Trend-Analyse</Text>
+          <View style={styles.trendContent}>
+            <View style={styles.trendItem}>
+              <Text style={styles.trendEmoji}>📈</Text>
+              <Text style={styles.trendText}>Gute Schlafqualität</Text>
+            </View>
+            <View style={styles.trendItem}>
+              <Text style={styles.trendEmoji}>😴</Text>
+              <Text style={styles.trendText}>Stabile Einschlafzeiten</Text>
+            </View>
+          </View>
+        </LiquidGlassCard>
+
+        {/* Highlight-Karten - Design Guide konform */}
+        <View style={styles.highlightsContainer}>
+          <LiquidGlassCard style={styles.highlightCard}>
+            <View style={styles.highlightContent}>
+              <Text style={styles.highlightEmoji}>🏆</Text>
+              <View style={styles.highlightInfo}>
+                <Text style={styles.highlightLabel}>Längster Schlaf</Text>
+                <Text style={styles.highlightValue}>
+                  {Math.round(Math.max(...sleepEntries.map(e => e.duration_minutes || 0)) / 60)}h {Math.max(...sleepEntries.map(e => e.duration_minutes || 0)) % 60}m
+                </Text>
+              </View>
+            </View>
+          </LiquidGlassCard>
+
+          <LiquidGlassCard style={styles.highlightCard}>
+            <View style={styles.highlightContent}>
+              <Text style={styles.highlightEmoji}>⭐</Text>
+              <View style={styles.highlightInfo}>
+                <Text style={styles.highlightLabel}>Durchschnitt</Text>
+                <Text style={styles.highlightValue}>
+                  {Math.round((sleepEntries.reduce((sum, e) => sum + (e.duration_minutes || 0), 0) / sleepEntries.length) / 60)}h {Math.round((sleepEntries.reduce((sum, e) => sum + (e.duration_minutes || 0), 0) / sleepEntries.length) % 60)}m
+                </Text>
+              </View>
+            </View>
+          </LiquidGlassCard>
+        </View>
       </View>
     );
   };
 
+  // Monatsansicht Component (Design Guide konform)
+  const MonthView = () => {
+    const currentDate = new Date();
+    const monthStart = getMonthStart(currentDate);
+    const monthEnd = getMonthEnd(currentDate);
+    const daysInMonth = getDaysInMonth(currentDate);
 
+    // Erstelle Kalender-Grid
+    const getCalendarDays = () => {
+      const days = [];
+      const firstDayOfWeek = monthStart.getDay();
+      const startOffset = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1; // Montag als erster Tag
 
+      // Füge leere Tage hinzu
+      for (let i = 0; i < startOffset; i++) {
+        days.push(null);
+      }
+
+      // Füge Tage des Monats hinzu
+      for (let day = 1; day <= daysInMonth; day++) {
+        days.push(new Date(currentDate.getFullYear(), currentDate.getMonth(), day));
+      }
+
+      return days;
+    };
+
+    const calendarDays = getCalendarDays();
+
+    const getEntriesForDate = (date: Date) => {
+      if (!date) return [];
+      const dateStr = date.toISOString().split('T')[0];
+      return sleepEntries.filter(entry => {
+        const entryDateStr = new Date(entry.start_time).toISOString().split('T')[0];
+        return entryDateStr === dateStr;
+      });
+    };
+
+    const getDayScore = (date: Date) => {
+      const dayEntries = getEntriesForDate(date);
+      const totalMinutes = dayEntries.reduce((sum, e) => sum + (e.duration_minutes || 0), 0);
+
+      if (totalMinutes >= 480) return 'excellent'; // 8h+
+      if (totalMinutes >= 360) return 'good';      // 6h+
+      if (totalMinutes >= 240) return 'okay';      // 4h+
+      return 'poor';                              // <4h
+    };
+
+    const getScoreColor = (score: string) => {
+      switch (score) {
+        case 'excellent': return '#38A169';
+        case 'good': return '#8E4EC6';
+        case 'okay': return '#F5A623';
+        case 'poor': return '#E53E3E';
+        default: return '#A0AEC0';
+      }
+    };
+
+    return (
+      <View style={styles.monthViewContainer}>
+        {/* Monats-Navigation */}
+        <View style={styles.monthNavigationContainer}>
+          <TouchableOpacity style={styles.monthNavButton}>
+            <Text style={styles.monthNavButtonText}>‹</Text>
+          </TouchableOpacity>
+
+          <View style={styles.monthHeaderCenter}>
+            <Text style={styles.monthHeaderTitle}>
+              {currentDate.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' })}
+            </Text>
+          </View>
+
+          <TouchableOpacity style={styles.monthNavButton}>
+            <Text style={styles.monthNavButtonText}>›</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Kalender-Grid */}
+        <View style={styles.calendarContainer}>
+          {/* Wochentags-Header */}
+          <View style={styles.weekdayHeader}>
+            {['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map((day) => (
+              <Text key={day} style={styles.weekdayLabel}>{day}</Text>
+            ))}
+          </View>
+
+          {/* Kalender-Tage */}
+          <View style={styles.calendarGrid}>
+            {calendarDays.map((date, index) => (
+              <View key={index} style={styles.calendarDay}>
+                {date ? (
+                  <TouchableOpacity style={[styles.calendarDayButton, {
+                    backgroundColor: getEntriesForDate(date).length > 0
+                      ? getScoreColor(getDayScore(date))
+                      : 'rgba(255,255,255,0.1)'
+                  }]}>
+                    <Text style={styles.calendarDayNumber}>
+                      {date.getDate()}
+                    </Text>
+                    {getEntriesForDate(date).length > 0 && (
+                      <Text style={styles.calendarDayIndicator}>
+                        {getEntriesForDate(date).length}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                ) : (
+                  <View style={styles.calendarDayEmpty} />
+                )}
+              </View>
+            ))}
+          </View>
+        </View>
+
+        {/* Monatsstatistiken */}
+        <LiquidGlassCard style={styles.monthSummaryCard}>
+          <Text style={styles.summaryTitle}>Monatsübersicht</Text>
+          <View style={styles.summaryStats}>
+            <View style={styles.statItem}>
+              <Text style={styles.statEmoji}>📊</Text>
+              <Text style={styles.statValue}>{sleepEntries.length}</Text>
+              <Text style={styles.statLabel}>Einträge</Text>
+            </View>
+            <View style={styles.statItem}>
+              <Text style={styles.statEmoji}>⏰</Text>
+              <Text style={styles.statValue}>{Math.round(sleepEntries.reduce((sum, e) => sum + (e.duration_minutes || 0), 0) / sleepEntries.length / 60)}h</Text>
+              <Text style={styles.statLabel}>Ø pro Tag</Text>
+            </View>
+            <View style={styles.statItem}>
+              <Text style={styles.statEmoji}>🏆</Text>
+              <Text style={styles.statValue}>{Math.round(Math.max(...sleepEntries.map(e => e.duration_minutes || 0)) / 60)}h</Text>
+              <Text style={styles.statLabel}>Längster Schlaf</Text>
+            </View>
+          </View>
+        </LiquidGlassCard>
+
+        {/* Monats-Highlights */}
+        <View style={styles.highlightsContainer}>
+          <LiquidGlassCard style={styles.highlightCard}>
+            <View style={styles.highlightContent}>
+              <Text style={styles.highlightEmoji}>🌙</Text>
+              <View style={styles.highlightInfo}>
+                <Text style={styles.highlightLabel}>Nachtschlaf</Text>
+                <Text style={styles.highlightValue}>
+                  {Math.round(sleepEntries.filter(e => e.period === 'night').reduce((sum, e) => sum + (e.duration_minutes || 0), 0) / sleepEntries.filter(e => e.period === 'night').length / 60)}h
+                </Text>
+              </View>
+            </View>
+          </LiquidGlassCard>
+
+          <LiquidGlassCard style={styles.highlightCard}>
+            <View style={styles.highlightContent}>
+              <Text style={styles.highlightEmoji}>☀️</Text>
+              <View style={styles.highlightInfo}>
+                <Text style={styles.highlightLabel}>Tagschlaf</Text>
+                <Text style={styles.highlightValue}>
+                  {Math.round(sleepEntries.filter(e => e.period === 'day').reduce((sum, e) => sum + (e.duration_minutes || 0), 0) / Math.max(sleepEntries.filter(e => e.period === 'day').length, 1) / 60)}h
+                </Text>
+              </View>
+            </View>
+          </LiquidGlassCard>
+        </View>
+      </View>
+    );
+  };
 
   return (
     <ThemedBackground style={styles.backgroundImage}>
@@ -1025,51 +1312,59 @@ export default function SleepTrackerScreen() {
             />
           }
         >
-          {/* Central Timer */}
-          <Animated.View style={{ opacity: appearAnim }}>
-            <CentralTimer />
-          </Animated.View>
+          {selectedTab === 'week' ? (
+            <WeekView />
+          ) : selectedTab === 'month' ? (
+            <MonthView />
+          ) : (
+            <>
+              {/* Central Timer - nur in Tag-Ansicht */}
+              <Animated.View style={{ opacity: appearAnim }}>
+                <CentralTimer />
+              </Animated.View>
 
-          {/* Schlaferfassung Section */}
-          <Text style={styles.sectionTitle}>Schlaferfassung</Text>
+              {/* Schlaferfassung Section - nur in Tag-Ansicht */}
+              <Text style={styles.sectionTitle}>Schlaferfassung</Text>
 
-          {/* Action Buttons */}
-          <ActionButtons />
+              {/* Action Buttons - nur in Tag-Ansicht */}
+              <ActionButtons />
 
-          {/* Timeline Section */}
-          <Text style={styles.sectionTitle}>Timeline</Text>
+              {/* Timeline Section - nur in Tag-Ansicht */}
+              <Text style={styles.sectionTitle}>Timeline</Text>
 
-          {/* Sleep Entries - Timeline Style like daily_old.tsx */}
-          <View style={styles.entriesSection}>
-            {sleepEntries.map((entry, index) => (
-                <ActivityCard
-                  key={entry.id || index}
-                  entry={convertSleepToDailyEntry(entry)}
-                  onDelete={handleDeleteEntry}
-                  onEdit={(entry) => {
-                    setEditingEntry(entry as any);
-                    setSelectedActivityType('feeding'); // Sleep wird als feeding behandelt
-                    setSelectedSubType('feeding_bottle'); // Standard subtype
-                    setShowInputModal(true);
-                  }}
-                />
-            ))}
-          {sleepEntries.length === 0 && !isLoading && (
-            <LiquidGlassCard style={styles.emptyState}>
-              <Text style={styles.emptyEmoji}>💤</Text>
-              <Text style={styles.emptyTitle}>Noch keine Schlafphasen</Text>
-              <Text style={styles.emptySubtitle}>Starte den ersten Schlaf-Eintrag!</Text>
-                <TouchableOpacity style={[styles.actionButton, styles.manualButton, { marginTop: 16 }]} onPress={() => {
-                  setEditingEntry(null);
-                  setSelectedActivityType('feeding');
-                  setSelectedSubType(null);
-                  setShowInputModal(true);
-                }}>
-                <Text style={styles.actionButtonText}>Manuell hinzufügen</Text>
-              </TouchableOpacity>
-            </LiquidGlassCard>
+              {/* Sleep Entries - Timeline Style like daily_old.tsx - nur in Tag-Ansicht */}
+              <View style={styles.entriesSection}>
+                {sleepEntries.map((entry, index) => (
+                    <ActivityCard
+                      key={entry.id || index}
+                      entry={convertSleepToDailyEntry(entry)}
+                      onDelete={handleDeleteEntry}
+                      onEdit={(entry) => {
+                        setEditingEntry(entry as any);
+                        setSelectedActivityType('feeding'); // Sleep wird als feeding behandelt
+                        setSelectedSubType('feeding_bottle'); // Standard subtype
+                        setShowInputModal(true);
+                      }}
+                    />
+                ))}
+              {sleepEntries.length === 0 && !isLoading && (
+                <LiquidGlassCard style={styles.emptyState}>
+                  <Text style={styles.emptyEmoji}>💤</Text>
+                  <Text style={styles.emptyTitle}>Noch keine Schlafphasen</Text>
+                  <Text style={styles.emptySubtitle}>Starte den ersten Schlaf-Eintrag!</Text>
+                    <TouchableOpacity style={[styles.actionButton, styles.manualButton, { marginTop: 16 }]} onPress={() => {
+                      setEditingEntry(null);
+                      setSelectedActivityType('feeding');
+                      setSelectedSubType(null);
+                      setShowInputModal(true);
+                    }}>
+                    <Text style={styles.actionButtonText}>Manuell hinzufügen</Text>
+                  </TouchableOpacity>
+                </LiquidGlassCard>
+              )}
+              </View>
+            </>
           )}
-          </View>
         </ScrollView>
 
         {/* Sleep Input Modal direkt hier rendern */}
@@ -1975,6 +2270,300 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.08)'
+  },
+
+  // Wochen- und Monatsansicht Styles (Design Guide konform)
+  weekViewContainer: {
+    paddingHorizontal: 16,      // Design Guide konform: gleicher Abstand wie KPI rows
+    paddingBottom: 20,
+  },
+  monthViewContainer: {
+    paddingHorizontal: 16,      // Design Guide konform: gleicher Abstand wie KPI rows
+    paddingBottom: 20,
+  },
+
+  // Navigation Styles
+  weekNavigationContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+    paddingHorizontal: 8,
+  },
+  monthNavigationContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+    paddingHorizontal: 8,
+  },
+  weekNavButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  monthNavButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  weekNavButtonText: {
+    fontSize: 24,
+    color: '#8E4EC6',
+    fontWeight: 'bold',
+  },
+  monthNavButtonText: {
+    fontSize: 24,
+    color: '#8E4EC6',
+    fontWeight: 'bold',
+  },
+  weekHeaderCenter: {
+    flex: 1,
+    alignItems: 'center',
+    marginHorizontal: 16,
+  },
+  monthHeaderCenter: {
+    flex: 1,
+    alignItems: 'center',
+    marginHorizontal: 16,
+  },
+  weekHeaderTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#7D5A50',
+    marginBottom: 4,
+  },
+  monthHeaderTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#7D5A50',
+    marginBottom: 4,
+  },
+  weekHeaderSubtitle: {
+    fontSize: 12,
+    color: '#7D5A50',
+  },
+  monthHeaderSubtitle: {
+    fontSize: 12,
+    color: '#7D5A50',
+  },
+
+  // Chart Styles
+  chartContainer: {
+    marginBottom: 20,
+  },
+  chartTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#7D5A50',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  chartArea: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+    height: 140,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+  },
+  chartColumn: {
+    flex: 1,
+    alignItems: 'center',
+    marginHorizontal: 2,
+  },
+  chartBarContainer: {
+    flex: 1,
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  chartBar: {
+    width: 8,
+    borderRadius: 4,
+    marginHorizontal: 1,
+    minHeight: 2,
+  },
+  chartBarDay: {
+    backgroundColor: '#FF8C42', // Orange für Tagschlaf
+  },
+  chartBarNight: {
+    backgroundColor: '#8E4EC6', // Lila für Nachtschlaf
+  },
+  chartLabel: {
+    fontSize: 10,
+    color: '#7D5A50',
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  chartValue: {
+    fontSize: 8,
+    color: '#A8978E',
+    fontWeight: '500',
+  },
+
+  // Summary Cards
+  weekSummaryCard: {
+    padding: 20,
+    marginHorizontal: 4,
+    marginBottom: 16,
+  },
+  monthSummaryCard: {
+    padding: 20,
+    marginHorizontal: 4,
+    marginBottom: 16,
+  },
+  summaryTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#7D5A50',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  summaryStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  statItem: {
+    alignItems: 'center',
+  },
+  statEmoji: {
+    fontSize: 24,
+    marginBottom: 8,
+  },
+  statValue: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#7D5A50',
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 12,
+    color: '#7D5A50',
+  },
+
+  // Trend Card
+  trendCard: {
+    padding: 20,
+    marginHorizontal: 4,
+    marginBottom: 16,
+  },
+  trendTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#7D5A50',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  trendContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  trendItem: {
+    alignItems: 'center',
+    flexDirection: 'row',
+  },
+  trendEmoji: {
+    fontSize: 20,
+    marginRight: 8,
+  },
+  trendText: {
+    fontSize: 12,
+    color: '#7D5A50',
+    fontWeight: '600',
+  },
+
+  // Calendar Styles
+  calendarContainer: {
+    marginBottom: 20,
+  },
+  weekdayHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+    paddingHorizontal: 8,
+  },
+  weekdayLabel: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#7D5A50',
+  },
+  calendarGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  calendarDay: {
+    width: `${100 / 7}%`,
+    padding: 2,
+  },
+  calendarDayButton: {
+    aspectRatio: 1,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 36,
+  },
+  calendarDayEmpty: {
+    aspectRatio: 1,
+  },
+  calendarDayNumber: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  calendarDayIndicator: {
+    fontSize: 8,
+    color: '#FFFFFF',
+    marginTop: 2,
+    opacity: 0.8,
+  },
+
+  // Highlight Cards
+  highlightsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+  },
+  highlightCard: {
+    width: '48%',
+    padding: 16,
+    marginHorizontal: 2,
+  },
+  highlightContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  highlightEmoji: {
+    fontSize: 24,
+    marginRight: 12,
+  },
+  highlightInfo: {
+    flex: 1,
+  },
+  highlightLabel: {
+    fontSize: 12,
+    color: '#7D5A50',
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  highlightValue: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#8E4EC6',
   },
 
 });
