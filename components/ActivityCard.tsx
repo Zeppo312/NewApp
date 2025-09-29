@@ -14,9 +14,10 @@ interface ActivityCardProps {
   entry: DailyEntry;
   onDelete: (id: string) => void;
   onEdit?: (entry: DailyEntry) => void;
+  marginHorizontal?: number;
 }
 
-const ActivityCard: React.FC<ActivityCardProps> = ({ entry, onDelete, onEdit }) => {
+const ActivityCard: React.FC<ActivityCardProps> = ({ entry, onDelete, onEdit, marginHorizontal = 16 }) => {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const [expanded, setExpanded] = useState(false);
@@ -244,7 +245,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({ entry, onDelete, onEdit }) 
           delayPressIn={0}
         >
           {(() => { const tint = getTypeTint(); return (
-          <View style={[styles.card, expanded && styles.expandedCard, { borderColor: tint.border }] }>
+          <View style={[styles.card, expanded && styles.expandedCard, { borderColor: tint.border, marginHorizontal }] }>
             <BlurView intensity={25} tint={colorScheme === 'dark' ? 'dark' : 'light'} style={StyleSheet.absoluteFillObject} />
             <View style={[StyleSheet.absoluteFillObject as any, { backgroundColor: tint.bg }]} />
             <LinearGradient colors={[ 'rgba(255,255,255,0.18)', 'rgba(255,255,255,0.10)' ]} style={StyleSheet.absoluteFillObject} />
@@ -313,7 +314,6 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: 18,
     padding: 14,
-    marginHorizontal: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.12,

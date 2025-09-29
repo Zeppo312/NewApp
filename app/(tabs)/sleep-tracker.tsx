@@ -38,6 +38,31 @@ import type { ViewStyle } from 'react-native';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
+// Einheitlicher horizontaler Innenabstand für konsistente Container-Breiten
+const LAYOUT_PAD = 20;
+
+// Einheitliche Vertikalabstände für Abschnittsüberschriften
+const SECTION_GAP_TOP = 20;
+const SECTION_GAP_BOTTOM = 12;
+
+// Match Timeline (ActivityCard marginHorizontal=8 -> 16px gesamt)
+const TIMELINE_INSET = 8;
+const contentWidth = screenWidth - 2 * LAYOUT_PAD;
+
+const COLS = 7;
+const GUTTER = 4; // weniger Abstand zwischen Spalten => mehr Netto-Breite
+const COL_WIDTH = Math.floor((contentWidth - (COLS - 1) * GUTTER) / COLS);
+const totalGutters = (COLS - 1) * GUTTER;
+const colsWidth = COLS * COL_WIDTH;
+const leftover = contentWidth - (colsWidth + totalGutters); // 0..(COLS-1)
+
+// Week-Chart spezifische Konstanten (wie Timeline)
+const WEEK_CONTENT_WIDTH = contentWidth - TIMELINE_INSET * 2;
+const WEEK_COL_WIDTH   = Math.floor((WEEK_CONTENT_WIDTH - (COLS - 1) * GUTTER) / COLS);
+const WEEK_COLS_WIDTH  = COLS * WEEK_COL_WIDTH;
+const WEEK_LEFTOVER    = WEEK_CONTENT_WIDTH - (WEEK_COLS_WIDTH + totalGutters);
+const MAX_BAR_H = 140; // Höhe der Balkenfläche (mehr Luft)
+
 // Reusable GlassCard using expo-blur
 function GlassCard({
   children,
@@ -382,11 +407,12 @@ export default function SleepTrackerScreen() {
         await loadSleepData();
 
         // Splash anzeigen
-        const period = new Date().getHours() >= 20 || new Date().getHours() < 10 ? 'night' : 'day';
+        const currentPeriod: SleepPeriod =
+          new Date().getHours() >= 20 || new Date().getHours() < 10 ? 'night' : 'day';
         showSuccessSplash(
           '#87CEEB', // Baby blue
-          period === 'night' ? '🌙' : '😴',
-          period === 'night' ? 'sleep_start_night' : 'sleep_start_day'
+          currentPeriod === 'night' ? '🌙' : '😴',
+          currentPeriod === 'night' ? 'sleep_start_night' : 'sleep_start_day'
         );
       } else {
         Alert.alert('Fehler', error || 'Schlaftracking konnte nicht gestartet werden');
@@ -776,7 +802,7 @@ export default function SleepTrackerScreen() {
           <View style={styles.kpiHeaderRow}>
             <IconSymbol name="moon.fill" size={12} color="#8E4EC6" />
             <Text style={styles.kpiTitle}>Heute</Text>
-          </View>
+        </View>
           <Text style={[styles.kpiValue, styles.kpiValueCentered]}>{minutesToHMM(stats.totalMinutes)}</Text>
         </GlassCard>
 
@@ -789,10 +815,10 @@ export default function SleepTrackerScreen() {
           <View style={styles.kpiHeaderRow}>
             <IconSymbol name="zzz" size={12} color="#FF8C42" />
             <Text style={styles.kpiTitle}>Naps</Text>
-          </View>
+        </View>
           <Text style={[styles.kpiValue, styles.kpiValueCentered]}>{stats.napsCount}</Text>
         </GlassCard>
-      </View>
+        </View>
 
       <View style={styles.kpiRow}>
         <GlassCard
@@ -804,7 +830,7 @@ export default function SleepTrackerScreen() {
           <View style={styles.kpiHeaderRow}>
             <IconSymbol name="clock.fill" size={12} color="#A8C4A2" />
             <Text style={styles.kpiTitle}>Längster</Text>
-          </View>
+        </View>
           <Text style={[styles.kpiValue, styles.kpiValueCentered]}>{minutesToHMM(stats.longestStretch)}</Text>
         </GlassCard>
 
@@ -817,7 +843,7 @@ export default function SleepTrackerScreen() {
           <View style={styles.kpiHeaderRow}>
             <IconSymbol name="chart.line.uptrend.xyaxis" size={12} color="#FF9B9B" />
             <Text style={styles.kpiTitle}>Score</Text>
-          </View>
+      </View>
           <Text style={[styles.kpiValue, styles.kpiValueCentered]}>{stats.score}%</Text>
         </GlassCard>
       </View>
@@ -1008,29 +1034,46 @@ export default function SleepTrackerScreen() {
     const weekStart = getWeekStart(currentDate);
     const weekEnd = getWeekEnd(currentDate);
 
-    // Gruppiere Daten nach Tagen
-    const getEntriesForDay = (date: Date) => {
-      const dateStr = date.toISOString().split('T')[0];
-      return sleepEntries.filter(entry => {
-        const entryDateStr = new Date(entry.start_time).toISOString().split('T')[0];
-        return entryDateStr === dateStr;
-      });
+    // Hilfsfunktionen (lokaler Tag, kein UTC-Shift)
+    const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const endOfDay   = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
+
+    // Minuten-Überlappung zweier Zeitintervalle
+    const overlapMinutes = (aStart: Date, aEnd: Date, bStart: Date, bEnd: Date) => {
+      const ms = Math.max(0, Math.min(+aEnd, +bEnd) - Math.max(+aStart, +bStart));
+      return Math.round(ms / 60000);
     };
 
+    // Berechne Schlaf-Minuten für genau diesen Kalendertag (00:00–24:00 lokal)
     const getDayStats = (date: Date) => {
-      const dayEntries = getEntriesForDay(date);
-      const nightSleep = dayEntries.filter(e => e.period === 'night');
-      const daySleep = dayEntries.filter(e => e.period === 'day');
-      const totalMinutes = dayEntries.reduce((sum, e) => sum + (e.duration_minutes || 0), 0);
-      const nightMinutes = nightSleep.reduce((sum, e) => sum + (e.duration_minutes || 0), 0);
-      const dayMinutes = daySleep.reduce((sum, e) => sum + (e.duration_minutes || 0), 0);
+      const dayStart = startOfDay(date);
+      const dayEnd   = endOfDay(date);
 
-      return { totalMinutes, nightMinutes, dayMinutes, count: dayEntries.length };
+      let totalMinutes = 0;
+      let nightMinutes = 0;
+      let dayMinutes   = 0;
+
+      for (const e of sleepEntries) {
+        const eStart = new Date(e.start_time);
+        const eEnd   = e.end_time ? new Date(e.end_time) : new Date(); // laufender Schlaf bis jetzt
+
+        const mins = overlapMinutes(eStart, eEnd, dayStart, dayEnd);
+        if (mins > 0) {
+          totalMinutes += mins;
+          if (e.period === 'night') {
+            nightMinutes += mins;
+          } else {
+            dayMinutes += mins;
+          }
+        }
+      }
+      return { totalMinutes, nightMinutes, dayMinutes, count: totalMinutes > 0 ? 1 : 0 };
     };
 
     // Berechne Max-Höhe für Balkendiagramm
-    const maxMinutes = Math.max(...weekDays.map((day: Date) => getDayStats(day).totalMinutes), 480); // Min 8h
-
+    const dayTotals = weekDays.map((day: Date) => getDayStats(day).totalMinutes);
+    const maxMinutes = Math.max(...dayTotals, 480); // Min 8h für vernünftige Skala
+    
     return (
       <View style={styles.weekViewContainer}>
         {/* Week Navigation - Design Guide konform */}
@@ -1044,84 +1087,103 @@ export default function SleepTrackerScreen() {
             <Text style={styles.weekHeaderSubtitle}>
               {weekStart.toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })} - {weekEnd.toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })}
             </Text>
-          </View>
+              </View>
 
           <TouchableOpacity style={styles.weekNavButton}>
             <Text style={styles.weekNavButtonText}>›</Text>
           </TouchableOpacity>
-        </View>
+              </View>
 
-        {/* Balkendiagramm - Design Guide konform */}
-        <View style={styles.chartContainer}>
+        {/* Balkendiagramm - Design Guide konform mit Liquid Glass */}
+        <LiquidGlassCard style={styles.chartGlassCard}>
           <Text style={styles.chartTitle}>Schlafzeiten dieser Woche</Text>
-          <View style={styles.chartArea}>
-            {weekDays.map((day: Date, index: number) => {
+
+          {/* feste Gesamtbreite = WEEK_CONTENT_WIDTH (wie Timeline) */}
+          <View style={[styles.chartArea, { width: WEEK_CONTENT_WIDTH, alignSelf: 'center' }]}>
+            {weekDays.map((day: Date, i: number) => {
               const stats = getDayStats(day);
-              const totalHeight = maxMinutes > 0 ? (stats.totalMinutes / maxMinutes) * 120 : 0;
-              const nightHeight = stats.nightMinutes > 0 ? (stats.nightMinutes / maxMinutes) * 120 : 0;
-              const dayHeight = stats.dayMinutes > 0 ? (stats.dayMinutes / maxMinutes) * 120 : 0;
+              // Sehr große Werte deckeln (z. B. „34h“)
+              const minutesCapped = Math.min(stats.totalMinutes, 24 * 60);
+              const totalH = minutesCapped ? (minutesCapped / maxMinutes) * MAX_BAR_H : 0;
+              const hours = Math.round(stats.totalMinutes / 60);
+
+              // Pixelgenaue Spaltenbreite für Week-Chart
+              const extra = i < WEEK_LEFTOVER ? 1 : 0;
 
               return (
-                <View key={index} style={styles.chartColumn}>
-                  <View style={styles.chartBarContainer}>
-                    {dayHeight > 0 && (
-                      <View style={[styles.chartBar, styles.chartBarDay, { height: dayHeight }]} />
-                    )}
-                    {nightHeight > 0 && (
-                      <View style={[styles.chartBar, styles.chartBarNight, { height: nightHeight }]} />
-                    )}
+                <View
+                  key={i}
+                  style={{
+                    width: WEEK_COL_WIDTH + extra,
+                    marginRight: i < (COLS - 1) ? GUTTER : 0,
+                    alignItems: 'center',
+                  }}
+                >
+                  <View style={[styles.chartBarContainer, { width: WEEK_COL_WIDTH + extra }]}>
+                    {totalH > 0 && <View
+                      style={[
+                        styles.chartBar,
+                        styles.chartBarTotal,
+                        { height: totalH, width: Math.max(10, Math.round(WEEK_COL_WIDTH * 0.66)) }
+                      ]}
+                    />}
                   </View>
-                  <Text style={styles.chartLabel}>
-                    {['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'][index]}
-                  </Text>
-                  <Text style={styles.chartValue}>
-                    {stats.totalMinutes > 0 ? minutesToHMM(stats.totalMinutes) : '0m'}
-                  </Text>
+
+                  <View style={[styles.chartLabelContainer, { width: WEEK_COL_WIDTH + extra }]}>
+                    <Text allowFontScaling={false} style={styles.chartLabel}>{['Mo','Di','Mi','Do','Fr','Sa','So'][i]}</Text>
+                    <Text allowFontScaling={false} style={styles.chartValue}>
+                      {hours > 24 ? '24h+' : `${hours}h`}
+                    </Text>
+                  </View>
                 </View>
               );
             })}
           </View>
-        </View>
+        </LiquidGlassCard>
 
         {/* Wochenzusammenfassung - Design Guide konform */}
         <LiquidGlassCard style={styles.weekSummaryCard}>
-          <Text style={styles.summaryTitle}>Wochenzusammenfassung</Text>
-          <View style={styles.summaryStats}>
-            <View style={styles.statItem}>
-              <Text style={styles.statEmoji}>🌙</Text>
-              <Text style={styles.statValue}>{Math.round(sleepEntries.filter(e => e.period === 'night').reduce((sum, e) => sum + (e.duration_minutes || 0), 0) / 60)}h</Text>
-              <Text style={styles.statLabel}>Nachtschlaf</Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text style={styles.statEmoji}>☀️</Text>
-              <Text style={styles.statValue}>{Math.round(sleepEntries.filter(e => e.period === 'day').reduce((sum, e) => sum + (e.duration_minutes || 0), 0) / 60)}h</Text>
-              <Text style={styles.statLabel}>Tagschlaf</Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text style={styles.statEmoji}>⭐</Text>
-              <Text style={styles.statValue}>{sleepEntries.length > 0 ? Math.round((sleepEntries.reduce((sum, e) => sum + (e.duration_minutes || 0), 0) / sleepEntries.length) / 60) : 0}h</Text>
-              <Text style={styles.statLabel}>Ø pro Tag</Text>
+          <View style={styles.summaryInner}>
+            <Text style={styles.summaryTitle}>Wochenzusammenfassung</Text>
+            <View style={styles.summaryStats}>
+              <View style={styles.statItem}>
+                <Text style={styles.statEmoji}>🌙</Text>
+                <Text style={styles.statValue}>{Math.round(sleepEntries.filter(e => e.period === 'night').reduce((sum, e) => sum + (e.duration_minutes || 0), 0) / 60)}h</Text>
+                <Text style={styles.statLabel}>Nachtschlaf</Text>
+              </View>
+              <View style={styles.statItem}>
+                <Text style={styles.statEmoji}>☀️</Text>
+                <Text style={styles.statValue}>{Math.round(sleepEntries.filter(e => e.period === 'day').reduce((sum, e) => sum + (e.duration_minutes || 0), 0) / 60)}h</Text>
+                <Text style={styles.statLabel}>Tagschlaf</Text>
+              </View>
+              <View style={styles.statItem}>
+                <Text style={styles.statEmoji}>⭐</Text>
+                <Text style={styles.statValue}>{sleepEntries.length > 0 ? Math.round((sleepEntries.reduce((sum, e) => sum + (e.duration_minutes || 0), 0) / sleepEntries.length) / 60) : 0}h</Text>
+                <Text style={styles.statLabel}>Ø pro Tag</Text>
+              </View>
             </View>
           </View>
         </LiquidGlassCard>
 
         {/* Trend-Analyse - Design Guide konform */}
         <LiquidGlassCard style={styles.trendCard}>
-          <Text style={styles.trendTitle}>Trend-Analyse</Text>
-          <View style={styles.trendContent}>
-            <View style={styles.trendItem}>
-              <Text style={styles.trendEmoji}>📈</Text>
-              <Text style={styles.trendText}>Gute Schlafqualität</Text>
-            </View>
-            <View style={styles.trendItem}>
-              <Text style={styles.trendEmoji}>😴</Text>
-              <Text style={styles.trendText}>Stabile Einschlafzeiten</Text>
+          <View style={styles.trendInner}>
+            <Text style={styles.trendTitle}>Trend-Analyse</Text>
+            <View style={styles.trendContent}>
+              <View style={styles.trendItem}>
+                <Text style={styles.trendEmoji}>📈</Text>
+                <Text style={styles.trendText}>Gute Schlafqualität</Text>
+              </View>
+              <View style={styles.trendItem}>
+                <Text style={styles.trendEmoji}>😴</Text>
+                <Text style={styles.trendText}>Stabile Einschlafzeiten</Text>
+              </View>
             </View>
           </View>
         </LiquidGlassCard>
 
         {/* Highlight-Karten - Design Guide konform */}
-        <View style={styles.highlightsContainer}>
+        <View style={[styles.highlightsContainer, { paddingHorizontal: TIMELINE_INSET }]}>
           <LiquidGlassCard style={styles.highlightCard}>
             <View style={styles.highlightContent}>
               <Text style={styles.highlightEmoji}>🏆</Text>
@@ -1194,18 +1256,39 @@ export default function SleepTrackerScreen() {
 
     const calendarDays = getCalendarDays();
 
+    // Hilfsfunktionen für lokale Tage (kein UTC-Shift)
+    const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const endOfDay   = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
+
+    // Minuten-Überlappung zweier Zeitintervalle
+    const overlapMinutes = (aStart: Date, aEnd: Date, bStart: Date, bEnd: Date) => {
+      const ms = Math.max(0, Math.min(+aEnd, +bEnd) - Math.max(+aStart, +bStart));
+      return Math.round(ms / 60000);
+    };
+
     const getEntriesForDate = (date: Date) => {
       if (!date) return [];
-      const dateStr = date.toISOString().split('T')[0];
+      const dayStart = startOfDay(date);
+      const dayEnd   = endOfDay(date);
+
       return sleepEntries.filter(entry => {
-        const entryDateStr = new Date(entry.start_time).toISOString().split('T')[0];
-        return entryDateStr === dateStr;
+        const eStart = new Date(entry.start_time);
+        const eEnd   = entry.end_time ? new Date(entry.end_time) : new Date();
+        const mins = overlapMinutes(eStart, eEnd, dayStart, dayEnd);
+        return mins > 0;
       });
     };
 
     const getDayScore = (date: Date) => {
-      const dayEntries = getEntriesForDate(date);
-      const totalMinutes = dayEntries.reduce((sum, e) => sum + (e.duration_minutes || 0), 0);
+      const dayStart = startOfDay(date);
+      const dayEnd   = endOfDay(date);
+
+      let totalMinutes = 0;
+      for (const entry of sleepEntries) {
+        const eStart = new Date(entry.start_time);
+        const eEnd   = entry.end_time ? new Date(entry.end_time) : new Date();
+        totalMinutes += overlapMinutes(eStart, eEnd, dayStart, dayEnd);
+      }
 
       if (totalMinutes >= 480) return 'excellent'; // 8h+
       if (totalMinutes >= 360) return 'good';      // 6h+
@@ -1368,49 +1451,54 @@ export default function SleepTrackerScreen() {
           ) : (
             <>
               {/* Central Timer - nur in Tag-Ansicht */}
-              <Animated.View style={{ opacity: appearAnim }}>
-                <CentralTimer />
-              </Animated.View>
+          <Animated.View style={{ opacity: appearAnim }}>
+            <CentralTimer />
+          </Animated.View>
 
               {/* Schlaferfassung Section - nur in Tag-Ansicht */}
-              <Text style={styles.sectionTitle}>Schlaferfassung</Text>
+              <View style={styles.sleepCaptureSection}>
+                <Text style={styles.sectionTitle}>Schlaferfassung</Text>
 
-              {/* Action Buttons - nur in Tag-Ansicht */}
-              <ActionButtons />
+                {/* Action Buttons - nur in Tag-Ansicht */}
+          <ActionButtons />
+              </View>
 
               {/* Timeline Section - nur in Tag-Ansicht */}
-              <Text style={styles.sectionTitle}>Timeline</Text>
+              <View style={styles.timelineSection}>
+                <Text style={styles.sectionTitle}>Timeline</Text>
 
-              {/* Sleep Entries - Timeline Style like daily_old.tsx - nur in Tag-Ansicht */}
-              <View style={{ gap: 12 }}>
-                {sleepEntries.map((entry, index) => (
-                    <ActivityCard
-                      key={entry.id || index}
-                      entry={convertSleepToDailyEntry(entry)}
-                      onDelete={handleDeleteEntry}
-                      onEdit={(entry) => {
-                        setEditingEntry(entry as any);
-                        setSelectedActivityType('feeding'); // Sleep wird als feeding behandelt
-                        setSelectedSubType('feeding_bottle'); // Standard subtype
-                        setShowInputModal(true);
-                      }}
-                    />
-                ))}
-              {sleepEntries.length === 0 && !isLoading && (
-                <LiquidGlassCard style={styles.emptyState}>
-                  <Text style={styles.emptyEmoji}>💤</Text>
-                  <Text style={styles.emptyTitle}>Noch keine Schlafphasen</Text>
-                  <Text style={styles.emptySubtitle}>Starte den ersten Schlaf-Eintrag!</Text>
-                    <TouchableOpacity style={[styles.actionButton, styles.manualButton, { marginTop: 16 }]} onPress={() => {
-                      setEditingEntry(null);
-                      setSelectedActivityType('feeding');
-                      setSelectedSubType(null);
-                      setShowInputModal(true);
-                    }}>
-                    <Text style={styles.actionButtonText}>Manuell hinzufügen</Text>
-                  </TouchableOpacity>
-                </LiquidGlassCard>
-              )}
+                {/* Sleep Entries - Timeline Style like daily_old.tsx - nur in Tag-Ansicht */}
+                <View style={styles.entriesContainer}>
+            {sleepEntries.map((entry, index) => (
+                <ActivityCard
+                  key={entry.id || index}
+                  entry={convertSleepToDailyEntry(entry)}
+                  onDelete={handleDeleteEntry}
+                  onEdit={(entry) => {
+                    setEditingEntry(entry as any);
+                    setSelectedActivityType('feeding'); // Sleep wird als feeding behandelt
+                    setSelectedSubType('feeding_bottle'); // Standard subtype
+                    setShowInputModal(true);
+                  }}
+                  marginHorizontal={8}
+                />
+            ))}
+          {sleepEntries.length === 0 && !isLoading && (
+            <LiquidGlassCard style={styles.emptyState}>
+              <Text style={styles.emptyEmoji}>💤</Text>
+              <Text style={styles.emptyTitle}>Noch keine Schlafphasen</Text>
+              <Text style={styles.emptySubtitle}>Starte den ersten Schlaf-Eintrag!</Text>
+                <TouchableOpacity style={[styles.actionButton, styles.manualButton, { marginTop: 16 }]} onPress={() => {
+                  setEditingEntry(null);
+                  setSelectedActivityType('feeding');
+                  setSelectedSubType(null);
+                  setShowInputModal(true);
+                }}>
+                <Text style={styles.actionButtonText}>Manuell hinzufügen</Text>
+              </TouchableOpacity>
+            </LiquidGlassCard>
+          )}
+          </View>
               </View>
             </>
           )}
@@ -1666,24 +1754,24 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   backgroundImage: { flex: 1, width: '100%', backgroundColor: '#f5eee0' },
   scrollContainer: { flex: 1 },
-  scrollContent: { paddingBottom: 140, paddingHorizontal: 20 },
+  scrollContent: { paddingBottom: 140, paddingHorizontal: LAYOUT_PAD },
 
   // KPI glass cards (Kompakt)
   kpiRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginTop: 6,
-    paddingHorizontal: 16,
+    paddingHorizontal: LAYOUT_PAD, // KPI-Row nutzt einheitlichen Abstand
     marginBottom: 4,
   },
   kpiCard: {
     width: '48%',
     borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 12, // Reduziertes Padding für bessere Balance
     borderWidth: 1,
     overflow: 'hidden',
-    minHeight: 60,
+    minHeight: 64,
   },
   kpiHeaderRow: { 
     flexDirection: 'row', 
@@ -1696,19 +1784,20 @@ const styles = StyleSheet.create({
     color: '#7D5A50',
     marginLeft: 4,
   },
-  kpiValue: { 
-    fontSize: 18, 
-    fontWeight: '800', 
+  kpiValue: {
+    fontSize: 18,
+    fontWeight: '800',
     color: '#5e3db3',
     marginTop: 1,
     letterSpacing: -0.5,
+    fontVariant: ['tabular-nums'], // Gleichbreite Ziffern
   },
   kpiValueCentered: { 
     textAlign: 'center', 
     width: '100%' 
   },
   kpiSub: { 
-    marginTop: 2, 
+    marginTop: 2,
     fontSize: 9, 
     color: '#7D5A50',
     textAlign: 'center',
@@ -1718,8 +1807,8 @@ const styles = StyleSheet.create({
   // Central Timer (Baby Blue Circle Only)
   centralTimerContainer: {
     alignItems: 'center',
-    paddingVertical: 8,
-    marginBottom: 8,
+    paddingVertical: 12,
+    marginBottom: 12,
   },
   centralContainer: {
     alignItems: 'center',
@@ -1824,14 +1913,15 @@ const styles = StyleSheet.create({
   },
 
   sectionTitle: {
-    marginTop: 18,
-    marginBottom: 8,
-    paddingHorizontal: 20,
-    fontSize: 14,
+    marginTop: SECTION_GAP_TOP,
+    marginBottom: SECTION_GAP_BOTTOM,
+    paddingHorizontal: LAYOUT_PAD,
+    fontSize: 15,
     fontWeight: '700',
     color: '#7D5A50',
     textAlign: 'center',
     width: '100%',
+    letterSpacing: -0.1,
   },
 
   // Top Tabs (exakt wie daily_old.tsx)
@@ -1857,20 +1947,20 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     justifyContent: 'space-between',
     alignItems: 'stretch',
-    marginBottom: 16,
-    paddingHorizontal: 4,
+    marginBottom: 20,
+    paddingHorizontal: 8,
   },
 
   // Liquid Glass Cards (from home.tsx)
   liquidGlassCardWrapper: {
     width: '48%',
-    marginBottom: 14,
+    marginBottom: 16,
     borderRadius: 22,
     overflow: 'hidden',
   },
   fullWidthStopButton: {
     width: '100%',
-    marginBottom: 14,
+    marginBottom: 16,
     borderRadius: 22,
     overflow: 'hidden',
   },
@@ -1994,9 +2084,22 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
   },
 
-  // Entries Container
+  // Schlaferfassung Section (Design Guide konform - gleiche Breite wie Wochenansicht)
+  sleepCaptureSection: {
+    paddingHorizontal: 0,       // Gleiche Breite wie Wochenansicht-Container
+    paddingVertical: 8,
+  },
+
+  // Timeline Section (Design Guide konform - gleiche Breite wie Wochenansicht)
+  timelineSection: {
+    paddingHorizontal: 0,       // Gleiche Breite wie Wochenansicht-Container
+  },
+
+  // Entries Container (Design Guide konform - gleiche Breite wie Wochenansicht)
   entriesContainer: {
-    gap: 12,
+    gap: 16,
+    paddingHorizontal: 0,       // Gleiche Breite wie Wochenansicht-Container
+    paddingVertical: 4,
   },
 
   // Action Button Styles (Home.tsx style)
@@ -2313,11 +2416,11 @@ const styles = StyleSheet.create({
 
   // Wochen- und Monatsansicht Styles (Design Guide konform)
   weekViewContainer: {
-    paddingHorizontal: 20,      // Design Guide konform: scrollContent paddingHorizontal
+    paddingHorizontal: 0,       // Padding bereits in contentWidth berücksichtigt
     paddingBottom: 20,
   },
   monthViewContainer: {
-    paddingHorizontal: 20,      // Design Guide konform: scrollContent paddingHorizontal
+    paddingHorizontal: 0,       // Padding bereits in contentWidth berücksichtigt
     paddingBottom: 20,
   },
 
@@ -2326,15 +2429,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 20,
-    paddingHorizontal: 0,       // Kein extra padding, da bereits in weekViewContainer
+    marginTop: SECTION_GAP_TOP,     // wie sectionTitle oben
+    marginBottom: SECTION_GAP_BOTTOM, // wie sectionTitle unten
+    paddingHorizontal: LAYOUT_PAD, // Navigation braucht eigenen Abstand
   },
   monthNavigationContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 20,
-    paddingHorizontal: 0,       // Kein extra padding, da bereits in monthViewContainer
+    marginTop: SECTION_GAP_TOP,     // wie sectionTitle oben
+    marginBottom: SECTION_GAP_BOTTOM, // wie sectionTitle unten
+    paddingHorizontal: LAYOUT_PAD, // Navigation braucht eigenen Abstand
   },
   weekNavButton: {
     width: 44,
@@ -2345,6 +2450,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.3)',
+    padding: 6,                 // Mehr Touch-Komfort
   },
   monthNavButton: {
     width: 44,
@@ -2377,10 +2483,10 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
   },
   weekHeaderTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#7D5A50',
-    marginBottom: 4,
+    marginBottom: 6,
   },
   monthHeaderTitle: {
     fontSize: 16,
@@ -2394,79 +2500,105 @@ const styles = StyleSheet.create({
   },
 
   // Chart Styles (Design Guide konform)
-  chartContainer: {
-    marginBottom: 20,
-    paddingHorizontal: 0,       // Volle Breite nutzen
-  },
+    chartContainer: {
+      marginBottom: 20,
+      marginHorizontal: 0,        // Volle Breite wie Tagesansicht
+      paddingHorizontal: 0,       // Volle Breite nutzen
+    },
+    chartGlassCard: {
+      marginHorizontal: TIMELINE_INSET, // Wie Timeline-Cards
+      marginBottom: 20,           // Abstand zur nächsten Karte
+      padding: 0,                 // Padding wird durch Container-Abstand geregelt
+    },
   chartTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
-    color: '#7D5A50',
+    color: '#5D4A40',           // Dunkler für bessere Lesbarkeit auf Glass
     textAlign: 'center',
-    marginBottom: 16,
+    marginBottom: SECTION_GAP_BOTTOM, // Einheitlicher Abstand
+    textShadowColor: 'rgba(255, 255, 255, 0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   chartArea: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'flex-end',
-    height: 140,
-    paddingVertical: 10,
-    paddingHorizontal: 8,       // Minimaler Innenabstand
-    width: '100%',              // Volle verfügbare Breite
+    height: 200,                // Mehr Höhe für bessere Lesbarkeit
+    paddingVertical: 16,        // Mehr Padding oben/unten
+    paddingHorizontal: 0,       // Keine interne Breite — wir setzen contentWidth explizit
+    width: '100%',              // Volle Breite der Glass Card
   },
   chartColumn: {
-    flex: 1,
     alignItems: 'center',
-    marginHorizontal: 1,        // Minimaler Abstand zwischen Säulen
+    justifyContent: 'flex-end',  // Wochentage immer unten
+    height: '100%',             // Volle Höhe der chartArea
   },
   chartBarContainer: {
-    flex: 1,
+    height: MAX_BAR_H,
     width: '100%',
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'center',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
     marginBottom: 8,
   },
   chartBar: {
-    width: 12,                  // Breitere Balken für bessere Sichtbarkeit
+    width: Math.max(10, Math.round(COL_WIDTH * 0.66)), // kräftiger und proportional
     borderRadius: 6,
-    marginHorizontal: 1,
-    minHeight: 2,
+    marginTop: 2,
+    minHeight: 3,
   },
-  chartBarDay: {
-    backgroundColor: '#FF8C42', // Orange für Tagschlaf (Design Guide konform)
-  },
-  chartBarNight: {
-    backgroundColor: '#8E4EC6', // Lila für Nachtschlaf (Design Guide konform)
+  chartBarTotal: {
+    backgroundColor: '#8E4EC6', // Lila für Gesamtschlaf
   },
   chartLabel: {
-    fontSize: 11,               // Etwas größer für bessere Lesbarkeit
-    color: '#7D5A50',
+    fontSize: screenWidth < 360 ? 11 : 12, // responsiv für schmale Geräte
+    color: '#5D4A40',           // Dunkler für Glass Hintergrund
     fontWeight: '600',
-    marginBottom: 2,
+    marginBottom: 4,
+    textShadowColor: 'rgba(255, 255, 255, 0.4)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 1,
+    includeFontPadding: false,  // System-Scaling ausschalten
   },
   chartValue: {
-    fontSize: 9,                // Etwas größer für bessere Lesbarkeit
-    color: '#A8978E',
-    fontWeight: '500',
+    fontSize: screenWidth < 360 ? 11 : 12, // responsiv für schmale Geräte
+    color: '#7D5A50',           // Dunkler für Glass Hintergrund
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'], // Gleichbreite Ziffern für präzise Ausrichtung
+    textShadowColor: 'rgba(255, 255, 255, 0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 1,
+    includeFontPadding: false,  // System-Scaling ausschalten
+  },
+  chartLabelContainer: {
+    minHeight: 44,              // Feste Höhe für einheitliche Ausrichtung
+    justifyContent: 'flex-start',
+    alignItems: 'center',
+    width: COL_WIDTH,           // fix = kein Umbruch/Abschnitt
   },
 
   // Summary Cards (Design Guide konform)
   weekSummaryCard: {
-    padding: 20,
-    marginHorizontal: 0,        // Volle Breite nutzen
-    marginBottom: 16,
+    padding: 0,                 // Padding entfernt für exakte Breite
+    marginHorizontal: TIMELINE_INSET, // Wie Timeline-Cards
+    marginBottom: 20,           // Mehr Abstand
   },
   monthSummaryCard: {
     padding: 20,
     marginHorizontal: 0,        // Volle Breite nutzen
     marginBottom: 16,
   },
+  // Wrapper für exakt gleiche Innenbreite wie Chart
+  summaryInner: {
+    width: WEEK_CONTENT_WIDTH,
+    alignSelf: 'center',
+    padding: 24,                // Innenabstand bleibt erhalten
+  },
   summaryTitle: {
-    fontSize: 16,
+    fontSize: 18,               // Größerer Titel
     fontWeight: 'bold',
     color: '#7D5A50',
-    marginBottom: 16,
+    marginBottom: SECTION_GAP_BOTTOM, // Einheitlicher Abstand
     textAlign: 'center',
   },
   summaryStats: {
@@ -2482,28 +2614,36 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   statValue: {
-    fontSize: 20,
+    fontSize: 22,               // Größer für bessere Lesbarkeit
     fontWeight: 'bold',
     color: '#7D5A50',
-    marginBottom: 4,
+    marginBottom: 6,            // Mehr Abstand
+    fontVariant: ['tabular-nums'], // Gleichbreite Ziffern
   },
   statLabel: {
-    fontSize: 12,
+    fontSize: 13,               // Größer für bessere Lesbarkeit
     color: '#7D5A50',
     textAlign: 'center',
+    fontWeight: '500',
   },
 
   // Trend Card (Design Guide konform)
   trendCard: {
-    padding: 20,
-    marginHorizontal: 0,        // Volle Breite nutzen
-    marginBottom: 16,
+    padding: 0,                 // Padding entfernt für exakte Breite
+    marginHorizontal: TIMELINE_INSET, // Wie Timeline-Cards
+    marginBottom: 20,           // Mehr Abstand
+  },
+  // Wrapper für exakt gleiche Innenbreite wie Chart
+  trendInner: {
+    width: WEEK_CONTENT_WIDTH,
+    alignSelf: 'center',
+    padding: 24,                // Innenabstand bleibt erhalten
   },
   trendTitle: {
-    fontSize: 16,
+    fontSize: 18,               // Größerer Titel
     fontWeight: 'bold',
     color: '#7D5A50',
-    marginBottom: 16,
+    marginBottom: SECTION_GAP_BOTTOM, // Einheitlicher Abstand
     textAlign: 'center',
   },
   trendContent: {
@@ -2517,20 +2657,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   trendEmoji: {
-    fontSize: 20,
-    marginRight: 8,
+    fontSize: 22,               // Größerer Emoji
+    marginRight: 10,            // Mehr Abstand
   },
   trendText: {
-    fontSize: 12,
+    fontSize: 13,               // Größerer Text
     color: '#7D5A50',
     fontWeight: '600',
   },
 
   // Calendar Styles (Design Guide konform)
-  calendarContainer: {
-    marginBottom: 20,
-    paddingHorizontal: 0,       // Volle Breite nutzen
-  },
+    calendarContainer: {
+      marginBottom: 20,
+      marginHorizontal: 0,        // Volle Breite wie Tagesansicht
+      paddingHorizontal: 0,       // Volle Breite nutzen
+    },
   weekdayHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -2576,15 +2717,16 @@ const styles = StyleSheet.create({
   },
 
   // Highlight Cards (Design Guide konform)
-  highlightsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 20,
-    paddingHorizontal: 0,       // Volle Breite nutzen
-  },
+    highlightsContainer: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      marginBottom: 20,
+      marginHorizontal: 0,        // Volle Breite wie Tagesansicht
+      paddingHorizontal: LAYOUT_PAD, // Eigener Abstand für Highlight-Karten
+    },
   highlightCard: {
     width: '48%',               // Design Guide konform: 48% für 2er-Grid
-    padding: 16,
+    padding: 20,                // Mehr Padding
     marginHorizontal: 0,        // Kein zusätzlicher Margin
   },
   highlightContent: {
@@ -2592,22 +2734,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   highlightEmoji: {
-    fontSize: 24,
-    marginRight: 12,
+    fontSize: 26,               // Größerer Emoji
+    marginRight: 14,            // Mehr Abstand
   },
   highlightInfo: {
     flex: 1,
   },
   highlightLabel: {
-    fontSize: 12,
+    fontSize: 13,               // Größerer Label-Text
     color: '#7D5A50',
     fontWeight: '600',
-    marginBottom: 4,
+    marginBottom: 6,            // Mehr Abstand
   },
   highlightValue: {
-    fontSize: 16,
+    fontSize: 18,               // Größerer Wert
     fontWeight: 'bold',
     color: '#8E4EC6',
+    fontVariant: ['tabular-nums'], // Gleichbreite Ziffern
   },
 
 });
