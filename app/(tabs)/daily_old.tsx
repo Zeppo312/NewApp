@@ -43,6 +43,17 @@ import { DebugPanel } from '@/components/DebugPanel';
 
 import { BlurView } from 'expo-blur';
 
+// Design Tokens (global, wie im Guide)
+const LAYOUT_PAD = 20;                  // horizontaler Innenabstand
+const SECTION_GAP_TOP = 20;             // Abstand vor Abschnittstiteln
+const SECTION_GAP_BOTTOM = 12;          // Abstand nach Abschnittstiteln
+
+const PRIMARY = '#5E3DB3';              // Brand Purple (kein Blau)
+const BG_BEIGE = '#f5eee0';             // warmer Hintergrund
+
+const GLASS_OVERLAY = 'rgba(255,255,255,0.30)';
+const GLASS_BORDER  = 'rgba(255,255,255,0.65)';
+
 type QuickActionType =
   | 'feeding_breast'
   | 'feeding_bottle'
@@ -56,8 +67,8 @@ function GlassCard({
   children,
   style,
   intensity = 26,
-  overlayColor = 'rgba(255,255,255,0.30)',
-  borderColor = 'rgba(255,255,255,0.65)',
+  overlayColor = GLASS_OVERLAY,
+  borderColor = GLASS_BORDER,
 }: {
   children: React.ReactNode;
   style?: any;
@@ -115,7 +126,7 @@ const TimerBanner: React.FC<{
   return (
     <GlassCard style={[s.timerBanner, { paddingVertical: 12, paddingHorizontal: 16 }]} intensity={28}>
       <View style={{ flex: 1 }}>
-        <Text style={[s.timerType, { color: '#5e3db3' }]}>
+        <Text style={[s.timerType, { color: PRIMARY }]}>
           {timer.type === 'BREAST' ? '🤱 Stillen' : '🍼 Fläschchen'} • läuft seit {new Date(timer.start).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
         </Text>
         <Text style={[s.timerTime, { color: '#7D5A50' }]}>{formatTime(elapsed)}</Text>
@@ -125,7 +136,7 @@ const TimerBanner: React.FC<{
           <IconSymbol name="xmark.circle" size={26} color="#a3a3a3" />
         </TouchableOpacity>
         <TouchableOpacity style={s.timerStopButton} onPress={onStop}>
-          <IconSymbol name="stop.circle.fill" size={28} color="#5e3db3" />
+          <IconSymbol name="stop.circle.fill" size={28} color={PRIMARY} />
         </TouchableOpacity>
       </View>
     </GlassCard>
@@ -759,30 +770,33 @@ export default function DailyScreen() {
         <WeekSummary entries={weekEntries} />
         
         {/* Week Entries Timeline */}
-        <Text style={[s.sectionTitle, { marginTop: 20 }]}>Wochenverlauf</Text>
-        <View style={s.weekEntriesContainer}>
-          {weekDays.map((day, dayIndex) => {
-            const dayEntries = getEntriesForDay(day);
-            if (dayEntries.length === 0) return null;
-            
-            return (
-              <View key={dayIndex} style={s.daySection}>
-                <Text style={s.daySectionTitle}>
-                  {day.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'short' })}
-                </Text>
-                {dayEntries.map((entry) => (
-                  <ActivityCard 
-                    key={entry.id ?? Math.random().toString()} 
-                    entry={entry} 
-                    onDelete={handleDeleteEntry}
-                  />
-                ))}
-              </View>
-            );
-          })}
-          {weekEntries.length === 0 && (
-            <EmptyState type="week" message="Noch keine Aktivitäten diese Woche 📅" />
-          )}
+        <View style={s.timelineSection}>
+          <Text style={[s.sectionTitle, { marginTop: 20 }]}>Wochenverlauf</Text>
+          <View style={s.weekEntriesContainer}>
+            {weekDays.map((day, dayIndex) => {
+              const dayEntries = getEntriesForDay(day);
+              if (dayEntries.length === 0) return null;
+              
+              return (
+                <View key={dayIndex} style={s.daySection}>
+                  <Text style={s.daySectionTitle}>
+                    {day.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'short' })}
+                  </Text>
+                  {dayEntries.map((entry) => (
+                    <ActivityCard 
+                      key={entry.id ?? Math.random().toString()} 
+                      entry={entry} 
+                      onDelete={handleDeleteEntry}
+                      marginHorizontal={8}
+                    />
+                  ))}
+                </View>
+              );
+            })}
+            {weekEntries.length === 0 && (
+              <EmptyState type="week" message="Noch keine Aktivitäten diese Woche 📅" />
+            )}
+          </View>
         </View>
       </View>
     );
@@ -1020,32 +1034,35 @@ export default function DailyScreen() {
           ) : selectedTab === 'month' ? (
             <MonthView />
           ) : (
-            <>
+            <View style={s.content}>
               <QuickActionRow />
 
               <Text style={s.sectionTitle}>Kennzahlen</Text>
               <KPISection />
 
-              <Text style={s.sectionTitle}>Timeline</Text>
+              <View style={s.timelineSection}>
+                <Text style={s.sectionTitle}>Timeline</Text>
 
-              <View style={s.entriesSection}>
-                {entries.map((item) => (
-                  <ActivityCard
-                    key={item.id ?? Math.random().toString()}
-                    entry={item}
-                    onDelete={handleDeleteEntry}
-                    onEdit={(entry) => {
-                      setEditingEntry(entry);
-                      if (entry.entry_type === 'feeding') setSelectedActivityType('feeding');
-                      else if (entry.entry_type === 'diaper') setSelectedActivityType('diaper');
-                      setSelectedSubType((entry as any).sub_type ?? null);
-                      setShowInputModal(true);
-                    }}
-                  />
-                ))}
-                {entries.length === 0 && <EmptyState type="day" message="Noch keine Aktivitäten heute 🤍" />}
+                <View style={s.entriesSection}>
+                  {entries.map((item) => (
+                    <ActivityCard
+                      key={item.id ?? Math.random().toString()}
+                      entry={item}
+                      onDelete={handleDeleteEntry}
+                      onEdit={(entry) => {
+                        setEditingEntry(entry);
+                        if (entry.entry_type === 'feeding') setSelectedActivityType('feeding');
+                        else if (entry.entry_type === 'diaper') setSelectedActivityType('diaper');
+                        setSelectedSubType((entry as any).sub_type ?? null);
+                        setShowInputModal(true);
+                      }}
+                      marginHorizontal={8}
+                    />
+                  ))}
+                  {entries.length === 0 && <EmptyState type="day" message="Noch keine Aktivitäten heute 🤍" />}
+                </View>
               </View>
-            </>
+            </View>
           )}
         </ScrollView>
 
@@ -1105,14 +1122,14 @@ export default function DailyScreen() {
 
 const s = StyleSheet.create({
   container: { flex: 1 },
-  backgroundImage: { flex: 1, width: '100%' },
+  backgroundImage: { flex: 1, width: '100%', backgroundColor: BG_BEIGE },
   scrollContainer: { flex: 1 },
   scrollContent: { paddingBottom: 140 },
+  content: { paddingHorizontal: LAYOUT_PAD },
 
   sectionTitle: {
-    marginTop: 18,
-    marginBottom: 8,
-    paddingHorizontal: 16,
+    marginTop: SECTION_GAP_TOP,
+    marginBottom: SECTION_GAP_BOTTOM,
     fontSize: 14,
     fontWeight: '700',
     color: '#7D5A50',
@@ -1139,11 +1156,11 @@ const s = StyleSheet.create({
   // Date spider
   dateSpiderWrap: { paddingHorizontal: 14 },
   dateSpiderCard: { paddingHorizontal: 18, paddingVertical: 8, borderRadius: 16 },
-  dateSpiderText: { fontSize: 14, fontWeight: '700', color: '#5e3db3', textAlign: 'center' },
+  dateSpiderText: { fontSize: 14, fontWeight: '700', color: PRIMARY, textAlign: 'center' },
 
   // Timer Banner
   timerBanner: {
-    marginHorizontal: 16,
+    marginHorizontal: LAYOUT_PAD,
     marginTop: 8,
     marginBottom: 0,
     borderRadius: 16,
@@ -1151,7 +1168,7 @@ const s = StyleSheet.create({
     alignItems: 'center',
   },
   timerType: { fontSize: 14, fontWeight: '700' },
-  timerTime: { fontSize: 22, fontWeight: '800', marginTop: 2 },
+  timerTime: { fontSize: 22, fontWeight: '800', marginTop: 2, fontVariant: ['tabular-nums'] },
   timerStopButton: { padding: 6 },
   timerCancelButton: { padding: 6, marginRight: 6 },
 
@@ -1170,11 +1187,11 @@ const s = StyleSheet.create({
   topTabInner: { paddingHorizontal: 18, paddingVertical: 6 },
   activeTopTab: { borderColor: 'rgba(94,61,179,0.65)' },
   topTabText: { fontSize: 13, fontWeight: '700', color: '#7D5A50' },
-  activeTopTabText: { color: '#5e3db3' },
+  activeTopTabText: { color: PRIMARY },
 
   // Quick actions as round glass buttons
-  quickActionSection: { marginTop: 16 },
-  quickScrollContainer: { paddingHorizontal: 16 },
+  quickActionSection: { marginTop: SECTION_GAP_TOP },
+  quickScrollContainer: { paddingHorizontal: 0 },
   circleButton: {
     width: 96,
     height: 96,
@@ -1191,7 +1208,6 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginTop: 8,
-    paddingHorizontal: 16,
   },
   kpiCard: {
     width: '48%',
@@ -1204,12 +1220,21 @@ const s = StyleSheet.create({
   kpiHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
   kpiEmoji: { fontSize: 14, marginRight: 6 },
   kpiTitle: { fontSize: 14, fontWeight: '700', color: '#7D5A50' },
-  kpiValue: { fontSize: 34, fontWeight: '800', color: '#5e3db3' },
+  kpiValue: { fontSize: 34, fontWeight: '800', color: PRIMARY, fontVariant: ['tabular-nums'] },
 kpiValueCentered: { textAlign: 'center', width: '100%' },
   kpiSub: { marginTop: 6, fontSize: 12, color: '#7D5A50' },
 
-  // Entries
-  entriesSection: { paddingHorizontal: 16, marginTop: 8 },
+  // Timeline Section (exakt wie Sleep-Tracker)
+  timelineSection: {
+    paddingHorizontal: 0, // Gleiche Breite wie Sleep-Tracker
+  },
+
+  // Entries Container (exakt wie Sleep-Tracker)
+  entriesSection: {
+    gap: 16,
+    paddingHorizontal: 0,
+    paddingVertical: 4,
+  },
 
   // FAB
   fab: {
@@ -1230,7 +1255,7 @@ kpiValueCentered: { textAlign: 'center', width: '100%' },
 
   // Week View Styles
   weekViewContainer: {
-    paddingHorizontal: 16,
+    paddingHorizontal: LAYOUT_PAD,
   },
   weekNavigationContainer: {
     flexDirection: 'row',
@@ -1251,7 +1276,7 @@ kpiValueCentered: { textAlign: 'center', width: '100%' },
   },
   weekNavButtonText: {
     fontSize: 24,
-    color: '#5E3DB3',
+    color: PRIMARY,
     fontWeight: 'bold',
   },
   weekHeaderCenter: {
@@ -1326,14 +1351,15 @@ kpiValueCentered: { textAlign: 'center', width: '100%' },
   statCount: {
     fontSize: 10,
     fontWeight: '600',
-    color: '#5E3DB3',
+    color: PRIMARY,
+    fontVariant: ['tabular-nums'],
   },
   weekSummaryContainer: {
     marginBottom: 20,
   },
   weekSummaryCard: {
     padding: 20,
-    marginHorizontal: 16,
+    marginHorizontal: LAYOUT_PAD,
   },
   weekSummaryTitle: {
     fontSize: 16,
@@ -1369,7 +1395,9 @@ kpiValueCentered: { textAlign: 'center', width: '100%' },
     color: '#999',
   },
   weekEntriesContainer: {
-    paddingHorizontal: 16,
+    gap: 16,
+    paddingHorizontal: 0,
+    paddingVertical: 4,
   },
   daySection: {
     marginBottom: 20,
