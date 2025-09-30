@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   SafeAreaView,
   View,
@@ -11,6 +11,7 @@ import {
   Alert,
   ScrollView,
   Animated,
+  Dimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Colors } from '@/constants/Colors';
@@ -53,6 +54,16 @@ const BG_BEIGE = '#f5eee0';             // warmer Hintergrund
 
 const GLASS_OVERLAY = 'rgba(255,255,255,0.30)';
 const GLASS_BORDER  = 'rgba(255,255,255,0.65)';
+
+// Layout metrics for week chart (match sleep-tracker)
+const { width: screenWidth } = Dimensions.get('window');
+const TIMELINE_INSET = 8;
+const contentWidth = screenWidth - 2 * LAYOUT_PAD;
+const COLS = 7;
+const GUTTER = 4;
+const WEEK_CONTENT_WIDTH = contentWidth - TIMELINE_INSET * 2;
+const WEEK_COL_WIDTH = Math.floor((WEEK_CONTENT_WIDTH - (COLS - 1) * GUTTER) / COLS);
+const MAX_BAR_H = 140;
 
 type QuickActionType =
   | 'feeding_breast'
@@ -157,6 +168,7 @@ export default function DailyScreen() {
   const [selectedWeekDate, setSelectedWeekDate] = useState(new Date()); // Separate state for week view
   const [selectedMonthDate, setSelectedMonthDate] = useState(new Date()); // Separate state for month view
   const [selectedTab, setSelectedTab] = useState<'day' | 'week' | 'month'>('day');
+  const [weekOffset, setWeekOffset] = useState(0); // align with sleep-tracker week nav
   const [showInputModal, setShowInputModal] = useState(false);
   const [showDateNav, setShowDateNav] = useState(true);
   const fadeNavAnim = useRef(new Animated.Value(1)).current;
@@ -209,6 +221,18 @@ export default function DailyScreen() {
       loadMonthEntries();
     }
   }, [selectedMonthDate, selectedTab]);
+
+  // Keep selectedWeekDate in sync with weekOffset (for data loading)
+  useEffect(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + weekOffset * 7);
+    setSelectedWeekDate(d);
+  }, [weekOffset]);
+
+  // Reset offsets on tab change like sleep-tracker
+  useEffect(() => {
+    if (selectedTab === 'week') setWeekOffset(0);
+  }, [selectedTab]);
 
   // Quick actions scroll hint animation - runs only once
   useEffect(() => {
@@ -655,24 +679,19 @@ export default function DailyScreen() {
   };
 
   // Week navigation functions
-  const goToPreviousWeek = () => {
-    const newWeekDate = new Date(selectedWeekDate);
-    newWeekDate.setDate(selectedWeekDate.getDate() - 7);
-    setSelectedWeekDate(newWeekDate);
-  };
-
-  const goToNextWeek = () => {
-    const newWeekDate = new Date(selectedWeekDate);
-    newWeekDate.setDate(selectedWeekDate.getDate() + 7);
-    setSelectedWeekDate(newWeekDate);
-  };
-
-  const goToCurrentWeek = () => {
-    setSelectedWeekDate(new Date());
-  };
+  const goToPreviousWeek = () => setWeekOffset((o) => o - 1);
+  const goToNextWeek = () => setWeekOffset((o) => o + 1);
+  const goToCurrentWeek = () => setWeekOffset(0);
 
   const WeekView = () => {
-    const weekDays = getWeekDays(selectedWeekDate);
+    // Reference date derived from weekOffset (exact like sleep-tracker)
+    const refDate = useMemo(() => {
+      const d = new Date();
+      d.setDate(d.getDate() + weekOffset * 7);
+      return d;
+    }, [weekOffset]);
+
+    const weekDays = getWeekDays(refDate);
     const dayNames = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
 
     const getEntriesForDay = (date: Date) => {
@@ -690,114 +709,152 @@ export default function DailyScreen() {
       return { feedingCount, diaperCount, total: dayEntries.length };
     };
 
+    // Aggregation for chart: total entries per day
+    const dayTotals = weekDays.map((d) => getEntriesForDay(d).length);
+    const maxCount = Math.max(...dayTotals, 4);
+
+    // Weekly summary totals
+    const totalFeedings = weekEntries.filter((e) => e.entry_type === 'feeding').length;
+    const totalDiapers = weekEntries.filter((e) => e.entry_type === 'diaper').length;
+    const avgPerDay = Math.round((weekEntries.length / 7) * 10) / 10;
+
+    const weekStart = getWeekStart(refDate);
+    const weekEnd = getWeekEnd(refDate);
+
     return (
       <View style={s.weekViewContainer}>
-        {/* Week Navigation Header */}
+        {/* Week Navigation - identical structure */}
         <View style={s.weekNavigationContainer}>
           <TouchableOpacity style={s.weekNavButton} onPress={goToPreviousWeek}>
             <Text style={s.weekNavButtonText}>‹</Text>
           </TouchableOpacity>
-          
-          <TouchableOpacity style={s.weekHeaderCenter} onPress={goToCurrentWeek}>
+
+          <View style={s.weekHeaderCenter}>
             <Text style={s.weekHeaderTitle}>Wochenübersicht</Text>
             <Text style={s.weekHeaderSubtitle}>
-              {getWeekStart(selectedWeekDate).toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })} - {getWeekEnd(selectedWeekDate).toLocaleDateString('de-DE', { day: 'numeric', month: 'short', year: 'numeric' })}
+              {weekStart.toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })} - {weekEnd.toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })}
             </Text>
-          </TouchableOpacity>
-          
+          </View>
+
           <TouchableOpacity style={s.weekNavButton} onPress={goToNextWeek}>
             <Text style={s.weekNavButtonText}>›</Text>
           </TouchableOpacity>
         </View>
-        
-        {/* Week Calendar */}
-        <View style={s.weekCalendar}>
-          {weekDays.map((day, index) => {
-            const stats = getDayStats(day);
-            const isToday = day.toDateString() === new Date().toDateString();
-            const isSelected = day.toDateString() === selectedDate.toDateString();
-            
-            return (
-              <TouchableOpacity
-                key={index}
-                style={[
-                  s.weekDayCard,
-                  isToday && s.todayCard,
-                  isSelected && s.selectedDayCard
-                ]}
-                onPress={() => {
-                  setSelectedDate(day);
-                  // Stay in week view; keep week context
-                  setSelectedWeekDate(selectedWeekDate);
-                }}
-              >
-                <GlassCard
-                  style={s.weekDayInner}
-                  intensity={isSelected ? 35 : 24}
-                  overlayColor={isSelected ? 'rgba(94, 61, 179, 0.2)' : 'rgba(255,255,255,0.20)'}
-                  borderColor={isToday ? 'rgba(94, 61, 179, 0.6)' : 'rgba(255,255,255,0.3)'}
-                >
-                  <Text style={[s.weekDayName, isSelected && s.selectedDayText]}>
-                    {dayNames[index]}
-                  </Text>
-                  <Text style={[s.weekDayNumber, isSelected && s.selectedDayText]}>
-                    {day.getDate()}
-                  </Text>
-                  
-                  {stats.total > 0 && (
-                    <View style={s.dayStatsContainer}>
-                      {stats.feedingCount > 0 && (
-                        <View style={s.statBadge}>
-                          <Text style={s.statEmoji}>🍼</Text>
-                          <Text style={s.statCount}>{stats.feedingCount}</Text>
-                        </View>
-                      )}
-                      {stats.diaperCount > 0 && (
-                        <View style={s.statBadge}>
-                          <Text style={s.statEmoji}>💧</Text>
-                          <Text style={s.statCount}>{stats.diaperCount}</Text>
-                        </View>
+
+        {/* Bar chart card: Wickeln diese Woche */}
+        <GlassCard style={s.chartGlassCard} intensity={24} overlayColor="rgba(255,255,255,0.15)" borderColor="rgba(255,255,255,0.3)">
+          <Text style={s.chartTitle}>Wickeln diese Woche</Text>
+          <View style={[s.chartArea, { width: WEEK_CONTENT_WIDTH, alignSelf: 'center' }]}>
+            {(() => {
+              const diaperCounts = weekDays.map((d) => getEntriesForDay(d).filter((e) => e.entry_type === 'diaper').length);
+              const maxDiaper = Math.max(...diaperCounts, 4);
+              return weekDays.map((day, i) => {
+                const count = diaperCounts[i];
+                const totalH = count ? (count / maxDiaper) * MAX_BAR_H : 0;
+                const barW = Math.max(10, Math.round(WEEK_COL_WIDTH * 0.66));
+                return (
+                  <View key={i} style={{ width: WEEK_COL_WIDTH, marginRight: i < (COLS - 1) ? GUTTER : 0, alignItems: 'center' }}>
+                    <View style={[s.chartBarContainer, { width: WEEK_COL_WIDTH }]}>
+                      {totalH > 0 && (
+                        <View style={[s.chartBar, s.chartBarDiaper, { height: totalH, width: barW }]} />
                       )}
                     </View>
-                  )}
-                </GlassCard>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        {/* Week Summary */}
-        <WeekSummary entries={weekEntries} />
-        
-        {/* Week Entries Timeline */}
-        <View style={s.timelineSection}>
-          <Text style={[s.sectionTitle, { marginTop: 20 }]}>Wochenverlauf</Text>
-          <View style={s.weekEntriesContainer}>
-            {weekDays.map((day, dayIndex) => {
-              const dayEntries = getEntriesForDay(day);
-              if (dayEntries.length === 0) return null;
-              
-              return (
-                <View key={dayIndex} style={s.daySection}>
-                  <Text style={s.daySectionTitle}>
-                    {day.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'short' })}
-                  </Text>
-                  {dayEntries.map((entry) => (
-                    <ActivityCard 
-                      key={entry.id ?? Math.random().toString()} 
-                      entry={entry} 
-                      onDelete={handleDeleteEntry}
-                      marginHorizontal={8}
-                    />
-                  ))}
-                </View>
-              );
-            })}
-            {weekEntries.length === 0 && (
-              <EmptyState type="week" message="Noch keine Aktivitäten diese Woche 📅" />
-            )}
+                    <View style={[s.chartLabelContainer, { width: WEEK_COL_WIDTH }]}>
+                      <Text allowFontScaling={false} style={s.chartLabel}>{dayNames[i]}</Text>
+                      <Text allowFontScaling={false} style={s.chartValue}>{count}</Text>
+                    </View>
+                  </View>
+                );
+              });
+            })()}
           </View>
-        </View>
+        </GlassCard>
+
+        {/* Bar chart card: Füttern diese Woche (Stillen, Fläschchen, Beikost) */}
+        <GlassCard style={s.chartGlassCard} intensity={24} overlayColor="rgba(255,255,255,0.15)" borderColor="rgba(255,255,255,0.3)">
+          <Text style={s.chartTitle}>Füttern diese Woche</Text>
+          <View style={[s.chartArea, { width: WEEK_CONTENT_WIDTH, alignSelf: 'center' }]}>
+            {(() => {
+              const perDay = weekDays.map((d) => {
+                const items = getEntriesForDay(d).filter((e) => e.entry_type === 'feeding');
+                const breast = items.filter((e: any) => (e as any).feeding_type === 'BREAST').length;
+                const bottle = items.filter((e: any) => (e as any).feeding_type === 'BOTTLE').length;
+                const solids = items.filter((e: any) => (e as any).feeding_type === 'SOLIDS').length;
+                return { breast, bottle, solids };
+              });
+              const maxFeed = Math.max(4, ...perDay.flatMap((d) => [d.breast, d.bottle, d.solids]));
+              return weekDays.map((_, i) => {
+                const { breast, bottle, solids } = perDay[i];
+                const bw = Math.max(10, Math.round(WEEK_COL_WIDTH * 0.66));
+                const miniW = Math.max(6, Math.floor((bw - 8) / 3));
+                const breastH = breast ? (breast / maxFeed) * MAX_BAR_H : 0;
+                const bottleH = bottle ? (bottle / maxFeed) * MAX_BAR_H : 0;
+                const solidsH = solids ? (solids / maxFeed) * MAX_BAR_H : 0;
+                return (
+                  <View key={i} style={{ width: WEEK_COL_WIDTH, marginRight: i < (COLS - 1) ? GUTTER : 0, alignItems: 'center' }}>
+                    <View style={[s.chartBarContainer, { width: WEEK_COL_WIDTH }]}>
+                      <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 4 }}>
+                        {breastH > 0 && <View style={[s.chartBar, s.chartBarBreast, { height: breastH, width: miniW }]} />}
+                        {bottleH > 0 && <View style={[s.chartBar, s.chartBarBottle, { height: bottleH, width: miniW }]} />}
+                        {solidsH > 0 && <View style={[s.chartBar, s.chartBarSolids, { height: solidsH, width: miniW }]} />}
+                      </View>
+                    </View>
+                    <View style={[s.chartLabelContainer, { width: WEEK_COL_WIDTH }]}>
+                      <Text allowFontScaling={false} style={s.chartLabel}>{dayNames[i]}</Text>
+                      <Text allowFontScaling={false} style={s.chartValue}>{breast + bottle + solids}</Text>
+                    </View>
+                  </View>
+                );
+              });
+            })()}
+          </View>
+          <View style={s.chartLegend}>
+            <View style={s.legendItem}><View style={[s.legendSwatch, s.legendBreast]} /><Text style={s.legendLabel}>Stillen</Text></View>
+            <View style={s.legendItem}><View style={[s.legendSwatch, s.legendBottle]} /><Text style={s.legendLabel}>Fläschchen</Text></View>
+            <View style={s.legendItem}><View style={[s.legendSwatch, s.legendSolids]} /><Text style={s.legendLabel}>Beikost</Text></View>
+          </View>
+        </GlassCard>
+
+        {/* Weekly summary */}
+        <GlassCard style={s.weekSummaryCard} intensity={24} overlayColor="rgba(255,255,255,0.15)" borderColor="rgba(255,255,255,0.3)">
+          <View style={s.summaryInner}>
+            <Text style={s.summaryTitle}>Wochenzusammenfassung</Text>
+            <View style={s.summaryStats}>
+              <View style={s.statItem}>
+                <Text style={s.statEmoji}>🍼</Text>
+                <Text style={s.statValue}>{totalFeedings}</Text>
+                <Text style={s.statLabel}>Fütterungen</Text>
+              </View>
+              <View style={s.statItem}>
+                <Text style={s.statEmoji}>💧</Text>
+                <Text style={s.statValue}>{totalDiapers}</Text>
+                <Text style={s.statLabel}>Windeln</Text>
+              </View>
+              <View style={s.statItem}>
+                <Text style={s.statEmoji}>⭐</Text>
+                <Text style={s.statValue}>{avgPerDay}</Text>
+                <Text style={s.statLabel}>Ø pro Tag</Text>
+              </View>
+            </View>
+          </View>
+        </GlassCard>
+
+        {/* Trend analysis (placeholder like sleep-tracker) */}
+        <GlassCard style={s.trendCard} intensity={24} overlayColor="rgba(255,255,255,0.15)" borderColor="rgba(255,255,255,0.3)">
+          <View style={s.trendInner}>
+            <Text style={s.trendTitle}>Trend-Analyse</Text>
+            <View style={s.trendContent}>
+              <View style={s.trendItem}>
+                <Text style={s.trendEmoji}>📈</Text>
+                <Text style={s.trendText}>Konstante Aktivitätsraten</Text>
+              </View>
+              <View style={s.trendItem}>
+                <Text style={s.trendEmoji}>🕒</Text>
+                <Text style={s.trendText}>Regelmäßige Intervalle</Text>
+              </View>
+            </View>
+          </View>
+        </GlassCard>
       </View>
     );
   };
@@ -1261,8 +1318,9 @@ kpiValueCentered: { textAlign: 'center', width: '100%' },
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 20,
-    paddingHorizontal: 8,
+    marginTop: SECTION_GAP_TOP,
+    marginBottom: SECTION_GAP_BOTTOM,
+    paddingHorizontal: LAYOUT_PAD,
   },
   weekNavButton: {
     width: 44,
@@ -1273,6 +1331,7 @@ kpiValueCentered: { textAlign: 'center', width: '100%' },
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.3)',
+    padding: 6,
   },
   weekNavButtonText: {
     fontSize: 24,
@@ -1285,10 +1344,10 @@ kpiValueCentered: { textAlign: 'center', width: '100%' },
     marginHorizontal: 16,
   },
   weekHeaderTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#7D5A50',
-    marginBottom: 4,
+    marginBottom: 6,
   },
   weekHeaderSubtitle: {
     fontSize: 12,
@@ -1399,6 +1458,69 @@ kpiValueCentered: { textAlign: 'center', width: '100%' },
     paddingHorizontal: 0,
     paddingVertical: 4,
   },
+  // Week chart styles (mirroring sleep-tracker aesthetics)
+  chartGlassCard: {
+    marginHorizontal: TIMELINE_INSET,
+    marginBottom: 20,
+    padding: 0,
+  },
+  chartTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#5D4A40',
+    textAlign: 'center',
+    marginBottom: SECTION_GAP_BOTTOM,
+  },
+  chartArea: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    height: 200,
+    paddingVertical: 16,
+    paddingHorizontal: 0,
+    width: '100%',
+  },
+  chartBarContainer: {
+    height: MAX_BAR_H,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
+  chartBar: {
+    borderRadius: 6,
+    marginTop: 2,
+    minHeight: 3,
+  },
+  chartBarTotal: { backgroundColor: PRIMARY },
+  chartBarDiaper: { backgroundColor: '#38A169' },
+  chartBarBreast: { backgroundColor: '#5E3DB3' },
+  chartBarBottle: { backgroundColor: '#4A90E2' },
+  chartBarSolids: { backgroundColor: '#F5A623' },
+  chartLabelContainer: {
+    marginTop: 6,
+    alignItems: 'center',
+  },
+  chartLabel: {
+    fontSize: 11,
+    color: '#7D5A50',
+    fontWeight: '700',
+  },
+  chartValue: {
+    fontSize: 11,
+    color: '#7D5A50',
+    marginTop: 2,
+    fontVariant: ['tabular-nums'],
+  },
+  chartLegend: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 16,
+    paddingVertical: 8,
+  },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  legendSwatch: { width: 10, height: 10, borderRadius: 2 },
+  legendLabel: { fontSize: 11, color: '#7D5A50', fontWeight: '600' },
+  legendBreast: { backgroundColor: '#5E3DB3' },
+  legendBottle: { backgroundColor: '#4A90E2' },
+  legendSolids: { backgroundColor: '#F5A623' },
   daySection: {
     marginBottom: 20,
   },
@@ -1408,6 +1530,69 @@ kpiValueCentered: { textAlign: 'center', width: '100%' },
     color: '#5E3DB3',
     marginBottom: 12,
     paddingHorizontal: 4,
+  },
+  // Summary styles (shared)
+  summaryInner: {
+    paddingVertical: 6,
+  },
+  summaryTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#7D5A50',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  summaryStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  statItem: {
+    alignItems: 'center',
+  },
+  statEmoji: {
+    fontSize: 22,
+    marginBottom: 6,
+  },
+  statValue: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#7D5A50',
+    marginBottom: 2,
+  },
+  statLabel: {
+    fontSize: 12,
+    color: '#7D5A50',
+  },
+  // Trend styles
+  trendCard: {
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    marginTop: 8,
+  },
+  trendInner: {},
+  trendTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#7D5A50',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  trendContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  trendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  trendEmoji: {
+    fontSize: 18,
+  },
+  trendText: {
+    fontSize: 13,
+    color: '#7D5A50',
+    fontWeight: '600',
   },
   splashOverlay: {
     position: 'absolute',
