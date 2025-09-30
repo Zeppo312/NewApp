@@ -16,6 +16,7 @@ import Header from '@/components/Header';
 export default function WeightTrackerScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
+  const styles = createStyles(theme);
   // router wird durch die BackButton-Komponente verwaltet
 
   const [weightEntries, setWeightEntries] = useState<WeightEntry[]>([]);
@@ -433,7 +434,8 @@ export default function WeightTrackerScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(theme: typeof Colors.light) {
+  return StyleSheet.create({
   backgroundImage: {
     flex: 1,
     width: '100%',
@@ -596,7 +598,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   input: {
-    backgroundColor: '#F5F5F5',
+    backgroundColor: theme.cardLight,
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
@@ -609,7 +611,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#F5F5F5',
+    backgroundColor: theme.cardLight,
     borderRadius: 8,
     padding: 12,
   },
@@ -620,7 +622,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   saveButtonText: {
-    color: '#FFFFFF',
+    color: theme.textPrimary,
     fontSize: 16,
     fontWeight: 'bold',
   },
@@ -651,4 +653,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
   },
-});
+  });
+}

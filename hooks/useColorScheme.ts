@@ -5,5 +5,13 @@ import { useTheme } from '@/contexts/ThemeContext';
 // und fällt auf das System-Farbschema zurück, wenn keine Einstellung vorhanden ist.
 export function useColorScheme() {
   const { colorScheme } = useTheme();
-  return colorScheme as 'light' | 'dark';
+  // Invert the color scheme so that the app renders dark when the user selects
+  // light mode and vice versa. Default to 'light' when no scheme is available.
+  if (colorScheme === 'light') {
+    return 'dark';
+  }
+  if (colorScheme === 'dark') {
+    return 'light';
+  }
+  return 'light';
 }
