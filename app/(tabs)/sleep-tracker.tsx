@@ -2758,23 +2758,28 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   trendContent: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
+    flexDirection: 'column',
+    gap: 12,
+    paddingHorizontal: 8,
   },
   trendItem: {
     alignItems: 'center',
     flexDirection: 'row',
-    flex: 1,                    // Gleichmäßige Verteilung
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
+    paddingVertical: 4,
   },
   trendEmoji: {
-    fontSize: 22,               // Größerer Emoji
-    marginRight: 10,            // Mehr Abstand
+    fontSize: 24,
+    marginRight: 12,
+    width: 32,
+    textAlign: 'center',
   },
   trendText: {
-    fontSize: 13,               // Größerer Text
+    fontSize: 14,
     color: '#7D5A50',
     fontWeight: '600',
+    flex: 1,
+    flexWrap: 'wrap',
   },
 
   // Calendar Styles (Design Guide konform)
