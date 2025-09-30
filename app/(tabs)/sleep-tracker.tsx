@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   SafeAreaView,
   View,
@@ -45,6 +45,24 @@ const LAYOUT_PAD = 20;
 const SECTION_GAP_TOP = 20;
 const SECTION_GAP_BOTTOM = 12;
 
+// Design Tokens für konsistente Gestaltung
+const RADIUS = 22;
+const PRIMARY = '#8E4EC6';
+const GLASS_BORDER = 'rgba(255,255,255,0.55)';
+const GLASS_OVERLAY = 'rgba(255,255,255,0.16)';
+
+// Typografie-Tokens
+const FONT_SM = 12;
+const FONT_MD = 14;
+const FONT_LG = 18;
+const FONT_NUM = { fontVariant: ['tabular-nums'] };
+
+// Globale Helper-Funktionen für Zeitberechnungen
+const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+const endOfDay   = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
+const overlapMinutes = (aStart: Date, aEnd: Date, bStart: Date, bEnd: Date) =>
+  Math.max(0, Math.min(+aEnd, +bEnd) - Math.max(+aStart, +bStart)) / 60000 | 0;
+
 // Match Timeline (ActivityCard marginHorizontal=8 -> 16px gesamt)
 const TIMELINE_INSET = 8;
 const contentWidth = screenWidth - 2 * LAYOUT_PAD;
@@ -61,6 +79,20 @@ const WEEK_CONTENT_WIDTH = contentWidth - TIMELINE_INSET * 2;
 const WEEK_COL_WIDTH   = Math.floor((WEEK_CONTENT_WIDTH - (COLS - 1) * GUTTER) / COLS);
 const WEEK_COLS_WIDTH  = COLS * WEEK_COL_WIDTH;
 const WEEK_LEFTOVER    = WEEK_CONTENT_WIDTH - (WEEK_COLS_WIDTH + totalGutters);
+
+// Highlight-Karten Konstanten (2-Spalten Layout)
+const HL_COLS = 2;
+const HL_GUTTER = 12;
+const HL_COL_WIDTH = Math.floor((WEEK_CONTENT_WIDTH - (HL_COLS - 1) * HL_GUTTER) / HL_COLS);
+const HL_COLS_WIDTH = HL_COLS * HL_COL_WIDTH;
+const HL_LEFTOVER = WEEK_CONTENT_WIDTH - (HL_COLS_WIDTH + (HL_COLS - 1) * HL_GUTTER);
+
+// Action Buttons Konstanten (2-Spalten Layout)
+const GRID_COLS = 2;
+const GRID_GUTTER = 12;
+const GRID_COL_W = Math.floor((contentWidth - (GRID_COLS - 1) * GRID_GUTTER) / GRID_COLS);
+const GRID_LEFTOVER = contentWidth - (GRID_COLS * GRID_COL_W + (GRID_COLS - 1) * GRID_GUTTER);
+
 const MAX_BAR_H = 140; // Höhe der Balkenfläche (mehr Luft)
 
 // Reusable GlassCard using expo-blur
@@ -265,9 +297,19 @@ export default function SleepTrackerScreen() {
   const [showInputModal, setShowInputModal] = useState(false);
   const [selectedTab, setSelectedTab] = useState<'day' | 'week' | 'month'>('day');
   const [editingEntry, setEditingEntry] = useState<ClassifiedSleepEntry | null>(null);
+
+  // Navigation offsets für Woche und Monat
+  const [weekOffset, setWeekOffset] = useState(0);   // 0 = diese Woche, -1 = letzte, +1 = nächste
+  const [monthOffset, setMonthOffset] = useState(0); // 0 = dieser Monat, -1 = vorheriger, +1 = nächster
   const [selectedActivityType, setSelectedActivityType] = useState<'feeding' | 'diaper' | 'other'>('feeding');
   const [selectedSubType, setSelectedSubType] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
+
+  // Bei Tabwechsel Offsets zurücksetzen
+  useEffect(() => {
+    setWeekOffset(0);
+    setMonthOffset(0);
+  }, [selectedTab]);
 
   // Splash System komplett entfernt - saubere Sleep-Tracker Implementierung
 
@@ -702,27 +744,34 @@ export default function SleepTrackerScreen() {
     return acc;
   }, {} as Record<SleepPeriod, ClassifiedSleepEntry[]>);
 
-  // Compute high-level stats & score (last 24h)
+  // Compute high-level stats & score (heutiger Kalendertag 00:00–24:00 lokal)
   const computeStats = () => {
-    const now = Date.now();
-    const dayMs = 24 * 60 * 60 * 1000;
-    const inWindow = sleepEntries.filter(e => {
-      const st = new Date(e.start_time).getTime();
-      return st >= now - dayMs;
-    });
-    const totalMinutes = inWindow.reduce((sum, e) => sum + (e.duration_minutes || 0), 0);
-    const napsCount = inWindow.filter(e => e.period === 'day').length;
-    const longestStretch = inWindow.reduce((max, e) => {
-      const dur = e.duration_minutes || 0;
-      return dur > max ? dur : max;
-    }, 0);
-    
-    // Sleep quality based on duration and consistency
-    const idealSleep = 12 * 60; // 12 hours for babies
-    const sleepEfficiency = Math.min(100, (totalMinutes / idealSleep) * 100);
-    const score = Math.min(100, Math.round(sleepEfficiency));
-    
-    return { totalMinutes, napsCount, longestStretch, score, sleepEfficiency };
+    const dayStart = startOfDay(new Date());
+    const dayEnd   = endOfDay(new Date());
+
+    let totalMinutes = 0;
+    let longestStretch = 0;
+    let napsCount = 0;
+
+    for (const e of sleepEntries) {
+      const s = new Date(e.start_time);
+      const ee = e.end_time ? new Date(e.end_time) : new Date();
+      const mins = overlapMinutes(s, ee, dayStart, dayEnd);
+      if (!mins) continue;
+
+      totalMinutes += mins;
+      longestStretch = Math.max(longestStretch, mins);
+
+      // Naps = kurze Schläfchen (<= 30 Min), egal ob Tag/Nacht klassifiziert
+      if (mins <= 30) napsCount += 1;
+    }
+
+    // Beispiel-Score: 14h Ziel, lineare Abweichung (keine 100% bei 25h)
+    const target = 14 * 60;
+    const deviation = Math.abs(totalMinutes - target);
+    const score = Math.max(0, Math.round(100 - (deviation / target) * 100));
+
+    return { totalMinutes, napsCount, longestStretch, score };
   };
 
   const stats = computeStats();
@@ -899,7 +948,7 @@ export default function SleepTrackerScreen() {
           
             {/* Content positioned absolutely above and below the center */}
             <View pointerEvents="none" style={styles.upperContent}>
-              <View style={[styles.centralIcon, { backgroundColor: activeSleepEntry ? 'rgba(135, 206, 235, 0.9)' : 'rgba(255, 140, 66, 0.9)', borderRadius: 30, padding: 8, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.6)', shadowColor: 'rgba(255, 255, 255, 0.3)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.8, shadowRadius: 2, elevation: 4 }]}>
+              <View style={[styles.centralIcon, { backgroundColor: activeSleepEntry ? 'rgba(135, 206, 235, 0.9)' : 'rgba(255, 140, 66, 0.9)', borderRadius: 30, padding: 8, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.6)', shadowColor: 'rgba(255, 255, 255, 0.3)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.12, shadowRadius: 2, elevation: 4 }]}>
                 <IconSymbol name={activeSleepEntry ? "moon.fill" : "sun.max.fill"} size={28} color="#FFFFFF" />
                 </View>
                 </View>
@@ -934,7 +983,7 @@ export default function SleepTrackerScreen() {
         >
           <BlurView intensity={24} tint="light" style={styles.liquidGlassCardBackground}>
               <View style={[styles.card, styles.liquidGlassCard, styles.fullWidthCard, { backgroundColor: 'rgba(255, 190, 190, 0.6)', borderColor: 'rgba(255, 255, 255, 0.6)' }]}>
-              <View style={[styles.iconContainer, { backgroundColor: 'rgba(255, 140, 160, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.6)', shadowColor: 'rgba(255, 255, 255, 0.3)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.8, shadowRadius: 2, elevation: 4 }]}>
+              <View style={[styles.iconContainer, { backgroundColor: 'rgba(255, 140, 160, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.6)', shadowColor: 'rgba(255, 255, 255, 0.3)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.12, shadowRadius: 2, elevation: 4 }]}>
                 <IconSymbol name="stop.fill" size={28} color="#FFFFFF" />
               </View>
               <Text style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: '#7D5A50', fontWeight: '700' }]}>Schlaf beenden</Text>
@@ -945,13 +994,13 @@ export default function SleepTrackerScreen() {
       ) : (
         <>
           <TouchableOpacity
-            style={styles.liquidGlassCardWrapper}
+            style={[styles.liquidGlassCardWrapper, { width: GRID_COL_W, marginRight: GRID_GUTTER }]}
               onPress={() => handleStartSleep(currentTime.getHours() >= 20 || currentTime.getHours() < 10 ? 'night' : 'day')}
             activeOpacity={0.9}
           >
             <BlurView intensity={24} tint="light" style={styles.liquidGlassCardBackground}>
               <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(220, 200, 255, 0.6)', borderColor: 'rgba(255, 255, 255, 0.6)' }]}>
-                <View style={[styles.iconContainer, { backgroundColor: 'rgba(142, 78, 198, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.6)', shadowColor: 'rgba(255, 255, 255, 0.3)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.8, shadowRadius: 2, elevation: 4 }]}>
+                <View style={[styles.iconContainer, { backgroundColor: 'rgba(142, 78, 198, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.6)', shadowColor: 'rgba(255, 255, 255, 0.3)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.12, shadowRadius: 2, elevation: 4 }]}>
                   <IconSymbol name="moon.fill" size={28} color="#FFFFFF" />
                 </View>
                 <Text style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: '#7D5A50', fontWeight: '700' }]}>Schlaf starten</Text>
@@ -961,7 +1010,7 @@ export default function SleepTrackerScreen() {
           </TouchableOpacity>
           
           <TouchableOpacity
-            style={styles.liquidGlassCardWrapper}
+            style={[styles.liquidGlassCardWrapper, { width: GRID_COL_W }]}
               onPress={() => {
                 setEditingEntry(null);
                 setSelectedActivityType('feeding');
@@ -972,7 +1021,7 @@ export default function SleepTrackerScreen() {
           >
             <BlurView intensity={24} tint="light" style={styles.liquidGlassCardBackground}>
               <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(168, 196, 193, 0.6)', borderColor: 'rgba(255, 255, 255, 0.6)' }]}>
-                <View style={[styles.iconContainer, { backgroundColor: 'rgba(168, 196, 193, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.6)', shadowColor: 'rgba(255, 255, 255, 0.3)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.8, shadowRadius: 2, elevation: 4 }]}>
+                <View style={[styles.iconContainer, { backgroundColor: 'rgba(168, 196, 193, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.6)', shadowColor: 'rgba(255, 255, 255, 0.3)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.12, shadowRadius: 2, elevation: 4 }]}>
                   <IconSymbol name="plus.circle.fill" size={28} color="#FFFFFF" />
                 </View>
                 <Text style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: '#7D5A50', fontWeight: '700' }]}>Manuell</Text>
@@ -1002,7 +1051,12 @@ export default function SleepTrackerScreen() {
 
   // Wochenansicht Component (Design Guide konform)
   const WeekView = () => {
-    const currentDate = new Date();
+    // Referenz-Datum: Heute + (weekOffset * 7 Tage)
+    const refDate = useMemo(() => {
+      const d = new Date();
+      d.setDate(d.getDate() + weekOffset * 7);
+      return d;
+    }, [weekOffset]);
     
     // Lokale Hilfsfunktionen
     const getWeekStart = (date: Date) => {
@@ -1030,9 +1084,9 @@ export default function SleepTrackerScreen() {
       return days;
     };
     
-    const weekDays = getWeekDays(currentDate);
-    const weekStart = getWeekStart(currentDate);
-    const weekEnd = getWeekEnd(currentDate);
+    const weekDays = useMemo(() => getWeekDays(refDate), [refDate]);
+    const weekStart = useMemo(() => getWeekStart(refDate), [refDate]);
+    const weekEnd = useMemo(() => getWeekEnd(refDate), [refDate]);
 
     // Hilfsfunktionen (lokaler Tag, kein UTC-Shift)
     const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -1073,12 +1127,39 @@ export default function SleepTrackerScreen() {
     // Berechne Max-Höhe für Balkendiagramm
     const dayTotals = weekDays.map((day: Date) => getDayStats(day).totalMinutes);
     const maxMinutes = Math.max(...dayTotals, 480); // Min 8h für vernünftige Skala
+
+    // Wochen-spezifische Highlight-Berechnung
+    const weekSpanStart = startOfDay(weekStart);
+    const weekSpanEnd   = endOfDay(weekEnd);
+
+    // Wochen-spezifische Berechnung für Zusammenfassung
+    const nightWeekMins = sleepEntries.reduce((sum, e) => {
+      if (e.period !== 'night') return sum;
+      const s = new Date(e.start_time);
+      const eEnd = e.end_time ? new Date(e.end_time) : new Date();
+      return sum + overlapMinutes(s, eEnd, weekSpanStart, weekSpanEnd);
+    }, 0);
+
+    const dayWeekMins = sleepEntries.reduce((sum, e) => {
+      if (e.period !== 'day') return sum;
+      const s = new Date(e.start_time);
+      const eEnd = e.end_time ? new Date(e.end_time) : new Date();
+      return sum + overlapMinutes(s, eEnd, weekSpanStart, weekSpanEnd);
+    }, 0);
+
+    // gesamte Schlafminuten dieser Woche (mit Intervall-Überlappung)
+    const totalWeekMins = sleepEntries.reduce((sum, e) => {
+      const s = new Date(e.start_time);
+      const eEnd = e.end_time ? new Date(e.end_time) : new Date();
+      return sum + overlapMinutes(s, eEnd, weekSpanStart, weekSpanEnd);
+    }, 0);
+
     
     return (
       <View style={styles.weekViewContainer}>
         {/* Week Navigation - Design Guide konform */}
         <View style={styles.weekNavigationContainer}>
-          <TouchableOpacity style={styles.weekNavButton}>
+          <TouchableOpacity style={styles.weekNavButton} onPress={() => setWeekOffset(o => o - 1)}>
             <Text style={styles.weekNavButtonText}>‹</Text>
           </TouchableOpacity>
 
@@ -1089,10 +1170,14 @@ export default function SleepTrackerScreen() {
             </Text>
               </View>
 
-          <TouchableOpacity style={styles.weekNavButton}>
+          <TouchableOpacity
+            style={[styles.weekNavButton, weekOffset >= 0 && { opacity: 0.4 }]}
+            disabled={weekOffset >= 0}
+            onPress={() => setWeekOffset(o => o + 1)}
+          >
             <Text style={styles.weekNavButtonText}>›</Text>
           </TouchableOpacity>
-              </View>
+        </View>
 
         {/* Balkendiagramm - Design Guide konform mit Liquid Glass */}
         <LiquidGlassCard style={styles.chartGlassCard}>
@@ -1146,21 +1231,21 @@ export default function SleepTrackerScreen() {
           <View style={styles.summaryInner}>
             <Text style={styles.summaryTitle}>Wochenzusammenfassung</Text>
             <View style={styles.summaryStats}>
-              <View style={styles.statItem}>
-                <Text style={styles.statEmoji}>🌙</Text>
-                <Text style={styles.statValue}>{Math.round(sleepEntries.filter(e => e.period === 'night').reduce((sum, e) => sum + (e.duration_minutes || 0), 0) / 60)}h</Text>
-                <Text style={styles.statLabel}>Nachtschlaf</Text>
-              </View>
-              <View style={styles.statItem}>
-                <Text style={styles.statEmoji}>☀️</Text>
-                <Text style={styles.statValue}>{Math.round(sleepEntries.filter(e => e.period === 'day').reduce((sum, e) => sum + (e.duration_minutes || 0), 0) / 60)}h</Text>
-                <Text style={styles.statLabel}>Tagschlaf</Text>
-              </View>
-              <View style={styles.statItem}>
-                <Text style={styles.statEmoji}>⭐</Text>
-                <Text style={styles.statValue}>{sleepEntries.length > 0 ? Math.round((sleepEntries.reduce((sum, e) => sum + (e.duration_minutes || 0), 0) / sleepEntries.length) / 60) : 0}h</Text>
-                <Text style={styles.statLabel}>Ø pro Tag</Text>
-              </View>
+                <View style={styles.statItem}>
+                  <Text style={styles.statEmoji}>🌙</Text>
+                  <Text style={styles.statValue}>{Math.round(nightWeekMins / 60)}h</Text>
+                  <Text style={styles.statLabel}>Nachtschlaf</Text>
+                </View>
+                <View style={styles.statItem}>
+                  <Text style={styles.statEmoji}>☀️</Text>
+                  <Text style={styles.statValue}>{Math.round(dayWeekMins / 60)}h</Text>
+                  <Text style={styles.statLabel}>Tagschlaf</Text>
+                </View>
+                <View style={styles.statItem}>
+                  <Text style={styles.statEmoji}>⭐</Text>
+                  <Text style={styles.statValue}>{Math.round(totalWeekMins / 7 / 60)}h</Text>
+                  <Text style={styles.statLabel}>Ø pro Tag</Text>
+                </View>
             </View>
           </View>
         </LiquidGlassCard>
@@ -1182,39 +1267,19 @@ export default function SleepTrackerScreen() {
           </View>
         </LiquidGlassCard>
 
-        {/* Highlight-Karten - Design Guide konform */}
-        <View style={[styles.highlightsContainer, { paddingHorizontal: TIMELINE_INSET }]}>
-          <LiquidGlassCard style={styles.highlightCard}>
-            <View style={styles.highlightContent}>
-              <Text style={styles.highlightEmoji}>🏆</Text>
-              <View style={styles.highlightInfo}>
-                <Text style={styles.highlightLabel}>Längster Schlaf</Text>
-                <Text style={styles.highlightValue}>
-                  {sleepEntries.length > 0 ? `${Math.round(Math.max(...sleepEntries.map(e => e.duration_minutes || 0)) / 60)}h ${Math.max(...sleepEntries.map(e => e.duration_minutes || 0)) % 60}m` : '0h'}
-                </Text>
-              </View>
-            </View>
-          </LiquidGlassCard>
-
-          <LiquidGlassCard style={styles.highlightCard}>
-            <View style={styles.highlightContent}>
-              <Text style={styles.highlightEmoji}>⭐</Text>
-              <View style={styles.highlightInfo}>
-                <Text style={styles.highlightLabel}>Durchschnitt</Text>
-                <Text style={styles.highlightValue}>
-                  {sleepEntries.length > 0 ? `${Math.round((sleepEntries.reduce((sum, e) => sum + (e.duration_minutes || 0), 0) / sleepEntries.length) / 60)}h ${Math.round((sleepEntries.reduce((sum, e) => sum + (e.duration_minutes || 0), 0) / sleepEntries.length) % 60)}m` : '0h'}
-                </Text>
-              </View>
-            </View>
-          </LiquidGlassCard>
-        </View>
       </View>
     );
   };
 
   // Monatsansicht Component (Design Guide konform)
   const MonthView = () => {
-    const currentDate = new Date();
+    // Referenz-Monat: aktueller Monat + monthOffset
+    const refMonthDate = useMemo(() => {
+      const d = new Date();
+      d.setDate(1);                 // Normalize to first of month
+      d.setMonth(d.getMonth() + monthOffset);
+      return d;
+    }, [monthOffset]);
     
     // Lokale Hilfsfunktionen
     const getMonthStart = (date: Date) => {
@@ -1231,30 +1296,47 @@ export default function SleepTrackerScreen() {
       return new Date(year, month + 1, 0).getDate();
     };
     
-    const monthStart = getMonthStart(currentDate);
-    const monthEnd = getMonthEnd(currentDate);
-    const daysInMonth = getDaysInMonth(currentDate);
+    const monthStart = useMemo(() => getMonthStart(refMonthDate), [refMonthDate]);
+    const monthEnd = useMemo(() => getMonthEnd(refMonthDate), [refMonthDate]);
+    const daysInMonth = useMemo(() => getDaysInMonth(refMonthDate), [refMonthDate]);
 
-    // Erstelle Kalender-Grid
-    const getCalendarDays = () => {
-      const days = [];
+    // Erstelle Kalender-Grid - gruppiert nach Wochen (wie Wochenansicht)
+    const getCalendarWeeks = () => {
+      const weeks = [];
       const firstDayOfWeek = monthStart.getDay();
       const startOffset = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1; // Montag als erster Tag
 
+      let currentWeek = [];
+      
       // Füge leere Tage hinzu
       for (let i = 0; i < startOffset; i++) {
-        days.push(null);
+        currentWeek.push(null);
       }
 
       // Füge Tage des Monats hinzu
       for (let day = 1; day <= daysInMonth; day++) {
-        days.push(new Date(currentDate.getFullYear(), currentDate.getMonth(), day));
+        currentWeek.push(new Date(monthStart.getFullYear(), monthStart.getMonth(), day));
+        
+        // Wenn Woche voll (7 Tage)
+        if (currentWeek.length === 7) {
+          weeks.push(currentWeek);
+          currentWeek = [];
+        }
       }
 
-      return days;
+      // Füge letzte unvollständige Woche hinzu
+      if (currentWeek.length > 0) {
+        // Fülle mit null auf
+        while (currentWeek.length < 7) {
+          currentWeek.push(null);
+        }
+        weeks.push(currentWeek);
+      }
+
+      return weeks;
     };
 
-    const calendarDays = getCalendarDays();
+    const calendarWeeks = useMemo(() => getCalendarWeeks(), [monthStart, daysInMonth]);
 
     // Hilfsfunktionen für lokale Tage (kein UTC-Shift)
     const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -1296,13 +1378,31 @@ export default function SleepTrackerScreen() {
       return 'poor';                              // <4h
     };
 
-    const getScoreColor = (score: string) => {
+    const getTotalMinutesForDate = (date: Date) => {
+      const dayStart = startOfDay(date);
+      const dayEnd   = endOfDay(date);
+      return sleepEntries.reduce((sum, e) => {
+        const s = new Date(e.start_time);
+        const eEnd = e.end_time ? new Date(e.end_time) : new Date();
+        return sum + overlapMinutes(s, eEnd, dayStart, dayEnd);
+      }, 0);
+    };
+
+    // Neue Farbpalette für Kalender-Tiles (wie KPI-Cards)
+    type DayScore = 'excellent' | 'good' | 'okay' | 'poor' | 'none';
+
+    const getDayColors = (score: DayScore) => {
       switch (score) {
-        case 'excellent': return '#38A169';
-        case 'good': return '#8E4EC6';
-        case 'okay': return '#F5A623';
-        case 'poor': return '#E53E3E';
-        default: return '#A0AEC0';
+        case 'excellent': // 8h+
+          return { bg: 'rgba(56,161,105,0.22)', text: '#2F855A', border: 'rgba(255,255,255,0.65)' }; // grün
+        case 'good':      // 6h+
+          return { bg: 'rgba(56,161,105,0.14)', text: '#2F855A', border: 'rgba(255,255,255,0.55)' }; // grün (heller)
+        case 'okay':      // 4h+
+          return { bg: 'rgba(245,166,35,0.18)', text: '#975A16', border: 'rgba(255,255,255,0.55)' }; // amber
+        case 'poor':      // <4h
+          return { bg: 'rgba(229,62,62,0.18)',  text: '#9B2C2C', border: 'rgba(255,255,255,0.55)' }; // rot
+        default:
+          return { bg: 'rgba(255,255,255,0.10)', text: '#7D5A50', border: 'rgba(255,255,255,0.35)' }; // glas neutral
       }
     };
 
@@ -1310,105 +1410,118 @@ export default function SleepTrackerScreen() {
       <View style={styles.monthViewContainer}>
         {/* Monats-Navigation - Design Guide konform */}
         <View style={styles.monthNavigationContainer}>
-          <TouchableOpacity style={styles.monthNavButton}>
+          <TouchableOpacity style={styles.monthNavButton} onPress={() => setMonthOffset(o => o - 1)}>
             <Text style={styles.monthNavButtonText}>‹</Text>
           </TouchableOpacity>
 
           <View style={styles.monthHeaderCenter}>
             <Text style={styles.monthHeaderTitle}>
-              {currentDate.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' })}
+              {refMonthDate.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' })}
             </Text>
           </View>
 
-          <TouchableOpacity style={styles.monthNavButton}>
+          <TouchableOpacity
+            style={[styles.monthNavButton, monthOffset >= 0 && { opacity: 0.4 }]}
+            disabled={monthOffset >= 0}
+            onPress={() => setMonthOffset(o => o + 1)}
+          >
             <Text style={styles.monthNavButtonText}>›</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Kalender-Grid - Design Guide konform */}
-        <View style={styles.calendarContainer}>
-          {/* Wochentags-Header */}
-          <View style={styles.weekdayHeader}>
-            {['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map((day) => (
-              <Text key={day} style={styles.weekdayLabel}>{day}</Text>
-            ))}
-          </View>
+        {/* Kalender-Block mit exakt gleicher Innenbreite wie Week-Chart */}
+        <LiquidGlassCard style={styles.chartGlassCard}>
+          <Text style={styles.chartTitle}>Schlafkalender</Text>
+          <View style={{ width: WEEK_CONTENT_WIDTH, alignSelf: 'center', paddingVertical: 16 }}>
+            {/* Wochentags-Header mit exakten Spaltenbreiten */}
+            <View style={styles.weekdayHeader}>
+              {['Mo','Di','Mi','Do','Fr','Sa','So'].map((label, i) => {
+                const extra = i < WEEK_LEFTOVER ? 1 : 0;
+                return (
+                  <View
+                    key={label}
+                    style={{
+                      width: WEEK_COL_WIDTH + extra,
+                      marginRight: i < 6 ? GUTTER : 0,
+                      alignItems: 'center',
+                    }}
+                  >
+                    <Text style={styles.weekdayLabel}>{label}</Text>
+                  </View>
+                );
+              })}
+            </View>
 
-          {/* Kalender-Tage */}
-          <View style={styles.calendarGrid}>
-            {calendarDays.map((date, index) => (
-              <View key={index} style={styles.calendarDay}>
-                {date ? (
-                  <TouchableOpacity style={[styles.calendarDayButton, {
-                    backgroundColor: getEntriesForDate(date).length > 0
-                      ? getScoreColor(getDayScore(date))
-                      : 'rgba(255,255,255,0.1)'
-                  }]}>
-                    <Text style={styles.calendarDayNumber}>
-                      {date.getDate()}
-                    </Text>
-                    {getEntriesForDate(date).length > 0 && (
-                      <Text style={styles.calendarDayIndicator}>
-                        {getEntriesForDate(date).length}
-                      </Text>
-                    )}
-                  </TouchableOpacity>
-                ) : (
-                  <View style={styles.calendarDayEmpty} />
-                )}
+            {/* Tage: wochenweise, gleiche Spaltenbreiten & Gutter wie oben */}
+            {calendarWeeks.map((week, weekIndex) => (
+              <View key={weekIndex} style={styles.calendarWeek}>
+                {week.map((date, dayIndex) => {
+                  const extra = dayIndex < WEEK_LEFTOVER ? 1 : 0;
+                  return (
+                    <View
+                      key={dayIndex}
+                      style={{
+                        width: WEEK_COL_WIDTH + extra,
+                        marginRight: dayIndex < 6 ? GUTTER : 0,
+                      }}
+                    >
+                      {date ? (() => {
+                        const entriesCount = getEntriesForDate(date).length;
+                        const totalMins = getTotalMinutesForDate(date);
+                        const hours = Math.round(totalMins / 60); // runde auf ganze Stunden
+
+                        const score = entriesCount > 0 ? getDayScore(date) : 'none';
+                        const c = getDayColors(score as DayScore);
+                        return (
+                          <TouchableOpacity
+                            style={[
+                              styles.calendarDayButton,
+                              { backgroundColor: c.bg, borderColor: c.border }
+                            ]}
+                          >
+                            <Text style={[styles.calendarDayNumber, { color: c.text }]}>{date.getDate()}</Text>
+                            {totalMins > 0 && (
+                              <Text style={[styles.calendarDayHours, { color: c.text }]}>
+                                {hours}h
+                              </Text>
+                            )}
+                          </TouchableOpacity>
+                        );
+                      })() : (
+                        <View style={styles.calendarDayEmpty} />
+                      )}
+                    </View>
+                  );
+                })}
               </View>
             ))}
           </View>
-        </View>
+        </LiquidGlassCard>
 
         {/* Monatsstatistiken - Design Guide konform */}
         <LiquidGlassCard style={styles.monthSummaryCard}>
-          <Text style={styles.summaryTitle}>Monatsübersicht</Text>
-          <View style={styles.summaryStats}>
-            <View style={styles.statItem}>
-              <Text style={styles.statEmoji}>📊</Text>
-              <Text style={styles.statValue}>{sleepEntries.length}</Text>
-              <Text style={styles.statLabel}>Einträge</Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text style={styles.statEmoji}>⏰</Text>
-              <Text style={styles.statValue}>{sleepEntries.length > 0 ? Math.round(sleepEntries.reduce((sum, e) => sum + (e.duration_minutes || 0), 0) / sleepEntries.length / 60) : 0}h</Text>
-              <Text style={styles.statLabel}>Ø pro Tag</Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text style={styles.statEmoji}>🏆</Text>
-              <Text style={styles.statValue}>{sleepEntries.length > 0 ? Math.round(Math.max(...sleepEntries.map(e => e.duration_minutes || 0)) / 60) : 0}h</Text>
-              <Text style={styles.statLabel}>Längster Schlaf</Text>
+          <View style={styles.summaryInner}>
+            <Text style={styles.summaryTitle}>Monatsübersicht</Text>
+            <View style={styles.summaryStats}>
+              <View style={styles.statItem}>
+                <Text style={styles.statEmoji}>📊</Text>
+                <Text style={styles.statValue}>{sleepEntries.length}</Text>
+                <Text style={styles.statLabel}>Einträge</Text>
+              </View>
+              <View style={styles.statItem}>
+                <Text style={styles.statEmoji}>⏰</Text>
+                <Text style={styles.statValue}>{sleepEntries.length > 0 ? Math.round(sleepEntries.reduce((sum, e) => sum + (e.duration_minutes || 0), 0) / sleepEntries.length / 60) : 0}h</Text>
+                <Text style={styles.statLabel}>Ø pro Tag</Text>
+              </View>
+              <View style={styles.statItem}>
+                <Text style={styles.statEmoji}>🏆</Text>
+                <Text style={styles.statValue}>{sleepEntries.length > 0 ? Math.round(Math.max(...sleepEntries.map(e => e.duration_minutes || 0)) / 60) : 0}h</Text>
+                <Text style={styles.statLabel}>Längster Schlaf</Text>
+              </View>
             </View>
           </View>
         </LiquidGlassCard>
 
-        {/* Monats-Highlights - Design Guide konform */}
-        <View style={styles.highlightsContainer}>
-          <LiquidGlassCard style={styles.highlightCard}>
-            <View style={styles.highlightContent}>
-              <Text style={styles.highlightEmoji}>🌙</Text>
-              <View style={styles.highlightInfo}>
-                <Text style={styles.highlightLabel}>Nachtschlaf</Text>
-                <Text style={styles.highlightValue}>
-                  {sleepEntries.filter(e => e.period === 'night').length > 0 ? Math.round(sleepEntries.filter(e => e.period === 'night').reduce((sum, e) => sum + (e.duration_minutes || 0), 0) / sleepEntries.filter(e => e.period === 'night').length / 60) : 0}h
-                </Text>
-              </View>
-            </View>
-          </LiquidGlassCard>
-
-          <LiquidGlassCard style={styles.highlightCard}>
-            <View style={styles.highlightContent}>
-              <Text style={styles.highlightEmoji}>☀️</Text>
-              <View style={styles.highlightInfo}>
-                <Text style={styles.highlightLabel}>Tagschlaf</Text>
-                <Text style={styles.highlightValue}>
-                  {sleepEntries.filter(e => e.period === 'day').length > 0 ? Math.round(sleepEntries.filter(e => e.period === 'day').reduce((sum, e) => sum + (e.duration_minutes || 0), 0) / sleepEntries.filter(e => e.period === 'day').length / 60) : 0}h
-                </Text>
-              </View>
-            </View>
-          </LiquidGlassCard>
-        </View>
       </View>
     );
   };
@@ -1757,13 +1870,14 @@ const styles = StyleSheet.create({
   scrollContent: { paddingBottom: 140, paddingHorizontal: LAYOUT_PAD },
 
   // KPI glass cards (Kompakt)
-  kpiRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 6,
-    paddingHorizontal: LAYOUT_PAD, // KPI-Row nutzt einheitlichen Abstand
-    marginBottom: 4,
-  },
+    kpiRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignSelf: 'center',
+      width: contentWidth,   // exakt gleich wie andere Abschnitte
+      marginTop: 6,
+      marginBottom: 4,
+    },
   kpiCard: {
     width: '48%',
     borderRadius: 12,
@@ -1787,7 +1901,7 @@ const styles = StyleSheet.create({
   kpiValue: {
     fontSize: 18,
     fontWeight: '800',
-    color: '#5e3db3',
+    color: PRIMARY,
     marginTop: 1,
     letterSpacing: -0.5,
     fontVariant: ['tabular-nums'], // Gleichbreite Ziffern
@@ -1939,21 +2053,18 @@ const styles = StyleSheet.create({
   topTabInner: { paddingHorizontal: 18, paddingVertical: 6 },
   activeTopTab: { borderColor: 'rgba(94,61,179,0.65)' },
   topTabText: { fontSize: 13, fontWeight: '700', color: '#7D5A50' },
-  activeTopTabText: { color: '#5e3db3' },
+  activeTopTabText: { color: PRIMARY },
 
   // Cards Grid (from home.tsx)
   cardsGrid: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    alignItems: 'stretch',
+    alignSelf: 'center',
+    width: contentWidth,
     marginBottom: 20,
-    paddingHorizontal: 8,
   },
 
   // Liquid Glass Cards (from home.tsx)
   liquidGlassCardWrapper: {
-    width: '48%',
     marginBottom: 16,
     borderRadius: 22,
     overflow: 'hidden',
@@ -1985,7 +2096,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.6)',
     shadowColor: 'rgba(255, 255, 255, 0.3)',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.8,
+    shadowOpacity: 0.12,
     shadowRadius: 6,
     elevation: 5,
   },
@@ -2076,7 +2187,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     shadowColor: 'rgba(255, 255, 255, 0.3)',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.8,
+    shadowOpacity: 0.12,
     shadowRadius: 8,
     elevation: 8,
   },
@@ -2584,8 +2695,8 @@ const styles = StyleSheet.create({
     marginBottom: 20,           // Mehr Abstand
   },
   monthSummaryCard: {
-    padding: 20,
-    marginHorizontal: 0,        // Volle Breite nutzen
+    padding: 0,                          // wie chartGlassCard
+    marginHorizontal: TIMELINE_INSET,    // gleiche Außenbreite
     marginBottom: 16,
   },
   // Wrapper für exakt gleiche Innenbreite wie Chart
@@ -2631,7 +2742,7 @@ const styles = StyleSheet.create({
   trendCard: {
     padding: 0,                 // Padding entfernt für exakte Breite
     marginHorizontal: TIMELINE_INSET, // Wie Timeline-Cards
-    marginBottom: 20,           // Mehr Abstand
+    marginBottom: 8,            // kompakter, da keine Highlights mehr folgen
   },
   // Wrapper für exakt gleiche Innenbreite wie Chart
   trendInner: {
@@ -2668,66 +2779,67 @@ const styles = StyleSheet.create({
 
   // Calendar Styles (Design Guide konform)
     calendarContainer: {
+      // hier *keine* feste Breite setzen – die kommt inline (WEEK_CONTENT_WIDTH)
       marginBottom: 20,
-      marginHorizontal: 0,        // Volle Breite wie Tagesansicht
-      paddingHorizontal: 0,       // Volle Breite nutzen
     },
   weekdayHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     marginBottom: 10,
-    paddingHorizontal: 8,
   },
   weekdayLabel: {
-    flex: 1,
     textAlign: 'center',
     fontSize: 12,
     fontWeight: '600',
     color: '#7D5A50',
   },
-  calendarGrid: {
+  calendarWeek: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    width: '100%',              // Volle Breite nutzen
-  },
-  calendarDay: {
-    width: `${100 / 7}%`,
-    padding: 2,
+    marginBottom: 4,
   },
   calendarDayButton: {
     aspectRatio: 1,
+    width: '100%',
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 36,
+    borderWidth: 1.25,                         // glasiger Rand
   },
   calendarDayEmpty: {
     aspectRatio: 1,
+    width: '100%',
   },
   calendarDayNumber: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#FFFFFF',
+    // Textfarben kommen jetzt dynamisch
   },
   calendarDayIndicator: {
     fontSize: 8,
-    color: '#FFFFFF',
     marginTop: 2,
     opacity: 0.8,
+    // Textfarben kommen jetzt dynamisch
+  },
+  calendarDayHours: {
+    fontSize: 10,
+    marginTop: 2,
+    fontWeight: '700',
+    opacity: 0.9,
+    fontVariant: ['tabular-nums'], // gleichbreite Ziffern
   },
 
   // Highlight Cards (Design Guide konform)
-    highlightsContainer: {
+    highlightRow: {
       flexDirection: 'row',
-      justifyContent: 'space-between',
+      alignSelf: 'center',
+      width: WEEK_CONTENT_WIDTH,  // exakt wie Chart-Innenbreite
       marginBottom: 20,
-      marginHorizontal: 0,        // Volle Breite wie Tagesansicht
-      paddingHorizontal: LAYOUT_PAD, // Eigener Abstand für Highlight-Karten
     },
   highlightCard: {
-    width: '48%',               // Design Guide konform: 48% für 2er-Grid
     padding: 20,                // Mehr Padding
     marginHorizontal: 0,        // Kein zusätzlicher Margin
+    alignItems: 'center',       // Inhalte zentrieren
+    justifyContent: 'center',   // vertikal zentrieren
   },
   highlightContent: {
     flexDirection: 'row',
