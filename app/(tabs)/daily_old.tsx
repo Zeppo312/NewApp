@@ -63,6 +63,8 @@ const COLS = 7;
 const GUTTER = 4;
 const WEEK_CONTENT_WIDTH = contentWidth - TIMELINE_INSET * 2;
 const WEEK_COL_WIDTH = Math.floor((WEEK_CONTENT_WIDTH - (COLS - 1) * GUTTER) / COLS);
+const WEEK_COLS_WIDTH = COLS * WEEK_COL_WIDTH;
+const WEEK_LEFTOVER = WEEK_CONTENT_WIDTH - (WEEK_COLS_WIDTH + (COLS - 1) * GUTTER);
 const MAX_BAR_H = 140;
 
 type QuickActionType =
@@ -205,6 +207,7 @@ export default function DailyScreen() {
   const [selectedMonthDate, setSelectedMonthDate] = useState(new Date()); // Separate state for month view
   const [selectedTab, setSelectedTab] = useState<'day' | 'week' | 'month'>('day');
   const [weekOffset, setWeekOffset] = useState(0); // align with sleep-tracker week nav
+  const [monthOffset, setMonthOffset] = useState(0); // align with sleep-tracker month nav
   const [showInputModal, setShowInputModal] = useState(false);
   const [showDateNav, setShowDateNav] = useState(true);
   const fadeNavAnim = useRef(new Animated.Value(1)).current;
@@ -268,6 +271,7 @@ export default function DailyScreen() {
   // Reset offsets on tab change like sleep-tracker
   useEffect(() => {
     if (selectedTab === 'week') setWeekOffset(0);
+    if (selectedTab === 'month') setMonthOffset(0);
   }, [selectedTab]);
 
   // Quick actions scroll hint animation - runs only once
@@ -941,8 +945,6 @@ export default function DailyScreen() {
 
   const MonthView = () => {
     // Referenz-Monat: aktueller Monat + monthOffset (wie Sleep-Tracker)
-    const [monthOffset, setMonthOffset] = useState(0);
-    
     const refMonthDate = useMemo(() => {
       const d = new Date();
       d.setDate(1);
@@ -1076,7 +1078,7 @@ export default function DailyScreen() {
             {/* Wochentags-Header mit exakten Spaltenbreiten */}
             <View style={s.weekdayHeader}>
               {['Mo','Di','Mi','Do','Fr','Sa','So'].map((label, i) => {
-                const extra = i < Math.floor((WEEK_CONTENT_WIDTH - (COLS * WEEK_COL_WIDTH + (COLS - 1) * GUTTER))) ? 1 : 0;
+                const extra = i < WEEK_LEFTOVER ? 1 : 0;
                 return (
                   <View
                     key={label}
@@ -1096,7 +1098,7 @@ export default function DailyScreen() {
             {calendarWeeks.map((week, weekIndex) => (
               <View key={weekIndex} style={s.calendarWeek}>
                 {week.map((date, dayIndex) => {
-                  const extra = dayIndex < Math.floor((WEEK_CONTENT_WIDTH - (COLS * WEEK_COL_WIDTH + (COLS - 1) * GUTTER))) ? 1 : 0;
+                  const extra = dayIndex < WEEK_LEFTOVER ? 1 : 0;
                   return (
                     <View
                       key={dayIndex}
