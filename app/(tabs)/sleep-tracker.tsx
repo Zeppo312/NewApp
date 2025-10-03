@@ -1536,7 +1536,7 @@ export default function SleepTrackerScreen() {
 
               {/* Timeline Section - nur in Tag-Ansicht */}
               <View style={styles.timelineSection}>
-                <Text style={styles.sectionTitle}>Timeline</Text>
+                <Text style={[styles.sectionTitle, styles.sectionTitleTight]}>Timeline</Text>
 
                 {/* Sleep Entries - Timeline Style like daily_old.tsx - nur in Tag-Ansicht */}
                 <View style={styles.entriesContainer}>
@@ -2028,7 +2028,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignSelf: 'center',
     width: contentWidth,
-    marginBottom: 20,
+    marginBottom: 0,
   },
 
   // Liquid Glass Cards (from home.tsx)
@@ -2167,7 +2167,7 @@ const styles = StyleSheet.create({
   sleepCaptureSection: {
     paddingHorizontal: 0,       // Gleiche Breite wie Wochenansicht-Container
     paddingTop: 0,
-    paddingBottom: 8,
+    paddingBottom: 0,
   },
 
   // Timeline Section (Design Guide konform - gleiche Breite wie Wochenansicht)

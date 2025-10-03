@@ -1330,8 +1330,29 @@ const s = StyleSheet.create({
   },
   timerType: { fontSize: 14, fontWeight: '700' },
   timerTime: { fontSize: 22, fontWeight: '800', marginTop: 2, fontVariant: ['tabular-nums'] },
-  timerStopButton: { padding: 6 },
-  timerCancelButton: { padding: 6, marginRight: 6 },
+  timerStopButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    padding: 6,
+  },
+  timerCancelButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    padding: 6,
+    marginRight: 6,
+  },
 
   // Tabs (glass pills)
   topTabsContainer: {
