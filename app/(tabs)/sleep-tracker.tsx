@@ -35,26 +35,11 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { ProgressCircle } from '@/components/ProgressCircle';
 import type { ViewStyle } from 'react-native';
+import { GlassCard, LiquidGlassCard, LAYOUT_PAD, SECTION_GAP_TOP, SECTION_GAP_BOTTOM, RADIUS, PRIMARY, GLASS_BORDER, GLASS_OVERLAY, FONT_SM, FONT_MD, FONT_LG } from '@/constants/DesignGuide';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
-// Einheitlicher horizontaler Innenabstand für konsistente Container-Breiten
-const LAYOUT_PAD = 20;
-
-// Einheitliche Vertikalabstände für Abschnittsüberschriften
-const SECTION_GAP_TOP = 20;
-const SECTION_GAP_BOTTOM = 12;
-
-// Design Tokens für konsistente Gestaltung
-const RADIUS = 22;
-const PRIMARY = '#8E4EC6';
-const GLASS_BORDER = 'rgba(255,255,255,0.55)';
-const GLASS_OVERLAY = 'rgba(255,255,255,0.16)';
-
-// Typografie-Tokens
-const FONT_SM = 12;
-const FONT_MD = 14;
-const FONT_LG = 18;
+// Typografie helper
 const FONT_NUM = { fontVariant: ['tabular-nums'] };
 
 // Globale Helper-Funktionen für Zeitberechnungen
@@ -95,28 +80,7 @@ const GRID_LEFTOVER = contentWidth - (GRID_COLS * GRID_COL_W + (GRID_COLS - 1) *
 
 const MAX_BAR_H = 140; // Höhe der Balkenfläche (mehr Luft)
 
-// Reusable GlassCard using expo-blur
-function GlassCard({
-  children,
-  style,
-  intensity = 26,
-  overlayColor = 'rgba(255,255,255,0.30)',
-  borderColor = 'rgba(255,255,255,0.65)',
-}: {
-  children: React.ReactNode;
-  style?: any;
-  intensity?: number;          // 0..100
-  overlayColor?: string;       // tint-like overlay
-  borderColor?: string;        // per-card border nuance
-}) {
-  return (
-    <View style={[styles.glassContainer, { borderColor }, style]}>
-      <BlurView style={StyleSheet.absoluteFill} intensity={intensity} tint="light" />
-      <View style={[styles.glassOverlay, { backgroundColor: overlayColor }]} />
-      {children}
-    </View>
-  );
-}
+// GlassCard imported from DesignGuide
 
 // Types for sleep periods
 type SleepPeriod = 'day' | 'night';
@@ -246,41 +210,7 @@ interface ManualEntryData {
   period: SleepPeriod;
 }
 
-// Liquid Glass Card Component
-const LiquidGlassCard: React.FC<{
-  children: React.ReactNode;
-  style?: any;
-  intensity?: number;
-  overlayColor?: string;
-  borderColor?: string;
-  onPress?: () => void;
-  activeOpacity?: number;
-}> = ({ 
-  children, 
-  style, 
-  intensity = 24, 
-  overlayColor = 'rgba(255,255,255,0.15)', 
-  borderColor = 'rgba(255,255,255,0.3)',
-  onPress,
-  activeOpacity = 0.9
-}) => {
-  const CardComponent = onPress ? TouchableOpacity : View;
-  
-  return (
-    <CardComponent 
-      style={[styles.liquidGlassWrapper, style]} 
-      onPress={onPress}
-      activeOpacity={activeOpacity}
-    >
-      <BlurView intensity={intensity} tint="light" style={styles.liquidGlassBackground as any}>
-        <View style={[styles.liquidGlassContainer as any, { borderColor }]}>
-          <View style={[styles.liquidGlassOverlay as any, { backgroundColor: overlayColor }]} />
-          {children}
-        </View>
-      </BlurView>
-    </CardComponent>
-  );
-};
+// LiquidGlassCard imported from DesignGuide
 
 
 export default function SleepTrackerScreen() {

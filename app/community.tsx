@@ -40,6 +40,7 @@ import { NotificationsList } from '@/components/NotificationsList';
 import { NotificationBadge } from '@/components/NotificationBadge';
 import { useRouter } from 'expo-router';
 import { FollowButton } from '@/components/FollowButton';
+import { GlassCard, LiquidGlassCard, PRIMARY, LAYOUT_PAD, GLASS_OVERLAY } from '@/constants/DesignGuide';
 
 export default function CommunityScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -550,6 +551,19 @@ export default function CommunityScreen() {
     (post.user_name || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  // Keine Farben: neutraler Look mit Liquid Glass. Farbakzente abgeschaltet.
+
+  // Subtil dunklere Variante für jede zweite Karte
+  const bumpOverlayAlpha = (rgba: string, delta: number) => {
+    const m = rgba.match(/rgba\((\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(0|0?\.\d+|1(\.0+)?)\)/);
+    if (!m) return rgba;
+    const r = parseInt(m[1], 10);
+    const g = parseInt(m[2], 10);
+    const b = parseInt(m[3], 10);
+    const a = Math.max(0, Math.min(1, parseFloat(m[4]) + delta));
+    return `rgba(${r},${g},${b},${a})`;
+  };
+
   // Formatiere das Datum für die Anzeige
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -568,22 +582,34 @@ export default function CommunityScreen() {
   };
 
   // Rendere einen Beitrag
-  const renderPostItem = ({ item }: { item: Post }) => {
+  const renderPostItem = ({ item, index }: { item: Post; index: number }) => {
     const isExpanded = expandedPostId === item.id;
     const comments = postComments[item.id] || [];
     const isOwnPost = user?.id === item.user_id;
+    const createdAt = new Date(item.created_at);
+    const isNew = (Date.now() - createdAt.getTime()) < 24 * 60 * 60 * 1000; // < 24h
 
     // Debug logging für Bilder
     if (item.image_url) {
       console.log(`Post ${item.id} has image_url: ${item.image_url}`);
     }
 
+    const baseOverlay = GLASS_OVERLAY; // helles, neutrales Glas
+    const overlayColor = index % 2 === 1 ? 'rgba(0,0,0,0.14)' : baseOverlay; // dunklere Scheibe
+    const cardIntensity = index % 2 === 1 ? 28 : 24;
     return (
-      <ThemedView
-        style={styles.postItem}
-        lightColor={theme.card}
-        darkColor={theme.card}
-      >
+      <LiquidGlassCard style={styles.postItem} overlayColor={overlayColor} intensity={cardIntensity}>
+        <View style={styles.postInner}>
+          <View style={styles.postTopRow}>
+            <View style={[styles.indexBubble]}>
+              <ThemedText style={styles.indexBubbleText}>{index + 1}</ThemedText>
+            </View>
+            {isNew && (
+              <View style={[styles.newBadge]}>
+                <ThemedText style={[styles.newBadgeText]}>Neu</ThemedText>
+              </View>
+            )}
+          </View>
         <TouchableOpacity
           style={styles.postHeader}
           onPress={() => togglePostExpansion(item.id)}
@@ -627,10 +653,7 @@ export default function CommunityScreen() {
           onPress={() => togglePostExpansion(item.id)}
           style={styles.contentTouchable}
         >
-          <ThemedView
-            lightColor="#FAFAFA"
-            darkColor={theme.cardDark}
-          >
+          <View>
             <ThemedText style={styles.postContent}>{item.content}</ThemedText>
 
             {/* Bild anzeigen, falls vorhanden */}
@@ -657,7 +680,7 @@ export default function CommunityScreen() {
             )}
 
             <ThemedText style={styles.tapHint}>Tippen zum {isExpanded ? 'Schließen' : 'Öffnen'}</ThemedText>
-          </ThemedView>
+          </View>
         </TouchableOpacity>
 
         <View style={[
@@ -708,6 +731,7 @@ export default function CommunityScreen() {
                 <ThemedText style={styles.commentsTitle}>Antworten:</ThemedText>
                 {comments.map(comment => {
                   const isOwnComment = user?.id === comment.user_id;
+                  const isOP = comment.user_id === item.user_id;
                   return (
                     <ThemedView key={comment.id} style={styles.commentItem} lightColor="#F9F9F9" darkColor={theme.cardDark}>
                       <View style={styles.commentHeader}>
@@ -719,6 +743,11 @@ export default function CommunityScreen() {
                           <ThemedText style={styles.userName}>
                             {comment.user_name || 'Anonym'}
                           </ThemedText>
+                          {isOP && (
+                            <View style={styles.opBadge}>
+                              <ThemedText style={styles.opBadgeText}>Autor</ThemedText>
+                            </View>
+                          )}
                           {__DEV__ && (
                             <ThemedText style={styles.debugText}>
                               [Debug: user_id: {comment.user_id?.substring(0, 8)}... anonym: {String(comment.is_anonymous)}]
@@ -937,7 +966,8 @@ export default function CommunityScreen() {
             </View>
           </View>
         )}
-      </ThemedView>
+        </View>
+      </LiquidGlassCard>
     );
   };
 
@@ -1133,25 +1163,23 @@ export default function CommunityScreen() {
                   // Liste der Beiträge
                   <>
                     <View style={styles.searchContainer}>
-                      <ThemedView
-                        style={styles.searchInputContainer}
-                        lightColor="#FFFFFF"
-                        darkColor={theme.cardDark}
-                      >
-                        <IconSymbol name="magnifyingglass" size={20} color={theme.tabIconDefault} />
-                        <TextInput
-                          style={[styles.searchInput, { color: theme.text }]}
-                          placeholder="Suche in der Community..."
-                          placeholderTextColor={theme.tabIconDefault}
-                          value={searchQuery}
-                          onChangeText={setSearchQuery}
-                        />
-                        {searchQuery.length > 0 && (
-                          <TouchableOpacity onPress={() => setSearchQuery('')}>
-                            <IconSymbol name="xmark.circle.fill" size={20} color={theme.tabIconDefault} />
-                          </TouchableOpacity>
-                        )}
-                      </ThemedView>
+                      <GlassCard style={styles.searchInputContainer} intensity={26} overlayColor={GLASS_OVERLAY}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                          <IconSymbol name="magnifyingglass" size={20} color={theme.tabIconDefault} />
+                          <TextInput
+                            style={[styles.searchInput, { color: theme.text }]}
+                            placeholder="Suche in der Community..."
+                            placeholderTextColor={theme.tabIconDefault}
+                            value={searchQuery}
+                            onChangeText={setSearchQuery}
+                          />
+                          {searchQuery.length > 0 && (
+                            <TouchableOpacity onPress={() => setSearchQuery('')}>
+                              <IconSymbol name="xmark.circle.fill" size={20} color={theme.tabIconDefault} />
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      </GlassCard>
                     </View>
 
                     {/* Tag-Filter */}
@@ -1350,14 +1378,54 @@ const styles = StyleSheet.create({
     paddingBottom: 80,
   },
   postItem: {
-    borderRadius: 12,
     marginBottom: 16,
+  },
+  postInner: {
     padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    position: 'relative',
+  },
+  postAccent: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 5,
+    borderTopLeftRadius: 12,
+    borderBottomLeftRadius: 12,
+    opacity: 0.9,
+  },
+  postTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  indexBubble: {
+    minWidth: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+    backgroundColor: 'rgba(0,0,0,0.15)',
+  },
+  indexBubbleText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 11,
+  },
+  newBadge: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    backgroundColor: 'rgba(255,255,255,0.6)',
+    borderColor: '#BFBFBF',
+  },
+  newBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#6A6A6A',
   },
   postHeader: {
     flexDirection: 'row',
@@ -1425,6 +1493,20 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 8,
+  },
+  opBadge: {
+    marginLeft: 8,
+    borderWidth: 1,
+    borderColor: '#FFD580',
+    backgroundColor: 'rgba(255, 213, 128, 0.25)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  opBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#A26E00',
   },
   commentDate: {
     fontSize: 12,

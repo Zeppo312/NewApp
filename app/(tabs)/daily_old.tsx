@@ -43,17 +43,9 @@ import { ConnectionStatus } from '@/components/ConnectionStatus';
 import { DebugPanel } from '@/components/DebugPanel';
 
 import { BlurView } from 'expo-blur';
+import { GlassCard, LiquidGlassCard, LAYOUT_PAD, SECTION_GAP_TOP, SECTION_GAP_BOTTOM, PRIMARY, GLASS_OVERLAY, GLASS_BORDER } from '@/constants/DesignGuide';
 
-// Design Tokens (global, wie im Guide)
-const LAYOUT_PAD = 20;                  // horizontaler Innenabstand
-const SECTION_GAP_TOP = 20;             // Abstand vor Abschnittstiteln
-const SECTION_GAP_BOTTOM = 12;          // Abstand nach Abschnittstiteln
-
-const PRIMARY = '#5E3DB3';              // Brand Purple (kein Blau)
-const BG_BEIGE = '#f5eee0';             // warmer Hintergrund
-
-const GLASS_OVERLAY = 'rgba(255,255,255,0.30)';
-const GLASS_BORDER  = 'rgba(255,255,255,0.65)';
+// Design Tokens now imported from DesignGuide
 
 // Layout metrics for week chart (match sleep-tracker)
 const { width: screenWidth } = Dimensions.get('window');
@@ -75,64 +67,7 @@ type QuickActionType =
   | 'diaper_dirty'
   | 'diaper_both';
 
-// Reusable GlassCard using expo-blur
-function GlassCard({
-  children,
-  style,
-  intensity = 26,
-  overlayColor = GLASS_OVERLAY,
-  borderColor = GLASS_BORDER,
-}: {
-  children: React.ReactNode;
-  style?: any;
-  intensity?: number;          // 0..100
-  overlayColor?: string;       // tint-like overlay
-  borderColor?: string;        // per-card border nuance
-}) {
-  return (
-    <View style={[s.glassContainer, { borderColor }, style]}>
-      <BlurView style={StyleSheet.absoluteFill} intensity={intensity} tint="light" />
-      <View style={[s.glassOverlay, { backgroundColor: overlayColor }]} />
-      {children}
-    </View>
-  );
-}
-
-// Liquid Glass Card Component (exakt wie Sleep-Tracker)
-const LiquidGlassCard: React.FC<{
-  children: React.ReactNode;
-  style?: any;
-  intensity?: number;
-  overlayColor?: string;
-  borderColor?: string;
-  onPress?: () => void;
-  activeOpacity?: number;
-}> = ({ 
-  children, 
-  style, 
-  intensity = 24, 
-  overlayColor = 'rgba(255,255,255,0.15)', 
-  borderColor = 'rgba(255,255,255,0.3)',
-  onPress,
-  activeOpacity = 0.9
-}) => {
-  const CardComponent = onPress ? TouchableOpacity : View;
-  
-  return (
-    <CardComponent 
-      style={[s.liquidGlassWrapper, style]} 
-      onPress={onPress}
-      activeOpacity={activeOpacity}
-    >
-      <BlurView intensity={intensity} tint="light" style={s.liquidGlassBackground as any}>
-        <View style={[s.liquidGlassContainer as any, { borderColor }]}>
-          <View style={[s.liquidGlassOverlay as any, { backgroundColor: overlayColor }]} />
-          {children}
-        </View>
-      </BlurView>
-    </CardComponent>
-  );
-};
+// GlassCard and LiquidGlassCard imported from DesignGuide
 
 // DateSpider as glass pill
 const DateSpider: React.FC<{ date: Date; visible: boolean }> = ({ date, visible }) => {
@@ -1348,7 +1283,7 @@ export default function DailyScreen() {
 
 const s = StyleSheet.create({
   container: { flex: 1 },
-  backgroundImage: { flex: 1, width: '100%', backgroundColor: BG_BEIGE },
+  backgroundImage: { flex: 1, width: '100%', backgroundColor: '#f5eee0' },
   scrollContainer: { flex: 1 },
   scrollContent: { paddingBottom: 140 },
   content: { paddingHorizontal: LAYOUT_PAD },
