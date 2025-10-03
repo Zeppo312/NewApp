@@ -226,6 +226,7 @@ export default function SleepTrackerScreen() {
   const [activeSleepEntry, setActiveSleepEntry] = useState<ClassifiedSleepEntry | null>(null);
   const [showInputModal, setShowInputModal] = useState(false);
   const [selectedTab, setSelectedTab] = useState<'day' | 'week' | 'month'>('day');
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [editingEntry, setEditingEntry] = useState<ClassifiedSleepEntry | null>(null);
 
   // Navigation offsets für Woche und Monat
@@ -676,8 +677,8 @@ export default function SleepTrackerScreen() {
 
   // Compute high-level stats & score (heutiger Kalendertag 00:00–24:00 lokal)
   const computeStats = () => {
-    const dayStart = startOfDay(new Date());
-    const dayEnd   = endOfDay(new Date());
+    const dayStart = startOfDay(selectedDate);
+    const dayEnd   = endOfDay(selectedDate);
 
     let totalMinutes = 0;
     let longestStretch = 0;
@@ -712,6 +713,13 @@ export default function SleepTrackerScreen() {
     if (h <= 0) return `${m}m`;
     return `${h}h ${m}m`;
   };
+
+  // Daily navigation helpers
+  const isSameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  const goPrevDay = () => setSelectedDate(d => { const nd = new Date(d); nd.setDate(nd.getDate() - 1); return nd; });
+  const goNextDay = () => setSelectedDate(d => { const nd = new Date(d); nd.setDate(nd.getDate() + 1); return nd; });
+  const today = new Date();
+  const nextDisabled = isSameDay(selectedDate, today) || selectedDate > today;
 
   const getNextSleepRecommendation = () => {
     const hour = currentTime.getHours();
@@ -780,7 +788,7 @@ export default function SleepTrackerScreen() {
         >
           <View style={styles.kpiHeaderRow}>
             <IconSymbol name="moon.fill" size={12} color="#8E4EC6" />
-            <Text style={styles.kpiTitle}>Heute</Text>
+            <Text style={styles.kpiTitle}>{isSameDay(selectedDate, today) ? 'Heute' : selectedDate.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' })}</Text>
         </View>
           <Text style={[styles.kpiValue, styles.kpiValueCentered]}>{minutesToHMM(stats.totalMinutes)}</Text>
         </GlassCard>
@@ -1126,13 +1134,14 @@ export default function SleepTrackerScreen() {
               const extra = i < WEEK_LEFTOVER ? 1 : 0;
 
               return (
-                <View
+                <TouchableOpacity
                   key={i}
                   style={{
                     width: WEEK_COL_WIDTH + extra,
                     marginRight: i < (COLS - 1) ? GUTTER : 0,
                     alignItems: 'center',
                   }}
+                  onPress={() => { setSelectedDate(day); setSelectedTab('day'); }}
                 >
                   <View style={[styles.chartBarContainer, { width: WEEK_COL_WIDTH + extra }]}>
                     {totalH > 0 && <View
@@ -1150,7 +1159,7 @@ export default function SleepTrackerScreen() {
                       {hours > 24 ? '24h+' : `${hours}h`}
                     </Text>
                   </View>
-                </View>
+                </TouchableOpacity>
               );
             })}
           </View>
@@ -1408,6 +1417,7 @@ export default function SleepTrackerScreen() {
                               styles.calendarDayButton,
                               { backgroundColor: c.bg, borderColor: c.border }
                             ]}
+                            onPress={() => { setSelectedDate(date); setSelectedTab('day'); }}
                           >
                             <Text style={[styles.calendarDayNumber, { color: c.text }]}>{date.getDate()}</Text>
                             {totalMins > 0 && (
@@ -1493,14 +1503,32 @@ export default function SleepTrackerScreen() {
             <MonthView />
           ) : (
             <>
+              {/* Day Navigation - gleiche Position/Höhe wie Woche/Monat */}
+              <View style={styles.weekNavigationContainer}>
+                <TouchableOpacity style={styles.weekNavButton} onPress={goPrevDay}>
+                  <Text style={styles.weekNavButtonText}>‹</Text>
+                </TouchableOpacity>
+                <View style={styles.weekHeaderCenter}>
+                  <Text style={styles.weekHeaderTitle}>Tagesansicht</Text>
+                  <Text style={styles.weekHeaderSubtitle}>
+                    {isSameDay(selectedDate, today)
+                      ? new Date().toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long' })
+                      : selectedDate.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long' })}
+                  </Text>
+                </View>
+                <TouchableOpacity style={[styles.weekNavButton, nextDisabled && { opacity: 0.4 }]} disabled={nextDisabled} onPress={goNextDay}>
+                  <Text style={styles.weekNavButtonText}>›</Text>
+                </TouchableOpacity>
+              </View>
+
               {/* Central Timer - nur in Tag-Ansicht */}
-          <Animated.View style={{ opacity: appearAnim }}>
-            <CentralTimer />
-          </Animated.View>
+              <Animated.View style={{ opacity: appearAnim }}>
+                <CentralTimer />
+              </Animated.View>
 
               {/* Schlaferfassung Section - nur in Tag-Ansicht */}
               <View style={styles.sleepCaptureSection}>
-                <Text style={styles.sectionTitle}>Schlaferfassung</Text>
+                <Text style={[styles.sectionTitle, styles.sectionTitleTight]}>Schlaferfassung</Text>
 
                 {/* Action Buttons - nur in Tag-Ansicht */}
           <ActionButtons />
@@ -1512,7 +1540,13 @@ export default function SleepTrackerScreen() {
 
                 {/* Sleep Entries - Timeline Style like daily_old.tsx - nur in Tag-Ansicht */}
                 <View style={styles.entriesContainer}>
-            {sleepEntries.map((entry, index) => (
+            {sleepEntries.filter(e => {
+                const s = new Date(e.start_time);
+                const ee = e.end_time ? new Date(e.end_time) : new Date();
+                const ds = startOfDay(selectedDate);
+                const de = endOfDay(selectedDate);
+                return overlapMinutes(s, ee, ds, de) > 0;
+              }).map((entry, index) => (
                 <ActivityCard
                   key={entry.id || index}
                   entry={convertSleepToDailyEntry(entry)}
@@ -1851,9 +1885,10 @@ const styles = StyleSheet.create({
   // Central Timer (Baby Blue Circle Only)
   centralTimerContainer: {
     alignItems: 'center',
-    paddingVertical: 12,
-    marginBottom: 12,
+    paddingVertical: 10,
+    marginBottom: 4,
   },
+  
   centralContainer: {
     alignItems: 'center',
     paddingVertical: 8,
@@ -1966,6 +2001,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     width: '100%',
     letterSpacing: -0.1,
+  },
+  sectionTitleTight: {
+    marginTop: Math.max(2, SECTION_GAP_TOP - 12),
   },
 
   // Top Tabs (exakt wie daily_old.tsx)
@@ -2128,7 +2166,8 @@ const styles = StyleSheet.create({
   // Schlaferfassung Section (Design Guide konform - gleiche Breite wie Wochenansicht)
   sleepCaptureSection: {
     paddingHorizontal: 0,       // Gleiche Breite wie Wochenansicht-Container
-    paddingVertical: 8,
+    paddingTop: 0,
+    paddingBottom: 8,
   },
 
   // Timeline Section (Design Guide konform - gleiche Breite wie Wochenansicht)
