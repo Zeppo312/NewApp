@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator, Platform, Modal, SafeAreaView, StatusBar, Text } from 'react-native';
+import { BlurView } from 'expo-blur';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedBackground } from '@/components/ThemedBackground';
@@ -23,7 +24,9 @@ export default function WeightTrackerScreen() {
   const [weightEntries, setWeightEntries] = useState<WeightEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  // Legacy inline form flag removed in favor of modal
   const [showAddForm, setShowAddForm] = useState(false);
+  const [showInputModal, setShowInputModal] = useState(false);
   const [weight, setWeight] = useState('');
   const [notes, setNotes] = useState('');
   const [date, setDate] = useState(new Date());
@@ -79,7 +82,7 @@ export default function WeightTrackerScreen() {
       setWeight('');
       setNotes('');
       setDate(new Date());
-      setShowAddForm(false);
+      setShowInputModal(false);
       Alert.alert('Erfolg', 'Dein Gewichtseintrag wurde erfolgreich gespeichert.');
     } catch (error) {
       console.error('Error saving weight entry:', error);
@@ -152,8 +155,8 @@ export default function WeightTrackerScreen() {
       datasets: [
         {
           data: recentEntries.map(entry => entry.weight),
-          color: (opacity = 1) => `rgba(229, 115, 115, ${opacity})`, // Pastellrot
-          strokeWidth: 3, // Dickere Linie für bessere Sichtbarkeit
+          color: (opacity = 1) => `rgba(94, 61, 179, ${opacity})`,
+          strokeWidth: 3,
         }
       ],
       legend: ['Gewicht']
@@ -180,53 +183,54 @@ export default function WeightTrackerScreen() {
         <View style={styles.chartWrapper}>
           <LineChart
           data={chartData}
-          width={screenWidth - 80} // Angepasste Breite für bessere Zentrierung
+          width={screenWidth - LAYOUT_PAD * 2}
           height={220}
           chartConfig={{
-            backgroundColor: theme.card,
-            backgroundGradientFrom: theme.card,
-            backgroundGradientTo: theme.card,
+            backgroundColor: 'transparent',
+            backgroundGradientFrom: 'transparent',
+            backgroundGradientTo: 'transparent',
             decimalPlaces: 0, // Keine Dezimalstellen für kg-Werte
-            color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
-            labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
+            color: () => theme.text,
+            labelColor: () => theme.text,
             style: {
-              borderRadius: 16
+              borderRadius: 22
             },
             propsForDots: {
-              r: '4', // Noch kleinere Punkte für bessere Darstellung
-              strokeWidth: '1',
-              stroke: '#E57373',
-              fill: '#E57373'
+              r: '5',
+              strokeWidth: '2',
+              stroke: '#5E3DB3',
+              fill: '#5E3DB3'
             },
             // Formatierung der Y-Achsen-Labels (kg-Anzeige)
             formatYLabel: (value) => `${value} kg`, // Mit kg-Suffix bei jedem Wert
             // Mehr Platz zwischen den Datenpunkten
             propsForBackgroundLines: {
-              strokeDasharray: '',
               strokeWidth: 1,
-              stroke: '#EFEFEF'
+              stroke: 'rgba(0,0,0,0.06)'
             },
             // Anpassung der Beschriftungen
             propsForLabels: {
-              fontSize: 9,
-              fontWeight: 'bold'
+              fontSize: 12,
+              fontWeight: '600'
             },
             // Spezifische Anpassung der Y-Achsen-Labels
             propsForVerticalLabels: {
-              fontSize: 10,
-              fontWeight: 'normal', // Normale Schrift statt fett
-              dx: 5, // Etwas mehr Abstand nach rechts
-              textAnchor: 'end', // Rechtsbündige Ausrichtung
-              alignmentBaseline: 'middle' // Vertikale Zentrierung
+              fontSize: 12,
+              fontWeight: '500'
             },
             // Spezifische Anpassung der X-Achsen-Labels
             propsForHorizontalLabels: {
-              fontSize: 8,
-              fontWeight: 'bold',
-              dy: -3, // Leichte Verschiebung nach oben
-              rotation: -45 // Schräge Darstellung für bessere Lesbarkeit
-            }
+              fontSize: 12,
+              fontWeight: '600',
+              dy: -2,
+              rotation: 0
+            },
+            fillShadowGradientFrom: '#5E3DB3',
+            fillShadowGradientFromOpacity: 0.15,
+            fillShadowGradientTo: '#5E3DB3',
+            fillShadowGradientToOpacity: 0.02
           }}
+          transparent
           bezier
           style={styles.chart}
           withInnerLines={true}
@@ -406,13 +410,11 @@ export default function WeightTrackerScreen() {
           <View style={styles.container}>
             <ScrollView contentContainerStyle={styles.scrollContent}>
 
-            {isLoading && !showAddForm ? (
+            {isLoading ? (
               <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color={theme.accent} />
                 <ThemedText style={styles.loadingText} lightColor="#888" darkColor="#E9D8C2">Daten werden geladen...</ThemedText>
               </View>
-            ) : showAddForm ? (
-              renderAddForm()
             ) : (
               <>
                 {renderWeightChart()}
@@ -422,14 +424,109 @@ export default function WeightTrackerScreen() {
             </ScrollView>
 
             {/* Floating Add Button - nur anzeigen, wenn nicht im Formular-Modus */}
-            {!showAddForm && !isLoading && (
+            {!showInputModal && !isLoading && (
               <TouchableOpacity
-                style={[styles.floatingAddButton, { backgroundColor: theme.accent }]}
-                onPress={() => setShowAddForm(true)}
+                style={[styles.floatingAddButton, { backgroundColor: '#5E3DB3' }]}
+                onPress={() => setShowInputModal(true)}
               >
                 <IconSymbol name="plus" size={24} color="#FFFFFF" />
               </TouchableOpacity>
             )}
+            {/* Add Entry Modal (like sleep-tracker) */}
+            <Modal 
+              visible={showInputModal}
+              transparent={true}
+              animationType="slide"
+              onRequestClose={() => setShowInputModal(false)}
+            >
+              <View style={styles.modalOverlay}>
+                <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setShowInputModal(false)} activeOpacity={1} />
+
+                <BlurView style={styles.modalContent} tint="extraLight" intensity={80}>
+                  {/* Header */}
+                  <View style={styles.header}>
+                    <TouchableOpacity style={styles.headerButton} onPress={() => setShowInputModal(false)}>
+                      <Text style={styles.closeHeaderButtonText}>✕</Text>
+                    </TouchableOpacity>
+                    <View style={styles.headerCenter}>
+                      <Text style={styles.modalTitle}>Gewicht hinzufügen</Text>
+                      <Text style={styles.modalSubtitle}>Neuen Eintrag erstellen</Text>
+                    </View>
+                    <TouchableOpacity
+                      style={[styles.headerButton, styles.saveHeaderButton, { backgroundColor: '#5E3DB3' }]}
+                      onPress={handleSaveWeightEntry}
+                      disabled={isLoading || isSaving}
+                    >
+                      <Text style={styles.saveHeaderButtonText}>✓</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <ScrollView showsVerticalScrollIndicator={false}>
+                    <TouchableOpacity activeOpacity={1}>
+                      <View style={{ width: '100%', alignItems: 'center' }}>
+                        {/* Datum */}
+                        <View style={styles.section}>
+                          <Text style={styles.sectionTitleSleepLike}>⏰ Datum</Text>
+                          <TouchableOpacity style={styles.timeButton} onPress={() => setShowDatePicker(true)}>
+                            <Text style={styles.timeLabel}>Datum</Text>
+                            <Text style={styles.timeValue}>{date.toLocaleDateString('de-DE')}</Text>
+                          </TouchableOpacity>
+
+                          {showDatePicker && (
+                            <View style={styles.datePickerContainer}>
+                              <DateTimePicker
+                                value={date}
+                                mode="date"
+                                display={Platform.OS === 'ios' ? 'compact' : 'default'}
+                                onChange={(_, selectedDate) => {
+                                  setShowDatePicker(false);
+                                  if (selectedDate) setDate(selectedDate);
+                                }}
+                                style={styles.dateTimePicker}
+                              />
+                              <View style={styles.datePickerActions}>
+                                <TouchableOpacity style={styles.datePickerCancel} onPress={() => setShowDatePicker(false)}>
+                                  <Text style={styles.datePickerCancelText}>Fertig</Text>
+                                </TouchableOpacity>
+                              </View>
+                            </View>
+                          )}
+                        </View>
+
+                        {/* Gewicht */}
+                        <View style={styles.section}>
+                          <Text style={styles.sectionTitleSleepLike}>⚖️ Gewicht</Text>
+                          <View style={styles.timeButton}>
+                            <Text style={styles.timeLabel}>kg</Text>
+                            <TextInput
+                              style={[styles.timeValue, { width: '100%', textAlign: 'center', color: '#333333' }]}
+                              placeholder="z.B. 65.5"
+                              placeholderTextColor="#888888"
+                              keyboardType="decimal-pad"
+                              value={weight}
+                              onChangeText={setWeight}
+                            />
+                          </View>
+                        </View>
+
+                        {/* Notizen */}
+                        <View style={styles.section}>
+                          <Text style={styles.sectionTitleSleepLike}>📝 Notizen</Text>
+                          <TextInput
+                            style={styles.modalNotesInput}
+                            placeholder="z.B. Nach dem Sport gemessen"
+                            placeholderTextColor="#888888"
+                            value={notes}
+                            onChangeText={setNotes}
+                            multiline
+                          />
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  </ScrollView>
+                </BlurView>
+              </View>
+            </Modal>
           </View>
         </SafeAreaView>
       </ThemedBackground>
@@ -449,10 +546,11 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    padding: 16,
+    padding: 0,
   },
   scrollContent: {
-    padding: 20,
+    paddingHorizontal: LAYOUT_PAD,
+    paddingTop: LAYOUT_PAD,
     paddingBottom: 40,
   },
 
@@ -464,7 +562,7 @@ const styles = StyleSheet.create({
   },
   saveView: {
     padding: 20,
-    borderRadius: 16,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
     width: '80%',
@@ -483,8 +581,8 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     alignItems: 'center',
     width: '100%', // Volle Breite nutzen
-    borderRadius: 16,
-    padding: 10,
+    borderRadius: 22,
+    padding: 0,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -500,15 +598,15 @@ const styles = StyleSheet.create({
   },
   // yAxisLabel wurde entfernt, da kg jetzt direkt in den Y-Achsenwerten angezeigt wird
   chart: {
-    borderRadius: 16,
+    borderRadius: 22,
     marginVertical: 8,
-    paddingHorizontal: 10, // Gleichmäßiger Abstand auf beiden Seiten
+    paddingHorizontal: 0,
   },
   emptyChartContainer: {
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,
-    borderRadius: 16,
+    borderRadius: 22,
     marginBottom: 20,
   },
   emptyChartText: {
@@ -520,17 +618,21 @@ const styles = StyleSheet.create({
     gap: 16,
     paddingHorizontal: 0,
     paddingVertical: 4,
+    width: '100%',
+  },
+  timelineSection: {
+    paddingHorizontal: 0,
   },
   sectionTitleSleepLike: {
     marginTop: SECTION_GAP_TOP,
     marginBottom: SECTION_GAP_BOTTOM,
     paddingHorizontal: LAYOUT_PAD,
-    fontSize: 15,
+    fontSize: 18,
     fontWeight: '700',
     color: '#7D5A50',
     textAlign: 'center',
     width: '100%',
-    letterSpacing: -0.1,
+    letterSpacing: -0.2,
   },
   entryItem: {
     borderRadius: 12,
@@ -567,9 +669,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 80, // Höher positioniert, um nicht vom Navigationsbalken verdeckt zu werden
     right: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
@@ -580,7 +682,7 @@ const styles = StyleSheet.create({
     zIndex: 100,
   },
   addFormContainer: {
-    borderRadius: 16,
+    borderRadius: 22,
     padding: 20,
     marginBottom: 20,
     shadowColor: '#000',
@@ -608,9 +710,11 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   input: {
-    backgroundColor: '#F5F5F5',
-    borderRadius: 8,
-    padding: 12,
+    backgroundColor: 'rgba(255,255,255,0.30)',
+    borderColor: 'rgba(255,255,255,0.65)',
+    borderWidth: 1,
+    borderRadius: 20,
+    padding: 14,
     fontSize: 16,
   },
   notesInput: {
@@ -621,9 +725,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#F5F5F5',
-    borderRadius: 8,
-    padding: 12,
+    backgroundColor: 'rgba(255,255,255,0.30)',
+    borderColor: 'rgba(255,255,255,0.65)',
+    borderWidth: 1,
+    borderRadius: 20,
+    padding: 14,
   },
   saveButton: {
     borderRadius: 8,
@@ -650,7 +756,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,
-    borderRadius: 16,
+    borderRadius: 22,
     marginVertical: 20,
   },
   emptyStateText: {
@@ -662,5 +768,140 @@ const styles = StyleSheet.create({
   emptyStateSubtext: {
     fontSize: 14,
     textAlign: 'center',
+  },
+  // Modal styles (aligned with sleep-tracker)
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  modalContent: {
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    width: '100%',
+    height: '80%',
+    maxHeight: 680,
+    minHeight: 560,
+    overflow: 'hidden',
+    padding: 20,
+    paddingBottom: 40,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 25,
+  },
+  headerButton: {
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 22,
+  },
+  closeHeaderButtonText: {
+    fontSize: 20,
+    fontWeight: '400',
+    color: '#888888',
+  },
+  headerCenter: {
+    alignItems: 'center',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#7D5A50',
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    marginTop: 2,
+    color: '#A8978E',
+  },
+  saveHeaderButton: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  saveHeaderButtonText: {
+    fontSize: 22,
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+  },
+  section: {
+    marginBottom: 22,
+    width: '100%',
+    alignItems: 'center',
+  },
+  timeButton: {
+    width: '90%',
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    borderRadius: 15,
+    padding: 15,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  timeLabel: {
+    fontSize: 12,
+    color: '#888888',
+    fontWeight: '600',
+    marginBottom: 5,
+  },
+  timeValue: {
+    fontSize: 16,
+    color: '#333333',
+    fontWeight: 'bold',
+  },
+  modalNotesInput: {
+    width: '90%',
+    minHeight: 80,
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    borderRadius: 15,
+    padding: 15,
+    fontSize: 16,
+    color: '#333333',
+    textAlignVertical: 'top',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  datePickerContainer: {
+    marginTop: 15,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 15,
+    padding: 15,
+    width: '90%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  dateTimePicker: {
+    width: '100%',
+    backgroundColor: 'transparent',
+  },
+  datePickerActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: 10,
+  },
+  datePickerCancel: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: '#5E3DB3',
+  },
+  datePickerCancelText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

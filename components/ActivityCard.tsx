@@ -360,6 +360,7 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(0,0,0,0.06)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 1,
+    fontVariant: ['tabular-nums'],
   },
   timeRowTop: {
     flexDirection: 'row',
