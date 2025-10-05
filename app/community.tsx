@@ -15,7 +15,8 @@ import {
   TouchableWithoutFeedback,
   KeyboardAvoidingView,
   Platform,
-  Animated
+  Animated,
+  Modal
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ThemedText } from '@/components/ThemedText';
@@ -26,7 +27,7 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 // useRouter wird durch die BackButton-Komponente verwaltet
 import { useAuth } from '@/contexts/AuthContext';
-import { Post, Comment, getPosts, getComments, createPost, createComment, togglePostLike, toggleCommentLike, deletePost, deleteComment, getNestedComments, createReply, toggleNestedCommentLike, deleteNestedComment } from '@/lib/community';
+import { Post, Comment, getPosts, getComments, getCommentsPreview, createPost, createComment, togglePostLike, toggleCommentLike, deletePost, deleteComment, getNestedComments, createReply, toggleNestedCommentLike, deleteNestedComment } from '@/lib/community';
 import { PollComponent } from '@/components/PollComponent';
 import { CreatePollForm } from '@/components/CreatePollForm';
 import { CreatePollPost } from '@/components/CreatePollPost';
@@ -52,6 +53,8 @@ export default function CommunityScreen() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [postComments, setPostComments] = useState<{[key: string]: Comment[]}>({});
   const [postPolls, setPostPolls] = useState<{[key: string]: any[]}>({});
+  const [previewComments, setPreviewComments] = useState<{[key: string]: Comment[]}>({});
+  const previewLoadedRef = useRef<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [showAddPollForm, setShowAddPollForm] = useState(false);
@@ -78,6 +81,12 @@ export default function CommunityScreen() {
   const [nestedComments, setNestedComments] = useState<{[key: string]: Comment[]}>({});
   const [showNotifications, setShowNotifications] = useState(false);
   const [refreshNotificationBadge, setRefreshNotificationBadge] = useState<number>(0);
+  // UI-only reactions per post (mapped heart to likes)
+  const [postReactions, setPostReactions] = useState<{[postId: string]: {heart: number; joy: number; sleep: number; clap: number; user?: {heart?: boolean; joy?: boolean; sleep?: boolean; clap?: boolean}}}>({});
+  // Toolbar modals
+  const [showSearch, setShowSearch] = useState(false);
+  const [tempSearch, setTempSearch] = useState('');
+  const [showFilter, setShowFilter] = useState(false);
 
   // Konstanten für AsyncStorage-Keys
   const FILTER_STORAGE_KEY = 'community_filter_tags';
@@ -119,7 +128,18 @@ export default function CommunityScreen() {
       setIsLoading(true);
       const { data, error } = await getPosts('', selectedFilterTagIds);
       if (error) throw error;
-      setPosts(data || []);
+      const list = data || [];
+      setPosts(list);
+      // Initialize UI reactions (map likes to ❤️)
+      setPostReactions(prev => {
+        const next = { ...prev };
+        for (const p of list) {
+          if (!next[p.id]) {
+            next[p.id] = { heart: p.likes_count || 0, joy: 0, sleep: 0, clap: 0, user: {} };
+          }
+        }
+        return next;
+      });
     } catch (error) {
       console.error('Error loading posts:', error);
       Alert.alert('Fehler', 'Beim Laden der Beiträge ist ein Fehler aufgetreten.');
@@ -141,6 +161,20 @@ export default function CommunityScreen() {
     } catch (error) {
       console.error('Error loading comments:', error);
       Alert.alert('Fehler', 'Beim Laden der Kommentare ist ein Fehler aufgetreten.');
+    }
+  };
+
+  // Lade Kommentar-Vorschau (1–2) für einen Beitrag
+  const loadPreviewForPost = async (postId: string) => {
+    if (previewLoadedRef.current.has(postId)) return;
+    try {
+      const { data, error } = await getCommentsPreview(postId, 2);
+      if (!error && data) {
+        setPreviewComments(prev => ({ ...prev, [postId]: data }));
+        previewLoadedRef.current.add(postId);
+      }
+    } catch (e) {
+      // Ignore preview errors silently
     }
   };
 
@@ -582,12 +616,47 @@ export default function CommunityScreen() {
   };
 
   // Rendere einen Beitrag
+  // Kleine Helfer: Avatar + Emoji per Inhalt/Tags
+  const getAvatar = (item: Post) => {
+    if (item.is_anonymous) return { label: '👤', bg: 'rgba(0,0,0,0.08)' };
+    const name = (item.user_name || '').trim();
+    const initial = name ? name.charAt(0).toUpperCase() : '👶';
+    const bg = item.user_role === 'mama' ? 'rgba(255,159,159,0.25)' : item.user_role === 'papa' ? 'rgba(159,216,255,0.25)' : 'rgba(0,0,0,0.08)';
+    const label = name ? initial : '👶';
+    return { label, bg };
+  };
+
+  const getPostEmoji = (item: Post) => {
+    const txt = (item.content || '').toLowerCase();
+    const hasTag = (key: string) => (item.tags || []).some(t => t.name.toLowerCase().includes(key));
+    if (txt.includes('still') || txt.includes('flasch') || hasTag('fütter')) return '🍼';
+    if (txt.includes('schlaf') || txt.includes('müd') || hasTag('schlaf')) return '🌙';
+    if (txt.includes('windel') || txt.includes('kack') || txt.includes('stuhl')) return '💩';
+    if (txt.includes('herz') || txt.includes('liebe')) return '❤️';
+    if (txt.includes('?') || txt.includes('hilfe')) return '❓';
+    return '💬';
+  };
+
+  // Kleine Rollen-Chips wie im Profil
+  const getRoleChip = (role?: string) => {
+    switch (role) {
+      case 'mama':
+        return { bg: '#9775FA', fg: '#FFFFFF', label: 'Mama' };
+      case 'papa':
+        return { bg: '#4DA3FF', fg: '#FFFFFF', label: 'Papa' };
+      default:
+        return { bg: '#E6E6E6', fg: '#333333', label: 'Elternteil' };
+    }
+  };
+
   const renderPostItem = ({ item, index }: { item: Post; index: number }) => {
     const isExpanded = expandedPostId === item.id;
     const comments = postComments[item.id] || [];
     const isOwnPost = user?.id === item.user_id;
     const createdAt = new Date(item.created_at);
     const isNew = (Date.now() - createdAt.getTime()) < 24 * 60 * 60 * 1000; // < 24h
+    const avatar = getAvatar(item);
+    const iconEmoji = getPostEmoji(item);
 
     // Debug logging für Bilder
     if (item.image_url) {
@@ -600,40 +669,40 @@ export default function CommunityScreen() {
     return (
       <LiquidGlassCard style={styles.postItem} overlayColor={overlayColor} intensity={cardIntensity}>
         <View style={styles.postInner}>
-          <View style={styles.postTopRow}>
-            <View style={[styles.indexBubble]}>
-              <ThemedText style={styles.indexBubbleText}>{index + 1}</ThemedText>
-            </View>
-            {isNew && (
-              <View style={[styles.newBadge]}>
-                <ThemedText style={[styles.newBadgeText]}>Neu</ThemedText>
-              </View>
-            )}
-          </View>
         <TouchableOpacity
           style={styles.postHeader}
           onPress={() => togglePostExpansion(item.id)}
         >
           <View style={styles.userInfo}>
-            <View style={[
-              styles.userRoleIndicator,
-              { backgroundColor: item.user_role === 'mama' ? '#FF9F9F' : item.user_role === 'papa' ? '#9FD8FF' : '#D9D9D9' }
-            ]} />
+            <View style={[styles.avatar, { backgroundColor: avatar.bg }]}>
+              <ThemedText style={styles.avatarText}>{item.is_anonymous ? '🍼' : avatar.label}</ThemedText>
+            </View>
             <ThemedText style={styles.userName}>
               {item.user_name || 'Anonym'}
             </ThemedText>
+            {!item.is_anonymous && (
+              <View style={[styles.roleChip, { backgroundColor: getRoleChip(item.user_role).bg }] }>
+                <ThemedText style={[styles.roleChipText, { color: getRoleChip(item.user_role).fg }]}>{getRoleChip(item.user_role).label}</ThemedText>
+              </View>
+            )}
             {__DEV__ && (
               <ThemedText style={styles.debugText}>
                 [Debug: user_id: {item.user_id?.substring(0, 8)}... anonym: {String(item.is_anonymous)}]
               </ThemedText>
             )}
             <ThemedText style={styles.postDate}>{formatDate(item.created_at)}</ThemedText>
+            {isNew && (
+              <View style={[styles.newBadge, { marginLeft: 8 }]}>
+                <ThemedText style={[styles.newBadgeText]}>Neu</ThemedText>
+              </View>
+            )}
             
             {!isOwnPost && !item.is_anonymous && (
               <FollowButton 
                 userId={item.user_id} 
-                size="small" 
-                showText={false} 
+                size="small"
+                showIcon={false}
+                showText={true}
                 style={styles.followButton}
               />
             )}
@@ -654,6 +723,24 @@ export default function CommunityScreen() {
           style={styles.contentTouchable}
         >
           <View>
+            <View style={styles.iconRow}>
+              <ThemedText style={styles.postEmoji}>{iconEmoji}</ThemedText>
+            </View>
+            {/* Tags oben als Chips */}
+            {item.tags && item.tags.length > 0 && (
+              <View style={{ marginBottom: 8 }}>
+                <TagDisplay
+                  tags={item.tags}
+                  small={true}
+                  onTagPress={async (tagId) => {
+                    const newFilter = [tagId];
+                    setSelectedFilterTagIds(newFilter);
+                    await saveFilterToStorage(newFilter);
+                    loadPosts();
+                  }}
+                />
+              </View>
+            )}
             <ThemedText style={styles.postContent}>{item.content}</ThemedText>
 
             {/* Bild anzeigen, falls vorhanden */}
@@ -669,17 +756,9 @@ export default function CommunityScreen() {
               </View>
             )}
 
-            {/* Tags anzeigen */}
-            {item.tags && item.tags.length > 0 && (
-              <TagDisplay tags={item.tags} small={true} onTagPress={async (tagId) => {
-                const newFilter = [tagId];
-                setSelectedFilterTagIds(newFilter);
-                await saveFilterToStorage(newFilter);
-                loadPosts();
-              }} />
-            )}
+            {/* Tags moved above content */}
 
-            <ThemedText style={styles.tapHint}>Tippen zum {isExpanded ? 'Schließen' : 'Öffnen'}</ThemedText>
+            {/* Hint removed in favor of inline Antworten flow */}
           </View>
         </TouchableOpacity>
 
@@ -698,14 +777,64 @@ export default function CommunityScreen() {
             />
             <ThemedText style={styles.actionText}>{item.likes_count || 0}</ThemedText>
           </TouchableOpacity>
+          {/* Additional lightweight reactions (UI only) */}
+          <TouchableOpacity
+            style={styles.reactionChip}
+            onPress={() => setPostReactions(prev => { const r = { ...(prev[item.id] || { heart: item.likes_count || 0, joy: 0, sleep: 0, clap: 0, user: {} }) }; const u = r.user || {}; if (u.joy) { r.joy = Math.max(0, r.joy - 1); u.joy = false; } else { r.joy += 1; u.joy = true; } r.user = u; return { ...prev, [item.id]: r }; })}
+          >
+            <ThemedText style={styles.reactionText}>😂 {postReactions[item.id]?.joy ?? 0}</ThemedText>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.reactionChip}
+            onPress={() => setPostReactions(prev => { const r = { ...(prev[item.id] || { heart: item.likes_count || 0, joy: 0, sleep: 0, clap: 0, user: {} }) }; const u = r.user || {}; if (u.sleep) { r.sleep = Math.max(0, r.sleep - 1); u.sleep = false; } else { r.sleep += 1; u.sleep = true; } r.user = u; return { ...prev, [item.id]: r }; })}
+          >
+            <ThemedText style={styles.reactionText}>😴 {postReactions[item.id]?.sleep ?? 0}</ThemedText>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.reactionChip}
+            onPress={() => setPostReactions(prev => { const r = { ...(prev[item.id] || { heart: item.likes_count || 0, joy: 0, sleep: 0, clap: 0, user: {} }) }; const u = r.user || {}; if (u.clap) { r.clap = Math.max(0, r.clap - 1); u.clap = false; } else { r.clap += 1; u.clap = true; } r.user = u; return { ...prev, [item.id]: r }; })}
+          >
+            <ThemedText style={styles.reactionText}>👏 {postReactions[item.id]?.clap ?? 0}</ThemedText>
+          </TouchableOpacity>
           <TouchableOpacity
             style={styles.actionButton}
             onPress={() => togglePostExpansion(item.id)}
           >
             <IconSymbol name="bubble.right" size={20} color={theme.tabIconDefault} />
-            <ThemedText style={styles.actionText}>{item.comments_count || 0}</ThemedText>
+            <ThemedText style={styles.actionText}>Antworten</ThemedText>
+            <ThemedText style={[styles.actionText, { marginLeft: 6 }]}>{item.comments_count || 0}</ThemedText>
           </TouchableOpacity>
         </View>
+
+        {/* Inline preview of first replies */}
+        {(!isExpanded) && (previewComments[item.id]?.length || 0) > 0 && (
+          <View style={[styles.commentsContainer, { borderTopColor: colorScheme === 'dark' ? theme.border : '#EFEFEF' }] }>
+            {previewComments[item.id]!.map((comment) => {
+              const cAvatar = comment.is_anonymous
+                ? { label: '👤', bg: 'rgba(0,0,0,0.08)' }
+                : { label: (comment.user_name || '👶').charAt(0).toUpperCase(), bg: comment.user_role === 'mama' ? 'rgba(255,159,159,0.25)' : comment.user_role === 'papa' ? 'rgba(159,216,255,0.25)' : 'rgba(0,0,0,0.08)' };
+              return (
+                <ThemedView key={comment.id} style={styles.commentItem} lightColor="#F9F9F9" darkColor={theme.cardDark}>
+                  <View style={styles.commentHeader}>
+                    <View style={styles.userInfo}>
+                      <View style={[styles.avatar, { width: 28, height: 28, backgroundColor: cAvatar.bg }]}>
+                        <ThemedText style={[styles.avatarText, { fontSize: 12 }]}>{cAvatar.label}</ThemedText>
+                      </View>
+                      <ThemedText style={styles.userName}>{comment.user_name || 'Anonym'}</ThemedText>
+                      <ThemedText style={styles.commentDate}>{formatDate(comment.created_at)}</ThemedText>
+                    </View>
+                  </View>
+                  <ThemedText style={styles.commentContent}>{comment.content}</ThemedText>
+                </ThemedView>
+              );
+            })}
+            {(item.comments_count || 0) > (previewComments[item.id]?.length || 0) && (
+              <TouchableOpacity onPress={() => togglePostExpansion(item.id)}>
+                <ThemedText style={[styles.viewMoreRepliesText, { color: theme.accent }]}>Weitere Antworten anzeigen</ThemedText>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
 
         {isExpanded && (
           <View style={styles.expandedContent}>
@@ -726,23 +855,37 @@ export default function CommunityScreen() {
             {comments.length > 0 && (
               <View style={[
                 styles.commentsContainer,
-                { borderTopColor: colorScheme === 'dark' ? theme.border : '#EFEFEF' }
+                { 
+                  borderTopColor: colorScheme === 'dark' ? theme.border : '#EFEFEF',
+                  borderLeftColor: colorScheme === 'dark' ? theme.border : '#EFEFEF'
+                }
               ]}>
-                <ThemedText style={styles.commentsTitle}>Antworten:</ThemedText>
+                <View style={styles.commentsHeaderRow}>
+                  <IconSymbol name="bubble.right" size={16} color={theme.tabIconDefault} />
+                  <ThemedText style={styles.commentsTitle}>Antworten</ThemedText>
+                  <View style={styles.countPill}><ThemedText style={styles.countPillText}>{comments.length}</ThemedText></View>
+                </View>
                 {comments.map(comment => {
                   const isOwnComment = user?.id === comment.user_id;
                   const isOP = comment.user_id === item.user_id;
+                  const cAvatar = comment.is_anonymous
+                    ? { label: '👤', bg: 'rgba(0,0,0,0.08)' }
+                    : { label: (comment.user_name || '👶').charAt(0).toUpperCase(), bg: comment.user_role === 'mama' ? 'rgba(255,159,159,0.25)' : comment.user_role === 'papa' ? 'rgba(159,216,255,0.25)' : 'rgba(0,0,0,0.08)' };
                   return (
                     <ThemedView key={comment.id} style={styles.commentItem} lightColor="#F9F9F9" darkColor={theme.cardDark}>
                       <View style={styles.commentHeader}>
                         <View style={styles.userInfo}>
-                          <View style={[
-                            styles.userRoleIndicator,
-                            { backgroundColor: comment.user_role === 'mama' ? '#FF9F9F' : comment.user_role === 'papa' ? '#9FD8FF' : '#D9D9D9' }
-                          ]} />
+                          <View style={[styles.avatar, { backgroundColor: cAvatar.bg }]}>
+                            <ThemedText style={styles.avatarText}>{cAvatar.label}</ThemedText>
+                          </View>
                           <ThemedText style={styles.userName}>
                             {comment.user_name || 'Anonym'}
                           </ThemedText>
+                          {!comment.is_anonymous && (
+                            <View style={[styles.roleChip, { backgroundColor: getRoleChip(comment.user_role).bg }]}>
+                              <ThemedText style={[styles.roleChipText, { color: getRoleChip(comment.user_role).fg }]}>{getRoleChip(comment.user_role).label}</ThemedText>
+                            </View>
+                          )}
                           {isOP && (
                             <View style={styles.opBadge}>
                               <ThemedText style={styles.opBadgeText}>Autor</ThemedText>
@@ -759,7 +902,8 @@ export default function CommunityScreen() {
                             <FollowButton 
                               userId={comment.user_id} 
                               size="small" 
-                              showText={false} 
+                              showIcon={false}
+                              showText={true}
                               style={styles.followButton}
                             />
                           )}
@@ -1016,13 +1160,82 @@ export default function CommunityScreen() {
                 onPress={() => router.push('/notifications' as any)}
               >
                 <IconSymbol 
-                  name="bell.fill" 
+                  name="paperplane.fill" 
                   size={24} 
                   color={theme.tabIconDefault} 
                 />
                 <NotificationBadge refreshTrigger={refreshNotificationBadge} />
               </TouchableOpacity>
             </View>
+
+            {/* Search modal */}
+            <Modal visible={showSearch} animationType="fade" transparent onRequestClose={() => setShowSearch(false)}>
+              <View style={styles.modalBackdrop}>
+                <LiquidGlassCard style={styles.modalCard} intensity={28} overlayColor={GLASS_OVERLAY}>
+                  <View style={styles.modalHeader}>
+                    <ThemedText style={styles.modalTitle}>Suchen</ThemedText>
+                    <TouchableOpacity onPress={() => setShowSearch(false)}>
+                      <IconSymbol name="xmark.circle.fill" size={22} color={theme.tabIconDefault} />
+                    </TouchableOpacity>
+                  </View>
+                  <TextInput
+                    style={[styles.modalInput, { color: theme.text, backgroundColor: colorScheme === 'dark' ? theme.cardDark : '#F0F0F0' }]}
+                    placeholder="Begriff eingeben…"
+                    placeholderTextColor={theme.tabIconDefault}
+                    value={tempSearch}
+                    onChangeText={setTempSearch}
+                    autoFocus
+                  />
+                  <View style={styles.modalActions}>
+                    <TouchableOpacity style={styles.modalCancel} onPress={() => setShowSearch(false)}>
+                      <ThemedText style={styles.modalCancelText}>Abbrechen</ThemedText>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.modalApply, { backgroundColor: theme.accent }]}
+                      onPress={() => { setSearchQuery(tempSearch); setShowSearch(false); }}
+                    >
+                      <ThemedText style={styles.modalApplyText}>Suchen</ThemedText>
+                    </TouchableOpacity>
+                  </View>
+                </LiquidGlassCard>
+              </View>
+            </Modal>
+
+            {/* Filter modal */}
+            <Modal visible={showFilter} animationType="fade" transparent onRequestClose={() => setShowFilter(false)}>
+              <View style={styles.modalBackdrop}>
+                <LiquidGlassCard style={styles.modalCard} intensity={28} overlayColor={GLASS_OVERLAY}>
+                  <View style={styles.modalHeader}>
+                    <ThemedText style={styles.modalTitle}>Filter</ThemedText>
+                    <TouchableOpacity onPress={() => setShowFilter(false)}>
+                      <IconSymbol name="xmark.circle.fill" size={22} color={theme.tabIconDefault} />
+                    </TouchableOpacity>
+                  </View>
+                  <TagFilter
+                    selectedTagIds={selectedFilterTagIds}
+                    onTagsChange={(tagIds) => {
+                      // only update local state here; apply on confirm
+                      setSelectedFilterTagIds(tagIds);
+                    }}
+                  />
+                  <View style={styles.modalActions}>
+                    <TouchableOpacity style={styles.modalCancel} onPress={() => setShowFilter(false)}>
+                      <ThemedText style={styles.modalCancelText}>Abbrechen</ThemedText>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.modalApply, { backgroundColor: theme.accent }]}
+                      onPress={async () => {
+                        await saveFilterToStorage(selectedFilterTagIds);
+                        loadPosts();
+                        setShowFilter(false);
+                      }}
+                    >
+                      <ThemedText style={styles.modalApplyText}>Fertig</ThemedText>
+                    </TouchableOpacity>
+                  </View>
+                </LiquidGlassCard>
+              </View>
+            </Modal>
 
             {/* Benachrichtigungen */}
             {showNotifications ? (
@@ -1162,38 +1375,34 @@ export default function CommunityScreen() {
                 ) : (
                   // Liste der Beiträge
                   <>
-                    <View style={styles.searchContainer}>
-                      <GlassCard style={styles.searchInputContainer} intensity={26} overlayColor={GLASS_OVERLAY}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                          <IconSymbol name="magnifyingglass" size={20} color={theme.tabIconDefault} />
-                          <TextInput
-                            style={[styles.searchInput, { color: theme.text }]}
-                            placeholder="Suche in der Community..."
-                            placeholderTextColor={theme.tabIconDefault}
-                            value={searchQuery}
-                            onChangeText={setSearchQuery}
-                          />
-                          {searchQuery.length > 0 && (
-                            <TouchableOpacity onPress={() => setSearchQuery('')}>
-                              <IconSymbol name="xmark.circle.fill" size={20} color={theme.tabIconDefault} />
-                            </TouchableOpacity>
-                          )}
-                        </View>
-                      </GlassCard>
-                    </View>
+                    {/* Inline composer */}
+                    <GlassCard style={styles.composerCard} intensity={26} overlayColor={GLASS_OVERLAY}>
+                      <TouchableOpacity style={styles.composerRow} onPress={() => setShowAddForm(true)}>
+                        <IconSymbol name="square.and.pencil" size={18} color={theme.tabIconDefault} />
+                        <ThemedText style={styles.composerPlaceholder}>Schreibe etwas …</ThemedText>
+                      </TouchableOpacity>
+                    </GlassCard>
 
-                    {/* Tag-Filter */}
-                    <TagFilter
-                      selectedTagIds={selectedFilterTagIds}
-                      onTagsChange={async (tagIds) => {
-                        // Setze den Filter und speichere ihn
-                        setSelectedFilterTagIds(tagIds);
-                        // Speichere den Filter in AsyncStorage
-                        await saveFilterToStorage(tagIds);
-                        // Lade die Beiträge neu
-                        loadPosts();
-                      }}
-                    />
+                    {/* Tools row with icons */}
+                    <View style={styles.toolsRow}>
+                      <GlassCard style={styles.toolIcon} intensity={26} overlayColor={GLASS_OVERLAY}>
+                        <TouchableOpacity style={styles.toolIconInner} onPress={() => { setTempSearch(searchQuery); setShowSearch(true); }}>
+                          <IconSymbol name="magnifyingglass" size={20} color={theme.tabIconDefault} />
+                        </TouchableOpacity>
+                      </GlassCard>
+                      <View style={{ position: 'relative' }}>
+                        <GlassCard style={styles.toolIcon} intensity={26} overlayColor={GLASS_OVERLAY}>
+                          <TouchableOpacity style={styles.toolIconInner} onPress={() => setShowFilter(true)}>
+                            <IconSymbol name="line.3.horizontal.decrease.circle" size={20} color={theme.tabIconDefault} />
+                          </TouchableOpacity>
+                        </GlassCard>
+                        {selectedFilterTagIds.length > 0 && (
+                          <View style={styles.toolBadge}>
+                            <ThemedText style={styles.toolBadgeText}>{selectedFilterTagIds.length}</ThemedText>
+                          </View>
+                        )}
+                      </View>
+                    </View>
 
                     {isLoading && !isRefreshing ? (
                       <View style={styles.loadingContainer}>
@@ -1207,6 +1416,13 @@ export default function CommunityScreen() {
                         keyExtractor={item => item.id}
                         contentContainerStyle={styles.postsList}
                         showsVerticalScrollIndicator={false}
+                        onViewableItemsChanged={({ viewableItems }) => {
+                          (viewableItems || []).forEach((vi: any) => {
+                            const p = vi?.item as Post;
+                            if (p?.id) loadPreviewForPost(p.id);
+                          });
+                        }}
+                        viewabilityConfig={{ itemVisiblePercentThreshold: 40 }}
                         refreshControl={
                           <RefreshControl
                             refreshing={isRefreshing}
@@ -1357,6 +1573,38 @@ const styles = StyleSheet.create({
   searchContainer: {
     marginVertical: 12,
   },
+  toolsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  toolIcon: {
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    marginRight: 12,
+  },
+  toolIconInner: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  toolBadge: {
+    position: 'absolute',
+    top: -2,
+    right: 4,
+    backgroundColor: '#FF6B6B',
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  toolBadgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
+  },
   searchInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1381,7 +1629,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   postInner: {
-    padding: 16,
+    padding: 20,
     position: 'relative',
   },
   postAccent: {
@@ -1394,26 +1642,7 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 12,
     opacity: 0.9,
   },
-  postTopRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  indexBubble: {
-    minWidth: 24,
-    height: 24,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 6,
-    backgroundColor: 'rgba(0,0,0,0.15)',
-  },
-  indexBubbleText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 11,
-  },
+  // removed index bubble and top row — cleaner look
   newBadge: {
     borderWidth: 1,
     borderRadius: 12,
@@ -1426,6 +1655,25 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: '#6A6A6A',
+  },
+  avatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+  },
+  avatarText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#4A4A4A',
+  },
+  iconRow: {
+    marginBottom: 4,
+  },
+  postEmoji: {
+    fontSize: 16,
   },
   postHeader: {
     flexDirection: 'row',
@@ -1455,13 +1703,25 @@ const styles = StyleSheet.create({
   },
   postContent: {
     fontSize: 16,
-    lineHeight: 22,
-    marginBottom: 8,
+    lineHeight: 24,
+    marginBottom: 10,
   },
   postActions: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
     borderTopWidth: 1,
     paddingTop: 12,
+  },
+  reactionChip: {
+    backgroundColor: '#EFEFEF',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    marginRight: 8,
+  },
+  reactionText: {
+    fontSize: 13,
   },
   actionButton: {
     flexDirection: 'row',
@@ -1477,11 +1737,45 @@ const styles = StyleSheet.create({
     marginTop: 12,
     paddingTop: 12,
     borderTopWidth: 1,
+    borderLeftWidth: 2,
+    paddingLeft: 10,
+  },
+  commentsHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  viewMoreRepliesText: {
+    marginTop: 6,
+    fontSize: 14,
+    fontWeight: '600',
   },
   commentsTitle: {
     fontSize: 14,
     fontWeight: 'bold',
     marginBottom: 8,
+  },
+  countPill: {
+    marginLeft: 8,
+    backgroundColor: '#EFEFEF',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  countPillText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#666',
+  },
+  roleChip: {
+    marginLeft: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  roleChipText: {
+    fontSize: 11,
+    fontWeight: '700',
   },
   commentItem: {
     borderRadius: 8,
@@ -1569,6 +1863,87 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#888',
     textAlign: 'center',
+  },
+  welcomeBanner: {
+    borderRadius: 12,
+    padding: 14,
+    marginTop: 8,
+    marginBottom: 12,
+  },
+  welcomeTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  welcomeText: {
+    fontSize: 14,
+    marginTop: 4,
+  },
+  composerCard: {
+    borderRadius: 12,
+    marginBottom: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  composerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  composerPlaceholder: {
+    marginLeft: 8,
+    fontSize: 14,
+    color: '#888',
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  modalCard: {
+    width: '100%',
+    borderRadius: 12,
+    padding: 16,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  modalInput: {
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    marginTop: 12,
+  },
+  modalCancel: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginRight: 8,
+  },
+  modalCancelText: {
+    color: '#888',
+    fontSize: 14,
+  },
+  modalApply: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+  },
+  modalApplyText: {
+    color: '#fff',
+    fontWeight: '700',
   },
   addFormContainer: {
     borderRadius: 12,

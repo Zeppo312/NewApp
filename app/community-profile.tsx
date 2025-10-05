@@ -13,6 +13,8 @@ import { getFollowerCount, getFollowingCount, getFollowers } from '@/lib/follows
 import Header from '@/components/Header';
 import { getPosts } from '@/lib/community';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { GlassCard, LiquidGlassCard, GLASS_OVERLAY } from '@/constants/DesignGuide';
+import { FollowButton } from '@/components/FollowButton';
 
 // Interface für das Benutzerprofil
 interface UserProfile {
@@ -37,6 +39,8 @@ enum ProfileTab {
   FOLLOWERS = 'followers',
   FOLLOWING = 'following',
   POSTS = 'posts',
+  REPLIES = 'replies',
+  FAVORITES = 'favorites',
 }
 
 export default function CommunityProfileScreen() {
@@ -244,26 +248,34 @@ export default function CommunityProfileScreen() {
     switch (role) {
       case 'mama':
         return {
-          color: '#FF9F9F',
+          chipBg: '#9775FA', // purple
+          chipFg: '#FFFFFF',
+          badge: '💜 Mama',
           label: 'Mama',
           icon: 'person.fill'
         };
       case 'papa':
         return {
-          color: '#9FD8FF',
+          chipBg: '#4DA3FF', // blue
+          chipFg: '#FFFFFF',
+          badge: '💙 Papa',
           label: 'Papa',
           icon: 'person.fill'
         };
       case 'admin':
         return {
-          color: '#9775FA',
+          chipBg: '#9775FA',
+          chipFg: '#FFFFFF',
+          badge: '🛡️ Admin',
           label: 'Administrator',
           icon: 'shield.fill'
         };
       default:
         return {
-          color: '#D9D9D9',
-          label: 'Benutzer',
+          chipBg: '#E6E6E6',
+          chipFg: '#333333',
+          badge: '🤍 Elternteil',
+          label: 'Elternteil',
           icon: 'person.fill'
         };
     }
@@ -332,7 +344,7 @@ export default function CommunityProfileScreen() {
   };
 
   return (
-    <ThemedBackground>
+    <ThemedBackground style={{ backgroundColor: '#F4EFE6' }}>
       <SafeAreaView style={styles.container} edges={['top', 'left', 'right', 'bottom']}>
         <Stack.Screen options={{ headerShown: false }} />
         <Header 
@@ -359,16 +371,12 @@ export default function CommunityProfileScreen() {
             contentContainerStyle={styles.contentContainer}
             showsVerticalScrollIndicator={false}
           >
-            {/* Profilkarte */}
-            <ThemedView 
-              style={[styles.profileCard, { backgroundColor: theme.card }]}
-              lightColor={theme.card}
-              darkColor={theme.card}
-            >
+            {/* Profilkarte im Liquid Glass */}
+            <LiquidGlassCard style={styles.profileCard} intensity={26} overlayColor={GLASS_OVERLAY}>
               <View style={styles.profileHeader}>
                 {/* Profilbild */}
-                <View style={[styles.avatarContainer, { backgroundColor: getRoleInfo(profile.user_role).color }]}>
-                  <IconSymbol name={getRoleInfo(profile.user_role).icon as any} size={40} color="#FFFFFF" />
+                <View style={[styles.avatarContainer, { backgroundColor: getRoleInfo(profile.user_role).chipBg }]}>
+                  <IconSymbol name={getRoleInfo(profile.user_role).icon as any} size={40} color={getRoleInfo(profile.user_role).chipFg} />
                 </View>
                 
                 {/* Profilinformationen */}
@@ -377,13 +385,23 @@ export default function CommunityProfileScreen() {
                     {profile.first_name} {profile.last_name}
                   </ThemedText>
                   
-                  <View style={[styles.roleTag, { backgroundColor: getRoleInfo(profile.user_role).color }]}>
-                    <ThemedText style={styles.roleText}>{getRoleInfo(profile.user_role).label}</ThemedText>
+                  <View style={[styles.roleChip, { backgroundColor: getRoleInfo(profile.user_role).chipBg }]}> 
+                    <ThemedText style={[styles.roleChipText, { color: getRoleInfo(profile.user_role).chipFg }]}>
+                      {getRoleInfo(profile.user_role).badge}
+                    </ThemedText>
                   </View>
                   
                   <ThemedText style={styles.joinDate}>
                     Dabei seit {formatJoinDate(profile.created_at)}
                   </ThemedText>
+                </View>
+
+                {/* Actions */}
+                <View style={styles.actionsRow}>
+                  <TouchableOpacity style={styles.dmButton} onPress={() => Alert.alert('Bald verfügbar', 'Direktnachrichten kommen bald 🎉') }>
+                    <IconSymbol name="paperplane.fill" size={18} color={'#FFFFFF'} />
+                    <ThemedText style={styles.dmButtonText}>Nachricht</ThemedText>
+                  </TouchableOpacity>
                 </View>
               </View>
               
@@ -437,7 +455,18 @@ export default function CommunityProfileScreen() {
                   <ThemedText style={styles.statLabel}>Beiträge</ThemedText>
                 </TouchableOpacity>
               </View>
-            </ThemedView>
+            </LiquidGlassCard>
+
+            {/* Tabs: Beiträge / Antworten / Favoriten */}
+            <View style={styles.tabContainer}>
+              {[{ key: ProfileTab.POSTS, label: 'Beiträge' }, { key: ProfileTab.REPLIES, label: 'Antworten' }, { key: ProfileTab.FAVORITES, label: 'Favoriten' }].map(t => (
+                <TouchableOpacity key={t.key} style={styles.tabButton} onPress={() => setActiveTab(t.key as ProfileTab)}>
+                  <ThemedText style={[styles.tabText, activeTab === t.key && { color: theme.accent, borderBottomWidth: 2, borderBottomColor: theme.accent }]}>
+                    {t.label}
+                  </ThemedText>
+                </TouchableOpacity>
+              ))}
+            </View>
             
             {/* Tab-Inhalte */}
             <View style={styles.tabContent}>
@@ -486,6 +515,20 @@ export default function CommunityProfileScreen() {
                   contentContainerStyle={styles.flatListContent}
                 />
               )}
+              {activeTab === ProfileTab.REPLIES && (
+                <View style={styles.emptyContainer}>
+                  <IconSymbol name="arrowshape.turn.up.left" size={32} color={theme.tabIconDefault} />
+                  <ThemedText style={styles.emptyText}>Noch keine Antworten</ThemedText>
+                  <ThemedText style={styles.emptySubtext}>Deine Antworten erscheinen hier.</ThemedText>
+                </View>
+              )}
+              {activeTab === ProfileTab.FAVORITES && (
+                <View style={styles.emptyContainer}>
+                  <IconSymbol name="heart" size={32} color={theme.tabIconDefault} />
+                  <ThemedText style={styles.emptyText}>Keine Favoriten</ThemedText>
+                  <ThemedText style={styles.emptySubtext}>Markiere Beiträge, um sie hier zu speichern.</ThemedText>
+                </View>
+              )}
             </View>
           </ScrollView>
         )}
@@ -525,13 +568,8 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   profileCard: {
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
     marginBottom: 16,
   },
   profileHeader: {
@@ -554,21 +592,38 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 4,
   },
-  roleTag: {
+  roleChip: {
     paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 4,
+    paddingHorizontal: 10,
+    borderRadius: 12,
     alignSelf: 'flex-start',
     marginBottom: 4,
   },
-  roleText: {
-    color: '#FFFFFF',
+  roleChipText: {
     fontSize: 12,
-    fontWeight: 'bold',
+    fontWeight: '700',
   },
   joinDate: {
     fontSize: 14,
     opacity: 0.7,
+  },
+  actionsRow: {
+    marginLeft: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  dmButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#9775FA',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+  },
+  dmButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    marginLeft: 6,
   },
   statsContainer: {
     flexDirection: 'row',
@@ -593,11 +648,9 @@ const styles = StyleSheet.create({
   tabContainer: {
     flexDirection: 'row',
     marginBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0, 0, 0, 0.1)',
+    justifyContent: 'space-around',
   },
   tabButton: {
-    flex: 1,
     paddingVertical: 12,
     alignItems: 'center',
     justifyContent: 'center',
@@ -606,7 +659,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
     paddingHorizontal: 8,
-    paddingBottom: 4,
   },
   contentContainer: {
     flex: 1,

@@ -14,6 +14,7 @@ import { FollowButton } from '@/components/FollowButton';
 import Header from '@/components/Header';
 import { getPosts } from '@/lib/community';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Alert } from 'react-native';
 
 // Interface für das Benutzerprofil
 interface UserProfile {
@@ -315,7 +316,7 @@ export default function ProfileScreen() {
   const roleInfo = getRoleInfo(profile?.user_role);
 
   return (
-    <ThemedBackground>
+    <ThemedBackground style={{ backgroundColor: '#F4EFE6' }}>
       <SafeAreaView style={styles.container} edges={['top', 'left', 'right', 'bottom']}>
         <Stack.Screen options={{ headerShown: false }} />
         <Header 
@@ -344,11 +345,7 @@ export default function ProfileScreen() {
             contentContainerStyle={styles.scrollViewContent}
             showsVerticalScrollIndicator={false}
           >
-            <ThemedView 
-              style={[styles.profileCard, { backgroundColor: theme.card }]} 
-              lightColor={theme.card}
-              darkColor={theme.card}
-            >
+            <LiquidGlassCard style={styles.profileCard} intensity={26} overlayColor={GLASS_OVERLAY}>
               {/* Profilbild und Name */}
               <View style={styles.profileHeader}>
                 <View style={[styles.avatarContainer, { backgroundColor: roleInfo.color }]}>
@@ -373,6 +370,7 @@ export default function ProfileScreen() {
                   <FollowButton 
                     userId={profile.id}
                     size="medium"
+                    showIcon={false}
                     onFollowStatusChange={handleFollowStatusChange}
                   />
                 )}
@@ -409,7 +407,7 @@ export default function ProfileScreen() {
                   <Text style={styles.chatButtonText}>Nachricht senden</Text>
                 </TouchableOpacity>
               )}
-            </ThemedView>
+            </LiquidGlassCard>
 
             {/* Benutzerbeiträge */}
             <ThemedView 
@@ -520,17 +518,17 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 4,
   },
-  roleTag: {
+  roleChip: {
     paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 4,
+    paddingHorizontal: 10,
+    borderRadius: 12,
     alignSelf: 'flex-start',
     marginBottom: 4,
   },
-  roleText: {
+  roleChipText: {
     color: '#FFFFFF',
     fontSize: 12,
-    fontWeight: 'bold',
+    fontWeight: '700',
   },
   joinDate: {
     fontSize: 14,
