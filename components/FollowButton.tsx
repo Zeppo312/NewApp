@@ -11,6 +11,7 @@ interface FollowButtonProps {
   onFollowStatusChange?: (isFollowing: boolean) => void;
   size?: 'small' | 'medium' | 'large';
   showText?: boolean;
+  showIcon?: boolean;
   style?: any;
 }
 
@@ -19,6 +20,7 @@ export const FollowButton: React.FC<FollowButtonProps> = ({
   onFollowStatusChange,
   size = 'medium',
   showText = true,
+  showIcon = true,
   style
 }) => {
   const colorScheme = useColorScheme() ?? 'light';
@@ -130,6 +132,7 @@ export const FollowButton: React.FC<FollowButtonProps> = ({
             : theme.accent,
           height: buttonSize,
           paddingHorizontal: showText ? paddingHorizontal : 0,
+          // When only icon is shown, keep it circular
           width: showText ? undefined : buttonSize,
           borderRadius: showText ? buttonSize / 2 : buttonSize / 2
         },
@@ -142,11 +145,13 @@ export const FollowButton: React.FC<FollowButtonProps> = ({
         <ActivityIndicator size="small" color={isFollowing ? theme.text : '#FFFFFF'} />
       ) : (
         <>
-          <IconSymbol
-            name={isFollowing ? 'checkmark' : 'plus'}
-            size={iconSize}
-            color={isFollowing ? theme.accent : '#FFFFFF'}
-          />
+          {showIcon && (
+            <IconSymbol
+              name={isFollowing ? 'checkmark' : 'plus'}
+              size={iconSize}
+              color={isFollowing ? theme.accent : '#FFFFFF'}
+            />
+          )}
           
           {showText && (
             <ThemedText
@@ -154,7 +159,8 @@ export const FollowButton: React.FC<FollowButtonProps> = ({
                 styles.text,
                 {
                   fontSize,
-                  color: isFollowing ? theme.tabIconDefault : '#FFFFFF'
+                  color: isFollowing ? theme.tabIconDefault : '#FFFFFF',
+                  marginLeft: showIcon ? 4 : 0,
                 }
               ]}
             >

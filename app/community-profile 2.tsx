@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, TouchableOpacity, ActivityIndicator, FlatList, Text, Alert, ScrollView, Image } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { StyleSheet, View, TouchableOpacity, ActivityIndicator, FlatList, Text, Alert, ScrollView } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
@@ -40,6 +39,8 @@ enum ProfileTab {
   FOLLOWERS = 'followers',
   FOLLOWING = 'following',
   POSTS = 'posts',
+  REPLIES = 'replies',
+  FAVORITES = 'favorites',
 }
 
 export default function CommunityProfileScreen() {
@@ -55,8 +56,7 @@ export default function CommunityProfileScreen() {
   const [following, setFollowing] = useState<Follower[]>([]);
   const [posts, setPosts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  // Standardmäßig Beiträge anzeigen
-  const [activeTab, setActiveTab] = useState<ProfileTab>(ProfileTab.POSTS);
+  const [activeTab, setActiveTab] = useState<ProfileTab>(ProfileTab.FOLLOWERS);
 
   // Benutzerprofil und Statistiken laden
   useEffect(() => {
@@ -104,9 +104,8 @@ export default function CommunityProfileScreen() {
       setFollowersCount(followers);
       setFollowingCount(following);
 
-      // Follower & Following laden (für Friends/Stories-Zeile)
+      // Follower für den ersten Tab laden
       loadFollowers();
-      loadFollowing();
 
     } catch (error) {
       console.error('Fehler beim Laden der Profildaten:', error);
@@ -300,14 +299,14 @@ export default function CommunityProfileScreen() {
         style={styles.userItem}
         onPress={() => router.push(`/profile/${item.id}` as any)}
       >
-        <View style={[styles.userAvatar, { backgroundColor: roleInfo.chipBg }]}>
+        <View style={[styles.userAvatar, { backgroundColor: roleInfo.color }]}>
           <IconSymbol name={roleInfo.icon as any} size={24} color="#FFFFFF" />
         </View>
         <View style={styles.userInfo}>
           <ThemedText style={styles.userNameItem}>
             {item.first_name} {item.last_name}
           </ThemedText>
-          <View style={[styles.userRoleTag, { backgroundColor: roleInfo.chipBg }]}>
+          <View style={[styles.userRoleTag, { backgroundColor: roleInfo.color }]}>
             <ThemedText style={styles.userRoleText}>{roleInfo.label}</ThemedText>
           </View>
         </View>
@@ -317,61 +316,30 @@ export default function CommunityProfileScreen() {
   };
 
   // Renderingfunktion für Beiträge
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffInDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
-    if (diffInDays === 0) return 'Heute';
-    if (diffInDays === 1) return 'Gestern';
-    if (diffInDays < 7) return `Vor ${diffInDays} Tagen`;
-    return date.toLocaleDateString('de-DE');
-  };
-
-  const getAvatar = (item: any) => {
-    if (item.is_anonymous) return { label: '👤', bg: 'rgba(0,0,0,0.08)' };
-    const name = (item.user_name || '').trim();
-    const initial = name ? name.charAt(0).toUpperCase() : '👶';
-    const bg = profile?.user_role === 'mama' ? 'rgba(255,159,159,0.25)' : profile?.user_role === 'papa' ? 'rgba(159,216,255,0.25)' : 'rgba(0,0,0,0.08)';
-    return { label: initial, bg };
-  };
-
-  const renderFeedItem = ({ item }: { item: any }) => {
-    const avatar = getAvatar(item);
+  const renderPostItem = ({ item }: { item: any }) => {
     return (
-      <LiquidGlassCard style={styles.feedCard} intensity={28} overlayColor={'rgba(255,255,255,0.18)'} borderColor={'rgba(255,255,255,0.4)'}>
-        <TouchableOpacity onPress={() => router.push({ pathname: '/community', params: { postId: item.id } } as any)}>
-          <View style={styles.feedInner}>
-            <View style={styles.postHeaderRow}>
-              <View style={styles.userInfoRow}>
-                <View style={[styles.avatar, { backgroundColor: avatar.bg }]}>
-                  <ThemedText style={styles.avatarText}>{item.is_anonymous ? '🍼' : avatar.label}</ThemedText>
-                </View>
-                <ThemedText style={styles.userNameText}>{item.user_name || 'Anonym'}</ThemedText>
-                <ThemedText style={styles.postDateText}>{formatDate(item.created_at)}</ThemedText>
-              </View>
-            </View>
-
-            <ThemedText style={styles.postBodyText}>{item.content}</ThemedText>
-
-            {!!item.image_url && (
-              <View style={styles.postImageContainer}> 
-                <Image source={{ uri: item.image_url }} style={styles.postImage} resizeMode="cover" />
-              </View>
-            )}
-
-            <View style={[styles.postActionsRow, { borderTopColor: colorScheme === 'dark' ? theme.border : '#EFEFEF' }]}>
-              <View style={styles.actionItem}>
-                <IconSymbol name={item.has_liked ? 'heart.fill' : 'heart'} size={18} color={item.has_liked ? '#FF6B6B' : theme.tabIconDefault} />
-                <ThemedText style={styles.actionCount}>{item.likes_count || 0}</ThemedText>
-              </View>
-              <View style={styles.actionItem}>
-                <IconSymbol name="bubble.right" size={18} color={theme.tabIconDefault} />
-                <ThemedText style={styles.actionCount}>{item.comments_count || 0}</ThemedText>
-              </View>
-            </View>
+      <TouchableOpacity
+        style={styles.postItem}
+        onPress={() => router.push(`/community` as any)}
+      >
+        <View style={styles.postHeader}>
+          <IconSymbol name={item.type === 'poll' ? "chart.bar" : "text.bubble"} size={20} color={theme.accent} />
+          <ThemedText style={styles.postDate}>{new Date(item.created_at).toLocaleDateString()}</ThemedText>
+        </View>
+        <ThemedText style={styles.postContent} numberOfLines={2}>
+          {item.content}
+        </ThemedText>
+        <View style={styles.postStats}>
+          <View style={styles.postStat}>
+            <IconSymbol name="heart" size={16} color={theme.tabIconDefault} />
+            <ThemedText style={styles.statText}>{item.likes_count || 0}</ThemedText>
           </View>
-        </TouchableOpacity>
-      </LiquidGlassCard>
+          <View style={styles.postStat}>
+            <IconSymbol name="bubble.right" size={16} color={theme.tabIconDefault} />
+            <ThemedText style={styles.statText}>{item.comments_count || 0}</ThemedText>
+          </View>
+        </View>
+      </TouchableOpacity>
     );
   };
 
@@ -404,7 +372,7 @@ export default function CommunityProfileScreen() {
             showsVerticalScrollIndicator={false}
           >
             {/* Profilkarte im Liquid Glass */}
-            <LiquidGlassCard style={styles.profileCard} intensity={32} overlayColor={'rgba(255,255,255,0.22)'} borderColor={'rgba(255,255,255,0.55)'}>
+            <LiquidGlassCard style={styles.profileCard} intensity={26} overlayColor={GLASS_OVERLAY}>
               <View style={styles.profileHeader}>
                 {/* Profilbild */}
                 <View style={[styles.avatarContainer, { backgroundColor: getRoleInfo(profile.user_role).chipBg }]}>
@@ -428,86 +396,79 @@ export default function CommunityProfileScreen() {
                   </ThemedText>
                 </View>
 
-                {/* Actions entfernt auf eigenem Profil */}
+                {/* Actions */}
+                <View style={styles.actionsRow}>
+                  <TouchableOpacity style={styles.dmButton} onPress={() => Alert.alert('Bald verfügbar', 'Direktnachrichten kommen bald 🎉') }>
+                    <IconSymbol name="paperplane.fill" size={18} color={'#FFFFFF'} />
+                    <ThemedText style={styles.dmButtonText}>Nachricht</ThemedText>
+                  </TouchableOpacity>
+                </View>
               </View>
               
               {/* Statistiken */}
               <View style={styles.statsContainer}>
-                {/* Beiträge links */}
                 <TouchableOpacity 
-                  style={[styles.statItem, activeTab === ProfileTab.POSTS && styles.activeStatItem]}
-                  onPress={() => setActiveTab(ProfileTab.POSTS)}
-                >
-                  <ThemedText style={[styles.statValue, activeTab === ProfileTab.POSTS && { color: theme.accent }]}>
-                    {posts.length}
-                  </ThemedText>
-                  <ThemedText style={styles.statLabel}>Beiträge</ThemedText>
-                </TouchableOpacity>
-
-                {/* Follower in der Mitte */}
-                <TouchableOpacity 
-                  style={[styles.statItem, activeTab === ProfileTab.FOLLOWERS && styles.activeStatItem]}
+                  style={[
+                    styles.statItem, 
+                    activeTab === ProfileTab.FOLLOWERS && styles.activeStatItem
+                  ]}
                   onPress={() => setActiveTab(ProfileTab.FOLLOWERS)}
                 >
-                  <ThemedText style={[styles.statValue, activeTab === ProfileTab.FOLLOWERS && { color: theme.accent }]}>
+                  <ThemedText style={[
+                    styles.statValue, 
+                    activeTab === ProfileTab.FOLLOWERS && { color: theme.accent }
+                  ]}>
                     {followersCount}
                   </ThemedText>
                   <ThemedText style={styles.statLabel}>Follower</ThemedText>
                 </TouchableOpacity>
-
-                {/* Folgt rechts */}
+                
                 <TouchableOpacity 
-                  style={[styles.statItem, activeTab === ProfileTab.FOLLOWING && styles.activeStatItem]}
+                  style={[
+                    styles.statItem, 
+                    activeTab === ProfileTab.FOLLOWING && styles.activeStatItem
+                  ]}
                   onPress={() => setActiveTab(ProfileTab.FOLLOWING)}
                 >
-                  <ThemedText style={[styles.statValue, activeTab === ProfileTab.FOLLOWING && { color: theme.accent }]}>
+                  <ThemedText style={[
+                    styles.statValue, 
+                    activeTab === ProfileTab.FOLLOWING && { color: theme.accent }
+                  ]}>
                     {followingCount}
                   </ThemedText>
                   <ThemedText style={styles.statLabel}>Folgt</ThemedText>
                 </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  style={[
+                    styles.statItem, 
+                    activeTab === ProfileTab.POSTS && styles.activeStatItem
+                  ]}
+                  onPress={() => setActiveTab(ProfileTab.POSTS)}
+                >
+                  <ThemedText style={[
+                    styles.statValue, 
+                    activeTab === ProfileTab.POSTS && { color: theme.accent }
+                  ]}>
+                    {posts.length}
+                  </ThemedText>
+                  <ThemedText style={styles.statLabel}>Beiträge</ThemedText>
+                </TouchableOpacity>
               </View>
             </LiquidGlassCard>
 
-            {/* Friends/Following – IG-Stories-Style Row */}
-            <View style={styles.friendsSection}>
-              <View style={styles.friendsHeaderRow}>
-                <ThemedText style={styles.friendsTitle}>Freunde</ThemedText>
-                <TouchableOpacity onPress={() => setActiveTab(ProfileTab.FOLLOWING)}>
-                  <ThemedText style={styles.friendsAction}>Alle ansehen</ThemedText>
+            {/* Tabs: Beiträge / Antworten / Favoriten */}
+            <View style={styles.tabContainer}>
+              {[{ key: ProfileTab.POSTS, label: 'Beiträge' }, { key: ProfileTab.REPLIES, label: 'Antworten' }, { key: ProfileTab.FAVORITES, label: 'Favoriten' }].map(t => (
+                <TouchableOpacity key={t.key} style={styles.tabButton} onPress={() => setActiveTab(t.key as ProfileTab)}>
+                  <ThemedText style={[styles.tabText, activeTab === t.key && { color: theme.accent, borderBottomWidth: 2, borderBottomColor: theme.accent }]}>
+                    {t.label}
+                  </ThemedText>
                 </TouchableOpacity>
-              </View>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.friendsRow}>
-                {(following.length > 0 ? following : followers).slice(0, 12).map((u) => {
-                  const role = getRoleInfo(u.user_role);
-                  const initials = `${(u.first_name || 'B')[0] || ''}${(u.last_name || '')[0] || ''}`.toUpperCase();
-                  return (
-                    <TouchableOpacity key={u.id} style={styles.friendItem} onPress={() => router.push(`/profile/${u.id}` as any)}>
-                      <LinearGradient
-                        colors={[ '#FEDA75', '#F58529', '#DD2A7B', '#8134AF', '#515BD4' ]}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                        style={styles.friendRing}
-                      >
-                        <View style={[styles.friendCircle, { backgroundColor: role.chipBg }]}>
-                          <ThemedText style={[styles.friendInitials, { color: role.chipFg }]}>{initials}</ThemedText>
-                        </View>
-                      </LinearGradient>
-                      <ThemedText style={styles.friendName} numberOfLines={1}>
-                        {u.first_name}
-                      </ThemedText>
-                    </TouchableOpacity>
-                  );
-                })}
-                {following.length === 0 && followers.length === 0 && (
-                  <View style={styles.friendsEmpty}>
-                    <IconSymbol name="person.2" size={20} color={theme.tabIconDefault} />
-                    <ThemedText style={styles.friendsEmptyText}>Noch keine Freunde</ThemedText>
-                  </View>
-                )}
-              </ScrollView>
+              ))}
             </View>
-
-            {/* Inhalte (Posts als Standard) */}
+            
+            {/* Tab-Inhalte */}
             <View style={styles.tabContent}>
               {activeTab === ProfileTab.FOLLOWERS && (
                 <FlatList
@@ -540,20 +501,33 @@ export default function CommunityProfileScreen() {
                 />
               )}
               {activeTab === ProfileTab.POSTS && (
-                posts.length === 0 ? (
-                  <View style={styles.emptyContainer}>
-                    <IconSymbol name="text.bubble" size={32} color={theme.tabIconDefault} />
-                    <ThemedText style={styles.emptyText}>Keine Beiträge</ThemedText>
-                    <ThemedText style={styles.emptySubtext}>Du hast noch keine Beiträge erstellt.</ThemedText>
-                  </View>
-                ) : (
-                  <FlatList
-                    data={posts}
-                    keyExtractor={(item) => item.id}
-                    renderItem={renderFeedItem}
-                    contentContainerStyle={{ paddingTop: 4, paddingBottom: 12 }}
-                  />
-                )
+                <FlatList
+                  data={posts}
+                  renderItem={renderPostItem}
+                  keyExtractor={(item) => item.id}
+                  ListEmptyComponent={() => (
+                    <View style={styles.emptyContainer}>
+                      <IconSymbol name="text.bubble" size={32} color={theme.tabIconDefault} />
+                      <ThemedText style={styles.emptyText}>Keine Beiträge</ThemedText>
+                      <ThemedText style={styles.emptySubtext}>Du hast noch keine Beiträge erstellt.</ThemedText>
+                    </View>
+                  )}
+                  contentContainerStyle={styles.flatListContent}
+                />
+              )}
+              {activeTab === ProfileTab.REPLIES && (
+                <View style={styles.emptyContainer}>
+                  <IconSymbol name="arrowshape.turn.up.left" size={32} color={theme.tabIconDefault} />
+                  <ThemedText style={styles.emptyText}>Noch keine Antworten</ThemedText>
+                  <ThemedText style={styles.emptySubtext}>Deine Antworten erscheinen hier.</ThemedText>
+                </View>
+              )}
+              {activeTab === ProfileTab.FAVORITES && (
+                <View style={styles.emptyContainer}>
+                  <IconSymbol name="heart" size={32} color={theme.tabIconDefault} />
+                  <ThemedText style={styles.emptyText}>Keine Favoriten</ThemedText>
+                  <ThemedText style={styles.emptySubtext}>Markiere Beiträge, um sie hier zu speichern.</ThemedText>
+                </View>
               )}
             </View>
           </ScrollView>
@@ -597,145 +571,6 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 20,
     marginBottom: 16,
-  },
-  // Feed styles (Community-like)
-  feedCard: {
-    marginBottom: 12,
-    borderRadius: 12,
-  },
-  feedInner: {
-    padding: 16,
-  },
-  postHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  userInfoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  avatar: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 8,
-  },
-  avatarText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#4A4A4A',
-  },
-  userNameText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  postDateText: {
-    fontSize: 12,
-    color: '#888',
-    marginLeft: 8,
-  },
-  postBodyText: {
-    fontSize: 16,
-    lineHeight: 24,
-    marginBottom: 10,
-  },
-  postImageContainer: {
-    marginTop: 6,
-    marginBottom: 10,
-    borderRadius: 8,
-    overflow: 'hidden',
-    backgroundColor: '#F5F5F5',
-  },
-  postImage: {
-    width: '100%',
-    height: 200,
-    borderRadius: 8,
-    backgroundColor: '#F5F5F5',
-  },
-  postActionsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderTopWidth: 1,
-    paddingTop: 10,
-  },
-  actionItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  actionCount: {
-    marginLeft: 6,
-    fontSize: 14,
-    color: '#888',
-  },
-  friendsSection: {
-    marginTop: 4,
-    marginBottom: 12,
-    paddingHorizontal: 12,
-  },
-  friendsHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-    paddingHorizontal: 4,
-  },
-  friendsTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  friendsAction: {
-    fontSize: 13,
-    fontWeight: '600',
-    opacity: 0.7,
-  },
-  friendsRow: {
-    paddingHorizontal: 4,
-  },
-  friendItem: {
-    width: 68,
-    marginRight: 10,
-    alignItems: 'center',
-  },
-  friendRing: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    padding: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 6,
-  },
-  friendCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#EEE'
-  },
-  friendInitials: {
-    fontSize: 18,
-    fontWeight: '800',
-  },
-  friendName: {
-    fontSize: 12,
-    maxWidth: 64,
-  },
-  friendsEmpty: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-  },
-  friendsEmptyText: {
-    marginLeft: 6,
-    fontSize: 13,
-    opacity: 0.7,
   },
   profileHeader: {
     flexDirection: 'row',

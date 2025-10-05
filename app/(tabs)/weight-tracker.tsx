@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator, Platform, Modal, SafeAreaView, StatusBar } from 'react-native';
+import { StyleSheet, View, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator, Platform, Modal, SafeAreaView, StatusBar, Text } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedBackground } from '@/components/ThemedBackground';
@@ -12,6 +12,8 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { saveWeightEntry, getWeightEntries, deleteWeightEntry, WeightEntry } from '@/lib/weight';
 import { Stack } from 'expo-router';
 import Header from '@/components/Header';
+import { LiquidGlassCard, GLASS_OVERLAY, LAYOUT_PAD, SECTION_GAP_TOP, SECTION_GAP_BOTTOM } from '@/constants/DesignGuide';
+import ActivityCard from '@/components/ActivityCard';
 
 export default function WeightTrackerScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -164,17 +166,17 @@ export default function WeightTrackerScreen() {
   const renderWeightChart = () => {
     if (weightEntries.length < 2) {
       return (
-        <ThemedView style={styles.emptyChartContainer} lightColor={theme.card} darkColor={theme.card}>
+        <LiquidGlassCard style={styles.emptyChartContainer} intensity={26} overlayColor={GLASS_OVERLAY}>
           <IconSymbol name="chart.line.uptrend.xyaxis" size={40} color={theme.tabIconDefault} />
           <ThemedText style={styles.emptyChartText} lightColor="#888" darkColor="#E9D8C2">
             Füge mindestens zwei Gewichtseinträge hinzu, um eine Kurve zu sehen.
           </ThemedText>
-        </ThemedView>
+        </LiquidGlassCard>
       );
     }
 
     return (
-      <ThemedView style={styles.chartContainer} lightColor={theme.card} darkColor={theme.card}>
+      <LiquidGlassCard style={styles.chartContainer} intensity={26} overlayColor={GLASS_OVERLAY}>
         <View style={styles.chartWrapper}>
           <LineChart
           data={chartData}
@@ -240,15 +242,29 @@ export default function WeightTrackerScreen() {
           formatXLabel={(value) => value} // Standard-Formatierung für X-Achse
         />
         </View>
-      </ThemedView>
+      </LiquidGlassCard>
     );
+  };
+
+  // Mappe Gewichtseintrag auf ActivityCard-kompatibles Format
+  const convertWeightToDailyEntry = (e: WeightEntry): any => {
+    return {
+      id: e.id,
+      entry_date: e.date,
+      entry_type: 'other',
+      // keine Zeiten -> keine Zeit-Pills
+      notes: e.notes ?? undefined,
+      // Custom Anzeige wie im Sleep-Tracker (über emoji/label)
+      emoji: '⚖️',
+      label: `Gewicht ${e.weight} kg`,
+    };
   };
 
   // Rendere die Gewichtseinträge
   const renderWeightEntries = () => {
     if (weightEntries.length === 0) {
       return (
-        <ThemedView style={styles.emptyState} lightColor={theme.card} darkColor={theme.card}>
+        <LiquidGlassCard style={styles.emptyState} intensity={26} overlayColor={GLASS_OVERLAY}>
           <IconSymbol name="scalemass" size={40} color={theme.tabIconDefault} />
           <ThemedText style={styles.emptyStateText} lightColor="#5C4033" darkColor="#FFFFFF">
             Noch keine Gewichtseinträge
@@ -256,35 +272,23 @@ export default function WeightTrackerScreen() {
           <ThemedText style={styles.emptyStateSubtext} lightColor="#888" darkColor="#E9D8C2">
             Füge deinen ersten Gewichtseintrag hinzu, um deine Gewichtskurve zu sehen.
           </ThemedText>
-        </ThemedView>
+        </LiquidGlassCard>
       );
     }
 
     return (
-      <View style={styles.entriesContainer}>
-        <ThemedText style={styles.sectionTitle} lightColor="#5C4033" darkColor="#FFFFFF">Gewichtseinträge</ThemedText>
-        {weightEntries.map(entry => (
-          <ThemedView
-            key={entry.id}
-            style={styles.entryItem}
-            lightColor={theme.card}
-            darkColor={theme.card}
-          >
-            <View style={styles.entryHeader}>
-              <ThemedText style={styles.entryDate} lightColor="#5C4033" darkColor="#FFFFFF">{formatDate(entry.date)}</ThemedText>
-              <TouchableOpacity
-                style={styles.deleteButton}
-                onPress={() => handleDeleteWeightEntry(entry.id)}
-              >
-                <IconSymbol name="trash" size={18} color="#FF6B6B" />
-              </TouchableOpacity>
-            </View>
-            <ThemedText style={styles.entryWeight} lightColor="#333333" darkColor="#F8F0E5">{entry.weight} kg</ThemedText>
-            {entry.notes && (
-              <ThemedText style={styles.entryNotes} lightColor="#888" darkColor="#E9D8C2">{entry.notes}</ThemedText>
-            )}
-          </ThemedView>
-        ))}
+      <View style={styles.timelineSection}>
+        <Text style={[styles.sectionTitleSleepLike]}>Gewichtseinträge</Text>
+        <View style={styles.entriesContainer}> 
+          {weightEntries.map((entry) => (
+            <ActivityCard
+              key={entry.id}
+              entry={convertWeightToDailyEntry(entry)}
+              onDelete={(id) => handleDeleteWeightEntry(id)}
+              marginHorizontal={8}
+            />
+          ))}
+        </View>
       </View>
     );
   };
@@ -298,12 +302,12 @@ export default function WeightTrackerScreen() {
         animationType="fade"
       >
         <View style={styles.saveViewContainer}>
-          <ThemedView style={styles.saveView} lightColor={theme.card} darkColor={theme.card}>
+          <LiquidGlassCard style={styles.saveView} intensity={26} overlayColor={GLASS_OVERLAY}>
             <ActivityIndicator size="large" color={theme.accent} />
             <ThemedText style={styles.saveViewText} lightColor="#5C4033" darkColor="#FFFFFF">
               Daten werden gespeichert...
             </ThemedText>
-          </ThemedView>
+          </LiquidGlassCard>
         </View>
       </Modal>
     );
@@ -312,7 +316,7 @@ export default function WeightTrackerScreen() {
   // Rendere das Formular zum Hinzufügen eines Gewichtseintrags
   const renderAddForm = () => {
     return (
-      <ThemedView style={styles.addFormContainer} lightColor={theme.card} darkColor={theme.card}>
+      <LiquidGlassCard style={styles.addFormContainer} intensity={26} overlayColor={GLASS_OVERLAY}>
         <View style={styles.formHeader}>
           <ThemedText style={styles.formTitle} lightColor="#5C4033" darkColor="#FFFFFF">Neuen Gewichtseintrag hinzufügen</ThemedText>
           <TouchableOpacity onPress={() => setShowAddForm(false)}>
@@ -377,7 +381,7 @@ export default function WeightTrackerScreen() {
             {isLoading || isSaving ? 'Wird gespeichert...' : 'Speichern'}
           </ThemedText>
         </TouchableOpacity>
-      </ThemedView>
+      </LiquidGlassCard>
     );
   };
 
@@ -513,12 +517,20 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   entriesContainer: {
-    marginBottom: 20,
+    gap: 16,
+    paddingHorizontal: 0,
+    paddingVertical: 4,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 12,
+  sectionTitleSleepLike: {
+    marginTop: SECTION_GAP_TOP,
+    marginBottom: SECTION_GAP_BOTTOM,
+    paddingHorizontal: LAYOUT_PAD,
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#7D5A50',
+    textAlign: 'center',
+    width: '100%',
+    letterSpacing: -0.1,
   },
   entryItem: {
     borderRadius: 12,

@@ -10,6 +10,7 @@ import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import Header from '@/components/Header';
+import { GlassCard, LiquidGlassCard, GLASS_OVERLAY, LAYOUT_PAD } from '@/constants/DesignGuide';
 
 export default function MoreScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -112,7 +113,7 @@ export default function MoreScreen() {
         />
         
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
-          <ThemedView style={styles.section} lightColor={theme.card} darkColor={theme.card}>
+          <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
             <ThemedText style={styles.sectionTitle}>
               Baby & Familie
             </ThemedText>
@@ -134,9 +135,9 @@ export default function MoreScreen() {
               </View>
               <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
             </TouchableOpacity>
-          </ThemedView>
+          </LiquidGlassCard>
 
-          <ThemedView style={styles.section} lightColor={theme.card} darkColor={theme.card}>
+          <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
             <ThemedText style={styles.sectionTitle}>
               Wissen & Hilfe
             </ThemedText>
@@ -197,9 +198,9 @@ export default function MoreScreen() {
               </View>
               <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
             </TouchableOpacity>
-          </ThemedView>
+          </LiquidGlassCard>
 
-          <ThemedView style={styles.section} lightColor={theme.card} darkColor={theme.card}>
+          <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
             <ThemedText style={styles.sectionTitle}>
               Einstellungen
             </ThemedText>
@@ -299,9 +300,9 @@ export default function MoreScreen() {
                 <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
               </TouchableOpacity>
             )}
-          </ThemedView>
+          </LiquidGlassCard>
 
-          <ThemedView style={styles.section} lightColor={theme.card} darkColor={theme.card}>
+          <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
             <ThemedText style={styles.sectionTitle}>
               Über die App
             </ThemedText>
@@ -335,7 +336,7 @@ export default function MoreScreen() {
               </View>
               <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
             </TouchableOpacity>
-          </ThemedView>
+          </LiquidGlassCard>
 
           {/* Logout Section */}
           <View style={styles.logoutSection}>
@@ -365,56 +366,44 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
   },
-  contentContainer: {
-    padding: 20,
-    paddingBottom: 40,
-  },
+  contentContainer: { paddingHorizontal: LAYOUT_PAD, paddingBottom: 40, paddingTop: 10 },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
     marginBottom: 20,
     textAlign: 'center',
   },
-  section: {
-    borderRadius: 15,
-    marginBottom: 20,
-    padding: 15,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
+  sectionCard: { marginBottom: 16, borderRadius: 22, overflow: 'hidden' },
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    marginBottom: 15,
-    paddingHorizontal: 5,
+    marginBottom: 12,
+    paddingHorizontal: 16,
   },
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 5,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0, 0, 0, 0.05)',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(0,0,0,0.08)'
   },
   menuItemIcon: {
     width: 40,
     alignItems: 'center',
-    marginRight: 15,
+    marginRight: 12,
   },
   menuItemContent: {
     flex: 1,
   },
   menuItemTitle: {
     fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 3,
+    fontWeight: '700',
+    marginBottom: 2,
   },
   menuItemDescription: {
-    fontSize: 14,
-    opacity: 0.7,
+    fontSize: 13,
+    opacity: 0.8,
   },
   logoutSection: {
     marginTop: 20,

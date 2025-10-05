@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 // Typ-Definitionen
 type ActivityType = 'feeding' | 'diaper' | 'other';
@@ -70,6 +71,8 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   const [startTime, setStartTime] = useState(new Date());
   const [endTime, setEndTime] = useState<Date | null>(null);
   const [isEndTimeVisible, setEndTimeVisible] = useState(false);
+  const [showStartPicker, setShowStartPicker] = useState(false);
+  const [showEndPicker, setShowEndPicker] = useState(false);
   const [notes, setNotes] = useState('');
   const [isNotesVisible, setNotesVisible] = useState(false);
 
@@ -170,49 +173,57 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
 
   const renderTimeSection = () => (
     <View style={styles.section}>
-      <Text style={[styles.sectionTitle, { color: theme.text }]}>⏱ Zeit</Text>
-      <View style={styles.timeCard}>
-        <BlurView intensity={20} tint="light" style={StyleSheet.absoluteFill} />
-        <LinearGradient colors={[ 'rgba(255,255,255,0.22)', 'rgba(255,255,255,0.12)' ]} style={StyleSheet.absoluteFill} />
+      <Text style={[styles.sectionTitle, { color: theme.text }]}>⏰ Zeitraum</Text>
 
-        <View style={styles.timeRow}> 
-          <Text style={[styles.timeLabel, { color: theme.textSecondary }]}>Start</Text>
-          <View style={styles.timeControls}>
-            <TouchableOpacity accessibilityLabel="Start minus 5 Minuten" style={styles.roundStepper} onPress={() => adjustTime(setStartTime, startTime, -5)}>
-              <Text style={styles.roundStepperText}>-5</Text>
-            </TouchableOpacity>
-            <View style={styles.timePill}>
-              <Text style={styles.timePillText}>
-                {startTime.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
-              </Text>
-            </View>
-            <TouchableOpacity accessibilityLabel="Start plus 5 Minuten" style={styles.roundStepper} onPress={() => adjustTime(setStartTime, startTime, +5)}>
-              <Text style={styles.roundStepperText}>+5</Text>
+      <View style={styles.timeRow}> 
+        <TouchableOpacity style={styles.timeButton} onPress={() => setShowStartPicker(true)}>
+          <Text style={styles.timeLabel}>Start</Text>
+          <Text style={styles.timeValue}>
+            {startTime.toLocaleString('de-DE', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.timeButton} onPress={() => { setEndTimeVisible(true); setShowEndPicker(true); }}>
+          <Text style={styles.timeLabel}>Ende</Text>
+          <Text style={styles.timeValue}>
+            {endTime ? endTime.toLocaleString('de-DE', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : 'Offen'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {showStartPicker && (
+        <View style={styles.datePickerContainer}>
+          <DateTimePicker
+            value={startTime}
+            mode="datetime"
+            display={Platform.OS === 'ios' ? 'compact' : 'default'}
+            onChange={(_, date) => { if (date) setStartTime(date); }}
+            style={styles.dateTimePicker}
+          />
+          <View style={styles.datePickerActions}>
+            <TouchableOpacity style={styles.datePickerCancel} onPress={() => setShowStartPicker(false)}>
+              <Text style={styles.datePickerCancelText}>Fertig</Text>
             </TouchableOpacity>
           </View>
         </View>
+      )}
 
-        <View style={[styles.timeRow, { marginTop: 12 }] }>
-          <TouchableOpacity accessibilityLabel="Ende hinzufügen" onPress={() => setEndTimeVisible(!isEndTimeVisible)}>
-            <Text style={[styles.timeLabel, { color: theme.textSecondary }]}>{isEndTimeVisible ? 'Ende' : 'Ende hinzufügen'}</Text>
-          </TouchableOpacity>
-          {isEndTimeVisible && (
-            <View style={styles.timeControls}>
-              <TouchableOpacity accessibilityLabel="Ende minus 5 Minuten" style={styles.roundStepper} onPress={() => setEndTime((prev) => prev ? new Date(prev.getTime() - 5*60000) : new Date(startTime.getTime() + 5*60000))}>
-                <Text style={styles.roundStepperText}>-5</Text>
-              </TouchableOpacity>
-              <View style={styles.timePill}>
-                <Text style={styles.timePillText}>
-                  {(endTime || startTime).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
-                </Text>
-              </View>
-              <TouchableOpacity accessibilityLabel="Ende plus 5 Minuten" style={styles.roundStepper} onPress={() => setEndTime((prev) => (prev ? new Date(prev.getTime() + 5*60000) : new Date(startTime.getTime() + 5*60000)))}>
-                <Text style={styles.roundStepperText}>+5</Text>
-              </TouchableOpacity>
-            </View>
-          )}
+      {showEndPicker && (
+        <View style={styles.datePickerContainer}>
+          <DateTimePicker
+            value={endTime || new Date()}
+            mode="datetime"
+            display={Platform.OS === 'ios' ? 'compact' : 'default'}
+            onChange={(_, date) => { if (date) setEndTime(date); }}
+            style={styles.dateTimePicker}
+          />
+          <View style={styles.datePickerActions}>
+            <TouchableOpacity style={styles.datePickerCancel} onPress={() => setShowEndPicker(false)}>
+              <Text style={styles.datePickerCancelText}>Fertig</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
+      )}
     </View>
   );
 
@@ -595,38 +606,37 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.3)',
     padding: 12,
   },
-  timeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-  },
-  timeLabel: {
-    fontSize: 14,
+  timeRow: { flexDirection: 'row', justifyContent: 'space-between', width: '90%', gap: 15 },
+  timeButton: {
     flex: 1,
-  },
-  timeControls: {
-    flexDirection: 'row',
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    borderRadius: 15,
+    padding: 15,
     alignItems: 'center',
-    gap: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
   },
-  timeText: {
-    fontSize: 18,
-    width: 60,
-    textAlign: 'center',
+  timeLabel: { fontSize: 12, color: '#888888', fontWeight: '600', marginBottom: 5 },
+  timeValue: { fontSize: 16, color: '#333333', fontWeight: 'bold' },
+  datePickerContainer: {
+    marginTop: 15,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 15,
+    padding: 15,
+    width: '90%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 4,
   },
-  timePill: {
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    borderColor: 'rgba(255,255,255,0.35)',
-    borderWidth: 1,
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  timePillText: {
-    fontSize: 16,
-    fontWeight: '700',
-  },
+  dateTimePicker: { width: '100%', backgroundColor: 'transparent' },
+  datePickerActions: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 10 },
+  datePickerCancel: { paddingVertical: 8, paddingHorizontal: 16, borderRadius: 8, backgroundColor: '#8E4EC6' },
+  datePickerCancelText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
   roundStepper: {
     width: 56,
     height: 56,

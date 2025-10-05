@@ -568,6 +568,81 @@ export const getComments = async (postId: string) => {
   }
 };
 
+// Kommentare (Vorschau) für einen Beitrag mit Limit abrufen
+export const getCommentsPreview = async (postId: string, limit: number = 2) => {
+  try {
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
+
+    // Kommentare abrufen (nur die ersten "limit" nach ältestem zuerst)
+    const { data: comments, error: commentsError } = await supabase
+      .from('community_comments')
+      .select()
+      .eq('post_id', postId)
+      .order('created_at', { ascending: true })
+      .limit(limit);
+
+    if (commentsError) {
+      console.error('Error fetching preview comments:', commentsError);
+      return { data: null, error: commentsError };
+    }
+
+    // Für jeden Kommentar die Benutzerinformationen und Likes abrufen (wie bei getComments)
+    const commentsWithCounts = await Promise.all(comments.map(async (comment) => {
+      // Profil abrufen
+      const { data: profileData } = await supabase
+        .rpc('get_user_profile', { user_id_param: comment.user_id });
+
+      let profile = null as any;
+      if (profileData && profileData.length > 0) {
+        profile = profileData[0];
+      } else {
+        const { data: directProfileData } = await supabase
+          .from('profiles')
+          .select('id, first_name, last_name, user_role')
+          .eq('id', comment.user_id)
+          .maybeSingle();
+        if (directProfileData) profile = directProfileData;
+      }
+
+      // Likes zählen
+      const { count: likesCount } = await supabase
+        .from('community_comment_likes')
+        .select('id', { count: 'exact', head: true })
+        .eq('comment_id', comment.id);
+
+      // Eigener Like
+      const { data: userLike } = await supabase
+        .from('community_comment_likes')
+        .select('id')
+        .eq('comment_id', comment.id)
+        .eq('user_id', userData.user.id)
+        .maybeSingle();
+
+      const isAnonymous = comment.is_anonymous === true;
+      let userName = 'Anonym';
+      if (!isAnonymous && profile && profile.first_name) userName = profile.first_name;
+      if (comment.user_id === userData.user.id) {
+        userName = isAnonymous ? 'Anonym (Du)' : `${userName} (Du)`;
+      }
+
+      return {
+        ...comment,
+        user_name: userName,
+        user_role: isAnonymous ? 'unknown' : (profile?.user_role || 'unknown'),
+        likes_count: likesCount || 0,
+        has_liked: !!userLike,
+        is_anonymous: isAnonymous
+      };
+    }));
+
+    return { data: commentsWithCounts, error: null };
+  } catch (err) {
+    console.error('Failed to get preview comments:', err);
+    return { data: null, error: err };
+  }
+};
+
 // Neuen Beitrag erstellen
 export const createPost = async (content: string, isAnonymous: boolean = false, type: 'text' | 'poll' = 'text', pollData?: any, tagIds: string[] = [], imageBase64?: string) => {
   try {

@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, ActivityIndicator, FlatList, Image } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, ActivityIndicator, FlatList } from 'react-native';
 import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
@@ -15,8 +14,6 @@ import { FollowButton } from '@/components/FollowButton';
 import Header from '@/components/Header';
 import { getPosts } from '@/lib/community';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { LiquidGlassCard, GLASS_OVERLAY } from '@/constants/DesignGuide';
-import { Alert } from 'react-native';
 
 // Interface für das Benutzerprofil
 interface UserProfile {
@@ -26,14 +23,6 @@ interface UserProfile {
   user_role?: string;
   bio?: string;
   created_at: string;
-}
-
-// Follower/Following Minimaltyp für Friends-Zeile
-interface Follower {
-  id: string;
-  first_name: string;
-  last_name?: string;
-  user_role?: string;
 }
 
 export default function ProfileScreen() {
@@ -52,7 +41,6 @@ export default function ProfileScreen() {
   const [mutualFollow, setMutualFollow] = useState(false);
   const [posts, setPosts] = useState<any[]>([]);
   const [loadingPosts, setLoadingPosts] = useState(false);
-  const [followingUsers, setFollowingUsers] = useState<Follower[]>([]);
 
   // Benutzerposts laden
   const loadUserPosts = async (userId: string) => {
@@ -76,47 +64,6 @@ export default function ProfileScreen() {
       console.error('Fehler beim Laden der Beiträge:', error);
     } finally {
       setLoadingPosts(false);
-    }
-  };
-
-  // Following-Liste für Profilnutzer laden (für Friends/Stories-Zeile)
-  const loadFollowingUsers = async (ownerId: string) => {
-    try {
-      // hole alle following_ids, denen dieser Profilnutzer folgt
-      const { data, error } = await supabase
-        .from('user_follows')
-        .select('following_id')
-        .eq('follower_id', ownerId);
-      if (error) throw error;
-
-      const list: Follower[] = [];
-      for (const rel of data || []) {
-        const fid = rel.following_id as string;
-        try {
-          const { data: p, error: perr } = await supabase
-            .from('profiles')
-            .select('id, first_name, last_name, user_role')
-            .eq('id', fid)
-            .single();
-          if (!perr && p) {
-            list.push({ id: p.id, first_name: p.first_name || 'Benutzer', last_name: p.last_name || '', user_role: p.user_role || 'unknown' });
-            continue;
-          }
-          if (perr) {
-            const { data: rpcData } = await supabase.rpc('get_user_profile', { user_id_param: fid });
-            if (rpcData && rpcData.length > 0) {
-              list.push({ id: fid, first_name: rpcData[0].first_name || 'Benutzer', last_name: rpcData[0].last_name || '', user_role: rpcData[0].user_role || 'unknown' });
-              continue;
-            }
-          }
-          list.push({ id: fid, first_name: 'Benutzer', last_name: '', user_role: 'unknown' });
-        } catch (e) {
-          list.push({ id: fid, first_name: 'Benutzer', last_name: '', user_role: 'unknown' });
-        }
-      }
-      setFollowingUsers(list);
-    } catch (e) {
-      // silently ignore friends row issues
     }
   };
 
@@ -230,8 +177,6 @@ export default function ProfileScreen() {
         
         // Lade die Beiträge des Benutzers
         await loadUserPosts(userId);
-        // Lade deren Following-Liste (für Friends-Zeile)
-        await loadFollowingUsers(userId);
         
       } catch (error) {
         console.error('Fehler beim Laden der Profildaten:', error);
@@ -338,68 +283,39 @@ export default function ProfileScreen() {
       month: 'long'
     });
   };
-
-  // Post-Helfer wie Community-Feed
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffInDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
-    if (diffInDays === 0) return 'Heute';
-    if (diffInDays === 1) return 'Gestern';
-    if (diffInDays < 7) return `Vor ${diffInDays} Tagen`;
-    return date.toLocaleDateString('de-DE');
-  };
-
-  const getAvatar = (item: any) => {
-    if (item.is_anonymous) return { label: '👤', bg: 'rgba(0,0,0,0.08)' };
-    const name = (item.user_name || '').trim();
-    const initial = name ? name.charAt(0).toUpperCase() : '👶';
-    const bg = profile?.user_role === 'mama' ? 'rgba(255,159,159,0.25)' : profile?.user_role === 'papa' ? 'rgba(159,216,255,0.25)' : 'rgba(0,0,0,0.08)';
-    return { label: initial, bg };
-  };
   
-  // Renderingfunktion für Beiträge – Community-Style Karten
+  // Renderingfunktion für Beiträge
   const renderPostItem = ({ item }: { item: any }) => {
-    const avatar = getAvatar(item);
     return (
-      <LiquidGlassCard style={styles.feedCard} intensity={28} overlayColor={'rgba(255,255,255,0.18)'} borderColor={'rgba(255,255,255,0.4)'}>
-        <TouchableOpacity onPress={() => router.push({ pathname: '/community', params: { postId: item.id } } as any)}>
-          <View style={styles.feedInner}>
-            <View style={styles.postHeaderRow}>
-              <View style={styles.userInfoRow}>
-                <View style={[styles.avatar, { backgroundColor: avatar.bg }]}>
-                  <ThemedText style={styles.avatarText}>{item.is_anonymous ? '🍼' : avatar.label}</ThemedText>
-                </View>
-                <ThemedText style={styles.userNameText}>{item.user_name || 'Anonym'}</ThemedText>
-                <ThemedText style={styles.postDateText}>{formatDate(item.created_at)}</ThemedText>
-              </View>
-            </View>
-            <ThemedText style={styles.postBodyText}>{item.content}</ThemedText>
-            {!!item.image_url && (
-              <View style={styles.postImageContainer}>
-                <Image source={{ uri: item.image_url }} style={styles.postImage} resizeMode="cover" />
-              </View>
-            )}
-            <View style={[styles.postActionsRow, { borderTopColor: colorScheme === 'dark' ? theme.border : '#EFEFEF' }]}>
-              <View style={styles.actionItem}>
-                <IconSymbol name={item.has_liked ? 'heart.fill' : 'heart'} size={18} color={item.has_liked ? '#FF6B6B' : theme.tabIconDefault} />
-                <ThemedText style={styles.actionCount}>{item.likes_count || 0}</ThemedText>
-              </View>
-              <View style={styles.actionItem}>
-                <IconSymbol name="bubble.right" size={18} color={theme.tabIconDefault} />
-                <ThemedText style={styles.actionCount}>{item.comments_count || 0}</ThemedText>
-              </View>
-            </View>
+      <TouchableOpacity
+        style={styles.postItem}
+        onPress={() => router.push(`/community` as any)}
+      >
+        <View style={styles.postHeader}>
+          <IconSymbol name={item.type === 'poll' ? "chart.bar" : "text.bubble"} size={20} color={theme.accent} />
+          <ThemedText style={styles.postDate}>{new Date(item.created_at).toLocaleDateString()}</ThemedText>
+        </View>
+        <ThemedText style={styles.postContent} numberOfLines={2}>
+          {item.content}
+        </ThemedText>
+        <View style={styles.postStats}>
+          <View style={styles.postStat}>
+            <IconSymbol name="heart" size={16} color={theme.tabIconDefault} />
+            <ThemedText style={styles.statText}>{item.likes_count || 0}</ThemedText>
           </View>
-        </TouchableOpacity>
-      </LiquidGlassCard>
+          <View style={styles.postStat}>
+            <IconSymbol name="bubble.right" size={16} color={theme.tabIconDefault} />
+            <ThemedText style={styles.statText}>{item.comments_count || 0}</ThemedText>
+          </View>
+        </View>
+      </TouchableOpacity>
     );
   };
   
   const roleInfo = getRoleInfo(profile?.user_role);
 
   return (
-    <ThemedBackground style={{ backgroundColor: '#F4EFE6' }}>
+    <ThemedBackground>
       <SafeAreaView style={styles.container} edges={['top', 'left', 'right', 'bottom']}>
         <Stack.Screen options={{ headerShown: false }} />
         <Header 
@@ -428,7 +344,11 @@ export default function ProfileScreen() {
             contentContainerStyle={styles.scrollViewContent}
             showsVerticalScrollIndicator={false}
           >
-            <LiquidGlassCard style={styles.profileCard} intensity={32} overlayColor={'rgba(255,255,255,0.22)'} borderColor={'rgba(255,255,255,0.55)'}>
+            <ThemedView 
+              style={[styles.profileCard, { backgroundColor: theme.card }]} 
+              lightColor={theme.card}
+              darkColor={theme.card}
+            >
               {/* Profilbild und Name */}
               <View style={styles.profileHeader}>
                 <View style={[styles.avatarContainer, { backgroundColor: roleInfo.color }]}>
@@ -440,8 +360,8 @@ export default function ProfileScreen() {
                     {profile.first_name} {profile.last_name}
                   </ThemedText>
                   
-                  <View style={[styles.roleChip, { backgroundColor: roleInfo.color }]}>
-                    <ThemedText style={styles.roleChipText}>{roleInfo.label}</ThemedText>
+                  <View style={[styles.roleTag, { backgroundColor: roleInfo.color }]}>
+                    <ThemedText style={styles.roleText}>{roleInfo.label}</ThemedText>
                   </View>
                   
                   <ThemedText style={styles.joinDate}>
@@ -453,25 +373,26 @@ export default function ProfileScreen() {
                   <FollowButton 
                     userId={profile.id}
                     size="medium"
-                    showIcon={false}
                     onFollowStatusChange={handleFollowStatusChange}
                   />
                 )}
               </View>
               
-              {/* Statistiken: Beiträge (links), Follower (mitte), Folgt (rechts) */}
+              {/* Follower Statistiken */}
               <View style={styles.statsContainer}>
-                <View style={styles.statItem}>
-                  <ThemedText style={[styles.statValue, { color: theme.accent }]}>{posts.length}</ThemedText>
-                  <ThemedText style={styles.statLabel}>Beiträge</ThemedText>
-                </View>
                 <View style={styles.statItem}>
                   <ThemedText style={[styles.statValue, { color: theme.accent }]}>{followersCount}</ThemedText>
                   <ThemedText style={styles.statLabel}>Follower</ThemedText>
                 </View>
+                
                 <View style={styles.statItem}>
                   <ThemedText style={[styles.statValue, { color: theme.accent }]}>{followingCount}</ThemedText>
                   <ThemedText style={styles.statLabel}>Folgt</ThemedText>
+                </View>
+
+                <View style={styles.statItem}>
+                  <ThemedText style={[styles.statValue, { color: theme.accent }]}>{posts.length}</ThemedText>
+                  <ThemedText style={styles.statLabel}>Beiträge</ThemedText>
                 </View>
               </View>
               
@@ -488,78 +409,43 @@ export default function ProfileScreen() {
                   <Text style={styles.chatButtonText}>Nachricht senden</Text>
                 </TouchableOpacity>
               )}
-          </LiquidGlassCard>
+            </ThemedView>
 
-            {/* Friends/Following – IG-Stories-Style Row */}
-            <View style={styles.friendsSection}>
-              <View style={styles.friendsHeaderRow}>
-                <ThemedText style={styles.friendsTitle}>Freunde</ThemedText>
-                {!!followingUsers?.length && (
-                  <TouchableOpacity onPress={() => {}}>
-                    <ThemedText style={styles.friendsAction}>Alle ansehen</ThemedText>
-                  </TouchableOpacity>
-                )}
+            {/* Benutzerbeiträge */}
+            <ThemedView 
+              style={[styles.postsContainer, { backgroundColor: theme.card }]} 
+              lightColor={theme.card}
+              darkColor={theme.card}
+            >
+              <View style={styles.postsHeader}>
+                <ThemedText style={styles.postsHeaderText}>Beiträge</ThemedText>
               </View>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.friendsRow}>
-                {(followingUsers || []).slice(0, 12).map((u) => {
-                  const initials = `${(u.first_name || 'B')[0] || ''}${(u.last_name || '')[0] || ''}`.toUpperCase();
-                  const chipBg = u.user_role === 'mama' ? '#9775FA' : u.user_role === 'papa' ? '#4DA3FF' : '#E6E6E6';
-                  const chipFg = u.user_role === 'mama' || u.user_role === 'papa' ? '#FFFFFF' : '#333333';
-                  return (
-                    <TouchableOpacity key={u.id} style={styles.friendItem} onPress={() => router.push(`/profile/${u.id}` as any)}>
-                      <LinearGradient
-                        colors={[ '#FEDA75', '#F58529', '#DD2A7B', '#8134AF', '#515BD4' ]}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                        style={styles.friendRing}
-                      >
-                        <View style={[styles.friendCircle, { backgroundColor: chipBg }]}>
-                          <ThemedText style={[styles.friendInitials, { color: chipFg }]}>{initials}</ThemedText>
-                        </View>
-                      </LinearGradient>
-                      <ThemedText style={styles.friendName} numberOfLines={1}>
-                        {u.first_name}
-                      </ThemedText>
-                    </TouchableOpacity>
-                  );
-                })}
-                {(!followingUsers || followingUsers.length === 0) && (
-                  <View style={styles.friendsEmpty}>
-                    <IconSymbol name="person.2" size={20} color={theme.tabIconDefault} />
-                    <ThemedText style={styles.friendsEmptyText}>Noch keine Freunde</ThemedText>
-                  </View>
-                )}
-              </ScrollView>
-            </View>
 
-            {/* Benutzerbeiträge – Community-Style Feed */}
-            <View style={{ marginTop: 8, paddingHorizontal: 16 }}>
-              <ThemedText style={styles.postsHeaderText}>Beiträge</ThemedText>
-            </View>
-            {loadingPosts ? (
-              <View style={styles.loadingPostsContainer}>
-                <ActivityIndicator size="small" color={theme.accent} />
-                <ThemedText style={styles.loadingText}>Beiträge werden geladen...</ThemedText>
-              </View>
-            ) : posts.length === 0 ? (
-              <View style={styles.emptyPostsContainer}>
-                <IconSymbol name="text.bubble" size={32} color={theme.tabIconDefault} />
-                <ThemedText style={styles.emptyPostsText}>
-                  {isOwnProfile 
-                    ? "Du hast noch keine Beiträge erstellt." 
-                    : "Dieser Benutzer hat noch keine Beiträge erstellt."}
-                </ThemedText>
-              </View>
-            ) : (
-              <FlatList
-                data={posts}
-                renderItem={renderPostItem}
-                keyExtractor={item => item.id}
-                scrollEnabled={false}
-                nestedScrollEnabled={true}
-                contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 24 }}
-              />
-            )}
+              {loadingPosts ? (
+                <View style={styles.loadingPostsContainer}>
+                  <ActivityIndicator size="small" color={theme.accent} />
+                  <ThemedText style={styles.loadingText}>Beiträge werden geladen...</ThemedText>
+                </View>
+              ) : posts.length === 0 ? (
+                <View style={styles.emptyPostsContainer}>
+                  <IconSymbol name="text.bubble" size={32} color={theme.tabIconDefault} />
+                  <ThemedText style={styles.emptyPostsText}>
+                    {isOwnProfile 
+                      ? "Du hast noch keine Beiträge erstellt." 
+                      : "Dieser Benutzer hat noch keine Beiträge erstellt."}
+                  </ThemedText>
+                </View>
+              ) : (
+                <FlatList
+                  data={posts}
+                  renderItem={renderPostItem}
+                  keyExtractor={item => item.id}
+                  scrollEnabled={false}
+                  nestedScrollEnabled={true}
+                  style={styles.postsList}
+                />
+              )}
+            </ThemedView>
           </ScrollView>
         )}
       </SafeAreaView>
@@ -634,17 +520,17 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 4,
   },
-  roleChip: {
+  roleTag: {
     paddingVertical: 4,
-    paddingHorizontal: 10,
-    borderRadius: 12,
+    paddingHorizontal: 8,
+    borderRadius: 4,
     alignSelf: 'flex-start',
     marginBottom: 4,
   },
-  roleChipText: {
+  roleText: {
     color: '#FFFFFF',
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: 'bold',
   },
   joinDate: {
     fontSize: 14,
@@ -739,145 +625,6 @@ const styles = StyleSheet.create({
   postsHeaderText: {
     fontSize: 22,
     fontWeight: 'bold',
-  },
-  // Feed styles
-  feedCard: {
-    marginBottom: 12,
-    borderRadius: 12,
-  },
-  feedInner: {
-    padding: 16,
-  },
-  postHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  userInfoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  avatar: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 8,
-  },
-  avatarText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#4A4A4A',
-  },
-  userNameText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  postDateText: {
-    fontSize: 12,
-    color: '#888',
-    marginLeft: 8,
-  },
-  postBodyText: {
-    fontSize: 16,
-    lineHeight: 24,
-    marginBottom: 10,
-  },
-  postImageContainer: {
-    marginTop: 6,
-    marginBottom: 10,
-    borderRadius: 8,
-    overflow: 'hidden',
-    backgroundColor: '#F5F5F5',
-  },
-  postImage: {
-    width: '100%',
-    height: 200,
-    borderRadius: 8,
-    backgroundColor: '#F5F5F5',
-  },
-  postActionsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderTopWidth: 1,
-    paddingTop: 10,
-  },
-  actionItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  actionCount: {
-    marginLeft: 6,
-    fontSize: 14,
-    color: '#888',
-  },
-  // Friends row
-  friendsSection: {
-    marginTop: 8,
-    marginBottom: 12,
-    paddingHorizontal: 16,
-  },
-  friendsHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  friendsTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  friendsAction: {
-    fontSize: 13,
-    fontWeight: '600',
-    opacity: 0.7,
-  },
-  friendsRow: {
-    paddingHorizontal: 4,
-  },
-  friendItem: {
-    width: 68,
-    marginRight: 10,
-    alignItems: 'center',
-  },
-  friendRing: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    padding: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 6,
-  },
-  friendCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#EEE'
-  },
-  friendInitials: {
-    fontSize: 18,
-    fontWeight: '800',
-  },
-  friendName: {
-    fontSize: 12,
-    maxWidth: 64,
-  },
-  friendsEmpty: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-  },
-  friendsEmptyText: {
-    marginLeft: 6,
-    fontSize: 13,
-    opacity: 0.7,
   },
   loadingPostsContainer: {
     flex: 1,

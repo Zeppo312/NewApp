@@ -74,6 +74,12 @@ const ActivityCard: React.FC<ActivityCardProps> = ({ entry, onDelete, onEdit, ma
 
   // Rendere Icon/Label basierend auf detailliertem Typ
   const getDetail = () => {
+    // Falls Custom-Label/Emoji gesetzt sind (z. B. für Gewicht), verwende diese
+    const customEmoji = (entry as any).emoji;
+    const customLabel = (entry as any).label;
+    if (customEmoji && customLabel) {
+      return { emoji: customEmoji, label: customLabel };
+    }
     if (entry.entry_type === 'feeding') {
       if (entry.feeding_type === 'BREAST') return { emoji: '🤱', label: 'Stillen' };
       if (entry.feeding_type === 'BOTTLE') return { emoji: '🍼', label: `Flasche${entry.feeding_volume_ml ? ` ${entry.feeding_volume_ml}ml` : ''}` };
@@ -274,6 +280,8 @@ const ActivityCard: React.FC<ActivityCardProps> = ({ entry, onDelete, onEdit, ma
                   </Animated.View>
                 </View>
 
+                {/* Zeiten nur zeigen, wenn vorhanden */}
+                {(entry.start_time || entry.end_time || duration > 0) && (
                 <View style={styles.timeRowTop}>
                   <View style={styles.timePill}>
                     <ThemedText style={styles.timePillText}>Start {entry.start_time && formatTime(entry.start_time)}</ThemedText>
@@ -290,6 +298,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({ entry, onDelete, onEdit, ma
                     </View>
                   )}
                 </View>
+                )}
               </View>
             </View>
             {/* Kein Expand mehr – Details werden im Modal bearbeitet */}

@@ -49,6 +49,8 @@ export default function CommunityScreen() {
   // router wird durch die BackButton-Komponente verwaltet
   const { user } = useAuth();
   const router = useRouter();
+  const { postId: postIdParam } = useLocalSearchParams<{ postId?: string }>();
+  const initialPostId = typeof postIdParam === 'string' ? postIdParam : undefined;
 
   const [posts, setPosts] = useState<Post[]>([]);
   const [postComments, setPostComments] = useState<{[key: string]: Comment[]}>({});
@@ -87,19 +89,6 @@ export default function CommunityScreen() {
   const [showSearch, setShowSearch] = useState(false);
   const [tempSearch, setTempSearch] = useState('');
   const [showFilter, setShowFilter] = useState(false);
-  // Deep-link support from profile grid
-  const { postId } = useLocalSearchParams<{ postId?: string }>();
-  const initialPostIdRef = useRef<string | null>(null);
-  const listRef = useRef<FlatList<Post>>(null);
-
-  useEffect(() => {
-    // Cache initial postId (string only)
-    if (typeof postId === 'string') {
-      initialPostIdRef.current = postId;
-    } else if (Array.isArray(postId) && postId.length > 0) {
-      initialPostIdRef.current = postId[0];
-    }
-  }, [postId]);
 
   // Konstanten für AsyncStorage-Keys
   const FILTER_STORAGE_KEY = 'community_filter_tags';
@@ -153,23 +142,6 @@ export default function CommunityScreen() {
         }
         return next;
       });
-
-      // If we came with a deep link to a specific post, expand and scroll
-      const targetId = initialPostIdRef.current;
-      if (targetId) {
-        const idx = list.findIndex(p => p.id === targetId);
-        if (idx >= 0) {
-          setTimeout(() => {
-            listRef.current?.scrollToIndex({ index: idx, animated: true, viewPosition: 0.2 });
-            setExpandedPostId(targetId);
-            // Ensure comments/polls are fetched for the expanded post
-            if (!postComments[targetId]) loadComments(targetId);
-            if (!postPolls[targetId]) loadPolls(targetId);
-          }, 200);
-        }
-        // Clear initial ref so it doesn't re-run on future loads
-        initialPostIdRef.current = null;
-      }
     } catch (error) {
       console.error('Error loading posts:', error);
       Alert.alert('Fehler', 'Beim Laden der Beiträge ist ein Fehler aufgetreten.');
@@ -178,6 +150,25 @@ export default function CommunityScreen() {
       setIsRefreshing(false);
     }
   };
+
+  // Expand and scroll to a post when opened via /community?postId=...
+  const listRef = useRef<FlatList<Post> | null>(null);
+  useEffect(() => {
+    if (!initialPostId) return;
+    // After posts are set, expand and scroll
+    if (posts.length > 0) {
+      const idx = posts.findIndex(p => p.id === initialPostId);
+      if (idx >= 0) {
+        setExpandedPostId(initialPostId);
+        loadComments(initialPostId);
+        try {
+          listRef.current?.scrollToIndex?.({ index: idx, animated: true, viewPosition: 0.25 });
+        } catch (e) {
+          // ignore
+        }
+      }
+    }
+  }, [posts, initialPostId]);
 
   // Lade Kommentare für einen Beitrag
   const loadComments = async (postId: string) => {
@@ -703,19 +694,13 @@ export default function CommunityScreen() {
           style={styles.postHeader}
           onPress={() => togglePostExpansion(item.id)}
         >
-            <View style={styles.userInfo}>
-              <View style={[styles.avatar, { backgroundColor: avatar.bg }]}>
-                <ThemedText style={styles.avatarText}>{item.is_anonymous ? '🍼' : avatar.label}</ThemedText>
-              </View>
-              {item.is_anonymous ? (
-                <ThemedText style={styles.userName}>Anonym</ThemedText>
-              ) : (
-                <TouchableOpacity onPress={() => item.user_id && router.push(`/profile/${item.user_id}` as any)}>
-                  <ThemedText style={[styles.userName, { textDecorationLine: 'underline' }]}>
-                    {item.user_name || 'Profil'}
-                  </ThemedText>
-                </TouchableOpacity>
-              )}
+          <View style={styles.userInfo}>
+            <View style={[styles.avatar, { backgroundColor: avatar.bg }]}>
+              <ThemedText style={styles.avatarText}>{item.is_anonymous ? '🍼' : avatar.label}</ThemedText>
+            </View>
+            <ThemedText style={styles.userName}>
+              {item.user_name || 'Anonym'}
+            </ThemedText>
             {!item.is_anonymous && (
               <View style={[styles.roleChip, { backgroundColor: getRoleChip(item.user_role).bg }] }>
                 <ThemedText style={[styles.roleChipText, { color: getRoleChip(item.user_role).fg }]}>{getRoleChip(item.user_role).label}</ThemedText>
@@ -844,34 +829,29 @@ export default function CommunityScreen() {
 
         {/* Inline preview of first replies */}
         {(!isExpanded) && (previewComments[item.id]?.length || 0) > 0 && (
-          <View
-            style={[
-              styles.commentsContainer,
-              {
-                borderTopColor: colorScheme === 'dark' ? '#5C4033' : '#D8C8B8',
-                borderLeftColor: colorScheme === 'dark' ? '#8B6D5A' : '#6B4C3B',
-              },
-            ]}
-          >
-            {previewComments[item.id]!.map((comment) => {
-              const cAvatar = comment.is_anonymous
-                ? { label: '👤', bg: 'rgba(0,0,0,0.08)' }
-                : { label: (comment.user_name || '👶').charAt(0).toUpperCase(), bg: comment.user_role === 'mama' ? 'rgba(255,159,159,0.25)' : comment.user_role === 'papa' ? 'rgba(159,216,255,0.25)' : 'rgba(0,0,0,0.08)' };
-              return (
-                <ThemedView key={comment.id} style={styles.commentItem} lightColor="#F9F9F9" darkColor={theme.cardDark}>
-                  <View style={styles.commentHeader}>
-                    <View style={styles.userInfo}>
-                      <View style={[styles.avatar, { width: 28, height: 28, backgroundColor: cAvatar.bg }]}>
-                        <ThemedText style={[styles.avatarText, { fontSize: 12 }]}>{cAvatar.label}</ThemedText>
+          <View style={[styles.commentsContainer, { borderTopColor: colorScheme === 'dark' ? theme.border : '#EFEFEF' }] }>
+                {previewComments[item.id]!.map((comment) => {
+                  const cAvatar = comment.is_anonymous
+                    ? { label: '👤', bg: 'rgba(0,0,0,0.08)' }
+                    : { label: (comment.user_name || '👶').charAt(0).toUpperCase(), bg: comment.user_role === 'mama' ? 'rgba(255,159,159,0.25)' : comment.user_role === 'papa' ? 'rgba(159,216,255,0.25)' : 'rgba(0,0,0,0.08)' };
+                return (
+                  <View key={comment.id} style={styles.commentRow}>
+                    <View style={styles.commentLine} />
+                    <ThemedView style={styles.commentItem} lightColor="#F9F9F9" darkColor={theme.cardDark}>
+                      <View style={styles.commentHeader}>
+                        <View style={styles.userInfo}>
+                          <View style={[styles.avatar, { width: 28, height: 28, backgroundColor: cAvatar.bg }]}>
+                            <ThemedText style={[styles.avatarText, { fontSize: 12 }]}>{cAvatar.label}</ThemedText>
+                          </View>
+                          <ThemedText style={styles.userName}>{comment.user_name || 'Anonym'}</ThemedText>
+                          <ThemedText style={styles.commentDate}>{formatDate(comment.created_at)}</ThemedText>
+                        </View>
                       </View>
-                      <ThemedText style={styles.userName}>{comment.user_name || 'Anonym'}</ThemedText>
-                      <ThemedText style={styles.commentDate}>{formatDate(comment.created_at)}</ThemedText>
-                    </View>
+                      <ThemedText style={styles.commentContent}>{comment.content}</ThemedText>
+                    </ThemedView>
                   </View>
-                  <ThemedText style={styles.commentContent}>{comment.content}</ThemedText>
-                </ThemedView>
-              );
-            })}
+                );
+                })}
             {(item.comments_count || 0) > (previewComments[item.id]?.length || 0) && (
               <TouchableOpacity onPress={() => togglePostExpansion(item.id)}>
                 <ThemedText style={[styles.viewMoreRepliesText, { color: theme.accent }]}>Weitere Antworten anzeigen</ThemedText>
@@ -897,15 +877,13 @@ export default function CommunityScreen() {
 
             {/* Kommentare anzeigen */}
             {comments.length > 0 && (
-              <View
-                style={[
-                  styles.commentsContainer,
-                  {
-                    borderTopColor: colorScheme === 'dark' ? '#5C4033' : '#D8C8B8',
-                    borderLeftColor: colorScheme === 'dark' ? '#8B6D5A' : '#6B4C3B',
-                  },
-                ]}
-              >
+              <View style={[
+                styles.commentsContainer,
+                { 
+                  borderTopColor: colorScheme === 'dark' ? theme.border : '#D0D0D0',
+                  borderLeftColor: colorScheme === 'dark' ? theme.border : '#D0D0D0'
+                }
+              ]}>
                 <View style={styles.commentsHeaderRow}>
                   <IconSymbol name="bubble.right" size={16} color={theme.tabIconDefault} />
                   <ThemedText style={styles.commentsTitle}>Antworten</ThemedText>
@@ -1457,7 +1435,7 @@ export default function CommunityScreen() {
                       </View>
                     ) : (
                       <FlatList
-                        ref={listRef}
+                        ref={ref => (listRef.current = ref)}
                         data={filteredPosts}
                         renderItem={renderPostItem}
                         keyExtractor={item => item.id}
@@ -1784,8 +1762,8 @@ const styles = StyleSheet.create({
     marginTop: 12,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderLeftWidth: 3,
-    paddingLeft: 12,
+    borderLeftWidth: 2,
+    paddingLeft: 10,
   },
   commentsHeaderRow: {
     flexDirection: 'row',
@@ -1801,6 +1779,17 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: 'bold',
     marginBottom: 8,
+  },
+  commentRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    marginBottom: 8,
+  },
+  commentLine: {
+    width: 2,
+    backgroundColor: '#D0D0D0',
+    borderRadius: 1,
+    marginRight: 8,
   },
   countPill: {
     marginLeft: 8,
@@ -2280,7 +2269,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 12,
     borderLeftWidth: 2,
-    borderLeftColor: '#B79B87',
+    borderLeftColor: '#D0D0D0',
   },
   nestedCommentsTitle: {
     fontSize: 14,
