@@ -11,6 +11,7 @@ import { LineChart } from 'react-native-chart-kit';
 import { Dimensions } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { saveWeightEntry, getWeightEntries, deleteWeightEntry, WeightEntry } from '@/lib/weight';
+import { supabase } from '@/lib/supabase';
 import { Stack } from 'expo-router';
 import Header from '@/components/Header';
 import { LiquidGlassCard, GLASS_OVERLAY, LAYOUT_PAD, SECTION_GAP_TOP, SECTION_GAP_BOTTOM } from '@/constants/DesignGuide';
@@ -27,6 +28,8 @@ export default function WeightTrackerScreen() {
   // Legacy inline form flag removed in favor of modal
   const [showAddForm, setShowAddForm] = useState(false);
   const [showInputModal, setShowInputModal] = useState(false);
+  const [editingEntry, setEditingEntry] = useState<WeightEntry | null>(null);
+  const [selectedRange, setSelectedRange] = useState<'week' | 'month' | 'year' | 'all'>('month');
   const [weight, setWeight] = useState('');
   const [notes, setNotes] = useState('');
   const [date, setDate] = useState(new Date());
@@ -68,13 +71,26 @@ export default function WeightTrackerScreen() {
     try {
       setIsSaving(true);
       const formattedDate = date.toISOString().split('T')[0]; // Format: YYYY-MM-DD
-      const { error } = await saveWeightEntry({
-        date: formattedDate,
-        weight: weightValue,
-        notes: notes.trim() || undefined
-      });
-
-      if (error) throw error;
+      if (editingEntry?.id) {
+        const nowIso = new Date().toISOString();
+        const { error } = await supabase
+          .from('weight_entries')
+          .update({
+            date: formattedDate,
+            weight: weightValue,
+            notes: notes.trim() || null,
+            updated_at: nowIso,
+          })
+          .eq('id', editingEntry.id);
+        if (error) throw error;
+      } else {
+        const { error } = await saveWeightEntry({
+          date: formattedDate,
+          weight: weightValue,
+          notes: notes.trim() || undefined
+        });
+        if (error) throw error;
+      }
 
       // Lade Gewichtsdaten neu
       setIsLoading(true);
@@ -83,6 +99,7 @@ export default function WeightTrackerScreen() {
       setNotes('');
       setDate(new Date());
       setShowInputModal(false);
+      setEditingEntry(null);
       Alert.alert('Erfolg', 'Dein Gewichtseintrag wurde erfolgreich gespeichert.');
     } catch (error) {
       console.error('Error saving weight entry:', error);
@@ -136,38 +153,135 @@ export default function WeightTrackerScreen() {
     });
   };
 
-  // Bereite die Daten für das Diagramm vor
-  const prepareChartData = () => {
-    // Sortiere die Einträge nach Datum
+  // Bereite die Daten für das Diagramm vor (nach Range)
+  const prepareChartData = (range: 'week' | 'month' | 'year' | 'all') => {
+    const pad = (n: number) => n.toString().padStart(2, '0');
     const sortedEntries = [...weightEntries].sort((a, b) =>
       new Date(a.date).getTime() - new Date(b.date).getTime()
     );
 
-    // Begrenze auf die letzten 10 Einträge für bessere Übersichtlichkeit
-    const recentEntries = sortedEntries.slice(-10);
+    const now = new Date();
 
-    return {
-      labels: recentEntries.map(entry => {
-        const date = new Date(entry.date);
-        // Formatiere das Datum als Tag.Monat
-        return `${date.getDate()}.${date.getMonth() + 1}.`;
-      }),
-      datasets: [
-        {
-          data: recentEntries.map(entry => entry.weight),
-          color: (opacity = 1) => `rgba(94, 61, 179, ${opacity})`,
-          strokeWidth: 3,
+    // Kein Datensatz -> leeres Chart
+    if (sortedEntries.length === 0) {
+      return { labels: [], datasets: [{ data: [] as number[], color: (o = 1) => `rgba(94, 61, 179, ${o})`, strokeWidth: 3 }], legend: ['Gewicht'] };
+    }
+
+    if (range === 'week') {
+      const labels: string[] = [];
+      const data: number[] = [];
+      // Letzte 7 Tage betrachten; nur Tage mit Eintrag anzeigen (letzter pro Tag)
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+        const dayStr = d.toISOString().split('T')[0];
+        const entriesOfDay = sortedEntries.filter(e => e.date === dayStr);
+        if (entriesOfDay.length > 0) {
+          const last = entriesOfDay[entriesOfDay.length - 1];
+          labels.push(`${d.getDate()}.${d.getMonth() + 1}.`);
+          data.push(last.weight);
         }
-      ],
+      }
+      return {
+        labels,
+        datasets: [{ data, color: (o = 1) => `rgba(94, 61, 179, ${o})`, strokeWidth: 3 }],
+        legend: ['Gewicht']
+      };
+    }
+
+    if (range === 'month') {
+      const labelsRaw: string[] = [];
+      const data: number[] = [];
+      for (let i = 29; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+        const dayStr = d.toISOString().split('T')[0];
+        const entriesOfDay = sortedEntries.filter(e => e.date === dayStr);
+        if (entriesOfDay.length > 0) {
+          const last = entriesOfDay[entriesOfDay.length - 1];
+          labelsRaw.push(`${d.getDate()}.${d.getMonth() + 1}.`);
+          data.push(last.weight);
+        }
+      }
+      const maxLabels = 12;
+      const step = Math.max(1, Math.ceil(labelsRaw.length / maxLabels));
+      const labels = labelsRaw.map((l, i) => (i % step === 0 ? l : ''));
+      return {
+        labels,
+        datasets: [{ data, color: (o = 1) => `rgba(94, 61, 179, ${o})`, strokeWidth: 3 }],
+        legend: ['Gewicht']
+      };
+    }
+
+    if (range === 'year') {
+      // Aggregiere nach Wochen (letzte 52 Wochen), nur Wochen mit Eintrag anzeigen
+      const start = new Date(now);
+      start.setDate(start.getDate() - 364);
+      const filtered = sortedEntries.filter(e => new Date(e.date) >= start);
+
+      // Finde Wochen-Montag (lokal, Mo=0)
+      const weekStart = (d: Date) => {
+        const dt = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+        const day = (dt.getDay() + 6) % 7; // Mo=0..So=6
+        dt.setDate(dt.getDate() - day);
+        return dt;
+      };
+
+      const toWeekKey = (d: Date) => {
+        const ws = weekStart(d);
+        return `${ws.getFullYear()}-${pad(ws.getMonth() + 1)}-${pad(ws.getDate())}`;
+      };
+
+      const byWeek: Record<string, WeightEntry> = {};
+      filtered.forEach(e => {
+        const key = toWeekKey(new Date(e.date));
+        byWeek[key] = e; // letzter Eintrag in dieser Woche
+      });
+
+      // Laufe über alle Wochen im Zeitraum und sammle vorhandene Wochenpunkte
+      const firstWs = weekStart(start);
+      const weeks: { label: string; value: number }[] = [];
+      for (let i = 0; i < 54; i++) {
+        const d = new Date(firstWs.getFullYear(), firstWs.getMonth(), firstWs.getDate() + i * 7);
+        if (d > now) break;
+        const key = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+        const entry = byWeek[key];
+        if (entry) {
+          weeks.push({ label: `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.`, value: entry.weight });
+        }
+      }
+
+      const labelsRaw = weeks.map(w => w.label);
+      const data = weeks.map(w => w.value);
+      const maxLabels = 12;
+      const step = Math.max(1, Math.ceil(labelsRaw.length / maxLabels));
+      const labels = labelsRaw.map((l, i) => (i % step === 0 ? l : ''));
+      return {
+        labels,
+        datasets: [{ data, color: (o = 1) => `rgba(94, 61, 179, ${o})`, strokeWidth: 3 }],
+        legend: ['Gewicht']
+      };
+    }
+
+    // 'all' – alle Einträge
+    const labelsRaw = sortedEntries.map(entry => {
+      const d = new Date(entry.date);
+      return `${d.getDate()}.${d.getMonth() + 1}.`;
+    });
+    const data = sortedEntries.map(entry => entry.weight);
+    const maxLabels = 12;
+    const step = Math.max(1, Math.ceil(labelsRaw.length / maxLabels));
+    const labels = labelsRaw.map((l, i) => (i % step === 0 ? l : ''));
+    return {
+      labels,
+      datasets: [{ data, color: (o = 1) => `rgba(94, 61, 179, ${o})`, strokeWidth: 3 }],
       legend: ['Gewicht']
     };
   };
 
-  const chartData = prepareChartData();
+  const chartData = prepareChartData(selectedRange);
 
   // Rendere die Gewichtskurve
   const renderWeightChart = () => {
-    if (weightEntries.length < 2) {
+    if (!chartData || !chartData.datasets || chartData.datasets[0].data.length < 2) {
       return (
         <LiquidGlassCard style={styles.emptyChartContainer} intensity={26} overlayColor={GLASS_OVERLAY}>
           <IconSymbol name="chart.line.uptrend.xyaxis" size={40} color={theme.tabIconDefault} />
@@ -179,7 +293,25 @@ export default function WeightTrackerScreen() {
     }
 
     return (
-      <LiquidGlassCard style={styles.chartContainer} intensity={26} overlayColor={GLASS_OVERLAY}>
+      <>
+        {/* Range Tabs */}
+        <View style={styles.topTabsContainer}>
+          {([
+            { id: 'week', label: 'Woche' },
+            { id: 'month', label: 'Monat' },
+            { id: 'year', label: 'Jahr' },
+            { id: 'all', label: 'Gesamt' },
+          ] as const).map(t => (
+            <TouchableOpacity
+              key={t.id}
+              style={[styles.topTab, selectedRange === t.id && styles.activeTopTab]}
+              onPress={() => setSelectedRange(t.id)}
+            >
+              <View style={styles.topTabInner}><Text style={[styles.topTabText, selectedRange === t.id && styles.activeTopTabText]}>{t.label}</Text></View>
+            </TouchableOpacity>
+          ))}
+        </View>
+        <LiquidGlassCard style={styles.chartContainer} intensity={26} overlayColor={GLASS_OVERLAY}>
         <View style={styles.chartWrapper}>
           <LineChart
           data={chartData}
@@ -247,6 +379,7 @@ export default function WeightTrackerScreen() {
         />
         </View>
       </LiquidGlassCard>
+      </>
     );
   };
 
@@ -289,6 +422,13 @@ export default function WeightTrackerScreen() {
               key={entry.id}
               entry={convertWeightToDailyEntry(entry)}
               onDelete={(id) => handleDeleteWeightEntry(id)}
+              onEdit={() => {
+                setEditingEntry(entry);
+                setWeight(String(entry.weight));
+                setNotes(entry.notes || '');
+                setDate(new Date(entry.date));
+                setShowInputModal(true);
+              }}
               marginHorizontal={8}
             />
           ))}
@@ -427,7 +567,7 @@ export default function WeightTrackerScreen() {
             {!showInputModal && !isLoading && (
               <TouchableOpacity
                 style={[styles.floatingAddButton, { backgroundColor: '#5E3DB3' }]}
-                onPress={() => setShowInputModal(true)}
+                onPress={() => { setEditingEntry(null); setWeight(''); setNotes(''); setDate(new Date()); setShowInputModal(true); }}
               >
                 <IconSymbol name="plus" size={24} color="#FFFFFF" />
               </TouchableOpacity>
@@ -449,8 +589,8 @@ export default function WeightTrackerScreen() {
                       <Text style={styles.closeHeaderButtonText}>✕</Text>
                     </TouchableOpacity>
                     <View style={styles.headerCenter}>
-                      <Text style={styles.modalTitle}>Gewicht hinzufügen</Text>
-                      <Text style={styles.modalSubtitle}>Neuen Eintrag erstellen</Text>
+                      <Text style={styles.modalTitle}>{editingEntry ? 'Gewicht bearbeiten' : 'Gewicht hinzufügen'}</Text>
+                      <Text style={styles.modalSubtitle}>{editingEntry ? 'Daten anpassen' : 'Neuen Eintrag erstellen'}</Text>
                     </View>
                     <TouchableOpacity
                       style={[styles.headerButton, styles.saveHeaderButton, { backgroundColor: '#5E3DB3' }]}
@@ -769,6 +909,24 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
   },
+  // Top tabs (like sleep-tracker)
+  topTabsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 10,
+    marginTop: 6,
+    marginBottom: 8,
+  },
+  topTab: {
+    borderRadius: 20,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)'
+  },
+  topTabInner: { paddingHorizontal: 18, paddingVertical: 6 },
+  activeTopTab: { borderColor: 'rgba(94,61,179,0.65)' },
+  topTabText: { fontSize: 13, fontWeight: '700', color: '#7D5A50' },
+  activeTopTabText: { color: '#5E3DB3' },
   // Modal styles (aligned with sleep-tracker)
   modalOverlay: {
     flex: 1,

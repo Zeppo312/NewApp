@@ -7,6 +7,7 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useRouter, Stack } from 'expo-router';
 import { ThemedBackground } from '@/components/ThemedBackground';
+import { LiquidGlassCard, LAYOUT_PAD } from '@/constants/DesignGuide';
 import { getWikiCategories, getWikiArticles, addWikiArticleToFavorites, removeWikiArticleFromFavorites, WikiArticle, WikiCategory } from '@/lib/supabase/wiki';
 import Header from '@/components/Header';
 
@@ -130,35 +131,23 @@ export default function MiniWikiScreen() {
 
   // Render category item
   const renderCategoryItem = ({ item }: { item: Category }) => (
-    <TouchableOpacity
-      style={[
-        styles.categoryItem,
-        selectedCategory === item.id && { backgroundColor: theme.accent + '30' }
-      ]}
+    <LiquidGlassCard
+      style={[styles.categoryItemGlass, selectedCategory === item.id && styles.categoryItemActive]}
       onPress={() => setSelectedCategory(item.id)}
+      intensity={24}
+      activeOpacity={0.9}
     >
-      <ThemedView
-        style={styles.categoryItemInner}
-        lightColor="rgba(255, 255, 255, 0.8)"
-        darkColor="rgba(50, 50, 50, 0.8)"
-      >
-        <IconSymbol name={item.icon as any} size={20} color={theme.accent} />
+      <View style={styles.categoryItemInnerGlass}>
+        <IconSymbol name={item.icon as any} size={18} color={theme.accent} />
         <ThemedText style={styles.categoryText}>{item.name}</ThemedText>
-      </ThemedView>
-    </TouchableOpacity>
+      </View>
+    </LiquidGlassCard>
   );
 
   // Render article item
   const renderArticleItem = ({ item }: { item: Article }) => (
-    <TouchableOpacity
-      style={styles.articleItem}
-      onPress={() => setSelectedArticle(item)}
-    >
-      <ThemedView
-        style={styles.articleItemInner}
-        lightColor="rgba(255, 255, 255, 0.8)"
-        darkColor="rgba(50, 50, 50, 0.8)"
-      >
+    <LiquidGlassCard style={styles.articleItemGlass} onPress={() => setSelectedArticle(item)} intensity={24}>
+      <View style={styles.articleItemInnerGlass}>
         <View style={styles.articleHeader}>
           <ThemedText style={styles.articleTitle}>{item.title}</ThemedText>
           <TouchableOpacity
@@ -180,8 +169,8 @@ export default function MiniWikiScreen() {
           </ThemedText>
           <ThemedText style={styles.readMore}>Weiterlesen</ThemedText>
         </View>
-      </ThemedView>
-    </TouchableOpacity>
+      </View>
+    </LiquidGlassCard>
   );
 
   return (
@@ -245,7 +234,7 @@ export default function MiniWikiScreen() {
               </ThemedText>
             </TouchableOpacity>
 
-            <ThemedView style={styles.articleDetailCard} lightColor={theme.card} darkColor={theme.card}>
+            <LiquidGlassCard style={styles.articleDetailCard}>
               <View style={styles.articleDetailHeader}>
                 <ThemedText style={styles.articleDetailTitle}>{selectedArticle.title}</ThemedText>
                 <TouchableOpacity
@@ -287,31 +276,29 @@ export default function MiniWikiScreen() {
                   ))}
                 </>
               )}
-            </ThemedView>
+            </LiquidGlassCard>
           </ScrollView>
         ) : (
           // Article list view
           <>
             <View style={styles.searchContainer}>
-              <ThemedView
-                style={styles.searchInputContainer}
-                lightColor="rgba(255, 255, 255, 0.8)"
-                darkColor="rgba(50, 50, 50, 0.8)"
-              >
-                <IconSymbol name="magnifyingglass" size={20} color={theme.tabIconDefault} />
-                <TextInput
-                  style={[styles.searchInput, { color: theme.text }]}
-                  placeholder="Suche nach Artikeln..."
-                  placeholderTextColor={theme.tabIconDefault}
-                  value={searchQuery}
-                  onChangeText={setSearchQuery}
-                />
-                {searchQuery.length > 0 && (
-                  <TouchableOpacity onPress={() => setSearchQuery('')}>
-                    <IconSymbol name="xmark.circle.fill" size={20} color={theme.tabIconDefault} />
-                  </TouchableOpacity>
-                )}
-              </ThemedView>
+              <LiquidGlassCard style={styles.searchGlass} intensity={24}>
+                <View style={styles.searchRow}>
+                  <IconSymbol name="magnifyingglass" size={20} color={theme.tabIconDefault} />
+                  <TextInput
+                    style={[styles.searchInput, { color: theme.text }]}
+                    placeholder="Suche nach Artikeln..."
+                    placeholderTextColor={theme.tabIconDefault}
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                  />
+                  {searchQuery.length > 0 && (
+                    <TouchableOpacity onPress={() => setSearchQuery('')}>
+                      <IconSymbol name="xmark.circle.fill" size={20} color={theme.tabIconDefault} />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </LiquidGlassCard>
             </View>
 
             <View style={styles.categoriesContainer}>
@@ -332,7 +319,7 @@ export default function MiniWikiScreen() {
               contentContainerStyle={styles.articlesList}
               showsVerticalScrollIndicator={false}
               ListEmptyComponent={
-                <ThemedView style={styles.emptyState} lightColor={theme.card} darkColor={theme.card}>
+                <LiquidGlassCard style={styles.emptyState}>
                   <IconSymbol name="doc.text.magnifyingglass" size={40} color={theme.tabIconDefault} />
                   <ThemedText style={styles.emptyStateText}>
                     Keine Artikel gefunden
@@ -340,7 +327,7 @@ export default function MiniWikiScreen() {
                   <ThemedText style={styles.emptyStateSubtext}>
                     Versuche es mit einem anderen Suchbegriff oder einer anderen Kategorie
                   </ThemedText>
-                </ThemedView>
+                </LiquidGlassCard>
               }
             />
           </>
@@ -354,10 +341,10 @@ export default function MiniWikiScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    paddingHorizontal: LAYOUT_PAD,
   },
   backgroundImage: {
     flex: 1,
-    paddingHorizontal: 16,
   },
 
   // Ladeindikator und Fehleranzeige
@@ -402,12 +389,14 @@ const styles = StyleSheet.create({
   searchContainer: {
     marginVertical: 12,
   },
-  searchInputContainer: {
+  searchGlass: {
+    borderRadius: 22,
+    padding: 10,
+  },
+  searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    gap: 8,
   },
   searchInput: {
     flex: 1,
@@ -421,16 +410,19 @@ const styles = StyleSheet.create({
   categoriesList: {
     paddingRight: 16,
   },
-  categoryItem: {
+  categoryItemGlass: {
     borderRadius: 20,
     marginRight: 8,
-    overflow: 'hidden',
   },
-  categoryItemInner: {
+  categoryItemActive: {
+    borderColor: 'rgba(94,61,179,0.65)'
+  },
+  categoryItemInnerGlass: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 8,
+    gap: 6,
   },
   categoryText: {
     marginLeft: 6,
@@ -439,12 +431,11 @@ const styles = StyleSheet.create({
   articlesList: {
     paddingBottom: 100,
   },
-  articleItem: {
-    borderRadius: 12,
+  articleItemGlass: {
+    borderRadius: 22,
     marginBottom: 12,
-    overflow: 'hidden',
   },
-  articleItemInner: {
+  articleItemInnerGlass: {
     padding: 16,
   },
   articleHeader: {
@@ -487,8 +478,8 @@ const styles = StyleSheet.create({
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 32,
-    borderRadius: 12,
+    padding: 24,
+    borderRadius: 22,
     marginTop: 24,
   },
   emptyStateText: {
@@ -515,7 +506,7 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   articleDetailCard: {
-    borderRadius: 12,
+    borderRadius: 22,
     padding: 16,
     marginBottom: 24,
   },
