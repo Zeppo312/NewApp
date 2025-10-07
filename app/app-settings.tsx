@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, SafeAreaView, StatusBar, TouchableOpacity, ScrollView, Switch, Alert, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, SafeAreaView, StatusBar, TouchableOpacity, ScrollView, Switch, Alert, ActivityIndicator, Dimensions } from 'react-native';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -11,6 +11,7 @@ import { useRouter, Stack } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { getAppSettings, saveAppSettings, AppSettings } from '@/lib/supabase';
 import Header from '@/components/Header';
+import { LiquidGlassCard, LAYOUT_PAD } from '@/constants/DesignGuide';
 
 export default function AppSettingsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -22,7 +23,9 @@ export default function AppSettingsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Keine Bildschirmabmessungen mehr nötig, da ThemedBackground diese intern verwaltet
+  const { width: screenWidth } = Dimensions.get('window');
+  const TIMELINE_INSET = 8; // Align with ActivityCard layout
+  const contentWidth = screenWidth - 2 * LAYOUT_PAD;
 
   useEffect(() => {
     if (user) {
@@ -96,7 +99,7 @@ export default function AppSettingsScreen() {
         <SafeAreaView style={styles.safeArea}>
           <StatusBar hidden={true} />
           <View style={styles.container}>
-            <Header title="App-Einstellungen" showBackButton />
+            <Header title="App-Einstellungen" showBackButton onBackPress={() => router.push('/more')} />
             <ScrollView contentContainerStyle={styles.scrollContent}>
               {isLoading ? (
                 <View style={styles.loadingContainer}>
@@ -106,7 +109,8 @@ export default function AppSettingsScreen() {
               ) : settings ? (
                 <>
                   {/* Erscheinungsbild-Einstellungen */}
-                  <ThemedView style={styles.section} lightColor={theme.card} darkColor={theme.card}>
+                  <View style={[styles.sectionWrapper, { width: contentWidth }]}>
+                    <LiquidGlassCard style={[styles.sectionGlass, { marginHorizontal: TIMELINE_INSET }]} intensity={24}>
                     <ThemedText style={styles.sectionTitle}>Erscheinungsbild</ThemedText>
 
                     <View style={styles.settingItem}>
@@ -180,10 +184,12 @@ export default function AppSettingsScreen() {
                         </ThemedText>
                       </TouchableOpacity>
                     </View>
-                  </ThemedView>
+                    </LiquidGlassCard>
+                  </View>
 
                   {/* Benachrichtigungen-Einstellungen */}
-                  <ThemedView style={styles.section} lightColor={theme.card} darkColor={theme.card}>
+                  <View style={[styles.sectionWrapper, { width: contentWidth }]}>
+                    <LiquidGlassCard style={[styles.sectionGlass, { marginHorizontal: TIMELINE_INSET }]} intensity={24}>
                     <ThemedText style={styles.sectionTitle}>Benachrichtigungen</ThemedText>
 
                     <View style={styles.settingItem}>
@@ -205,10 +211,12 @@ export default function AppSettingsScreen() {
                         ios_backgroundColor="#D1D1D6"
                       />
                     </View>
-                  </ThemedView>
+                    </LiquidGlassCard>
+                  </View>
 
                   {/* Über die App */}
-                  <ThemedView style={styles.section} lightColor={theme.card} darkColor={theme.card}>
+                  <View style={[styles.sectionWrapper, { width: contentWidth }]}>
+                    <LiquidGlassCard style={[styles.sectionGlass, { marginHorizontal: TIMELINE_INSET }]} intensity={24}>
                     <ThemedText style={styles.sectionTitle}>Über die App</ThemedText>
 
                     <View style={styles.settingItem}>
@@ -234,10 +242,12 @@ export default function AppSettingsScreen() {
                       </View>
                       <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
                     </TouchableOpacity>
-                  </ThemedView>
+                    </LiquidGlassCard>
+                  </View>
 
                   {/* Daten verwalten */}
-                  <ThemedView style={styles.section} lightColor={theme.card} darkColor={theme.card}>
+                  <View style={[styles.sectionWrapper, { width: contentWidth }]}>
+                    <LiquidGlassCard style={[styles.sectionGlass, { marginHorizontal: TIMELINE_INSET }]} intensity={24}>
                     <ThemedText style={styles.sectionTitle}>Daten verwalten</ThemedText>
 
                     <TouchableOpacity style={styles.settingItem}>
@@ -284,10 +294,12 @@ export default function AppSettingsScreen() {
                       </View>
                       <IconSymbol name="chevron.right" size={20} color="#FF6B6B" />
                     </TouchableOpacity>
-                  </ThemedView>
+                    </LiquidGlassCard>
+                  </View>
                 </>
               ) : (
-                <ThemedView style={styles.errorContainer} lightColor={theme.card} darkColor={theme.card}>
+                <View style={[styles.sectionWrapper, { width: contentWidth }]}>
+                  <LiquidGlassCard style={[styles.errorContainerGlass, { marginHorizontal: TIMELINE_INSET }]} intensity={24}>
                   <IconSymbol name="exclamationmark.triangle" size={40} color="#FF6B6B" />
                   <ThemedText style={styles.errorText}>
                     Einstellungen konnten nicht geladen werden
@@ -300,7 +312,8 @@ export default function AppSettingsScreen() {
                       Erneut versuchen
                     </ThemedText>
                   </TouchableOpacity>
-                </ThemedView>
+                  </LiquidGlassCard>
+                </View>
               )}
             </ScrollView>
           </View>
@@ -340,16 +353,16 @@ const styles = StyleSheet.create({
     marginTop: 10,
     fontSize: 16,
   },
-  section: {
-    marginHorizontal: 16,    // <<< HINZUFÜGEN/ÄNDERN
-    borderRadius: 15,        // <<< ÄNDERN (war z.B. 16)
-    padding: 15,             // <<< ÄNDERN (war z.B. 16)
-    marginBottom: 20,        // <<< ÄNDERN (war z.B. 16)
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,            // <<< ÄNDERN (war z.B. 2)
+  sectionWrapper: {
+    alignSelf: 'center',
+    width: undefined,
+    // Width set via inline: contentWidth
+  },
+  sectionGlass: {
+    borderRadius: 22,
+    padding: 14,
+    marginBottom: 20,
+    width: '100%',
   },
   sectionTitle: {
     fontSize: 18,
@@ -408,16 +421,11 @@ const styles = StyleSheet.create({
   dangerText: {
     color: '#FF6B6B',
   },
-  errorContainer: {
+  errorContainerGlass: {
+    borderRadius: 22,
     padding: 20,
-    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
   },
   errorText: {
     fontSize: 18,

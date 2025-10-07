@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, TextInput, SafeAreaView, StatusBar, FlatList, ActivityIndicator, Alert } from 'react-native';
+import { StyleSheet, ScrollView, View, TouchableOpacity, TextInput, SafeAreaView, StatusBar, FlatList, ActivityIndicator, Alert, Dimensions } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { Colors } from '@/constants/Colors';
@@ -23,6 +23,11 @@ interface Category extends WikiCategory {
   isFavorites?: boolean; // Für die "Favoriten"-Kategorie
 }
 
+const { width: screenWidth } = Dimensions.get('window');
+const TIMELINE_INSET = 8; // match ActivityCard inset
+const contentWidth = screenWidth - 2 * LAYOUT_PAD;
+const timelineWidth = contentWidth - TIMELINE_INSET * 2; // EXACT Timeline card width
+
 export default function MiniWikiScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
@@ -30,7 +35,7 @@ export default function MiniWikiScreen() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
-  const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
+  // Details laufen über eigene Route: /mini-wiki/[id]
   const [articles, setArticles] = useState<Article[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -146,7 +151,7 @@ export default function MiniWikiScreen() {
 
   // Render article item
   const renderArticleItem = ({ item }: { item: Article }) => (
-    <LiquidGlassCard style={styles.articleItemGlass} onPress={() => setSelectedArticle(item)} intensity={24}>
+    <LiquidGlassCard style={[styles.articleItemGlass, { width: '100%' }]} onPress={() => router.push(`/mini-wiki/${item.id}`)} intensity={24}>
       <View style={styles.articleItemInnerGlass}>
         <View style={styles.articleHeader}>
           <ThemedText style={styles.articleTitle}>{item.title}</ThemedText>
@@ -183,7 +188,7 @@ export default function MiniWikiScreen() {
         <SafeAreaView style={styles.container}>
           <StatusBar hidden={true} />
           
-          <Header title="Mini-Wiki" showBackButton />
+          <Header title="Mini-Wiki" showBackButton onBackPress={() => router.push('/more')} />
           
 
         {isLoading ? (
@@ -221,67 +226,10 @@ export default function MiniWikiScreen() {
               <ThemedText style={styles.retryButtonText}>Erneut versuchen</ThemedText>
             </TouchableOpacity>
           </View>
-        ) : selectedArticle ? (
-          // Article detail view
-          <ScrollView style={styles.articleDetailContainer}>
-            <TouchableOpacity
-              style={styles.backToListButton}
-              onPress={() => setSelectedArticle(null)}
-            >
-              <IconSymbol name="chevron.left" size={20} color={theme.accent} />
-              <ThemedText style={[styles.backToListText, { color: theme.accent }]}>
-                Zurück zur Übersicht
-              </ThemedText>
-            </TouchableOpacity>
-
-            <LiquidGlassCard style={styles.articleDetailCard}>
-              <View style={styles.articleDetailHeader}>
-                <ThemedText style={styles.articleDetailTitle}>{selectedArticle.title}</ThemedText>
-                <TouchableOpacity
-                  style={styles.favoriteButton}
-                  onPress={() => toggleFavorite(selectedArticle.id)}
-                >
-                  <IconSymbol
-                    name={selectedArticle.isFavorite ? 'star.fill' : 'star'}
-                    size={24}
-                    color={selectedArticle.isFavorite ? theme.accent : theme.tabIconDefault}
-                  />
-                </TouchableOpacity>
-              </View>
-
-              <ThemedText style={styles.articleDetailCategory}>{selectedArticle.category}</ThemedText>
-
-              <View style={styles.readingTimeDetail}>
-                <IconSymbol name="clock" size={14} color={theme.tabIconDefault} />
-                <ThemedText style={styles.readingTimeText}>{selectedArticle.readingTime || selectedArticle.reading_time}</ThemedText>
-              </View>
-
-              {selectedArticle.content && (
-                <>
-                  <View style={styles.coreStatementsContainer}>
-                    <ThemedText style={styles.sectionTitle}>Das Wichtigste in Kürze</ThemedText>
-                    {selectedArticle.content.coreStatements.map((statement, index) => (
-                      <View key={index} style={styles.coreStatementItem}>
-                        <View style={[styles.bulletPoint, { backgroundColor: theme.accent }]} />
-                        <ThemedText style={styles.coreStatementText}>{statement}</ThemedText>
-                      </View>
-                    ))}
-                  </View>
-
-                  {selectedArticle.content.sections.map((section, index) => (
-                    <View key={index} style={styles.contentSection}>
-                      <ThemedText style={styles.sectionTitle}>{section.title}</ThemedText>
-                      <ThemedText style={styles.sectionContent}>{section.content}</ThemedText>
-                    </View>
-                  ))}
-                </>
-              )}
-            </LiquidGlassCard>
-          </ScrollView>
         ) : (
           // Article list view
           <>
-            <View style={styles.searchContainer}>
+            <View style={[styles.searchContainer, { alignSelf: 'center', width: contentWidth }]}>
               <LiquidGlassCard style={styles.searchGlass} intensity={24}>
                 <View style={styles.searchRow}>
                   <IconSymbol name="magnifyingglass" size={20} color={theme.tabIconDefault} />
@@ -301,22 +249,23 @@ export default function MiniWikiScreen() {
               </LiquidGlassCard>
             </View>
 
-            <View style={styles.categoriesContainer}>
+            <View style={[styles.categoriesContainer, { alignSelf: 'center', width: contentWidth }]}>
               <FlatList
                 data={categories}
                 renderItem={renderCategoryItem}
                 keyExtractor={item => item.id}
                 horizontal
                 showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.categoriesList}
+                contentContainerStyle={[styles.categoriesList, { paddingHorizontal: TIMELINE_INSET }]}
               />
             </View>
 
+            <View style={{ alignSelf: 'center', width: contentWidth }}>
             <FlatList
               data={filteredArticles}
               renderItem={renderArticleItem}
               keyExtractor={item => item.id}
-              contentContainerStyle={styles.articlesList}
+              contentContainerStyle={[styles.articlesList, { paddingHorizontal: TIMELINE_INSET }]}
               showsVerticalScrollIndicator={false}
               ListEmptyComponent={
                 <LiquidGlassCard style={styles.emptyState}>
@@ -330,6 +279,7 @@ export default function MiniWikiScreen() {
                 </LiquidGlassCard>
               }
             />
+            </View>
           </>
         )}
         </SafeAreaView>
@@ -434,6 +384,7 @@ const styles = StyleSheet.create({
   articleItemGlass: {
     borderRadius: 22,
     marginBottom: 12,
+    width: '100%',
   },
   articleItemInnerGlass: {
     padding: 16,

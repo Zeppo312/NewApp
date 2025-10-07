@@ -416,22 +416,24 @@ export default function WeightTrackerScreen() {
     return (
       <View style={styles.timelineSection}>
         <Text style={[styles.sectionTitleSleepLike]}>Gewichtseinträge</Text>
-        <View style={styles.entriesContainer}> 
-          {weightEntries.map((entry) => (
-            <ActivityCard
-              key={entry.id}
-              entry={convertWeightToDailyEntry(entry)}
-              onDelete={(id) => handleDeleteWeightEntry(id)}
-              onEdit={() => {
-                setEditingEntry(entry);
-                setWeight(String(entry.weight));
-                setNotes(entry.notes || '');
-                setDate(new Date(entry.date));
-                setShowInputModal(true);
-              }}
-              marginHorizontal={8}
-            />
-          ))}
+        <View style={{ alignSelf: 'center', width: contentWidth }}>
+          <View style={[styles.entriesContainer, { paddingHorizontal: TIMELINE_INSET }]}> 
+            {weightEntries.map((entry) => (
+              <ActivityCard
+                key={entry.id}
+                entry={convertWeightToDailyEntry(entry)}
+                onDelete={(id) => handleDeleteWeightEntry(id)}
+                onEdit={() => {
+                  setEditingEntry(entry);
+                  setWeight(String(entry.weight));
+                  setNotes(entry.notes || '');
+                  setDate(new Date(entry.date));
+                  setShowInputModal(true);
+                }}
+                marginHorizontal={8}
+              />
+            ))}
+          </View>
         </View>
       </View>
     );
@@ -531,6 +533,8 @@ export default function WeightTrackerScreen() {
 
   // Holen der Bildschirmabmessungen für das Diagramm
   const screenWidth = Dimensions.get('window').width;
+  const contentWidth = screenWidth - 2 * LAYOUT_PAD;
+  const TIMELINE_INSET = 8;
 
   return (
     <>

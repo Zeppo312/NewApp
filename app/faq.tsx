@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, TextInput, SafeAreaView, StatusBar, FlatList, ActivityIndicator, Alert } from 'react-native';
+import { StyleSheet, ScrollView, View, TouchableOpacity, TextInput, SafeAreaView, StatusBar, FlatList, ActivityIndicator, Alert, Dimensions } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { Colors } from '@/constants/Colors';
@@ -7,6 +7,7 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useRouter, Stack } from 'expo-router';
 import { ThemedBackground } from '@/components/ThemedBackground';
+import { LiquidGlassCard, LAYOUT_PAD } from '@/constants/DesignGuide';
 import { getFaqCategories, getFaqEntries, FaqCategory, FaqEntry } from '@/lib/supabase/faq';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import Header from '@/components/Header';
@@ -20,6 +21,9 @@ export default function FaqScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const router = useRouter();
+  const { width: screenWidth } = Dimensions.get('window');
+  const TIMELINE_INSET = 8; // Match ActivityCard inset
+  const contentWidth = screenWidth - 2 * LAYOUT_PAD;
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -86,22 +90,17 @@ export default function FaqScreen() {
 
   // Render category item
   const renderCategoryItem = ({ item }: { item: Category }) => (
-    <TouchableOpacity
-      style={[
-        styles.categoryItem,
-        selectedCategory === item.id && { backgroundColor: theme.accent + '30' }
-      ]}
+    <LiquidGlassCard
+      style={[styles.categoryItemGlass, selectedCategory === item.id && styles.categoryItemActive]}
       onPress={() => setSelectedCategory(item.id)}
+      intensity={24}
+      activeOpacity={0.9}
     >
-      <ThemedView
-        style={styles.categoryItemInner}
-        lightColor="rgba(255, 255, 255, 0.8)"
-        darkColor="rgba(50, 50, 50, 0.8)"
-      >
-        <IconSymbol name={item.icon as any} size={20} color={theme.accent} />
+      <View style={styles.categoryItemInnerGlass}>
+        <IconSymbol name={item.icon as any} size={18} color={theme.accent} />
         <ThemedText style={styles.categoryText}>{item.name}</ThemedText>
-      </ThemedView>
-    </TouchableOpacity>
+      </View>
+    </LiquidGlassCard>
   );
 
   // Render FAQ entry item
@@ -109,32 +108,20 @@ export default function FaqScreen() {
     const isExpanded = expandedEntries[item.id] || false;
 
     return (
-      <ThemedView
-        style={styles.faqItem}
-        lightColor={theme.card}
-        darkColor={theme.card}
-      >
-        <TouchableOpacity
-          style={styles.faqQuestion}
-          onPress={() => toggleExpanded(item.id)}
-        >
+      <LiquidGlassCard style={styles.faqItemGlass} intensity={24}>
+        <TouchableOpacity style={styles.faqQuestion} onPress={() => toggleExpanded(item.id)}>
           <View style={styles.faqQuestionContent}>
             <ThemedText style={styles.faqQuestionText}>{item.question}</ThemedText>
             <ThemedText style={styles.faqCategoryText}>{item.category}</ThemedText>
           </View>
-          <IconSymbol
-            name={isExpanded ? 'chevron.up' : 'chevron.down'}
-            size={20}
-            color={theme.tabIconDefault}
-          />
+          <IconSymbol name={isExpanded ? 'chevron.up' : 'chevron.down'} size={20} color={theme.tabIconDefault} />
         </TouchableOpacity>
-
         {isExpanded && (
           <View style={styles.faqAnswer}>
             <ThemedText style={styles.faqAnswerText}>{item.answer}</ThemedText>
           </View>
         )}
-      </ThemedView>
+      </LiquidGlassCard>
     );
   };
 
@@ -148,7 +135,7 @@ export default function FaqScreen() {
         <SafeAreaView style={styles.container}>
           <StatusBar hidden={true} />
           
-          <Header title="Häufige Fragen" showBackButton />
+          <Header title="Häufige Fragen" showBackButton onBackPress={() => router.push('/more')} />
           
 
         {isLoading ? (
@@ -185,57 +172,57 @@ export default function FaqScreen() {
         ) : (
           // FAQ list view
           <>
-            <View style={styles.searchContainer}>
-              <ThemedView
-                style={styles.searchInputContainer}
-                lightColor="rgba(255, 255, 255, 0.8)"
-                darkColor="rgba(50, 50, 50, 0.8)"
-              >
-                <IconSymbol name="magnifyingglass" size={20} color={theme.tabIconDefault} />
-                <TextInput
-                  style={[styles.searchInput, { color: theme.text }]}
-                  placeholder="Suche nach Fragen..."
-                  placeholderTextColor={theme.tabIconDefault}
-                  value={searchQuery}
-                  onChangeText={setSearchQuery}
-                />
-                {searchQuery.length > 0 && (
-                  <TouchableOpacity onPress={() => setSearchQuery('')}>
-                    <IconSymbol name="xmark.circle.fill" size={20} color={theme.tabIconDefault} />
-                  </TouchableOpacity>
-                )}
-              </ThemedView>
+            <View style={[styles.searchContainer, { alignSelf: 'center', width: contentWidth }]}>
+              <LiquidGlassCard style={styles.searchGlass} intensity={24}>
+                <View style={styles.searchRow}>
+                  <IconSymbol name="magnifyingglass" size={20} color={theme.tabIconDefault} />
+                  <TextInput
+                    style={[styles.searchInput, { color: theme.text }]}
+                    placeholder="Suche nach Fragen..."
+                    placeholderTextColor={theme.tabIconDefault}
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                  />
+                  {searchQuery.length > 0 && (
+                    <TouchableOpacity onPress={() => setSearchQuery('')}>
+                      <IconSymbol name="xmark.circle.fill" size={20} color={theme.tabIconDefault} />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </LiquidGlassCard>
             </View>
 
-            <View style={styles.categoriesContainer}>
+            <View style={[styles.categoriesContainer, { alignSelf: 'center', width: contentWidth }]}>
               <FlatList
                 data={categories}
                 renderItem={renderCategoryItem}
                 keyExtractor={item => item.id}
                 horizontal
                 showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.categoriesList}
+                contentContainerStyle={[styles.categoriesList, { paddingHorizontal: TIMELINE_INSET }]}
               />
             </View>
 
-            <FlatList
-              data={filteredEntries}
-              renderItem={renderFaqItem}
-              keyExtractor={item => item.id}
-              contentContainerStyle={styles.faqList}
-              showsVerticalScrollIndicator={false}
-              ListEmptyComponent={
-                <ThemedView style={styles.emptyState} lightColor={theme.card} darkColor={theme.card}>
-                  <IconSymbol name="doc.text.magnifyingglass" size={40} color={theme.tabIconDefault} />
-                  <ThemedText style={styles.emptyStateText}>
-                    Keine Fragen gefunden
-                  </ThemedText>
-                  <ThemedText style={styles.emptyStateSubtext}>
-                    Versuche es mit einem anderen Suchbegriff oder einer anderen Kategorie
-                  </ThemedText>
-                </ThemedView>
-              }
-            />
+            <View style={{ alignSelf: 'center', width: contentWidth }}>
+              <FlatList
+                data={filteredEntries}
+                renderItem={renderFaqItem}
+                keyExtractor={item => item.id}
+                contentContainerStyle={[styles.faqList, { paddingHorizontal: TIMELINE_INSET }]}
+                showsVerticalScrollIndicator={false}
+                ListEmptyComponent={
+                  <LiquidGlassCard style={styles.emptyState}>
+                    <IconSymbol name="doc.text.magnifyingglass" size={40} color={theme.tabIconDefault} />
+                    <ThemedText style={styles.emptyStateText}>
+                      Keine Fragen gefunden
+                    </ThemedText>
+                    <ThemedText style={styles.emptyStateSubtext}>
+                      Versuche es mit einem anderen Suchbegriff oder einer anderen Kategorie
+                    </ThemedText>
+                  </LiquidGlassCard>
+                }
+              />
+            </View>
           </>
         )}
         </SafeAreaView>
@@ -247,10 +234,10 @@ export default function FaqScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    paddingHorizontal: LAYOUT_PAD,
   },
   backgroundImage: {
     flex: 1,
-    paddingHorizontal: 16,
   },
 
   // Ladeindikator und Fehleranzeige
@@ -295,53 +282,37 @@ const styles = StyleSheet.create({
   searchContainer: {
     marginVertical: 12,
   },
-  searchInputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
+  searchGlass: { borderRadius: 22, padding: 10 },
+  searchRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   searchInput: {
     flex: 1,
-    marginLeft: 8,
     fontSize: 16,
-    paddingVertical: 4,
   },
   categoriesContainer: {
     marginBottom: 12,
   },
-  categoriesList: {
-    paddingRight: 16,
-  },
-  categoryItem: {
-    borderRadius: 20,
-    marginRight: 8,
-    overflow: 'hidden',
-  },
-  categoryItemInner: {
+  categoriesList: { paddingRight: 0 },
+  categoryItemGlass: { borderRadius: 20, marginRight: 8 },
+  categoryItemActive: { borderColor: 'rgba(94,61,179,0.65)' },
+  categoryItemInnerGlass: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 8,
+    gap: 6,
   },
   categoryText: {
-    marginLeft: 6,
     fontSize: 14,
   },
   faqList: {
     paddingBottom: 100,
   },
-  faqItem: {
-    borderRadius: 12,
-    marginBottom: 12,
-    overflow: 'hidden',
-  },
+  faqItemGlass: { borderRadius: 22, marginBottom: 12, width: '100%' },
   faqQuestion: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
+    padding: 14,
   },
   faqQuestionContent: {
     flex: 1,
@@ -349,7 +320,7 @@ const styles = StyleSheet.create({
   },
   faqQuestionText: {
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '700',
   },
   faqCategoryText: {
     fontSize: 12,
@@ -357,7 +328,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   faqAnswer: {
-    padding: 16,
+    padding: 14,
     paddingTop: 0,
     borderTopWidth: 1,
     borderTopColor: 'rgba(0, 0, 0, 0.05)',
@@ -369,8 +340,8 @@ const styles = StyleSheet.create({
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 32,
-    borderRadius: 12,
+    padding: 24,
+    borderRadius: 22,
     marginTop: 24,
   },
   emptyStateText: {
