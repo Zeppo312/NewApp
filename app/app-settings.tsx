@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, SafeAreaView, StatusBar, TouchableOpacity, ScrollView, Switch, Alert, ActivityIndicator, Dimensions } from 'react-native';
+import { StyleSheet, View, SafeAreaView, StatusBar, TouchableOpacity, ScrollView, Switch, Alert, ActivityIndicator } from 'react-native';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -11,7 +11,7 @@ import { useRouter, Stack } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { getAppSettings, saveAppSettings, AppSettings } from '@/lib/supabase';
 import Header from '@/components/Header';
-import { LiquidGlassCard, LAYOUT_PAD } from '@/constants/DesignGuide';
+import { LiquidGlassCard, GLASS_OVERLAY, LAYOUT_PAD } from '@/constants/DesignGuide';
 
 export default function AppSettingsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -23,11 +23,7 @@ export default function AppSettingsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
-  const TIMELINE_INSET = 8; // Align with ActivityCard layout
-  const { width: screenWidth } = Dimensions.get('window');
-  // Slightly wider than sleep timeline containers (+8), plus a tiny extra tweak (+6)
-  const EXTRA_WIDTH = 6;
-  const CONTENT_WIDTH = Math.round(screenWidth - 2 * LAYOUT_PAD + TIMELINE_INSET + EXTRA_WIDTH);
+  // no extra width logic; match "Mehr" padding rhythm via ScrollView
 
   useEffect(() => {
     if (user) {
@@ -101,7 +97,12 @@ export default function AppSettingsScreen() {
         <SafeAreaView style={styles.safeArea}>
           <StatusBar hidden={true} />
           <View style={styles.container}>
-            <Header title="App-Einstellungen" showBackButton onBackPress={() => router.push('/more')} />
+            <Header
+              title="App-Einstellungen"
+              subtitle="Benachrichtigungen, Erscheinungsbild und mehr"
+              showBackButton
+              onBackPress={() => router.push('/more')}
+            />
             <ScrollView contentContainerStyle={styles.scrollContent}>
               {isLoading ? (
                 <View style={styles.loadingContainer}>
@@ -109,159 +110,141 @@ export default function AppSettingsScreen() {
                   <ThemedText style={styles.loadingText}>Einstellungen werden geladen...</ThemedText>
                 </View>
               ) : (
-                <View style={[styles.contentWrap, { width: CONTENT_WIDTH }]}>
+                <View style={styles.contentWrap}>
                 {settings ? (
                 <>
                   {/* Erscheinungsbild-Einstellungen */}
-                  <LiquidGlassCard style={styles.sectionGlass} intensity={24}>
+                  <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
                     <ThemedText style={styles.sectionTitle}>Erscheinungsbild</ThemedText>
 
-                    <View style={styles.settingItem}>
-                      <View style={styles.settingInfo}>
+                    <TouchableOpacity style={styles.rowItem} onPress={() => handleChangeTheme('light')} disabled={isSaving}>
+                      <View style={styles.rowIcon}>
                         <IconSymbol name="sun.max" size={24} color={theme.accent} />
-                        <ThemedText style={styles.settingText}>Helles Design</ThemedText>
                       </View>
-                      <TouchableOpacity
-                        style={[
-                          styles.themeButton,
-                          themePreference === 'light' && styles.selectedThemeButton
-                        ]}
-                        onPress={() => handleChangeTheme('light')}
-                        disabled={isSaving}
-                      >
-                        <ThemedText
-                          style={[
-                            styles.themeButtonText,
-                            themePreference === 'light' && styles.selectedThemeButtonText
-                          ]}
-                        >
-                          {themePreference === 'light' && '✓'}
-                        </ThemedText>
-                      </TouchableOpacity>
-                    </View>
+                      <View style={styles.rowContent}>
+                        <ThemedText style={styles.rowTitle}>Helles Design</ThemedText>
+                      </View>
+                      <View style={styles.trailing}>
+                        <View style={[styles.themeButton, themePreference === 'light' && styles.selectedThemeButton]}>
+                          <ThemedText style={[styles.themeButtonText, themePreference === 'light' && styles.selectedThemeButtonText]}>
+                            {themePreference === 'light' && '✓'}
+                          </ThemedText>
+                        </View>
+                      </View>
+                    </TouchableOpacity>
 
-                    <View style={styles.settingItem}>
-                      <View style={styles.settingInfo}>
+                    <TouchableOpacity style={styles.rowItem} onPress={() => handleChangeTheme('dark')} disabled={isSaving}>
+                      <View style={styles.rowIcon}>
                         <IconSymbol name="moon" size={24} color={theme.accent} />
-                        <ThemedText style={styles.settingText}>Dunkles Design</ThemedText>
                       </View>
-                      <TouchableOpacity
-                        style={[
-                          styles.themeButton,
-                          themePreference === 'dark' && styles.selectedThemeButton
-                        ]}
-                        onPress={() => handleChangeTheme('dark')}
-                        disabled={isSaving}
-                      >
-                        <ThemedText
-                          style={[
-                            styles.themeButtonText,
-                            themePreference === 'dark' && styles.selectedThemeButtonText
-                          ]}
-                        >
-                          {themePreference === 'dark' && '✓'}
-                        </ThemedText>
-                      </TouchableOpacity>
-                    </View>
+                      <View style={styles.rowContent}>
+                        <ThemedText style={styles.rowTitle}>Dunkles Design</ThemedText>
+                      </View>
+                      <View style={styles.trailing}>
+                        <View style={[styles.themeButton, themePreference === 'dark' && styles.selectedThemeButton]}>
+                          <ThemedText style={[styles.themeButtonText, themePreference === 'dark' && styles.selectedThemeButtonText]}>
+                            {themePreference === 'dark' && '✓'}
+                          </ThemedText>
+                        </View>
+                      </View>
+                    </TouchableOpacity>
 
-                    <View style={styles.settingItem}>
-                      <View style={styles.settingInfo}>
+                    <TouchableOpacity style={styles.rowItem} onPress={() => handleChangeTheme('system')} disabled={isSaving}>
+                      <View style={styles.rowIcon}>
                         <IconSymbol name="gearshape" size={24} color={theme.accent} />
-                        <ThemedText style={styles.settingText}>Systemeinstellung</ThemedText>
                       </View>
-                      <TouchableOpacity
-                        style={[
-                          styles.themeButton,
-                          themePreference === 'system' && styles.selectedThemeButton
-                        ]}
-                        onPress={() => handleChangeTheme('system')}
-                        disabled={isSaving}
-                      >
-                        <ThemedText
-                          style={[
-                            styles.themeButtonText,
-                            themePreference === 'system' && styles.selectedThemeButtonText
-                          ]}
-                        >
-                          {themePreference === 'system' && '✓'}
-                        </ThemedText>
-                      </TouchableOpacity>
-                    </View>
-                    </LiquidGlassCard>
+                      <View style={styles.rowContent}>
+                        <ThemedText style={styles.rowTitle}>Systemeinstellung</ThemedText>
+                      </View>
+                      <View style={styles.trailing}>
+                        <View style={[styles.themeButton, themePreference === 'system' && styles.selectedThemeButton]}>
+                          <ThemedText style={[styles.themeButtonText, themePreference === 'system' && styles.selectedThemeButtonText]}>
+                            {themePreference === 'system' && '✓'}
+                          </ThemedText>
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  </LiquidGlassCard>
 
                   {/* Benachrichtigungen-Einstellungen */}
-                  <LiquidGlassCard style={styles.sectionGlass} intensity={24}>
+                  <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
                     <ThemedText style={styles.sectionTitle}>Benachrichtigungen</ThemedText>
 
-                    <View style={styles.settingItem}>
-                      <View style={styles.settingInfo}>
+                    <View style={styles.rowItem}>
+                      <View style={styles.rowIcon}>
                         <IconSymbol name="bell" size={24} color={theme.accent} />
-                        <View>
-                          <ThemedText style={styles.settingText}>Benachrichtigungen aktivieren</ThemedText>
-                          <ThemedText style={styles.settingDescription}>
-                            Erhalte wichtige Erinnerungen und Updates
-                          </ThemedText>
-                        </View>
                       </View>
-                      <Switch
-                        value={settings.notifications_enabled}
-                        onValueChange={handleToggleNotifications}
-                        disabled={isSaving}
-                        trackColor={{ false: '#D1D1D6', true: '#9DBEBB' }}
-                        thumbColor={settings.notifications_enabled ? '#FFFFFF' : '#F4F4F4'}
-                        ios_backgroundColor="#D1D1D6"
-                      />
+                      <View style={styles.rowContent}>
+                        <ThemedText style={styles.rowTitle}>Benachrichtigungen aktivieren</ThemedText>
+                        <ThemedText style={styles.rowDescription}>Erhalte wichtige Erinnerungen und Updates</ThemedText>
+                      </View>
+                      <View style={styles.trailing}>
+                        <Switch
+                          value={settings.notifications_enabled}
+                          onValueChange={handleToggleNotifications}
+                          disabled={isSaving}
+                          trackColor={{ false: '#D1D1D6', true: '#9DBEBB' }}
+                          thumbColor={settings.notifications_enabled ? '#FFFFFF' : '#F4F4F4'}
+                          ios_backgroundColor="#D1D1D6"
+                        />
+                      </View>
                     </View>
-                    </LiquidGlassCard>
+                  </LiquidGlassCard>
 
                   {/* Über die App */}
-                  <LiquidGlassCard style={styles.sectionGlass} intensity={24}>
+                  <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
                     <ThemedText style={styles.sectionTitle}>Über die App</ThemedText>
 
-                    <View style={styles.settingItem}>
-                      <View style={styles.settingInfo}>
+                    <View style={styles.rowItem}>
+                      <View style={styles.rowIcon}>
                         <IconSymbol name="info.circle" size={24} color={theme.accent} />
-                        <ThemedText style={styles.settingText}>Version</ThemedText>
                       </View>
-                      <ThemedText style={styles.versionText}>1.0.0</ThemedText>
+                      <View style={styles.rowContent}>
+                        <ThemedText style={styles.rowTitle}>Version</ThemedText>
+                      </View>
+                      <View style={styles.trailing}>
+                        <ThemedText style={styles.versionText}>1.0.0</ThemedText>
+                      </View>
                     </View>
 
-                    <TouchableOpacity style={styles.settingItem}>
-                      <View style={styles.settingInfo}>
+                    <TouchableOpacity style={styles.rowItem}>
+                      <View style={styles.rowIcon}>
                         <IconSymbol name="doc.text" size={24} color={theme.accent} />
-                        <ThemedText style={styles.settingText}>Datenschutzerklärung</ThemedText>
+                      </View>
+                      <View style={styles.rowContent}>
+                        <ThemedText style={styles.rowTitle}>Datenschutzerklärung</ThemedText>
                       </View>
                       <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
                     </TouchableOpacity>
 
-                    <TouchableOpacity style={styles.settingItem}>
-                      <View style={styles.settingInfo}>
+                    <TouchableOpacity style={styles.rowItem}>
+                      <View style={styles.rowIcon}>
                         <IconSymbol name="doc.text" size={24} color={theme.accent} />
-                        <ThemedText style={styles.settingText}>Impressum</ThemedText>
+                      </View>
+                      <View style={styles.rowContent}>
+                        <ThemedText style={styles.rowTitle}>Impressum</ThemedText>
                       </View>
                       <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
                     </TouchableOpacity>
-                    </LiquidGlassCard>
+                  </LiquidGlassCard>
 
                   {/* Daten verwalten */}
-                  <LiquidGlassCard style={styles.sectionGlass} intensity={24}>
+                  <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
                     <ThemedText style={styles.sectionTitle}>Daten verwalten</ThemedText>
 
-                    <TouchableOpacity style={styles.settingItem}>
-                      <View style={styles.settingInfo}>
+                    <TouchableOpacity style={styles.rowItem}>
+                      <View style={styles.rowIcon}>
                         <IconSymbol name="arrow.down.doc" size={24} color={theme.accent} />
-                        <View>
-                          <ThemedText style={styles.settingText}>Daten exportieren</ThemedText>
-                          <ThemedText style={styles.settingDescription}>
-                            Exportiere deine Daten als Backup
-                          </ThemedText>
-                        </View>
+                      </View>
+                      <View style={styles.rowContent}>
+                        <ThemedText style={styles.rowTitle}>Daten exportieren</ThemedText>
+                        <ThemedText style={styles.rowDescription}>Exportiere deine Daten als Backup</ThemedText>
                       </View>
                       <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                      style={[styles.settingItem, styles.dangerItem]}
+                      style={styles.rowItem}
                       onPress={() => {
                         Alert.alert(
                           'Daten löschen',
@@ -280,21 +263,19 @@ export default function AppSettingsScreen() {
                         );
                       }}
                     >
-                      <View style={styles.settingInfo}>
+                      <View style={styles.rowIcon}>
                         <IconSymbol name="trash" size={24} color="#FF6B6B" />
-                        <View>
-                          <ThemedText style={[styles.settingText, styles.dangerText]}>Alle Daten löschen</ThemedText>
-                          <ThemedText style={styles.settingDescription}>
-                            Lösche alle deine gespeicherten Daten
-                          </ThemedText>
-                        </View>
+                      </View>
+                      <View style={styles.rowContent}>
+                        <ThemedText style={[styles.rowTitle, styles.dangerText]}>Alle Daten löschen</ThemedText>
+                        <ThemedText style={styles.rowDescription}>Lösche alle deine gespeicherten Daten</ThemedText>
                       </View>
                       <IconSymbol name="chevron.right" size={20} color="#FF6B6B" />
                     </TouchableOpacity>
-                    </LiquidGlassCard>
+                  </LiquidGlassCard>
                 </>
               ) : (
-                <LiquidGlassCard style={styles.errorContainerGlass} intensity={24}>
+                <LiquidGlassCard style={[styles.sectionCard, styles.errorContainerGlass]} intensity={26} overlayColor={GLASS_OVERLAY}>
                   <IconSymbol name="exclamationmark.triangle" size={40} color="#FF6B6B" />
                   <ThemedText style={styles.errorText}>
                     Einstellungen konnten nicht geladen werden
@@ -335,11 +316,12 @@ const styles = StyleSheet.create({
     paddingTop: 0,
   },
   scrollContent: {
+    paddingHorizontal: LAYOUT_PAD,
     paddingBottom: 40,
-    paddingTop: 16,
+    paddingTop: 10,
   },
   contentWrap: {
-    alignSelf: 'center',
+    width: '100%',
   },
 
   loadingContainer: {
@@ -351,43 +333,30 @@ const styles = StyleSheet.create({
     marginTop: 10,
     fontSize: 16,
   },
-  // sectionWrapper removed – ScrollView provides horizontal padding
-  sectionGlass: {
-    borderRadius: 22,
-    padding: 14,
-    marginBottom: 20,
-    width: '100%',
-    alignSelf: 'stretch',
-  },
+  sectionCard: { marginBottom: 16, borderRadius: 22, overflow: 'hidden' },
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    marginBottom: 10,
-    textAlign: 'center',
-    width: '100%',
+    marginBottom: 12,
+    paddingHorizontal: 16,
   },
-  settingItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0, 0, 0, 0.05)',
-  },
-  settingInfo: {
+  rowItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(0,0,0,0.08)'
   },
-  settingText: {
-    fontSize: 16,
-    marginLeft: 12,
+  rowIcon: {
+    width: 40,
+    alignItems: 'center',
+    marginRight: 12,
   },
-  settingDescription: {
-    fontSize: 14,
-    marginLeft: 12,
-    opacity: 0.7,
-  },
+  rowContent: { flex: 1 },
+  rowTitle: { fontSize: 16, fontWeight: '700' },
+  rowDescription: { fontSize: 13, opacity: 0.8, marginTop: 2 },
+  trailing: { marginLeft: 12, alignItems: 'center', justifyContent: 'center' },
   themeButton: {
     width: 30,
     height: 30,
