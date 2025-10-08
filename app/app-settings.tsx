@@ -23,9 +23,11 @@ export default function AppSettingsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
-  const { width: screenWidth } = Dimensions.get('window');
   const TIMELINE_INSET = 8; // Align with ActivityCard layout
-  const contentWidth = screenWidth - 2 * LAYOUT_PAD;
+  const { width: screenWidth } = Dimensions.get('window');
+  // Slightly wider than sleep timeline containers (+8), plus a tiny extra tweak (+6)
+  const EXTRA_WIDTH = 6;
+  const CONTENT_WIDTH = Math.round(screenWidth - 2 * LAYOUT_PAD + TIMELINE_INSET + EXTRA_WIDTH);
 
   useEffect(() => {
     if (user) {
@@ -106,11 +108,12 @@ export default function AppSettingsScreen() {
                   <ActivityIndicator size="large" color={theme.accent} />
                   <ThemedText style={styles.loadingText}>Einstellungen werden geladen...</ThemedText>
                 </View>
-              ) : settings ? (
+              ) : (
+                <View style={[styles.contentWrap, { width: CONTENT_WIDTH }]}>
+                {settings ? (
                 <>
                   {/* Erscheinungsbild-Einstellungen */}
-                  <View style={[styles.sectionWrapper, { width: contentWidth }]}>
-                    <LiquidGlassCard style={[styles.sectionGlass, { marginHorizontal: TIMELINE_INSET }]} intensity={24}>
+                  <LiquidGlassCard style={styles.sectionGlass} intensity={24}>
                     <ThemedText style={styles.sectionTitle}>Erscheinungsbild</ThemedText>
 
                     <View style={styles.settingItem}>
@@ -185,11 +188,9 @@ export default function AppSettingsScreen() {
                       </TouchableOpacity>
                     </View>
                     </LiquidGlassCard>
-                  </View>
 
                   {/* Benachrichtigungen-Einstellungen */}
-                  <View style={[styles.sectionWrapper, { width: contentWidth }]}>
-                    <LiquidGlassCard style={[styles.sectionGlass, { marginHorizontal: TIMELINE_INSET }]} intensity={24}>
+                  <LiquidGlassCard style={styles.sectionGlass} intensity={24}>
                     <ThemedText style={styles.sectionTitle}>Benachrichtigungen</ThemedText>
 
                     <View style={styles.settingItem}>
@@ -212,11 +213,9 @@ export default function AppSettingsScreen() {
                       />
                     </View>
                     </LiquidGlassCard>
-                  </View>
 
                   {/* Über die App */}
-                  <View style={[styles.sectionWrapper, { width: contentWidth }]}>
-                    <LiquidGlassCard style={[styles.sectionGlass, { marginHorizontal: TIMELINE_INSET }]} intensity={24}>
+                  <LiquidGlassCard style={styles.sectionGlass} intensity={24}>
                     <ThemedText style={styles.sectionTitle}>Über die App</ThemedText>
 
                     <View style={styles.settingItem}>
@@ -243,11 +242,9 @@ export default function AppSettingsScreen() {
                       <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
                     </TouchableOpacity>
                     </LiquidGlassCard>
-                  </View>
 
                   {/* Daten verwalten */}
-                  <View style={[styles.sectionWrapper, { width: contentWidth }]}>
-                    <LiquidGlassCard style={[styles.sectionGlass, { marginHorizontal: TIMELINE_INSET }]} intensity={24}>
+                  <LiquidGlassCard style={styles.sectionGlass} intensity={24}>
                     <ThemedText style={styles.sectionTitle}>Daten verwalten</ThemedText>
 
                     <TouchableOpacity style={styles.settingItem}>
@@ -295,11 +292,9 @@ export default function AppSettingsScreen() {
                       <IconSymbol name="chevron.right" size={20} color="#FF6B6B" />
                     </TouchableOpacity>
                     </LiquidGlassCard>
-                  </View>
                 </>
               ) : (
-                <View style={[styles.sectionWrapper, { width: contentWidth }]}>
-                  <LiquidGlassCard style={[styles.errorContainerGlass, { marginHorizontal: TIMELINE_INSET }]} intensity={24}>
+                <LiquidGlassCard style={styles.errorContainerGlass} intensity={24}>
                   <IconSymbol name="exclamationmark.triangle" size={40} color="#FF6B6B" />
                   <ThemedText style={styles.errorText}>
                     Einstellungen konnten nicht geladen werden
@@ -313,6 +308,7 @@ export default function AppSettingsScreen() {
                     </ThemedText>
                   </TouchableOpacity>
                   </LiquidGlassCard>
+              )}
                 </View>
               )}
             </ScrollView>
@@ -340,8 +336,10 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: 40,
-    paddingHorizontal: 0,
     paddingTop: 16,
+  },
+  contentWrap: {
+    alignSelf: 'center',
   },
 
   loadingContainer: {
@@ -353,21 +351,20 @@ const styles = StyleSheet.create({
     marginTop: 10,
     fontSize: 16,
   },
-  sectionWrapper: {
-    alignSelf: 'center',
-    width: undefined,
-    // Width set via inline: contentWidth
-  },
+  // sectionWrapper removed – ScrollView provides horizontal padding
   sectionGlass: {
     borderRadius: 22,
     padding: 14,
     marginBottom: 20,
     width: '100%',
+    alignSelf: 'stretch',
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 10,
+    textAlign: 'center',
+    width: '100%',
   },
   settingItem: {
     flexDirection: 'row',
