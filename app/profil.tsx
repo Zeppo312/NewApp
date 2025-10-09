@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, ScrollView, View, TouchableOpacity, TextInput, Alert, SafeAreaView, StatusBar, Platform, Switch, ActivityIndicator } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
+// import { ThemedView } from '@/components/ThemedView';
 import { ThemedBackground } from '@/components/ThemedBackground';
-import { BackButton } from '@/components/BackButton';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/contexts/AuthContext';
@@ -14,6 +13,7 @@ import { getBabyInfo, saveBabyInfo } from '@/lib/baby';
 import { router, Stack } from 'expo-router';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import Header from '@/components/Header';
+import { LiquidGlassCard, GLASS_OVERLAY, LAYOUT_PAD } from '@/constants/DesignGuide';
 
 export default function ProfilScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -235,7 +235,7 @@ export default function ProfilScreen() {
       Alert.alert('Erfolg', 'Deine Daten wurden erfolgreich gespeichert.', [
         {
           text: 'OK',
-          onPress: () => router.push('/(tabs)/more')
+          onPress: () => router.push('/more')
         }
       ]);
     } catch (err) {
@@ -288,9 +288,14 @@ export default function ProfilScreen() {
       <Stack.Screen options={{ headerShown: false }} />
       <ThemedBackground style={styles.container}>
         <SafeAreaView style={styles.safeArea}>
-          <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
-          
-          <Header title="Profil" showBackButton />
+          <StatusBar hidden={true} />
+
+          <Header
+            title="Profil"
+            subtitle="Persönliche Daten und Babyinfos"
+            showBackButton
+            onBackPress={() => router.push('/more')}
+          />
           
           <ScrollView contentContainerStyle={styles.scrollContainer}>
 
@@ -301,11 +306,11 @@ export default function ProfilScreen() {
               </View>
             ) : (
               <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
-                {/* Benutzerinformationen */}
-                <ThemedView style={styles.section} lightColor="#FFFFFF" darkColor="#333333">
+                {/* Persönliche Daten – Glass Card */}
+                <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
                   <ThemedText style={styles.sectionTitle}>Persönliche Daten</ThemedText>
-
-                  <View style={styles.formGroup}>
+                  <View style={styles.cardInner}>
+                    <View style={styles.formGroup}>
                     <ThemedText style={styles.label}>E-Mail</ThemedText>
                     <TextInput
                       style={[styles.input, { color: theme.text, backgroundColor: 'rgba(200, 200, 200, 0.3)' }]}
@@ -314,9 +319,9 @@ export default function ProfilScreen() {
                       placeholder="Deine E-Mail-Adresse"
                       placeholderTextColor={theme.tabIconDefault}
                     />
-                  </View>
+                    </View>
 
-                  <View style={styles.formGroup}>
+                    <View style={styles.formGroup}>
                     <ThemedText style={styles.label}>Vorname</ThemedText>
                     <TextInput
                       style={[styles.input, { color: theme.text }]}
@@ -325,9 +330,9 @@ export default function ProfilScreen() {
                       placeholder="Dein Vorname"
                       placeholderTextColor={theme.tabIconDefault}
                     />
-                  </View>
+                    </View>
 
-                  <View style={styles.formGroup}>
+                    <View style={styles.formGroup}>
                     <ThemedText style={styles.label}>Nachname</ThemedText>
                     <TextInput
                       style={[styles.input, { color: theme.text }]}
@@ -336,9 +341,9 @@ export default function ProfilScreen() {
                       placeholder="Dein Nachname"
                       placeholderTextColor={theme.tabIconDefault}
                     />
-                  </View>
+                    </View>
 
-                  <View style={styles.formGroup}>
+                    <View style={styles.formGroup}>
                     <ThemedText style={styles.label}>Rolle</ThemedText>
                     <View style={styles.roleButtonsContainer}>
                       <TouchableOpacity
@@ -369,164 +374,128 @@ export default function ProfilScreen() {
                         </ThemedText>
                       </TouchableOpacity>
                     </View>
-                  </View>
-                </ThemedView>
+                    </View>
 
-                {/* Schwangerschafts-/Baby-Informationen */}
-                <ThemedView style={styles.section} lightColor="#FFFFFF" darkColor="#333333">
+                {/* Baby-Informationen – Glass Card */}
+                <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
                   <ThemedText style={styles.sectionTitle}>Baby-Informationen</ThemedText>
+                  <View style={styles.cardInner}>
+                    <View style={styles.formGroup}>
+                      <ThemedText style={styles.label}>Errechneter Geburtstermin</ThemedText>
+                      <TouchableOpacity
+                        style={styles.dateButton}
+                        onPress={() => setShowDueDatePicker(true)}
+                      >
+                        <ThemedText style={styles.dateButtonText}>
+                          {dueDate ? formatDate(dueDate) : 'Geburtstermin auswählen'}
+                        </ThemedText>
+                        <IconSymbol name="calendar" size={20} color={theme.tabIconDefault} />
+                      </TouchableOpacity>
+                      {showDueDatePicker && (
+                        <DateTimePicker
+                          value={dueDate || new Date()}
+                          mode="date"
+                          display="default"
+                          onChange={handleDueDateChange}
+                        />
+                      )}
+                    </View>
 
-                  <View style={styles.formGroup}>
-                    <ThemedText style={styles.label}>Errechneter Geburtstermin</ThemedText>
-                    <TouchableOpacity
-                      style={styles.dateButton}
-                      onPress={() => setShowDueDatePicker(true)}
-                    >
-                      <ThemedText style={styles.dateButtonText}>
-                        {dueDate ? formatDate(dueDate) : 'Geburtstermin auswählen'}
-                      </ThemedText>
-                      <IconSymbol name="calendar" size={20} color={theme.tabIconDefault} />
-                    </TouchableOpacity>
+                    <View style={styles.formGroup}>
+                      <ThemedText style={styles.label}>Baby bereits geboren?</ThemedText>
+                      <View style={styles.switchContainer}>
+                        <ThemedText style={styles.switchLabel}>
+                          {isBabyBorn ? 'Ja' : 'Nein'}
+                        </ThemedText>
+                        <Switch
+                          value={isBabyBorn}
+                          onValueChange={handleBabyBornChange}
+                          trackColor={{ false: '#D1D1D6', true: '#9DBEBB' }}
+                          thumbColor={isBabyBorn ? '#FFFFFF' : '#F4F4F4'}
+                          ios_backgroundColor="#D1D1D6"
+                        />
+                      </View>
+                    </View>
 
-                    {showDueDatePicker && (
-                      <DateTimePicker
-                        value={dueDate || new Date()}
-                        mode="date"
-                        display="default"
-                        onChange={handleDueDateChange}
+                    <View style={styles.formGroup}>
+                      <ThemedText style={styles.label}>Name des Babys</ThemedText>
+                      <TextInput
+                        style={[styles.input, { color: theme.text }]}
+                        value={babyName}
+                        onChangeText={setBabyName}
+                        placeholder="Name deines Babys"
+                        placeholderTextColor={theme.tabIconDefault}
                       />
+                    </View>
+
+                    <View style={styles.formGroup}>
+                      <ThemedText style={styles.label}>Geschlecht</ThemedText>
+                      <View style={styles.genderContainer}>
+                        <TouchableOpacity
+                          style={[styles.genderButton, babyGender === 'male' && styles.genderButtonActive]}
+                          onPress={() => setBabyGender('male')}
+                        >
+                          <IconSymbol name="person.fill" size={24} color={babyGender === 'male' ? '#FFFFFF' : theme.tabIconDefault} />
+                          <ThemedText style={[styles.genderButtonText, babyGender === 'male' && styles.genderButtonTextActive]}>Junge</ThemedText>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.genderButton, babyGender === 'female' && styles.genderButtonActive]}
+                          onPress={() => setBabyGender('female')}
+                        >
+                          <IconSymbol name="person.fill" size={24} color={babyGender === 'female' ? '#FFFFFF' : theme.tabIconDefault} />
+                          <ThemedText style={[styles.genderButtonText, babyGender === 'female' && styles.genderButtonTextActive]}>Mädchen</ThemedText>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+
+                    {isBabyBorn && (
+                      <>
+                        <View style={styles.formGroup}>
+                          <ThemedText style={styles.label}>Geburtsdatum</ThemedText>
+                          <TouchableOpacity style={styles.dateButton} onPress={() => setShowBirthDatePicker(true)}>
+                            <ThemedText style={styles.dateButtonText}>
+                              {birthDate ? formatDate(birthDate) : 'Geburtsdatum auswählen'}
+                            </ThemedText>
+                            <IconSymbol name="calendar" size={20} color={theme.tabIconDefault} />
+                          </TouchableOpacity>
+                          {showBirthDatePicker && (
+                            <DateTimePicker
+                              value={birthDate || new Date()}
+                              mode="date"
+                              display="default"
+                              onChange={handleBirthDateChange}
+                              maximumDate={new Date()}
+                            />
+                          )}
+                        </View>
+
+                        <View style={styles.formGroup}>
+                          <ThemedText style={styles.label}>Geburtsgewicht (g)</ThemedText>
+                          <TextInput
+                            style={[styles.input, { color: theme.text, fontVariant: ['tabular-nums'] }]}
+                            value={babyWeight}
+                            onChangeText={setBabyWeight}
+                            placeholder="z.B. 3500"
+                            placeholderTextColor={theme.tabIconDefault}
+                            keyboardType="numeric"
+                          />
+                        </View>
+
+                        <View style={styles.formGroup}>
+                          <ThemedText style={styles.label}>Größe bei Geburt (cm)</ThemedText>
+                          <TextInput
+                            style={[styles.input, { color: theme.text, fontVariant: ['tabular-nums'] }]}
+                            value={babyHeight}
+                            onChangeText={setBabyHeight}
+                            placeholder="z.B. 52"
+                            placeholderTextColor={theme.tabIconDefault}
+                            keyboardType="numeric"
+                          />
+                        </View>
+                      </>
                     )}
                   </View>
-
-                  <View style={styles.formGroup}>
-                    <ThemedText style={styles.label}>Baby bereits geboren?</ThemedText>
-                    <View style={styles.switchContainer}>
-                      <ThemedText style={styles.switchLabel}>
-                        {isBabyBorn ? 'Ja' : 'Nein'}
-                      </ThemedText>
-                      <Switch
-                        value={isBabyBorn}
-                        onValueChange={handleBabyBornChange}
-                        trackColor={{ false: '#767577', true: '#E9C9B6' }}
-                        thumbColor={isBabyBorn ? '#7D5A50' : '#f4f3f4'}
-                      />
-                    </View>
-                  </View>
-
-                  {/* Name des Babys - immer anzeigen */}
-                  <View style={styles.formGroup}>
-                    <ThemedText style={styles.label}>Name des Babys</ThemedText>
-                    <TextInput
-                      style={[styles.input, { color: theme.text }]}
-                      value={babyName}
-                      onChangeText={setBabyName}
-                      placeholder="Name deines Babys"
-                      placeholderTextColor={theme.tabIconDefault}
-                    />
-                  </View>
-
-                  {/* Geschlecht - immer anzeigen */}
-                  <View style={styles.formGroup}>
-                    <ThemedText style={styles.label}>Geschlecht</ThemedText>
-                    <View style={styles.genderContainer}>
-                      <TouchableOpacity
-                        style={[
-                          styles.genderButton,
-                          babyGender === 'male' && styles.genderButtonActive
-                        ]}
-                        onPress={() => setBabyGender('male')}
-                      >
-                        <IconSymbol
-                          name="person.fill"
-                          size={24}
-                          color={babyGender === 'male' ? '#FFFFFF' : theme.tabIconDefault}
-                        />
-                        <ThemedText
-                          style={[
-                            styles.genderButtonText,
-                            babyGender === 'male' && styles.genderButtonTextActive
-                          ]}
-                        >
-                          Junge
-                        </ThemedText>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={[
-                          styles.genderButton,
-                          babyGender === 'female' && styles.genderButtonActive
-                        ]}
-                        onPress={() => setBabyGender('female')}
-                      >
-                        <IconSymbol
-                          name="person.fill"
-                          size={24}
-                          color={babyGender === 'female' ? '#FFFFFF' : theme.tabIconDefault}
-                        />
-                        <ThemedText
-                          style={[
-                            styles.genderButtonText,
-                            babyGender === 'female' && styles.genderButtonTextActive
-                          ]}
-                        >
-                          Mädchen
-                        </ThemedText>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-
-                  {/* Geburtsdatum, Gewicht und Größe - nur anzeigen, wenn Baby geboren ist */}
-                  {isBabyBorn && (
-                    <>
-                      <View style={styles.formGroup}>
-                        <ThemedText style={styles.label}>Geburtsdatum</ThemedText>
-                        <TouchableOpacity
-                          style={styles.dateButton}
-                          onPress={() => setShowBirthDatePicker(true)}
-                        >
-                          <ThemedText style={styles.dateButtonText}>
-                            {birthDate ? formatDate(birthDate) : 'Geburtsdatum auswählen'}
-                          </ThemedText>
-                          <IconSymbol name="calendar" size={20} color={theme.tabIconDefault} />
-                        </TouchableOpacity>
-
-                        {showBirthDatePicker && (
-                          <DateTimePicker
-                            value={birthDate || new Date()}
-                            mode="date"
-                            display="default"
-                            onChange={handleBirthDateChange}
-                            maximumDate={new Date()}
-                          />
-                        )}
-                      </View>
-
-                      <View style={styles.formGroup}>
-                        <ThemedText style={styles.label}>Geburtsgewicht (g)</ThemedText>
-                        <TextInput
-                          style={[styles.input, { color: theme.text }]}
-                          value={babyWeight}
-                          onChangeText={setBabyWeight}
-                          placeholder="z.B. 3500"
-                          placeholderTextColor={theme.tabIconDefault}
-                          keyboardType="numeric"
-                        />
-                      </View>
-
-                      <View style={styles.formGroup}>
-                        <ThemedText style={styles.label}>Größe bei Geburt (cm)</ThemedText>
-                        <TextInput
-                          style={[styles.input, { color: theme.text }]}
-                          value={babyHeight}
-                          onChangeText={setBabyHeight}
-                          placeholder="z.B. 52"
-                          placeholderTextColor={theme.tabIconDefault}
-                          keyboardType="numeric"
-                        />
-                      </View>
-                    </>
-                  )}
-                </ThemedView>
+                </LiquidGlassCard>
 
                 {/* Speichern-Button */}
                 <TouchableOpacity
@@ -593,30 +562,25 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contentContainer: {
-    padding: 16,
-    paddingBottom: 32,
+    paddingHorizontal: LAYOUT_PAD,
+    paddingTop: 10,
+    paddingBottom: 40,
   },
-  section: {
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
+  sectionCard: { marginBottom: 16, borderRadius: 22, overflow: 'hidden', minHeight: 120 },
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    marginBottom: 16,
+    marginBottom: 12,
+    paddingHorizontal: 16,
   },
+  cardInner: { paddingHorizontal: 20, paddingBottom: 16 },
   formGroup: {
     marginBottom: 16,
   },
   label: {
     fontSize: 16,
     marginBottom: 8,
+    color: '#7D5A50',
   },
   input: {
     height: 48,
@@ -648,6 +612,7 @@ const styles = StyleSheet.create({
   },
   switchLabel: {
     fontSize: 16,
+    color: '#7D5A50',
   },
   genderContainer: {
     flexDirection: 'row',
@@ -678,7 +643,7 @@ const styles = StyleSheet.create({
   },
   saveButton: {
     backgroundColor: '#7D5A50',
-    borderRadius: 8,
+    borderRadius: 12,
     height: 48,
     alignItems: 'center',
     justifyContent: 'center',
