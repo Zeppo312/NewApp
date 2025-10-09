@@ -1,19 +1,41 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, TextInput, Alert, SafeAreaView, StatusBar, Platform, Switch, ActivityIndicator } from 'react-native';
+import {
+  StyleSheet,
+  ScrollView,
+  View,
+  TouchableOpacity,
+  TextInput,
+  Alert,
+  SafeAreaView,
+  StatusBar,
+  Platform,
+  Switch,
+  ActivityIndicator,
+  Dimensions,
+} from 'react-native';
+import { BlurView } from 'expo-blur';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { router, Stack } from 'expo-router';
+
 import { ThemedText } from '@/components/ThemedText';
-// import { ThemedView } from '@/components/ThemedView';
 import { ThemedBackground } from '@/components/ThemedBackground';
+import { IconSymbol } from '@/components/ui/IconSymbol';
+import Header from '@/components/Header';
+
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { LiquidGlassCard, GLASS_OVERLAY, LAYOUT_PAD } from '@/constants/DesignGuide';
+
 import { useAuth } from '@/contexts/AuthContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
-import { IconSymbol } from '@/components/ui/IconSymbol';
 import { supabase } from '@/lib/supabase';
 import { getBabyInfo, saveBabyInfo } from '@/lib/baby';
-import { router, Stack } from 'expo-router';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import Header from '@/components/Header';
-import { LiquidGlassCard, GLASS_OVERLAY, LAYOUT_PAD } from '@/constants/DesignGuide';
+
+const { width: screenWidth } = Dimensions.get('window');
+const TIMELINE_INSET = 8; // wie im Sleep-Tracker
+const PRIMARY_TEXT = '#7D5A50';
+const ACCENT_PURPLE = '#8E4EC6'; // Sleep-Tracker Akzent
+const BABY_BLUE = '#87CEEB';
 
 export default function ProfilScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -23,60 +45,50 @@ export default function ProfilScreen() {
 
   // Benutzerinformationen
   const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
-  const [email, setEmail] = useState('');
-  const [userRole, setUserRole] = useState<'mama' | 'papa' | ''>('');
+  const [lastName, setLastName]   = useState('');
+  const [email, setEmail]         = useState('');
+  const [userRole, setUserRole]   = useState<'mama' | 'papa' | ''>('');
 
   // Baby-Informationen
-  const [babyName, setBabyName] = useState('');
-  const [babyGender, setBabyGender] = useState<'male' | 'female' | ''>('');
-  const [dueDate, setDueDate] = useState<Date | null>(null);
-  const [birthDate, setBirthDate] = useState<Date | null>(null);
-  const [babyWeight, setBabyWeight] = useState('');
-  const [babyHeight, setBabyHeight] = useState('');
+  const [babyName, setBabyName]         = useState('');
+  const [babyGender, setBabyGender]     = useState<'male' | 'female' | ''>('');
+  const [dueDate, setDueDate]           = useState<Date | null>(null);
+  const [birthDate, setBirthDate]       = useState<Date | null>(null);
+  const [babyWeight, setBabyWeight]     = useState('');
+  const [babyHeight, setBabyHeight]     = useState('');
 
-  // UI-Status
-  const [isLoading, setIsLoading] = useState(true);
-  const [showDueDatePicker, setShowDueDatePicker] = useState(false);
+  // UI
+  const [isLoading, setIsLoading]                   = useState(true);
+  const [showDueDatePicker, setShowDueDatePicker]   = useState(false);
   const [showBirthDatePicker, setShowBirthDatePicker] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
+  const [isSaving, setIsSaving]                     = useState(false);
 
-  // Laden der Daten beim Start
   useEffect(() => {
-    if (user) {
-      loadUserData();
-    } else {
-      setIsLoading(false);
-    }
+    if (user) loadUserData();
+    else setIsLoading(false);
   }, [user]);
 
-  // Laden der Benutzerdaten aus verschiedenen Tabellen
   const loadUserData = async () => {
     try {
       setIsLoading(true);
 
-      // E-Mail aus dem Auth-Objekt
-      if (user?.email) {
-        setEmail(user.email);
-      }
+      if (user?.email) setEmail(user.email);
 
-      // Laden der Profildaten (Vorname, Nachname, Rolle)
+      // Profile
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('first_name, last_name, user_role')
         .eq('id', user?.id)
         .single();
 
-      if (profileError && profileError.code !== 'PGRST116') {
-        console.error('Error loading profile data:', profileError);
-      } else if (profileData) {
+      if (!profileError && profileData) {
         setFirstName(profileData.first_name || '');
         setLastName(profileData.last_name || '');
-        setUserRole(profileData.user_role || '');
+        setUserRole((profileData.user_role as any) || '');
       }
 
-      // Laden der Benutzereinstellungen (Geburtstermin, Baby geboren)
-      const { data: settingsData, error: settingsError } = await supabase
+      // Settings
+      const { data: settingsData } = await supabase
         .from('user_settings')
         .select('due_date, is_baby_born')
         .eq('user_id', user?.id)
@@ -84,203 +96,121 @@ export default function ProfilScreen() {
         .limit(1)
         .maybeSingle();
 
-      if (settingsError && settingsError.code !== 'PGRST116') {
-        console.error('Error loading user settings:', settingsError);
-      } else if (settingsData) {
-        if (settingsData.due_date) {
-          setDueDate(new Date(settingsData.due_date));
-        }
-        if (settingsData.is_baby_born !== undefined) {
-          setIsBabyBorn(settingsData.is_baby_born);
-        }
+      if (settingsData) {
+        if (settingsData.due_date) setDueDate(new Date(settingsData.due_date));
+        if (settingsData.is_baby_born !== undefined) setIsBabyBorn(settingsData.is_baby_born);
       }
 
-      // Laden der Baby-Informationen (Name, Geschlecht, Geburtsdatum, Gewicht, Größe)
+      // Baby info
       const { data: babyData } = await getBabyInfo();
       if (babyData) {
         setBabyName(babyData.name || '');
         setBabyGender(babyData.baby_gender || '');
         setBabyWeight(babyData.weight || '');
         setBabyHeight(babyData.height || '');
-        if (babyData.birth_date) {
-          setBirthDate(new Date(babyData.birth_date));
-        }
+        if (babyData.birth_date) setBirthDate(new Date(babyData.birth_date));
       }
-    } catch (err) {
-      console.error('Failed to load user data:', err);
+    } catch (e) {
+      console.error(e);
       Alert.alert('Fehler', 'Deine Daten konnten nicht geladen werden.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Speichern der Benutzerdaten in verschiedenen Tabellen
   const saveUserData = async () => {
     try {
       if (!user) {
         Alert.alert('Hinweis', 'Bitte melde dich an, um deine Daten zu speichern.');
         return;
       }
-
       setIsSaving(true);
 
-      // Speichern der Profildaten (Vorname, Nachname)
-      // Zuerst prüfen, ob bereits ein Eintrag existiert
-      const { data: existingProfile, error: fetchProfileError } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('id', user.id)
-        .maybeSingle();
-
-      if (fetchProfileError && fetchProfileError.code !== 'PGRST116') {
-        console.error('Error checking existing profile:', fetchProfileError);
-        throw new Error('Profildaten konnten nicht überprüft werden.');
-      }
+      // profiles upsert
+      const { data: existingProfile } = await supabase
+        .from('profiles').select('id').eq('id', user.id).maybeSingle();
 
       let profileResult;
-
-      if (existingProfile && existingProfile.id) {
-        // Wenn ein Eintrag existiert, aktualisieren wir diesen
-        profileResult = await supabase
-          .from('profiles')
-          .update({
-            first_name: firstName,
-            last_name: lastName,
-            user_role: userRole,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', user.id);
+      if (existingProfile?.id) {
+        profileResult = await supabase.from('profiles').update({
+          first_name: firstName,
+          last_name: lastName,
+          user_role: userRole,
+          updated_at: new Date().toISOString(),
+        }).eq('id', user.id);
       } else {
-        // Wenn kein Eintrag existiert, erstellen wir einen neuen
-        profileResult = await supabase
-          .from('profiles')
-          .insert({
-            id: user.id,
-            first_name: firstName,
-            last_name: lastName,
-            user_role: userRole,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          });
+        profileResult = await supabase.from('profiles').insert({
+          id: user.id,
+          first_name: firstName,
+          last_name: lastName,
+          user_role: userRole,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
       }
+      if (profileResult.error) throw profileResult.error;
 
-      if (profileResult.error) {
-        console.error('Error saving profile data:', profileResult.error);
-        throw new Error('Profildaten konnten nicht gespeichert werden.');
-      }
-
-      // Speichern der Benutzereinstellungen (Geburtstermin, Baby geboren)
-      // Zuerst prüfen, ob bereits ein Eintrag existiert
-      const { data: existingSettings, error: fetchError } = await supabase
-        .from('user_settings')
-        .select('id')
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      if (fetchError && fetchError.code !== 'PGRST116') {
-        console.error('Error checking existing settings:', fetchError);
-        throw new Error('Benutzereinstellungen konnten nicht überprüft werden.');
-      }
+      // user_settings upsert
+      const { data: existingSettings } = await supabase
+        .from('user_settings').select('id').eq('user_id', user.id).maybeSingle();
 
       let settingsResult;
-
-      if (existingSettings && existingSettings.id) {
-        // Wenn ein Eintrag existiert, aktualisieren wir diesen
-        settingsResult = await supabase
-          .from('user_settings')
-          .update({
-            due_date: dueDate ? dueDate.toISOString() : null,
-            is_baby_born: isBabyBorn,
-            theme: 'light', // Standard-Theme
-            notifications_enabled: true, // Benachrichtigungen standardmäßig aktiviert
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', existingSettings.id);
+      const base = {
+        due_date: dueDate ? dueDate.toISOString() : null,
+        is_baby_born: isBabyBorn,
+        theme: 'light',
+        notifications_enabled: true,
+        updated_at: new Date().toISOString(),
+      };
+      if (existingSettings?.id) {
+        settingsResult = await supabase.from('user_settings')
+          .update(base).eq('id', existingSettings.id);
       } else {
-        // Wenn kein Eintrag existiert, erstellen wir einen neuen
-        settingsResult = await supabase
-          .from('user_settings')
-          .insert({
-            user_id: user.id,
-            due_date: dueDate ? dueDate.toISOString() : null,
-            is_baby_born: isBabyBorn,
-            theme: 'light', // Standard-Theme
-            notifications_enabled: true, // Benachrichtigungen standardmäßig aktiviert
-            updated_at: new Date().toISOString()
-          });
+        settingsResult = await supabase.from('user_settings')
+          .insert({ user_id: user.id, ...base });
       }
+      if (settingsResult.error) throw settingsResult.error;
 
-      if (settingsResult.error) {
-        console.error('Error saving user settings:', settingsResult.error);
-        throw new Error('Benutzereinstellungen konnten nicht gespeichert werden.');
-      }
-
-      // Speichern der Baby-Informationen (Name, Geschlecht, Geburtsdatum, Gewicht, Größe)
-      const babyInfo = {
+      // baby info
+      const { error: babyError } = await saveBabyInfo({
         name: babyName,
         baby_gender: babyGender,
         birth_date: birthDate ? birthDate.toISOString() : null,
         weight: babyWeight,
-        height: babyHeight
-      };
+        height: babyHeight,
+      });
+      if (babyError) throw babyError;
 
-      const { error: babyError } = await saveBabyInfo(babyInfo);
-
-      if (babyError) {
-        console.error('Error saving baby info:', babyError);
-        throw new Error('Baby-Informationen konnten nicht gespeichert werden.');
-      }
-
-      // Zeige kurze Erfolgsmeldung und navigiere dann zurück zur "Mehr"-Seite
       Alert.alert('Erfolg', 'Deine Daten wurden erfolgreich gespeichert.', [
-        {
-          text: 'OK',
-          onPress: () => router.push('/more')
-        }
+        { text: 'OK', onPress: () => router.push('/more') },
       ]);
-    } catch (err) {
-      console.error('Failed to save user data:', err);
-      Alert.alert('Fehler', err instanceof Error ? err.message : 'Deine Daten konnten nicht gespeichert werden.');
+    } catch (e: any) {
+      console.error(e);
+      Alert.alert('Fehler', e?.message || 'Deine Daten konnten nicht gespeichert werden.');
     } finally {
       setIsSaving(false);
     }
   };
 
-  // Formatieren eines Datums für die Anzeige
-  const formatDate = (date: Date | null) => {
-    if (!date) return 'Nicht festgelegt';
-    return date.toLocaleDateString('de-DE', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric'
-    });
-  };
+  const formatDate = (date: Date | null) =>
+    !date
+      ? 'Nicht festgelegt'
+      : date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
-  // Handler für Änderungen am Geburtstermin
   const handleDueDateChange = (_: any, selectedDate?: Date) => {
     setShowDueDatePicker(Platform.OS === 'ios');
-    if (selectedDate) {
-      setDueDate(selectedDate);
-    }
+    if (selectedDate) setDueDate(selectedDate);
   };
-
-  // Handler für Änderungen am Geburtsdatum
   const handleBirthDateChange = (_: any, selectedDate?: Date) => {
     setShowBirthDatePicker(Platform.OS === 'ios');
     if (selectedDate) {
       setBirthDate(selectedDate);
-      // Wenn ein Geburtsdatum gesetzt wird, setzen wir is_baby_born automatisch auf true
       setIsBabyBorn(true);
     }
   };
-
-  // Handler für Änderungen am Baby-Status
   const handleBabyBornChange = (value: boolean) => {
     setIsBabyBorn(value);
-    // Wenn das Baby noch nicht geboren ist, setzen wir das Geburtsdatum zurück
-    if (!value) {
-      setBirthDate(null);
-    }
+    if (!value) setBirthDate(null);
   };
 
   return (
@@ -288,7 +218,7 @@ export default function ProfilScreen() {
       <Stack.Screen options={{ headerShown: false }} />
       <ThemedBackground style={styles.container}>
         <SafeAreaView style={styles.safeArea}>
-          <StatusBar hidden={true} />
+          <StatusBar hidden />
 
           <Header
             title="Profil"
@@ -296,106 +226,137 @@ export default function ProfilScreen() {
             showBackButton
             onBackPress={() => router.push('/more')}
           />
-          
-          <ScrollView contentContainerStyle={styles.scrollContainer}>
 
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={styles.scrollContent}
+          >
             {isLoading ? (
               <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color={theme.accent} />
                 <ThemedText style={styles.loadingText}>Lade Daten...</ThemedText>
               </View>
             ) : (
-              <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
-                {/* Persönliche Daten – Glass Card */}
-                <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
+              <>
+                {/* Persönliche Daten */}
+                <LiquidGlassCard
+                  style={[styles.sectionCard, { marginHorizontal: TIMELINE_INSET }]}
+                  intensity={26}
+                  overlayColor={GLASS_OVERLAY}
+                >
                   <ThemedText style={styles.sectionTitle}>Persönliche Daten</ThemedText>
                   <View style={styles.cardInner}>
                     <View style={styles.formGroup}>
-                    <ThemedText style={styles.label}>E-Mail</ThemedText>
-                    <TextInput
-                      style={[styles.input, { color: theme.text, backgroundColor: 'rgba(200, 200, 200, 0.3)' }]}
-                      value={email}
-                      editable={false}
-                      placeholder="Deine E-Mail-Adresse"
-                      placeholderTextColor={theme.tabIconDefault}
-                    />
+                      <ThemedText style={styles.label}>E-Mail</ThemedText>
+                      <TextInput
+                        style={[styles.inputGlass, styles.inputDisabled]}
+                        value={email}
+                        editable={false}
+                        placeholder="Deine E-Mail-Adresse"
+                        placeholderTextColor="#9BA0A6"
+                      />
                     </View>
 
                     <View style={styles.formGroup}>
-                    <ThemedText style={styles.label}>Vorname</ThemedText>
-                    <TextInput
-                      style={[styles.input, { color: theme.text }]}
-                      value={firstName}
-                      onChangeText={setFirstName}
-                      placeholder="Dein Vorname"
-                      placeholderTextColor={theme.tabIconDefault}
-                    />
+                      <ThemedText style={styles.label}>Vorname</ThemedText>
+                      <TextInput
+                        style={styles.inputGlass}
+                        value={firstName}
+                        onChangeText={setFirstName}
+                        placeholder="Dein Vorname"
+                        placeholderTextColor="#9BA0A6"
+                      />
                     </View>
 
                     <View style={styles.formGroup}>
-                    <ThemedText style={styles.label}>Nachname</ThemedText>
-                    <TextInput
-                      style={[styles.input, { color: theme.text }]}
-                      value={lastName}
-                      onChangeText={setLastName}
-                      placeholder="Dein Nachname"
-                      placeholderTextColor={theme.tabIconDefault}
-                    />
+                      <ThemedText style={styles.label}>Nachname</ThemedText>
+                      <TextInput
+                        style={styles.inputGlass}
+                        value={lastName}
+                        onChangeText={setLastName}
+                        placeholder="Dein Nachname"
+                        placeholderTextColor="#9BA0A6"
+                      />
                     </View>
 
                     <View style={styles.formGroup}>
-                    <ThemedText style={styles.label}>Rolle</ThemedText>
-                    <View style={styles.roleButtonsContainer}>
-                      <TouchableOpacity
-                        style={[styles.roleButton, userRole === 'mama' && styles.roleButtonActive]}
-                        onPress={() => setUserRole('mama')}
-                      >
-                        <IconSymbol
-                          name="person.fill"
-                          size={24}
-                          color={userRole === 'mama' ? '#FFFFFF' : theme.tabIconDefault}
-                        />
-                        <ThemedText style={[styles.roleButtonText, userRole === 'mama' && styles.roleButtonTextActive]}>
-                          Mama
-                        </ThemedText>
-                      </TouchableOpacity>
+                      <ThemedText style={styles.label}>Rolle</ThemedText>
+                      <View style={styles.duoRow}>
+                        <TouchableOpacity
+                          style={[
+                            styles.pickButton,
+                            userRole === 'mama' && styles.pickButtonActive,
+                          ]}
+                          onPress={() => setUserRole('mama')}
+                          activeOpacity={0.9}
+                        >
+                          <IconSymbol
+                            name="person.fill"
+                            size={24}
+                            color={userRole === 'mama' ? '#FFFFFF' : '#7D7D85'}
+                          />
+                          <ThemedText
+                            style={[
+                              styles.pickButtonText,
+                              userRole === 'mama' && styles.pickButtonTextActive,
+                            ]}
+                          >
+                            Mama
+                          </ThemedText>
+                        </TouchableOpacity>
 
-                      <TouchableOpacity
-                        style={[styles.roleButton, userRole === 'papa' && styles.roleButtonActive]}
-                        onPress={() => setUserRole('papa')}
-                      >
-                        <IconSymbol
-                          name="person.fill"
-                          size={24}
-                          color={userRole === 'papa' ? '#FFFFFF' : theme.tabIconDefault}
-                        />
-                        <ThemedText style={[styles.roleButtonText, userRole === 'papa' && styles.roleButtonTextActive]}>
-                          Papa
-                        </ThemedText>
-                      </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[
+                            styles.pickButton,
+                            userRole === 'papa' && styles.pickButtonActive,
+                          ]}
+                          onPress={() => setUserRole('papa')}
+                          activeOpacity={0.9}
+                        >
+                          <IconSymbol
+                            name="person.fill"
+                            size={24}
+                            color={userRole === 'papa' ? '#FFFFFF' : '#7D7D85'}
+                          />
+                          <ThemedText
+                            style={[
+                              styles.pickButtonText,
+                              userRole === 'papa' && styles.pickButtonTextActive,
+                            ]}
+                          >
+                            Papa
+                          </ThemedText>
+                        </TouchableOpacity>
+                      </View>
                     </View>
-                    </View>
+                  </View>
+                </LiquidGlassCard>
 
-                {/* Baby-Informationen – Glass Card */}
-                <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
+                {/* Baby-Infos */}
+                <LiquidGlassCard
+                  style={[styles.sectionCard, { marginHorizontal: TIMELINE_INSET }]}
+                  intensity={26}
+                  overlayColor={GLASS_OVERLAY}
+                >
                   <ThemedText style={styles.sectionTitle}>Baby-Informationen</ThemedText>
                   <View style={styles.cardInner}>
                     <View style={styles.formGroup}>
                       <ThemedText style={styles.label}>Errechneter Geburtstermin</ThemedText>
                       <TouchableOpacity
-                        style={styles.dateButton}
+                        style={styles.dateButtonGlass}
                         onPress={() => setShowDueDatePicker(true)}
+                        activeOpacity={0.9}
                       >
                         <ThemedText style={styles.dateButtonText}>
                           {dueDate ? formatDate(dueDate) : 'Geburtstermin auswählen'}
                         </ThemedText>
-                        <IconSymbol name="calendar" size={20} color={theme.tabIconDefault} />
+                        <IconSymbol name="calendar" size={20} color="#7D7D85" />
                       </TouchableOpacity>
                       {showDueDatePicker && (
                         <DateTimePicker
                           value={dueDate || new Date()}
                           mode="date"
-                          display="default"
+                          display={Platform.OS === 'ios' ? 'compact' : 'default'}
                           onChange={handleDueDateChange}
                         />
                       )}
@@ -410,6 +371,7 @@ export default function ProfilScreen() {
                         <Switch
                           value={isBabyBorn}
                           onValueChange={handleBabyBornChange}
+                          disabled={isSaving}
                           trackColor={{ false: '#D1D1D6', true: '#9DBEBB' }}
                           thumbColor={isBabyBorn ? '#FFFFFF' : '#F4F4F4'}
                           ios_backgroundColor="#D1D1D6"
@@ -420,30 +382,61 @@ export default function ProfilScreen() {
                     <View style={styles.formGroup}>
                       <ThemedText style={styles.label}>Name des Babys</ThemedText>
                       <TextInput
-                        style={[styles.input, { color: theme.text }]}
+                        style={styles.inputGlass}
                         value={babyName}
                         onChangeText={setBabyName}
                         placeholder="Name deines Babys"
-                        placeholderTextColor={theme.tabIconDefault}
+                        placeholderTextColor="#9BA0A6"
                       />
                     </View>
 
                     <View style={styles.formGroup}>
                       <ThemedText style={styles.label}>Geschlecht</ThemedText>
-                      <View style={styles.genderContainer}>
+                      <View style={styles.duoRow}>
                         <TouchableOpacity
-                          style={[styles.genderButton, babyGender === 'male' && styles.genderButtonActive]}
+                          style={[
+                            styles.pickButton,
+                            babyGender === 'male' && styles.pickButtonActive,
+                          ]}
                           onPress={() => setBabyGender('male')}
+                          activeOpacity={0.9}
                         >
-                          <IconSymbol name="person.fill" size={24} color={babyGender === 'male' ? '#FFFFFF' : theme.tabIconDefault} />
-                          <ThemedText style={[styles.genderButtonText, babyGender === 'male' && styles.genderButtonTextActive]}>Junge</ThemedText>
+                          <IconSymbol
+                            name="person.fill"
+                            size={24}
+                            color={babyGender === 'male' ? '#FFFFFF' : '#7D7D85'}
+                          />
+                          <ThemedText
+                            style={[
+                              styles.pickButtonText,
+                              babyGender === 'male' && styles.pickButtonTextActive,
+                            ]}
+                          >
+                            Junge
+                          </ThemedText>
                         </TouchableOpacity>
+
                         <TouchableOpacity
-                          style={[styles.genderButton, babyGender === 'female' && styles.genderButtonActive]}
+                          style={[
+                            styles.pickButton,
+                            babyGender === 'female' && styles.pickButtonActive,
+                          ]}
                           onPress={() => setBabyGender('female')}
+                          activeOpacity={0.9}
                         >
-                          <IconSymbol name="person.fill" size={24} color={babyGender === 'female' ? '#FFFFFF' : theme.tabIconDefault} />
-                          <ThemedText style={[styles.genderButtonText, babyGender === 'female' && styles.genderButtonTextActive]}>Mädchen</ThemedText>
+                          <IconSymbol
+                            name="person.fill"
+                            size={24}
+                            color={babyGender === 'female' ? '#FFFFFF' : '#7D7D85'}
+                          />
+                          <ThemedText
+                            style={[
+                              styles.pickButtonText,
+                              babyGender === 'female' && styles.pickButtonTextActive,
+                            ]}
+                          >
+                            Mädchen
+                          </ThemedText>
                         </TouchableOpacity>
                       </View>
                     </View>
@@ -452,66 +445,88 @@ export default function ProfilScreen() {
                       <>
                         <View style={styles.formGroup}>
                           <ThemedText style={styles.label}>Geburtsdatum</ThemedText>
-                          <TouchableOpacity style={styles.dateButton} onPress={() => setShowBirthDatePicker(true)}>
+                          <TouchableOpacity
+                            style={styles.dateButtonGlass}
+                            onPress={() => setShowBirthDatePicker(true)}
+                            activeOpacity={0.9}
+                          >
                             <ThemedText style={styles.dateButtonText}>
                               {birthDate ? formatDate(birthDate) : 'Geburtsdatum auswählen'}
                             </ThemedText>
-                            <IconSymbol name="calendar" size={20} color={theme.tabIconDefault} />
+                            <IconSymbol name="calendar" size={20} color="#7D7D85" />
                           </TouchableOpacity>
                           {showBirthDatePicker && (
                             <DateTimePicker
                               value={birthDate || new Date()}
                               mode="date"
-                              display="default"
+                              display={Platform.OS === 'ios' ? 'compact' : 'default'}
                               onChange={handleBirthDateChange}
                               maximumDate={new Date()}
                             />
                           )}
                         </View>
 
-                        <View style={styles.formGroup}>
-                          <ThemedText style={styles.label}>Geburtsgewicht (g)</ThemedText>
-                          <TextInput
-                            style={[styles.input, { color: theme.text, fontVariant: ['tabular-nums'] }]}
-                            value={babyWeight}
-                            onChangeText={setBabyWeight}
-                            placeholder="z.B. 3500"
-                            placeholderTextColor={theme.tabIconDefault}
-                            keyboardType="numeric"
-                          />
-                        </View>
+                        <View style={styles.formRow2}>
+                          <View style={[styles.formGroup, { flex: 1 }]}>
+                            <ThemedText style={styles.label}>Geburtsgewicht (g)</ThemedText>
+                            <TextInput
+                              style={[styles.inputGlass, styles.numeric]}
+                              value={babyWeight}
+                              onChangeText={setBabyWeight}
+                              placeholder="z.B. 3500"
+                              placeholderTextColor="#9BA0A6"
+                              keyboardType="numeric"
+                            />
+                          </View>
 
-                        <View style={styles.formGroup}>
-                          <ThemedText style={styles.label}>Größe bei Geburt (cm)</ThemedText>
-                          <TextInput
-                            style={[styles.input, { color: theme.text, fontVariant: ['tabular-nums'] }]}
-                            value={babyHeight}
-                            onChangeText={setBabyHeight}
-                            placeholder="z.B. 52"
-                            placeholderTextColor={theme.tabIconDefault}
-                            keyboardType="numeric"
-                          />
+                          <View style={[styles.formGroup, { flex: 1 }]}>
+                            <ThemedText style={styles.label}>Größe (cm)</ThemedText>
+                            <TextInput
+                              style={[styles.inputGlass, styles.numeric]}
+                              value={babyHeight}
+                              onChangeText={setBabyHeight}
+                              placeholder="z.B. 52"
+                              placeholderTextColor="#9BA0A6"
+                              keyboardType="numeric"
+                            />
+                          </View>
                         </View>
                       </>
                     )}
                   </View>
                 </LiquidGlassCard>
 
-                {/* Speichern-Button */}
-                <TouchableOpacity
-                  style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
-                  onPress={saveUserData}
-                  disabled={isSaving}
-                >
-                  {isSaving ? (
-                    <ActivityIndicator size="small" color="#FFFFFF" />
-                  ) : (
-                    <ThemedText style={styles.saveButtonText}>
-                      Änderungen speichern
-                    </ThemedText>
-                  )}
-                </TouchableOpacity>
-              </ScrollView>
+                {/* Speichern – im Action-Card Look */}
+                <View style={{ marginHorizontal: TIMELINE_INSET }}>
+                  <TouchableOpacity
+                    onPress={saveUserData}
+                    activeOpacity={0.9}
+                    disabled={isSaving}
+                    style={{ borderRadius: 22, overflow: 'hidden', marginTop: 12 }}
+                  >
+                    <BlurView intensity={24} tint="light" style={{ borderRadius: 22, overflow: 'hidden' }}>
+                      <View
+                        style={[
+                          styles.saveCard,
+                          { backgroundColor: isSaving ? 'rgba(168,168,168,0.5)' : 'rgba(220,200,255,0.6)' },
+                        ]}
+                      >
+                        <View style={[styles.saveIconWrap, { backgroundColor: ACCENT_PURPLE }]}>
+                          {isSaving ? (
+                            <ActivityIndicator color="#fff" />
+                          ) : (
+                            <IconSymbol name="tray.and.arrow.down.fill" size={26} color="#FFFFFF" />
+                          )}
+                        </View>
+                        <ThemedText style={styles.saveTitle}>
+                          {isSaving ? 'Speichern…' : 'Änderungen speichern'}
+                        </ThemedText>
+                        <ThemedText style={styles.saveSub}>Deine Daten sicher aktualisieren</ThemedText>
+                      </View>
+                    </BlurView>
+                  </TouchableOpacity>
+                </View>
+              </>
             )}
           </ScrollView>
         </SafeAreaView>
@@ -521,179 +536,116 @@ export default function ProfilScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  backgroundImage: {
-    flex: 1,
-    width: '100%',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
-    justifyContent: 'center',
-    position: 'relative',
-  },
-  backButtonContainer: {
-    position: 'absolute',
-    left: 16,
-    top: 0,
-    bottom: 0,
-    justifyContent: 'center',
-    zIndex: 10,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    textAlign: 'center',
-  },
-  // Alte Back-Button Styles wurden entfernt und in den Header integriert
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  contentContainer: {
+  container: { flex: 1 },
+  safeArea: { flex: 1, paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0 },
+
+  // Scroll rhythm wie Sleep-Tracker
+  scrollContent: {
     paddingHorizontal: LAYOUT_PAD,
+    paddingBottom: 140,
     paddingTop: 10,
-    paddingBottom: 40,
   },
-  sectionCard: { marginBottom: 16, borderRadius: 22, overflow: 'hidden', minHeight: 120 },
+
+  loadingContainer: { padding: 20, alignItems: 'center', justifyContent: 'center' },
+  loadingText: { marginTop: 10, fontSize: 16, color: PRIMARY_TEXT },
+
+  sectionCard: { marginBottom: 16, borderRadius: 22, overflow: 'hidden' },
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 12,
     paddingHorizontal: 16,
+    color: PRIMARY_TEXT,
+    textAlign: 'center',
   },
   cardInner: { paddingHorizontal: 20, paddingBottom: 16 },
-  formGroup: {
-    marginBottom: 16,
-  },
-  label: {
-    fontSize: 16,
-    marginBottom: 8,
-    color: '#7D5A50',
-  },
-  input: {
+
+  formGroup: { marginBottom: 16 },
+  formRow2: { flexDirection: 'row', gap: 12 },
+
+  label: { fontSize: 14, marginBottom: 8, color: PRIMARY_TEXT, fontWeight: '700' },
+
+  // Glas-Inputs wie Sleep-Tracker
+  inputGlass: {
     height: 48,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    fontSize: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.7)',
-  },
-  dateButton: {
-    height: 48,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: 'rgba(255, 255, 255, 0.7)',
-  },
-  dateButtonText: {
-    fontSize: 16,
-  },
-  switchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  switchLabel: {
-    fontSize: 16,
-    color: '#7D5A50',
-  },
-  genderContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  genderButton: {
-    flex: 1,
-    height: 48,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 8,
-    marginHorizontal: 4,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.7)',
-  },
-  genderButtonActive: {
-    backgroundColor: '#7D5A50',
-    borderColor: '#7D5A50',
-  },
-  genderButtonText: {
-    fontSize: 16,
-    marginLeft: 8,
-  },
-  genderButtonTextActive: {
-    color: '#FFFFFF',
-  },
-  saveButton: {
-    backgroundColor: '#7D5A50',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.6)',
     borderRadius: 12,
+    paddingHorizontal: 12,
+    fontSize: 16,
+    backgroundColor: 'rgba(255,255,255,0.7)',
+    color: '#333',
+  },
+  inputDisabled: {
+    backgroundColor: 'rgba(200,200,200,0.35)',
+  },
+  numeric: { fontVariant: ['tabular-nums'] },
+
+  // Glas-DateButton
+  dateButtonGlass: {
     height: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 16,
-  },
-  saveButtonDisabled: {
-    backgroundColor: '#A89992',
-  },
-  saveButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  roleButtonsContainer: {
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.6)',
+    borderRadius: 12,
+    paddingHorizontal: 12,
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
+    backgroundColor: 'rgba(255,255,255,0.7)',
   },
-  roleButton: {
+  dateButtonText: { fontSize: 16, color: '#333' },
+
+  // Duo-Buttons (Rolle/Geschlecht) – Sleep-Tracker Look
+  duoRow: { flexDirection: 'row', gap: 8 },
+  pickButton: {
     flex: 1,
-    height: 80,
+    height: 56,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.6)',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    backgroundColor: 'rgba(255,255,255,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  pickButtonActive: {
+    backgroundColor: ACCENT_PURPLE,
+    borderColor: 'rgba(255,255,255,0.85)',
+  },
+  pickButtonText: { fontSize: 16, color: '#7D7D85', fontWeight: '700' },
+  pickButtonTextActive: { color: '#FFFFFF', fontWeight: '800' },
+
+  // Switch
+  switchContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  switchLabel: { fontSize: 16, color: PRIMARY_TEXT, fontWeight: '700' },
+
+  // Save Action-Card (wie Sleep-Tracker Karten)
+  saveCard: {
+    borderRadius: 22,
+    padding: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 128,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.6)',
+  },
+  saveIconWrap: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E9C9B6',
-    borderRadius: 10,
-    marginHorizontal: 5,
-    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+    marginBottom: 10,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.6)',
+    shadowColor: 'rgba(255, 255, 255, 0.3)',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.12,
+    shadowRadius: 2,
+    elevation: 4,
   },
-  roleButtonActive: {
-    backgroundColor: '#9DBEBB',
-    borderColor: '#9DBEBB',
-  },
-  roleButtonText: {
-    fontSize: 16,
-    marginTop: 5,
-  },
-  roleButtonTextActive: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-  },
-  backButtonInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 8,
-  },
-  safeArea: {
-    flex: 1,
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
-  },
-  scrollContainer: {
-    //padding: 16,
-  },
+  saveTitle: { fontSize: 16, fontWeight: '800', color: PRIMARY_TEXT, marginBottom: 4 },
+  saveSub: { fontSize: 11, color: PRIMARY_TEXT, opacity: 0.8 },
 });
