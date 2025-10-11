@@ -7,7 +7,8 @@ import { pregnancyWeekInfo, pregnancyWeekCircleInfo } from '@/constants/Pregnanc
 import { babySizeComparison } from '@/constants/BabySizeComparison';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { router } from 'expo-router';
-import Svg, { Circle, G, Text as SvgText } from 'react-native-svg';
+import Svg, { Circle, G, Text as SvgText, Defs, LinearGradient, Stop } from 'react-native-svg';
+import { PRIMARY, TEXT_PRIMARY, GLASS_BORDER, FONT_SM, FONT_MD, FONT_LG, RADIUS } from '@/constants/DesignGuide';
 
 // Hilfsfunktion zum Aufteilen von Text in mehrere Zeilen
 const splitTextIntoLines = (text: string, maxCharsPerLine: number): string[] => {
@@ -41,9 +42,20 @@ const overdueInfo = {
 
 interface CountdownTimerProps {
   dueDate: Date | null;
+  // Darstellung: 'standalone' hat eigenen Card-Look, 'embedded' ist für GlassCards
+  variant?: 'standalone' | 'embedded';
+  // Optional: Babygrößen-Block unterhalb ein-/ausblenden
+  showBabySize?: boolean;
+  // Optional: eigener Handler beim Tippen auf den Kreis
+  onPressRing?: () => void;
 }
 
-const CountdownTimer: React.FC<CountdownTimerProps> = ({ dueDate }) => {
+const CountdownTimer: React.FC<CountdownTimerProps> = ({ 
+  dueDate,
+  variant = 'standalone',
+  showBabySize = true,
+  onPressRing,
+}) => {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const [daysLeft, setDaysLeft] = useState<number | null>(null);
@@ -172,50 +184,78 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({ dueDate }) => {
   };
 
   // Erhöhe die Größe des Kreises etwas
-  const size = Dimensions.get('window').width * 0.75; // Größerer Kreis (von 0.7 auf 0.75)
-  const strokeWidth = 15;
+  const size = Dimensions.get('window').width * 0.75; // Größerer Kreis (Design ähnlich Sleep-Tracker)
+  const strokeWidth = 14;
   const radius = (size - strokeWidth) / 2;
   const circumference = radius * 2 * Math.PI;
   const strokeDashoffset = circumference * (1 - progress);
+  const WARN = '#E57373';
+  const bgStroke = colorScheme === 'dark' ? 'rgba(255,255,255,0.22)' : GLASS_BORDER;
+  const bgStrokeGlass = colorScheme === 'dark' ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.55)';
 
   return (
     <ThemedView 
       style={[
-        styles.container, 
-        isOverdue && { borderWidth: 2, borderColor: colorScheme === 'dark' ? '#E9C9B6' : '#E9C9B6' }
-      ]} 
-      lightColor={theme.card} 
-      darkColor={theme.card}
+        styles.container,
+        variant === 'embedded' && styles.embeddedContainer,
+        variant === 'standalone' && isOverdue && { borderWidth: 2, borderColor: colorScheme === 'dark' ? '#E9C9B6' : '#E9C9B6' },
+      ]}
+      lightColor={variant === 'embedded' ? 'transparent' : theme.card}
+      darkColor={variant === 'embedded' ? 'transparent' : theme.card}
     >
       <TouchableOpacity
         style={styles.countdownContainer}
-        onPress={navigateToStats}
+        onPress={onPressRing ? onPressRing : navigateToStats}
         activeOpacity={0.8}
       >
         <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-          {/* Hintergrundkreis */}
+          <Defs>
+            {/* Gradient für den Fortschrittsring (Liquid Glass Stil) */}
+            <LinearGradient id="progressGradient" x1="0" y1="0" x2={String(size)} y2={String(size)} gradientUnits="userSpaceOnUse">
+              <Stop offset="0%" stopColor={colorScheme === 'dark' ? '#C9B3E8' : '#E6D8F7'} stopOpacity={1} />
+              <Stop offset="55%" stopColor={colorScheme === 'dark' ? '#A677D8' : '#B88CE8'} stopOpacity={1} />
+              <Stop offset="100%" stopColor={PRIMARY} stopOpacity={1} />
+            </LinearGradient>
+            {/* Gradient für Überfälligkeit (warme Glas-Töne) */}
+            <LinearGradient id="overdueGradient" x1="0" y1="0" x2={String(size)} y2={String(size)} gradientUnits="userSpaceOnUse">
+              <Stop offset="0%" stopColor="#FFC1B5" stopOpacity={1} />
+              <Stop offset="55%" stopColor="#FF9E90" stopOpacity={1} />
+              <Stop offset="100%" stopColor={WARN} stopOpacity={1} />
+            </LinearGradient>
+          </Defs>
+          {/* Hintergrundkreis (Glass/Border Ton) */}
           <Circle
             cx={size / 2}
             cy={size / 2}
             r={radius}
-            stroke={colorScheme === 'dark' ? '#3D3330' : '#F2E2CE'}
+            stroke={bgStrokeGlass}
             strokeWidth={strokeWidth}
             fill="none"
           />
 
-          {/* Fortschrittskreis */}
+          {/* Fortschrittskreis (Accent) */}
           <Circle
             cx={size / 2}
             cy={size / 2}
             r={radius}
-            stroke={
-              isOverdue 
-                ? colorScheme === 'dark' ? '#E9C9B6' : '#E9C9B6' 
-                : colorScheme === 'dark' ? '#A5D6D9' : '#9DBEBB'
-            }
+            stroke={isOverdue ? 'url(#overdueGradient)' : 'url(#progressGradient)'}
             strokeWidth={strokeWidth}
             strokeDasharray={`${circumference} ${circumference}`}
             strokeDashoffset={strokeDashoffset}
+            strokeLinecap="round"
+            fill="none"
+            transform={`rotate(-90, ${size / 2}, ${size / 2})`}
+          />
+
+          {/* Glänzender Highlight-Bogen (subtiler Glas-Reflex) */}
+          <Circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            stroke={colorScheme === 'dark' ? 'rgba(255,255,255,0.28)' : 'rgba(255,255,255,0.45)'}
+            strokeWidth={strokeWidth * 0.55}
+            strokeDasharray={`${(circumference * 0.22).toFixed(2)} ${(circumference).toFixed(2)}`}
+            strokeDashoffset={(circumference * 0.15).toFixed(2)}
             strokeLinecap="round"
             fill="none"
             transform={`rotate(-90, ${size / 2}, ${size / 2})`}
@@ -227,12 +267,12 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({ dueDate }) => {
               x={size / 2}
               y={size / 2 - 45}
               textAnchor="middle"
-              fontSize="70"
+              fontSize="64"
               fontWeight="bold"
               fill={
-                isOverdue 
-                  ? colorScheme === 'dark' ? '#E9C9B6' : '#5C4033'
-                  : colorScheme === 'dark' ? '#FFFFFF' : '#5C4033'
+                isOverdue
+                  ? (colorScheme === 'dark' ? '#FFFFFF' : TEXT_PRIMARY)
+                  : (colorScheme === 'dark' ? '#FFFFFF' : TEXT_PRIMARY)
               }
             >
               {currentWeek}
@@ -241,8 +281,8 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({ dueDate }) => {
               x={size / 2}
               y={size / 2}
               textAnchor="middle"
-              fontSize="24"
-              fill={colorScheme === 'dark' ? '#FFFFFF' : '#5C4033'}
+              fontSize="22"
+              fill={colorScheme === 'dark' ? '#FFFFFF' : TEXT_PRIMARY}
             >
               SSW
             </SvgText>
@@ -252,11 +292,7 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({ dueDate }) => {
               textAnchor="middle"
               fontSize="22"
               fontWeight="bold"
-              fill={
-                isOverdue 
-                  ? colorScheme === 'dark' ? '#E9C9B6' : '#E9C9B6'
-                  : colorScheme === 'dark' ? '#A5D6D9' : '#9DBEBB'
-              }
+              fill={isOverdue ? WARN : PRIMARY}
             >
               {isOverdue 
                 ? 'Überfällig' 
@@ -276,7 +312,7 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({ dueDate }) => {
                     textAnchor="middle"
                     fontSize="15"
                     fontWeight="500"
-                    fill={colorScheme === 'dark' ? '#F8F0E5' : '#5C4033'}
+                    fill={colorScheme === 'dark' ? '#FFFFFF' : TEXT_PRIMARY}
                   >
                     Geburtszeit! Dein
                   </SvgText>
@@ -286,7 +322,7 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({ dueDate }) => {
                     textAnchor="middle"
                     fontSize="15"
                     fontWeight="500"
-                    fill={colorScheme === 'dark' ? '#F8F0E5' : '#5C4033'}
+                    fill={colorScheme === 'dark' ? '#FFFFFF' : TEXT_PRIMARY}
                   >
                     Baby macht sich auf
                   </SvgText>
@@ -296,7 +332,7 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({ dueDate }) => {
                     textAnchor="middle"
                     fontSize="15"
                     fontWeight="500"
-                    fill={colorScheme === 'dark' ? '#F8F0E5' : '#5C4033'}
+                    fill={colorScheme === 'dark' ? '#FFFFFF' : TEXT_PRIMARY}
                   >
                     den Weg in die Welt.
                   </SvgText>
@@ -319,7 +355,7 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({ dueDate }) => {
                       textAnchor="middle"
                       fontSize="15"
                       fontWeight="500"
-                      fill={colorScheme === 'dark' ? '#F8F0E5' : '#5C4033'}
+                      fill={colorScheme === 'dark' ? '#FFFFFF' : TEXT_PRIMARY}
                     >
                       {line}
                     </SvgText>
@@ -329,19 +365,18 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({ dueDate }) => {
           </G>
         </Svg>
 
-        <ThemedText style={styles.tapHint}>Tippen für Details</ThemedText>
+        <ThemedText style={[styles.tapHint]} lightColor={TEXT_PRIMARY} darkColor={TEXT_PRIMARY}>
+          Tippen für Details
+        </ThemedText>
 
         {/* Tage bis zur Geburt oder Tage überfällig */}
         <View style={styles.detailsContainer}>
           <View style={styles.detailRow}>
-            <ThemedText style={[
-              styles.detailLabel,
-              { color: colorScheme === 'dark' ? '#E9C9B6' : '#E9C9B6' }
-            ]}>Noch:</ThemedText>
+            <ThemedText style={styles.detailLabel} lightColor={TEXT_PRIMARY} darkColor={TEXT_PRIMARY}>Noch:</ThemedText>
             <ThemedText 
               style={[
                 styles.detailValue,
-                isOverdue && { color: colorScheme === 'dark' ? '#E9C9B6' : '#E9C9B6' }
+                { color: isOverdue ? WARN : PRIMARY }
               ]}
             >
               {daysLeft !== null ? (
@@ -353,22 +388,16 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({ dueDate }) => {
           </View>
           
           <View style={styles.detailRow}>
-            <ThemedText style={[
-              styles.detailLabel,
-              { color: colorScheme === 'dark' ? '#E9C9B6' : '#E9C9B6' }
-            ]}>Genau:</ThemedText>
-            <ThemedText style={styles.detailValue}>
+            <ThemedText style={styles.detailLabel} lightColor={TEXT_PRIMARY} darkColor={TEXT_PRIMARY}>Genau:</ThemedText>
+            <ThemedText style={[styles.detailValue, { color: TEXT_PRIMARY }]}>
               {currentWeek !== null && currentDay !== null ? 
                 `SSW ${currentWeek-1}+${currentDay}` : ''}
             </ThemedText>
           </View>
           
           <View style={styles.detailRow}>
-            <ThemedText style={[
-              styles.detailLabel,
-              { color: colorScheme === 'dark' ? '#E9C9B6' : '#E9C9B6' }
-            ]}>Geschafft:</ThemedText>
-            <ThemedText style={[styles.detailValue, { color: '#9DBEBB' }]}>
+            <ThemedText style={styles.detailLabel} lightColor={TEXT_PRIMARY} darkColor={TEXT_PRIMARY}>Geschafft:</ThemedText>
+            <ThemedText style={[styles.detailValue, { color: PRIMARY }]}>
               {progress ? `${Math.round(progress * 100)}%` : '0%'}
             </ThemedText>
           </View>
@@ -376,18 +405,15 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({ dueDate }) => {
       </TouchableOpacity>
 
       {/* Container für die Babygröße */}
-      {currentWeek && currentWeek >= 4 && (
+      {showBabySize && currentWeek && currentWeek >= 4 && (
         <TouchableOpacity
           style={styles.babySizeContainer}
           onPress={navigateToBabySize}
           activeOpacity={0.8}
         >
-          <ThemedView style={styles.babySizeInnerContainer} lightColor={theme.card} darkColor={theme.card}>
-            <ThemedText style={styles.babySizeLabel}>Babygröße:</ThemedText>
-            <ThemedText style={[
-              styles.babySizeValue,
-              { color: colorScheme === 'dark' ? '#A5D6D9' : '#9DBEBB' }
-            ]}>
+          <ThemedView style={styles.babySizeInnerContainer} lightColor={'transparent'} darkColor={'transparent'}>
+            <ThemedText style={styles.babySizeLabel} lightColor={TEXT_PRIMARY} darkColor={TEXT_PRIMARY}>Babygröße:</ThemedText>
+            <ThemedText style={[styles.babySizeValue, { color: PRIMARY }]}>
               {babySizeComparison[currentWeek] || "Noch nicht berechenbar"}
             </ThemedText>
             <ThemedText style={styles.babySizeTapHint}>Tippen für mehr Details</ThemedText>
@@ -403,7 +429,8 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 20,
+    borderRadius: RADIUS,
+    overflow: 'hidden',
     padding: 20,
     marginBottom: 20,
     shadowColor: '#000',
@@ -411,6 +438,17 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+  },
+  embeddedContainer: {
+    // Für Einbettung in GlassCards: keine eigene Schatten/Margins/Fläche
+    borderRadius: RADIUS,
+    overflow: 'hidden',
+    marginBottom: 0,
+    shadowColor: 'transparent',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    elevation: 0,
   },
   countdownContainer: {
     alignItems: 'center',
@@ -423,7 +461,7 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   tapHint: {
-    fontSize: 14,
+    fontSize: FONT_SM,
     opacity: 0.6,
     marginTop: 10,
     marginBottom: 20,
@@ -440,11 +478,11 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   detailLabel: {
-    fontSize: 18,
+    fontSize: FONT_LG,
     fontWeight: '600',
   },
   detailValue: {
-    fontSize: 18,
+    fontSize: FONT_LG,
     fontWeight: 'bold',
   },
   babySizeContainer: {
@@ -452,18 +490,13 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   babySizeInnerContainer: {
-    padding: 15,
-    borderRadius: 15,
+    padding: 12,
+    borderRadius: 16,
     width: '100%',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
   },
   babySizeLabel: {
-    fontSize: 16,
+    fontSize: FONT_MD,
     fontWeight: '600',
     marginBottom: 8,
   },
@@ -473,7 +506,7 @@ const styles = StyleSheet.create({
     marginBottom: 5,
   },
   babySizeTapHint: {
-    fontSize: 12,
+    fontSize: FONT_SM,
     opacity: 0.6,
     fontStyle: 'italic',
   },

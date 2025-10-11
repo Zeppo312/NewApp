@@ -5,6 +5,7 @@ import { BlurView } from 'expo-blur';
 // Centralized design tokens and reusable glass components
 
 export const LAYOUT_PAD = 20; // horizontal padding for containers
+export const TIMELINE_INSET = 8; // horizontal inset for timeline-width cards
 export const SECTION_GAP_TOP = 20;
 export const SECTION_GAP_BOTTOM = 12;
 
@@ -20,6 +21,7 @@ export const FONT_LG = 18;
 
 export const designTokens = {
   LAYOUT_PAD,
+  TIMELINE_INSET,
   SECTION_GAP_TOP,
   SECTION_GAP_BOTTOM,
   RADIUS,
@@ -112,4 +114,3 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
   },
 });
-

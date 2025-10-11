@@ -424,7 +424,7 @@ export default function CountdownScreen() {
         <ScrollView contentContainerStyle={styles.scrollContent}>
           {/* Countdown im Glas-Card */}
           <LiquidGlassCard style={[styles.sectionCard, styles.centerCard]} intensity={26} overlayColor={GLASS_OVERLAY}>
-            <CountdownTimer dueDate={dueDate} />
+            <CountdownTimer dueDate={dueDate} variant="embedded" />
           </LiquidGlassCard>
 
           {/* Entbindungstermin */}
@@ -594,30 +594,41 @@ export default function CountdownScreen() {
                 : 'Erstelle einen individuellen Geburtsplan und teile ihn mit deinem Team.'}
             </ThemedText>
 
-            {isGeneratingPDF ? (
-              <View style={styles.loadingRow}>
-                <ActivityIndicator size="small" />
-                <ThemedText style={{ marginLeft: 8 }}>PDF wird generiert…</ThemedText>
-              </View>
-            ) : (
-              <View style={styles.pillRow}>
-                {geburtsplanExists && (
-                  <TouchableOpacity onPress={handleDownloadPDF} activeOpacity={0.9} style={[styles.pillBtn, styles.pillPrimary]}>
-                    <IconSymbol name="arrow.down" size={16} color="#fff" />
-                    <ThemedText style={styles.pillPrimaryText}>PDF exportieren</ThemedText>
-                  </TouchableOpacity>
-                )}
-                <TouchableOpacity
-                  onPress={() => router.push('/geburtsplan')}
-                  activeOpacity={0.9}
-                  style={[styles.pillBtn, geburtsplanExists ? styles.pillMuted : styles.pillPrimary]}
-                >
-                  <IconSymbol name={geburtsplanExists ? 'pencil' : 'plus.circle'} size={16} color={geburtsplanExists ? PRIMARY_TEXT : '#fff'} />
-                  <ThemedText style={geburtsplanExists ? styles.pillGhostText : styles.pillPrimaryText}>
-                    {geburtsplanExists ? 'Bearbeiten' : 'Erstellen'}
+            {/* Hauptaktion: exakt wie ET-Button aufgebaut */}
+            <TouchableOpacity onPress={() => router.push('/geburtsplan')} activeOpacity={0.9} style={styles.fullWidthAction}>
+              <BlurView intensity={24} tint="light" style={styles.cardBlur}>
+                <View style={[styles.actionCard, { backgroundColor: 'rgba(220,200,255,0.55)' }]}>
+                  <View style={[styles.actionIcon, { backgroundColor: ACCENT_PURPLE }]}>
+                    <IconSymbol name={geburtsplanExists ? 'pencil' : 'plus.circle'} size={24} color="#fff" />
+                  </View>
+                  <ThemedText style={styles.actionTitle}>
+                    {geburtsplanExists ? 'Geburtsplan bearbeiten' : 'Geburtsplan erstellen'}
                   </ThemedText>
+                  <ThemedText style={styles.actionSub}>Tippen zum {geburtsplanExists ? 'Bearbeiten' : 'Erstellen'}</ThemedText>
+                </View>
+              </BlurView>
+            </TouchableOpacity>
+
+            {/* Sekundäraktion: PDF Export als gleicher Stil (optional) */}
+            {geburtsplanExists && (
+              isGeneratingPDF ? (
+                <View style={styles.loadingRow}>
+                  <ActivityIndicator size="small" />
+                  <ThemedText style={{ marginLeft: 8 }}>PDF wird generiert…</ThemedText>
+                </View>
+              ) : (
+                <TouchableOpacity onPress={handleDownloadPDF} activeOpacity={0.9} style={styles.fullWidthAction}>
+                  <BlurView intensity={24} tint="light" style={styles.cardBlur}>
+                    <View style={[styles.actionCard, { backgroundColor: 'rgba(168,196,193,0.6)' }]}>
+                      <View style={[styles.actionIcon, { backgroundColor: '#389D91' }]}>
+                        <IconSymbol name="arrow.down.doc" size={22} color="#fff" />
+                      </View>
+                      <ThemedText style={styles.actionTitle}>Als PDF herunterladen</ThemedText>
+                      <ThemedText style={styles.actionSub}>Tippen zum Exportieren</ThemedText>
+                    </View>
+                  </BlurView>
                 </TouchableOpacity>
-              </View>
+              )
             )}
           </LiquidGlassCard>
 
@@ -728,7 +739,7 @@ const styles = StyleSheet.create({
   actionSub: { fontSize: 11, color: PRIMARY_TEXT, opacity: 0.8, textAlign: 'center' },
 
   // Info Blöcke
-  infoBlock: { marginBottom: 12, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.55)' },
+  infoBlock: { marginBottom: 12, paddingBottom: 12, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.55)' },
   infoHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
   infoTitle: { fontSize: 15, fontWeight: '800', color: PRIMARY_TEXT },
   infoText: { fontSize: 14, lineHeight: 20, color: PRIMARY_TEXT, opacity: 0.95, paddingLeft: 40 },
@@ -739,7 +750,7 @@ const styles = StyleSheet.create({
   },
 
   // Symptome
-  symptomList: { paddingHorizontal: 8, paddingTop: 2 },
+  symptomList: { paddingHorizontal: 16, paddingTop: 2 },
   symptomItem: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
   symptomText: { fontSize: 14, marginLeft: 8, color: PRIMARY_TEXT },
 
@@ -772,6 +783,24 @@ const styles = StyleSheet.create({
   pillMuted: { backgroundColor: 'rgba(255,255,255,0.6)' },
   pillGhost: { backgroundColor: 'transparent' },
   pillGhostText: { color: PRIMARY_TEXT, fontWeight: '800' },
+
+  // Glass pill buttons (Liquid Glass look)
+  glassPill: {
+    borderRadius: 22,
+    overflow: 'hidden',
+    borderWidth: 1.5,
+  },
+  glassPillInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+  },
+  glassPillText: { color: PRIMARY_TEXT, fontWeight: '800' },
+  glassPillTextPrimary: { color: '#fff', fontWeight: '800' },
+
+  // (obsolete) gpCards styles removed; using shared fullWidthAction pattern
 
   // Modal
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', alignItems: 'center', padding: 20 },

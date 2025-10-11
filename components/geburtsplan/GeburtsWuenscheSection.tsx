@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, StyleProp, ViewStyle } from 'react-native';
 import { GeburtsplanSection } from './GeburtsplanSection';
 import { OptionGroup } from './OptionGroup';
 import { CheckboxOption } from './CheckboxOption';
@@ -10,9 +10,10 @@ import { GeburtsWuensche } from '@/types/geburtsplan';
 interface GeburtsWuenscheSectionProps {
   data: GeburtsWuensche;
   onChange: (data: GeburtsWuensche) => void;
+  containerStyle?: StyleProp<ViewStyle>;
 }
 
-export const GeburtsWuenscheSection: React.FC<GeburtsWuenscheSectionProps> = ({ data, onChange }) => {
+export const GeburtsWuenscheSection: React.FC<GeburtsWuenscheSectionProps> = ({ data, onChange, containerStyle }) => {
   // Geburtspositionen
   const geburtspositionenOptions = ['Stehend', 'Hocken', 'Vierfüßler', 'im Wasser', 'flexibel'];
   
@@ -66,7 +67,7 @@ export const GeburtsWuenscheSection: React.FC<GeburtsWuenscheSectionProps> = ({ 
   };
 
   return (
-    <GeburtsplanSection title="2. Wünsche zur Geburt">
+    <GeburtsplanSection title="2. Wünsche zur Geburt" containerStyle={containerStyle}>
       <OptionGroup label="Geburtspositionen">
         {geburtspositionenOptions.map((option) => (
           <CheckboxOption

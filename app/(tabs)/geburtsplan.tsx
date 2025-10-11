@@ -4,10 +4,12 @@ import { Text as RNText } from 'react-native';
 import { router, useRouter } from 'expo-router';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
 import { ThemedBackground } from '@/components/ThemedBackground';
+import { LiquidGlassCard, GLASS_OVERLAY, LAYOUT_PAD, RADIUS, PRIMARY, TEXT_PRIMARY, TIMELINE_INSET } from '@/constants/DesignGuide';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
+
+// TIMELINE_INSET zentral aus DesignGuide
 import { supabase } from '@/lib/supabase';
 import { getCurrentUser, getGeburtsplan, saveGeburtsplan, saveStructuredGeburtsplan } from '@/lib/supabase';
 import { GeburtsplanData, defaultGeburtsplan } from '@/types/geburtsplan';
@@ -120,7 +122,7 @@ export default function GeburtsplanScreen() {
 
         // Lese die Datei als Base64
         const base64 = await FileSystem.readAsStringAsync(asset.localUri!, {
-          encoding: FileSystem.EncodingType.Base64,
+          encoding: 'base64',
         });
 
         setBabyIconBase64(base64);
@@ -279,27 +281,30 @@ export default function GeburtsplanScreen() {
         
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
 
-                <ThemedView style={styles.card} lightColor={theme.card} darkColor={theme.card}>
-                  <ThemedText style={styles.cardText}>
-                    Hier kannst du deinen persönlichen Geburtsplan erstellen und speichern.
-                    Notiere deine Wünsche und Vorstellungen für die Geburt, damit du sie mit deinem
-                    Geburtsteam teilen kannst.
+                <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
+                  <ThemedText style={styles.sectionTitle}>
+                    Über den Geburtsplan
                   </ThemedText>
-                </ThemedView>
+                  <ThemedText style={styles.infoText}>
+                    Hier kannst du deinen persönlichen Geburtsplan erstellen und speichern. Notiere deine Wünsche und Vorstellungen für die Geburt, damit du sie mit deinem Geburtsteam teilen kannst.
+                  </ThemedText>
+                </LiquidGlassCard>
 
-                {/* Editor-Umschalter */}
-                <ThemedView style={styles.switchContainer} lightColor={theme.card} darkColor={theme.card}>
-                  <ThemedText style={styles.switchLabel}>
-                    Strukturierter Editor
+                <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
+                  <ThemedText style={styles.sectionTitle}>
+                    Editor-Modus
                   </ThemedText>
-                  <Switch
-                    value={useStructuredEditor}
-                    onValueChange={setUseStructuredEditor}
-                    trackColor={{ false: '#767577', true: theme.tint }}
-                    thumbColor={useStructuredEditor ? '#fff' : '#f4f3f4'}
-                    ios_backgroundColor="#767577"
-                  />
-                </ThemedView>
+                  <View style={styles.switchContainer}>
+                    <ThemedText style={styles.switchLabel}>Strukturierter Editor</ThemedText>
+                    <Switch
+                      value={useStructuredEditor}
+                      onValueChange={setUseStructuredEditor}
+                      trackColor={{ false: '#D1D1D6', true: '#9DBEBB' }}
+                      thumbColor={useStructuredEditor ? '#FFFFFF' : '#F4F4F4'}
+                      ios_backgroundColor="#D1D1D6"
+                    />
+                  </View>
+                </LiquidGlassCard>
 
                 {isLoading ? (
                   <ActivityIndicator size="large" color={theme.accent} style={styles.loader} />
@@ -312,6 +317,7 @@ export default function GeburtsplanScreen() {
                         ...structuredData,
                         allgemeineAngaben: newData
                       })}
+                      containerStyle={styles.fullWidthCard}
                     />
 
                     <GeburtsWuenscheSection
@@ -320,6 +326,7 @@ export default function GeburtsplanScreen() {
                         ...structuredData,
                         geburtsWuensche: newData
                       })}
+                      containerStyle={styles.fullWidthCard}
                     />
 
                     <MedizinischeEingriffeSection
@@ -328,6 +335,7 @@ export default function GeburtsplanScreen() {
                         ...structuredData,
                         medizinischeEingriffe: newData
                       })}
+                      containerStyle={styles.fullWidthCard}
                     />
 
                     <NachDerGeburtSection
@@ -336,6 +344,7 @@ export default function GeburtsplanScreen() {
                         ...structuredData,
                         nachDerGeburt: newData
                       })}
+                      containerStyle={styles.fullWidthCard}
                     />
 
                     <NotfallSection
@@ -344,6 +353,7 @@ export default function GeburtsplanScreen() {
                         ...structuredData,
                         notfall: newData
                       })}
+                      containerStyle={styles.fullWidthCard}
                     />
 
                     <SonstigeWuenscheSection
@@ -352,11 +362,12 @@ export default function GeburtsplanScreen() {
                         ...structuredData,
                         sonstigeWuensche: newData
                       })}
+                      containerStyle={styles.fullWidthCard}
                     />
                   </>
                 ) : (
                   // Einfacher Texteditor
-                  <ThemedView style={styles.textAreaContainer} lightColor={theme.card} darkColor={theme.card}>
+                  <LiquidGlassCard style={styles.textAreaGlass} intensity={26} overlayColor={GLASS_OVERLAY}>
                     <TextInput
                       style={[
                         styles.textArea,
@@ -369,52 +380,65 @@ export default function GeburtsplanScreen() {
                       value={geburtsplan}
                       onChangeText={setGeburtsplan}
                     />
-                  </ThemedView>
+                  </LiquidGlassCard>
                 )}
 
-                <View style={styles.buttonContainer}>
-                  <TouchableOpacity
-                    style={[styles.saveButton, { backgroundColor: theme.accent }]}
+                <View style={styles.cardsRow}>
+                  <LiquidGlassCard
+                    style={[styles.actionCardWrapper, { marginRight: 12 }]}
+                    intensity={24}
+                    overlayColor={'rgba(142,78,198,0.32)'}
+                    borderColor={'rgba(255,255,255,0.7)'}
                     onPress={handleSaveGeburtsplan}
-                    disabled={isSaving}
                   >
-                    {isSaving ? (
-                      <ActivityIndicator size="small" color="#FFFFFF" />
-                    ) : (
-                      <ThemedText style={styles.saveButtonText} lightColor="#FFFFFF" darkColor="#FFFFFF">
-                        Geburtsplan speichern
-                      </ThemedText>
-                    )}
-                  </TouchableOpacity>
+                    <View style={styles.actionCardInner}>
+                      {isSaving ? (
+                        <ActivityIndicator size="small" color={colorScheme === 'dark' ? '#fff' : '#fff'} />
+                      ) : (
+                        <>
+                          <View style={[styles.iconContainer, { backgroundColor: 'rgba(142,78,198,0.9)' }]}>
+                            <IconSymbol name="tray.and.arrow.down.fill" size={24} color="#FFFFFF" />
+                          </View>
+                          <ThemedText style={[styles.cardTitle, { color: TEXT_PRIMARY }]}>Speichern</ThemedText>
+                          <ThemedText style={[styles.cardDesc, { color: TEXT_PRIMARY }]}>Geburtsplan</ThemedText>
+                        </>
+                      )}
+                    </View>
+                  </LiquidGlassCard>
 
-                  <TouchableOpacity
-                    style={[styles.downloadButton, { backgroundColor: theme.success }]}
+                  <LiquidGlassCard
+                    style={styles.actionCardWrapper}
+                    intensity={24}
+                    overlayColor={'rgba(168,196,193,0.32)'}
+                    borderColor={'rgba(255,255,255,0.7)'}
                     onPress={handleGeneratePDF}
-                    disabled={isGeneratingPDF}
                   >
-                    {isGeneratingPDF ? (
-                      <ActivityIndicator size="small" color="#FFFFFF" />
-                    ) : (
-                      <View style={styles.downloadButtonInner}>
-                        <IconSymbol name="arrow.down.doc" size={20} color="#FFFFFF" />
-                        <ThemedText style={styles.downloadButtonText} lightColor="#FFFFFF" darkColor="#FFFFFF">
-                          Als PDF herunterladen
-                        </ThemedText>
-                      </View>
-                    )}
-                  </TouchableOpacity>
+                    <View style={styles.actionCardInner}>
+                      {isGeneratingPDF ? (
+                        <ActivityIndicator size="small" color={colorScheme === 'dark' ? '#fff' : '#fff'} />
+                      ) : (
+                        <>
+                          <View style={[styles.iconContainer, { backgroundColor: 'rgba(168,196,193,0.9)' }]}>
+                            <IconSymbol name="arrow.down.doc" size={24} color="#FFFFFF" />
+                          </View>
+                          <ThemedText style={[styles.cardTitle, { color: TEXT_PRIMARY }]}>PDF</ThemedText>
+                          <ThemedText style={[styles.cardDesc, { color: TEXT_PRIMARY }]}>Herunterladen</ThemedText>
+                        </>
+                      )}
+                    </View>
+                  </LiquidGlassCard>
                 </View>
 
-                <ThemedView style={styles.tipsCard} lightColor={theme.card} darkColor={theme.card}>
-                  <ThemedText type="defaultSemiBold" style={styles.tipsTitle}>
-                    Tipps für deinen Geburtsplan:
+                <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
+                  <ThemedText style={styles.sectionTitle}>
+                    Tipps für deinen Geburtsplan
                   </ThemedText>
                   <ThemedText style={styles.tipText}>• Gebärposition: Welche Positionen bevorzugst du?</ThemedText>
                   <ThemedText style={styles.tipText}>• Schmerzlinderung: Welche Methoden möchtest du nutzen?</ThemedText>
                   <ThemedText style={styles.tipText}>• Atmosphäre: Musik, Licht, Anwesende Personen</ThemedText>
                   <ThemedText style={styles.tipText}>• Medizinische Eingriffe: Welche akzeptierst du, welche nicht?</ThemedText>
                   <ThemedText style={styles.tipText}>• Nach der Geburt: Wünsche für die ersten Stunden mit deinem Baby</ThemedText>
-                </ThemedView>
+                </LiquidGlassCard>
         </ScrollView>
       </SafeAreaView>
     </ThemedBackground>
@@ -432,51 +456,37 @@ const createStyles = (theme: any) => StyleSheet.create({
   scrollView: {
     flex: 1,
   },
-  contentContainer: {
-    padding: 20,
-    paddingBottom: 40,
+  contentContainer: { paddingHorizontal: LAYOUT_PAD, paddingBottom: 40, paddingTop: 10 },
+  fullWidthCard: {
+    marginHorizontal: TIMELINE_INSET, // identisch zur Timeline
   },
-  card: {
-    padding: 20,
-    borderRadius: 15,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+  sectionCard: {
+    marginBottom: 16,
+    borderRadius: 22,
+    overflow: 'hidden',
+    // gleiche Innenbreite wie Timeline:
+    marginHorizontal: TIMELINE_INSET,
   },
-  cardText: {
-    fontSize: 16,
-    lineHeight: 24,
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 12,
+    paddingHorizontal: 16,
   },
-  // Switch-Container für den Editor-Umschalter
-  switchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 15,
-    borderRadius: 15,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
+  infoText: { fontSize: 14, lineHeight: 20, color: TEXT_PRIMARY, paddingHorizontal: 16, marginBottom: 16 },
+  switchContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 16 },
   switchLabel: {
     fontSize: 16,
     fontWeight: '600',
+    color: TEXT_PRIMARY,
   },
-  textAreaContainer: {
-    borderRadius: 15,
-    padding: 15,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+  textAreaGlass: {
+    borderRadius: 22,
+    overflow: 'hidden',
+    // gleiche Innenbreite wie Timeline:
+    marginHorizontal: TIMELINE_INSET,
+    padding: 12,
+    marginBottom: 16
   },
   textArea: {
     fontSize: 16,
@@ -484,65 +494,32 @@ const createStyles = (theme: any) => StyleSheet.create({
     minHeight: 300,
     textAlignVertical: 'top',
   },
-  buttonContainer: {
-    marginBottom: 20,
-  },
-  saveButton: {
-    padding: 15,
-    borderRadius: 30,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 15,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  saveButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  downloadButton: {
-    padding: 15,
-    borderRadius: 30,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  downloadButtonInner: {
+  // Action cards row
+  cardsRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    // gleiche Innenbreite wie Timeline:
+    alignSelf: 'stretch',
+    marginHorizontal: TIMELINE_INSET,
     justifyContent: 'center',
+    marginBottom: 16
   },
-  downloadButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginLeft: 8,
+  actionCardWrapper: { flex: 1, borderRadius: 22, overflow: 'hidden' },
+  actionCardInner: {
+    alignItems: 'center', justifyContent: 'center', padding: 16, minHeight: 112,
   },
-  tipsCard: {
-    padding: 20,
-    borderRadius: 15,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+  iconContainer: {
+    width: 54, height: 54, borderRadius: 27,
+    justifyContent: 'center', alignItems: 'center', marginBottom: 8,
+    borderWidth: 2, borderColor: 'rgba(255,255,255,0.6)'
   },
-  tipsTitle: {
-    fontSize: 18,
-    marginBottom: 10,
-  },
+  cardTitle: { fontSize: 16, fontWeight: '800' },
+  cardDesc: { fontSize: 12, opacity: 0.9 },
   tipText: {
     fontSize: 15,
     lineHeight: 24,
     marginBottom: 5,
+    color: TEXT_PRIMARY,
+    paddingHorizontal: 16,
   },
   loader: {
     marginVertical: 30,

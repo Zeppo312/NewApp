@@ -1,4 +1,5 @@
 import React from 'react';
+import { StyleProp, ViewStyle } from 'react-native';
 import { GeburtsplanSection } from './GeburtsplanSection';
 import { OptionGroup } from './OptionGroup';
 import { CheckboxOption } from './CheckboxOption';
@@ -9,9 +10,10 @@ import { NachDerGeburt } from '@/types/geburtsplan';
 interface NachDerGeburtSectionProps {
   data: NachDerGeburt;
   onChange: (data: NachDerGeburt) => void;
+  containerStyle?: StyleProp<ViewStyle>;
 }
 
-export const NachDerGeburtSection: React.FC<NachDerGeburtSectionProps> = ({ data, onChange }) => {
+export const NachDerGeburtSection: React.FC<NachDerGeburtSectionProps> = ({ data, onChange, containerStyle }) => {
   // Bonding
   const toggleBonding = () => {
     onChange({
@@ -53,7 +55,7 @@ export const NachDerGeburtSection: React.FC<NachDerGeburtSectionProps> = ({ data
   };
 
   return (
-    <GeburtsplanSection title="4. Nach der Geburt">
+    <GeburtsplanSection title="4. Nach der Geburt" containerStyle={containerStyle}>
       <OptionGroup label="Bonding">
         <CheckboxOption
           label="Haut-zu-Haut-Kontakt direkt nach Geburt"

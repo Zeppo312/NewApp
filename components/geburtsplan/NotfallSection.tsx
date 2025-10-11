@@ -1,4 +1,5 @@
 import React from 'react';
+import { StyleProp, ViewStyle } from 'react-native';
 import { GeburtsplanSection } from './GeburtsplanSection';
 import { OptionGroup } from './OptionGroup';
 import { CheckboxOption } from './CheckboxOption';
@@ -9,9 +10,10 @@ import { Notfall } from '@/types/geburtsplan';
 interface NotfallSectionProps {
   data: Notfall;
   onChange: (data: Notfall) => void;
+  containerStyle?: StyleProp<ViewStyle>;
 }
 
-export const NotfallSection: React.FC<NotfallSectionProps> = ({ data, onChange }) => {
+export const NotfallSection: React.FC<NotfallSectionProps> = ({ data, onChange, containerStyle }) => {
   // Begleitperson im OP
   const begleitpersonOptions = ['Ja', 'Nein', 'wenn möglich'];
   
@@ -41,7 +43,7 @@ export const NotfallSection: React.FC<NotfallSectionProps> = ({ data, onChange }
   };
 
   return (
-    <GeburtsplanSection title="5. Für den Notfall / Kaiserschnitt">
+    <GeburtsplanSection title="5. Für den Notfall / Kaiserschnitt" containerStyle={containerStyle}>
       <OptionGroup label="Begleitperson im OP">
         {begleitpersonOptions.map((option) => (
           <RadioOption

@@ -1,4 +1,5 @@
 import React from 'react';
+import { StyleProp, ViewStyle } from 'react-native';
 import { GeburtsplanSection } from './GeburtsplanSection';
 import { OptionGroup } from './OptionGroup';
 import { RadioOption } from './RadioOption';
@@ -8,9 +9,10 @@ import { MedizinischeEingriffe } from '@/types/geburtsplan';
 interface MedizinischeEingriffeSectionProps {
   data: MedizinischeEingriffe;
   onChange: (data: MedizinischeEingriffe) => void;
+  containerStyle?: StyleProp<ViewStyle>;
 }
 
-export const MedizinischeEingriffeSection: React.FC<MedizinischeEingriffeSectionProps> = ({ data, onChange }) => {
+export const MedizinischeEingriffeSection: React.FC<MedizinischeEingriffeSectionProps> = ({ data, onChange, containerStyle }) => {
   // Wehenförderung
   const wehenfoerderungOptions = [
     'Nur wenn medizinisch nötig',
@@ -68,7 +70,7 @@ export const MedizinischeEingriffeSection: React.FC<MedizinischeEingriffeSection
   };
 
   return (
-    <GeburtsplanSection title="3. Medizinische Eingriffe & Maßnahmen">
+    <GeburtsplanSection title="3. Medizinische Eingriffe & Maßnahmen" containerStyle={containerStyle}>
       <OptionGroup label="Wehenförderung">
         {wehenfoerderungOptions.map((option) => (
           <RadioOption
