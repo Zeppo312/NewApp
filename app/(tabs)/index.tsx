@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { StyleSheet, TouchableOpacity, ScrollView, Alert, View, StatusBar, SafeAreaView, ActivityIndicator, AppState, Platform, ImageBackground, RefreshControl } from 'react-native';
+import { StyleSheet, TouchableOpacity, ScrollView, Alert, View, StatusBar, SafeAreaView, ActivityIndicator, AppState, Platform, ImageBackground, RefreshControl, Dimensions, Animated } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedBackground } from '@/components/ThemedBackground';
@@ -20,6 +20,10 @@ import {
   formatTime as formatBackgroundTime
 } from '@/lib/background-tasks';
 import Header from '@/components/Header';
+import { LiquidGlassCard, GLASS_OVERLAY, TIMELINE_INSET, LAYOUT_PAD, RADIUS } from '@/constants/DesignGuide';
+import { BlurView } from 'expo-blur';
+import { IconSymbol } from '@/components/ui/IconSymbol';
+import { ProgressCircle } from '@/components/ProgressCircle';
 
 type Contraction = {
   id: string;
@@ -45,6 +49,7 @@ export default function HomeScreen() {
   const { user } = useAuth();
   const appState = useRef(AppState.currentState);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const pulseAnim = useRef(new Animated.Value(1)).current;
 
   // Hilfsfunktion zur Generierung einer eindeutigen ID
   const generateUniqueId = (): string => {
@@ -95,6 +100,18 @@ export default function HomeScreen() {
       subscription.remove();
     };
   }, []);
+
+  // Subtle pulsing of central timer
+  useEffect(() => {
+    const pulseAnimation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1.02, duration: 1500, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 1500, useNativeDriver: true }),
+      ])
+    );
+    pulseAnimation.start();
+    return () => pulseAnimation.stop();
+  }, [pulseAnim]);
 
   // Start a new contraction
   const startContraction = async () => {
@@ -655,51 +672,99 @@ export default function HomeScreen() {
           )}
           
           <View style={styles.container}>
-            <ThemedView style={styles.timerSection} lightColor="rgba(255, 255, 255, 0.8)" darkColor="rgba(50, 50, 50, 0.8)">
-              <ThemedView
-                style={[styles.timerDisplay, {borderColor: theme.timerBorder, overflow: 'visible'}]}
-                lightColor={theme.timerBackground}
-                darkColor={theme.timerBackground}
-              >
-                <ThemedText
-                  style={styles.timerText}
-                  lightColor={theme.timerText}
-                  darkColor={theme.timerText}
-                >
-                  {formatTime(elapsedTime)}
-                </ThemedText>
-                {timerRunning && (
-                  <ThemedText
-                    style={styles.timerRunningText}
-                    lightColor={theme.textTertiary}
-                    darkColor={theme.textTertiary}
-                  >
-                    Timer läuft auch im Hintergrund weiter
-                  </ThemedText>
-                )}
-              </ThemedView>
+            <LiquidGlassCard style={[styles.timerGlass, styles.fullWidthCard]} intensity={26} overlayColor={GLASS_OVERLAY}>
+              <View style={styles.centralTimerContainer}>
+                <Animated.View style={[styles.centralContainer, { transform: [{ scale: pulseAnim }] }]}>
+                  {(() => {
+                    const { width: screenWidth } = Dimensions.get('window');
+                    const ringSize = Math.min(screenWidth * 0.82, 380);
+                    const circleSize = Math.round(ringSize * 0.87);
+                    const progress = timerRunning ? Math.min((elapsedTime / 120) * 100, 100) : 0; // 120s Ziel
+                    return (
+                      <View style={[styles.circleArea, { width: circleSize, height: circleSize, borderRadius: circleSize / 2 }]}>
+                        <View style={[styles.glassCircle, { width: circleSize, height: circleSize, borderRadius: circleSize / 2 }]}>
+                          <BlurView intensity={18} tint="light" style={[styles.glassCircleBlur, { borderRadius: circleSize / 2 }]}>
+                            <View style={[styles.glassCircleOverlay, { borderRadius: circleSize / 2 }]} />
+                          </BlurView>
+                        </View>
 
-              <ThemedView style={styles.buttonContainer}>
+                        <View style={[styles.progressAbsolute, { width: circleSize, height: circleSize }]}>
+                          <ProgressCircle
+                            progress={progress}
+                            size={circleSize}
+                            strokeWidth={8}
+                            progressColor={timerRunning ? '#87CEEB' : 'rgba(135,206,235,0.4)'}
+                            backgroundColor="rgba(135,206,235,0.2)"
+                            textColor="transparent"
+                          />
+                        </View>
+
+                        <View pointerEvents="none" style={styles.centerOverlay}>
+                          <ThemedText style={[styles.centralTime, { color: '#6B4C3B', fontWeight: '800' }]}>
+                            {formatTime(elapsedTime)}
+                          </ThemedText>
+                        </View>
+
+                        <View pointerEvents="none" style={styles.upperContent}>
+                          <View style={[styles.centralIcon, { backgroundColor: timerRunning ? 'rgba(135,206,235,0.9)' : 'rgba(168,196,193,0.9)', borderRadius: 30, padding: 8, borderWidth: 2, borderColor: 'rgba(255,255,255,0.6)' }]}>
+                            <IconSymbol name={timerRunning ? 'waveform.path.ecg' : 'heart.fill'} size={28} color="#FFFFFF" />
+                          </View>
+                        </View>
+
+                        <View pointerEvents="none" style={styles.lowerContent}>
+                          <ThemedText style={[styles.centralStatus, { color: '#6B4C3B', fontWeight: '700' }]}>
+                            {timerRunning ? 'Wehe läuft' : 'Bereit'}
+                          </ThemedText>
+                          <ThemedText style={[styles.centralHint, { color: '#7D5A50', fontWeight: '500' }]}>
+                            {timerRunning ? 'Timer läuft auch im Hintergrund weiter' : 'Tippe unten, um eine neue Wehe zu starten'}
+                          </ThemedText>
+                        </View>
+                      </View>
+                    );
+                  })()}
+                </Animated.View>
+              </View>
+            
+              {/* Action Button(s) im Sleep‑Stil */}
+              <View style={styles.actionsRow}>
                 {!timerRunning ? (
-                  <TouchableOpacity
-                    style={[styles.button, styles.startButton]}
+                  <LiquidGlassCard
+                    style={[styles.actionCard, styles.fullWidthCard]}
+                    intensity={24}
+                    overlayColor={'rgba(142,78,198,0.32)'}
+                    borderColor={'rgba(255,255,255,0.7)'}
                     onPress={startContraction}
                   >
-                    <ThemedText style={styles.buttonText}>Wehe Starten</ThemedText>
-                  </TouchableOpacity>
+                    <View style={styles.actionCardInner}>
+                      <View style={[styles.actionIcon, { backgroundColor: 'rgba(142,78,198,0.9)' }]}>
+                        <IconSymbol name="waveform.path.ecg" size={24} color="#FFFFFF" />
+                      </View>
+                      <ThemedText style={styles.actionTitle}>Wehe starten</ThemedText>
+                      <ThemedText style={styles.actionDesc}>Timer beginnen</ThemedText>
+                    </View>
+                  </LiquidGlassCard>
                 ) : (
-                  <TouchableOpacity
-                    style={[styles.button, styles.stopButton]}
+                  <LiquidGlassCard
+                    style={[styles.actionCard, styles.fullWidthCard]}
+                    intensity={24}
+                    overlayColor={'rgba(255,155,155,0.32)'}
+                    borderColor={'rgba(255,255,255,0.7)'}
                     onPress={stopContraction}
                   >
-                    <ThemedText style={styles.buttonText}>Wehe Beenden</ThemedText>
-                  </TouchableOpacity>
+                    <View style={styles.actionCardInner}>
+                      <View style={[styles.actionIcon, { backgroundColor: 'rgba(255, 140, 160, 0.9)' }]}>
+                        <IconSymbol name="stop.fill" size={24} color="#FFFFFF" />
+                      </View>
+                      <ThemedText style={styles.actionTitle}>Wehe beenden</ThemedText>
+                      <ThemedText style={styles.actionDesc}>Timer stoppen</ThemedText>
+                    </View>
+                  </LiquidGlassCard>
                 )}
-              </ThemedView>
-            </ThemedView>
+              </View>
+            </LiquidGlassCard>
 
-            <ThemedView style={styles.historySection} lightColor="transparent" darkColor="transparent">
-              <View style={styles.historyHeader}>
+            <View style={styles.historySection}>
+              <View style={[styles.historyHeader, styles.fullWidthCard] }>
                 <ThemedText
                   type="subtitle"
                   style={styles.historyTitle}
@@ -711,11 +776,13 @@ export default function HomeScreen() {
               </View>
 
               {linkedUsers.length > 0 && (
-                <ThemedView style={styles.syncInfoContainer} lightColor="rgba(255, 255, 255, 0.8)" darkColor="rgba(50, 50, 50, 0.8)">
-                  <ThemedText style={styles.syncInfoText} lightColor="#5C4033" darkColor="#F2E6DD">
-                    Deine Wehen werden automatisch mit {linkedUsers.map(user => user.firstName).join(', ')} synchronisiert.
-                  </ThemedText>
-                </ThemedView>
+                <LiquidGlassCard style={[styles.infoGlass, styles.fullWidthCard]} intensity={26} overlayColor={GLASS_OVERLAY}>
+                  <View style={{ padding: 12 }}>
+                    <ThemedText style={styles.syncInfoText} lightColor="#5C4033" darkColor="#F2E6DD">
+                      Deine Wehen werden automatisch mit {linkedUsers.map(user => user.firstName).join(', ')} synchronisiert.
+                    </ThemedText>
+                  </View>
+                </LiquidGlassCard>
               )}
 
               {!isLoading && contractions.length > 0 && (
@@ -725,32 +792,29 @@ export default function HomeScreen() {
                   darkColor="rgba(50, 50, 50, 0.8)"
                   onDelete={handleDeleteContraction}
                   onEdit={handleEditContractionIntensity}
+                  containerStyle={styles.fullWidthCard}
                 />
               )}
 
               {isLoading || isSyncing ? (
-                <ThemedView
-                  style={styles.emptyState}
-                  lightColor={theme.card}
-                  darkColor={theme.card}
-                >
-                  <ActivityIndicator size="large" color={theme.accent} />
-                  <ThemedText style={{marginTop: 10}} lightColor={theme.text} darkColor={theme.text}>
-                    {isSyncing ? 'Wehen werden synchronisiert...' : 'Wehen werden geladen...'}
-                  </ThemedText>
-                </ThemedView>
+                <LiquidGlassCard style={[styles.emptyGlass, styles.fullWidthCard]} intensity={26} overlayColor={GLASS_OVERLAY}>
+                  <View style={styles.emptyInner}>
+                    <ActivityIndicator size="large" color={theme.accent} />
+                    <ThemedText style={{marginTop: 10}} lightColor={theme.text} darkColor={theme.text}>
+                      {isSyncing ? 'Wehen werden synchronisiert...' : 'Wehen werden geladen...'}
+                    </ThemedText>
+                  </View>
+                </LiquidGlassCard>
               ) : contractions.length === 0 ? (
-                <ThemedView
-                  style={styles.emptyState}
-                  lightColor={theme.card}
-                  darkColor={theme.card}
-                >
-                  <ThemedText lightColor={theme.text} darkColor={theme.text}>
-                    Noch keine Wehen aufgezeichnet
-                  </ThemedText>
-                </ThemedView>
+                <LiquidGlassCard style={[styles.emptyGlass, styles.fullWidthCard]} intensity={26} overlayColor={GLASS_OVERLAY}>
+                  <View style={styles.emptyInner}>
+                    <ThemedText lightColor={theme.text} darkColor={theme.text}>
+                      Noch keine Wehen aufgezeichnet
+                    </ThemedText>
+                  </View>
+                </LiquidGlassCard>
               ) : null}
-            </ThemedView>
+            </View>
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -759,6 +823,9 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
+  fullWidthCard: {
+    marginHorizontal: TIMELINE_INSET,
+  },
   historyHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -805,11 +872,11 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    padding: 16,
   },
   scrollView: {
     paddingBottom: 40,
     paddingTop: 30, // Add more padding at the top for better visibility
+    paddingHorizontal: LAYOUT_PAD,
   },
   header: {
     alignItems: 'center',
@@ -827,16 +894,109 @@ const styles = StyleSheet.create({
     opacity: 0.8,
     fontStyle: 'italic',
   },
-  timerSection: {
+  timerGlass: {
     alignItems: 'center',
-    marginBottom: 10, // Increased margin
-    borderRadius: 30, // More rounded corners
-    padding: 5, // More padding
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 3,
+    marginBottom: 10,
+    borderRadius: RADIUS,
+    overflow: 'hidden',
+  },
+  // Central timer styles (align with sleep-tracker)
+  centralTimerContainer: {
+    alignItems: 'center',
+    paddingVertical: 10,
+    marginBottom: 4,
+  },
+  centralContainer: {
+    alignItems: 'center',
+    paddingVertical: 8,
+    position: 'relative',
+  },
+  circleArea: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  glassCircle: {
+    position: 'absolute',
+    overflow: 'hidden',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  glassCircleBlur: { flex: 1 },
+  glassCircleOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(135, 206, 235, 0.1)',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.6)',
+  },
+  progressAbsolute: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+  },
+  centerOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  upperContent: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: '60%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  lowerContent: {
+    position: 'absolute',
+    top: '60%',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    paddingTop: 8,
+  },
+  centralIcon: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  centralStatus: {
+    fontSize: 16,
+    fontWeight: '800',
+    marginBottom: 2,
+    textAlign: 'center',
+    lineHeight: 16,
+    textAlignVertical: 'center',
+    includeFontPadding: false,
+  },
+  centralTime: {
+    fontSize: 32,
+    fontWeight: '900',
+    letterSpacing: 0,
+    textAlign: 'center',
+    lineHeight: 32,
+    textAlignVertical: 'center',
+    includeFontPadding: false,
+    fontVariant: ['tabular-nums'],
+  },
+  centralHint: {
+    fontSize: 11,
+    textAlign: 'center',
+    lineHeight: 11,
+    maxWidth: 220,
+    textAlignVertical: 'center',
+    includeFontPadding: false,
   },
   timerDisplay: {
     marginVertical: 25, // More vertical margin
@@ -870,28 +1030,59 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     width: '100%',
-    marginTop: 10, // Add some margin at the top
-    borderRadius: 40,
+    marginTop: 14, // etwas mehr Abstand zum Kreis
     backgroundColor: 'transparent',
   },
-  button: {
-    paddingVertical: 16, // Taller buttons
-    paddingHorizontal: 30, // Wider buttons
-    borderRadius: 40, // Very rounded corners
-    minWidth: 240, // Wider for better touch targets
+  // Neuer Glass-Button
+  glassButton: {
+    alignSelf: 'center',
+    marginHorizontal: 16, // Abstand zu den Card-Rändern
+    marginTop: 6,
+    marginBottom: 10,
+    borderRadius: 28,
+    overflow: 'hidden',
+    minWidth: 240,
+  },
+  actionsRow: {
+    marginHorizontal: TIMELINE_INSET,
+    marginTop: 10,
+    marginBottom: 8,
+  },
+  actionCard: {
+    borderRadius: RADIUS,
+    overflow: 'hidden',
+  },
+  actionCardInner: {
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 5,
+    padding: 12,
+    minHeight: 96,
   },
-  startButton: {
-    backgroundColor: Colors.light.success,
+  actionIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.6)'
   },
-  stopButton: {
-    backgroundColor: Colors.light.warning,
+  actionTitle: { fontSize: 15, fontWeight: '800', color: '#7D5A50' },
+  actionDesc: { fontSize: 12, opacity: 0.9, color: '#7D5A50' },
+  glassButtonInner: {
+    paddingVertical: 14,
+    paddingHorizontal: 22,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  glassButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 18,
+    letterSpacing: 0.3,
   },
   buttonText: {
     color: 'white',
@@ -915,6 +1106,17 @@ const styles = StyleSheet.create({
     borderColor: Colors.light.border,
     borderRadius: 20, // More rounded corners
     height: 120, // Taller
+  },
+  emptyGlass: {
+    borderRadius: RADIUS,
+    overflow: 'hidden',
+    marginTop: 8,
+    marginBottom: 12,
+  },
+  emptyInner: {
+    padding: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   contractionItem: {
     padding: 20, // More padding

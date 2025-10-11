@@ -8,31 +8,32 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useRouter, Stack } from 'expo-router';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import Header from '@/components/Header';
+import { LiquidGlassCard, GLASS_OVERLAY, LAYOUT_PAD, TIMELINE_INSET, TEXT_PRIMARY } from '@/constants/DesignGuide';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 
 // Fallback-Daten für Babynamen, falls die Datenbank nicht verfügbar ist
 const FALLBACK_NAMES = {
   male: [
-    { name: 'Noah', meaning: 'Ruhe, Trost', origin: 'Hebräisch' },
-    { name: 'Leon', meaning: 'Löwe', origin: 'Lateinisch' },
-    { name: 'Paul', meaning: 'Der Kleine, der Bescheidene', origin: 'Lateinisch' },
-    { name: 'Ben', meaning: 'Sohn', origin: 'Hebräisch' },
-    { name: 'Finn', meaning: 'Der Blonde, der Helle', origin: 'Irisch' },
+    { name: 'Noah', meaning: 'Ruhe, Trost', origin: 'Hebräisch', gender: 'male' as const },
+    { name: 'Leon', meaning: 'Löwe', origin: 'Lateinisch', gender: 'male' as const },
+    { name: 'Paul', meaning: 'Der Kleine, der Bescheidene', origin: 'Lateinisch', gender: 'male' as const },
+    { name: 'Ben', meaning: 'Sohn', origin: 'Hebräisch', gender: 'male' as const },
+    { name: 'Finn', meaning: 'Der Blonde, der Helle', origin: 'Irisch', gender: 'male' as const },
   ],
   female: [
-    { name: 'Emma', meaning: 'Die Große, die Starke', origin: 'Germanisch' },
-    { name: 'Mia', meaning: 'Mein', origin: 'Italienisch' },
-    { name: 'Hannah', meaning: 'Die Anmutige', origin: 'Hebräisch' },
-    { name: 'Emilia', meaning: 'Die Eifrige, die Fleißige', origin: 'Lateinisch' },
-    { name: 'Lina', meaning: 'Die Zarte, die Milde', origin: 'Arabisch' },
+    { name: 'Emma', meaning: 'Die Große, die Starke', origin: 'Germanisch', gender: 'female' as const },
+    { name: 'Mia', meaning: 'Mein', origin: 'Italienisch', gender: 'female' as const },
+    { name: 'Hannah', meaning: 'Die Anmutige', origin: 'Hebräisch', gender: 'female' as const },
+    { name: 'Emilia', meaning: 'Die Eifrige, die Fleißige', origin: 'Lateinisch', gender: 'female' as const },
+    { name: 'Lina', meaning: 'Die Zarte, die Milde', origin: 'Arabisch', gender: 'female' as const },
   ],
   unisex: [
-    { name: 'Alex', meaning: 'Der Beschützer', origin: 'Griechisch' },
-    { name: 'Charlie', meaning: 'Die Freie', origin: 'Germanisch' },
-    { name: 'Robin', meaning: 'Der Glänzende', origin: 'Germanisch' },
-    { name: 'Kim', meaning: 'Der Kühne', origin: 'Englisch' },
-    { name: 'Noel', meaning: 'Weihnachten', origin: 'Französisch' },
+    { name: 'Alex', meaning: 'Der Beschützer', origin: 'Griechisch', gender: 'unisex' as const },
+    { name: 'Charlie', meaning: 'Die Freie', origin: 'Germanisch', gender: 'unisex' as const },
+    { name: 'Robin', meaning: 'Der Glänzende', origin: 'Germanisch', gender: 'unisex' as const },
+    { name: 'Kim', meaning: 'Der Kühne', origin: 'Englisch', gender: 'unisex' as const },
+    { name: 'Noel', meaning: 'Weihnachten', origin: 'Französisch', gender: 'unisex' as const },
   ]
 };
 
@@ -49,6 +50,7 @@ interface Name {
   name: string;
   meaning: string;
   origin: string;
+  gender?: 'male' | 'female' | 'unisex';
   isFavorite?: boolean;
 }
 
@@ -280,16 +282,20 @@ export default function BabyNamesScreen() {
     </TouchableOpacity>
   );
 
+  const genderOverlay = (gender?: string) => {
+    if (gender === 'male') return 'rgba(135,206,235,0.32)'; // Baby blue
+    if (gender === 'female') return 'rgba(142,78,198,0.32)'; // Lila
+    return 'rgba(168,196,193,0.32)'; // Neutral grünlich
+  };
+
   const renderNameItem = ({ item }: { item: Name }) => (
-    <TouchableOpacity
-      style={styles.nameItem}
-      onPress={() => {}}
+    <LiquidGlassCard
+      style={[styles.fullWidthCard, styles.glassCard]}
+      intensity={26}
+      overlayColor={genderOverlay(item.gender)}
+      borderColor={'rgba(255,255,255,0.7)'}
     >
-      <ThemedView
-        style={styles.nameItemInner}
-        lightColor="rgba(255, 255, 255, 0.8)"
-        darkColor="rgba(50, 50, 50, 0.8)"
-      >
+      <TouchableOpacity style={styles.nameItemInner} onPress={() => {}}>
         <View style={styles.nameHeader}>
           <ThemedText style={styles.nameTitle}>{item.name}</ThemedText>
           <TouchableOpacity
@@ -308,10 +314,10 @@ export default function BabyNamesScreen() {
             )}
           </TouchableOpacity>
         </View>
-        <ThemedText style={styles.nameOrigin}>{item.origin}</ThemedText>
-        <ThemedText style={styles.nameMeaning}>{item.meaning}</ThemedText>
-      </ThemedView>
-    </TouchableOpacity>
+        <ThemedText style={[styles.nameOrigin, { color: TEXT_PRIMARY }]}>{item.origin}</ThemedText>
+        <ThemedText style={[styles.nameMeaning, { color: TEXT_PRIMARY }]}>{item.meaning}</ThemedText>
+      </TouchableOpacity>
+    </LiquidGlassCard>
   );
 
   return (
@@ -328,12 +334,8 @@ export default function BabyNamesScreen() {
           <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
 
           {/* Suchleiste */}
-          <View style={styles.searchContainer}>
-            <ThemedView
-              style={styles.searchInputContainer}
-              lightColor="rgba(255, 255, 255, 0.8)"
-              darkColor="rgba(50, 50, 50, 0.8)"
-            >
+          <LiquidGlassCard style={[styles.fullWidthCard, styles.glassCard]} intensity={26} overlayColor={GLASS_OVERLAY}>
+            <View style={styles.searchInputContainer}>
               <IconSymbol name="magnifyingglass" size={20} color={theme.tabIconDefault} />
               <TextInput
                 style={[styles.searchInput, { color: theme.text }]}
@@ -347,47 +349,53 @@ export default function BabyNamesScreen() {
                   <IconSymbol name="xmark.circle.fill" size={20} color={theme.tabIconDefault} />
                 </TouchableOpacity>
               )}
-            </ThemedView>
-          </View>
+            </View>
+          </LiquidGlassCard>
 
           {/* Kategorien */}
-          <View style={styles.categoriesContainer}>
-            <FlatList
-              data={CATEGORIES}
-              renderItem={renderCategoryItem}
-              keyExtractor={(item) => item.id}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-            />
-          </View>
+          <LiquidGlassCard style={[styles.fullWidthCard, styles.glassCard]} intensity={26} overlayColor={GLASS_OVERLAY}>
+            <View style={styles.categoriesContainer}>
+              <FlatList
+                data={CATEGORIES}
+                renderItem={renderCategoryItem}
+                keyExtractor={(item) => item.id}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+              />
+            </View>
+          </LiquidGlassCard>
 
           {/* Namen-Liste */}
           {isLoading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={theme.accent} />
-              <ThemedText style={styles.loadingText}>Lade Namen...</ThemedText>
-            </View>
+            <LiquidGlassCard style={[styles.fullWidthCard, styles.glassCard]} intensity={26} overlayColor={GLASS_OVERLAY}>
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color={theme.accent} />
+                <ThemedText style={[styles.loadingText, { color: TEXT_PRIMARY }]}>Lade Namen...</ThemedText>
+              </View>
+            </LiquidGlassCard>
           ) : names.length === 0 ? (
-            <ThemedView style={styles.emptyContainer} lightColor="rgba(255, 255, 255, 0.8)" darkColor="rgba(50, 50, 50, 0.8)">
-              <IconSymbol name="magnifyingglass" size={40} color={theme.tabIconDefault} />
-              <ThemedText style={styles.emptyText}>
-                {selectedCategory === 'favorites'
-                  ? 'Du hast noch keine Favoriten gespeichert.'
-                  : 'Keine Namen gefunden.'}
-              </ThemedText>
-              {selectedCategory === 'favorites' && (
-                <TouchableOpacity
-                  style={styles.emptyButton}
-                  onPress={() => setSelectedCategory('all')}
-                >
-                  <ThemedText style={styles.emptyButtonText}>Alle Namen anzeigen</ThemedText>
-                </TouchableOpacity>
-              )}
-            </ThemedView>
+            <LiquidGlassCard style={[styles.fullWidthCard, styles.glassCard]} intensity={26} overlayColor={GLASS_OVERLAY}>
+              <View style={styles.emptyContainer}>
+                <IconSymbol name="magnifyingglass" size={40} color={theme.tabIconDefault} />
+                <ThemedText style={[styles.emptyText, { color: TEXT_PRIMARY }]}>
+                  {selectedCategory === 'favorites'
+                    ? 'Du hast noch keine Favoriten gespeichert.'
+                    : 'Keine Namen gefunden.'}
+                </ThemedText>
+                {selectedCategory === 'favorites' && (
+                  <TouchableOpacity
+                    style={styles.emptyButton}
+                    onPress={() => setSelectedCategory('all')}
+                  >
+                    <ThemedText style={styles.emptyButtonText}>Alle Namen anzeigen</ThemedText>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </LiquidGlassCard>
           ) : (
             <View style={styles.namesContainer}>
               {names.map((item, index) => (
-                <View key={index} style={{ width: '100%' }}>
+                <View key={index} style={{ width: '100%', marginBottom: 12 }}>
                   {renderNameItem({ item })}
                 </View>
               ))}
@@ -412,8 +420,17 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contentContainer: {
-    padding: 16,
+    paddingHorizontal: LAYOUT_PAD,
+    paddingTop: 10,
     paddingBottom: 40,
+  },
+  fullWidthCard: {
+    marginHorizontal: TIMELINE_INSET,
+  },
+  glassCard: {
+    borderRadius: 22,
+    overflow: 'hidden',
+    marginBottom: 16,
   },
   searchContainer: {
     marginBottom: 16,
@@ -431,9 +448,8 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     padding: 8,
   },
-  categoriesContainer: {
-    marginBottom: 16,
-  },
+  categoriesContainer: { paddingVertical: 6 },
+  categoriesRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6 },
   categoryItem: {
     borderRadius: 20,
     marginRight: 8,
@@ -449,9 +465,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginLeft: 8,
   },
-  namesContainer: {
-    marginBottom: 16,
-  },
+  namesContainer: { marginBottom: 16 },
   nameItem: {
     borderRadius: 12,
     marginBottom: 12,

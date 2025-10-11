@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, Text, ScrollView, TouchableOpacity, Dimensions, Alert } from 'react-native';
+import { View, StyleSheet, Text, ScrollView, TouchableOpacity, Dimensions, Alert, StyleProp, ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ThemedText } from './ThemedText';
 import { ThemedView } from './ThemedView';
 import { Colors, QualityColors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { LiquidGlassCard, GLASS_OVERLAY, RADIUS } from '@/constants/DesignGuide';
 
 // Typ für die Wehen-Daten
 type Contraction = {
@@ -23,6 +24,7 @@ type VerticalContractionTimelineProps = {
   darkColor?: string;
   onDelete?: (id: string) => void;
   onEdit?: (id: string, intensity: string) => void;
+  containerStyle?: StyleProp<ViewStyle>;
 };
 
 // Funktion zur Bestimmung der Farbe basierend auf der Intensität
@@ -94,7 +96,8 @@ const VerticalContractionTimeline: React.FC<VerticalContractionTimelineProps> = 
   lightColor = '#FFFFFF',
   darkColor = '#333333',
   onDelete,
-  onEdit
+  onEdit,
+  containerStyle
 }) => {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
@@ -122,11 +125,13 @@ const VerticalContractionTimeline: React.FC<VerticalContractionTimelineProps> = 
   // Wenn keine Wehen vorhanden sind
   if (contractions.length === 0) {
     return (
-      <ThemedView style={styles.container} lightColor={lightColor} darkColor={darkColor}>
-        <ThemedText style={styles.noDataText}>
-          Noch keine Wehen aufgezeichnet.
-        </ThemedText>
-      </ThemedView>
+      <LiquidGlassCard style={[styles.glass, containerStyle]} intensity={26} overlayColor={GLASS_OVERLAY}>
+        <View style={styles.inner}>
+          <ThemedText style={styles.noDataText}>
+            Noch keine Wehen aufgezeichnet.
+          </ThemedText>
+        </View>
+      </LiquidGlassCard>
     );
   }
 
@@ -196,11 +201,12 @@ const VerticalContractionTimeline: React.FC<VerticalContractionTimelineProps> = 
   };
 
   return (
-    <ThemedView style={styles.container} lightColor={lightColor} darkColor={darkColor}>
-      <ThemedText style={styles.title}>Wehenverlauf</ThemedText>
+    <LiquidGlassCard style={[styles.glass, containerStyle]} intensity={26} overlayColor={GLASS_OVERLAY}>
+      <View style={styles.inner}>
+        <ThemedText style={styles.title}>Wehenverlauf</ThemedText>
 
-      <ScrollView style={styles.scrollView}>
-        {Object.keys(groupedContractions).map(dateKey => {
+        <ScrollView style={styles.scrollView}>
+          {Object.keys(groupedContractions).map(dateKey => {
           const date = new Date(parseInt(dateKey.split('-')[0]), parseInt(dateKey.split('-')[1]), parseInt(dateKey.split('-')[2]));
           const dayContractions = groupedContractions[dateKey];
 
@@ -343,16 +349,20 @@ const VerticalContractionTimeline: React.FC<VerticalContractionTimelineProps> = 
             </View>
           );
         })}
-      </ScrollView>
-    </ThemedView>
+        </ScrollView>
+      </View>
+    </LiquidGlassCard>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
+  glass: {
+    borderRadius: RADIUS,
+    overflow: 'hidden',
+    marginBottom: 16,
+  },
+  inner: {
     padding: 16,
-    borderRadius: 10,
   },
   title: {
     fontSize: 18,

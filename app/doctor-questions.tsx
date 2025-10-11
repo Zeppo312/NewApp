@@ -10,6 +10,7 @@ import { useRouter, Stack } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { getDoctorQuestions, saveDoctorQuestion, updateDoctorQuestion, deleteDoctorQuestion, DoctorQuestion } from '@/lib/supabase';
 import Header from '@/components/Header';
+import { LiquidGlassCard, GLASS_OVERLAY, LAYOUT_PAD, TIMELINE_INSET, TEXT_PRIMARY, RADIUS } from '@/constants/DesignGuide';
 
 export default function DoctorQuestionsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -196,61 +197,69 @@ export default function DoctorQuestionsScreen() {
           />
           <ScrollView contentContainerStyle={styles.scrollContent}>
 
-            <ThemedView style={styles.inputContainer} lightColor={theme.card} darkColor={theme.card}>
-              <ThemedText style={styles.inputLabel}>
-                Neue Frage hinzufügen
-              </ThemedText>
-              <TextInput
-                style={[styles.textInput, { color: theme.text }]}
-                placeholder="Was möchtest du deinen Frauenarzt fragen?"
-                placeholderTextColor={theme.tabIconDefault}
-                value={newQuestion}
-                onChangeText={setNewQuestion}
-                multiline
-                numberOfLines={3}
-              />
-              <TouchableOpacity
-                style={[styles.saveButton, { backgroundColor: theme.accent }]}
-                onPress={handleSaveQuestion}
-                disabled={isSaving || !newQuestion.trim()}
-              >
-                {isSaving ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <ThemedText style={styles.saveButtonText}>
-                    Frage speichern
-                  </ThemedText>
-                )}
-              </TouchableOpacity>
-            </ThemedView>
+            <LiquidGlassCard style={[styles.fullWidthCard, styles.glassCard]} intensity={26} overlayColor={GLASS_OVERLAY}>
+              <View style={styles.cardInnerCenter}>
+                <ThemedText style={[styles.inputLabel, styles.centerText, { color: TEXT_PRIMARY }]}>Neue Frage hinzufügen</ThemedText>
+                <TextInput
+                  style={[styles.textInput, { color: theme.text, alignSelf: 'stretch' }]}
+                  placeholder="Was möchtest du deinen Frauenarzt fragen?"
+                  placeholderTextColor={theme.tabIconDefault}
+                  value={newQuestion}
+                  onChangeText={setNewQuestion}
+                  multiline
+                  numberOfLines={3}
+                />
+                <LiquidGlassCard
+                  style={[styles.actionCard, styles.fullWidthCard]}
+                  intensity={24}
+                  overlayColor={'rgba(142,78,198,0.32)'}
+                  borderColor={'rgba(255,255,255,0.7)'}
+                  onPress={handleSaveQuestion}
+                >
+                  <View style={styles.actionCardInner}>
+                    {isSaving ? (
+                      <ActivityIndicator size="small" color={'#FFFFFF'} />
+                    ) : (
+                      <>
+                        <View style={[styles.actionIcon, { backgroundColor: 'rgba(142,78,198,0.9)' }]}>
+                          <IconSymbol name="paperplane.fill" size={24} color="#FFFFFF" />
+                        </View>
+                        <ThemedText style={styles.actionTitle}>Frage speichern</ThemedText>
+                        <ThemedText style={styles.actionDesc}>Absenden</ThemedText>
+                      </>
+                    )}
+                  </View>
+                </LiquidGlassCard>
+              </View>
+            </LiquidGlassCard>
 
-            <ThemedText style={styles.sectionTitle}>
-              Deine gespeicherten Fragen
-            </ThemedText>
+            <LiquidGlassCard style={[styles.fullWidthCard, styles.glassCard]} intensity={26} overlayColor={GLASS_OVERLAY}>
+              <ThemedText style={[styles.sectionTitle, styles.centerText]}>Deine gespeicherten Fragen</ThemedText>
+            </LiquidGlassCard>
 
             {isLoading ? (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color={theme.accent} />
-                <ThemedText style={styles.loadingText}>Fragen werden geladen...</ThemedText>
-              </View>
+              <LiquidGlassCard style={[styles.fullWidthCard, styles.glassCard]} intensity={26} overlayColor={GLASS_OVERLAY}>
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="large" color={theme.accent} />
+                  <ThemedText style={[styles.loadingText, { color: TEXT_PRIMARY }]}>Fragen werden geladen...</ThemedText>
+                </View>
+              </LiquidGlassCard>
             ) : questions.length === 0 ? (
-              <ThemedView style={styles.emptyState} lightColor={theme.card} darkColor={theme.card}>
-                <IconSymbol name="questionmark.circle" size={40} color={theme.tabIconDefault} />
-                <ThemedText style={styles.emptyStateText}>
-                  Noch keine Fragen gespeichert
-                </ThemedText>
-                <ThemedText style={styles.emptyStateSubtext}>
-                  Füge deine erste Frage hinzu, die du deinem Frauenarzt stellen möchtest.
-                </ThemedText>
-              </ThemedView>
+              <LiquidGlassCard style={[styles.fullWidthCard, styles.glassCard]} intensity={26} overlayColor={GLASS_OVERLAY}>
+                <View style={styles.emptyState}>
+                  <IconSymbol name="questionmark.circle" size={40} color={theme.tabIconDefault} />
+                  <ThemedText style={[styles.emptyStateText, { color: TEXT_PRIMARY }]}>Noch keine Fragen gespeichert</ThemedText>
+                  <ThemedText style={[styles.emptyStateSubtext, { color: TEXT_PRIMARY }]}>Füge deine erste Frage hinzu, die du deinem Frauenarzt stellen möchtest.</ThemedText>
+                </View>
+              </LiquidGlassCard>
             ) : (
               <View style={styles.questionsList}>
                 {questions.map((question) => (
-                  <ThemedView
+                  <LiquidGlassCard
                     key={question.id}
-                    style={styles.questionItem}
-                    lightColor={theme.card}
-                    darkColor={theme.card}
+                    style={[styles.fullWidthCard, styles.glassCard]}
+                    intensity={26}
+                    overlayColor={question.is_answered ? 'rgba(168,196,162,0.32)' : GLASS_OVERLAY}
                   >
                     <TouchableOpacity
                       style={styles.questionHeader}
@@ -306,18 +315,30 @@ export default function DoctorQuestionsScreen() {
                                 numberOfLines={3}
                               />
                               <View style={styles.answerEditButtons}>
-                                <TouchableOpacity
-                                  style={[styles.answerButton, { backgroundColor: '#FF6B6B' }]}
+                                <LiquidGlassCard
+                                  style={styles.pillGlassButton}
+                                  intensity={24}
+                                  overlayColor={'rgba(255,107,107,0.28)'}
+                                  borderColor={'rgba(255,255,255,0.7)'}
                                   onPress={handleCancelEditAnswer}
                                 >
-                                  <ThemedText style={styles.answerButtonText}>Abbrechen</ThemedText>
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                  style={[styles.answerButton, { backgroundColor: Colors.light.success }]}
+                                  <View style={styles.pillInner}>
+                                    <IconSymbol name="xmark" size={14} color="#FFFFFF" />
+                                    <ThemedText style={styles.pillText}>Abbrechen</ThemedText>
+                                  </View>
+                                </LiquidGlassCard>
+                                <LiquidGlassCard
+                                  style={styles.pillGlassButton}
+                                  intensity={24}
+                                  overlayColor={'rgba(168,196,162,0.32)'}
+                                  borderColor={'rgba(255,255,255,0.7)'}
                                   onPress={() => handleSaveAnswer(question.id)}
                                 >
-                                  <ThemedText style={styles.answerButtonText}>Speichern</ThemedText>
-                                </TouchableOpacity>
+                                  <View style={styles.pillInner}>
+                                    <IconSymbol name="checkmark" size={14} color="#FFFFFF" />
+                                    <ThemedText style={styles.pillText}>Speichern</ThemedText>
+                                  </View>
+                                </LiquidGlassCard>
                               </View>
                             </View>
                           ) : (
@@ -345,7 +366,7 @@ export default function DoctorQuestionsScreen() {
                         </TouchableOpacity>
                       </View>
                     )}
-                  </ThemedView>
+                  </LiquidGlassCard>
                 ))}
               </View>
             )}
@@ -367,24 +388,25 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   scrollContent: {
-    padding: 16,
+    paddingHorizontal: LAYOUT_PAD,
+    paddingTop: 10,
     paddingBottom: 40,
   },
-  inputContainer: {
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+  fullWidthCard: {
+    marginHorizontal: TIMELINE_INSET,
+  },
+  glassCard: {
+    borderRadius: RADIUS,
+    overflow: 'hidden',
+    marginBottom: 16,
   },
   inputLabel: {
     fontSize: 16,
     fontWeight: 'bold',
     marginBottom: 8,
   },
+  centerText: { textAlign: 'center' },
+  cardInnerCenter: { alignItems: 'center' },
   textInput: {
     backgroundColor: '#F5F5F5',
     borderRadius: 8,
@@ -393,23 +415,18 @@ const styles = StyleSheet.create({
     minHeight: 100,
     textAlignVertical: 'top',
   },
-  saveButton: {
-    borderRadius: 8,
-    padding: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 12,
-  },
-  saveButtonText: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-    fontSize: 16,
-  },
+  // Action card styles (like Wehe starten)
+  actionCard: { borderRadius: RADIUS, overflow: 'hidden', marginTop: 12 },
+  actionCardInner: { alignItems: 'center', justifyContent: 'center', padding: 16, minHeight: 96 },
+  actionIcon: { width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginBottom: 8, borderWidth: 2, borderColor: 'rgba(255,255,255,0.6)' },
+  actionTitle: { fontSize: 15, fontWeight: '800', color: '#7D5A50' },
+  actionDesc: { fontSize: 12, opacity: 0.9, color: '#7D5A50' },
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 12,
     color: '#7D5A50',
+    paddingHorizontal: 16,
   },
   loadingContainer: {
     padding: 20,
@@ -420,17 +437,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
     fontSize: 16,
   },
-  emptyState: {
-    padding: 20,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
+  emptyState: { padding: 20, alignItems: 'center', justifyContent: 'center' },
   emptyStateText: {
     fontSize: 18,
     fontWeight: 'bold',
@@ -446,16 +453,7 @@ const styles = StyleSheet.create({
   questionsList: {
     marginBottom: 20,
   },
-  questionItem: {
-    borderRadius: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-    overflow: 'hidden',
-  },
+  questionItem: {},
   questionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -530,18 +528,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'flex-end',
     marginTop: 8,
+    gap: 8,
   },
-  answerButton: {
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    marginLeft: 8,
-  },
-  answerButtonText: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
+  pillGlassButton: { borderRadius: RADIUS, overflow: 'hidden' },
+  pillInner: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8, paddingHorizontal: 12 },
+  pillText: { color: '#FFFFFF', fontWeight: '700', fontSize: 13 },
   actionButton: {
     borderRadius: 8,
     padding: 10,

@@ -275,19 +275,24 @@ export default function GeburtsplanScreen() {
         
         <Header 
           title="Geburtsplan" 
-          subtitle="Plane deine ideale Geburt"
+          subtitle={"Plane deine ideale Geburt\nIndividuell. Klar. Teilbar."}
           showBackButton 
         />
         
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
 
                 <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
-                  <ThemedText style={styles.sectionTitle}>
-                    Über den Geburtsplan
-                  </ThemedText>
-                  <ThemedText style={styles.infoText}>
-                    Hier kannst du deinen persönlichen Geburtsplan erstellen und speichern. Notiere deine Wünsche und Vorstellungen für die Geburt, damit du sie mit deinem Geburtsteam teilen kannst.
-                  </ThemedText>
+                  <View style={styles.heroHeader}>
+                    <View style={[styles.heroIcon, { backgroundColor: 'rgba(142,78,198,0.9)' }]}>
+                      <IconSymbol name="doc.text.fill" size={24} color="#FFFFFF" />
+                    </View>
+                    <ThemedText style={[styles.sectionTitle, styles.centerText]}>
+                      Über den Geburtsplan
+                    </ThemedText>
+                    <ThemedText style={[styles.infoText, styles.centerText]}>
+                      Hier kannst du deinen persönlichen Geburtsplan erstellen und speichern. Notiere deine Wünsche und Vorstellungen für die Geburt, damit du sie mit deinem Geburtsteam teilen kannst.
+                    </ThemedText>
+                  </View>
                 </LiquidGlassCard>
 
                 <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
@@ -383,51 +388,46 @@ export default function GeburtsplanScreen() {
                   </LiquidGlassCard>
                 )}
 
-                <View style={styles.cardsRow}>
-                  <LiquidGlassCard
-                    style={[styles.actionCardWrapper, { marginRight: 12 }]}
-                    intensity={24}
-                    overlayColor={'rgba(142,78,198,0.32)'}
-                    borderColor={'rgba(255,255,255,0.7)'}
+                {/* Quick Actions im More-Style */}
+                <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
+                  <TouchableOpacity
+                    style={styles.menuItem}
                     onPress={handleSaveGeburtsplan}
+                    disabled={isSaving}
                   >
-                    <View style={styles.actionCardInner}>
-                      {isSaving ? (
-                        <ActivityIndicator size="small" color={colorScheme === 'dark' ? '#fff' : '#fff'} />
-                      ) : (
-                        <>
-                          <View style={[styles.iconContainer, { backgroundColor: 'rgba(142,78,198,0.9)' }]}>
-                            <IconSymbol name="tray.and.arrow.down.fill" size={24} color="#FFFFFF" />
-                          </View>
-                          <ThemedText style={[styles.cardTitle, { color: TEXT_PRIMARY }]}>Speichern</ThemedText>
-                          <ThemedText style={[styles.cardDesc, { color: TEXT_PRIMARY }]}>Geburtsplan</ThemedText>
-                        </>
-                      )}
+                    <View style={styles.menuItemIcon}>
+                      <IconSymbol name="tray.and.arrow.down.fill" size={24} color={theme.accent} />
                     </View>
-                  </LiquidGlassCard>
+                    <View style={styles.menuItemContent}>
+                      <ThemedText style={styles.menuItemTitle}>Speichern</ThemedText>
+                      <ThemedText style={styles.menuItemDescription}>Geburtsplan</ThemedText>
+                    </View>
+                    {isSaving ? (
+                      <ActivityIndicator size="small" color={theme.accent} />
+                    ) : (
+                      <IconSymbol name="chevron.right" size={20} color={colorScheme === 'dark' ? '#ddd' : '#8b756d'} />
+                    )}
+                  </TouchableOpacity>
 
-                  <LiquidGlassCard
-                    style={styles.actionCardWrapper}
-                    intensity={24}
-                    overlayColor={'rgba(168,196,193,0.32)'}
-                    borderColor={'rgba(255,255,255,0.7)'}
+                  <TouchableOpacity
+                    style={styles.menuItem}
                     onPress={handleGeneratePDF}
+                    disabled={isGeneratingPDF}
                   >
-                    <View style={styles.actionCardInner}>
-                      {isGeneratingPDF ? (
-                        <ActivityIndicator size="small" color={colorScheme === 'dark' ? '#fff' : '#fff'} />
-                      ) : (
-                        <>
-                          <View style={[styles.iconContainer, { backgroundColor: 'rgba(168,196,193,0.9)' }]}>
-                            <IconSymbol name="arrow.down.doc" size={24} color="#FFFFFF" />
-                          </View>
-                          <ThemedText style={[styles.cardTitle, { color: TEXT_PRIMARY }]}>PDF</ThemedText>
-                          <ThemedText style={[styles.cardDesc, { color: TEXT_PRIMARY }]}>Herunterladen</ThemedText>
-                        </>
-                      )}
+                    <View style={styles.menuItemIcon}>
+                      <IconSymbol name="arrow.down.doc" size={24} color={theme.accent} />
                     </View>
-                  </LiquidGlassCard>
-                </View>
+                    <View style={styles.menuItemContent}>
+                      <ThemedText style={styles.menuItemTitle}>PDF</ThemedText>
+                      <ThemedText style={styles.menuItemDescription}>Herunterladen</ThemedText>
+                    </View>
+                    {isGeneratingPDF ? (
+                      <ActivityIndicator size="small" color={theme.accent} />
+                    ) : (
+                      <IconSymbol name="chevron.right" size={20} color={colorScheme === 'dark' ? '#ddd' : '#8b756d'} />
+                    )}
+                  </TouchableOpacity>
+                </LiquidGlassCard>
 
                 <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
                   <ThemedText style={styles.sectionTitle}>
@@ -479,6 +479,18 @@ const createStyles = (theme: any) => StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: TEXT_PRIMARY,
+  },
+  centerText: { textAlign: 'center' },
+  heroHeader: { alignItems: 'center', paddingVertical: 6 },
+  heroIcon: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.6)'
   },
   textAreaGlass: {
     borderRadius: 22,
