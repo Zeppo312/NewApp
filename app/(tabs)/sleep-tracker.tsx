@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   SafeAreaView,
   View,
@@ -36,6 +36,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { ProgressCircle } from '@/components/ProgressCircle';
 import type { ViewStyle } from 'react-native';
 import { GlassCard, LiquidGlassCard, LAYOUT_PAD, SECTION_GAP_TOP, SECTION_GAP_BOTTOM, RADIUS, PRIMARY, GLASS_BORDER, GLASS_OVERLAY, FONT_SM, FONT_MD, FONT_LG } from '@/constants/DesignGuide';
+import { getBabyInfo } from '@/lib/baby';
+import { predictNextSleepWindow, updatePersonalizationAfterNap, type SleepWindowPrediction } from '@/lib/sleep-window';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -235,6 +237,11 @@ export default function SleepTrackerScreen() {
   const [selectedActivityType, setSelectedActivityType] = useState<'feeding' | 'diaper' | 'other'>('feeding');
   const [selectedSubType, setSelectedSubType] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [babyBirthdate, setBabyBirthdate] = useState<Date | null>(null);
+  const [sleepPrediction, setSleepPrediction] = useState<SleepWindowPrediction | null>(null);
+  const [predictionLoading, setPredictionLoading] = useState(false);
+  const [predictionError, setPredictionError] = useState<string | null>(null);
+  const predictionRef = useRef<SleepWindowPrediction | null>(null);
 
   // Bei Tabwechsel Offsets zurücksetzen
   useEffect(() => {
@@ -276,6 +283,39 @@ export default function SleepTrackerScreen() {
   useEffect(() => {
     loadSleepData();
   }, []);
+
+  useEffect(() => {
+    if (!user?.id) {
+      setBabyBirthdate(null);
+      return;
+    }
+
+    let isMounted = true;
+
+    const fetchBabyProfile = async () => {
+      try {
+        const { data } = await getBabyInfo();
+        if (!isMounted) return;
+
+        if (data?.birth_date) {
+          const parsed = new Date(data.birth_date);
+          setBabyBirthdate(Number.isNaN(parsed.getTime()) ? null : parsed);
+        } else {
+          setBabyBirthdate(null);
+        }
+      } catch (error) {
+        if (isMounted) {
+          console.error('Failed to load baby info for sleep prediction:', error);
+        }
+      }
+    };
+
+    fetchBabyProfile();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user?.id]);
 
   useEffect(() => {
     Animated.timing(appearAnim, {
@@ -326,6 +366,10 @@ export default function SleepTrackerScreen() {
     }
   }, [activeSleepEntry, pulseAnim]);
 
+  useEffect(() => {
+    updateSleepPrediction(sleepEntries);
+  }, [sleepEntries, updateSleepPrediction]);
+
   // Classify sleep entry by time period
   const classifySleepEntry = (entry: any): ClassifiedSleepEntry => {
     const startHour = new Date(entry.start_time).getHours();
@@ -338,6 +382,38 @@ export default function SleepTrackerScreen() {
       isActive
     };
   };
+
+  const updateSleepPrediction = useCallback(
+    async (entries: ClassifiedSleepEntry[]) => {
+      if (!user?.id) {
+        setSleepPrediction(null);
+        predictionRef.current = null;
+        setPredictionLoading(false);
+        return;
+      }
+
+      setPredictionLoading(true);
+      try {
+        const prediction = await predictNextSleepWindow({
+          userId: user.id,
+          birthdate: babyBirthdate ?? undefined,
+          entries,
+          anchorBedtime: '19:30',
+        });
+        setSleepPrediction(prediction);
+        predictionRef.current = prediction;
+        setPredictionError(null);
+      } catch (error) {
+        console.error('Failed to predict next sleep window:', error);
+        setSleepPrediction(null);
+        predictionRef.current = null;
+        setPredictionError('Vorhersage aktuell nicht möglich');
+      } finally {
+        setPredictionLoading(false);
+      }
+    },
+    [user?.id, babyBirthdate]
+  );
 
   // Load sleep data
   const loadSleepData = async () => {
@@ -357,6 +433,7 @@ export default function SleepTrackerScreen() {
       }
     } catch (error) {
       console.error('Failed to load sleep data:', error);
+      setPredictionLoading(false);
     } finally {
       setIsLoading(false);
       setRefreshing(false);
@@ -370,13 +447,33 @@ export default function SleepTrackerScreen() {
   };
 
   // Start sleep tracking
-  const handleStartSleep = async (period: SleepPeriod) => {
+  const handleStartSleep = async (_period: SleepPeriod) => {
     try {
       const { success, entry, error } = await startSleepTracking();
       
       if (success && entry) {
         const classifiedEntry = classifySleepEntry(entry);
         setActiveSleepEntry(classifiedEntry);
+
+        if (user?.id && predictionRef.current) {
+          try {
+            await updatePersonalizationAfterNap(
+              user.id,
+              predictionRef.current.napIndexToday,
+              predictionRef.current.timeOfDayBucket,
+              predictionRef.current.recommendedStart,
+              new Date(entry.start_time),
+            );
+          } catch (personalizationError) {
+            console.error('Failed to update sleep personalization:', personalizationError);
+          } finally {
+            predictionRef.current = null;
+            setSleepPrediction(null);
+            setPredictionError(null);
+            setPredictionLoading(true);
+          }
+        }
+
         await loadSleepData();
 
         // Splash anzeigen
@@ -713,6 +810,15 @@ export default function SleepTrackerScreen() {
     if (h <= 0) return `${m}m`;
     return `${h}h ${m}m`;
   };
+  const formatClockTime = (date: Date) =>
+    date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+
+  const bucketLabels: Record<SleepWindowPrediction['timeOfDayBucket'], string> = {
+    morning: 'Vormittag',
+    midday: 'Mittag',
+    afternoon: 'Nachmittag',
+    evening: 'Abend',
+  };
 
   // Daily navigation helpers
   const isSameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
@@ -720,13 +826,6 @@ export default function SleepTrackerScreen() {
   const goNextDay = () => setSelectedDate(d => { const nd = new Date(d); nd.setDate(nd.getDate() + 1); return nd; });
   const today = new Date();
   const nextDisabled = isSameDay(selectedDate, today) || selectedDate > today;
-
-  const getNextSleepRecommendation = () => {
-    const hour = currentTime.getHours();
-    if (hour >= 10 && hour < 14) return 'Mittagsschlaf';
-    if (hour >= 14 && hour < 18) return 'Nachmittagsschlaf';
-    return 'Nachtschlaf';
-  };
 
   const qualityPillActive = (q: 'good' | 'medium' | 'bad'): ViewStyle => ({
     backgroundColor:
@@ -892,15 +991,28 @@ export default function SleepTrackerScreen() {
                 </View>
 
             <View pointerEvents="none" style={styles.lowerContent}>
-              <Text style={[styles.centralStatus, { color: '#6B4C3B', fontWeight: '700' }]}>
-                {activeSleepEntry ? 'Schläft' : 'Wach'}
-              </Text>
-                <Text style={[styles.centralHint, { color: '#7D5A50', fontWeight: '500' }]}>
-                {activeSleepEntry
-                  ? `Seit ${new Date(activeSleepEntry.start_time).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}`
-                  : `Bereit für ${getNextSleepRecommendation()}`
-                }
+              {activeSleepEntry && (
+                <Text style={[styles.centralStatus, { color: '#6B4C3B', fontWeight: '700' }]}>
+                  Schläft
                 </Text>
+              )}
+              {activeSleepEntry ? (
+                <Text style={[styles.centralHint, { color: '#7D5A50', fontWeight: '500' }]}>
+                  Seit {new Date(activeSleepEntry.start_time).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
+                </Text>
+              ) : predictionLoading ? (
+                <Text style={[styles.centralHint, { color: '#7D5A50', fontWeight: '500' }]}>
+                  Schlaffenster wird berechnet...
+                </Text>
+              ) : sleepPrediction ? (
+                <Text style={[styles.centralHintPrimary, { color: '#6B4C3B' }]}>
+                  Nächste Schlafphase um {formatClockTime(sleepPrediction.recommendedStart)}
+                </Text>
+              ) : (
+                <Text style={[styles.centralHint, { color: '#7D5A50', fontWeight: '500' }]}>
+                  {predictionError || 'Bereit für den nächsten Schlaf'}
+                </Text>
+              )}
             </View>
           </View>
         </Animated.View>
@@ -971,20 +1083,6 @@ export default function SleepTrackerScreen() {
       )}
     </View>
   );
-  };
-
-  // Next Sleep Window Component
-  const getNextSleepWindow = () => {
-    const hour = currentTime.getHours();
-    const minutes = currentTime.getMinutes();
-    
-    if (hour >= 9 && hour < 12) {
-      return { time: '12:30 - 14:00', type: 'Mittagsschlaf', icon: 'sun.haze.fill', color: '#FFB84D' };
-    } else if (hour >= 12 && hour < 19) {
-      return { time: '19:30 - 07:00', type: 'Nachtschlaf', icon: 'moon.fill', color: '#8E4EC6' };
-    } else {
-      return { time: '19:30 - 07:00', type: 'Nachtschlaf', icon: 'moon.fill', color: '#8E4EC6' };
-    }
   };
 
   // Wochenansicht Component (Design Guide konform)
@@ -1834,14 +1932,14 @@ const styles = StyleSheet.create({
   scrollContent: { paddingBottom: 140, paddingHorizontal: LAYOUT_PAD },
 
   // KPI glass cards (Kompakt)
-    kpiRow: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignSelf: 'center',
-      width: contentWidth,   // exakt gleich wie andere Abschnitte
-      marginTop: 6,
-      marginBottom: 4,
-    },
+  kpiRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignSelf: 'center',
+    width: contentWidth,   // exakt gleich wie andere Abschnitte
+    marginTop: 6,
+    marginBottom: 4,
+  },
   kpiCard: {
     width: '48%',
     borderRadius: 12,
@@ -1983,12 +2081,28 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   centralHint: {
-    fontSize: 11,
+    fontSize: 12,
     textAlign: 'center',
-    lineHeight: 11, // Match fontSize for perfect alignment
-    maxWidth: 180,
+    lineHeight: 16,
+    maxWidth: 200,
     textAlignVertical: 'center',
     includeFontPadding: false,
+    marginTop: 2,
+  },
+  centralHintPrimary: {
+    fontSize: 16,
+    fontWeight: '800',
+    textAlign: 'center',
+    lineHeight: 20,
+    includeFontPadding: false,
+  },
+  centralHintSecondary: {
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'center',
+    lineHeight: 16,
+    includeFontPadding: false,
+    opacity: 0.85,
   },
 
   sectionTitle: {
