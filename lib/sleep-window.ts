@@ -339,20 +339,15 @@ function normalizeEntries(entries: SleepEntry[]): NormalizedEntry[] {
         return null;
       }
 
-      const normalized: NormalizedEntry = {
+      return {
+        id: entry.id,
         start,
         end: end ?? null,
         duration,
         raw: entry,
       };
-
-      if (entry.id) {
-        normalized.id = entry.id;
-      }
-
-      return normalized;
     })
-    .filter((entry): entry is NormalizedEntry => entry !== null);
+    .filter((entry): entry is NormalizedEntry => Boolean(entry));
 }
 
 function getBaselineWindow(
