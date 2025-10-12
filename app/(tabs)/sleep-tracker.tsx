@@ -234,8 +234,6 @@ export default function SleepTrackerScreen() {
   // Navigation offsets für Woche und Monat
   const [weekOffset, setWeekOffset] = useState(0);   // 0 = diese Woche, -1 = letzte, +1 = nächste
   const [monthOffset, setMonthOffset] = useState(0); // 0 = dieser Monat, -1 = vorheriger, +1 = nächster
-  const [selectedActivityType, setSelectedActivityType] = useState<'feeding' | 'diaper' | 'other'>('feeding');
-  const [selectedSubType, setSelectedSubType] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [babyBirthdate, setBabyBirthdate] = useState<Date | null>(null);
   const [sleepPrediction, setSleepPrediction] = useState<SleepWindowPrediction | null>(null);
@@ -813,13 +811,6 @@ export default function SleepTrackerScreen() {
   const formatClockTime = (date: Date) =>
     date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
 
-  const bucketLabels: Record<SleepWindowPrediction['timeOfDayBucket'], string> = {
-    morning: 'Vormittag',
-    midday: 'Mittag',
-    afternoon: 'Nachmittag',
-    evening: 'Abend',
-  };
-
   // Daily navigation helpers
   const isSameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
   const goPrevDay = () => setSelectedDate(d => { const nd = new Date(d); nd.setDate(nd.getDate() - 1); return nd; });
@@ -1063,8 +1054,6 @@ export default function SleepTrackerScreen() {
             style={[styles.liquidGlassCardWrapper, { width: GRID_COL_W }]}
               onPress={() => {
                 setEditingEntry(null);
-                setSelectedActivityType('feeding');
-                setSelectedSubType(null);
                 setShowInputModal(true);
               }}
             activeOpacity={0.9}
@@ -1651,8 +1640,6 @@ export default function SleepTrackerScreen() {
                   onDelete={handleDeleteEntry}
                   onEdit={(entry) => {
                     setEditingEntry(entry as any);
-                    setSelectedActivityType('feeding'); // Sleep wird als feeding behandelt
-                    setSelectedSubType('feeding_bottle'); // Standard subtype
                     setShowInputModal(true);
                   }}
                   marginHorizontal={8}
@@ -1665,8 +1652,6 @@ export default function SleepTrackerScreen() {
               <Text style={styles.emptySubtitle}>Starte den ersten Schlaf-Eintrag!</Text>
                 <TouchableOpacity style={[styles.actionButton, styles.manualButton, { marginTop: 16 }]} onPress={() => {
                   setEditingEntry(null);
-                  setSelectedActivityType('feeding');
-                  setSelectedSubType(null);
                   setShowInputModal(true);
                 }}>
                 <Text style={styles.actionButtonText}>Manuell hinzufügen</Text>

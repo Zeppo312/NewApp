@@ -204,22 +204,32 @@ export async function predictNextSleepWindow({
     }
   }
 
-  if (recommendedStart.getTime() < earliest.getTime()) {
-    recommendedStart = earliest;
-  }
-  if (recommendedStart.getTime() > latest.getTime()) {
-    recommendedStart = latest;
-  }
-
-  if (earliest.getTime() > latest.getTime()) {
-    earliest = new Date(latest);
-  }
-
   if (awakeOverrideApplied) {
     earliest = new Date(Math.max(earliest.getTime(), now.getTime()));
     if (recommendedStart.getTime() < earliest.getTime()) {
       recommendedStart = earliest;
     }
+  }
+
+  if (awakeOverrideApplied && recommendedStart.getTime() > latest.getTime()) {
+    recommendedStart = new Date(latest);
+  }
+
+  const minStart = now;
+  if (latest.getTime() < minStart.getTime()) {
+    latest = new Date(minStart);
+  }
+  if (earliest.getTime() < minStart.getTime()) {
+    earliest = new Date(minStart);
+  }
+  if (earliest.getTime() > latest.getTime()) {
+    earliest = new Date(latest);
+  }
+  if (recommendedStart.getTime() > latest.getTime()) {
+    recommendedStart = new Date(latest);
+  }
+  if (recommendedStart.getTime() < earliest.getTime()) {
+    recommendedStart = new Date(earliest);
   }
 
   timeOfDayBucket = getTimeOfDayBucket(recommendedStart);
@@ -371,25 +381,21 @@ function computeDailySleepStats(entries: NormalizedEntry[], reference: Date): {
   last24hMinutes: number;
   todayMinutes: number;
 } {
-  const last24hThreshold = reference.getTime() - 24 * 60 * 60 * 1000;
-  const startOfTodayTs = startOfDay(reference).getTime();
+  const refEnd = reference;
+  const refStart24h = new Date(refEnd.getTime() - 24 * 60 * 60 * 1000);
+  const todayStart = startOfDay(refEnd);
+  const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
 
   let last24hMinutes = 0;
   let todayMinutes = 0;
 
-  entries.forEach((entry) => {
+  for (const entry of entries) {
     if (!entry.end || entry.duration === null) {
-      return;
+      continue;
     }
-
-    if (entry.end.getTime() >= last24hThreshold) {
-      last24hMinutes += entry.duration;
-    }
-
-    if (entry.end.getTime() >= startOfTodayTs) {
-      todayMinutes += entry.duration;
-    }
-  });
+    last24hMinutes += overlapMinutes(entry.start, entry.end, refStart24h, refEnd);
+    todayMinutes += overlapMinutes(entry.start, entry.end, todayStart, todayEnd);
+  }
 
   return { last24hMinutes, todayMinutes };
 }
@@ -442,6 +448,11 @@ function minutesBetween(later: Date, earlier: Date): number {
   return Math.round((later.getTime() - earlier.getTime()) / 60000);
 }
 
+function overlapMinutes(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date): number {
+  const ms = Math.max(0, Math.min(+aEnd, +bEnd) - Math.max(+aStart, +bStart));
+  return Math.round(ms / 60000);
+}
+
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
@@ -474,7 +485,8 @@ function resolveAnchorDate(anchor: string, reference: Date): Date | null {
   const anchorDate = new Date(reference);
   anchorDate.setHours(hours, minutes, 0, 0);
 
-  if (anchorDate.getTime() < reference.getTime() - 6 * 60 * 60 * 1000) {
+  const TOLERANCE_MS = 15 * 60 * 1000;
+  if (anchorDate.getTime() < reference.getTime() - TOLERANCE_MS) {
     anchorDate.setDate(anchorDate.getDate() + 1);
   }
 
