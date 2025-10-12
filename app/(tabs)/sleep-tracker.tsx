@@ -364,23 +364,6 @@ export default function SleepTrackerScreen() {
     }
   }, [activeSleepEntry, pulseAnim]);
 
-  useEffect(() => {
-    updateSleepPrediction(sleepEntries);
-  }, [sleepEntries, updateSleepPrediction]);
-
-  // Classify sleep entry by time period
-  const classifySleepEntry = (entry: any): ClassifiedSleepEntry => {
-    const startHour = new Date(entry.start_time).getHours();
-    const period: SleepPeriod = (startHour >= 6 && startHour < 20) ? 'day' : 'night';
-    const isActive = !entry.end_time;
-    
-    return {
-      ...entry,
-      period,
-      isActive
-    };
-  };
-
   const updateSleepPrediction = useCallback(
     async (entries: ClassifiedSleepEntry[]) => {
       if (!user?.id) {
@@ -412,6 +395,23 @@ export default function SleepTrackerScreen() {
     },
     [user?.id, babyBirthdate]
   );
+
+  useEffect(() => {
+    updateSleepPrediction(sleepEntries);
+  }, [sleepEntries, updateSleepPrediction]);
+
+  // Classify sleep entry by time period
+  const classifySleepEntry = (entry: any): ClassifiedSleepEntry => {
+    const startHour = new Date(entry.start_time).getHours();
+    const period: SleepPeriod = (startHour >= 6 && startHour < 20) ? 'day' : 'night';
+    const isActive = !entry.end_time;
+    
+    return {
+      ...entry,
+      period,
+      isActive
+    };
+  };
 
   // Load sleep data
   const loadSleepData = async () => {
