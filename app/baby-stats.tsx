@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { StyleSheet, ScrollView, View, ActivityIndicator, SafeAreaView } from 'react-native';
+import { StyleSheet, ScrollView, View, ActivityIndicator, SafeAreaView, Dimensions } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedBackground } from '@/components/ThemedBackground';
@@ -18,6 +18,11 @@ import {
   addMonths,
   addDays
 } from 'date-fns';
+import { LAYOUT_PAD, SECTION_GAP_TOP, RADIUS } from '@/constants/DesignGuide';
+
+const { width: screenWidth } = Dimensions.get('window');
+const TIMELINE_INSET = 8;
+const contentWidth = screenWidth - 2 * LAYOUT_PAD;
 
 // Initiale Stats als leere Werte definieren
 const initialStats = {
@@ -343,8 +348,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contentContainer: {
-    padding: 16,
-    paddingBottom: 40,
+    paddingHorizontal: LAYOUT_PAD,
+    paddingVertical: 16,
+    paddingBottom: 140,
+    alignItems: 'center',
   },
   loadingContainer: {
     flex: 1,
@@ -352,9 +359,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statsCard: {
+    width: contentWidth - 2 * TIMELINE_INSET,
     padding: 20,
-    borderRadius: 15,
-    marginBottom: 16,
+    borderRadius: RADIUS,
+    marginBottom: SECTION_GAP_TOP,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,

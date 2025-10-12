@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, TextInput, Alert, ImageBackground, SafeAreaView, StatusBar, FlatList } from 'react-native';
+import { StyleSheet, ScrollView, View, TouchableOpacity, TextInput, Alert, ImageBackground, SafeAreaView, StatusBar, FlatList, Dimensions } from 'react-native';
 import { useRouter, Stack } from 'expo-router';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
@@ -10,6 +10,11 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { supabase } from '@/lib/supabase';
 import Header from '@/components/Header';
 import { useSmartBack } from '@/contexts/NavigationContext';
+import { LAYOUT_PAD, SECTION_GAP_TOP, RADIUS } from '@/constants/DesignGuide';
+
+const { width: screenWidth } = Dimensions.get('window');
+const TIMELINE_INSET = 8;
+const contentWidth = screenWidth - 2 * LAYOUT_PAD;
 
 // Typen für die Stimmungen
 type MoodType = 'great' | 'good' | 'okay' | 'bad' | 'awful';
@@ -480,13 +485,16 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contentContainer: {
-    padding: 20,
-    paddingBottom: 40,
+    paddingHorizontal: LAYOUT_PAD,
+    paddingVertical: 20,
+    paddingBottom: 140,
+    alignItems: 'center',
   },
   card: {
-    borderRadius: 15,
+    width: contentWidth - 2 * TIMELINE_INSET,
+    borderRadius: RADIUS,
     padding: 20,
-    marginBottom: 20,
+    marginBottom: SECTION_GAP_TOP,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -662,9 +670,10 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   saveButton: {
+    width: contentWidth - 2 * TIMELINE_INSET,
     backgroundColor: '#7D5A50',
     paddingVertical: 15,
-    borderRadius: 10,
+    borderRadius: RADIUS,
     alignItems: 'center',
     marginTop: 10,
     shadowColor: '#000',
