@@ -996,9 +996,14 @@ export default function SleepTrackerScreen() {
                   Schlaffenster wird berechnet...
                 </Text>
               ) : sleepPrediction ? (
-                <Text style={[styles.centralHintPrimary, { color: '#6B4C3B' }]}>
-                  Nächste Schlafphase um {formatClockTime(sleepPrediction.recommendedStart)}
-                </Text>
+                <>
+                  <Text style={[styles.centralHintPrimary, { color: '#6B4C3B' }]}>
+                    Nächste Schlafphase um
+                  </Text>
+                  <Text style={[styles.centralHintSecondary, { color: '#7D5A50' }]}>
+                    {formatClockTime(sleepPrediction.recommendedStart)}
+                  </Text>
+                </>
               ) : (
                 <Text style={[styles.centralHint, { color: '#7D5A50', fontWeight: '500' }]}>
                   {predictionError || 'Bereit für den nächsten Schlaf'}
@@ -2075,10 +2080,10 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   centralHintPrimary: {
-    fontSize: 16,
-    fontWeight: '800',
+    fontSize: 14,
+    fontWeight: '600',
     textAlign: 'center',
-    lineHeight: 20,
+    lineHeight: 18,
     includeFontPadding: false,
   },
   centralHintSecondary: {
