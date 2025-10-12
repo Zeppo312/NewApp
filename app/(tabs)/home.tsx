@@ -49,6 +49,7 @@ export default function HomeScreen() {
   const [showInputModal, setShowInputModal] = useState(false);
   const [selectedActivityType, setSelectedActivityType] = useState<'feeding' | 'diaper' | 'other'>('feeding');
   const [selectedSubType, setSelectedSubType] = useState<string | null>(null);
+  const [todaySleepMinutes, setTodaySleepMinutes] = useState(0);
 
   useEffect(() => {
     if (user) {
@@ -125,6 +126,8 @@ export default function HomeScreen() {
         setDailyEntries(dailyData);
       }
 
+      await fetchTodaySleepMinutes(startOfDay, endOfDay);
+
       // Aktuelle Entwicklungsphase laden
       const { data: phaseData } = await getCurrentPhase();
       if (phaseData) {
@@ -166,6 +169,16 @@ export default function HomeScreen() {
   // Berechne die Anzahl der heutigen Windelwechsel
   const getTodayDiaperChanges = () => {
     return dailyEntries.filter(entry => entry.entry_type === 'diaper').length;
+  };
+
+  const formatMinutes = (minutes: number) => {
+    if (!minutes || minutes <= 0) return '0m';
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    if (hours > 0) {
+      return `${hours}h ${mins}m`;
+    }
+    return `${mins}m`;
   };
 
   // Berechne die Anzahl der heutigen Einträge (für Referenz, wird nicht mehr angezeigt)
@@ -229,8 +242,52 @@ export default function HomeScreen() {
         console.log('Loaded daily entries:', dailyData.length, 'entries');
         setDailyEntries(dailyData);
       }
+
+      await fetchTodaySleepMinutes(startOfDay, endOfDay);
     } catch (err) {
       console.error('Failed to load daily entries:', err);
+    }
+  };
+
+  const fetchTodaySleepMinutes = async (startOfDay: Date, endOfDay: Date) => {
+    try {
+      if (!user?.id) {
+        setTodaySleepMinutes(0);
+        return;
+      }
+
+      const startIso = startOfDay.toISOString();
+      const endIso = endOfDay.toISOString();
+      const overlapFilter = [
+        `and(start_time.lte.${endIso},end_time.is.null)`,
+        `and(start_time.lte.${endIso},end_time.gte.${startIso})`
+      ].join(',');
+
+      const { data, error } = await supabase
+        .from('sleep_entries')
+        .select('start_time,end_time')
+        .eq('user_id', user.id)
+        .or(overlapFilter);
+
+      if (error || !data) {
+        console.error('Error loading sleep entries for today:', error);
+        setTodaySleepMinutes(0);
+        return;
+      }
+
+      const totalMinutes = data.reduce((sum, entry) => {
+        const entryStart = new Date(entry.start_time);
+        const rawEnd = entry.end_time ? new Date(entry.end_time) : new Date();
+        const clampedStart = entryStart < startOfDay ? startOfDay : entryStart;
+        const clampedEnd = rawEnd > endOfDay ? endOfDay : rawEnd;
+        const diff = clampedEnd.getTime() - clampedStart.getTime();
+        return diff > 0 ? sum + Math.round(diff / 60000) : sum;
+      }, 0);
+
+      setTodaySleepMinutes(totalMinutes);
+    } catch (error) {
+      console.error('Failed to calculate today sleep minutes:', error);
+      setTodaySleepMinutes(0);
     }
   };
 
@@ -381,23 +438,21 @@ export default function HomeScreen() {
                 <ThemedText style={[styles.statLabel, styles.liquidGlassStatLabel, { color: '#7D5A50' }]}>Windeln</ThemedText>
               </TouchableOpacity>
 
-              {currentPhase && phaseProgress && (
-                <View style={[styles.statItem, styles.liquidGlassStatItem, { 
-                  backgroundColor: 'rgba(94, 61, 179, 0.05)', 
-                  borderColor: 'rgba(94, 61, 179, 0.15)' 
-                }]}>
-                  <View style={styles.liquidGlassStatIcon}>
-                    <Text style={styles.statEmoji}>💤</Text>
-                  </View>
-                  <ThemedText style={[styles.statValue, styles.liquidGlassStatValue, { 
-                    color: '#5E3DB3',
-                    textShadowColor: 'rgba(255, 255, 255, 0.8)',
-                    textShadowOffset: { width: 0, height: 1 },
-                    textShadowRadius: 2,
-                  }]}>0m</ThemedText>
-                  <ThemedText style={[styles.statLabel, styles.liquidGlassStatLabel, { color: '#7D5A50' }]}>Schlaf</ThemedText>
+              <View style={[styles.statItem, styles.liquidGlassStatItem, { 
+                backgroundColor: 'rgba(94, 61, 179, 0.05)', 
+                borderColor: 'rgba(94, 61, 179, 0.15)' 
+              }]}>
+                <View style={styles.liquidGlassStatIcon}>
+                  <Text style={styles.statEmoji}>💤</Text>
                 </View>
-              )}
+                <ThemedText style={[styles.statValue, styles.liquidGlassStatValue, { 
+                  color: '#5E3DB3',
+                  textShadowColor: 'rgba(255, 255, 255, 0.8)',
+                  textShadowOffset: { width: 0, height: 1 },
+                  textShadowRadius: 2,
+                }]}>{formatMinutes(todaySleepMinutes)}</ThemedText>
+                <ThemedText style={[styles.statLabel, styles.liquidGlassStatLabel, { color: '#7D5A50' }]}>Schlaf</ThemedText>
+              </View>
             </View>
           </ThemedView>
         </BlurView>
