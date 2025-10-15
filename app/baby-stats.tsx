@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { StyleSheet, ScrollView, View, ActivityIndicator, SafeAreaView } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
@@ -11,6 +10,7 @@ import { Stack, useRouter } from 'expo-router';
 import { BackButton } from '@/components/BackButton';
 import Header from '@/components/Header';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { LiquidGlassCard, LAYOUT_PAD, TIMELINE_INSET } from '@/constants/DesignGuide';
 import {
   differenceInYears,
   differenceInMonths,
@@ -210,29 +210,31 @@ export default function BabyStatsScreen() {
     const sleep = Math.round(stats.totalDays * getAvgSleepHours(totalMonths));
     
     return (
-      <ThemedView style={styles.statsCard} lightColor={theme.cardLight} darkColor={theme.cardDark}>
-        <ThemedText style={styles.sectionTitle}>Interessante Fakten</ThemedText>
-        
-        <View style={styles.factRow}>
-          <ThemedText style={styles.factLabel}>Geschätzte Herzschläge:</ThemedText>
-          <ThemedText style={styles.factValue}>{heartbeats.toLocaleString('de-DE')}</ThemedText>
+      <LiquidGlassCard style={styles.glassCard}>
+        <View style={styles.glassInner}>
+          <ThemedText style={styles.sectionTitle}>Interessante Fakten</ThemedText>
+          
+          <View style={styles.factRow}>
+            <ThemedText style={styles.factLabel}>Geschätzte Herzschläge:</ThemedText>
+            <ThemedText style={styles.factValue}>{heartbeats.toLocaleString('de-DE')}</ThemedText>
+          </View>
+          
+          <View style={styles.factRow}>
+            <ThemedText style={styles.factLabel}>Geschätzte Atemzüge:</ThemedText>
+            <ThemedText style={styles.factValue}>{breaths.toLocaleString('de-DE')}</ThemedText>
+          </View>
+          
+          <View style={styles.factRow}>
+            <ThemedText style={styles.factLabel}>Geschätzte Windeln:</ThemedText>
+            <ThemedText style={styles.factValue}>{diapers.toLocaleString('de-DE')}</ThemedText>
+          </View>
+          
+          <View style={styles.factRow}>
+            <ThemedText style={styles.factLabel}>Geschätzte Schlafstunden:</ThemedText>
+            <ThemedText style={styles.factValue}>{sleep.toLocaleString('de-DE')} Stunden</ThemedText>
+          </View>
         </View>
-        
-        <View style={styles.factRow}>
-          <ThemedText style={styles.factLabel}>Geschätzte Atemzüge:</ThemedText>
-          <ThemedText style={styles.factValue}>{breaths.toLocaleString('de-DE')}</ThemedText>
-        </View>
-        
-        <View style={styles.factRow}>
-          <ThemedText style={styles.factLabel}>Geschätzte Windeln:</ThemedText>
-          <ThemedText style={styles.factValue}>{diapers.toLocaleString('de-DE')}</ThemedText>
-        </View>
-        
-        <View style={styles.factRow}>
-          <ThemedText style={styles.factLabel}>Geschätzte Schlafstunden:</ThemedText>
-          <ThemedText style={styles.factValue}>{sleep.toLocaleString('de-DE')} Stunden</ThemedText>
-        </View>
-      </ThemedView>
+      </LiquidGlassCard>
     );
   };
 
@@ -245,7 +247,7 @@ export default function BabyStatsScreen() {
           }}
         />
         
-        <Header title="Baby-Statistiken" showBackButton />
+        <Header title="Baby-Statistiken" subtitle="Alter, Entwicklung & Fakten" showBackButton />
         
         {isLoading ? (
           <View style={styles.loadingContainer}>
@@ -258,72 +260,80 @@ export default function BabyStatsScreen() {
           >
             {babyInfo.birth_date ? (
               <>
-                <ThemedView style={styles.statsCard} lightColor={theme.cardLight} darkColor={theme.cardDark}>
-                  <ThemedText style={styles.sectionTitle}>Alter</ThemedText>
-                  <ThemedText style={styles.ageValue}>{renderAgeDescription()}</ThemedText>
+                <LiquidGlassCard style={[styles.glassCard, styles.firstGlassCard]}>
+                  <View style={styles.glassInner}>
+                    <ThemedText style={styles.sectionTitle}>Alter</ThemedText>
+                    <ThemedText style={styles.ageValue}>{renderAgeDescription()}</ThemedText>
                   
-                  <View style={styles.statRow}>
-                    <View style={styles.statItem}>
-                      <ThemedText style={styles.statValue}>{stats.totalDays}</ThemedText>
-                      <ThemedText style={styles.statLabel}>Tage</ThemedText>
-                    </View>
-                    
-                    <View style={styles.statItem}>
-                      <ThemedText style={styles.statValue}>{stats.totalWeeks}</ThemedText>
-                      <ThemedText style={styles.statLabel}>Wochen</ThemedText>
-                    </View>
-                    
-                    <View style={styles.statItem}>
-                      <ThemedText style={styles.statValue}>{stats.totalMonths}</ThemedText>
-                      <ThemedText style={styles.statLabel}>Monate</ThemedText>
+                    <View style={styles.statRow}>
+                      <View style={styles.statItem}>
+                        <ThemedText style={styles.statValue}>{stats.totalDays}</ThemedText>
+                        <ThemedText style={styles.statLabel}>Tage</ThemedText>
+                      </View>
+                      
+                      <View style={styles.statItem}>
+                        <ThemedText style={styles.statValue}>{stats.totalWeeks}</ThemedText>
+                        <ThemedText style={styles.statLabel}>Wochen</ThemedText>
+                      </View>
+                      
+                      <View style={styles.statItem}>
+                        <ThemedText style={styles.statValue}>{stats.totalMonths}</ThemedText>
+                        <ThemedText style={styles.statLabel}>Monate</ThemedText>
+                      </View>
                     </View>
                   </View>
-                </ThemedView>
+                </LiquidGlassCard>
                 
-                <ThemedView style={styles.statsCard} lightColor={theme.cardLight} darkColor={theme.cardDark}>
-                  <ThemedText style={styles.sectionTitle}>Körperliche Entwicklung</ThemedText>
-                  
-                  <View style={styles.factRow}>
-                    <ThemedText style={styles.factLabel}>Größe:</ThemedText>
-                    <ThemedText style={styles.factValue}>
-                      {babyInfo.height ? `${babyInfo.height} cm` : 'Nicht angegeben'}
-                    </ThemedText>
+                <LiquidGlassCard style={styles.glassCard}>
+                  <View style={styles.glassInner}>
+                    <ThemedText style={styles.sectionTitle}>Körperliche Entwicklung</ThemedText>
+                    
+                    <View style={styles.factRow}>
+                      <ThemedText style={styles.factLabel}>Größe:</ThemedText>
+                      <ThemedText style={styles.factValue}>
+                        {babyInfo.height ? `${babyInfo.height} cm` : 'Nicht angegeben'}
+                      </ThemedText>
+                    </View>
+                    
+                    <View style={styles.factRow}>
+                      <ThemedText style={styles.factLabel}>Gewicht:</ThemedText>
+                      <ThemedText style={styles.factValue}>
+                        {babyInfo.weight ? `${babyInfo.weight} kg` : 'Nicht angegeben'}
+                      </ThemedText>
+                    </View>
+                    
+                    <View style={styles.factRow}>
+                      <ThemedText style={styles.factLabel}>Geschlecht:</ThemedText>
+                      <ThemedText style={styles.factValue}>
+                        {genderLabels[babyInfo.baby_gender as keyof typeof genderLabels] || genderLabels.unknown}
+                      </ThemedText>
+                    </View>
                   </View>
-                  
-                  <View style={styles.factRow}>
-                    <ThemedText style={styles.factLabel}>Gewicht:</ThemedText>
-                    <ThemedText style={styles.factValue}>
-                      {babyInfo.weight ? `${babyInfo.weight} kg` : 'Nicht angegeben'}
-                    </ThemedText>
-                  </View>
-                  
-                  <View style={styles.factRow}>
-                    <ThemedText style={styles.factLabel}>Geschlecht:</ThemedText>
-                    <ThemedText style={styles.factValue}>
-                      {genderLabels[babyInfo.baby_gender as keyof typeof genderLabels] || genderLabels.unknown}
-                    </ThemedText>
-                  </View>
-                </ThemedView>
+                </LiquidGlassCard>
                 
                 {renderInterestingFacts()}
                 
-                <ThemedView style={styles.statsCard} lightColor={theme.cardLight} darkColor={theme.cardDark}>
-                  <ThemedText style={styles.sectionTitle}>Meilensteine</ThemedText>
-                  <View style={styles.milestoneContainer}>
-                    {stats.milestones.map((milestone, index) => (
-                      <View key={index}>
-                        {renderMilestoneStatus(milestone)}
-                      </View>
-                    ))}
+                <LiquidGlassCard style={styles.glassCard}>
+                  <View style={styles.glassInner}>
+                    <ThemedText style={styles.sectionTitle}>Meilensteine</ThemedText>
+                    <View style={styles.milestoneContainer}>
+                      {stats.milestones.map((milestone, index) => (
+                        <View key={index}>
+                          {renderMilestoneStatus(milestone)}
+                        </View>
+                      ))}
+                    </View>
                   </View>
-                </ThemedView>
+                </LiquidGlassCard>
               </>
             ) : (
-              <ThemedView style={styles.statsCard} lightColor={theme.cardLight} darkColor={theme.cardDark}>
-                <ThemedText style={styles.noDataText}>
-                  Kein Geburtsdatum verfügbar. Bitte füge das Geburtsdatum deines Babys hinzu, um Statistiken anzuzeigen.
-                </ThemedText>
-              </ThemedView>
+              <LiquidGlassCard style={styles.glassCard}>
+                <View style={styles.glassInner}>
+                  <ThemedText style={styles.noDataText}>
+                    Kein Geburtsdatum verfügbar. Bitte füge das Geburtsdatum deines Babys hinzu, um Statistiken anzuzeigen.
+                  </ThemedText>
+                </View>
+              </LiquidGlassCard>
             )}
           </ScrollView>
         )}
@@ -343,7 +353,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contentContainer: {
-    padding: 16,
+    paddingHorizontal: LAYOUT_PAD,
     paddingBottom: 40,
   },
   loadingContainer: {
@@ -351,25 +361,31 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  statsCard: {
+  // Liquid Glass wrappers to match app design
+  glassCard: {
+    marginHorizontal: TIMELINE_INSET,
+    marginBottom: 20,
+    borderRadius: 22,
+  },
+  glassInner: {
     padding: 20,
-    borderRadius: 15,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+  },
+  firstGlassCard: {
+    marginTop: 12,
   },
   sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 16,
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#7D5A50',
+    marginBottom: 12,
+    textAlign: 'center',
   },
   ageValue: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 16,
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#7D5A50',
+    marginBottom: 14,
+    textAlign: 'center',
   },
   statRow: {
     flexDirection: 'row',
@@ -381,12 +397,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   statValue: {
-    fontSize: 22,
-    fontWeight: 'bold',
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#7D5A50',
   },
   statLabel: {
-    fontSize: 14,
+    fontSize: 12,
     marginTop: 4,
+    color: '#7D5A50',
   },
   factRow: {
     flexDirection: 'row',
@@ -394,11 +412,13 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   factLabel: {
-    fontSize: 16,
+    fontSize: 14,
+    color: '#7D5A50',
   },
   factValue: {
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#7D5A50',
   },
   milestoneContainer: {
     marginTop: 8,
@@ -412,7 +432,7 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 15,
-    backgroundColor: '#e6f7ee',
+    backgroundColor: 'rgba(56,161,105,0.18)',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -421,7 +441,7 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 15,
-    backgroundColor: '#f2f2f2',
+    backgroundColor: 'rgba(255,255,255,0.18)',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -431,15 +451,18 @@ const styles = StyleSheet.create({
   },
   milestoneName: {
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '700',
+    color: '#7D5A50',
   },
   milestoneDate: {
-    fontSize: 14,
+    fontSize: 12,
     marginTop: 2,
+    color: '#7D5A50',
   },
   noDataText: {
-    fontSize: 16,
+    fontSize: 14,
     textAlign: 'center',
     padding: 20,
+    color: '#7D5A50',
   }
 });

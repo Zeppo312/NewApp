@@ -13,6 +13,7 @@ import { API_KEYS } from '@/lib/config';
 import { Stack } from 'expo-router';
 import Header from '@/components/Header';
 import { useSmartBack } from '@/contexts/NavigationContext';
+import { LiquidGlassCard, LAYOUT_PAD, TIMELINE_INSET } from '@/constants/DesignGuide';
 
 // Funktion zum Laden der Bilder
 const getClothingImage = (imageName: string | null) => {
@@ -225,7 +226,7 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
   const theme = Colors[colorScheme || 'light'];
   
   return (
-    <>
+    <View style={styles.headerWrapper}>
       <TouchableOpacity 
         style={styles.infoButton}
         onPress={() => setShowBabyInfo(!showBabyInfo)}
@@ -252,7 +253,7 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
       )}
 
       {/* Standort-/Postleitzahl-Auswahl */}
-      <ThemedView style={styles.sectionCard} lightColor={theme.cardLight} darkColor={theme.cardDark}>
+      <LiquidGlassCard style={styles.sectionCard} intensity={26}>
         <ThemedText style={styles.sectionTitle}>Standort</ThemedText>
         <View style={styles.locationToggle}>
           <TouchableOpacity
@@ -347,7 +348,7 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
             {weatherData.location || (searchType === 'location' ? 'Aktueller Standort' : searchType === 'zipCode' ? `PLZ ${searchType === 'zipCode' ? zipCode : ''}` : cityName)}
           </ThemedText>
         )}
-      </ThemedView>
+      </LiquidGlassCard>
 
       {isLoading ? (
         <View style={styles.loadingContainer}>
@@ -355,14 +356,14 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
           <ThemedText style={styles.loadingText}>Wetterdaten werden geladen...</ThemedText>
         </View>
       ) : errorMessage ? (
-        <ThemedView style={styles.errorContainer} lightColor={theme.cardLight} darkColor={theme.cardDark}>
+        <LiquidGlassCard style={styles.errorContainer} intensity={26}>
           <IconSymbol name="exclamationmark.triangle" size={40} color="#FF6B6B" />
           <ThemedText style={styles.errorText}>{errorMessage}</ThemedText>
-        </ThemedView>
+        </LiquidGlassCard>
       ) : (
         <>
           {/* Wetteranzeige */}
-          <ThemedView style={[styles.sectionCard, styles.weatherCard]} lightColor={theme.cardLight} darkColor={theme.cardDark}>
+          <LiquidGlassCard style={[styles.sectionCard, styles.weatherCard]} intensity={26}>
             <ThemedText style={[styles.sectionTitle, styles.weatherTitle]}>Aktuelle Wetterlage</ThemedText>
             
             {/* New weather display layout */}
@@ -398,10 +399,10 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
                 </View>
               </View>
             </View>
-          </ThemedView>
+          </LiquidGlassCard>
 
           {/* Kontext-Auswahl */}
-          <ThemedView style={[styles.sectionCard]} lightColor={theme.cardLight} darkColor={theme.cardDark}>
+          <LiquidGlassCard style={[styles.sectionCard]} intensity={26}>
             <ThemedText style={styles.sectionTitle}>Situation auswählen</ThemedText>
             <View style={styles.contextButtonsContainer}>
               {(Object.keys(contextDescriptions) as ContextMode[]).map((mode) => (
@@ -433,34 +434,34 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
                 </TouchableOpacity>
               ))}
             </View>
-          </ThemedView>
+          </LiquidGlassCard>
 
           {/* Meta-Cards vor den Kleidungsempfehlungen anzeigen */}
           {!isLoading && !errorMessage && weatherData && (
             <View style={styles.metaCardsContainer}>
               {metaCards.map((card, index) => (
-                <ThemedView key={index} style={styles.metaCard} lightColor={theme.cardLight} darkColor={theme.cardDark}>
+                <LiquidGlassCard key={index} style={styles.metaCard} intensity={26}>
                   <View style={styles.metaCardHeader}>
                     <IconSymbol name={card.icon} size={22} color={theme.accent} />
                     <ThemedText style={styles.metaCardTitle}>{card.title}</ThemedText>
                   </View>
                   <ThemedText style={styles.metaCardContent}>{card.content}</ThemedText>
-                </ThemedView>
+                </LiquidGlassCard>
               ))}
             </View>
           )}
           
           {/* Neue Überschrift für Kleidungsempfehlungen */}
           {!isLoading && !errorMessage && weatherData && (
-            <ThemedView style={styles.sectionCard} lightColor={theme.cardLight} darkColor={theme.cardDark}>
+            <LiquidGlassCard style={styles.sectionCard} intensity={26}>
               <ThemedText style={styles.sectionTitle}>
                 Empfohlene Kleidung für {contextDescriptions[selectedMode]}
               </ThemedText>
-            </ThemedView>
+            </LiquidGlassCard>
           )}
         </>
       )}
-    </>
+    </View>
   );
 };
 
@@ -954,13 +955,13 @@ export default function BabyWeatherScreen() {
 
   // Zusätzliches Rendering für Meta-Cards
   const renderMetaCard = ({ item }: { item: {title: string, content: string, icon: any} }) => (
-    <ThemedView style={styles.metaCard} lightColor={theme.cardLight} darkColor={theme.cardDark}>
+    <LiquidGlassCard style={styles.metaCard} intensity={26}>
       <View style={styles.metaCardHeader}>
         <IconSymbol name={item.icon} size={22} color={theme.accent} />
         <ThemedText style={styles.metaCardTitle}>{item.title}</ThemedText>
       </View>
       <ThemedText style={styles.metaCardContent}>{item.content}</ThemedText>
-    </ThemedView>
+    </LiquidGlassCard>
   );
 
   return (
@@ -1149,8 +1150,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contentContainer: {
-    padding: 20,
+    paddingHorizontal: LAYOUT_PAD,
+    paddingTop: 16,
     paddingBottom: 40,
+    alignItems: 'stretch',
   },
 
   loadingContainer: {
@@ -1162,16 +1165,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginTop: 15,
   },
+  headerWrapper: {
+    width: '100%',
+    alignSelf: 'stretch',
+    position: 'relative',
+  },
   errorContainer: {
+    width: '100%',
     padding: 20,
-    borderRadius: 15,
+    borderRadius: 22,
     alignItems: 'center',
     marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    overflow: 'hidden',
   },
   errorText: {
     fontSize: 16,
@@ -1251,8 +1256,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   weatherDetailText: {
-    fontSize: 14,
-    marginLeft: 8,
+    fontSize: 13,
+    marginLeft: 6,
+    color: '#7D5A50',
+    fontWeight: '500',
   },
   contextContainer: {
     borderRadius: 15,
@@ -1266,8 +1273,10 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: '700',
+    color: '#7D5A50',
     marginBottom: 12,
+    textAlign: 'center',
   },
   weatherTitle: {
     marginBottom: 16,
@@ -1369,17 +1378,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   clothingName: {
-    fontSize: 14,
-    fontWeight: 'bold',
+    fontSize: 13,
+    fontWeight: '700',
     textAlign: 'center',
     marginTop: 4,
+    color: '#7D5A50',
   },
   disclaimer: {
     fontSize: 12,
     fontStyle: 'italic',
     marginTop: 15,
+    marginHorizontal: 8,
     textAlign: 'center',
     opacity: 0.7,
+    color: '#7D5A50',
   },
   noRecommendations: {
     alignItems: 'center',
@@ -1409,21 +1421,28 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    borderRadius: 25,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 18,
     flex: 1,
-    marginHorizontal: 2,
+    marginHorizontal: 3,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.3)',
+    backgroundColor: 'rgba(255,255,255,0.12)',
   },
   activeLocationButton: {
-    backgroundColor: 'rgba(100, 150, 255, 0.2)',
+    borderColor: 'rgba(100,150,255,0.55)',
+    backgroundColor: 'rgba(166,205,237,0.2)',
   },
   locationButtonText: {
     marginLeft: 6,
-    fontSize: 14,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#7D5A50',
   },
   activeLocationButtonText: {
-    fontWeight: 'bold',
+    fontWeight: '700',
+    color: '#5D4A40',
   },
   zipCodeContainer: {
     flexDirection: 'row',
@@ -1432,29 +1451,39 @@ const styles = StyleSheet.create({
   },
   zipCodeInput: {
     flex: 1,
-    height: 44,
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
+    height: 48,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.35)',
+    borderRadius: 16,
+    paddingHorizontal: 16,
     marginRight: 10,
-    fontSize: 16,
+    fontSize: 15,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    color: '#7D5A50',
+    fontWeight: '500',
   },
   searchButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: 'rgba(100,150,255,0.78)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.55)',
   },
   searchButtonText: {
     color: '#FFFFFF',
-    fontWeight: 'bold',
+    fontWeight: '700',
+    fontSize: 14,
   },
   currentLocation: {
-    fontSize: 14,
+    fontSize: 13,
     textAlign: 'center',
     opacity: 0.7,
-    marginTop: 5,
+    marginTop: 8,
+    color: '#7D5A50',
+    fontWeight: '500',
   },
   location: {
     fontSize: 12,
@@ -1503,14 +1532,16 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   infoCard: {
-    borderRadius: 15,
-    padding: 16,
+    width: '100%',
+    borderRadius: 22,
+    padding: 18,
     marginBottom: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+    overflow: 'hidden',
   },
   infoTitle: {
     fontSize: 16,
@@ -1536,14 +1567,11 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   sectionCard: {
-    borderRadius: 15,
-    padding: 16,
+    width: '100%',
     marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    borderRadius: 22,
+    padding: 18,
+    overflow: 'hidden',
   },
   stickyContextCard: {
     backgroundColor: 'rgba(255, 255, 255, 0.95)', // Für iOS
@@ -1554,17 +1582,15 @@ const styles = StyleSheet.create({
     marginVertical: 10,
   },
   metaCardsContainer: {
+    width: '100%',
     marginBottom: 16,
   },
   metaCard: {
-    borderRadius: 15,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    width: '100%',
+    borderRadius: 22,
+    padding: 18,
+    marginBottom: 14,
+    overflow: 'hidden',
   },
   metaCardHeader: {
     flexDirection: 'row',
@@ -1573,12 +1599,14 @@ const styles = StyleSheet.create({
   },
   metaCardTitle: {
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '700',
+    color: '#7D5A50',
     marginLeft: 8,
   },
   metaCardContent: {
     fontSize: 14,
     lineHeight: 20,
+    color: '#7D5A50',
   },
   contextImage: {
     width: 40,
@@ -1602,9 +1630,11 @@ const styles = StyleSheet.create({
   },
   temperatureBox: {
     flex: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.6)',
-    borderRadius: 12,
-    padding: 12,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.35)',
+    borderRadius: 18,
+    padding: 14,
     marginRight: 12,
     minWidth: 130,
     minHeight: 90,
@@ -1612,38 +1642,47 @@ const styles = StyleSheet.create({
   },
   temperatureValue: {
     fontSize: 38,
-    fontWeight: 'bold',
+    fontWeight: '800',
     letterSpacing: -1,
     flexShrink: 0,
     lineHeight: 46,
+    color: '#7D5A50',
   },
   feelsLikeValue: {
-    fontSize: 14,
+    fontSize: 13,
     marginTop: 4,
-    opacity: 0.8,
+    opacity: 0.75,
+    color: '#7D5A50',
+    fontWeight: '600',
   },
   weatherIconBox: {
     width: 75,
     height: 75,
     borderRadius: 38,
-    backgroundColor: 'rgba(100, 150, 255, 0.15)',
+    backgroundColor: 'rgba(166,205,237,0.2)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.35)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   weatherDescriptionContainer: {
-    backgroundColor: 'rgba(255, 255, 255, 0.4)',
-    borderRadius: 8,
-    padding: 8,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+    borderRadius: 14,
+    padding: 10,
     marginBottom: 12,
   },
   weatherDescriptionText: {
-    fontSize: 16,
-    fontWeight: '500',
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#7D5A50',
   },
   locationText: {
     fontSize: 12,
     opacity: 0.7,
     marginTop: 4,
+    color: '#7D5A50',
   },
   weatherDetailsContainer: {
     flexDirection: 'row',
@@ -1652,10 +1691,12 @@ const styles = StyleSheet.create({
   weatherDetailBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.4)',
-    borderRadius: 8,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+    borderRadius: 14,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
     flex: 0.48,
   },
   tempMainContainer: {
@@ -1679,8 +1720,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   selectedContextButtonTextNew: {
-    fontWeight: 'bold',
-    color: '#666',
+    fontWeight: '700',
+    color: '#5D4A40',
   },
   contextButtonsContainer: {
     flexDirection: 'row',
@@ -1689,31 +1730,32 @@ const styles = StyleSheet.create({
   },
   contextButtonNew: {
     width: '48%',
-    borderRadius: 12,
+    borderRadius: 18,
     marginBottom: 10,
-    backgroundColor: 'rgba(0, 0, 0, 0.02)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.3)',
+    backgroundColor: 'rgba(255,255,255,0.12)',
     padding: 12,
     alignItems: 'center',
   },
   selectedContextButtonNew: {
-    backgroundColor: 'rgba(166, 205, 237, 0.25)',
+    borderColor: 'rgba(100,150,255,0.55)',
+    backgroundColor: 'rgba(166,205,237,0.25)',
   },
   contextImageContainer: {
     width: 54,
     height: 54,
     borderRadius: 27,
-    backgroundColor: 'white',
+    backgroundColor: 'rgba(255,255,255,0.6)',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.35)',
   },
   selectedContextImageContainer: {
-    backgroundColor: 'rgba(166, 205, 237, 0.9)',
+    backgroundColor: 'rgba(166,205,237,0.9)',
+    borderColor: 'rgba(100,150,255,0.55)',
   },
   contextImageNew: {
     width: 36,
@@ -1721,8 +1763,9 @@ const styles = StyleSheet.create({
     resizeMode: 'contain',
   },
   contextButtonTextNew: {
-    fontSize: 14,
-    fontWeight: '500',
+    fontSize: 13,
+    fontWeight: '600',
     textAlign: 'center',
+    color: '#7D5A50',
   },
 });

@@ -77,6 +77,11 @@ const selfcareActivities = [
   { id: '8', title: 'Mit jemandem gesprochen' }
 ];
 
+const movementChoices = [
+  { value: true, emoji: '✨', label: 'Ja, ein bisschen' },
+  { value: false, emoji: '⏳', label: 'Noch nicht' },
+];
+
 export default function SelfcareScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
@@ -96,6 +101,7 @@ export default function SelfcareScreen() {
   const [checkedActivities, setCheckedActivities] = useState<string[]>([]);
   const [todayEntry, setTodayEntry] = useState<SelfcareEntry | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [exerciseTouched, setExerciseTouched] = useState(false);
   // Animations
   const moodPulse = React.useRef(new Animated.Value(1)).current;
   const tipOpacity = React.useRef(new Animated.Value(1)).current;
@@ -156,6 +162,7 @@ export default function SelfcareScreen() {
         setSleepHours(data.sleep_hours || 7);
         setWaterIntake(data.water_intake || 0);
         setExerciseDone(data.exercise_done || false);
+        setExerciseTouched(data.exercise_done !== undefined && data.exercise_done !== null);
         setCheckedActivities(data.selfcare_activities || []);
       }
     } catch (err) {
@@ -266,6 +273,12 @@ export default function SelfcareScreen() {
     });
   };
 
+  const handleMovementSelect = (value: boolean) => {
+    setExerciseDone(value);
+    setExerciseTouched(true);
+    try { Haptics.selectionAsync(); } catch {}
+  };
+
   return (
     <ThemedBackground style={styles.container}>
       <SafeAreaView style={{ flex: 1 }}>
@@ -276,7 +289,7 @@ export default function SelfcareScreen() {
         
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
           {/* 1. Persönliche Begrüßung & Daily Check-In */}
-          <LiquidGlassCard style={styles.glassCard}>
+          <LiquidGlassCard style={styles.glassCard} intensity={26}>
             <View style={styles.glassInner}>
             <ThemedText style={styles.cardTitle}>{userName ? `Wie geht’s dir, ${userName}?` : 'Wie geht’s dir, Mama?'}</ThemedText>
             <ThemedText style={styles.cardSubtitle}>Nimm dir kurz einen Moment nur für dich 💭</ThemedText>
@@ -330,7 +343,7 @@ export default function SelfcareScreen() {
               value={journalEntry}
               onChangeText={setJournalEntry}
               placeholder="Wie geht es dir heute? Was beschäftigt dich?"
-              placeholderTextColor={'#A8978E'}
+              placeholderTextColor={'rgba(125,90,80,0.5)'}
               multiline
               numberOfLines={4}
             />
@@ -338,7 +351,7 @@ export default function SelfcareScreen() {
           </LiquidGlassCard>
 
           {/* 2. Selbstfürsorge-Tipps & Anleitungen */}
-          <LiquidGlassCard style={styles.glassCard}>
+          <LiquidGlassCard style={styles.glassCard} intensity={26}>
             <View style={styles.glassInner}>
               <ThemedText style={styles.cardTitle}>💡 Tipp des Tages</ThemedText>
 
@@ -360,93 +373,145 @@ export default function SelfcareScreen() {
           </LiquidGlassCard>
 
           {/* 3. Gesundheit & Wohlbefinden */}
-          <LiquidGlassCard style={styles.glassCard}>
+          <LiquidGlassCard style={styles.glassCard} intensity={26}>
             <View style={styles.glassInner}>
               <ThemedText style={styles.cardTitle}>💧 Gesundheit & Wohlbefinden</ThemedText>
 
-            <View style={styles.healthItem}>
-              <ThemedText style={styles.healthLabel}>Schlaf:</ThemedText>
-              <View style={styles.sleepContainer}>
-                <TouchableOpacity
-                  style={styles.sleepButton}
-                  onPress={() => setSleepHours(Math.max(0, sleepHours - 1))}
-                >
-                  <IconSymbol name="minus" size={16} color={theme.text} />
-                </TouchableOpacity>
-
-                <ThemedText style={styles.sleepHours}>{sleepHours} Stunden</ThemedText>
-
-                <TouchableOpacity
-                  style={styles.sleepButton}
-                  onPress={() => setSleepHours(Math.min(24, sleepHours + 1))}
-                >
-                  <IconSymbol name="plus" size={16} color={theme.text} />
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            <View style={styles.healthItem}>
-              <ThemedText style={styles.healthLabel}>Wasser:</ThemedText>
-              <View style={styles.waterContainer}>
-                <View style={styles.waterProgressBackground}>
-                  <View
-                    style={[
-                      styles.waterProgress,
-                      { width: `${Math.min(100, (waterIntake / 8) * 100)}%` }
-                    ]}
-                  />
+              <View style={styles.healthStack}>
+                <View style={styles.healthCard}>
+                  <View style={styles.healthHeader}>
+                    <View style={[styles.healthIcon, { backgroundColor: 'rgba(135, 206, 235, 0.55)' }]}>
+                      <IconSymbol name="moon.fill" size={18} color="#FFFFFF" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <ThemedText style={styles.healthTitle}>Schlafdauer</ThemedText>
+                      <ThemedText style={styles.healthSubtitle}>Letzte Nacht</ThemedText>
+                    </View>
+                    <View style={styles.healthValueBadge}>
+                      <ThemedText style={styles.healthValueText}>{sleepHours}h</ThemedText>
+                    </View>
+                  </View>
+                  <View style={styles.healthControlsRow}>
+                    <TouchableOpacity
+                      style={styles.controlCircle}
+                      onPress={() => setSleepHours(Math.max(0, sleepHours - 1))}
+                      activeOpacity={0.85}
+                    >
+                      <IconSymbol name="minus" size={16} color="#7D5A50" />
+                    </TouchableOpacity>
+                    <ThemedText style={styles.healthControlValue}>{sleepHours} Stunden</ThemedText>
+                    <TouchableOpacity
+                      style={styles.controlCircle}
+                      onPress={() => setSleepHours(Math.min(24, sleepHours + 1))}
+                      activeOpacity={0.85}
+                    >
+                      <IconSymbol name="plus" size={16} color="#7D5A50" />
+                    </TouchableOpacity>
+                  </View>
                 </View>
-                <ThemedText style={styles.waterText}>{waterIntake} / 8 Gläser – {Math.max(0, 8 - waterIntake)} verbleibend ✨</ThemedText>
-                <TouchableOpacity
-                  style={styles.waterButton}
-                  onPress={() => setWaterIntake(Math.min(8, waterIntake + 1))}
-                >
-                  <IconSymbol name="plus.circle.fill" size={24} color={Colors.light.success} />
-                </TouchableOpacity>
-              </View>
-            </View>
 
-            <View style={styles.healthItem}>
-              <ThemedText style={styles.healthLabel}>Bewegung:</ThemedText>
-              <TouchableOpacity
-                style={[
-                  styles.exerciseButton,
-                  exerciseDone && styles.exerciseButtonDone
-                ]}
-                onPress={() => setExerciseDone(!exerciseDone)}
-              >
-                <IconSymbol
-                  name={exerciseDone ? "checkmark.circle.fill" : "circle"}
-                  size={24}
-                  color={exerciseDone ? Colors.light.success : theme.text}
-                />
-                <ThemedText
-                  style={[
-                    styles.exerciseText,
-                    exerciseDone && styles.exerciseTextDone
-                  ]}
-                >
-                  {exerciseDone ? "Erledigt!" : "Heute bewegt?"}
-                </ThemedText>
-              </TouchableOpacity>
-            </View>
+                <View style={styles.healthCard}>
+                  <View style={styles.healthHeader}>
+                    <View style={[styles.healthIcon, { backgroundColor: 'rgba(142, 78, 198, 0.6)' }]}>
+                      <IconSymbol name="drop.fill" size={18} color="#FFFFFF" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <ThemedText style={styles.healthTitle}>Wasseraufnahme</ThemedText>
+                      <ThemedText style={styles.healthSubtitle}>Ziel 8 Gläser</ThemedText>
+                    </View>
+                    <View style={styles.healthValueBadge}>
+                      <ThemedText style={styles.healthValueText}>{waterIntake}/8</ThemedText>
+                    </View>
+                  </View>
+                  <View style={styles.waterMeterWrapper}>
+                    <View style={styles.waterMeterTrack}>
+                      <View
+                        style={[
+                          styles.waterMeterFill,
+                          { width: `${Math.min(100, (waterIntake / 8) * 100)}%` },
+                        ]}
+                      />
+                    </View>
+                    <ThemedText style={styles.waterHint}>
+                      {Math.max(0, 8 - waterIntake)} noch offen
+                    </ThemedText>
+                  </View>
+                  <View style={styles.healthControlsRow}>
+                    <TouchableOpacity
+                      style={styles.controlCircle}
+                      onPress={() => setWaterIntake(Math.max(0, waterIntake - 1))}
+                      activeOpacity={0.85}
+                    >
+                      <IconSymbol name="minus" size={16} color="#7D5A50" />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.controlPrimary}
+                      onPress={() => setWaterIntake(Math.min(8, waterIntake + 1))}
+                      activeOpacity={0.9}
+                    >
+                      <IconSymbol name="plus.circle.fill" size={18} color="#FFFFFF" />
+                      <ThemedText style={styles.controlPrimaryText}>Glas hinzufügen</ThemedText>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                <View style={styles.healthCard}>
+                  <View style={styles.healthHeader}>
+                    <View style={[styles.healthIcon, { backgroundColor: 'rgba(168, 196, 162, 0.65)' }]}>
+                      <IconSymbol name="figure.walk" size={18} color="#FFFFFF" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <ThemedText style={styles.healthTitle}>Bewegung heute</ThemedText>
+                      <ThemedText style={styles.healthSubtitle}>Sanfte Aktivität zählt</ThemedText>
+                    </View>
+                  </View>
+                  <View style={styles.segmentRow}>
+                    {movementChoices.map((choice) => (
+                      <TouchableOpacity
+                        key={choice.label}
+                        style={[
+                          styles.segmentButton,
+                          exerciseTouched && exerciseDone === choice.value && styles.segmentButtonActive,
+                        ]}
+                        onPress={() => handleMovementSelect(choice.value)}
+                        activeOpacity={0.9}
+                      >
+                        <ThemedText style={styles.segmentEmoji}>{choice.emoji}</ThemedText>
+                        <ThemedText
+                          style={[
+                            styles.segmentLabel,
+                            exerciseTouched && exerciseDone === choice.value && styles.segmentLabelActive,
+                          ]}
+                        >
+                          {choice.label}
+                        </ThemedText>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              </View>
             </View>
           </LiquidGlassCard>
 
           {/* 4. Rückbildung & Körperpflege */}
-          <LiquidGlassCard style={styles.glassCard}>
+          <LiquidGlassCard style={styles.glassCard} intensity={26}>
             <View style={styles.glassInner}>
               <ThemedText style={styles.cardTitle}>Rückbildung & Körperpflege</ThemedText>
 
               <ThemedText style={styles.sectionTitle}>🌸 Rückbildungsübung des Tages</ThemedText>
-            <View style={styles.exerciseCard}>
-              <ThemedText style={styles.exerciseTitle}>
-                {postpartumExercises[Math.floor(Math.random() * postpartumExercises.length)].title}
-              </ThemedText>
-              <ThemedText style={styles.exerciseDescription}>
-                {postpartumExercises[Math.floor(Math.random() * postpartumExercises.length)].description}
-              </ThemedText>
-            </View>
+            {(() => {
+              const exercise = postpartumExercises[Math.floor(Math.random() * postpartumExercises.length)];
+              return (
+                <View style={styles.exerciseCard}>
+                  <ThemedText style={styles.exerciseTitle}>
+                    {exercise.title}
+                  </ThemedText>
+                  <ThemedText style={styles.exerciseDescription}>
+                    {exercise.description}
+                  </ThemedText>
+                </View>
+              );
+            })()}
 
             <ThemedText style={styles.sectionTitle}>☑️ Meine Selfcare‑Checkliste</ThemedText>
             <View style={{ alignItems: 'center', marginBottom: 12 }}>
@@ -489,7 +554,13 @@ export default function SelfcareScreen() {
 
         </ScrollView>
         {/* Sticky CTA */}
-        <LiquidGlassCard style={styles.stickyCta} onPress={saveEntry}>
+        <LiquidGlassCard 
+          style={styles.stickyCta} 
+          onPress={saveEntry}
+          intensity={26}
+          overlayColor="rgba(142, 78, 198, 0.16)"
+          borderColor="rgba(142, 78, 198, 0.35)"
+        >
           <View style={styles.saveButtonInner}>
             <ThemedText style={styles.saveButtonText}>💜 Speichern & Weitermachen</ThemedText>
           </View>
@@ -508,13 +579,14 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     paddingHorizontal: LAYOUT_PAD,
-    paddingBottom: 140,
+    paddingTop: 16,
+    paddingBottom: 160,
   },
   // Liquid Glass card wrappers
   glassCard: {
-    marginHorizontal: TIMELINE_INSET,
     marginBottom: 20,
     borderRadius: 22,
+    overflow: 'hidden',
   },
   glassInner: {
     padding: 20,
@@ -572,14 +644,16 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   glassInput: {
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: 'rgba(255,255,255,0.35)',
-    borderRadius: 15,
-    padding: 15,
-    fontSize: 16,
+    borderRadius: 16,
+    padding: 16,
+    fontSize: 15,
     minHeight: 100,
     textAlignVertical: 'top',
-    backgroundColor: 'rgba(255,255,255,0.85)'
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    color: '#7D5A50',
+    fontWeight: '500',
   },
   tipContainer: {
     flexDirection: 'row',
@@ -614,99 +688,160 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#7D5A50',
   },
-  healthItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 15,
-    paddingBottom: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.25)',
+  healthStack: {
+    flexDirection: 'column',
+    gap: 16,
   },
-  healthLabel: {
+  healthCard: {
+    borderRadius: 24,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.3)',
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    paddingVertical: 18,
+    paddingHorizontal: 18,
+  },
+  healthHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  healthIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.45)',
+  },
+  healthTitle: {
     fontSize: 16,
     fontWeight: '700',
     color: '#7D5A50',
   },
-  sleepContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  healthSubtitle: {
+    fontSize: 12,
+    color: '#7D5A50',
+    opacity: 0.75,
+    marginTop: 2,
   },
-  sleepButton: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.35)',
-    justifyContent: 'center',
-    alignItems: 'center',
+  healthValueBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderWidth: 1.2,
+    borderColor: 'rgba(255,255,255,0.45)',
   },
-  sleepHours: {
-    fontSize: 16,
-    marginHorizontal: 10,
-    minWidth: 80,
-    textAlign: 'center',
+  healthValueText: {
+    fontSize: 13,
+    fontWeight: '700',
     color: '#7D5A50',
   },
-  waterContainer: {
+  healthControlsRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 14,
   },
-  waterProgressBackground: {
-    height: 10,
-    width: 150,
-    backgroundColor: 'rgba(255,255,255,0.25)',
-    borderRadius: 5,
-    marginRight: 10,
+  controlCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.35)',
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  controlPrimary: {
+    flex: 1,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: 'rgba(142,78,198,0.78)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.55)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  controlPrimaryText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  healthControlValue: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#7D5A50',
+  },
+  waterMeterWrapper: {
+    marginBottom: 12,
+  },
+  waterMeterTrack: {
+    height: 12,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.22)',
     overflow: 'hidden',
   },
-  waterProgress: {
+  waterMeterFill: {
     height: '100%',
     backgroundColor: '#8E4EC6',
-    borderRadius: 5,
+    borderRadius: 8,
   },
-  waterText: {
-    fontSize: 14,
-    marginRight: 10,
+  waterHint: {
+    marginTop: 6,
+    fontSize: 12,
+    textAlign: 'center',
     color: '#7D5A50',
+    opacity: 0.75,
   },
-  waterButton: {
-    padding: 5,
-  },
-  exerciseButton: {
+  segmentRow: {
     flexDirection: 'row',
+    gap: 10,
+  },
+  segmentButton: {
+    flex: 1,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.3)',
+    backgroundColor: 'rgba(255,255,255,0.12)',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.35)',
-    padding: 10,
-    borderRadius: 12,
+    justifyContent: 'center',
+    paddingVertical: 12,
+    gap: 6,
   },
-  exerciseButtonDone: {
-    backgroundColor: 'rgba(142, 78, 198, 0.16)',
-    borderColor: 'rgba(142, 78, 198, 0.35)',
+  segmentButtonActive: {
+    borderColor: 'rgba(142,78,198,0.55)',
+    backgroundColor: 'rgba(142,78,198,0.16)',
   },
-  exerciseText: {
-    fontSize: 16,
-    marginLeft: 10,
+  segmentEmoji: {
+    fontSize: 20,
+  },
+  segmentLabel: {
+    fontSize: 13,
+    fontWeight: '600',
     color: '#7D5A50',
   },
-  exerciseTextDone: {
-    fontWeight: 'bold',
+  segmentLabelActive: {
+    color: '#5D4A40',
   },
   exerciseCard: {
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.35)',
-    padding: 15,
-    borderRadius: 14,
-    marginBottom: 15,
+    marginBottom: 18,
+    borderRadius: 22,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.3)',
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    padding: 18,
+    gap: 6,
   },
   exerciseTitle: {
     fontSize: 16,
     fontWeight: '700',
-    marginBottom: 5,
     color: '#7D5A50',
   },
   exerciseDescription: {
@@ -738,21 +873,22 @@ const styles = StyleSheet.create({
   },
   stickyCta: {
     position: 'absolute',
-    left: TIMELINE_INSET,
-    right: TIMELINE_INSET,
-    bottom: 12,
+    left: LAYOUT_PAD,
+    right: LAYOUT_PAD,
+    bottom: 100,
     borderRadius: 22,
-    borderWidth: 1,
-    borderColor: 'rgba(142, 78, 198, 0.35)',
-    backgroundColor: 'rgba(142, 78, 198, 0.16)'
+    overflow: 'hidden',
   },
   saveButtonInner: {
-    paddingVertical: 16,
+    paddingVertical: 18,
+    paddingHorizontal: 20,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   saveButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: 17,
+    fontWeight: '800',
     color: '#7D5A50',
+    letterSpacing: 0.3,
   },
 });

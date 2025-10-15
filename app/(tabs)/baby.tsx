@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, ScrollView, View, TouchableOpacity, Image, TextInput, Alert, SafeAreaView, StatusBar, Platform } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
@@ -18,6 +17,7 @@ import { useSmartBack } from '@/contexts/NavigationContext';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { defineMilestoneCheckerTask, saveBabyInfoForBackgroundTask, isTaskRegistered } from '@/tasks/milestoneCheckerTask';
+import { LAYOUT_PAD, TIMELINE_INSET, LiquidGlassCard } from '@/constants/DesignGuide';
 
 export default function BabyScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -221,9 +221,8 @@ export default function BabyScreen() {
           contentContainerStyle={styles.contentContainer}
           showsVerticalScrollIndicator={false}
         >
-          
-
-          <ThemedView style={styles.card} lightColor={theme.card} darkColor={theme.card}>
+          <LiquidGlassCard style={styles.glassCard} intensity={24}>
+            <View style={styles.glassInner}>
             <View style={styles.photoContainer}>
               {babyInfo.photo_url ? (
                 <Image source={{ uri: babyInfo.photo_url }} style={styles.babyPhoto} />
@@ -246,33 +245,17 @@ export default function BabyScreen() {
                   <View style={styles.inputRow}>
                     <ThemedText style={styles.label}>Name:</ThemedText>
                     <TextInput
-                      style={[
-                        styles.input, 
-                        { 
-                          color: colorScheme === 'dark' ? '#FFFFFF' : '#000000',
-                          borderColor: colorScheme === 'dark' ? '#666' : '#CCCCCC',
-                          backgroundColor: colorScheme === 'dark' ? '#444' : '#FFFFFF'
-                        }
-                      ]}
+                      style={styles.glassInput}
                       value={babyInfo.name}
                       onChangeText={(text) => setBabyInfo({ ...babyInfo, name: text })}
                       placeholder="Name des Babys"
-                      placeholderTextColor={colorScheme === 'dark' ? '#AAAAAA' : '#888888'}
+                      placeholderTextColor={'#A8978E'}
                     />
                   </View>
 
                   <View style={styles.inputRow}>
                     <ThemedText style={styles.label}>Geburtsdatum:</ThemedText>
-                    <TouchableOpacity
-                      style={[
-                        styles.dateButton,
-                        {
-                          borderColor: colorScheme === 'dark' ? '#666' : '#CCCCCC',
-                          backgroundColor: colorScheme === 'dark' ? '#444' : '#FFFFFF' 
-                        }
-                      ]}
-                      onPress={() => setShowDatePicker(true)}
-                    >
+                    <TouchableOpacity style={styles.glassDateButton} onPress={() => setShowDatePicker(true)}>
                       <ThemedText style={styles.dateText}>
                         {babyInfo.birth_date
                           ? new Date(babyInfo.birth_date).toLocaleDateString('de-DE')
@@ -296,36 +279,22 @@ export default function BabyScreen() {
                   <View style={styles.inputRow}>
                     <ThemedText style={styles.label}>Gewicht:</ThemedText>
                     <TextInput
-                      style={[
-                        styles.input, 
-                        { 
-                          color: colorScheme === 'dark' ? '#FFFFFF' : '#000000',
-                          borderColor: colorScheme === 'dark' ? '#666' : '#CCCCCC',
-                          backgroundColor: colorScheme === 'dark' ? '#444' : '#FFFFFF'
-                        }
-                      ]}
+                      style={styles.glassInput}
                       value={babyInfo.weight}
                       onChangeText={(text) => setBabyInfo({ ...babyInfo, weight: text })}
                       placeholder="z.B. 3250g"
-                      placeholderTextColor={colorScheme === 'dark' ? '#AAAAAA' : '#888888'}
+                      placeholderTextColor={'#A8978E'}
                     />
                   </View>
 
                   <View style={styles.inputRow}>
                     <ThemedText style={styles.label}>Größe:</ThemedText>
                     <TextInput
-                      style={[
-                        styles.input, 
-                        { 
-                          color: colorScheme === 'dark' ? '#FFFFFF' : '#000000',
-                          borderColor: colorScheme === 'dark' ? '#666' : '#CCCCCC',
-                          backgroundColor: colorScheme === 'dark' ? '#444' : '#FFFFFF'
-                        }
-                      ]}
+                      style={styles.glassInput}
                       value={babyInfo.height}
                       onChangeText={(text) => setBabyInfo({ ...babyInfo, height: text })}
                       placeholder="z.B. 52cm"
-                      placeholderTextColor={colorScheme === 'dark' ? '#AAAAAA' : '#888888'}
+                      placeholderTextColor={'#A8978E'}
                     />
                   </View>
 
@@ -337,7 +306,7 @@ export default function BabyScreen() {
                         loadBabyInfo(); // Zurücksetzen auf gespeicherte Daten
                       }}
                     >
-                      <ThemedText style={styles.buttonText} lightColor="#FFFFFF" darkColor="#FFFFFF">
+                      <ThemedText style={[styles.buttonText, { color: '#7D5A50' }]} lightColor="#7D5A50" darkColor="#7D5A50">
                         Abbrechen
                       </ThemedText>
                     </TouchableOpacity>
@@ -346,7 +315,7 @@ export default function BabyScreen() {
                       style={[styles.button, styles.saveButton]}
                       onPress={handleSave}
                     >
-                      <ThemedText style={styles.buttonText} lightColor="#FFFFFF" darkColor="#FFFFFF">
+                      <ThemedText style={[styles.buttonText, { color: '#7D5A50' }]} lightColor="#7D5A50" darkColor="#7D5A50">
                         Speichern
                       </ThemedText>
                     </TouchableOpacity>
@@ -384,51 +353,53 @@ export default function BabyScreen() {
                     </ThemedText>
                   </View>
 
-                  <TouchableOpacity
-                    style={[styles.button, styles.editButton]}
-                    onPress={() => setIsEditing(true)}
-                  >
-                    <ThemedText style={styles.buttonText} lightColor="#FFFFFF" darkColor="#FFFFFF">
+                  <TouchableOpacity style={[styles.button, styles.editButton]} onPress={() => setIsEditing(true)}>
+                    <ThemedText style={[styles.buttonText, { color: '#7D5A50' }]} lightColor="#7D5A50" darkColor="#7D5A50">
                       Bearbeiten
                     </ThemedText>
                   </TouchableOpacity>
                 </>
               )}
             </View>
-          </ThemedView>
+            </View>
+          </LiquidGlassCard>
 
-          <TouchableOpacity onPress={() => router.push({ pathname: '/baby-stats' } as any)}>
-            <ThemedView style={styles.infoCard} lightColor={theme.cardLight} darkColor={theme.cardDark}>
+          <LiquidGlassCard
+            style={styles.infoGlassCard}
+            intensity={24}
+            overlayColor={'rgba(142, 78, 198, 0.16)'}
+            borderColor={'rgba(142, 78, 198, 0.35)'}
+            onPress={() => router.push({ pathname: '/baby-stats' } as any)}
+          >
+            <View style={styles.infoGlassInner}>
               <View style={styles.statsButtonContent}>
                 <View>
-                  <ThemedText style={styles.infoTitle}>
-                    Baby-Statistiken
-                  </ThemedText>
+                  <ThemedText style={styles.infoTitle}>Baby-Statistiken</ThemedText>
                   <ThemedText style={styles.infoText}>
                     Alter, Entwicklung, Meilensteine und interessante Fakten über dein Baby
                   </ThemedText>
                 </View>
               </View>
-            </ThemedView>
-          </TouchableOpacity>
+            </View>
+          </LiquidGlassCard>
           
-          <ThemedView style={styles.infoCard} lightColor={theme.cardLight} darkColor={theme.cardDark}>
-            <ThemedText style={styles.infoTitle}>
-              Die ersten Wochen
-            </ThemedText>
-            <ThemedText style={styles.infoText}>
-              • In den ersten Wochen ist es wichtig, eine Bindung zu deinem Baby aufzubauen.
-            </ThemedText>
-            <ThemedText style={styles.infoText}>
-              • Achte auf ausreichend Ruhe und Erholung für dich und dein Baby.
-            </ThemedText>
-            <ThemedText style={styles.infoText}>
-              • Nimm dir Zeit, dein Baby kennenzulernen und seine Bedürfnisse zu verstehen.
-            </ThemedText>
-            <ThemedText style={styles.infoText}>
-              • Scheue dich nicht, um Hilfe zu bitten, wenn du sie brauchst.
-            </ThemedText>
-          </ThemedView>
+          <LiquidGlassCard style={styles.infoGlassCard} intensity={24}>
+            <View style={styles.infoGlassInner}>
+              <ThemedText style={styles.infoTitle}>Die ersten Wochen</ThemedText>
+              <ThemedText style={styles.infoText}>
+                • In den ersten Wochen ist es wichtig, eine Bindung zu deinem Baby aufzubauen.
+              </ThemedText>
+              <ThemedText style={styles.infoText}>
+                • Achte auf ausreichend Ruhe und Erholung für dich und dein Baby.
+              </ThemedText>
+              <ThemedText style={styles.infoText}>
+                • Nimm dir Zeit, dein Baby kennenzulernen und seine Bedürfnisse zu verstehen.
+              </ThemedText>
+              <ThemedText style={styles.infoText}>
+                • Scheue dich nicht, um Hilfe zu bitten, wenn du sie brauchst.
+              </ThemedText>
+            </View>
+          </LiquidGlassCard>
         </ScrollView>
       </SafeAreaView>
     </ThemedBackground>
@@ -479,7 +450,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contentContainer: {
-    padding: 20,
+    paddingHorizontal: LAYOUT_PAD,
     paddingBottom: 40,
   },
   header: {
@@ -496,15 +467,14 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontWeight: 'bold',
   },
-  card: {
-    padding: 20,
-    borderRadius: 15,
+  // Liquid Glass wrappers (Sleep-Tracker look)
+  glassCard: {
+    marginHorizontal: TIMELINE_INSET,
     marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    borderRadius: 22,
+  },
+  glassInner: {
+    padding: 20,
   },
   photoContainer: {
     alignItems: 'center',
@@ -564,19 +534,24 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 5,
   },
-  input: {
+  // Glass inputs/buttons
+  glassInput: {
     borderWidth: 1,
-    borderRadius: 5,
-    padding: 10,
+    borderRadius: 15,
+    padding: 12,
     fontSize: 16,
+    backgroundColor: 'rgba(255,255,255,0.85)',
+    borderColor: 'rgba(255,255,255,0.35)'
   },
-  dateButton: {
+  glassDateButton: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     borderWidth: 1,
-    borderRadius: 5,
-    padding: 10,
+    borderRadius: 15,
+    padding: 12,
+    backgroundColor: 'rgba(255,255,255,0.8)',
+    borderColor: 'rgba(255,255,255,0.35)'
   },
   dateText: {
     fontSize: 16,
@@ -599,16 +574,22 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   editButton: {
-    backgroundColor: '#7D5A50',
+    backgroundColor: 'rgba(142, 78, 198, 0.16)',
+    borderColor: 'rgba(142, 78, 198, 0.35)',
+    borderWidth: 1,
     marginTop: 10,
   },
   cancelButton: {
-    backgroundColor: '#9E9E9E',
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderColor: 'rgba(255,255,255,0.35)',
+    borderWidth: 1,
     flex: 1,
     marginRight: 10,
   },
   saveButton: {
-    backgroundColor: '#9DBEBB',
+    backgroundColor: 'rgba(142, 78, 198, 0.16)',
+    borderColor: 'rgba(142, 78, 198, 0.35)',
+    borderWidth: 1,
     flex: 1,
     marginLeft: 10,
   },
@@ -616,15 +597,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
-  infoCard: {
-    padding: 20,
-    borderRadius: 15,
+  // Info cards (Liquid Glass)
+  infoGlassCard: {
+    marginHorizontal: TIMELINE_INSET,
     marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    borderRadius: 22,
+  },
+  infoGlassInner: {
+    padding: 20,
   },
   infoTitle: {
     fontSize: 18,

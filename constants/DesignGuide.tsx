@@ -77,10 +77,20 @@ export const LiquidGlassCard: React.FC<{
 }) => {
   const CardComponent = onPress ? TouchableOpacity : View;
   return (
-    <CardComponent style={[styles.liquidGlassWrapper, style]} onPress={onPress} activeOpacity={activeOpacity}>
-      <BlurView intensity={intensity} tint="light" style={styles.liquidGlassBackground as any}>
+    <CardComponent
+      style={[styles.liquidGlassWrapper, style]}
+      onPress={onPress}
+      activeOpacity={activeOpacity}
+    >
+      <BlurView
+        intensity={intensity}
+        tint="light"
+        style={styles.liquidGlassBackground as any}
+      >
         <View style={[styles.liquidGlassContainer as any, { borderColor }]}>
-          <View style={[styles.liquidGlassOverlay as any, { backgroundColor: overlayColor }]} />
+          <View
+            style={[styles.liquidGlassOverlay as any, { backgroundColor: overlayColor }]}
+          />
           {children}
         </View>
       </BlurView>
@@ -99,18 +109,24 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
   },
   liquidGlassWrapper: {
+    width: '100%',
+    alignSelf: 'stretch',
     borderRadius: RADIUS,
     overflow: 'hidden',
   },
   liquidGlassBackground: {
     width: '100%',
+    borderRadius: RADIUS,
+    overflow: 'hidden',
   },
   liquidGlassContainer: {
     position: 'relative',
     borderWidth: 1,
     borderRadius: RADIUS,
+    overflow: 'hidden',
   },
   liquidGlassOverlay: {
     ...StyleSheet.absoluteFillObject,
+    borderRadius: RADIUS,
   },
 });
