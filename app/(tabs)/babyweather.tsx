@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, View, ScrollView, SafeAreaView, StatusBar, TouchableOpacity, Image, ActivityIndicator, Alert, TextInput, FlatList } from 'react-native';
+import { StyleSheet, View, ScrollView, SafeAreaView, StatusBar, TouchableOpacity, Image, ActivityIndicator, Alert, TextInput, FlatList, Dimensions } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedBackground } from '@/components/ThemedBackground';
@@ -14,6 +14,10 @@ import { Stack } from 'expo-router';
 import Header from '@/components/Header';
 import { useSmartBack } from '@/contexts/NavigationContext';
 import { LiquidGlassCard, LAYOUT_PAD, TIMELINE_INSET } from '@/constants/DesignGuide';
+
+const { width: screenWidth } = Dimensions.get('window');
+const contentWidth = screenWidth - 2 * LAYOUT_PAD;
+const TIMELINE_CONTENT_WIDTH = Math.max(screenWidth - LAYOUT_PAD, contentWidth);
 
 // Funktion zum Laden der Bilder
 const getClothingImage = (imageName: string | null) => {
@@ -1166,8 +1170,8 @@ const styles = StyleSheet.create({
     marginTop: 15,
   },
   headerWrapper: {
-    width: '100%',
-    alignSelf: 'stretch',
+    width: TIMELINE_CONTENT_WIDTH,
+    alignSelf: 'center',
     position: 'relative',
   },
   errorContainer: {
@@ -1388,14 +1392,17 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontStyle: 'italic',
     marginTop: 15,
-    marginHorizontal: 8,
     textAlign: 'center',
     opacity: 0.7,
     color: '#7D5A50',
+    alignSelf: 'center',
+    width: TIMELINE_CONTENT_WIDTH,
   },
   noRecommendations: {
     alignItems: 'center',
     padding: 20,
+    alignSelf: 'center',
+    width: TIMELINE_CONTENT_WIDTH,
   },
   noRecommendationsText: {
     fontSize: 14,
@@ -1580,6 +1587,8 @@ const styles = StyleSheet.create({
   columnWrapper: {
     justifyContent: 'space-around',
     marginVertical: 10,
+    width: TIMELINE_CONTENT_WIDTH,
+    alignSelf: 'center',
   },
   metaCardsContainer: {
     width: '100%',
