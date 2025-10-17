@@ -43,6 +43,7 @@ const MAPPING = {
   'location': 'location_on',
   'wind': 'air',
   'humidity': 'water_drop',
+  'plus': 'add',
 } as Partial<
   Record<
     import('expo-symbols').SymbolViewProps['name'],
