@@ -17,11 +17,12 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { BlurView } from 'expo-blur';
 
 import { PRIMARY, GLASS_OVERLAY } from '@/constants/PlannerDesign';
-import { PlannerAssignee } from '@/services/planner';
+import { PlannerAssignee, PlannerEvent, PlannerTodo } from '@/services/planner';
 
 export type PlannerCaptureType = 'todo' | 'event' | 'note';
 
 export type PlannerCapturePayload = {
+  id?: string;
   type: PlannerCaptureType;
   title: string;
   dueAt?: Date;
@@ -36,6 +37,7 @@ type Props = {
   visible: boolean;
   type: PlannerCaptureType;
   baseDate: Date;
+  editingItem?: { type: 'todo' | 'event'; item: PlannerTodo | PlannerEvent } | null;
   onClose: () => void;
   onSave: (payload: PlannerCapturePayload) => void;
 };
@@ -53,7 +55,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-export const PlannerCaptureModal: React.FC<Props> = ({ visible, type, baseDate, onClose, onSave }) => {
+export const PlannerCaptureModal: React.FC<Props> = ({ visible, type, baseDate, editingItem, onClose, onSave }) => {
   const initialStart = useMemo(() => {
     const d = new Date(baseDate);
     d.setHours(new Date().getHours(), new Date().getMinutes(), 0, 0);
@@ -75,7 +77,41 @@ export const PlannerCaptureModal: React.FC<Props> = ({ visible, type, baseDate, 
   const [assignee, setAssignee] = useState<PlannerAssignee>('me');
 
   useEffect(() => {
-    if (visible) {
+    if (!visible) return;
+    setShowStartPicker(false);
+    setShowEndPicker(false);
+    setShowDuePicker(false);
+
+    if (editingItem) {
+      const { type: editingType, item } = editingItem;
+      setCurrentType(editingType);
+      setTitle(item.title);
+      if ('notes' in item && item.notes) {
+        setNotes(item.notes);
+        setNotesExpanded(true);
+      } else {
+        setNotes('');
+        setNotesExpanded(false);
+      }
+      if (editingType === 'event') {
+        const start = new Date(item.start);
+        const end = new Date(item.end);
+        setStartTime(start);
+        setEndTime(end);
+        setShowEnd(true);
+        setDueTime(null);
+        setLocation(item.location ?? '');
+        setAssignee('me');
+      } else {
+        const due = item.dueAt ? new Date(item.dueAt) : null;
+        setStartTime(due ?? new Date(initialStart));
+        setEndTime(null);
+        setShowEnd(false);
+        setDueTime(due);
+        setLocation('');
+        setAssignee(item.assignee ?? 'me');
+      }
+    } else {
       const reset = new Date(baseDate);
       reset.setHours(new Date().getHours(), new Date().getMinutes(), 0, 0);
       setCurrentType(type);
@@ -88,11 +124,8 @@ export const PlannerCaptureModal: React.FC<Props> = ({ visible, type, baseDate, 
       setLocation('');
       setNotesExpanded(type === 'note');
       setAssignee('me');
-      setShowStartPicker(false);
-      setShowEndPicker(false);
-      setShowDuePicker(false);
     }
-  }, [visible, type, baseDate]);
+  }, [visible, type, baseDate, editingItem]);
 
   useEffect(() => {
     if (!visible) return;
@@ -103,7 +136,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({ visible, type, baseDate, 
       setShowEnd(true);
     } else {
       setShowEnd(false);
-      setDueTime(new Date(startTime));
+      setDueTime((prev) => prev ?? new Date(startTime));
     }
   }, [currentType, visible]);
 
@@ -178,6 +211,10 @@ export const PlannerCaptureModal: React.FC<Props> = ({ visible, type, baseDate, 
 
     if (currentType === 'note') {
       payload.dueAt = dueTime || undefined;
+    }
+
+    if (editingItem) {
+      payload.id = editingItem.item.id;
     }
 
     onSave(payload);

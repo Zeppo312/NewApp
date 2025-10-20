@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { BlurView } from 'expo-blur';
 
 import { PlannerAssignee, PlannerEvent, PlannerTodo } from '@/services/planner';
@@ -14,6 +14,8 @@ type Props = {
   todos: PlannerTodo[];
   onToggleTodo: (id: string) => void;
   onMoveTomorrow: (id: string) => void;
+  onEditTodo?: (id: string) => void;
+  onEditEvent?: (id: string) => void;
 };
 
 type TimelineEvent = {
@@ -53,7 +55,15 @@ function parseISO(iso?: string) {
   return Number.isNaN(dt.getTime()) ? undefined : dt;
 }
 
-export const StructuredTimeline: React.FC<Props> = ({ date, events, todos, onToggleTodo, onMoveTomorrow }) => {
+export const StructuredTimeline: React.FC<Props> = ({
+  date,
+  events,
+  todos,
+  onToggleTodo,
+  onMoveTomorrow,
+  onEditTodo,
+  onEditEvent,
+}) => {
   const timeline = useMemo(() => {
     const entries: TimelineItem[] = [];
     const minutesSet = new Set<number>();
@@ -183,7 +193,13 @@ export const StructuredTimeline: React.FC<Props> = ({ date, events, todos, onTog
             return (
               <View key={item.id} style={[styles.itemWrap, { top }]}> 
                 <View style={styles.node} />
-                <View style={styles.eventCard}>
+                <TouchableOpacity
+                  activeOpacity={0.9}
+                  onPress={() => onEditEvent?.(item.id)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Termin ${item.title}`}
+                  style={styles.eventCard}
+                >
                   <BlurView intensity={20} tint="light" style={StyleSheet.absoluteFill} />
                   <View
                     style={[StyleSheet.absoluteFill, styles.cardOverlay, { backgroundColor: GLASS_OVERLAY, borderColor: GLASS_BORDER }]}
@@ -197,7 +213,7 @@ export const StructuredTimeline: React.FC<Props> = ({ date, events, todos, onTog
                       <ThemedText style={styles.itemTitle}>{item.title}</ThemedText>
                     </View>
                   </View>
-                </View>
+                </TouchableOpacity>
               </View>
             );
           }
@@ -235,7 +251,9 @@ export const StructuredTimeline: React.FC<Props> = ({ date, events, todos, onTog
                       completed={item.completed}
                       onComplete={() => onToggleTodo(item.id)}
                       onMoveTomorrow={() => onMoveTomorrow(item.id)}
+                      onPress={() => onEditTodo?.(item.id)}
                       showLeadingCheckbox={false}
+                      trailingCheckbox
                       style={styles.todoContent}
                       subtitle={item.timeLabel}
                     />

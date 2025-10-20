@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { SafeAreaView, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -15,6 +15,8 @@ import { PlannerEvent, PlannerTodo, usePlannerDay } from '@/services/planner';
 import { PRIMARY, BACKGROUND, LAYOUT_PAD, SECTION_GAP_BOTTOM, SECTION_GAP_TOP, TEXT_PRIMARY } from '@/constants/PlannerDesign';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import * as Haptics from 'expo-haptics';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/lib/supabase';
 
 function formatDateHeader(d: Date) {
   return new Intl.DateTimeFormat('de-DE', { weekday: 'long', day: '2-digit', month: 'short' }).format(d);
@@ -22,15 +24,29 @@ function formatDateHeader(d: Date) {
 
 export default function PlannerScreen() {
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
   const [selectedDate, setSelectedDate] = useState(() => {
     const d = new Date();
     d.setHours(0, 0, 0, 0);
     return d;
   });
-  const { blocks, summary, toggleTodo, moveToTomorrow, addTodo, addEvent, updateMood, saveReflection } = usePlannerDay(selectedDate);
+  const {
+    blocks,
+    summary,
+    toggleTodo,
+    moveToTomorrow,
+    addTodo,
+    addEvent,
+    updateTodo,
+    updateEvent,
+    updateMood,
+    saveReflection,
+  } = usePlannerDay(selectedDate);
 
   const [captureVisible, setCaptureVisible] = useState(false);
   const [captureType, setCaptureType] = useState<PlannerCaptureType>('todo');
+  const [editingItem, setEditingItem] = useState<{ type: 'todo' | 'event'; item: PlannerTodo | PlannerEvent } | null>(null);
+  const [profileName, setProfileName] = useState<string>('Lotti');
 
   const weekStrip = useMemo(() => {
     const current = new Date(selectedDate);
@@ -47,10 +63,73 @@ export default function PlannerScreen() {
   const todayIso = toDateStr(new Date());
   const dayEmojis = ['🍼', '💜', '👣', '🧸', '🌙', '☀️', '🫧'];
 
+  useEffect(() => {
+    let active = true;
+    const loadProfileName = async () => {
+      if (!user?.id) {
+        if (active) setProfileName('Lotti');
+        return;
+      }
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('first_name')
+        .eq('id', user.id)
+        .maybeSingle();
+      if (!active) return;
+      if (error) {
+        console.warn('Planner: Profilname konnte nicht geladen werden', error);
+      }
+      const raw = data?.first_name?.trim();
+      const fallback = user.email ? user.email.split('@')[0] : '';
+      setProfileName(raw && raw.length > 0 ? raw : (fallback || 'Lotti'));
+    };
+    loadProfileName();
+    return () => {
+      active = false;
+    };
+  }, [user?.id, user?.email]);
+
+  const greeting = useMemo(() => {
+    const now = new Date();
+    const hour = now.getHours();
+    let base = 'Hallo';
+    let emoji = '☀️';
+    let sub = 'Schön, dass du da bist.';
+
+    if (hour >= 5 && hour < 11) {
+      base = 'Guten Morgen';
+      emoji = '☀️';
+      sub = 'Bereit für einen neuen Tag?';
+    } else if (hour >= 11 && hour < 17) {
+      base = 'Guten Tag';
+      emoji = '🌤️';
+      sub = 'Was steht heute noch an?';
+    } else if (hour >= 17 && hour < 22) {
+      base = 'Guten Abend';
+      emoji = '🌆';
+      sub = 'Lass den Tag entspannt ausklingen.';
+    } else {
+      base = 'Gute Nacht';
+      emoji = '🌙';
+      sub = 'Zeit zum Abschalten und Ausruhen.';
+    }
+
+    const safeName = profileName?.trim().length ? profileName.trim() : 'du';
+    const nameCapitalized = safeName.charAt(0).toUpperCase() + safeName.slice(1);
+
+    return {
+      title: `${base}, ${nameCapitalized}`,
+      emoji,
+      subline: sub,
+    };
+  }, [profileName]);
+
   const handleSelectDate = (next: Date) => {
     const normalized = new Date(next);
     normalized.setHours(0, 0, 0, 0);
     setSelectedDate(normalized);
+    setCaptureVisible(false);
+    setEditingItem(null);
   };
 
   const shiftWeek = (delta: number) => {
@@ -59,9 +138,52 @@ export default function PlannerScreen() {
     handleSelectDate(next);
   };
 
-  const openCapture = (type: PlannerCaptureType) => {
+  const openCapture = (
+    type: PlannerCaptureType,
+    existing?: { type: 'todo' | 'event'; item: PlannerTodo | PlannerEvent }
+  ) => {
     setCaptureType(type);
+    setEditingItem(existing ?? null);
     setCaptureVisible(true);
+  };
+
+  const handleCaptureClose = () => {
+    setCaptureVisible(false);
+    setEditingItem(null);
+  };
+
+  const findTodoById = (id: string) => {
+    for (const block of blocks) {
+      for (const item of block.items) {
+        if ('completed' in item && item.id === id) {
+          return item as PlannerTodo;
+        }
+      }
+    }
+    return undefined;
+  };
+
+  const findEventById = (id: string) => {
+    for (const block of blocks) {
+      for (const item of block.items) {
+        if ('start' in item && 'end' in item && item.id === id) {
+          return item as PlannerEvent;
+        }
+      }
+    }
+    return undefined;
+  };
+
+  const handleEditTodo = (id: string) => {
+    const todo = findTodoById(id);
+    if (!todo) return;
+    openCapture('todo', { type: 'todo', item: { ...todo } });
+  };
+
+  const handleEditEvent = (id: string) => {
+    const event = findEventById(id);
+    if (!event) return;
+    openCapture('event', { type: 'event', item: { ...event } });
   };
 
   const handleCaptureSave = (payload: PlannerCapturePayload) => {
@@ -69,14 +191,44 @@ export default function PlannerScreen() {
       if (payload.type === 'event' && payload.start) {
         const startIso = payload.start.toISOString();
         const endIso = (payload.end ?? new Date(payload.start.getTime() + 30 * 60000)).toISOString();
-        addEvent(payload.title, startIso, endIso, payload.location);
-      } else {
+        if (payload.id) {
+          updateEvent(payload.id, {
+            title: payload.title,
+            start: startIso,
+            end: endIso,
+            location: payload.location,
+          });
+        } else {
+          addEvent(payload.title, startIso, endIso, payload.location);
+        }
+      } else if (payload.type === 'todo') {
         const dueIso = payload.dueAt ? payload.dueAt.toISOString() : undefined;
-        addTodo(payload.title, undefined, dueIso, payload.notes, payload.assignee);
+        if (payload.id) {
+          updateTodo(payload.id, {
+            title: payload.title,
+            dueAt: dueIso,
+            notes: payload.notes,
+            assignee: payload.assignee,
+          });
+        } else {
+          addTodo(payload.title, undefined, dueIso, payload.notes, payload.assignee);
+        }
+      } else if (payload.type === 'note') {
+        const dueIso = payload.dueAt ? payload.dueAt.toISOString() : undefined;
+        if (payload.id) {
+          updateTodo(payload.id, {
+            title: payload.title,
+            dueAt: dueIso,
+            notes: payload.notes,
+          });
+        } else {
+          addTodo(payload.title, undefined, dueIso, payload.notes);
+        }
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } finally {
       setCaptureVisible(false);
+      setEditingItem(null);
     }
   };
 
@@ -144,7 +296,7 @@ export default function PlannerScreen() {
           showsVerticalScrollIndicator={false}
         >
           <View style={{ paddingHorizontal: LAYOUT_PAD }}>
-            <GreetingCard name="Lotti" />
+            <GreetingCard title={greeting.title} emoji={greeting.emoji} subline={greeting.subline} />
             <View style={{ height: SECTION_GAP_TOP }} />
             <TodayOverviewCard summary={summary} />
             <View style={{ height: SECTION_GAP_TOP }} />
@@ -162,6 +314,8 @@ export default function PlannerScreen() {
                 todos={todos}
                 onToggleTodo={(id) => toggleTodo(id)}
                 onMoveTomorrow={(id) => moveToTomorrow(id)}
+                onEditTodo={handleEditTodo}
+                onEditEvent={handleEditEvent}
               />
             );
           })()}
@@ -184,7 +338,8 @@ export default function PlannerScreen() {
         visible={captureVisible}
         type={captureType}
         baseDate={selectedDate}
-        onClose={() => setCaptureVisible(false)}
+        editingItem={editingItem}
+        onClose={handleCaptureClose}
         onSave={handleCaptureSave}
       />
     </ThemedBackground>
@@ -220,26 +375,24 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
   },
   weekDays: {
-    flex: 1,
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     alignItems: 'center',
-    gap: 16,
-    alignSelf: 'stretch',
-    paddingHorizontal: 36,
+    gap: 8,
+    alignSelf: 'center',
   },
   weekItem: {
     alignItems: 'center',
-    width: 48,
+    width: 38,
     gap: 6,
   },
-  weekDay: { fontSize: 12, opacity: 0.7, color: TEXT_PRIMARY },
+  weekDay: { fontSize: 11, opacity: 0.7, color: TEXT_PRIMARY },
   weekDayActive: { color: PRIMARY, opacity: 1 },
   weekDayCircle: {
     marginTop: 2,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.35)',
@@ -250,11 +403,11 @@ const styles = StyleSheet.create({
     backgroundColor: PRIMARY,
     borderColor: PRIMARY,
   },
-  weekDayNum: { fontWeight: '700', color: TEXT_PRIMARY },
+  weekDayNum: { fontWeight: '700', color: TEXT_PRIMARY, fontSize: 14 },
   weekDayNumActive: { color: '#fff' },
   weekEmoji: {
     position: 'absolute',
-    fontSize: 18,
+    fontSize: 16,
     opacity: 0.35,
     top: 3,
   },
@@ -276,8 +429,9 @@ const styles = StyleSheet.create({
     opacity: 0.9,
   },
   reflectionWrapper: {
-    marginHorizontal: LAYOUT_PAD,
+    marginHorizontal: LAYOUT_PAD / 2,
     alignItems: 'center',
+    alignSelf: 'stretch',
   },
 });
 

@@ -5,10 +5,16 @@ import { LiquidGlassCard } from '@/constants/DesignGuide';
 import { GLASS_BORDER, GLASS_OVERLAY, LAYOUT_PAD, PRIMARY, TEXT_PRIMARY } from '@/constants/PlannerDesign';
 
 type Props = {
-  name?: string;
+  title: string;
+  subline?: string;
+  emoji?: string;
 };
 
-export const GreetingCard: React.FC<Props> = ({ name = 'Lotti' }) => {
+export const GreetingCard: React.FC<Props> = ({
+  title,
+  subline = 'Schön, dass du da bist.',
+  emoji = '☀️',
+}) => {
   return (
     <LiquidGlassCard
       style={styles.card}
@@ -16,13 +22,23 @@ export const GreetingCard: React.FC<Props> = ({ name = 'Lotti' }) => {
       borderColor={GLASS_BORDER}
       intensity={24}
     >
-      <View style={styles.row} accessible accessibilityRole="summary" accessibilityLabel={`Begrüßung. Guten Morgen, ${name}.`}>
-        <ThemedText style={styles.emoji} accessibilityLabel="Sonnenschein Emoji">☀️</ThemedText>
-        <View style={{ flex: 1 }}>
-          <ThemedText style={styles.headline}>{`Guten Morgen, ${name} `}<ThemedText style={{ color: PRIMARY }}>💜</ThemedText></ThemedText>
-          <ThemedText style={styles.sub} lightColor={TEXT_PRIMARY} darkColor={TEXT_PRIMARY}>
-            Schön, dass du da bist.
+      <View
+        style={styles.row}
+        accessible
+        accessibilityRole="summary"
+        accessibilityLabel={`Begrüßung. ${title}.`}
+      >
+        <ThemedText style={styles.emoji} accessibilityLabel="Stimmungs-Emoji">{emoji}</ThemedText>
+        <View style={styles.textWrap}>
+          <ThemedText style={styles.headline}>
+            {title}{' '}
+            <ThemedText style={styles.highlight}>💜</ThemedText>
           </ThemedText>
+          {subline ? (
+            <ThemedText style={styles.sub} lightColor={TEXT_PRIMARY} darkColor={TEXT_PRIMARY}>
+              {subline}
+            </ThemedText>
+          ) : null}
         </View>
       </View>
     </LiquidGlassCard>
@@ -31,7 +47,8 @@ export const GreetingCard: React.FC<Props> = ({ name = 'Lotti' }) => {
 
 const styles = StyleSheet.create({
   card: {
-    padding: LAYOUT_PAD,
+    paddingHorizontal: LAYOUT_PAD,
+    paddingVertical: LAYOUT_PAD + 8,
     borderRadius: 26,
     shadowColor: '#000',
     shadowOpacity: 0.08,
@@ -39,16 +56,20 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
   },
   row: { flexDirection: 'row', alignItems: 'center' },
-  emoji: { fontSize: 32, marginRight: 12 },
+  emoji: { fontSize: 36, marginRight: 12 },
+  textWrap: { flex: 1 },
   headline: {
-    fontSize: 20,
+    fontSize: 21,
     fontWeight: '700',
+    lineHeight: 26,
   },
+  highlight: { color: PRIMARY },
   sub: {
     marginTop: 4,
-    fontSize: 14,
-    opacity: 0.9,
+    fontSize: 15,
+    opacity: 0.85,
     color: TEXT_PRIMARY,
+    lineHeight: 20,
   },
 });
 

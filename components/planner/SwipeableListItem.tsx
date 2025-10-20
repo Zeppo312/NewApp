@@ -1,5 +1,5 @@
-import React, { useRef } from 'react';
-import { Alert, Animated, Pressable, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { Alert, Animated, Pressable, StyleProp, StyleSheet, Text, View, ViewStyle, GestureResponderEvent } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import * as Haptics from 'expo-haptics';
 import { IconSymbol } from '@/components/ui/IconSymbol';
@@ -14,6 +14,7 @@ type Props = {
   onComplete?: (id: string) => void;
   onMoveTomorrow?: (id: string) => void;
   onLongPress?: (id: string) => void;
+  onPress?: (id: string) => void;
   showLeadingCheckbox?: boolean; // default true for todo
   trailingCheckbox?: boolean; // when true, render checkbox at right instead of left
   style?: StyleProp<ViewStyle>;
@@ -28,12 +29,17 @@ export const SwipeableListItem: React.FC<Props> = ({
   onComplete,
   onMoveTomorrow,
   onLongPress,
+  onPress,
   showLeadingCheckbox = true,
   trailingCheckbox = false,
   style,
 }) => {
   const ref = useRef<Swipeable | null>(null);
   const scale = useRef(new Animated.Value(completed ? 1 : 0)).current;
+
+  useEffect(() => {
+    Animated.spring(scale, { toValue: completed ? 1 : 0, bounciness: 12, useNativeDriver: true }).start();
+  }, [completed, scale]);
 
   const animateCheck = (to: number) => {
     Animated.spring(scale, { toValue: to, bounciness: 12, useNativeDriver: true }).start();
@@ -51,6 +57,17 @@ export const SwipeableListItem: React.FC<Props> = ({
       <Text style={styles.actionText}>Morgen</Text>
     </View>
   );
+
+  const triggerComplete = () => {
+    if (type !== 'todo' || !onComplete) return;
+    Haptics.selectionAsync();
+    onComplete(id);
+  };
+
+  const handleCheckboxPress = (event: GestureResponderEvent) => {
+    event.stopPropagation();
+    triggerComplete();
+  };
 
   return (
     <Swipeable
@@ -70,6 +87,11 @@ export const SwipeableListItem: React.FC<Props> = ({
       }}
     >
       <Pressable
+        onPress={() => {
+          if (onPress) {
+            onPress(id);
+          }
+        }}
         onLongPress={() => {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
           if (onLongPress) onLongPress(id);
@@ -90,9 +112,11 @@ export const SwipeableListItem: React.FC<Props> = ({
         {!trailingCheckbox && (
           <View style={styles.leading}>
             {type === 'todo' && showLeadingCheckbox ? (
-              <View style={[styles.checkbox, completed && styles.checkboxDone]}>
-                <Animated.View style={[styles.checkDot, { transform: [{ scale }] }]} />
-              </View>
+              <Pressable onPress={handleCheckboxPress} hitSlop={10}>
+                <View style={[styles.checkbox, completed && styles.checkboxDone]}>
+                  <Animated.View style={[styles.checkDot, { transform: [{ scale }] }]} />
+                </View>
+              </Pressable>
             ) : (
               type === 'event' ? <IconSymbol name="calendar" color={PRIMARY as any} size={20} /> : <View style={{ width: 20 }} />
             )}
@@ -104,11 +128,11 @@ export const SwipeableListItem: React.FC<Props> = ({
         </View>
         {/* Trailing checkbox (Structured-like) */}
         {trailingCheckbox && type === 'todo' && (
-          <View style={styles.trailing}>
+          <Pressable style={styles.trailing} onPress={handleCheckboxPress} hitSlop={10}>
             <View style={[styles.checkbox, completed && styles.checkboxDone]}>
               <Animated.View style={[styles.checkDot, { transform: [{ scale }] }]} />
             </View>
-          </View>
+          </Pressable>
         )}
       </Pressable>
     </Swipeable>
