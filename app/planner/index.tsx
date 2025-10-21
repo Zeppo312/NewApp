@@ -47,6 +47,7 @@ export default function PlannerScreen() {
   const [captureType, setCaptureType] = useState<PlannerCaptureType>('todo');
   const [editingItem, setEditingItem] = useState<{ type: 'todo' | 'event'; item: PlannerTodo | PlannerEvent } | null>(null);
   const [profileName, setProfileName] = useState<string>('Lotti');
+  const contentTopPadding = Math.max(SECTION_GAP_TOP - 24, 0);
 
   const weekStrip = useMemo(() => {
     const current = new Date(selectedDate);
@@ -235,7 +236,7 @@ export default function PlannerScreen() {
   return (
     <ThemedBackground style={{ flex: 1, backgroundColor: BACKGROUND }}>
       <SafeAreaView style={{ flex: 1 }}>
-        <View style={{ paddingHorizontal: LAYOUT_PAD, paddingTop: 6 }}>
+        <View style={{ paddingHorizontal: LAYOUT_PAD, paddingTop: 0 }}>
           <Header title={formatDateHeader(selectedDate)} showBackButton />
 
           <View style={styles.weekStrip} accessibilityRole="tablist" accessibilityLabel="Wochentage">
@@ -292,7 +293,7 @@ export default function PlannerScreen() {
         </View>
 
         <ScrollView
-          contentContainerStyle={{ paddingHorizontal: 0, paddingTop: SECTION_GAP_TOP, paddingBottom: SECTION_GAP_BOTTOM + 96 }}
+          contentContainerStyle={{ paddingHorizontal: 0, paddingTop: contentTopPadding, paddingBottom: SECTION_GAP_BOTTOM + 96 }}
           showsVerticalScrollIndicator={false}
         >
           <View style={{ paddingHorizontal: LAYOUT_PAD }}>

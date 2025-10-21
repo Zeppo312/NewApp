@@ -86,6 +86,7 @@ type LoadedPlannerData = {
   summary: PlannerDaySummary;
   baseDayId: string | null;
   itemsMap: Record<string, PlannerItemRow>;
+  dayMap: Record<string, string>;
 };
 
 type BlockDefinition = {
@@ -209,6 +210,7 @@ async function ensurePlannerDayForUser(userId: string, date: Date): Promise<stri
 function buildAggregatedData(date: Date, dayRows: PlannerDayRow[], itemRows: PlannerItemRow[], baseUserId: string): LoadedPlannerData {
   const baseDayRow = dayRows.find((row) => row.user_id === baseUserId) ?? null;
   const workingDate = new Date(date);
+  const selectedIso = toDateOnlyISO(workingDate);
 
   const blocks = buildEmptyBlocks(workingDate);
   const fallbackBlock: PlannerBlock = {
@@ -220,12 +222,18 @@ function buildAggregatedData(date: Date, dayRows: PlannerDayRow[], itemRows: Pla
   };
 
   const itemsMap: Record<string, PlannerItemRow> = {};
+  const includedTodoRows: PlannerItemRow[] = [];
+  const includedEventRows: PlannerItemRow[] = [];
   itemRows.forEach((row) => {
     itemsMap[row.id] = row;
 
     if (row.entry_type === 'event') {
       const startDate = parseISO(row.start_at) ?? parseISO(row.due_at) ?? new Date(workingDate);
       const endDate = parseISO(row.end_at) ?? new Date(startDate.getTime() + 30 * 60000);
+      if (startDate && toDateOnlyISO(startDate) !== selectedIso) {
+        return;
+      }
+      includedEventRows.push(row);
       const event: PlannerEvent = {
         id: row.id,
         title: row.title,
@@ -246,6 +254,10 @@ function buildAggregatedData(date: Date, dayRows: PlannerDayRow[], itemRows: Pla
     }
 
     const dueDate = parseISO(row.due_at);
+    if (dueDate && toDateOnlyISO(dueDate) !== selectedIso) {
+      return;
+    }
+    includedTodoRows.push(row);
     const todo: PlannerTodo = {
       id: row.id,
       title: row.title,
@@ -281,8 +293,8 @@ function buildAggregatedData(date: Date, dayRows: PlannerDayRow[], itemRows: Pla
     });
   });
 
-  const todoRows = itemRows.filter((row) => row.entry_type === 'todo');
-  const eventsCount = itemRows.filter((row) => row.entry_type === 'event').length;
+  const todoRows = includedTodoRows;
+  const eventsCount = includedEventRows.length;
 
   const summary: PlannerDaySummary = {
     tasksDone: todoRows.filter((row) => row.completed).length,
@@ -293,11 +305,17 @@ function buildAggregatedData(date: Date, dayRows: PlannerDayRow[], itemRows: Pla
     reflection: baseDayRow?.reflection ?? undefined,
   };
 
+  const dayMap: Record<string, string> = {};
+  dayRows.forEach((row) => {
+    dayMap[row.id] = row.day;
+  });
+
   return {
     blocks,
     summary,
     baseDayId: baseDayRow?.id ?? null,
     itemsMap,
+    dayMap,
   };
 }
 
@@ -322,6 +340,7 @@ export function usePlannerDay(date: Date) {
   const [error, setError] = useState<string | null>(null);
   const [baseDayId, setBaseDayId] = useState<string | null>(null);
   const [itemsMap, setItemsMap] = useState<Record<string, PlannerItemRow>>({});
+  const [dayDateById, setDayDateById] = useState<Record<string, string>>({});
   const [linkedUserIds, setLinkedUserIds] = useState<string[]>([]);
 
   useEffect(() => {
@@ -406,14 +425,17 @@ export function usePlannerDay(date: Date) {
 
   const itemsMapRef = useRef<Record<string, PlannerItemRow>>({});
   const baseDayIdRef = useRef<string | null>(null);
+  const dayDateByIdRef = useRef<Record<string, string>>({});
 
   const applyLoadedData = useCallback((data: LoadedPlannerData) => {
     itemsMapRef.current = data.itemsMap;
     baseDayIdRef.current = data.baseDayId;
+    dayDateByIdRef.current = data.dayMap;
     setBlocks(data.blocks);
     setSummary(data.summary);
     setBaseDayId(data.baseDayId);
     setItemsMap(data.itemsMap);
+    setDayDateById(data.dayMap);
   }, []);
 
   useEffect(() => {
@@ -458,15 +480,65 @@ export function usePlannerDay(date: Date) {
     baseDayIdRef.current = baseDayId;
   }, [baseDayId]);
 
+  useEffect(() => {
+    dayDateByIdRef.current = dayDateById;
+  }, [dayDateById]);
+
+  const recordDayMapping = useCallback(
+    (dayId: string, date: Date) => {
+      const iso = toDateOnlyISO(date);
+      dayDateByIdRef.current = { ...dayDateByIdRef.current, [dayId]: iso };
+      setDayDateById((prev) => {
+        if (prev[dayId] === iso) return prev;
+        return { ...prev, [dayId]: iso };
+      });
+    },
+    [],
+  );
+
+  const ensureDayFor = useCallback(
+    async (ownerId: string, date: Date) => {
+      const ensuredId = await ensurePlannerDayForUser(ownerId, date);
+      recordDayMapping(ensuredId, date);
+      if (ownerId === user?.id && toDateOnlyISO(date) === dateIso) {
+        baseDayIdRef.current = ensuredId;
+        setBaseDayId((prev) => (prev === ensuredId ? prev : ensuredId));
+      }
+      return ensuredId;
+    },
+    [recordDayMapping, user?.id, dateIso],
+  );
+
   const addTodo = useCallback(
     async (title: string, blockId?: string, dueAt?: string, notes?: string, assignee: PlannerAssignee = 'me') => {
       if (!user?.id) return;
-      const dayId = baseDayIdRef.current;
-      if (!dayId) return;
+      const ownerId = user.id;
+      let targetDayId = baseDayIdRef.current;
+      let targetBlockId = blockId ?? null;
+
+      if (!targetDayId) {
+        targetDayId = await ensureDayFor(ownerId, normalizedDate);
+      }
+
+      if (dueAt) {
+        const dueDate = parseISO(dueAt);
+        if (dueDate) {
+          const dueIso = toDateOnlyISO(dueDate);
+          if (dueIso !== dateIso) {
+            targetDayId = await ensureDayFor(ownerId, dueDate);
+            targetBlockId = null;
+          }
+        }
+      }
+
+      if (!targetDayId) {
+        targetDayId = await ensureDayFor(ownerId, normalizedDate);
+      }
+
       const payload = {
-        user_id: user.id,
-        day_id: dayId,
-        block_id: blockId ?? null,
+        user_id: ownerId,
+        day_id: targetDayId,
+        block_id: targetBlockId,
         entry_type: 'todo' as const,
         title,
         completed: false,
@@ -482,18 +554,37 @@ export function usePlannerDay(date: Date) {
       }
       await reloadSilently();
     },
-    [reloadSilently, user?.id],
+    [reloadSilently, user?.id, ensureDayFor, normalizedDate, dateIso],
   );
 
   const addEvent = useCallback(
     async (title: string, start: string, end: string, location?: string, blockId?: string) => {
       if (!user?.id) return;
-      const dayId = baseDayIdRef.current;
-      if (!dayId) return;
+      const ownerId = user.id;
+      let targetDayId = baseDayIdRef.current;
+      let targetBlockId = blockId ?? null;
+
+      if (!targetDayId) {
+        targetDayId = await ensureDayFor(ownerId, normalizedDate);
+      }
+
+      const startDate = parseISO(start);
+      if (startDate) {
+        const startIso = toDateOnlyISO(startDate);
+        if (startIso !== dateIso) {
+          targetDayId = await ensureDayFor(ownerId, startDate);
+          targetBlockId = null;
+        }
+      }
+
+      if (!targetDayId) {
+        targetDayId = await ensureDayFor(ownerId, normalizedDate);
+      }
+
       const payload = {
-        user_id: user.id,
-        day_id: dayId,
-        block_id: blockId ?? null,
+        user_id: ownerId,
+        day_id: targetDayId,
+        block_id: targetBlockId,
         entry_type: 'event' as const,
         title,
         start_at: start,
@@ -508,7 +599,7 @@ export function usePlannerDay(date: Date) {
       }
       await reloadSilently();
     },
-    [reloadSilently, user?.id],
+    [reloadSilently, user?.id, ensureDayFor, normalizedDate, dateIso],
   );
 
   const updateTodo = useCallback(
@@ -518,8 +609,34 @@ export function usePlannerDay(date: Date) {
       const payload: Record<string, any> = {};
       if (updates.title !== undefined) payload.title = updates.title;
       if (updates.notes !== undefined) payload.notes = updates.notes ?? null;
-      if (updates.dueAt !== undefined) payload.due_at = updates.dueAt ?? null;
       if (updates.assignee !== undefined) payload.assignee = updates.assignee;
+
+      let newDayId: string | undefined;
+      if (updates.dueAt !== undefined) {
+        payload.due_at = updates.dueAt ?? null;
+        if (updates.dueAt) {
+          const ownerId = row.user_id ?? user?.id;
+          const dueDate = parseISO(updates.dueAt);
+          if (ownerId && dueDate) {
+            const nextIso = toDateOnlyISO(dueDate);
+            const currentIso =
+              (row.day_id && dayDateByIdRef.current[row.day_id]) ||
+              (row.due_at ? toDateOnlyISO(new Date(row.due_at)) : undefined);
+            if (!currentIso || currentIso !== nextIso) {
+              const ensured = await ensureDayFor(ownerId, dueDate);
+              if (ensured !== row.day_id) {
+                newDayId = ensured;
+                payload.block_id = null;
+              }
+            }
+          }
+        }
+      }
+
+      if (newDayId) {
+        payload.day_id = newDayId;
+      }
+
       if (Object.keys(payload).length === 0) return;
       const { error: updateError } = await supabase.from('planner_items').update(payload).eq('id', id);
       if (updateError) {
@@ -529,7 +646,7 @@ export function usePlannerDay(date: Date) {
       }
       await reloadSilently();
     },
-    [reloadSilently],
+    [reloadSilently, ensureDayFor, user?.id],
   );
 
   const updateEvent = useCallback(
@@ -539,8 +656,32 @@ export function usePlannerDay(date: Date) {
       const payload: Record<string, any> = {};
       if (updates.title !== undefined) payload.title = updates.title;
       if (updates.start !== undefined) payload.start_at = updates.start;
-      if (updates.end !== undefined) payload.end_at = updates.end;
+      if (updates.end !== undefined) payload.end_at = updates.end ?? null;
       if (updates.location !== undefined) payload.location = updates.location ?? null;
+
+      let newDayId: string | undefined;
+      if (updates.start !== undefined && updates.start) {
+        const ownerId = row.user_id ?? user?.id;
+        const nextStartDate = parseISO(updates.start);
+        if (ownerId && nextStartDate) {
+          const nextIso = toDateOnlyISO(nextStartDate);
+          const currentIso =
+            (row.day_id && dayDateByIdRef.current[row.day_id]) ||
+            (row.start_at ? toDateOnlyISO(new Date(row.start_at)) : undefined);
+          if (!currentIso || currentIso !== nextIso) {
+            const ensured = await ensureDayFor(ownerId, nextStartDate);
+            if (ensured !== row.day_id) {
+              newDayId = ensured;
+              payload.block_id = null;
+            }
+          }
+        }
+      }
+
+      if (newDayId) {
+        payload.day_id = newDayId;
+      }
+
       if (Object.keys(payload).length === 0) return;
       const { error: updateError } = await supabase.from('planner_items').update(payload).eq('id', id);
       if (updateError) {
@@ -550,7 +691,7 @@ export function usePlannerDay(date: Date) {
       }
       await reloadSilently();
     },
-    [reloadSilently],
+    [reloadSilently, ensureDayFor, user?.id],
   );
 
   const toggleTodo = useCallback(
@@ -575,12 +716,13 @@ export function usePlannerDay(date: Date) {
     async (id: string) => {
       const row = itemsMapRef.current[id];
       if (!row || (row.entry_type !== 'todo' && row.entry_type !== 'note')) return;
-      const ownerId = row.user_id;
+      const ownerId = row.user_id ?? user?.id;
+      if (!ownerId) return;
       const tomorrow = new Date(normalizedDate);
       tomorrow.setDate(tomorrow.getDate() + 1);
       let targetDayId: string;
       try {
-        targetDayId = await ensurePlannerDayForUser(ownerId, tomorrow);
+        targetDayId = await ensureDayFor(ownerId, tomorrow);
       } catch (err) {
         setError(extractErrorMessage(err));
         console.error('Planner: ensurePlannerDayForUser failed', err);
@@ -603,7 +745,7 @@ export function usePlannerDay(date: Date) {
       }
       await reloadSilently();
     },
-    [reloadSilently, normalizedKey],
+    [reloadSilently, normalizedKey, ensureDayFor, user?.id],
   );
 
   const updateMood = useCallback(
