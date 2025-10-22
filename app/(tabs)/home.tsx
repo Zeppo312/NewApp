@@ -692,9 +692,9 @@ const styles = StyleSheet.create({
 
   // Begrüßungsbereich - Liquid Glass Design
   greetingContainer: {
-    paddingTop: 24,
-    paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingTop: 32,
+    paddingHorizontal: 24,
+    paddingBottom: 28,
     backgroundColor: 'transparent',
   },
   greetingHeader: {
