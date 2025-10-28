@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, Text, SafeAreaView, StatusBar, Image, ActivityIndicator, RefreshControl, Platform } from 'react-native';
+import { StyleSheet, ScrollView, View, TouchableOpacity, Text, SafeAreaView, StatusBar, Image, ActivityIndicator, RefreshControl, Platform, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
@@ -14,6 +14,7 @@ import { getBabyInfo, getDiaryEntries, getCurrentPhase, getPhaseProgress, getMil
 import { supabase } from '@/lib/supabase';
 import { BlurView } from 'expo-blur';
 import ActivityInputModal from '@/components/ActivityInputModal';
+import SleepQuickAddModal, { SleepQuickEntry } from '@/components/SleepQuickAddModal';
 
 // Tägliche Tipps für Mamas
 const dailyTips = [
@@ -50,6 +51,8 @@ export default function HomeScreen() {
   const [selectedActivityType, setSelectedActivityType] = useState<'feeding' | 'diaper' | 'other'>('feeding');
   const [selectedSubType, setSelectedSubType] = useState<string | null>(null);
   const [todaySleepMinutes, setTodaySleepMinutes] = useState(0);
+  const [showSleepModal, setShowSleepModal] = useState(false);
+  const [sleepModalStart, setSleepModalStart] = useState(new Date());
 
   useEffect(() => {
     if (user) {
@@ -207,7 +210,12 @@ export default function HomeScreen() {
   };
 
   // Handle stat item press
-  const handleStatPress = (type: 'feeding' | 'diaper') => {
+  const handleStatPress = (type: 'feeding' | 'diaper' | 'sleep') => {
+    if (type === 'sleep') {
+      setSleepModalStart(new Date());
+      setShowSleepModal(true);
+      return;
+    }
     setSelectedActivityType(type);
     setSelectedSubType(null);
     setShowInputModal(true);
@@ -306,6 +314,42 @@ export default function HomeScreen() {
     await loadDailyEntriesOnly();
   };
 
+  const handleSaveSleepQuickEntry = async (entry: SleepQuickEntry) => {
+    if (!user?.id) {
+      Alert.alert('Hinweis', 'Bitte melde dich an, um Schlaf zu speichern.');
+      return;
+    }
+    try {
+      const payload = {
+        user_id: user.id,
+        start_time: entry.start.toISOString(),
+        end_time: entry.end ? entry.end.toISOString() : null,
+        quality: entry.quality,
+        notes: entry.notes || null,
+        duration_minutes: entry.end ? Math.max(0, Math.round((entry.end.getTime() - entry.start.getTime()) / 60000)) : null,
+      };
+
+      const { error } = await supabase.from('sleep_entries').insert(payload);
+      if (error) {
+        console.error('Error saving sleep entry:', error);
+        Alert.alert('Fehler', 'Schlaf konnte nicht gespeichert werden.');
+        return;
+      }
+
+      setShowSleepModal(false);
+
+      const today = new Date();
+      const startOfDay = new Date(today);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(today);
+      endOfDay.setHours(23, 59, 59, 999);
+      await fetchTodaySleepMinutes(startOfDay, endOfDay);
+    } catch (err) {
+      console.error('Failed to save sleep entry:', err);
+      Alert.alert('Fehler', 'Schlafeintrag konnte nicht gespeichert werden.');
+    }
+  };
+
   // Rendere den Begrüßungsbereich
   const renderGreetingSection = () => {
     // Verwende den Benutzernamen aus der profiles-Tabelle
@@ -375,26 +419,26 @@ export default function HomeScreen() {
     const todayDiaperChanges = getTodayDiaperChanges();
 
     return (
-      <TouchableOpacity
-        onPress={() => router.push('/(tabs)/daily_old')}
-        activeOpacity={0.9}
-        style={styles.liquidGlassWrapper}
-      >
+      <View style={styles.liquidGlassWrapper}>
         <BlurView 
           intensity={22} 
           tint={colorScheme === 'dark' ? 'dark' : 'light'} 
           style={styles.liquidGlassBackground}
         >
-                     <ThemedView style={[styles.summaryContainer, styles.liquidGlassContainer]} 
+          <ThemedView style={[styles.summaryContainer, styles.liquidGlassContainer]} 
                       lightColor="rgba(255, 255, 255, 0.04)" 
                       darkColor="rgba(255, 255, 255, 0.02)">
             <View style={styles.sectionTitleContainer}>
               <ThemedText style={[styles.sectionTitle, styles.liquidGlassText, { color: '#6B4C3B', fontSize: 22 }]}> 
                 Dein Tag im Überblick
               </ThemedText>
-              <View style={styles.liquidGlassChevron}>
+              <TouchableOpacity
+                style={styles.liquidGlassChevron}
+                onPress={() => router.push('/(tabs)/daily_old')}
+                activeOpacity={0.8}
+              >
                 <IconSymbol name="chevron.right" size={20} color="#6B4C3B" />
-              </View>
+              </TouchableOpacity>
             </View>
 
             <View style={styles.statsContainer}>
@@ -438,10 +482,14 @@ export default function HomeScreen() {
                 <ThemedText style={[styles.statLabel, styles.liquidGlassStatLabel, { color: '#7D5A50' }]}>Windeln</ThemedText>
               </TouchableOpacity>
 
-              <View style={[styles.statItem, styles.liquidGlassStatItem, { 
-                backgroundColor: 'rgba(94, 61, 179, 0.05)', 
-                borderColor: 'rgba(94, 61, 179, 0.15)' 
-              }]}>
+              <TouchableOpacity
+                style={[styles.statItem, styles.liquidGlassStatItem, { 
+                  backgroundColor: 'rgba(94, 61, 179, 0.05)', 
+                  borderColor: 'rgba(94, 61, 179, 0.15)' 
+                }]}
+                onPress={() => handleStatPress('sleep')}
+                activeOpacity={0.8}
+              >
                 <View style={styles.liquidGlassStatIcon}>
                   <Text style={styles.statEmoji}>💤</Text>
                 </View>
@@ -452,11 +500,11 @@ export default function HomeScreen() {
                   textShadowRadius: 2,
                 }]}>{formatMinutes(todaySleepMinutes)}</ThemedText>
                 <ThemedText style={[styles.statLabel, styles.liquidGlassStatLabel, { color: '#7D5A50' }]}>Schlaf</ThemedText>
-              </View>
+              </TouchableOpacity>
             </View>
           </ThemedView>
         </BlurView>
-      </TouchableOpacity>
+      </View>
     );
   };
 
@@ -634,6 +682,12 @@ export default function HomeScreen() {
             setSelectedSubType(null);
           }}
           onSave={handleSaveEntry}
+        />
+        <SleepQuickAddModal
+          visible={showSleepModal}
+          initialStart={sleepModalStart}
+          onClose={() => setShowSleepModal(false)}
+          onSave={handleSaveSleepQuickEntry}
         />
       </SafeAreaView>
     </ThemedBackground>
