@@ -554,17 +554,19 @@ export default function SelfcareScreen() {
 
         </ScrollView>
         {/* Sticky CTA */}
-        <LiquidGlassCard 
-          style={styles.stickyCta} 
-          onPress={saveEntry}
-          intensity={26}
-          overlayColor="rgba(142, 78, 198, 0.16)"
-          borderColor="rgba(142, 78, 198, 0.35)"
-        >
-          <View style={styles.saveButtonInner}>
-            <ThemedText style={styles.saveButtonText}>💜 Speichern & Weitermachen</ThemedText>
-          </View>
-        </LiquidGlassCard>
+        <View style={styles.stickyCtaContainer}>
+          <LiquidGlassCard 
+            style={styles.stickyCtaCard} 
+            onPress={saveEntry}
+            intensity={26}
+            overlayColor="rgba(142, 78, 198, 0.16)"
+            borderColor="rgba(142, 78, 198, 0.35)"
+          >
+            <View style={styles.saveButtonInner}>
+              <ThemedText style={styles.saveButtonText}>💜 Speichern & Weitermachen</ThemedText>
+            </View>
+          </LiquidGlassCard>
+        </View>
       </SafeAreaView>
     </ThemedBackground>
   );
@@ -871,11 +873,16 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(142, 78, 198, 0.16)',
     marginBottom: 24,
   },
-  stickyCta: {
+  stickyCtaContainer: {
     position: 'absolute',
-    left: LAYOUT_PAD,
-    right: LAYOUT_PAD,
+    left: 0,
+    right: 0,
     bottom: 100,
+    paddingHorizontal: LAYOUT_PAD,
+    alignItems: 'center',
+  },
+  stickyCtaCard: {
+    alignSelf: 'stretch',
     borderRadius: 22,
     overflow: 'hidden',
   },

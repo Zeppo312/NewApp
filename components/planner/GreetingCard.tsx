@@ -60,7 +60,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
   },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
-  emoji: { fontSize: 48, marginRight: 18 },
+  emoji: { fontSize: 48, lineHeight: 54, marginRight: 18 },
   textWrap: { flex: 1, alignItems: 'center' },
   headline: {
     fontSize: 24,
