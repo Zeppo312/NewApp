@@ -729,7 +729,7 @@ export default function HomeScreen() {
               <View style={styles.actionsRow}>
                 {!timerRunning ? (
                   <LiquidGlassCard
-                    style={[styles.actionCard, styles.fullWidthCard]}
+                    style={styles.actionCard}
                     intensity={24}
                     overlayColor={'rgba(142,78,198,0.32)'}
                     borderColor={'rgba(255,255,255,0.7)'}
@@ -745,7 +745,7 @@ export default function HomeScreen() {
                   </LiquidGlassCard>
                 ) : (
                   <LiquidGlassCard
-                    style={[styles.actionCard, styles.fullWidthCard]}
+                    style={styles.actionCard}
                     intensity={24}
                     overlayColor={'rgba(255,155,155,0.32)'}
                     borderColor={'rgba(255,255,255,0.7)'}
@@ -1047,10 +1047,12 @@ const styles = StyleSheet.create({
     marginHorizontal: TIMELINE_INSET,
     marginTop: 10,
     marginBottom: 8,
+    alignItems: 'center',
   },
   actionCard: {
     borderRadius: RADIUS,
     overflow: 'hidden',
+    width: '100%',
   },
   actionCardInner: {
     alignItems: 'center',
