@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, TouchableOpacity, View, TextInput, Alert, Keyboard } from 'react-native';
+import { StyleSheet, TouchableOpacity, View, TextInput, Alert, Keyboard, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -180,7 +180,11 @@ export default function VerifyOTPScreen() {
             <View style={styles.content}>
               {/* Header */}
               <View style={styles.header}>
-                <ThemedText style={styles.emailIcon}>📱</ThemedText>
+                <Image
+                  source={require('@/assets/images/BabyCode.png')}
+                  style={styles.babyImage}
+                  resizeMode="contain"
+                />
                 <ThemedText type="title" style={styles.title}>
                   Code eingeben
                 </ThemedText>
@@ -289,8 +293,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 32,
   },
-  emailIcon: {
-    fontSize: 64,
+  babyImage: {
+    width: 200,
+    height: 200,
     marginBottom: 16,
   },
   title: {

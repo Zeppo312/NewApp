@@ -3,6 +3,8 @@ import { StyleSheet, TouchableOpacity, View, TextInput, KeyboardAvoidingView, Pl
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
@@ -326,67 +328,75 @@ export default function LoginScreen() {
                 </ThemedText>
               </View>
 
-              <ThemedView style={styles.formContainer} lightColor={theme.card} darkColor={theme.card}>
-                <ThemedText type="subtitle" style={styles.formTitle}>
-                  Anmelden
-                </ThemedText>
+              <View style={styles.formContainer}>
+                <BlurView intensity={25} tint="light" style={StyleSheet.absoluteFill} />
+                <LinearGradient
+                  colors={['rgba(255,255,255,0.2)', 'rgba(255,255,255,0.1)']}
+                  style={StyleSheet.absoluteFill}
+                />
+                <View style={styles.formContent}>
+                  <ThemedText type="subtitle" style={styles.formTitle}>
+                    {isRegistering ? 'Registrieren' : 'Anmelden'}
+                  </ThemedText>
 
-                {error ? (
-                  <ThemedView style={styles.errorContainer} lightColor="#FFEBEE" darkColor="#3E2723">
-                    <ThemedText style={styles.errorText} lightColor="#B71C1C" darkColor="#FFCDD2">
-                      {error}
-                    </ThemedText>
-                  </ThemedView>
-                ) : null}
+                  {error ? (
+                    <View style={styles.errorContainer}>
+                      <BlurView intensity={15} tint="light" style={StyleSheet.absoluteFill} />
+                      <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(244,67,54,0.15)' }]} />
+                      <ThemedText style={styles.errorText} lightColor="#B71C1C" darkColor="#FFCDD2">
+                        {error}
+                      </ThemedText>
+                    </View>
+                  ) : null}
 
                 <View style={styles.inputContainer}>
                   <ThemedText style={styles.inputLabel}>
                     E-Mail
                   </ThemedText>
-                  <TextInput
-                    style={[
-                      styles.input,
-                      {
-                        backgroundColor: colorScheme === 'dark' ? '#362E28' : '#FFFFFF',
-                        color: colorScheme === 'dark' ? '#FFF8F0' : '#7D5A50',
-                        borderColor: colorScheme === 'dark' ? '#7D6A5A' : '#EFE1CF'
-                      }
-                    ]}
-                    placeholder="deine@email.de"
-                    placeholderTextColor={colorScheme === 'dark' ? '#A68A7B' : '#C8B6A6'}
-                    value={email}
-                    onChangeText={setEmail}
-                    autoCapitalize="none"
-                    keyboardType="email-address"
-                  />
+                  <View style={styles.inputWrapper}>
+                    <BlurView intensity={20} tint="light" style={StyleSheet.absoluteFill} />
+                    <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,255,255,0.6)' }]} />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="deine@email.de"
+                      placeholderTextColor="#9D9D9D"
+                      value={email}
+                      onChangeText={setEmail}
+                      autoCapitalize="none"
+                      keyboardType="email-address"
+                    />
+                  </View>
                 </View>
 
                 <View style={styles.inputContainer}>
                   <ThemedText style={styles.inputLabel}>
                     Passwort
                   </ThemedText>
-                  <TextInput
-                    style={[
-                      styles.input,
-                      {
-                        backgroundColor: colorScheme === 'dark' ? '#362E28' : '#FFFFFF',
-                        color: colorScheme === 'dark' ? '#FFF8F0' : '#7D5A50',
-                        borderColor: colorScheme === 'dark' ? '#7D6A5A' : '#EFE1CF'
-                      }
-                    ]}
-                    placeholder="••••••••"
-                    placeholderTextColor={colorScheme === 'dark' ? '#A68A7B' : '#C8B6A6'}
-                    value={password}
-                    onChangeText={setPassword}
-                    secureTextEntry
-                  />
+                  <View style={styles.inputWrapper}>
+                    <BlurView intensity={20} tint="light" style={StyleSheet.absoluteFill} />
+                    <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,255,255,0.6)' }]} />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="••••••••"
+                      placeholderTextColor="#9D9D9D"
+                      value={password}
+                      onChangeText={setPassword}
+                      secureTextEntry
+                    />
+                  </View>
                 </View>
 
                 <TouchableOpacity
                   style={[styles.button, styles.loginButton, isLoading && styles.buttonDisabled]}
                   onPress={handleAuth}
                   disabled={isLoading}
+                  activeOpacity={0.9}
                 >
+                  <BlurView intensity={15} tint="dark" style={StyleSheet.absoluteFill} />
+                  <LinearGradient
+                    colors={['#9DBEBB', 'rgba(157, 190, 187, 0.9)']}
+                    style={StyleSheet.absoluteFill}
+                  />
                   <ThemedText style={styles.buttonText}>
                     {isLoading ? (isRegistering ? 'Registrieren...' : 'Anmelden...') : (isRegistering ? 'Registrieren' : 'Anmelden')}
                   </ThemedText>
@@ -397,7 +407,13 @@ export default function LoginScreen() {
                     style={[styles.button, styles.appleButton]}
                     onPress={handleAppleSignIn}
                     disabled={isLoading}
+                    activeOpacity={0.9}
                   >
+                    <BlurView intensity={15} tint="dark" style={StyleSheet.absoluteFill} />
+                    <LinearGradient
+                      colors={['#000000', '#000000E6']}
+                      style={StyleSheet.absoluteFill}
+                    />
                     <View style={styles.buttonContent}>
                       <ThemedText style={styles.appleIcon}></ThemedText>
                       <ThemedText style={styles.buttonText}>
@@ -411,8 +427,14 @@ export default function LoginScreen() {
                   style={[styles.button, styles.demoButton]}
                   onPress={handleDemoLogin}
                   disabled={isLoading}
+                  activeOpacity={0.9}
                 >
-                  <ThemedText style={styles.buttonText}>
+                  <BlurView intensity={15} tint="light" style={StyleSheet.absoluteFill} />
+                  <LinearGradient
+                    colors={['rgba(255,255,255,0.2)', 'rgba(255,255,255,0.1)']}
+                    style={StyleSheet.absoluteFill}
+                  />
+                  <ThemedText style={styles.demoButtonText}>
                     Demo-Modus
                   </ThemedText>
                 </TouchableOpacity>
@@ -434,21 +456,18 @@ export default function LoginScreen() {
                         <ThemedText style={styles.inputLabel}>
                           Einladungscode (optional)
                         </ThemedText>
-                        <TextInput
-                          style={[
-                            styles.input,
-                            {
-                              backgroundColor: colorScheme === 'dark' ? '#362E28' : '#FFFFFF',
-                              color: colorScheme === 'dark' ? '#FFF8F0' : '#7D5A50',
-                              borderColor: colorScheme === 'dark' ? '#7D6A5A' : '#EFE1CF'
-                            }
-                          ]}
-                          placeholder="Einladungscode eingeben"
-                          placeholderTextColor={colorScheme === 'dark' ? '#A68A7B' : '#C8B6A6'}
-                          value={invitationCode}
-                          onChangeText={setInvitationCode}
-                          autoCapitalize="characters"
-                        />
+                        <View style={styles.inputWrapper}>
+                          <BlurView intensity={20} tint="light" style={StyleSheet.absoluteFill} />
+                          <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,255,255,0.6)' }]} />
+                          <TextInput
+                            style={styles.input}
+                            placeholder="Einladungscode eingeben"
+                            placeholderTextColor="#9D9D9D"
+                            value={invitationCode}
+                            onChangeText={setInvitationCode}
+                            autoCapitalize="characters"
+                          />
+                        </View>
                       </>
                     )}
                   </View>
@@ -467,7 +486,8 @@ export default function LoginScreen() {
                     {isRegistering ? 'Bereits ein Konto? Anmelden' : 'Noch kein Konto? Registrieren'}
                   </ThemedText>
                 </TouchableOpacity>
-              </ThemedView>
+                </View>
+              </View>
             </ScrollView>
           </SafeAreaView>
         </KeyboardAvoidingView>
@@ -498,35 +518,64 @@ const styles = StyleSheet.create({
   appTitle: {
     fontSize: 36,
     marginBottom: 8,
-    fontWeight: '600',
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    textShadowColor: 'rgba(0,0,0,0.1)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
   },
   appSubtitle: {
     fontSize: 18,
     opacity: 0.8,
     fontStyle: 'italic',
+    textShadowColor: 'rgba(0,0,0,0.1)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   formContainer: {
-    padding: 24,
-    borderRadius: 20,
+    padding: 0,
+    borderRadius: 24,
+    overflow: 'hidden',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.3)',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 20,
+    elevation: 16,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  formContent: {
+    padding: 24,
+    position: 'relative',
+    zIndex: 1,
   },
   formTitle: {
     fontSize: 24,
     marginBottom: 20,
     textAlign: 'center',
+    fontWeight: '700',
+    letterSpacing: 0.3,
+    textShadowColor: 'rgba(0,0,0,0.1)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   errorContainer: {
     padding: 12,
-    borderRadius: 10,
+    borderRadius: 16,
     marginBottom: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(244,67,54,0.3)',
+    position: 'relative',
   },
   errorText: {
     fontSize: 14,
     textAlign: 'center',
+    fontWeight: '500',
+    textShadowColor: 'rgba(0,0,0,0.1)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   inputContainer: {
     marginBottom: 16,
@@ -534,42 +583,59 @@ const styles = StyleSheet.create({
   inputLabel: {
     fontSize: 16,
     marginBottom: 8,
+    fontWeight: '600',
+    textShadowColor: 'rgba(0,0,0,0.1)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  inputWrapper: {
+    height: 50,
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.3)',
+    position: 'relative',
   },
   input: {
     height: 50,
-    borderWidth: 1,
-    borderRadius: 12,
     paddingHorizontal: 16,
     fontSize: 16,
+    color: '#7D5A50',
+    fontWeight: '500',
+    position: 'relative',
+    zIndex: 1,
   },
   button: {
     height: 54,
-    borderRadius: 30,
+    borderRadius: 27,
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 8,
+    overflow: 'hidden',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.2)',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowRadius: 12,
+    elevation: 8,
+    position: 'relative',
   },
   loginButton: {
-    backgroundColor: Colors.light.success,
     marginTop: 24,
   },
   appleButton: {
-    backgroundColor: '#000000',
     marginTop: 16,
   },
   demoButton: {
-    backgroundColor: Colors.light.accent,
     marginTop: 16,
   },
   buttonContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    position: 'relative',
+    zIndex: 1,
   },
   appleIcon: {
     fontSize: 18,
@@ -581,8 +647,25 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: 'white',
-    fontWeight: 'bold',
+    fontWeight: '700',
     fontSize: 18,
+    letterSpacing: 0.3,
+    textShadowColor: 'rgba(0,0,0,0.15)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+    position: 'relative',
+    zIndex: 1,
+  },
+  demoButtonText: {
+    color: '#7D5A50',
+    fontWeight: '700',
+    fontSize: 18,
+    letterSpacing: 0.3,
+    textShadowColor: 'rgba(255,255,255,0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+    position: 'relative',
+    zIndex: 1,
   },
   switchModeButton: {
     marginTop: 20,
