@@ -17,6 +17,7 @@ import { useRouter } from 'expo-router';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { ThemedBackground } from '@/components/ThemedBackground';
+import { ThemedText } from '@/components/ThemedText';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { DailyEntry } from '@/lib/baby';
@@ -1201,6 +1202,17 @@ export default function DailyScreen() {
               <Text style={s.sectionTitle}>Kennzahlen</Text>
               <KPISection />
 
+              <View style={s.recipeButtonWrapper}>
+                <TouchableOpacity
+                  style={s.recipeButton}
+                  activeOpacity={0.88}
+                  onPress={() => router.push('/recipe-generator')}
+                >
+                  <IconSymbol name="fork.knife" size={20} color={PRIMARY} />
+                  <ThemedText style={s.recipeText}>BLW-Rezepte entdecken</ThemedText>
+                </TouchableOpacity>
+              </View>
+
               <View style={s.timelineSection}>
                 <Text style={s.sectionTitle}>Timeline</Text>
 
@@ -1296,6 +1308,28 @@ const s = StyleSheet.create({
     color: '#7D5A50',
     textAlign: 'center',
     width: '100%',
+  },
+
+  recipeButtonWrapper: {
+    marginTop: SECTION_GAP_TOP,
+    marginBottom: SECTION_GAP_BOTTOM,
+  },
+  recipeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.35)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.65)',
+    marginHorizontal: LAYOUT_PAD,
+  },
+  recipeText: {
+    marginLeft: 8,
+    fontWeight: '600',
+    color: PRIMARY,
+    fontSize: 15,
   },
 
   // Glass base
