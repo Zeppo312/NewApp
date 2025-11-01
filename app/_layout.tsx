@@ -146,6 +146,7 @@ function RootLayoutNav() {
         <Stack.Screen name="pregnancy-stats" />
         <Stack.Screen name="account-linking" />
         <Stack.Screen name="sync-test" />
+        <Stack.Screen name="recipe-generator" />
         <Stack.Screen name="+not-found" />
         <Stack.Screen name="auth/callback" />
       </Stack>
