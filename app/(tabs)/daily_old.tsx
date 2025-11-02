@@ -1201,6 +1201,17 @@ export default function DailyScreen() {
               <Text style={s.sectionTitle}>Kennzahlen</Text>
               <KPISection />
 
+              <View style={s.recipeButtonSection}>
+                <TouchableOpacity
+                  style={s.recipeButton}
+                  activeOpacity={0.88}
+                  onPress={() => router.push('/recipe-generator')}
+                >
+                  <IconSymbol name="fork.knife.circle.fill" size={22} color={PRIMARY} />
+                  <Text style={s.recipeText}>BLW-Rezepte entdecken</Text>
+                </TouchableOpacity>
+              </View>
+
               <View style={s.timelineSection}>
                 <Text style={s.sectionTitle}>Timeline</Text>
 
@@ -1296,6 +1307,27 @@ const s = StyleSheet.create({
     color: '#7D5A50',
     textAlign: 'center',
     width: '100%',
+  },
+
+  recipeButtonSection: {
+    marginTop: SECTION_GAP_TOP,
+  },
+  recipeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.35)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.65)',
+  },
+  recipeText: {
+    marginLeft: 8,
+    fontWeight: '600',
+    color: PRIMARY,
+    fontSize: 15,
   },
 
   // Glass base
