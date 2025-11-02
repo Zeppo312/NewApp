@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, View, TouchableOpacity, TextInput, Alert, ImageBackground, SafeAreaView, StatusBar, Platform, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, TouchableOpacity, TextInput, Alert, ImageBackground, SafeAreaView, StatusBar, Platform, ActivityIndicator, Image, KeyboardAvoidingView, ScrollView } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { Colors } from '@/constants/Colors';
@@ -245,6 +245,11 @@ export default function GetUserInfoScreen() {
       case 0: // Vorname
         return (
           <ThemedView style={styles.stepContainer} lightColor="#FFFFFF" darkColor="#333333">
+            <Image
+              source={require('@/assets/images/BabyThinking.png')}
+              style={styles.babyImageSmall}
+              resizeMode="contain"
+            />
             <ThemedText style={styles.stepTitle}>Wie ist dein Vorname?</ThemedText>
             <TextInput
               style={[styles.input, { color: theme.text }]}
@@ -260,6 +265,11 @@ export default function GetUserInfoScreen() {
       case 1: // Nachname
         return (
           <ThemedView style={styles.stepContainer} lightColor="#FFFFFF" darkColor="#333333">
+            <Image
+              source={require('@/assets/images/BabyThinking.png')}
+              style={styles.babyImageSmall}
+              resizeMode="contain"
+            />
             <ThemedText style={styles.stepTitle}>Wie ist dein Nachname?</ThemedText>
             <TextInput
               style={[styles.input, { color: theme.text }]}
@@ -275,6 +285,11 @@ export default function GetUserInfoScreen() {
       case 2: // Mama oder Papa
         return (
           <ThemedView style={styles.stepContainer} lightColor="#FFFFFF" darkColor="#333333">
+            <Image
+              source={require('@/assets/images/MamaPapaBaby.png')}
+              style={styles.babyImageSmall}
+              resizeMode="contain"
+            />
             <ThemedText style={styles.stepTitle}>Bist du Mama oder Papa?</ThemedText>
             <View style={styles.roleButtonsContainer}>
               <TouchableOpacity
@@ -534,34 +549,46 @@ export default function GetUserInfoScreen() {
             <ThemedText style={styles.loadingText}>Lade Daten...</ThemedText>
           </View>
         ) : (
-          <View style={styles.content}>
-            {renderCurrentStep()}
+          <KeyboardAvoidingView
+            style={styles.keyboardAvoidingView}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+          >
+            <ScrollView
+              contentContainerStyle={styles.scrollContent}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.content}>
+                {renderCurrentStep()}
 
-            <View style={styles.buttonsContainer}>
-              {currentStep > 0 && (
-                <TouchableOpacity
-                  style={styles.backButton}
-                  onPress={goToPreviousStep}
-                >
-                  <IconSymbol name="chevron.left" size={20} color={theme.text} />
-                  <ThemedText style={styles.backButtonText}>Zurück</ThemedText>
-                </TouchableOpacity>
-              )}
+                <View style={styles.buttonsContainer}>
+                  {currentStep > 0 && (
+                    <TouchableOpacity
+                      style={styles.backButton}
+                      onPress={goToPreviousStep}
+                    >
+                      <IconSymbol name="chevron.left" size={20} color={theme.text} />
+                      <ThemedText style={styles.backButtonText}>Zurück</ThemedText>
+                    </TouchableOpacity>
+                  )}
 
-              <TouchableOpacity
-                style={[styles.nextButton, isSaving && styles.buttonDisabled]}
-                onPress={goToNextStep}
-                disabled={isSaving}
-              >
-                <ThemedText style={styles.nextButtonText}>
-                  {currentStep === totalSteps - 1 ? (isSaving ? 'Speichern...' : 'Fertig') : 'Weiter'}
-                </ThemedText>
-                {currentStep < totalSteps - 1 && (
-                  <IconSymbol name="chevron.right" size={20} color="#FFFFFF" />
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
+                  <TouchableOpacity
+                    style={[styles.nextButton, isSaving && styles.buttonDisabled]}
+                    onPress={goToNextStep}
+                    disabled={isSaving}
+                  >
+                    <ThemedText style={styles.nextButtonText}>
+                      {currentStep === totalSteps - 1 ? (isSaving ? 'Speichern...' : 'Fertig') : 'Weiter'}
+                    </ThemedText>
+                    {currentStep < totalSteps - 1 && (
+                      <IconSymbol name="chevron.right" size={20} color="#FFFFFF" />
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </ScrollView>
+          </KeyboardAvoidingView>
         )}
       </SafeAreaView>
     </ImageBackground>
@@ -578,8 +605,8 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: 'center',
-    paddingTop: 40,
-    paddingBottom: 20,
+    paddingTop: 20,
+    paddingBottom: 12,
   },
   title: {
     fontSize: 28,
@@ -622,11 +649,31 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     marginBottom: 20,
   },
+  babyImage: {
+    width: 180,
+    height: 180,
+    alignSelf: 'center',
+    marginBottom: 20,
+  },
+  babyImageSmall: {
+    width: 100,
+    height: 100,
+    alignSelf: 'center',
+    marginBottom: 12,
+  },
+  keyboardAvoidingView: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 20,
+  },
   stepTitle: {
     fontSize: 20,
     fontWeight: 'bold',
     marginBottom: 20,
     color: '#7D5A50',
+    textAlign: 'center',
   },
   stepSubtitle: {
     fontSize: 16,
