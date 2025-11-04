@@ -1,13 +1,20 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
+  Image,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
   SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { Stack, useRouter } from 'expo-router';
 
 import { ThemedBackground } from '@/components/ThemedBackground';
@@ -25,21 +32,12 @@ import {
   SECTION_GAP_TOP,
 } from '@/constants/DesignGuide';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { createRecipe, fetchRecipes, RecipeRecord } from '@/lib/recipes';
 
 type AllergenId = 'milk' | 'gluten' | 'egg' | 'nuts' | 'fish';
 
-type RecipeDefinition = {
-  id: string;
-  title: string;
-  description: string;
-  minMonths: number;
-  ingredients: string[];
-  allergens: AllergenId[];
-  tip: string;
-};
-
 type RecipeMatch = {
-  recipe: RecipeDefinition;
+  recipe: RecipeRecord;
   matchCount: number;
   missingIngredients: string[];
 };
@@ -87,51 +85,128 @@ const INGREDIENT_GROUPS: { key: string; label: string; items: string[] }[] = [
   },
 ];
 
-const RECIPE_LIBRARY: RecipeDefinition[] = [
+const defaultIngredientsSet = new Set(
+  INGREDIENT_GROUPS.flatMap((group) => group.items.map((item) => item.toLowerCase()))
+);
+
+type SampleRecipe = {
+  title: string;
+  description: string;
+  min_months: number;
+  ingredients: string[];
+  allergens?: AllergenId[];
+  instructions: string;
+  tip?: string;
+};
+
+const SAMPLE_RECIPES: SampleRecipe[] = [
   {
-    id: 'sweet-potato-mash',
     title: 'Süßkartoffel & Kichererbsen Mash',
     description: 'Cremiger BLW-Mash mit milden Kräutern – perfekt zum Löffeln oder Dippen.',
-    minMonths: 6,
+    min_months: 6,
     ingredients: ['Süßkartoffel', 'Kichererbsen', 'Rapsöl', 'Kräuter'],
-    allergens: [],
+    instructions:
+      'Süßkartoffel schälen, würfeln und in wenig Wasser oder im Dampfgarer weich garen. Kichererbsen gründlich abspülen und mit der warmen Süßkartoffel zerdrücken. Rapsöl und fein gehackte Kräuter unterrühren, bis eine cremige Konsistenz entsteht.',
     tip: 'Kichererbsen kurz pürieren, damit kleine Hände sie gut greifen können.',
   },
   {
-    id: 'apple-oat-porridge',
     title: 'Apfel-Hafer-Porridge',
     description: 'Warmer Haferschmaus mit Apfelstückchen und optional einem Klecks Joghurt.',
-    minMonths: 6,
+    min_months: 6,
     ingredients: ['Haferflocken', 'Apfel', 'Naturjoghurt', 'Rapsöl'],
     allergens: ['gluten', 'milk'],
-    tip: 'Für Milchfrei einfach den Joghurt durch Haferdrink ersetzen.',
+    instructions:
+      'Haferflocken mit Wasser oder Milchalternative sanft köcheln lassen. Apfel fein reiben und kurz mitziehen lassen. Vom Herd nehmen, Rapsöl und bei Bedarf Naturjoghurt einrühren und servieren.',
+    tip: 'Für milchfreie Variante den Joghurt durch Haferdrink ersetzen.',
   },
   {
-    id: 'broccoli-fish-fingers',
     title: 'Brokkoli-Lachs-Bällchen',
     description: 'Weiche Fingerfood-Bällchen mit Omega-3-Power – lassen sich gut vorbereiten.',
-    minMonths: 7,
+    min_months: 7,
     ingredients: ['Brokkoli', 'Lachs', 'Kartoffel', 'Olivenöl'],
     allergens: ['fish'],
+    instructions:
+      'Kartoffeln und Brokkoli im Dampf weich garen. Lachs ohne Haut schonend dämpfen und fein zupfen. Alles miteinander zerdrücken, kleine Bällchen formen, mit Olivenöl bepinseln und im Ofen bei 180 °C 10 Minuten backen.',
     tip: 'Im Ofen backen, bis sie außen leicht gold werden – dann zerfallen sie nicht.',
   },
   {
-    id: 'banana-millet-pancakes',
     title: 'Banane-Hirse-Puffer',
     description: 'Schnelle Puffer ohne Zucker – ideal als Frühstück oder Snack.',
-    minMonths: 8,
+    min_months: 8,
     ingredients: ['Banane', 'Hirse', 'Ei', 'Rapsöl'],
     allergens: ['egg'],
+    instructions:
+      'Gekochte Hirse mit zerdrückter Banane und geschlagenem Ei verrühren. Kleine Puffer formen und in wenig Rapsöl bei mittlerer Hitze goldbraun ausbacken. Kurz auf Küchenpapier abtropfen lassen.',
     tip: 'Für allergiefreundliche Variante das Ei durch Apfelmus ersetzen.',
   },
   {
-    id: 'green-toast',
     title: 'Avocado-Erbsen-Toast',
     description: 'Weicher Toast mit cremigem Belag – prima zum Selbstschmieren üben.',
-    minMonths: 9,
+    min_months: 9,
     ingredients: ['Vollkornbrot', 'Avocado', 'Erbsen', 'Frischkäse'],
     allergens: ['gluten', 'milk'],
+    instructions:
+      'Erbsen kurz blanchieren und mit Avocado und Frischkäse zu einer Creme zerdrücken. Vollkornbrot leicht toasten, Rinde entfernen, Creme darauf streichen und in babygerechte Streifen schneiden.',
     tip: 'Rinde entfernen, damit es kleine Esser leichter haben.',
+  },
+  {
+    title: 'Zucchini-Linsen-Gulasch',
+    description: 'Sämiger Gemüse-Linsen-Eintopf, ideal zum Löffeln.',
+    min_months: 8,
+    ingredients: ['Zucchini', 'Rote Linsen', 'Karotte', 'Tomate', 'Olivenöl', 'Kräuter'],
+    instructions:
+      'Karotte und Zucchini klein würfeln und in Olivenöl anschwitzen. Rote Linsen und gewürfelte Tomate dazugeben, mit Wasser bedecken und weich köcheln. Mit milden Kräutern abschmecken und grob zerdrücken.',
+  },
+  {
+    title: 'Karotten-Polenta-Sticks',
+    description: 'Knusprige Sticks, die innen schön weich bleiben.',
+    min_months: 9,
+    ingredients: ['Polenta', 'Karotte', 'Butter', 'Kräuter'],
+    allergens: ['milk'],
+    instructions:
+      'Polenta nach Packungsangabe mit Wasser und etwas Butter kochen. Fein geriebene Karotte und Kräuter unterheben, Masse in eine Form streichen, auskühlen lassen und in Sticks schneiden. Kurz im Ofen knusprig backen.',
+  },
+  {
+    title: 'Apfel-Birnen-Kompott mit Hirse',
+    description: 'Fruchtiger Kompott mit extra Eisen aus der Hirse.',
+    min_months: 6,
+    ingredients: ['Apfel', 'Birne', 'Hirse', 'Zimt'],
+    instructions:
+      'Apfel und Birne schälen, würfeln und mit etwas Wasser sowie einer Prise Zimt weich köcheln. Gekochte Hirse unterrühren, alles grob pürieren und lauwarm servieren.',
+  },
+  {
+    title: 'Hühnchen-Reis-Bowl',
+    description: 'Herzhafte Schüssel mit zarten Hühnchenstreifen und Gemüse.',
+    min_months: 9,
+    ingredients: ['Hühnchen', 'Reis', 'Brokkoli', 'Erbsen', 'Rapsöl'],
+    instructions:
+      'Reis garen und warm halten. Hühnchen in feine Streifen schneiden und in wenig Wasser gar ziehen lassen. Brokkoli und Erbsen dämpfen, alles zusammen mit etwas Rapsöl vermengen und servieren.',
+  },
+  {
+    title: 'Kürbis-Kokos-Suppe',
+    description: 'Samtene Suppe, leicht süßlich und sanft gewürzt.',
+    min_months: 7,
+    ingredients: ['Kürbis', 'Kartoffel', 'Kokosmilch', 'Rapsöl'],
+    instructions:
+      'Kürbis und Kartoffel würfeln, in Rapsöl anschwitzen und mit Wasser bedecken. Weich kochen, Kokosmilch zugeben und fein pürieren. Nach Belieben mit mildem Curry abschmecken.',
+  },
+  {
+    title: 'Spinat-Ricotta-Pasta',
+    description: 'Cremige Pasta mit mildem Spinat und Ricotta.',
+    min_months: 10,
+    ingredients: ['Vollkornnudeln', 'Spinat', 'Ricotta', 'Olivenöl'],
+    allergens: ['gluten', 'milk'],
+    instructions:
+      'Vollkornnudeln weich kochen. Spinat kurz dämpfen und fein hacken. Ricotta mit etwas Nudelwasser cremig rühren, Spinat und Olivenöl hinzufügen und mit den Nudeln vermengen.',
+  },
+  {
+    title: 'Birnen-Buchweizen-Muffins',
+    description: 'Saftige Mini-Muffins ohne Zuckerzusatz.',
+    min_months: 10,
+    ingredients: ['Birne', 'Buchweizenmehl', 'Ei', 'Rapsöl', 'Backpulver'],
+    allergens: ['egg'],
+    instructions:
+      'Reife Birne fein reiben, mit Buchweizenmehl, Ei, etwas Backpulver und Rapsöl zu einem Teig verrühren. In Mini-Muffinförmchen füllen und bei 180 °C etwa 12 Minuten backen.',
   },
 ];
 
@@ -139,13 +214,98 @@ const RecipeGeneratorScreen = () => {
   const router = useRouter();
   const colorScheme = useColorScheme() ?? 'light';
 
+  const [recipes, setRecipes] = useState<RecipeRecord[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [ageMonths, setAgeMonths] = useState<number>(8);
   const [selectedAllergies, setSelectedAllergies] = useState<AllergenId[]>([]);
   const [availableIngredients, setAvailableIngredients] = useState<string[]>([]);
   const [recipeMatches, setRecipeMatches] = useState<RecipeMatch[]>([]);
   const [hasGenerated, setHasGenerated] = useState(false);
+  const [selectedRecipe, setSelectedRecipe] = useState<RecipeRecord | null>(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSeeding, setIsSeeding] = useState(false);
 
-  const selectedIngredientSet = useMemo(() => new Set(availableIngredients), [availableIngredients]);
+  const [newTitle, setNewTitle] = useState('');
+  const [newDescription, setNewDescription] = useState('');
+  const [newInstructions, setNewInstructions] = useState('');
+  const [newTip, setNewTip] = useState('');
+  const [newMinMonths, setNewMinMonths] = useState('6');
+  const [newIngredients, setNewIngredients] = useState<string[]>([]);
+  const [newIngredientInput, setNewIngredientInput] = useState('');
+  const [newAllergens, setNewAllergens] = useState<AllergenId[]>([]);
+  const [newImage, setNewImage] = useState<string | null>(null);
+
+  const selectedIngredientSet = useMemo(
+    () => new Set(availableIngredients.map((item) => item.toLowerCase())),
+    [availableIngredients]
+  );
+
+  const extraIngredients = useMemo(() => {
+    const extras = new Set<string>();
+    recipes.forEach((recipe) => {
+      recipe.ingredients.forEach((ingredient) => {
+        const normalized = ingredient.trim();
+        if (!defaultIngredientsSet.has(normalized.toLowerCase())) {
+          extras.add(normalized);
+        }
+      });
+    });
+    return Array.from(extras).sort((a, b) => a.localeCompare(b, 'de'));
+  }, [recipes]);
+
+  const sortedRecipes = useMemo(() => {
+    return [...recipes].sort((a, b) => {
+      if (a.min_months === b.min_months) {
+        return a.title.localeCompare(b.title, 'de');
+      }
+      return a.min_months - b.min_months;
+    });
+  }, [recipes]);
+
+  const disabledIngredientsCount = useMemo(() => {
+    if (selectedAllergies.length === 0) return 0;
+    const allergySet = new Set(selectedAllergies);
+    return recipes.reduce((count, recipe) => {
+      const hasConflictingAllergen = recipe.allergens.some((item) =>
+        allergySet.has(item as AllergenId)
+      );
+      return hasConflictingAllergen ? count + 1 : count;
+    }, 0);
+  }, [selectedAllergies, recipes]);
+
+  const loadRecipes = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const { data, error } = await fetchRecipes();
+      if (error) throw error;
+      setRecipes(data);
+    } catch (error) {
+      console.error('Error loading recipes:', error);
+      Alert.alert(
+        'Fehler beim Laden',
+        'Die Rezepte konnten nicht geladen werden. Bitte versuche es später erneut.'
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadRecipes();
+  }, [loadRecipes]);
+
+  const resetCreateForm = () => {
+    setNewTitle('');
+    setNewDescription('');
+    setNewInstructions('');
+    setNewTip('');
+    setNewMinMonths('6');
+    setNewIngredients([]);
+    setNewIngredientInput('');
+    setNewAllergens([]);
+    setNewImage(null);
+  };
 
   const toggleAllergy = (allergen: AllergenId) => {
     setSelectedAllergies((prev) =>
@@ -172,38 +332,42 @@ const RecipeGeneratorScreen = () => {
 
   const computeMatches = () => {
     if (availableIngredients.length === 0) {
-      Alert.alert('Noch keine Vorräte ausgewählt', 'Hake ein paar Zutaten an, damit wir passende Rezepte finden können.');
+      Alert.alert(
+        'Noch keine Vorräte ausgewählt',
+        'Hake ein paar Zutaten an, damit wir passende Rezepte finden können.'
+      );
       return;
     }
 
-    const matches = RECIPE_LIBRARY.map((recipe) => {
-      const matching = recipe.ingredients.filter((ingredient) =>
-        selectedIngredientSet.has(ingredient)
-      );
-      const missing = recipe.ingredients.filter(
-        (ingredient) => !selectedIngredientSet.has(ingredient)
-      );
-      const hasBlockedAllergen = recipe.allergens.some((allergen) =>
-        selectedAllergies.includes(allergen)
-      );
-      const meetsAge = ageMonths >= recipe.minMonths;
+    const matches = recipes
+      .map((recipe) => {
+        const matching = recipe.ingredients.filter((ingredient) =>
+          selectedIngredientSet.has(ingredient.toLowerCase())
+        );
+        const missing = recipe.ingredients.filter(
+          (ingredient) => !selectedIngredientSet.has(ingredient.toLowerCase())
+        );
+        const hasBlockedAllergen = recipe.allergens.some((allergen) =>
+          selectedAllergies.includes(allergen as AllergenId)
+        );
+        const meetsAge = ageMonths >= recipe.min_months;
 
-      return {
-        recipe,
-        matchCount: matching.length,
-        missingIngredients: missing,
-        hasBlockedAllergen,
-        meetsAge,
-      };
-    })
+        return {
+          recipe,
+          matchCount: matching.length,
+          missingIngredients: missing,
+          hasBlockedAllergen,
+          meetsAge,
+        };
+      })
       .filter((entry) => entry.meetsAge && !entry.hasBlockedAllergen && entry.matchCount > 0)
       .sort((a, b) => {
         if (b.matchCount === a.matchCount) {
-          return a.recipe.minMonths - b.recipe.minMonths;
+          return a.recipe.min_months - b.recipe.min_months;
         }
         return b.matchCount - a.matchCount;
       })
-      .slice(0, 4)
+      .slice(0, 6)
       .map(({ recipe, matchCount, missingIngredients }) => ({
         recipe,
         matchCount,
@@ -214,15 +378,179 @@ const RecipeGeneratorScreen = () => {
     setHasGenerated(true);
   };
 
-  const disabledIngredientsCount = useMemo(() => {
-    if (selectedAllergies.length === 0) return 0;
-    return RECIPE_LIBRARY.reduce((acc, recipe) => {
-      if (recipe.allergens.some((item) => selectedAllergies.includes(item))) {
-        return acc + 1;
+  const addIngredientToForm = () => {
+    const trimmed = newIngredientInput.trim();
+    if (!trimmed) return;
+    setNewIngredients((prev) => {
+      if (prev.some((item) => item.toLowerCase() === trimmed.toLowerCase())) {
+        return prev;
       }
-      return acc;
-    }, 0);
-  }, [selectedAllergies]);
+      return [...prev, trimmed];
+    });
+    setNewIngredientInput('');
+  };
+
+  const removeIngredientFromForm = (ingredient: string) => {
+    setNewIngredients((prev) => prev.filter((item) => item !== ingredient));
+  };
+
+  const toggleNewAllergen = (allergen: AllergenId) => {
+    setNewAllergens((prev) =>
+      prev.includes(allergen) ? prev.filter((item) => item !== allergen) : [...prev, allergen]
+    );
+  };
+
+  const pickRecipeImage = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          'Berechtigung erforderlich',
+          'Wir benötigen Zugriff auf deine Fotos, um Bilder hinzuzufügen.'
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.7,
+        base64: true,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        if (asset.base64) {
+          setNewImage(`data:image/jpeg;base64,${asset.base64}`);
+        } else {
+          const response = await fetch(asset.uri);
+          const blob = await response.blob();
+          const reader = new FileReader();
+          const base64Data = await new Promise<string>((resolve, reject) => {
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          });
+          setNewImage(base64Data);
+        }
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      Alert.alert('Fehler', 'Das Bild konnte nicht ausgewählt werden.');
+    }
+  };
+
+  const handleCreateRecipe = async () => {
+    if (!newTitle.trim()) {
+      Alert.alert('Hinweis', 'Bitte gib einen Rezepttitel ein.');
+      return;
+    }
+
+    if (newIngredients.length === 0) {
+      Alert.alert('Hinweis', 'Bitte füge mindestens eine Zutat hinzu.');
+      return;
+    }
+
+    if (!newInstructions.trim()) {
+      Alert.alert('Hinweis', 'Beschreibe kurz die Zubereitung.');
+      return;
+    }
+
+    const months = Math.max(
+      AGE_LIMITS.min,
+      Math.min(AGE_LIMITS.max, Number.parseInt(newMinMonths, 10) || AGE_LIMITS.min)
+    );
+
+    try {
+      setIsSubmitting(true);
+      const { data, error } = await createRecipe(
+        {
+          title: newTitle,
+          description: newDescription || null,
+          min_months: months,
+          ingredients: newIngredients,
+          allergens: newAllergens,
+          instructions: newInstructions,
+          tip: newTip || null,
+        },
+        newImage ?? undefined
+      );
+
+      if (error) {
+        throw error;
+      }
+
+      if (data) {
+        setRecipes((prev) => [data, ...prev.filter((item) => item.id !== data.id)]);
+      } else {
+        await loadRecipes();
+      }
+
+      setHasGenerated(false);
+      setRecipeMatches([]);
+      resetCreateForm();
+      setShowCreateModal(false);
+      Alert.alert('Erfolg', 'Dein Rezept wurde gespeichert.');
+    } catch (error) {
+      console.error('Error creating recipe:', error);
+      const message =
+        error instanceof Error ? error.message : 'Beim Speichern ist ein Fehler aufgetreten.';
+      Alert.alert('Fehler', message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const seedSampleRecipes = async () => {
+    try {
+      setIsSeeding(true);
+      const existingTitles = new Set(recipes.map((recipe) => recipe.title.toLowerCase()));
+      let inserted = 0;
+
+      for (const sample of SAMPLE_RECIPES) {
+        if (existingTitles.has(sample.title.toLowerCase())) {
+          continue;
+        }
+
+        const { error } = await createRecipe(
+          {
+            title: sample.title,
+            description: sample.description,
+            min_months: sample.min_months,
+            ingredients: sample.ingredients,
+            allergens: sample.allergens ?? [],
+            instructions: sample.instructions,
+            tip: sample.tip ?? null,
+          },
+          undefined
+        );
+
+        if (!error) {
+          inserted += 1;
+          existingTitles.add(sample.title.toLowerCase());
+        } else {
+          console.warn('Konnte Beispielrezept nicht erstellen:', sample.title, error);
+        }
+      }
+
+      await loadRecipes();
+      setHasGenerated(false);
+      setRecipeMatches([]);
+
+      Alert.alert(
+        'Rezepte importiert',
+        inserted > 0
+          ? `${inserted} Standardrezepte wurden hinzugefügt.`
+          : 'Alle Standardrezepte sind bereits vorhanden.'
+      );
+    } catch (error) {
+      console.error('Error seeding recipes:', error);
+      Alert.alert('Fehler', 'Standardrezepte konnten nicht importiert werden.');
+    } finally {
+      setIsSeeding(false);
+    }
+  };
 
   return (
     <>
@@ -231,40 +559,66 @@ const RecipeGeneratorScreen = () => {
         <SafeAreaView style={styles.safeArea}>
           <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
           <Header
-            title="BLW-Rezepte"
-            subtitle="Aus euren Vorräten blitzschnell Ideen zaubern"
+            title='BLW-Rezepte'
+            subtitle='Aus euren Vorräten blitzschnell Ideen zaubern'
             showBackButton
             onBackPress={() => router.back()}
           />
 
-          <ScrollView contentContainerStyle={styles.content}>
+          <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
             <LiquidGlassCard
               style={styles.heroCard}
               intensity={28}
-              overlayColor="rgba(255,255,255,0.22)"
-              borderColor="rgba(255,255,255,0.35)"
+              overlayColor='rgba(255,255,255,0.22)'
+              borderColor='rgba(255,255,255,0.35)'
             >
               <View style={styles.heroRow}>
                 <View style={styles.heroIcon}>
-                  <IconSymbol name="checklist" size={26} color={PRIMARY} />
+                  <IconSymbol name='checklist' size={26} color={PRIMARY} />
                 </View>
                 <View style={styles.heroTextWrap}>
                   <ThemedText style={styles.heroTitle}>Dein Vorrats-Assistent</ThemedText>
                   <ThemedText style={styles.heroSubtitle}>
-                    Wähle Zutaten, setze Allergien, und erhalte passende BLW-Rezepte für Levi.
+                    Wähle Zutaten, setze Allergien, und entdecke passende BLW-Rezepte aus der
+                    Supabase-Bibliothek.
                   </ThemedText>
                 </View>
               </View>
             </LiquidGlassCard>
 
             <LiquidGlassCard
+              style={styles.actionCard}
+              intensity={24}
+              overlayColor='rgba(255,255,255,0.18)'
+              borderColor={GLASS_BORDER}
+              onPress={() => {
+                resetCreateForm();
+                setShowCreateModal(true);
+              }}
+              activeOpacity={0.86}
+            >
+              <View style={styles.actionContent}>
+                <View style={styles.actionIcon}>
+                  <IconSymbol name='plus.circle.fill' size={26} color={PRIMARY} />
+                </View>
+                <View style={styles.actionTextWrap}>
+                  <ThemedText style={styles.actionTitle}>Eigenes Rezept ergänzen</ThemedText>
+                  <ThemedText style={styles.actionHint}>
+                    Teile eure Lieblingsgerichte – alle Nutzer*innen können sie sofort entdecken.
+                  </ThemedText>
+                </View>
+                <IconSymbol name='chevron.right' size={20} color={PRIMARY} />
+              </View>
+            </LiquidGlassCard>
+
+            <LiquidGlassCard
               style={styles.sectionCard}
               intensity={26}
-              overlayColor="rgba(255,255,255,0.20)"
+              overlayColor='rgba(255,255,255,0.20)'
               borderColor={GLASS_BORDER}
             >
               <View style={styles.sectionHeader}>
-                <IconSymbol name="calendar" size={22} color={PRIMARY} />
+                <IconSymbol name='calendar' size={22} color={PRIMARY} />
                 <ThemedText style={styles.sectionTitle}>Baby-Alter</ThemedText>
               </View>
               <ThemedText style={styles.sectionHint}>
@@ -295,11 +649,11 @@ const RecipeGeneratorScreen = () => {
             <LiquidGlassCard
               style={styles.sectionCard}
               intensity={26}
-              overlayColor="rgba(255,255,255,0.20)"
+              overlayColor='rgba(255,255,255,0.20)'
               borderColor={GLASS_BORDER}
             >
               <View style={styles.sectionHeader}>
-                <IconSymbol name="info.circle.fill" size={22} color={PRIMARY} />
+                <IconSymbol name='info.circle.fill' size={22} color={PRIMARY} />
                 <ThemedText style={styles.sectionTitle}>Allergien berücksichtigen</ThemedText>
               </View>
               <ThemedText style={styles.sectionHint}>
@@ -312,18 +666,12 @@ const RecipeGeneratorScreen = () => {
                   return (
                     <TouchableOpacity
                       key={option.id}
-                      style={[
-                        styles.chip,
-                        isSelected && styles.chipSelected,
-                      ]}
+                      style={[styles.chip, isSelected && styles.chipSelected]}
                       onPress={() => toggleAllergy(option.id)}
                       activeOpacity={0.85}
                     >
                       <ThemedText
-                        style={[
-                          styles.chipLabel,
-                          isSelected && styles.chipLabelSelected,
-                        ]}
+                        style={[styles.chipLabel, isSelected && styles.chipLabelSelected]}
                       >
                         {option.label}
                       </ThemedText>
@@ -335,7 +683,7 @@ const RecipeGeneratorScreen = () => {
             </LiquidGlassCard>
 
             <View style={styles.sectionIntro}>
-              <IconSymbol name="checklist" size={20} color={PRIMARY} />
+              <IconSymbol name='checklist' size={20} color={PRIMARY} />
               <ThemedText style={styles.sectionIntroText}>
                 Hake eure verfügbaren Zutaten ab:
               </ThemedText>
@@ -352,14 +700,11 @@ const RecipeGeneratorScreen = () => {
                 <ThemedText style={styles.ingredientsTitle}>{group.label}</ThemedText>
                 <View style={styles.ingredientsGrid}>
                   {group.items.map((ingredient) => {
-                    const isSelected = selectedIngredientSet.has(ingredient);
+                    const isSelected = selectedIngredientSet.has(ingredient.toLowerCase());
                     return (
                       <TouchableOpacity
                         key={ingredient}
-                        style={[
-                          styles.ingredientChip,
-                          isSelected && styles.ingredientChipSelected,
-                        ]}
+                        style={[styles.ingredientChip, isSelected && styles.ingredientChipSelected]}
                         onPress={() => toggleIngredient(ingredient)}
                         activeOpacity={0.85}
                       >
@@ -378,19 +723,52 @@ const RecipeGeneratorScreen = () => {
               </LiquidGlassCard>
             ))}
 
+            {extraIngredients.length > 0 && (
+              <LiquidGlassCard
+                style={styles.ingredientsCard}
+                intensity={24}
+                overlayColor='rgba(255,255,255,0.18)'
+                borderColor={GLASS_BORDER}
+              >
+                <ThemedText style={styles.ingredientsTitle}>Weitere Zutaten aus Rezepten</ThemedText>
+                <View style={styles.ingredientsGrid}>
+                  {extraIngredients.map((ingredient) => {
+                    const isSelected = selectedIngredientSet.has(ingredient.toLowerCase());
+                    return (
+                      <TouchableOpacity
+                        key={ingredient}
+                        style={[styles.ingredientChip, isSelected && styles.ingredientChipSelected]}
+                        onPress={() => toggleIngredient(ingredient)}
+                        activeOpacity={0.85}
+                      >
+                        <ThemedText
+                          style={[
+                            styles.ingredientLabel,
+                            isSelected && styles.ingredientLabelSelected,
+                          ]}
+                        >
+                          {ingredient}
+                        </ThemedText>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </LiquidGlassCard>
+            )}
+
             <LiquidGlassCard
               style={[
                 styles.generateButton,
                 availableIngredients.length === 0 && styles.generateButtonDisabled,
               ]}
               intensity={28}
-              overlayColor="rgba(142,78,198,0.36)"
-              borderColor="rgba(255,255,255,0.4)"
+              overlayColor='rgba(142,78,198,0.36)'
+              borderColor='rgba(255,255,255,0.4)'
               onPress={computeMatches}
               activeOpacity={0.85}
             >
               <View style={styles.generateButtonInner}>
-                <IconSymbol name="star.fill" size={22} color="#FFFFFF" style={styles.generateIcon} />
+                <IconSymbol name='star.fill' size={22} color='#FFFFFF' style={styles.generateIcon} />
                 <ThemedText style={styles.generateLabel}>Rezepte generieren</ThemedText>
                 <View style={styles.generateBadge}>
                   <ThemedText style={styles.generateBadgeText}>
@@ -400,95 +778,534 @@ const RecipeGeneratorScreen = () => {
               </View>
             </LiquidGlassCard>
 
-            {hasGenerated && (
-              <View style={styles.resultsWrapper}>
-                <ThemedText style={styles.resultsTitle}>Eure Vorschläge</ThemedText>
-                {recipeMatches.length === 0 ? (
+            {isLoading ? (
+              <View style={styles.loadingWrapper}>
+                <ActivityIndicator size='large' color={PRIMARY} />
+                <ThemedText style={styles.loadingText}>Rezepte werden geladen ...</ThemedText>
+              </View>
+            ) : (
+              <>
+                {hasGenerated && (
+                  <View style={styles.resultsWrapper}>
+                    <ThemedText style={styles.resultsTitle}>Eure Top-Treffer</ThemedText>
+                    {recipeMatches.length === 0 ? (
+                      <LiquidGlassCard
+                        style={styles.emptyStateCard}
+                        intensity={26}
+                        overlayColor='rgba(255,255,255,0.26)'
+                        borderColor='rgba(255,255,255,0.3)'
+                      >
+                        <View style={styles.emptyStateBody}>
+                          <IconSymbol name='info.circle.fill' size={24} color={PRIMARY} />
+                          <ThemedText style={styles.emptyStateTitle}>
+                            Noch keine Treffer
+                          </ThemedText>
+                          <ThemedText style={styles.emptyStateText}>
+                            Probiere mehr Zutaten zu markieren oder passe das Alter an – dann finden wir
+                            etwas, das garantiert passt.
+                          </ThemedText>
+                        </View>
+                      </LiquidGlassCard>
+                    ) : (
+                      recipeMatches.map((match) => (
+                        <LiquidGlassCard
+                          key={match.recipe.id}
+                          style={styles.recipeCard}
+                          intensity={26}
+                          overlayColor='rgba(255,255,255,0.24)'
+                          borderColor='rgba(255,255,255,0.35)'
+                          onPress={() => setSelectedRecipe(match.recipe)}
+                          activeOpacity={0.88}
+                        >
+                          <View style={styles.recipeHeader}>
+                            <ThemedText style={styles.recipeTitle}>{match.recipe.title}</ThemedText>
+                            <View style={styles.ageTag}>
+                              <IconSymbol name='clock' size={16} color='#FFFFFF' />
+                              <ThemedText style={styles.ageTagText}>
+                                ab {match.recipe.min_months} M
+                              </ThemedText>
+                            </View>
+                          </View>
+                          <ThemedText style={styles.recipeDescription}>
+                            {match.recipe.description ?? 'Perfekt passend zu euren Zutaten.'}
+                          </ThemedText>
+
+                          <View style={styles.recipeStatsRow}>
+                            <View style={styles.statPill}>
+                              <IconSymbol name='checklist' size={16} color={PRIMARY} />
+                              <ThemedText style={styles.statText}>
+                                {match.matchCount} / {match.recipe.ingredients.length} Zutaten vorhanden
+                              </ThemedText>
+                            </View>
+                            {match.missingIngredients.length === 0 ? (
+                              <View style={[styles.statPill, styles.readyPill]}>
+                                <ThemedText style={styles.readyText}>Alles im Haus 🎉</ThemedText>
+                              </View>
+                            ) : (
+                              <View style={styles.missingList}>
+                                <ThemedText style={styles.missingLabel}>Noch besorgen:</ThemedText>
+                                <ThemedText style={styles.missingItems}>
+                                  {match.missingIngredients.join(', ')}
+                                </ThemedText>
+                              </View>
+                            )}
+                          </View>
+
+                          {match.recipe.tip && (
+                            <View style={styles.tipBox}>
+                              <IconSymbol name='info.circle.fill' size={16} color={PRIMARY} />
+                              <ThemedText style={styles.tipText}>{match.recipe.tip}</ThemedText>
+                            </View>
+                          )}
+                        </LiquidGlassCard>
+                      ))
+                    )}
+                  </View>
+                )}
+
+                <View style={styles.catalogHeader}>
+                  <ThemedText style={styles.catalogTitle}>Alle Rezepte</ThemedText>
+                  <TouchableOpacity
+                    style={styles.refreshButton}
+                    onPress={loadRecipes}
+                    activeOpacity={0.85}
+                  >
+                    <IconSymbol name='arrow.clockwise' size={16} color={PRIMARY} />
+                    <ThemedText style={styles.refreshLabel}>Aktualisieren</ThemedText>
+                  </TouchableOpacity>
+                </View>
+
+                {sortedRecipes.length === 0 ? (
                   <LiquidGlassCard
                     style={styles.emptyStateCard}
-                    intensity={26}
-                    overlayColor="rgba(255,255,255,0.26)"
-                    borderColor="rgba(255,255,255,0.3)"
+                    intensity={24}
+                    overlayColor='rgba(255,255,255,0.2)'
+                    borderColor='rgba(255,255,255,0.32)'
                   >
                     <View style={styles.emptyStateBody}>
-                      <IconSymbol name="info.circle.fill" size={24} color={PRIMARY} />
-                      <ThemedText style={styles.emptyStateTitle}>Noch keine Treffer</ThemedText>
-                      <ThemedText style={styles.emptyStateText}>
-                        Probiere mehr Zutaten zu markieren oder passe das Alter an – dann finden wir etwas,
-                        das garantiert passt.
+                      <IconSymbol name='sparkles' size={24} color={PRIMARY} />
+                      <ThemedText style={styles.emptyStateTitle}>
+                        Noch keine Supabase-Rezepte
                       </ThemedText>
+                      <ThemedText style={styles.emptyStateText}>
+                        Leg direkt los und füge euer erstes Lieblingsrezept hinzu. Alle können davon
+                        profitieren!
+                      </ThemedText>
+                      <TouchableOpacity
+                        style={[styles.seedButton, isSeeding && styles.seedButtonDisabled]}
+                        onPress={seedSampleRecipes}
+                        activeOpacity={0.85}
+                        disabled={isSeeding}
+                      >
+                        {isSeeding ? (
+                          <ActivityIndicator color='#FFFFFF' />
+                        ) : (
+                          <>
+                            <IconSymbol name='tray.and.arrow.down.fill' size={18} color='#FFFFFF' />
+                            <ThemedText style={styles.seedButtonText}>
+                              Standardrezepte importieren
+                            </ThemedText>
+                          </>
+                        )}
+                      </TouchableOpacity>
                     </View>
                   </LiquidGlassCard>
                 ) : (
-                  recipeMatches.map((match) => (
-                    <LiquidGlassCard
-                      key={match.recipe.id}
-                      style={styles.recipeCard}
-                      intensity={26}
-                      overlayColor="rgba(255,255,255,0.24)"
-                      borderColor="rgba(255,255,255,0.35)"
-                    >
-                      <View style={styles.recipeHeader}>
-                        <ThemedText style={styles.recipeTitle}>{match.recipe.title}</ThemedText>
-                        <View style={styles.ageTag}>
-                          <IconSymbol name="clock" size={16} color="#FFFFFF" />
-                          <ThemedText style={styles.ageTagText}>
-                            ab {match.recipe.minMonths} M
-                          </ThemedText>
-                        </View>
-                      </View>
-                      <ThemedText style={styles.recipeDescription}>
-                        {match.recipe.description}
-                      </ThemedText>
+                  sortedRecipes.map((recipe) => {
+                    const isFilteredOut = selectedAllergies.some((allergen) =>
+                      recipe.allergens.includes(allergen)
+                    );
+                    const meetsAge = ageMonths >= recipe.min_months;
 
-                      <View style={styles.recipeStatsRow}>
-                        <View style={styles.statPill}>
-                          <IconSymbol name="checklist" size={16} color={PRIMARY} />
-                          <ThemedText style={styles.statText}>
-                            {match.matchCount} / {match.recipe.ingredients.length} Zutaten vorhanden
-                          </ThemedText>
-                        </View>
-                        {match.missingIngredients.length === 0 ? (
-                          <View style={[styles.statPill, styles.readyPill]}>
-                            <ThemedText style={styles.readyText}>Alles im Haus 🎉</ThemedText>
-                          </View>
-                        ) : (
-                          <View style={styles.missingList}>
-                            <ThemedText style={styles.missingLabel}>Noch besorgen:</ThemedText>
-                            <ThemedText style={styles.missingItems}>
-                              {match.missingIngredients.join(', ')}
+                    if (!meetsAge || isFilteredOut) {
+                      return (
+                        <LiquidGlassCard
+                          key={recipe.id}
+                          style={[styles.recipeCard, styles.disabledRecipeCard]}
+                          intensity={20}
+                          overlayColor='rgba(200,200,200,0.2)'
+                          borderColor='rgba(255,255,255,0.25)'
+                        >
+                          <View style={styles.recipeHeader}>
+                            <ThemedText style={[styles.recipeTitle, styles.disabledRecipeTitle]}>
+                              {recipe.title}
                             </ThemedText>
+                            <View style={[styles.ageTag, styles.disabledAgeTag]}>
+                              <IconSymbol name='clock' size={16} color='#FFFFFF' />
+                              <ThemedText style={styles.ageTagText}>
+                                ab {recipe.min_months} M
+                              </ThemedText>
+                            </View>
                           </View>
-                        )}
-                      </View>
+                          <ThemedText style={styles.disabledNotice}>
+                            Dieses Rezept ist aktuell ausgeblendet (Alters- oder Allergie-Filter).
+                          </ThemedText>
+                        </LiquidGlassCard>
+                      );
+                    }
 
-                      <View style={styles.tipBox}>
-                        <IconSymbol name="info.circle.fill" size={16} color={PRIMARY} />
-                        <ThemedText style={styles.tipText}>{match.recipe.tip}</ThemedText>
-                      </View>
-                    </LiquidGlassCard>
-                  ))
+                    return (
+                      <LiquidGlassCard
+                        key={recipe.id}
+                        style={styles.catalogCard}
+                        intensity={24}
+                        overlayColor='rgba(255,255,255,0.2)'
+                        borderColor='rgba(255,255,255,0.35)'
+                        onPress={() => setSelectedRecipe(recipe)}
+                        activeOpacity={0.88}
+                      >
+                        <View style={styles.catalogContent}>
+                          <View style={styles.catalogTextColumn}>
+                            <View style={styles.recipeHeader}>
+                              <ThemedText style={styles.recipeTitle}>{recipe.title}</ThemedText>
+                              <View style={styles.ageTag}>
+                                <IconSymbol name='clock' size={16} color='#FFFFFF' />
+                                <ThemedText style={styles.ageTagText}>
+                                  ab {recipe.min_months} M
+                                </ThemedText>
+                              </View>
+                            </View>
+                            <ThemedText style={styles.catalogDescription}>
+                              {recipe.description ??
+                                'Leckeres BLW-Gericht – tippe für Details und Anleitung.'}
+                            </ThemedText>
+                            <View style={styles.catalogMetaRow}>
+                              <View style={styles.statPill}>
+                                <IconSymbol name='checklist' size={14} color={PRIMARY} />
+                                <ThemedText style={styles.statText}>
+                                  {recipe.ingredients.length} Zutaten
+                                </ThemedText>
+                              </View>
+                              {recipe.allergens.length > 0 && (
+                                <View style={styles.statPill}>
+                                  <IconSymbol name='exclamationmark.triangle.fill' size={14} color={PRIMARY} />
+                                  <ThemedText style={styles.statText}>
+                                    Allergene: {recipe.allergens.join(', ')}
+                                  </ThemedText>
+                                </View>
+                              )}
+                            </View>
+                          </View>
+                          {recipe.image_url && (
+                            <Image source={{ uri: recipe.image_url }} style={styles.recipeImage} />
+                          )}
+                        </View>
+                      </LiquidGlassCard>
+                    );
+                  })
                 )}
-              </View>
+              </>
             )}
 
             {selectedAllergies.length > 0 && (
               <LiquidGlassCard
                 style={styles.noticeCard}
                 intensity={22}
-                overlayColor="rgba(255,255,255,0.18)"
-                borderColor="rgba(255,255,255,0.28)"
+                overlayColor='rgba(255,255,255,0.18)'
+                borderColor='rgba(255,255,255,0.28)'
               >
                 <ThemedText style={styles.noticeTitle}>Allergie-Filter aktiv</ThemedText>
                 <ThemedText style={styles.noticeText}>
-                  Wir haben {disabledIngredientsCount} Rezepte ausgeblendet, weil sie Allergene enthalten,
-                  die ihr aktuell meiden möchtet.
+                  Wir haben {disabledIngredientsCount} Rezepte ausgeblendet, weil sie Allergene
+                  enthalten, die ihr aktuell meidet.
                 </ThemedText>
               </LiquidGlassCard>
             )}
           </ScrollView>
         </SafeAreaView>
       </ThemedBackground>
+
+      <Modal
+        visible={!!selectedRecipe}
+        transparent
+        animationType='fade'
+        onRequestClose={() => setSelectedRecipe(null)}
+      >
+        <View style={styles.modalBackdrop}>
+          <LiquidGlassCard
+            style={styles.modalCard}
+            intensity={30}
+            overlayColor='rgba(255,255,255,0.4)'
+            borderColor='rgba(255,255,255,0.45)'
+          >
+            <ScrollView contentContainerStyle={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <ThemedText style={styles.modalTitle}>{selectedRecipe?.title}</ThemedText>
+                <TouchableOpacity
+                  onPress={() => setSelectedRecipe(null)}
+                  style={styles.modalClose}
+                  activeOpacity={0.85}
+                >
+                  <IconSymbol name='xmark.circle.fill' size={26} color={PRIMARY} />
+                </TouchableOpacity>
+              </View>
+              {selectedRecipe?.image_url && (
+                <Image source={{ uri: selectedRecipe.image_url }} style={styles.modalImage} />
+              )}
+              <ThemedText style={styles.modalSubtitle}>
+                Ab {selectedRecipe?.min_months} Monaten geeignet
+              </ThemedText>
+              {selectedRecipe?.description && (
+                <ThemedText style={styles.modalDescription}>{selectedRecipe.description}</ThemedText>
+              )}
+
+              <View style={styles.modalSection}>
+                <ThemedText style={styles.modalSectionTitle}>Zutaten</ThemedText>
+                {selectedRecipe?.ingredients.map((ingredient) => (
+                  <View key={ingredient} style={styles.modalIngredientRow}>
+                    <IconSymbol name='drop.fill' size={14} color={PRIMARY} />
+                    <ThemedText style={styles.modalIngredientText}>{ingredient}</ThemedText>
+                  </View>
+                ))}
+              </View>
+
+              {selectedRecipe?.instructions && (
+                <View style={styles.modalSection}>
+                  <ThemedText style={styles.modalSectionTitle}>Anleitung</ThemedText>
+                  <ThemedText style={styles.modalInstructions}>
+                    {selectedRecipe.instructions}
+                  </ThemedText>
+                </View>
+              )}
+
+              {selectedRecipe?.tip && (
+                <View style={styles.modalTipBox}>
+                  <IconSymbol name='lightbulb.fill' size={18} color={PRIMARY} />
+                  <ThemedText style={styles.modalTipText}>{selectedRecipe.tip}</ThemedText>
+                </View>
+              )}
+
+              {selectedRecipe?.allergens.length ? (
+                <View style={styles.modalSection}>
+                  <ThemedText style={styles.modalSectionTitle}>Enthaltene Allergene</ThemedText>
+                  <ThemedText style={styles.modalAllergenText}>
+                    {selectedRecipe.allergens.join(', ')}
+                  </ThemedText>
+                </View>
+              ) : null}
+            </ScrollView>
+          </LiquidGlassCard>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showCreateModal}
+        animationType='slide'
+        transparent
+        onRequestClose={() => setShowCreateModal(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalBackdrop}
+        >
+          <LiquidGlassCard
+            style={[styles.modalCard, styles.createModalCard]}
+            intensity={32}
+            overlayColor='rgba(255,255,255,0.45)'
+            borderColor='rgba(255,255,255,0.5)'
+          >
+            <ScrollView contentContainerStyle={styles.formContent}>
+              <View style={styles.modalHeader}>
+                <ThemedText style={styles.modalTitle}>Neues Rezept</ThemedText>
+                <TouchableOpacity
+                  onPress={() => setShowCreateModal(false)}
+                  style={styles.modalClose}
+                  activeOpacity={0.85}
+                >
+                  <IconSymbol name='xmark.circle.fill' size={26} color={PRIMARY} />
+                </TouchableOpacity>
+              </View>
+
+              <ThemedText style={styles.formHint}>
+                Beschreibe kurz das Gericht, Zutaten, Allergene und falls möglich ein Foto. Alle
+                Felder können später bearbeitet werden.
+              </ThemedText>
+
+              <View style={styles.formGroup}>
+                <ThemedText style={styles.formLabel}>Titel</ThemedText>
+                <TextInput
+                  style={styles.formInput}
+                  placeholder='z. B. Cremige Kürbis-Pasta'
+                  value={newTitle}
+                  onChangeText={setNewTitle}
+                  placeholderTextColor='rgba(0,0,0,0.35)'
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <ThemedText style={styles.formLabel}>Kurzbeschreibung</ThemedText>
+                <TextInput
+                  style={[styles.formInput, styles.formMultiline]}
+                  placeholder='Was macht das Rezept besonders?'
+                  value={newDescription}
+                  onChangeText={setNewDescription}
+                  multiline
+                  numberOfLines={3}
+                  placeholderTextColor='rgba(0,0,0,0.35)'
+                />
+              </View>
+
+              <View style={styles.formRow}>
+                <View style={styles.formRowItem}>
+                  <ThemedText style={styles.formLabel}>Alter (Monate)</ThemedText>
+                  <TextInput
+                    style={styles.formInput}
+                    placeholder={`${AGE_LIMITS.min}-${AGE_LIMITS.max}`}
+                    value={newMinMonths}
+                    onChangeText={(text) => setNewMinMonths(text.replace(/[^0-9]/g, ''))}
+                    keyboardType='number-pad'
+                    maxLength={2}
+                    placeholderTextColor='rgba(0,0,0,0.35)'
+                  />
+                </View>
+                <View style={styles.formRowItem}>
+                  <ThemedText style={styles.formLabel}>Optionaler Tipp</ThemedText>
+                  <TextInput
+                    style={styles.formInput}
+                    placeholder='Tricks oder Variation'
+                    value={newTip}
+                    onChangeText={setNewTip}
+                    placeholderTextColor='rgba(0,0,0,0.35)'
+                  />
+                </View>
+              </View>
+
+              <View style={styles.formGroup}>
+                <ThemedText style={styles.formLabel}>Zutaten</ThemedText>
+                <View style={styles.formRow}>
+                  <TextInput
+                    style={[styles.formInput, styles.formRowInput]}
+                    placeholder='Zutat eingeben'
+                    value={newIngredientInput}
+                    onChangeText={setNewIngredientInput}
+                    onSubmitEditing={addIngredientToForm}
+                    placeholderTextColor='rgba(0,0,0,0.35)'
+                  />
+                  <TouchableOpacity
+                    style={styles.formAddButton}
+                    onPress={addIngredientToForm}
+                    activeOpacity={0.85}
+                  >
+                    <IconSymbol name='plus' size={18} color='#FFFFFF' />
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.formChipRow}>
+                  {newIngredients.length === 0 ? (
+                    <ThemedText style={styles.formChipHint}>
+                      Noch keine Zutaten hinzugefügt.
+                    </ThemedText>
+                  ) : (
+                    newIngredients.map((ingredient) => (
+                      <TouchableOpacity
+                        key={ingredient}
+                        style={styles.formChip}
+                        onPress={() => removeIngredientFromForm(ingredient)}
+                        activeOpacity={0.8}
+                      >
+                        <ThemedText style={styles.formChipText}>{ingredient}</ThemedText>
+                        <IconSymbol name='xmark.circle.fill' size={16} color='#FFFFFF' />
+                      </TouchableOpacity>
+                    ))
+                  )}
+                </View>
+              </View>
+
+              <View style={styles.formGroup}>
+                <ThemedText style={styles.formLabel}>Allergene</ThemedText>
+                <View style={styles.formChipRow}>
+                  {ALLERGEN_OPTIONS.map((option) => {
+                    const isSelected = newAllergens.includes(option.id);
+                    return (
+                      <TouchableOpacity
+                        key={option.id}
+                        style={[styles.formAllergenChip, isSelected && styles.formAllergenSelected]}
+                        onPress={() => toggleNewAllergen(option.id)}
+                        activeOpacity={0.85}
+                      >
+                        <ThemedText
+                          style={[
+                            styles.formAllergenLabel,
+                            isSelected && styles.formAllergenLabelSelected,
+                          ]}
+                        >
+                          {option.label}
+                        </ThemedText>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+
+              <View style={styles.formGroup}>
+                <ThemedText style={styles.formLabel}>Anleitung</ThemedText>
+                <TextInput
+                  style={[styles.formInput, styles.formMultiline, styles.formInstructions]}
+                  placeholder='Beschreibe die Zubereitungsschritte'
+                  value={newInstructions}
+                  onChangeText={setNewInstructions}
+                  multiline
+                  numberOfLines={5}
+                  placeholderTextColor='rgba(0,0,0,0.35)'
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <ThemedText style={styles.formLabel}>Bild (optional)</ThemedText>
+                {newImage ? (
+                  <View style={styles.formImagePreviewWrapper}>
+                    <Image source={{ uri: newImage }} style={styles.formImagePreview} />
+                    <TouchableOpacity
+                      style={styles.formImageRemove}
+                      onPress={() => setNewImage(null)}
+                      activeOpacity={0.85}
+                    >
+                      <IconSymbol name='trash' size={18} color='#FFFFFF' />
+                      <ThemedText style={styles.formImageRemoveText}>Entfernen</ThemedText>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    style={styles.formImagePicker}
+                    onPress={pickRecipeImage}
+                    activeOpacity={0.85}
+                  >
+                    <IconSymbol name='camera' size={22} color={PRIMARY} />
+                    <ThemedText style={styles.formImagePickerText}>
+                      Bild aus der Mediathek wählen
+                    </ThemedText>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              <View style={styles.formActions}>
+                <TouchableOpacity
+                  style={[styles.formActionButton, styles.formCancelButton]}
+                  onPress={() => {
+                    resetCreateForm();
+                    setShowCreateModal(false);
+                  }}
+                  activeOpacity={0.85}
+                  disabled={isSubmitting}
+                >
+                  <ThemedText style={styles.formCancelText}>Abbrechen</ThemedText>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.formActionButton, styles.formSubmitButton]}
+                  onPress={handleCreateRecipe}
+                  activeOpacity={0.85}
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? (
+                    <ActivityIndicator color='#FFFFFF' />
+                  ) : (
+                    <ThemedText style={styles.formSubmitText}>Speichern</ThemedText>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </LiquidGlassCard>
+        </KeyboardAvoidingView>
+      </Modal>
     </>
   );
 };
@@ -505,7 +1322,7 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: LAYOUT_PAD,
-    paddingBottom: 80,
+    paddingBottom: 120,
   },
   heroCard: {
     marginTop: SECTION_GAP_TOP,
@@ -526,90 +1343,121 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 14,
   },
-  heroTextWrap: { flex: 1 },
+  heroTextWrap: {
+    flex: 1,
+    gap: 4,
+  },
   heroTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '700',
     color: '#7D5A50',
   },
   heroSubtitle: {
-    marginTop: 6,
     fontSize: 14,
+    color: '#7D5A50',
     lineHeight: 20,
+  },
+  actionCard: {
+    marginBottom: SECTION_GAP_BOTTOM,
+    paddingHorizontal: 18,
+    paddingVertical: 18,
+  },
+  actionContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  actionIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(142,78,198,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionTextWrap: {
+    flex: 1,
+    gap: 6,
+  },
+  actionTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#7D5A50',
+  },
+  actionHint: {
+    fontSize: 13,
     color: '#7D5A50',
   },
   sectionCard: {
-    paddingHorizontal: 18,
-    paddingVertical: 20,
     marginBottom: SECTION_GAP_BOTTOM,
+    paddingHorizontal: 18,
+    paddingVertical: 18,
+    borderRadius: RADIUS,
   },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 10,
+    marginBottom: 10,
   },
   sectionTitle: {
-    marginLeft: 10,
     fontSize: 16,
     fontWeight: '700',
     color: '#7D5A50',
   },
   sectionHint: {
-    marginTop: 8,
     fontSize: 13,
     color: '#7D5A50',
+    marginBottom: 14,
   },
   ageControlRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 16,
+    justifyContent: 'space-between',
   },
   ageButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.45)',
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: 'rgba(142,78,198,0.16)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   ageButtonText: {
-    fontSize: 26,
+    fontSize: 28,
     fontWeight: '600',
-    color: '#7D5A50',
-    marginTop: -2,
+    color: PRIMARY,
   },
   ageBadge: {
-    flex: 1,
     alignItems: 'center',
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+    borderRadius: 16,
+    backgroundColor: 'rgba(142,78,198,0.12)',
   },
   ageValue: {
-    fontSize: 32,
-    fontWeight: '800',
+    fontSize: 18,
+    fontWeight: '700',
     color: '#7D5A50',
-    lineHeight: 36,
   },
   ageLabel: {
-    fontSize: 13,
+    fontSize: 12,
     color: '#7D5A50',
   },
   chipRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginTop: 16,
     gap: 10,
   },
   chip: {
     paddingVertical: 10,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.5)',
     backgroundColor: 'rgba(255,255,255,0.18)',
+    width: '48%',
   },
   chipSelected: {
-    backgroundColor: 'rgba(142,78,198,0.18)',
-    borderColor: 'rgba(142,78,198,0.35)',
+    backgroundColor: 'rgba(142,78,198,0.22)',
   },
   chipLabel: {
     fontSize: 14,
@@ -620,17 +1468,16 @@ const styles = StyleSheet.create({
     color: PRIMARY,
   },
   chipHint: {
-    marginTop: 2,
-    fontSize: 11,
+    fontSize: 12,
     color: '#7D5A50',
-    opacity: 0.7,
+    marginTop: 4,
   },
   sectionIntro: {
-    marginTop: SECTION_GAP_TOP,
-    marginBottom: SECTION_GAP_BOTTOM,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    marginTop: SECTION_GAP_TOP,
+    marginBottom: 12,
   },
   sectionIntroText: {
     fontSize: 15,
@@ -638,9 +1485,10 @@ const styles = StyleSheet.create({
     color: '#7D5A50',
   },
   ingredientsCard: {
-    paddingHorizontal: 16,
-    paddingVertical: 18,
     marginBottom: SECTION_GAP_BOTTOM,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderRadius: RADIUS,
   },
   ingredientsTitle: {
     fontSize: 15,
@@ -657,21 +1505,18 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 14,
     borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.45)',
-    backgroundColor: 'rgba(255,255,255,0.16)',
+    backgroundColor: 'rgba(255,255,255,0.2)',
   },
   ingredientChipSelected: {
-    backgroundColor: 'rgba(142,78,198,0.22)',
-    borderColor: 'rgba(142,78,198,0.4)',
+    backgroundColor: 'rgba(142,78,198,0.28)',
   },
   ingredientLabel: {
-    fontSize: 14,
+    fontSize: 13,
+    fontWeight: '600',
     color: '#7D5A50',
   },
   ingredientLabelSelected: {
-    color: PRIMARY,
-    fontWeight: '600',
+    color: '#FFFFFF',
   },
   generateButton: {
     marginTop: SECTION_GAP_TOP,
@@ -707,6 +1552,15 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#FFFFFF',
   },
+  loadingWrapper: {
+    marginTop: 40,
+    alignItems: 'center',
+    gap: 12,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: '#7D5A50',
+  },
   resultsWrapper: {
     marginTop: SECTION_GAP_TOP,
   },
@@ -729,11 +1583,31 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: '#7D5A50',
+    textAlign: 'center',
   },
   emptyStateText: {
     fontSize: 14,
     textAlign: 'center',
     color: '#7D5A50',
+  },
+  seedButton: {
+    marginTop: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    borderRadius: 16,
+    backgroundColor: PRIMARY,
+  },
+  seedButtonDisabled: {
+    opacity: 0.7,
+  },
+  seedButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
   recipeCard: {
     marginBottom: SECTION_GAP_BOTTOM,
@@ -753,20 +1627,6 @@ const styles = StyleSheet.create({
     color: '#7D5A50',
     flex: 1,
     marginRight: 12,
-  },
-  ageTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 12,
-    backgroundColor: PRIMARY,
-  },
-  ageTagText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '600',
   },
   recipeDescription: {
     fontSize: 14,
@@ -798,41 +1658,50 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#FFFFFF',
   },
-  missingList: {
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.24)',
+  ageTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    backgroundColor: PRIMARY,
   },
-  missingLabel: {
+  ageTagText: {
+    color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '600',
+  },
+  missingList: {
+    gap: 4,
+  },
+  missingLabel: {
+    fontSize: 13,
+    fontWeight: '600',
     color: '#7D5A50',
-    marginBottom: 4,
   },
   missingItems: {
     fontSize: 13,
     color: '#7D5A50',
   },
   tipBox: {
-    marginTop: 14,
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 10,
+    marginTop: 14,
     padding: 12,
     borderRadius: 14,
-    backgroundColor: 'rgba(142,78,198,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.26)',
   },
   tipText: {
-    flex: 1,
     fontSize: 13,
-    lineHeight: 18,
     color: '#7D5A50',
+    flex: 1,
   },
   noticeCard: {
-    marginTop: SECTION_GAP_TOP,
-    padding: 18,
-    borderRadius: RADIUS,
+    marginTop: 24,
+    paddingHorizontal: 18,
+    paddingVertical: 18,
   },
   noticeTitle: {
     fontSize: 15,
@@ -843,6 +1712,324 @@ const styles = StyleSheet.create({
   noticeText: {
     fontSize: 13,
     color: '#7D5A50',
+  },
+  catalogHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 28,
+    marginBottom: 12,
+  },
+  catalogTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#7D5A50',
+  },
+  refreshButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+    backgroundColor: 'rgba(142,78,198,0.15)',
+  },
+  refreshLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: PRIMARY,
+  },
+  catalogCard: {
+    paddingVertical: 18,
+    paddingHorizontal: 18,
+    borderRadius: RADIUS,
+    marginBottom: SECTION_GAP_BOTTOM,
+  },
+  catalogContent: {
+    flexDirection: 'row',
+    gap: 16,
+    alignItems: 'center',
+  },
+  catalogTextColumn: {
+    flex: 1,
+  },
+  catalogDescription: {
+    fontSize: 14,
+    color: '#7D5A50',
+    marginBottom: 10,
+  },
+  catalogMetaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  recipeImage: {
+    width: 92,
+    height: 92,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0,0,0,0.06)',
+  },
+  disabledRecipeCard: {
+    opacity: 0.6,
+  },
+  disabledRecipeTitle: {
+    color: 'rgba(125,90,80,0.6)',
+  },
+  disabledNotice: {
+    fontSize: 13,
+    color: 'rgba(125,90,80,0.7)',
+  },
+  disabledAgeTag: {
+    backgroundColor: 'rgba(142,78,198,0.35)',
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 40,
+  },
+  modalCard: {
+    maxHeight: '92%',
+    width: '100%',
+    paddingHorizontal: 18,
+    paddingVertical: 18,
+  },
+  modalContent: {
+    paddingBottom: 24,
+    gap: 16,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#7D5A50',
+    flex: 1,
+  },
+  modalClose: {
+    paddingLeft: 12,
+  },
+  modalImage: {
+    width: '100%',
+    height: 180,
+    borderRadius: 18,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: PRIMARY,
+  },
+  modalDescription: {
+    fontSize: 14,
+    color: '#7D5A50',
+    lineHeight: 20,
+  },
+  modalSection: {
+    gap: 10,
+  },
+  modalSectionTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#7D5A50',
+  },
+  modalIngredientRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  modalIngredientText: {
+    fontSize: 14,
+    color: '#7D5A50',
+  },
+  modalInstructions: {
+    fontSize: 14,
+    color: '#7D5A50',
+    lineHeight: 21,
+  },
+  modalTipBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    padding: 12,
+    borderRadius: 16,
+    backgroundColor: 'rgba(142,78,198,0.12)',
+  },
+  modalTipText: {
+    fontSize: 14,
+    color: '#7D5A50',
+    flex: 1,
+  },
+  modalAllergenText: {
+    fontSize: 14,
+    color: '#7D5A50',
+  },
+  createModalCard: {
+    maxHeight: '96%',
+  },
+  formContent: {
+    paddingBottom: 32,
+    gap: 18,
+  },
+  formHint: {
+    fontSize: 13,
+    color: '#7D5A50',
     lineHeight: 19,
+  },
+  formGroup: {
+    gap: 10,
+  },
+  formLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#7D5A50',
+  },
+  formInput: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(125,90,80,0.2)',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: 'rgba(255,255,255,0.85)',
+    fontSize: 14,
+    color: '#7D5A50',
+  },
+  formMultiline: {
+    minHeight: 80,
+    textAlignVertical: 'top',
+  },
+  formInstructions: {
+    minHeight: 120,
+  },
+  formRow: {
+    flexDirection: 'row',
+    gap: 12,
+    alignItems: 'center',
+  },
+  formRowItem: {
+    flex: 1,
+    gap: 8,
+  },
+  formRowInput: {
+    flex: 1,
+  },
+  formAddButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: PRIMARY,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  formChipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  formChipHint: {
+    fontSize: 13,
+    color: 'rgba(125,90,80,0.7)',
+  },
+  formChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 14,
+    backgroundColor: PRIMARY,
+  },
+  formChipText: {
+    fontSize: 13,
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  formAllergenChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(125,90,80,0.25)',
+  },
+  formAllergenSelected: {
+    backgroundColor: 'rgba(142,78,198,0.22)',
+    borderColor: 'rgba(142,78,198,0.4)',
+  },
+  formAllergenLabel: {
+    fontSize: 13,
+    color: '#7D5A50',
+    fontWeight: '600',
+  },
+  formAllergenLabelSelected: {
+    color: PRIMARY,
+  },
+  formImagePicker: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    borderColor: 'rgba(125,90,80,0.2)',
+    borderWidth: 1,
+    backgroundColor: 'rgba(255,255,255,0.85)',
+  },
+  formImagePickerText: {
+    fontSize: 13,
+    color: PRIMARY,
+    fontWeight: '600',
+  },
+  formImagePreviewWrapper: {
+    gap: 10,
+  },
+  formImagePreview: {
+    width: '100%',
+    height: 160,
+    borderRadius: 18,
+  },
+  formImageRemove: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 14,
+    backgroundColor: 'rgba(142,78,198,0.6)',
+  },
+  formImageRemoveText: {
+    fontSize: 13,
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  formActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 10,
+  },
+  formActionButton: {
+    flex: 1,
+    borderRadius: 16,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  formCancelButton: {
+    backgroundColor: 'rgba(125,90,80,0.15)',
+  },
+  formSubmitButton: {
+    backgroundColor: PRIMARY,
+  },
+  formCancelText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#7D5A50',
+  },
+  formSubmitText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
 });
