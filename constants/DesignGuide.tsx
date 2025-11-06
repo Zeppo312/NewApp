@@ -78,6 +78,7 @@ export const LiquidGlassCard: React.FC<{
   const CardComponent = onPress ? TouchableOpacity : View;
   return (
     <CardComponent
+      // Wichtig: Erst die Defaults, DANN der externe Style (kommt zuletzt)
       style={[styles.liquidGlassWrapper, style]}
       onPress={onPress}
       activeOpacity={activeOpacity}
