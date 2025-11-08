@@ -5,7 +5,6 @@ import {
   Dimensions,
   Image,
   KeyboardAvoidingView,
-  LayoutChangeEvent,
   Modal,
   Platform,
   SafeAreaView,
@@ -32,6 +31,7 @@ import {
   RADIUS,
   SECTION_GAP_BOTTOM,
   SECTION_GAP_TOP,
+  GRID_GAP,
 } from '@/constants/DesignGuide';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { createRecipe, fetchRecipes, RecipeRecord } from '@/lib/recipes';
@@ -98,8 +98,26 @@ const contentWidth = screenWidth - 2 * SCREEN_PADDING; // Maximale Breite
 
 const CARD_INTERNAL_PADDING = 28; // Großzügiger Abstand zum Rand
 const CARD_SPACING = 16; // Abstand zwischen Cards
-const INGREDIENT_GRID_GAP = 8;
-const INGREDIENT_COLUMNS = 3;
+const INGREDIENT_COLUMNS = 2; // Immer 2 Buttons pro Reihe
+const ALLERGEN_COLUMNS = 2; // Immer 2 Buttons pro Reihe
+
+const chunkItems = <T,>(items: T[], columns: number): (T | null)[][] => {
+  const rows: (T | null)[][] = [];
+  for (let i = 0; i < items.length; i += columns) {
+    rows.push(items.slice(i, i + columns));
+  }
+  if (rows.length > 0) {
+    const lastRow = rows[rows.length - 1];
+    if (lastRow && lastRow.length < columns) {
+      const padded = [...lastRow];
+      while (padded.length < columns) {
+        padded.push(null);
+      }
+      rows[rows.length - 1] = padded;
+    }
+  }
+  return rows;
+};
 
 type SampleRecipe = {
   title: string;
@@ -247,7 +265,6 @@ const RecipeGeneratorScreen = () => {
   const [newIngredientInput, setNewIngredientInput] = useState('');
   const [newAllergens, setNewAllergens] = useState<AllergenId[]>([]);
   const [newImage, setNewImage] = useState<string | null>(null);
-  const [ingredientsGridWidth, setIngredientsGridWidth] = useState<number | null>(null);
 
   const selectedIngredientSet = useMemo(
     () => new Set(availableIngredients.map((item) => item.toLowerCase())),
@@ -334,26 +351,10 @@ const RecipeGeneratorScreen = () => {
     );
   };
 
-  const computedIngredientChipWidth = useMemo(() => {
-    if (!ingredientsGridWidth || ingredientsGridWidth <= 0) {
-      return null;
-    }
-    return (
-      (ingredientsGridWidth - INGREDIENT_GRID_GAP * (INGREDIENT_COLUMNS - 1)) /
-      INGREDIENT_COLUMNS
-    );
-  }, [ingredientsGridWidth]);
-
-  const handleIngredientsGridLayout = useCallback((event: LayoutChangeEvent) => {
-    const layoutWidth = event.nativeEvent.layout.width;
-    if (layoutWidth <= 0) return;
-    setIngredientsGridWidth((prev) => {
-      if (prev === null || Math.abs(prev - layoutWidth) > 0.5) {
-        return layoutWidth;
-      }
-      return prev;
-    });
-  }, []);
+  const allergenRows = useMemo(
+    () => chunkItems(ALLERGEN_OPTIONS, ALLERGEN_COLUMNS),
+    []
+  );
 
   const handleAgeChange = (delta: number) => {
     setAgeMonths((prev) => {
@@ -700,25 +701,53 @@ const RecipeGeneratorScreen = () => {
               <ThemedText style={styles.sectionHint}>
                 Markiere, was ihr aktuell meidet.
               </ThemedText>
-              <View style={styles.chipRow}>
-                {ALLERGEN_OPTIONS.map((option) => {
-                  const isSelected = selectedAllergies.includes(option.id);
-                  return (
-                    <TouchableOpacity
-                      key={option.id}
-                      style={[styles.chip, isSelected && styles.chipSelected]}
-                      onPress={() => toggleAllergy(option.id)}
-                      activeOpacity={0.85}
-                    >
-                      <ThemedText
-                        style={[styles.chipLabel, isSelected && styles.chipLabelSelected]}
-                      >
-                        {option.label}
-                      </ThemedText>
-                      <ThemedText style={styles.chipHint}>{option.hint}</ThemedText>
-                    </TouchableOpacity>
-                  );
-                })}
+              <View style={styles.chipGrid}>
+                {allergenRows.map((row, rowIndex, rows) => (
+                  <View
+                    key={`allergen-row-${rowIndex}`}
+                    style={[
+                      styles.gridRow,
+                      rowIndex === rows.length - 1 && styles.gridRowLast,
+                    ]}
+                  >
+                    {row.map((option, colIndex) => {
+                      if (!option) {
+                        return (
+                          <View
+                            key={`allergen-placeholder-${rowIndex}-${colIndex}`}
+                            style={[
+                              styles.gridItem,
+                              colIndex === 0 && styles.gridItemLeft,
+                            ]}
+                          />
+                        );
+                      }
+                      const isSelected = selectedAllergies.includes(option.id);
+                      return (
+                        <View
+                          key={option.id}
+                          style={[
+                            styles.gridItem,
+                            colIndex === 0 && styles.gridItemLeft,
+                          ]}
+                        >
+                          <TouchableOpacity
+                            style={[styles.chip, isSelected && styles.chipSelected]}
+                            onPress={() => toggleAllergy(option.id)}
+                            activeOpacity={0.85}
+                          >
+                            <ThemedText
+                              style={[styles.chipLabel, isSelected && styles.chipLabelSelected]}
+                            >
+                              {option.label}
+                            </ThemedText>
+                            <ThemedText style={styles.chipHint}>{option.hint}</ThemedText>
+                          </TouchableOpacity>
+                        </View>
+                      );
+                    })}
+                  </View>
+                ))}
               </View>
             </LiquidGlassCard>
 
@@ -740,31 +769,58 @@ const RecipeGeneratorScreen = () => {
                 borderColor={GLASS_BORDER}
               >
                 <ThemedText style={styles.ingredientsTitle}>{group.label}</ThemedText>
-                <View style={styles.ingredientsGrid} onLayout={handleIngredientsGridLayout}>
-                  {group.items.map((ingredient) => {
-                    const isSelected = selectedIngredientSet.has(ingredient.toLowerCase());
-                    return (
-                      <TouchableOpacity
-                        key={ingredient}
-                        style={[
-                          styles.ingredientChip,
-                          computedIngredientChipWidth !== null && { width: computedIngredientChipWidth },
-                          isSelected && styles.ingredientChipSelected,
-                        ]}
-                        onPress={() => toggleIngredient(ingredient)}
-                        activeOpacity={0.85}
-                      >
-                        <ThemedText
-                          style={[
-                            styles.ingredientLabel,
-                            isSelected && styles.ingredientLabelSelected,
-                          ]}
-                        >
-                          {ingredient}
-                        </ThemedText>
-                      </TouchableOpacity>
-                    );
-                  })}
+                <View style={styles.ingredientsGrid}>
+                  {chunkItems(group.items, INGREDIENT_COLUMNS).map((row, rowIndex, rows) => (
+                    <View
+                      key={`${group.key}-row-${rowIndex}`}
+                      style={[
+                        styles.gridRow,
+                        rowIndex === rows.length - 1 && styles.gridRowLast,
+                      ]}
+                    >
+                      {row.map((ingredient, colIndex) => {
+                        if (!ingredient) {
+                          return (
+                            <View
+                              key={`${group.key}-placeholder-${rowIndex}-${colIndex}`}
+                              style={[
+                                styles.gridItem,
+                                colIndex === 0 && styles.gridItemLeft,
+                              ]}
+                            />
+                          );
+                        }
+                        const isSelected = selectedIngredientSet.has(ingredient.toLowerCase());
+                        return (
+                          <View
+                            key={ingredient}
+                            style={[
+                              styles.gridItem,
+                              colIndex === 0 && styles.gridItemLeft,
+                            ]}
+                          >
+                            <TouchableOpacity
+                              style={[
+                                styles.ingredientChip,
+                                isSelected && styles.ingredientChipSelected,
+                              ]}
+                              onPress={() => toggleIngredient(ingredient)}
+                              activeOpacity={0.85}
+                            >
+                              <ThemedText
+                                style={[
+                                  styles.ingredientLabel,
+                                  isSelected && styles.ingredientLabelSelected,
+                                ]}
+                              >
+                                {ingredient}
+                              </ThemedText>
+                            </TouchableOpacity>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  ))}
                 </View>
               </LiquidGlassCard>
             ))}
@@ -778,31 +834,58 @@ const RecipeGeneratorScreen = () => {
                 borderColor={GLASS_BORDER}
               >
                 <ThemedText style={styles.ingredientsTitle}>Weitere Zutaten aus Rezepten</ThemedText>
-                <View style={styles.ingredientsGrid} onLayout={handleIngredientsGridLayout}>
-                  {extraIngredients.map((ingredient) => {
-                    const isSelected = selectedIngredientSet.has(ingredient.toLowerCase());
-                    return (
-                      <TouchableOpacity
-                        key={ingredient}
-                        style={[
-                          styles.ingredientChip,
-                          computedIngredientChipWidth !== null && { width: computedIngredientChipWidth },
-                          isSelected && styles.ingredientChipSelected,
-                        ]}
-                        onPress={() => toggleIngredient(ingredient)}
-                        activeOpacity={0.85}
-                      >
-                        <ThemedText
-                          style={[
-                            styles.ingredientLabel,
-                            isSelected && styles.ingredientLabelSelected,
-                          ]}
-                        >
-                          {ingredient}
-                        </ThemedText>
-                      </TouchableOpacity>
-                    );
-                  })}
+                <View style={styles.ingredientsGrid}>
+                  {chunkItems(extraIngredients, INGREDIENT_COLUMNS).map((row, rowIndex, rows) => (
+                    <View
+                      key={`extra-row-${rowIndex}`}
+                      style={[
+                        styles.gridRow,
+                        rowIndex === rows.length - 1 && styles.gridRowLast,
+                      ]}
+                    >
+                      {row.map((ingredient, colIndex) => {
+                        if (!ingredient) {
+                          return (
+                            <View
+                              key={`extra-placeholder-${rowIndex}-${colIndex}`}
+                              style={[
+                                styles.gridItem,
+                                colIndex === 0 && styles.gridItemLeft,
+                              ]}
+                            />
+                          );
+                        }
+                        const isSelected = selectedIngredientSet.has(ingredient.toLowerCase());
+                        return (
+                          <View
+                            key={ingredient}
+                            style={[
+                              styles.gridItem,
+                              colIndex === 0 && styles.gridItemLeft,
+                            ]}
+                          >
+                            <TouchableOpacity
+                              style={[
+                                styles.ingredientChip,
+                                isSelected && styles.ingredientChipSelected,
+                              ]}
+                              onPress={() => toggleIngredient(ingredient)}
+                              activeOpacity={0.85}
+                            >
+                              <ThemedText
+                                style={[
+                                  styles.ingredientLabel,
+                                  isSelected && styles.ingredientLabelSelected,
+                                ]}
+                              >
+                                {ingredient}
+                              </ThemedText>
+                            </TouchableOpacity>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  ))}
                 </View>
               </LiquidGlassCard>
             )}
@@ -863,7 +946,7 @@ const RecipeGeneratorScreen = () => {
                       recipeMatches.map((match) => (
                         <LiquidGlassCard
                           key={match.recipe.id}
-                          style={styles.card}
+                          style={[styles.card, styles.recipeCard]}
                           intensity={26}
                           overlayColor='rgba(255,255,255,0.24)'
                           borderColor='rgba(255,255,255,0.35)'
@@ -972,7 +1055,7 @@ const RecipeGeneratorScreen = () => {
                       return (
                         <LiquidGlassCard
                           key={recipe.id}
-                          style={[styles.card, styles.disabledRecipeCard]}
+                          style={[styles.card, styles.recipeCard, styles.disabledRecipeCard]}
                           intensity={20}
                           overlayColor='rgba(200,200,200,0.2)'
                           borderColor='rgba(255,255,255,0.25)'
@@ -998,7 +1081,7 @@ const RecipeGeneratorScreen = () => {
                     return (
                       <LiquidGlassCard
                         key={recipe.id}
-                        style={styles.card}
+                        style={[styles.card, styles.recipeCard]}
                         intensity={24}
                         overlayColor='rgba(255,255,255,0.2)'
                         borderColor='rgba(255,255,255,0.35)'
@@ -1379,6 +1462,10 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 4,
   },
+  recipeCard: {
+    paddingHorizontal: 32, // Viel mehr Abstand für bessere Lesbarkeit
+    paddingVertical: 24,
+  },
   // Hero Section
   heroRow: {
     flexDirection: 'column',
@@ -1496,18 +1583,31 @@ const styles = StyleSheet.create({
     color: '#7D5A50',
     fontWeight: '500',
   },
-  chipRow: {
+  chipGrid: {
+    paddingHorizontal: GRID_GAP,
+    paddingTop: GRID_GAP,
+    paddingBottom: GRID_GAP,
+  },
+  gridRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    padding: 8, // Gleicher Abstand zum Rand wie zwischen den Chips
+    width: '100%',
+    marginBottom: GRID_GAP,
+  },
+  gridRowLast: {
+    marginBottom: 0,
+  },
+  gridItem: {
+    flex: 1,
+  },
+  gridItemLeft: {
+    marginRight: GRID_GAP,
   },
   chip: {
+    width: '100%',
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 16,
     backgroundColor: 'rgba(255,255,255,0.18)',
-    width: '48%',
   },
   chipSelected: {
     backgroundColor: 'rgba(142,78,198,0.22)',
@@ -1547,19 +1647,18 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   ingredientsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: INGREDIENT_GRID_GAP,
-    padding: INGREDIENT_GRID_GAP, // Gleicher Abstand zum Rand wie zwischen den Buttons
+    paddingHorizontal: GRID_GAP,
+    paddingTop: GRID_GAP,
+    paddingBottom: GRID_GAP,
   },
   ingredientChip: {
+    width: '100%',
     paddingVertical: 10,
     paddingHorizontal: 12,
     borderRadius: 16,
     backgroundColor: 'rgba(255,255,255,0.2)',
     alignItems: 'center',
     justifyContent: 'center',
-    flexShrink: 0,
   },
   ingredientChipSelected: {
     backgroundColor: 'rgba(142,78,198,0.28)',
@@ -1661,35 +1760,36 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 12, // Mehr Abstand für bessere Trennung
   },
   recipeTitle: {
-    fontSize: 16,
+    fontSize: 18, // Größere Schrift für bessere Lesbarkeit
     fontWeight: '700',
     color: '#7D5A50',
     flex: 1,
     marginRight: 12,
+    lineHeight: 24,
   },
   recipeDescription: {
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 15, // Größere Schrift für bessere Lesbarkeit
+    lineHeight: 22,
     color: '#7D5A50',
-    marginBottom: 16,
+    marginBottom: 18, // Mehr Abstand für bessere Trennung
   },
   recipeStatsRow: {
-    gap: 8,
+    gap: 10, // Mehr Abstand zwischen Stats
   },
   statPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
     borderRadius: 16,
     backgroundColor: 'rgba(255,255,255,0.28)',
   },
   statText: {
-    fontSize: 13,
+    fontSize: 14, // Größere Schrift für bessere Lesbarkeit
     color: '#7D5A50',
     fontWeight: '500',
   },
@@ -1697,7 +1797,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(142,78,198,0.3)',
   },
   readyText: {
-    fontSize: 13,
+    fontSize: 14, // Größere Schrift für bessere Lesbarkeit
     fontWeight: '600',
     color: '#FFFFFF',
   },
@@ -1705,43 +1805,43 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
     borderRadius: 12,
     backgroundColor: PRIMARY,
   },
   ageTagText: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 13, // Größere Schrift für bessere Lesbarkeit
     fontWeight: '600',
   },
   missingList: {
     gap: 4,
   },
   missingLabel: {
-    fontSize: 13,
+    fontSize: 14, // Größere Schrift für bessere Lesbarkeit
     fontWeight: '600',
     color: '#7D5A50',
   },
   missingItems: {
-    fontSize: 13,
+    fontSize: 14, // Größere Schrift für bessere Lesbarkeit
     color: '#7D5A50',
-    lineHeight: 18,
+    lineHeight: 20,
   },
   tipBox: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 8,
+    gap: 10,
     marginTop: 16,
-    padding: 16,
+    padding: 18,
     borderRadius: 16,
     backgroundColor: 'rgba(255,255,255,0.26)',
   },
   tipText: {
-    fontSize: 13,
+    fontSize: 14, // Größere Schrift für bessere Lesbarkeit
     color: '#7D5A50',
     flex: 1,
-    lineHeight: 18,
+    lineHeight: 20,
   },
   noticeTitle: {
     fontSize: 16,
@@ -1793,10 +1893,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   catalogDescription: {
-    fontSize: 14,
+    fontSize: 15, // Größere Schrift für bessere Lesbarkeit
     color: '#7D5A50',
-    marginBottom: 8,
-    lineHeight: 20,
+    marginBottom: 10,
+    lineHeight: 22,
   },
   catalogMetaRow: {
     flexDirection: 'row',

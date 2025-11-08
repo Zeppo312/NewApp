@@ -14,6 +14,7 @@ export const PRIMARY = '#8E4EC6';
 export const TEXT_PRIMARY = '#7D5A50';
 export const GLASS_BORDER = 'rgba(255,255,255,0.55)';
 export const GLASS_OVERLAY = 'rgba(255,255,255,0.16)';
+export const GRID_GAP = 8;
 
 export const FONT_SM = 12;
 export const FONT_MD = 14;
@@ -29,6 +30,7 @@ export const designTokens = {
   TEXT_PRIMARY,
   GLASS_BORDER,
   GLASS_OVERLAY,
+  GRID_GAP,
   FONT_SM,
   FONT_MD,
   FONT_LG,
