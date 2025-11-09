@@ -96,7 +96,7 @@ const { width: screenWidth } = Dimensions.get('window');
 const SCREEN_PADDING = 4; // Minimales Außen-Padding
 const contentWidth = screenWidth - 2 * SCREEN_PADDING; // Maximale Breite
 
-const CARD_INTERNAL_PADDING = 28; // Großzügiger Abstand zum Rand
+const CARD_INTERNAL_PADDING = 32; // Noch großzügigerer Abstand zum Rand für bessere Lesbarkeit
 const CARD_SPACING = 16; // Abstand zwischen Cards
 const INGREDIENT_COLUMNS = 2; // Immer 2 Buttons pro Reihe
 const ALLERGEN_COLUMNS = 2; // Immer 2 Buttons pro Reihe
@@ -1463,8 +1463,9 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   recipeCard: {
-    paddingHorizontal: 32, // Viel mehr Abstand für bessere Lesbarkeit
-    paddingVertical: 24,
+    // Gleiche Breite wie normale Cards - Padding wird durch innere Elemente erreicht
+    paddingHorizontal: CARD_INTERNAL_PADDING, // 32px - gleiche Breite wie andere Cards
+    paddingVertical: CARD_INTERNAL_PADDING, // 32px
   },
   // Hero Section
   heroRow: {
@@ -1485,16 +1486,17 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   heroTitle: {
-    fontSize: 22,
+    fontSize: 24, // Größere Schrift für bessere Sichtbarkeit
     fontWeight: '700',
     color: '#7D5A50',
     letterSpacing: -0.3,
     textAlign: 'center',
+    lineHeight: 30,
   },
   heroSubtitle: {
-    fontSize: 14,
+    fontSize: 15, // Größere Schrift für bessere Lesbarkeit
     color: '#7D5A50',
-    lineHeight: 20,
+    lineHeight: 22,
     textAlign: 'center',
   },
   // Action Section
@@ -1516,15 +1518,16 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   actionTitle: {
-    fontSize: 16,
+    fontSize: 18, // Größere Schrift für bessere Sichtbarkeit
     fontWeight: '700',
     color: '#7D5A50',
     textAlign: 'center',
+    lineHeight: 24,
   },
   actionHint: {
-    fontSize: 14,
+    fontSize: 15, // Größere Schrift für bessere Lesbarkeit
     color: '#7D5A50',
-    lineHeight: 20,
+    lineHeight: 22,
     textAlign: 'center',
   },
   sectionHeader: {
@@ -1534,17 +1537,18 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 20, // Größere Schrift für bessere Sichtbarkeit
     fontWeight: '600',
     color: '#7D5A50',
     letterSpacing: -0.2,
     textAlign: 'center',
+    lineHeight: 26,
   },
   sectionHint: {
-    fontSize: 14,
+    fontSize: 15, // Größere Schrift für bessere Lesbarkeit
     color: '#7D5A50',
     marginBottom: 16,
-    lineHeight: 20,
+    lineHeight: 22,
     textAlign: 'center',
   },
   ageControlRow: {
@@ -1613,7 +1617,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(142,78,198,0.22)',
   },
   chipLabel: {
-    fontSize: 14,
+    fontSize: 15, // Größere Schrift für bessere Lesbarkeit
     fontWeight: '600',
     color: '#7D5A50',
   },
@@ -1621,10 +1625,11 @@ const styles = StyleSheet.create({
     color: PRIMARY,
   },
   chipHint: {
-    fontSize: 12,
+    fontSize: 13, // Größere Schrift für bessere Lesbarkeit
     color: '#7D5A50',
     marginTop: 4,
     fontWeight: '500',
+    lineHeight: 18,
   },
   sectionIntro: {
     flexDirection: 'column',
@@ -1634,17 +1639,19 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   sectionIntroText: {
-    fontSize: 16,
+    fontSize: 18, // Größere Schrift für bessere Sichtbarkeit
     fontWeight: '700',
     color: '#7D5A50',
     textAlign: 'center',
+    lineHeight: 24,
   },
   ingredientsTitle: {
-    fontSize: 16,
+    fontSize: 18, // Größere Schrift für bessere Sichtbarkeit
     fontWeight: '700',
     color: '#7D5A50',
     marginBottom: 16,
     textAlign: 'center',
+    lineHeight: 24,
   },
   ingredientsGrid: {
     paddingHorizontal: GRID_GAP,
@@ -1664,7 +1671,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(142,78,198,0.28)',
   },
   ingredientLabel: {
-    fontSize: 14,
+    fontSize: 15, // Größere Schrift für bessere Lesbarkeit
     fontWeight: '600',
     color: '#7D5A50',
     textAlign: 'center',
@@ -1685,7 +1692,7 @@ const styles = StyleSheet.create({
   generateLabel: {
     color: '#FFFFFF',
     fontWeight: '700',
-    fontSize: 16,
+    fontSize: 18, // Größere Schrift für bessere Sichtbarkeit
   },
   generateBadge: {
     marginLeft: 12,
@@ -1714,28 +1721,30 @@ const styles = StyleSheet.create({
     marginTop: 24,
   },
   resultsTitle: {
-    fontSize: 18,
+    fontSize: 20, // Größere Schrift für bessere Sichtbarkeit
     fontWeight: '700',
     color: '#7D5A50',
     marginBottom: 16,
     letterSpacing: -0.2,
     textAlign: 'center',
+    lineHeight: 26,
   },
   emptyStateBody: {
     alignItems: 'center',
     gap: 16,
   },
   emptyStateTitle: {
-    fontSize: 18,
+    fontSize: 20, // Größere Schrift für bessere Sichtbarkeit
     fontWeight: '700',
     color: '#7D5A50',
     textAlign: 'center',
+    lineHeight: 26,
   },
   emptyStateText: {
-    fontSize: 14,
+    fontSize: 15, // Größere Schrift für bessere Lesbarkeit
     textAlign: 'center',
     color: '#7D5A50',
-    lineHeight: 20,
+    lineHeight: 22,
   },
   seedButton: {
     marginTop: 16,
@@ -1759,25 +1768,29 @@ const styles = StyleSheet.create({
   recipeHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12, // Mehr Abstand für bessere Trennung
+    alignItems: 'flex-start', // Besser für mehrzeilige Titel
+    marginBottom: 14, // Noch mehr Abstand für bessere Trennung
+    gap: 12, // Abstand zwischen Titel und Tag
   },
   recipeTitle: {
     fontSize: 18, // Größere Schrift für bessere Lesbarkeit
     fontWeight: '700',
     color: '#7D5A50',
     flex: 1,
-    marginRight: 12,
     lineHeight: 24,
+    paddingRight: 12, // Mehr Abstand vom rechten Rand
+    paddingLeft: 8, // Mehr Abstand vom linken Rand
   },
   recipeDescription: {
     fontSize: 15, // Größere Schrift für bessere Lesbarkeit
     lineHeight: 22,
     color: '#7D5A50',
     marginBottom: 18, // Mehr Abstand für bessere Trennung
+    paddingHorizontal: 8, // Mehr Abstand links/rechts - nichts direkt am Rand
   },
   recipeStatsRow: {
     gap: 10, // Mehr Abstand zwischen Stats
+    paddingHorizontal: 4, // Abstand vom Rand
   },
   statPill: {
     flexDirection: 'row',
@@ -1817,31 +1830,36 @@ const styles = StyleSheet.create({
   },
   missingList: {
     gap: 4,
+    paddingHorizontal: 4, // Abstand vom Rand
   },
   missingLabel: {
     fontSize: 14, // Größere Schrift für bessere Lesbarkeit
     fontWeight: '600',
     color: '#7D5A50',
+    paddingHorizontal: 2, // Abstand vom Rand
   },
   missingItems: {
     fontSize: 14, // Größere Schrift für bessere Lesbarkeit
     color: '#7D5A50',
     lineHeight: 20,
+    paddingHorizontal: 2, // Abstand vom Rand
   },
   tipBox: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 10,
     marginTop: 16,
-    padding: 18,
+    padding: 20, // Mehr Padding - nichts direkt am Rand
     borderRadius: 16,
     backgroundColor: 'rgba(255,255,255,0.26)',
+    marginHorizontal: 4, // Zusätzlicher Abstand vom Container-Rand
   },
   tipText: {
     fontSize: 14, // Größere Schrift für bessere Lesbarkeit
     color: '#7D5A50',
     flex: 1,
     lineHeight: 20,
+    paddingLeft: 4, // Abstand vom Icon
   },
   noticeTitle: {
     fontSize: 16,
@@ -1864,11 +1882,12 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   catalogTitle: {
-    fontSize: 18,
+    fontSize: 20, // Größere Schrift für bessere Sichtbarkeit
     fontWeight: '700',
     color: '#7D5A50',
     letterSpacing: -0.2,
     textAlign: 'center',
+    lineHeight: 26,
   },
   refreshButton: {
     flexDirection: 'row',
@@ -1897,11 +1916,13 @@ const styles = StyleSheet.create({
     color: '#7D5A50',
     marginBottom: 10,
     lineHeight: 22,
+    paddingHorizontal: 8, // Mehr Abstand links/rechts - nichts direkt am Rand
   },
   catalogMetaRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
+    paddingHorizontal: 4, // Abstand vom Rand
   },
   recipeImage: {
     width: 96,
@@ -1919,6 +1940,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: 'rgba(125,90,80,0.7)',
     lineHeight: 20,
+    paddingHorizontal: 6, // Abstand vom Rand - nichts direkt am Rand
   },
   disabledAgeTag: {
     backgroundColor: 'rgba(142,78,198,0.35)',
