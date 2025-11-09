@@ -1207,34 +1207,34 @@ const RecipeGeneratorScreen = () => {
                 contentContainerStyle={styles.recipeModalScroll}
                 showsVerticalScrollIndicator={false}
               >
-                <View style={styles.recipeHero}>
+                <View style={styles.recipeHeroCard}>
                   {selectedRecipe.image_url ? (
-                    <Image
-                      source={{ uri: selectedRecipe.image_url }}
-                      style={styles.recipeHeroImage}
-                      resizeMode='cover'
-                    />
+                    <>
+                      <Image
+                        source={{ uri: selectedRecipe.image_url }}
+                        style={StyleSheet.absoluteFill}
+                        resizeMode='cover'
+                      />
+                      <View style={styles.recipeHeroTint} />
+                    </>
                   ) : (
-                    <View style={[styles.recipeHeroImage, styles.recipeHeroPlaceholder]}>
-                      <IconSymbol name='fork.knife' size={28} color='#FFFFFF' />
-                    </View>
+                    <View style={[StyleSheet.absoluteFill, styles.recipeHeroSolid]} />
                   )}
-                  <View style={styles.recipeHeroOverlay} />
-                  <View style={styles.recipeHeroTextWrap}>
+                  <View style={styles.recipeHeroContent}>
                     <ThemedText style={styles.recipeHeroTitle} numberOfLines={2}>
                       {selectedRecipe.title}
                     </ThemedText>
-                    <View style={styles.recipeHeroBadgeRow}>
-                      <View style={styles.recipeHeroBadge}>
+                    <View style={styles.recipeHeroChipRow}>
+                      <View style={styles.recipeHeroChip}>
                         <IconSymbol name='clock' size={14} color='#FFFFFF' />
-                        <ThemedText style={styles.recipeHeroBadgeText}>
+                        <ThemedText style={styles.recipeHeroChipText}>
                           ab {selectedRecipe.min_months} M
                         </ThemedText>
                       </View>
                       {selectedRecipe.allergens.length > 0 && (
-                        <View style={[styles.recipeHeroBadge, styles.recipeHeroWarningBadge]}>
+                        <View style={[styles.recipeHeroChip, styles.recipeHeroChipWarn]}>
                           <IconSymbol name='exclamationmark.triangle.fill' size={14} color='#FFFFFF' />
-                          <ThemedText style={styles.recipeHeroBadgeText}>
+                          <ThemedText style={styles.recipeHeroChipText}>
                             {selectedRecipe.allergens.join(', ')}
                           </ThemedText>
                         </View>
@@ -1249,17 +1249,17 @@ const RecipeGeneratorScreen = () => {
                   </ThemedText>
                 ) : null}
 
-                <View style={styles.recipeMetaRow}>
-                  <View style={styles.recipeMetaPill}>
+                <View style={styles.recipeInfoChipsRow}>
+                  <View style={styles.recipeInfoChip}>
                     <IconSymbol name='checklist' size={16} color={PRIMARY} />
-                    <ThemedText style={styles.recipeMetaText}>
+                    <ThemedText style={styles.recipeInfoChipText}>
                       {selectedRecipe.ingredients.length} Zutaten
                     </ThemedText>
                   </View>
                   <View
                     style={[
-                      styles.recipeMetaPill,
-                      selectedRecipe.allergens.length > 0 && styles.recipeAllergenPill,
+                      styles.recipeInfoChip,
+                      selectedRecipe.allergens.length === 0 && styles.recipeInfoChipSafe,
                     ]}
                   >
                     <IconSymbol
@@ -1272,11 +1272,10 @@ const RecipeGeneratorScreen = () => {
                       color={selectedRecipe.allergens.length > 0 ? '#FFFFFF' : PRIMARY}
                     />
                     <ThemedText
-                      style={
-                        selectedRecipe.allergens.length > 0
-                          ? styles.recipeAllergenText
-                          : styles.recipeMetaText
-                      }
+                      style={[
+                        styles.recipeInfoChipText,
+                        selectedRecipe.allergens.length === 0 && styles.recipeInfoChipTextSafe,
+                      ]}
                     >
                       {selectedRecipe.allergens.length > 0
                         ? selectedRecipe.allergens.join(', ')
@@ -2162,61 +2161,54 @@ const styles = StyleSheet.create({
   recipeModalScroll: {
     paddingBottom: 80,
   },
-  recipeHero: {
-    borderRadius: 24,
+  recipeHeroCard: {
+    borderRadius: 28,
     overflow: 'hidden',
-    marginBottom: 20,
+    marginBottom: 24,
+    minHeight: isCompact ? 220 : 260,
+    backgroundColor: 'rgba(142,78,198,0.25)',
+    justifyContent: 'flex-end',
   },
-  recipeHeroImage: {
-    width: '100%',
-    height: 220,
-  },
-  recipeHeroPlaceholder: {
-    backgroundColor: 'rgba(142,78,198,0.32)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  recipeHeroOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+  recipeHeroTint: {
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.25)',
   },
-  recipeHeroTextWrap: {
+  recipeHeroSolid: {
+    backgroundColor: 'rgba(142,78,198,0.35)',
+  },
+  recipeHeroContent: {
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
-    paddingHorizontal: 20,
-    paddingVertical: 20,
-    gap: 10,
+    paddingHorizontal: 24,
+    paddingVertical: 24,
+    gap: 12,
   },
   recipeHeroTitle: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: '700',
     color: '#FFFFFF',
-    lineHeight: 28,
+    lineHeight: 30,
   },
-  recipeHeroBadgeRow: {
+  recipeHeroChipRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 10,
   },
-  recipeHeroBadge: {
+  recipeHeroChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
     paddingHorizontal: 14,
-    paddingVertical: 6,
+    paddingVertical: 8,
     borderRadius: 16,
     backgroundColor: 'rgba(0,0,0,0.35)',
   },
-  recipeHeroWarningBadge: {
-    backgroundColor: 'rgba(255,87,87,0.65)',
+  recipeHeroChipWarn: {
+    backgroundColor: 'rgba(255,87,87,0.75)',
   },
-  recipeHeroBadgeText: {
+  recipeHeroChipText: {
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '600',
@@ -2227,33 +2219,32 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     marginBottom: 20,
   },
-  recipeMetaRow: {
+  recipeInfoChipsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    gap: 12,
     marginBottom: 20,
   },
-  recipeMetaPill: {
+  recipeInfoChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
     paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingVertical: 12,
     borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.92)',
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    flexGrow: 1,
   },
-  recipeMetaText: {
+  recipeInfoChipSafe: {
+    backgroundColor: 'rgba(142,78,198,0.18)',
+  },
+  recipeInfoChipText: {
     fontSize: 14,
     fontWeight: '600',
     color: '#7D5A50',
   },
-  recipeAllergenPill: {
-    backgroundColor: 'rgba(142,78,198,0.35)',
-  },
-  recipeAllergenText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#FFFFFF',
+  recipeInfoChipTextSafe: {
+    color: PRIMARY,
   },
   recipeSectionCard: {
     borderRadius: 20,
