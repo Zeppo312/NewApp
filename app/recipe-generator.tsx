@@ -96,6 +96,7 @@ const defaultIngredientsSet = new Set(
 const { width: screenWidth } = Dimensions.get('window');
 const SCREEN_PADDING = 4; // Minimales Außen-Padding
 const contentWidth = screenWidth - 2 * SCREEN_PADDING; // Maximale Breite
+const isCompact = screenWidth < 380;
 
 const CARD_INTERNAL_PADDING = 32; // Noch großzügigerer Abstand zum Rand für bessere Lesbarkeit
 const CARD_SPACING = 16; // Abstand zwischen Cards
@@ -1089,40 +1090,56 @@ const RecipeGeneratorScreen = () => {
                         onPress={() => setSelectedRecipe(recipe)}
                         activeOpacity={0.88}
                       >
-                        <View style={styles.catalogContent}>
-                          <View style={styles.catalogTextColumn}>
-                            <View style={styles.recipeHeader}>
-                              <ThemedText style={styles.recipeTitle}>{recipe.title}</ThemedText>
-                              <View style={styles.ageTag}>
-                                <IconSymbol name='clock' size={16} color='#FFFFFF' />
-                                <ThemedText style={styles.ageTagText}>
-                                  ab {recipe.min_months} M
-                                </ThemedText>
-                              </View>
+                        <View style={styles.imageHeader}>
+                          {recipe.image_url ? (
+                            <Image
+                              source={{ uri: recipe.image_url }}
+                              style={styles.imageHeaderImg}
+                              resizeMode='cover'
+                            />
+                          ) : (
+                            <View style={[styles.imageHeaderImg, styles.imageHeaderPlaceholder]}>
+                              <IconSymbol name='fork.knife' size={22} color='#FFFFFF' />
                             </View>
-                            <ThemedText style={styles.catalogDescription}>
-                              {recipe.description ?? 'Leckeres BLW-Gericht – tippe für Details.'}
-                            </ThemedText>
-                            <View style={styles.catalogMetaRow}>
-                              <View style={styles.statPill}>
-                                <IconSymbol name='checklist' size={14} color={PRIMARY} />
-                                <ThemedText style={styles.statText}>
-                                  {recipe.ingredients.length} Zutaten
+                          )}
+                          <View style={styles.imageHeaderOverlay} />
+                          <View style={styles.imageHeaderBadges}>
+                            <View style={styles.imageHeaderBadge}>
+                              <IconSymbol name='clock' size={14} color='#FFFFFF' />
+                              <ThemedText style={styles.imageHeaderBadgeText}>
+                                ab {recipe.min_months} M
+                              </ThemedText>
+                            </View>
+                            {!!recipe.allergens.length && (
+                              <View style={[styles.imageHeaderBadge, styles.imageHeaderWarn]}>
+                                <IconSymbol name='exclamationmark.triangle.fill' size={14} color='#FFFFFF' />
+                                <ThemedText style={styles.imageHeaderBadgeText}>
+                                  {recipe.allergens.join(', ')}
                                 </ThemedText>
                               </View>
-                              {recipe.allergens.length > 0 && (
-                                <View style={styles.statPill}>
-                                  <IconSymbol name='exclamationmark.triangle.fill' size={14} color={PRIMARY} />
-                                  <ThemedText style={styles.statText}>
-                                    {recipe.allergens.join(', ')}
-                                  </ThemedText>
-                                </View>
-                              )}
+                            )}
+                          </View>
+                        </View>
+
+                        <View style={styles.catalogTextColumn}>
+                          <ThemedText style={styles.recipeTitle} numberOfLines={2}>
+                            {recipe.title}
+                          </ThemedText>
+                          <ThemedText
+                            style={styles.catalogDescription}
+                            numberOfLines={2}
+                            ellipsizeMode='tail'
+                          >
+                            {recipe.description ?? 'Leckeres BLW-Gericht – tippe für Details.'}
+                          </ThemedText>
+                          <View style={styles.catalogMetaRow}>
+                            <View style={styles.statPill}>
+                              <IconSymbol name='checklist' size={14} color={PRIMARY} />
+                              <ThemedText style={styles.statText}>
+                                {recipe.ingredients.length} Zutaten
+                              </ThemedText>
                             </View>
                           </View>
-                          {recipe.image_url && (
-                            <Image source={{ uri: recipe.image_url }} style={styles.recipeImage} />
-                          )}
                         </View>
                       </LiquidGlassCard>
                     );
@@ -1308,25 +1325,42 @@ const RecipeGeneratorScreen = () => {
       >
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.modalBackdrop}
+          style={styles.recipeModalOverlay}
         >
-          <LiquidGlassCard
-            style={[styles.modalCard, styles.createModalCard]}
-            intensity={32}
-            overlayColor='rgba(255,255,255,0.45)'
-            borderColor='rgba(255,255,255,0.5)'
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            onPress={() => setShowCreateModal(false)}
+            activeOpacity={1}
+          />
+          <BlurView
+            style={[styles.recipeModalCard, styles.createModalCard]}
+            intensity={90}
+            tint={colorScheme === 'dark' ? 'dark' : 'extraLight'}
           >
-            <ScrollView contentContainerStyle={styles.formContent}>
-              <View style={styles.modalHeader}>
-                <ThemedText style={styles.modalTitle}>Neues Rezept</ThemedText>
-                <TouchableOpacity
-                  onPress={() => setShowCreateModal(false)}
-                  style={styles.modalClose}
-                  activeOpacity={0.85}
-                >
-                  <IconSymbol name='xmark.circle.fill' size={26} color={PRIMARY} />
-                </TouchableOpacity>
+            <View style={styles.recipeModalHandle} />
+            <View style={styles.recipeModalHeaderRow}>
+              <TouchableOpacity
+                style={styles.recipeModalHeaderButton}
+                onPress={() => {
+                  resetCreateForm();
+                  setShowCreateModal(false);
+                }}
+                activeOpacity={0.85}
+              >
+                <IconSymbol name='xmark' size={18} color='#7D5A50' />
+              </TouchableOpacity>
+              <View style={styles.recipeModalHeaderCenter}>
+                <ThemedText style={styles.recipeModalHeaderTitle}>Neues Rezept</ThemedText>
+                <ThemedText style={styles.recipeModalHeaderSubtitle}>
+                  Teile euer Lieblingsgericht
+                </ThemedText>
               </View>
+              <View style={styles.recipeModalHeaderSpacer} />
+            </View>
+            <ScrollView
+              contentContainerStyle={styles.formContent}
+              showsVerticalScrollIndicator={false}
+            >
               <ThemedText style={styles.formHint}>
                 Beschreibe kurz das Gericht, Zutaten, Allergene und optional ein Foto.
               </ThemedText>
@@ -1505,7 +1539,7 @@ const RecipeGeneratorScreen = () => {
                 </TouchableOpacity>
               </View>
             </ScrollView>
-          </LiquidGlassCard>
+          </BlurView>
         </KeyboardAvoidingView>
       </Modal>
     </>
@@ -1546,6 +1580,58 @@ const styles = StyleSheet.create({
     // Gleiche Breite wie normale Cards - Padding wird durch innere Elemente erreicht
     paddingHorizontal: CARD_INTERNAL_PADDING, // 32px - gleiche Breite wie andere Cards
     paddingVertical: CARD_INTERNAL_PADDING, // 32px
+  },
+  imageHeader: {
+    marginTop: -CARD_INTERNAL_PADDING,
+    marginHorizontal: -CARD_INTERNAL_PADDING,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  imageHeaderImg: {
+    width: '100%',
+    aspectRatio: 16 / 9,
+    maxHeight: isCompact ? 180 : 220,
+  },
+  imageHeaderPlaceholder: {
+    backgroundColor: 'rgba(142,78,198,0.28)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  imageHeaderOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.18)',
+  },
+  imageHeaderBadges: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 12,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  imageHeaderBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+    backgroundColor: 'rgba(0,0,0,0.38)',
+  },
+  imageHeaderWarn: {
+    backgroundColor: 'rgba(255,87,87,0.7)',
+  },
+  imageHeaderBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
   },
   // Hero Section
   heroRow: {
@@ -1983,32 +2069,24 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: PRIMARY,
   },
-  catalogContent: {
-    flexDirection: 'row',
-    gap: 16,
-    alignItems: 'center',
-  },
   catalogTextColumn: {
+    marginTop: 12,
     flex: 1,
+    minWidth: 0,
   },
   catalogDescription: {
     fontSize: 15, // Größere Schrift für bessere Lesbarkeit
     color: '#7D5A50',
+    marginTop: 6,
     marginBottom: 10,
     lineHeight: 22,
-    paddingHorizontal: 8, // Mehr Abstand links/rechts - nichts direkt am Rand
+    paddingHorizontal: 2,
   },
   catalogMetaRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
     paddingHorizontal: 4, // Abstand vom Rand
-  },
-  recipeImage: {
-    width: 96,
-    height: 96,
-    borderRadius: 16,
-    backgroundColor: 'rgba(0,0,0,0.06)',
   },
   disabledRecipeCard: {
     opacity: 0.6,
@@ -2223,107 +2301,13 @@ const styles = StyleSheet.create({
     color: '#7D5A50',
     lineHeight: 20,
   },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: SCREEN_PADDING,
-    paddingVertical: 40,
-  },
-  modalCard: {
-    maxHeight: '92%',
-    width: '100%',
-    paddingHorizontal: 24,
-    paddingVertical: 24,
-    borderRadius: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  modalContent: {
-    paddingBottom: 24,
-    gap: 16,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#7D5A50',
-    flex: 1,
-    letterSpacing: -0.3,
-  },
-  modalClose: {
-    paddingLeft: 12,
-  },
-  modalImage: {
-    width: '100%',
-    height: 200,
-    borderRadius: 20,
-  },
-  modalSubtitle: {
-    fontSize: 14,
-    color: PRIMARY,
-    fontWeight: '500',
-  },
-  modalDescription: {
-    fontSize: 14,
-    color: '#7D5A50',
-    lineHeight: 20,
-  },
-  modalSection: {
-    gap: 8,
-  },
-  modalSectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#7D5A50',
-  },
-  modalIngredientRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  modalIngredientText: {
-    fontSize: 14,
-    color: '#7D5A50',
-  },
-  modalInstructions: {
-    fontSize: 14,
-    color: '#7D5A50',
-    lineHeight: 21,
-  },
-  modalTipBox: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-    padding: 16,
-    borderRadius: 16,
-    backgroundColor: 'rgba(142,78,198,0.12)',
-  },
-  modalTipText: {
-    fontSize: 14,
-    color: '#7D5A50',
-    flex: 1,
-    lineHeight: 20,
-  },
-  modalAllergenText: {
-    fontSize: 14,
-    color: '#7D5A50',
-    lineHeight: 20,
-  },
   createModalCard: {
     maxHeight: '96%',
-    borderRadius: 20,
+    paddingBottom: 48,
   },
   formContent: {
-    paddingBottom: 32,
+    paddingBottom: 48,
+    paddingHorizontal: 4,
     gap: 24,
   },
   formHint: {
