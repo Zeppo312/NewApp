@@ -88,10 +88,6 @@ const INGREDIENT_GROUPS: { key: string; label: string; items: string[] }[] = [
   },
 ];
 
-const defaultIngredientsSet = new Set(
-  INGREDIENT_GROUPS.flatMap((group) => group.items.map((item) => item.toLowerCase()))
-);
-
 // Layout-System mit maximaler Content-Breite
 const { width: screenWidth } = Dimensions.get('window');
 const SCREEN_PADDING = 4; // Minimales Außen-Padding
@@ -102,6 +98,277 @@ const CARD_INTERNAL_PADDING = 32; // Noch großzügigerer Abstand zum Rand für 
 const CARD_SPACING = 16; // Abstand zwischen Cards
 const INGREDIENT_COLUMNS = 2; // Immer 2 Buttons pro Reihe
 const ALLERGEN_COLUMNS = 2; // Immer 2 Buttons pro Reihe
+
+type Unit =
+  | 'g'
+  | 'kg'
+  | 'ml'
+  | 'l'
+  | 'TL'
+  | 'EL'
+  | 'Prise'
+  | 'Stück'
+  | 'Becher'
+  | 'Tasse'
+  | 'Cup'
+  | 'Glas'
+  | 'none';
+
+type CanonExtra = {
+  id: string;
+  label: string;
+  quantity?: string;
+  unit?: Unit;
+  note?: string;
+  count: number;
+};
+
+type ParsedIngredientInfo = {
+  id: string;
+  label: string;
+  quantity?: string;
+  unit?: string;
+  note?: string;
+};
+
+const UNIT_ALIASES: Record<string, Unit> = {
+  g: 'g',
+  gramm: 'g',
+  kg: 'kg',
+  kilogramm: 'kg',
+  ml: 'ml',
+  milliliter: 'ml',
+  l: 'l',
+  liter: 'l',
+  tl: 'TL',
+  teelöffel: 'TL',
+  teeloeffel: 'TL',
+  el: 'EL',
+  esslöffel: 'EL',
+  essloeffel: 'EL',
+  prise: 'Prise',
+  st: 'Stück',
+  stk: 'Stück',
+  stück: 'Stück',
+  becher: 'Becher',
+  tasse: 'Tasse',
+  cup: 'Cup',
+  glas: 'Glas',
+};
+
+const DESCRIPTIVE_WORDS = new Set([
+  'reif',
+  'reife',
+  'reifer',
+  'reifes',
+  'klein',
+  'kleine',
+  'kleiner',
+  'kleines',
+  'groß',
+  'große',
+  'großer',
+  'großes',
+  'mittelgroß',
+  'mittelgrosse',
+  'mittelgroße',
+  'mittelgross',
+  'frisch',
+  'frische',
+  'frischer',
+  'frisches',
+  'gehackt',
+  'geschält',
+  'optional',
+  'etwas',
+  'ca.',
+  'ca',
+  'circa',
+  'bio',
+]);
+
+const slugify = (value: string) => {
+  return (
+    value
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/ß/g, 'ss')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'ingredient'
+  );
+};
+
+const cleanLabel = (value: string) => {
+  const parts = value
+    .split(/\s+/)
+    .filter((word) => word && !DESCRIPTIVE_WORDS.has(word.toLowerCase()));
+  const cleaned = parts.join(' ').trim() || value.trim();
+  if (!cleaned) return 'Zutat';
+  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+};
+
+const splitParentheses = (value: string) => {
+  const match = value.match(/^(.*?)(?:\((.*?)\))?\s*$/);
+  return {
+    main: (match?.[1] ?? '').trim(),
+    note: match?.[2]?.trim() || undefined,
+  };
+};
+
+const splitAlternative = (value: string) => {
+  const alternativeRegex = /\b(oder|alternativ|bzw\.)\b/i;
+  const match = value.match(alternativeRegex);
+  if (!match || match.index === undefined) {
+    return { main: value.trim(), note: undefined };
+  }
+  const main = value.slice(0, match.index).trim();
+  const rest = value.slice(match.index).trim();
+  return {
+    main: main.length > 0 ? main : value.trim(),
+    note: rest || undefined,
+  };
+};
+
+const CANONICAL_ALIASES: Record<string, string> = {
+  // Proteine
+  eier: 'Ei',
+  ei: 'Ei',
+  hühnerei: 'Ei',
+  huehnerei: 'Ei',
+  'rote linse': 'Rote Linsen',
+  'rote linsen': 'Rote Linsen',
+  linsen: 'Rote Linsen',
+  kichererbse: 'Kichererbsen',
+  kichererbsen: 'Kichererbsen',
+  // Obst/Gemüse
+  apfel: 'Apfel',
+  äpfel: 'Apfel',
+  aepfel: 'Apfel',
+  banane: 'Banane',
+  bananen: 'Banane',
+  tomate: 'Tomate',
+  tomaten: 'Tomate',
+  erbsen: 'Erbsen',
+  // Getreide/Mehl
+  mehle: 'Mehl',
+  'vollkornmehle': 'Vollkornmehl',
+  'vollkorn mehl': 'Vollkornmehl',
+  'vollkornmehl': 'Vollkornmehl',
+  nudeln: 'Vollkornnudeln',
+};
+
+const toSingularGuess = (value: string) => {
+  if (value.endsWith('innen')) return value.slice(0, -4);
+  if (value.endsWith('nen')) return value.slice(0, -3);
+  if (value.endsWith('en')) return value.slice(0, -2);
+  if (value.endsWith('e')) return value.slice(0, -1);
+  return value;
+};
+
+const toCanonicalLabel = (label: string) => {
+  const lower = label.toLowerCase();
+  if (CANONICAL_ALIASES[lower]) {
+    return CANONICAL_ALIASES[lower];
+  }
+  const singular = toSingularGuess(lower);
+  if (CANONICAL_ALIASES[singular]) {
+    return CANONICAL_ALIASES[singular];
+  }
+  return label.charAt(0).toUpperCase() + label.slice(1);
+};
+
+const extractQuantityUnit = (value: string) => {
+  const trimmed = value.trim();
+  const quantityRegex =
+    /^((?:\d+\s*\d\/\d)|(?:\d+\/\d+)|(?:\d+(?:[.,]\d+)?))\b([\s\S]*)$/;
+  const match = trimmed.match(quantityRegex);
+  if (!match) {
+    return { rest: trimmed };
+  }
+
+  const quantity = match[1].replace(/\s+/g, ' ').trim();
+  let remainder = match[2]?.trimStart() ?? '';
+  let unit: string | undefined;
+
+  if (remainder) {
+    const unitMatch = remainder.match(/^([a-zA-ZäöüÄÖÜß]+)(.*)$/);
+    if (unitMatch) {
+      const rawUnit = (unitMatch[1] ?? '').toLowerCase();
+      const normalizedUnitKey = rawUnit
+        .replace(/ä/g, 'ae')
+        .replace(/ö/g, 'oe')
+        .replace(/ü/g, 'ue');
+      const resolvedUnit = UNIT_ALIASES[normalizedUnitKey];
+      if (resolvedUnit) {
+        unit = resolvedUnit;
+        remainder = (unitMatch[2] ?? '').trimStart();
+      }
+    }
+  }
+
+  return {
+    quantity,
+    unit,
+    rest: remainder.length > 0 ? remainder : undefined,
+  };
+};
+
+const parseIngredientInfo = (raw: string): ParsedIngredientInfo => {
+  const trimmed = raw.trim();
+  const { main: withoutParen, note: parenNote } = splitParentheses(trimmed);
+  const { main: withoutAlternative, note: alternativeNote } = splitAlternative(withoutParen);
+  const { quantity, unit, rest } = extractQuantityUnit(withoutAlternative);
+  const labelBase = cleanLabel(rest ?? withoutAlternative);
+  const canonicalLabel = toCanonicalLabel(labelBase);
+  const id = slugify(canonicalLabel);
+  return {
+    id,
+    label: canonicalLabel,
+    quantity,
+    unit,
+    note: alternativeNote || parenNote,
+  };
+};
+
+const getIngredientId = (input: string) => {
+  const parsed = parseIngredientInfo(input);
+  return parsed.id;
+};
+
+const defaultIngredientsSet = new Set(
+  INGREDIENT_GROUPS.flatMap((group) => group.items.map((item) => slugify(item)))
+);
+
+const buildExtraIngredientList = (recipes: RecipeRecord[]): CanonExtra[] => {
+  const extras = new Map<string, CanonExtra>();
+  recipes.forEach((recipe) => {
+    recipe.ingredients.forEach((raw) => {
+      const parsed = parseIngredientInfo(raw);
+      if (defaultIngredientsSet.has(parsed.id)) {
+        return;
+      }
+      const existing = extras.get(parsed.id);
+      if (!existing) {
+        extras.set(parsed.id, {
+          id: parsed.id,
+          label: parsed.label,
+          quantity: parsed.quantity,
+          unit: parsed.unit,
+          note: parsed.note,
+          count: 1,
+        });
+      } else {
+        existing.count += 1;
+        if (!existing.quantity && parsed.quantity) existing.quantity = parsed.quantity;
+        if (!existing.unit && parsed.unit) existing.unit = parsed.unit;
+        if (!existing.note && parsed.note) existing.note = parsed.note;
+      }
+    });
+  });
+
+  return Array.from(extras.values()).sort((a, b) => a.label.localeCompare(b.label, 'de'));
+};
 
 const chunkItems = <T,>(items: T[], columns: number): (T | null)[][] => {
   const rows: (T | null)[][] = [];
@@ -250,7 +517,7 @@ const RecipeGeneratorScreen = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [ageMonths, setAgeMonths] = useState<number>(8);
   const [selectedAllergies, setSelectedAllergies] = useState<AllergenId[]>([]);
-  const [availableIngredients, setAvailableIngredients] = useState<string[]>([]);
+  const [availableIngredientIds, setAvailableIngredientIds] = useState<string[]>([]);
   const [recipeMatches, setRecipeMatches] = useState<RecipeMatch[]>([]);
   const [hasGenerated, setHasGenerated] = useState(false);
   const [selectedRecipe, setSelectedRecipe] = useState<RecipeRecord | null>(null);
@@ -269,21 +536,12 @@ const RecipeGeneratorScreen = () => {
   const [newImage, setNewImage] = useState<string | null>(null);
 
   const selectedIngredientSet = useMemo(
-    () => new Set(availableIngredients.map((item) => item.toLowerCase())),
-    [availableIngredients]
+    () => new Set(availableIngredientIds),
+    [availableIngredientIds]
   );
 
   const extraIngredients = useMemo(() => {
-    const extras = new Set<string>();
-    recipes.forEach((recipe) => {
-      recipe.ingredients.forEach((ingredient) => {
-        const normalized = ingredient.trim();
-        if (!defaultIngredientsSet.has(normalized.toLowerCase())) {
-          extras.add(normalized);
-        }
-      });
-    });
-    return Array.from(extras).sort((a, b) => a.localeCompare(b, 'de'));
+    return buildExtraIngredientList(recipes);
   }, [recipes]);
 
   const sortedRecipes = useMemo(() => {
@@ -345,11 +603,11 @@ const RecipeGeneratorScreen = () => {
     );
   };
 
-  const toggleIngredient = (ingredient: string) => {
-    setAvailableIngredients((prev) =>
-      prev.includes(ingredient)
-        ? prev.filter((item) => item !== ingredient)
-        : [...prev, ingredient]
+  const toggleIngredient = (ingredientId: string) => {
+    setAvailableIngredientIds((prev) =>
+      prev.includes(ingredientId)
+        ? prev.filter((item) => item !== ingredientId)
+        : [...prev, ingredientId]
     );
   };
 
@@ -368,7 +626,7 @@ const RecipeGeneratorScreen = () => {
   };
 
   const computeMatches = () => {
-    if (availableIngredients.length === 0) {
+    if (availableIngredientIds.length === 0) {
       Alert.alert(
         'Noch keine Vorräte ausgewählt',
         'Hake ein paar Zutaten an, damit wir passende Rezepte finden können.'
@@ -378,12 +636,12 @@ const RecipeGeneratorScreen = () => {
 
     const matches = recipes
       .map((recipe) => {
-        const matching = recipe.ingredients.filter((ingredient) =>
-          selectedIngredientSet.has(ingredient.toLowerCase())
-        );
-        const missing = recipe.ingredients.filter(
-          (ingredient) => !selectedIngredientSet.has(ingredient.toLowerCase())
-        );
+        const normalized = recipe.ingredients.map((ingredient) => ({
+          raw: ingredient,
+          id: getIngredientId(ingredient),
+        }));
+        const matching = normalized.filter((item) => selectedIngredientSet.has(item.id));
+        const missing = normalized.filter((item) => !selectedIngredientSet.has(item.id));
         const hasBlockedAllergen = recipe.allergens.some((allergen) =>
           selectedAllergies.includes(allergen as AllergenId)
         );
@@ -392,7 +650,7 @@ const RecipeGeneratorScreen = () => {
         return {
           recipe,
           matchCount: matching.length,
-          missingIngredients: missing,
+          missingIngredients: missing.map((item) => item.raw),
           hasBlockedAllergen,
           meetsAge,
         };
@@ -805,7 +1063,8 @@ const RecipeGeneratorScreen = () => {
                             />
                           );
                         }
-                        const isSelected = selectedIngredientSet.has(ingredient.toLowerCase());
+                        const ingredientId = slugify(ingredient);
+                        const isSelected = selectedIngredientSet.has(ingredientId);
                         return (
                           <View
                             key={ingredient}
@@ -819,7 +1078,7 @@ const RecipeGeneratorScreen = () => {
                                 styles.ingredientChip,
                                 isSelected && styles.ingredientChipSelected,
                               ]}
-                              onPress={() => toggleIngredient(ingredient)}
+                              onPress={() => toggleIngredient(ingredientId)}
                               activeOpacity={0.85}
                             >
                               <ThemedText
@@ -858,8 +1117,8 @@ const RecipeGeneratorScreen = () => {
                         rowIndex === rows.length - 1 && styles.gridRowLast,
                       ]}
                     >
-                      {row.map((ingredient, colIndex) => {
-                        if (!ingredient) {
+                      {row.map((item, colIndex) => {
+                        if (!item) {
                           return (
                             <View
                               key={`extra-placeholder-${rowIndex}-${colIndex}`}
@@ -870,32 +1129,20 @@ const RecipeGeneratorScreen = () => {
                             />
                           );
                         }
-                        const isSelected = selectedIngredientSet.has(ingredient.toLowerCase());
+                        const isSelected = selectedIngredientSet.has(item.id);
                         return (
                           <View
-                            key={ingredient}
+                            key={item.id}
                             style={[
                               styles.gridItem,
                               colIndex === 0 && styles.gridItemLeft,
                             ]}
                           >
-                            <TouchableOpacity
-                              style={[
-                                styles.ingredientChip,
-                                isSelected && styles.ingredientChipSelected,
-                              ]}
-                              onPress={() => toggleIngredient(ingredient)}
-                              activeOpacity={0.85}
-                            >
-                              <ThemedText
-                                style={[
-                                  styles.ingredientLabel,
-                                  isSelected && styles.ingredientLabelSelected,
-                                ]}
-                              >
-                                {ingredient}
-                              </ThemedText>
-                            </TouchableOpacity>
+                            <CompactIngredientChip
+                              item={item}
+                              selected={isSelected}
+                              onPress={() => toggleIngredient(item.id)}
+                            />
                           </View>
                         );
                       })}
@@ -909,7 +1156,7 @@ const RecipeGeneratorScreen = () => {
             <LiquidGlassCard
               style={[
                 styles.card,
-                availableIngredients.length === 0 && styles.generateButtonDisabled,
+                availableIngredientIds.length === 0 && styles.generateButtonDisabled,
               ]}
               intensity={28}
               overlayColor='rgba(142,78,198,0.36)'
@@ -922,7 +1169,7 @@ const RecipeGeneratorScreen = () => {
                 <ThemedText style={styles.generateLabel}>Rezepte generieren</ThemedText>
                 <View style={styles.generateBadge}>
                   <ThemedText style={styles.generateBadgeText}>
-                    {availableIngredients.length}
+                    {availableIngredientIds.length}
                   </ThemedText>
                 </View>
               </View>
@@ -1560,6 +1807,53 @@ const RecipeGeneratorScreen = () => {
 
 export default RecipeGeneratorScreen;
 
+type CompactIngredientChipProps = {
+  item: CanonExtra;
+  selected: boolean;
+  onPress: () => void;
+};
+
+const CompactIngredientChip = ({ item, selected, onPress }: CompactIngredientChipProps) => {
+  const quantityBadge =
+    item.quantity && item.unit
+      ? `${item.quantity.replace('.', ',')} ${item.unit}`
+      : item.quantity
+        ? item.quantity.replace('.', ',')
+        : undefined;
+
+  return (
+    <TouchableOpacity
+      style={[styles.compactChip, selected && styles.compactChipSelected]}
+      onPress={onPress}
+      activeOpacity={0.85}
+    >
+      <ThemedText
+        style={[styles.compactChipLabel, selected && styles.compactChipLabelSelected]}
+        numberOfLines={1}
+      >
+        {item.label}
+      </ThemedText>
+      <View style={styles.compactChipBadges}>
+        {quantityBadge && (
+          <View style={styles.badge}>
+            <ThemedText style={styles.badgeText}>{quantityBadge}</ThemedText>
+          </View>
+        )}
+        {item.note && (
+          <View style={[styles.badge, styles.badgeSoft]}>
+            <ThemedText style={styles.badgeText}>{item.note}</ThemedText>
+          </View>
+        )}
+        {item.count > 1 && (
+          <View style={[styles.badge, styles.badgeSoft]}>
+            <ThemedText style={styles.badgeText}>×{item.count}</ThemedText>
+          </View>
+        )}
+      </View>
+    </TouchableOpacity>
+  );
+};
+
 // @ts-nocheck - StyleSheet.create type inference issues with strict mode
 const styles = StyleSheet.create({
   background: {
@@ -1851,6 +2145,51 @@ const styles = StyleSheet.create({
   },
   ingredientChipSelected: {
     backgroundColor: 'rgba(142,78,198,0.28)',
+  },
+  compactChip: {
+    width: '100%',
+    minHeight: 44,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  compactChipSelected: {
+    backgroundColor: 'rgba(142,78,198,0.28)',
+  },
+  compactChipLabel: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#7D5A50',
+    flex: 1,
+  },
+  compactChipLabelSelected: {
+    color: '#FFFFFF',
+  },
+  compactChipBadges: {
+    flexDirection: 'row',
+    gap: 6,
+    marginLeft: 6,
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
+  },
+  badge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.28)',
+  },
+  badgeSoft: {
+    backgroundColor: 'rgba(142,78,198,0.16)',
+  },
+  badgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#7D5A50',
   },
   ingredientLabel: {
     fontSize: 15, // Größere Schrift für bessere Lesbarkeit
