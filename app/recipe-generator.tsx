@@ -23,27 +23,11 @@ import { ThemedBackground } from '@/components/ThemedBackground';
 import Header from '@/components/Header';
 import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import {
-  GLASS_BORDER,
-  GLASS_OVERLAY,
-  LAYOUT_PAD,
-  LiquidGlassCard,
-  PRIMARY,
-  RADIUS,
-  SECTION_GAP_BOTTOM,
-  SECTION_GAP_TOP,
-  GRID_GAP,
-} from '@/constants/DesignGuide';
+import { GLASS_BORDER, LiquidGlassCard, PRIMARY, GRID_GAP } from '@/constants/DesignGuide';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { createRecipe, fetchRecipes, RecipeRecord } from '@/lib/recipes';
 
 type AllergenId = 'milk' | 'gluten' | 'egg' | 'nuts' | 'fish';
-
-type RecipeMatch = {
-  recipe: RecipeRecord;
-  matchCount: number;
-  missingIngredients: string[];
-};
 
 const AGE_LIMITS = { min: 4, max: 24 };
 
@@ -55,39 +39,6 @@ const ALLERGEN_OPTIONS: { id: AllergenId; label: string; hint: string }[] = [
   { id: 'fish', label: 'Fisch', hint: 'Lachs, Forelle' },
 ];
 
-const INGREDIENT_GROUPS: { key: string; label: string; items: string[] }[] = [
-  {
-    key: 'produce',
-    label: 'Gemüse & Obst',
-    items: [
-      'Karotte',
-      'Süßkartoffel',
-      'Kürbis',
-      'Brokkoli',
-      'Zucchini',
-      'Apfel',
-      'Birne',
-      'Banane',
-      'Avocado',
-    ],
-  },
-  {
-    key: 'carbs',
-    label: 'Getreide & Sättigendes',
-    items: ['Haferflocken', 'Hirse', 'Reis', 'Kartoffel', 'Vollkornbrot', 'Polenta'],
-  },
-  {
-    key: 'proteins',
-    label: 'Proteine',
-    items: ['Hühnchen', 'Lachs', 'Kichererbsen', 'Linsen', 'Naturjoghurt', 'Ei', 'Tofu'],
-  },
-  {
-    key: 'extras',
-    label: 'Extras & Fette',
-    items: ['Rapsöl', 'Olivenöl', 'Butter', 'Kräuter', 'Erbsen', 'Mais', 'Frischkäse'],
-  },
-];
-
 // Layout-System mit maximaler Content-Breite
 const { width: screenWidth } = Dimensions.get('window');
 const SCREEN_PADDING = 4; // Minimales Außen-Padding
@@ -96,279 +47,7 @@ const isCompact = screenWidth < 380;
 
 const CARD_INTERNAL_PADDING = 32; // Noch großzügigerer Abstand zum Rand für bessere Lesbarkeit
 const CARD_SPACING = 16; // Abstand zwischen Cards
-const INGREDIENT_COLUMNS = 2; // Immer 2 Buttons pro Reihe
 const ALLERGEN_COLUMNS = 2; // Immer 2 Buttons pro Reihe
-
-type Unit =
-  | 'g'
-  | 'kg'
-  | 'ml'
-  | 'l'
-  | 'TL'
-  | 'EL'
-  | 'Prise'
-  | 'Stück'
-  | 'Becher'
-  | 'Tasse'
-  | 'Cup'
-  | 'Glas'
-  | 'none';
-
-type CanonExtra = {
-  id: string;
-  label: string;
-  quantity?: string;
-  unit?: Unit;
-  note?: string;
-  count: number;
-};
-
-type ParsedIngredientInfo = {
-  id: string;
-  label: string;
-  quantity?: string;
-  unit?: string;
-  note?: string;
-};
-
-const UNIT_ALIASES: Record<string, Unit> = {
-  g: 'g',
-  gramm: 'g',
-  kg: 'kg',
-  kilogramm: 'kg',
-  ml: 'ml',
-  milliliter: 'ml',
-  l: 'l',
-  liter: 'l',
-  tl: 'TL',
-  teelöffel: 'TL',
-  teeloeffel: 'TL',
-  el: 'EL',
-  esslöffel: 'EL',
-  essloeffel: 'EL',
-  prise: 'Prise',
-  st: 'Stück',
-  stk: 'Stück',
-  stück: 'Stück',
-  becher: 'Becher',
-  tasse: 'Tasse',
-  cup: 'Cup',
-  glas: 'Glas',
-};
-
-const DESCRIPTIVE_WORDS = new Set([
-  'reif',
-  'reife',
-  'reifer',
-  'reifes',
-  'klein',
-  'kleine',
-  'kleiner',
-  'kleines',
-  'groß',
-  'große',
-  'großer',
-  'großes',
-  'mittelgroß',
-  'mittelgrosse',
-  'mittelgroße',
-  'mittelgross',
-  'frisch',
-  'frische',
-  'frischer',
-  'frisches',
-  'gehackt',
-  'geschält',
-  'optional',
-  'etwas',
-  'ca.',
-  'ca',
-  'circa',
-  'bio',
-]);
-
-const slugify = (value: string) => {
-  return (
-    value
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/ß/g, 'ss')
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '') || 'ingredient'
-  );
-};
-
-const cleanLabel = (value: string) => {
-  const parts = value
-    .split(/\s+/)
-    .filter((word) => word && !DESCRIPTIVE_WORDS.has(word.toLowerCase()));
-  const cleaned = parts.join(' ').trim() || value.trim();
-  if (!cleaned) return 'Zutat';
-  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
-};
-
-const splitParentheses = (value: string) => {
-  const match = value.match(/^(.*?)(?:\((.*?)\))?\s*$/);
-  return {
-    main: (match?.[1] ?? '').trim(),
-    note: match?.[2]?.trim() || undefined,
-  };
-};
-
-const splitAlternative = (value: string) => {
-  const alternativeRegex = /\b(oder|alternativ|bzw\.)\b/i;
-  const match = value.match(alternativeRegex);
-  if (!match || match.index === undefined) {
-    return { main: value.trim(), note: undefined };
-  }
-  const main = value.slice(0, match.index).trim();
-  const rest = value.slice(match.index).trim();
-  return {
-    main: main.length > 0 ? main : value.trim(),
-    note: rest || undefined,
-  };
-};
-
-const CANONICAL_ALIASES: Record<string, string> = {
-  // Proteine
-  eier: 'Ei',
-  ei: 'Ei',
-  hühnerei: 'Ei',
-  huehnerei: 'Ei',
-  'rote linse': 'Rote Linsen',
-  'rote linsen': 'Rote Linsen',
-  linsen: 'Rote Linsen',
-  kichererbse: 'Kichererbsen',
-  kichererbsen: 'Kichererbsen',
-  // Obst/Gemüse
-  apfel: 'Apfel',
-  äpfel: 'Apfel',
-  aepfel: 'Apfel',
-  banane: 'Banane',
-  bananen: 'Banane',
-  tomate: 'Tomate',
-  tomaten: 'Tomate',
-  erbsen: 'Erbsen',
-  // Getreide/Mehl
-  mehle: 'Mehl',
-  'vollkornmehle': 'Vollkornmehl',
-  'vollkorn mehl': 'Vollkornmehl',
-  'vollkornmehl': 'Vollkornmehl',
-  nudeln: 'Vollkornnudeln',
-};
-
-const toSingularGuess = (value: string) => {
-  if (value.endsWith('innen')) return value.slice(0, -4);
-  if (value.endsWith('nen')) return value.slice(0, -3);
-  if (value.endsWith('en')) return value.slice(0, -2);
-  if (value.endsWith('e')) return value.slice(0, -1);
-  return value;
-};
-
-const toCanonicalLabel = (label: string) => {
-  const lower = label.toLowerCase();
-  if (CANONICAL_ALIASES[lower]) {
-    return CANONICAL_ALIASES[lower];
-  }
-  const singular = toSingularGuess(lower);
-  if (CANONICAL_ALIASES[singular]) {
-    return CANONICAL_ALIASES[singular];
-  }
-  return label.charAt(0).toUpperCase() + label.slice(1);
-};
-
-const extractQuantityUnit = (value: string) => {
-  const trimmed = value.trim();
-  const quantityRegex =
-    /^((?:\d+\s*\d\/\d)|(?:\d+\/\d+)|(?:\d+(?:[.,]\d+)?))\b([\s\S]*)$/;
-  const match = trimmed.match(quantityRegex);
-  if (!match) {
-    return { rest: trimmed };
-  }
-
-  const quantity = match[1].replace(/\s+/g, ' ').trim();
-  let remainder = match[2]?.trimStart() ?? '';
-  let unit: string | undefined;
-
-  if (remainder) {
-    const unitMatch = remainder.match(/^([a-zA-ZäöüÄÖÜß]+)(.*)$/);
-    if (unitMatch) {
-      const rawUnit = (unitMatch[1] ?? '').toLowerCase();
-      const normalizedUnitKey = rawUnit
-        .replace(/ä/g, 'ae')
-        .replace(/ö/g, 'oe')
-        .replace(/ü/g, 'ue');
-      const resolvedUnit = UNIT_ALIASES[normalizedUnitKey];
-      if (resolvedUnit) {
-        unit = resolvedUnit;
-        remainder = (unitMatch[2] ?? '').trimStart();
-      }
-    }
-  }
-
-  return {
-    quantity,
-    unit,
-    rest: remainder.length > 0 ? remainder : undefined,
-  };
-};
-
-const parseIngredientInfo = (raw: string): ParsedIngredientInfo => {
-  const trimmed = raw.trim();
-  const { main: withoutParen, note: parenNote } = splitParentheses(trimmed);
-  const { main: withoutAlternative, note: alternativeNote } = splitAlternative(withoutParen);
-  const { quantity, unit, rest } = extractQuantityUnit(withoutAlternative);
-  const labelBase = cleanLabel(rest ?? withoutAlternative);
-  const canonicalLabel = toCanonicalLabel(labelBase);
-  const id = slugify(canonicalLabel);
-  return {
-    id,
-    label: canonicalLabel,
-    quantity,
-    unit,
-    note: alternativeNote || parenNote,
-  };
-};
-
-const getIngredientId = (input: string) => {
-  const parsed = parseIngredientInfo(input);
-  return parsed.id;
-};
-
-const defaultIngredientsSet = new Set(
-  INGREDIENT_GROUPS.flatMap((group) => group.items.map((item) => slugify(item)))
-);
-
-const buildExtraIngredientList = (recipes: RecipeRecord[]): CanonExtra[] => {
-  const extras = new Map<string, CanonExtra>();
-  recipes.forEach((recipe) => {
-    recipe.ingredients.forEach((raw) => {
-      const parsed = parseIngredientInfo(raw);
-      if (defaultIngredientsSet.has(parsed.id)) {
-        return;
-      }
-      const existing = extras.get(parsed.id);
-      if (!existing) {
-        extras.set(parsed.id, {
-          id: parsed.id,
-          label: parsed.label,
-          quantity: parsed.quantity,
-          unit: parsed.unit,
-          note: parsed.note,
-          count: 1,
-        });
-      } else {
-        existing.count += 1;
-        if (!existing.quantity && parsed.quantity) existing.quantity = parsed.quantity;
-        if (!existing.unit && parsed.unit) existing.unit = parsed.unit;
-        if (!existing.note && parsed.note) existing.note = parsed.note;
-      }
-    });
-  });
-
-  return Array.from(extras.values()).sort((a, b) => a.label.localeCompare(b.label, 'de'));
-};
 
 const chunkItems = <T,>(items: T[], columns: number): (T | null)[][] => {
   const rows: (T | null)[][] = [];
@@ -517,9 +196,6 @@ const RecipeGeneratorScreen = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [ageMonths, setAgeMonths] = useState<number>(8);
   const [selectedAllergies, setSelectedAllergies] = useState<AllergenId[]>([]);
-  const [availableIngredientIds, setAvailableIngredientIds] = useState<string[]>([]);
-  const [recipeMatches, setRecipeMatches] = useState<RecipeMatch[]>([]);
-  const [hasGenerated, setHasGenerated] = useState(false);
   const [selectedRecipe, setSelectedRecipe] = useState<RecipeRecord | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -535,15 +211,6 @@ const RecipeGeneratorScreen = () => {
   const [newAllergens, setNewAllergens] = useState<AllergenId[]>([]);
   const [newImage, setNewImage] = useState<string | null>(null);
 
-  const selectedIngredientSet = useMemo(
-    () => new Set(availableIngredientIds),
-    [availableIngredientIds]
-  );
-
-  const extraIngredients = useMemo(() => {
-    return buildExtraIngredientList(recipes);
-  }, [recipes]);
-
   const sortedRecipes = useMemo(() => {
     return [...recipes].sort((a, b) => {
       if (a.min_months === b.min_months) {
@@ -553,7 +220,7 @@ const RecipeGeneratorScreen = () => {
     });
   }, [recipes]);
 
-  const disabledIngredientsCount = useMemo(() => {
+  const blockedRecipeCount = useMemo(() => {
     if (selectedAllergies.length === 0) return 0;
     const allergySet = new Set(selectedAllergies);
     return recipes.reduce((count, recipe) => {
@@ -603,14 +270,6 @@ const RecipeGeneratorScreen = () => {
     );
   };
 
-  const toggleIngredient = (ingredientId: string) => {
-    setAvailableIngredientIds((prev) =>
-      prev.includes(ingredientId)
-        ? prev.filter((item) => item !== ingredientId)
-        : [...prev, ingredientId]
-    );
-  };
-
   const allergenRows = useMemo(
     () => chunkItems(ALLERGEN_OPTIONS, ALLERGEN_COLUMNS),
     []
@@ -623,54 +282,6 @@ const RecipeGeneratorScreen = () => {
       if (next > AGE_LIMITS.max) return AGE_LIMITS.max;
       return next;
     });
-  };
-
-  const computeMatches = () => {
-    if (availableIngredientIds.length === 0) {
-      Alert.alert(
-        'Noch keine Vorräte ausgewählt',
-        'Hake ein paar Zutaten an, damit wir passende Rezepte finden können.'
-      );
-      return;
-    }
-
-    const matches = recipes
-      .map((recipe) => {
-        const normalized = recipe.ingredients.map((ingredient) => ({
-          raw: ingredient,
-          id: getIngredientId(ingredient),
-        }));
-        const matching = normalized.filter((item) => selectedIngredientSet.has(item.id));
-        const missing = normalized.filter((item) => !selectedIngredientSet.has(item.id));
-        const hasBlockedAllergen = recipe.allergens.some((allergen) =>
-          selectedAllergies.includes(allergen as AllergenId)
-        );
-        const meetsAge = ageMonths >= recipe.min_months;
-
-        return {
-          recipe,
-          matchCount: matching.length,
-          missingIngredients: missing.map((item) => item.raw),
-          hasBlockedAllergen,
-          meetsAge,
-        };
-      })
-      .filter((entry) => entry.meetsAge && !entry.hasBlockedAllergen && entry.matchCount > 0)
-      .sort((a, b) => {
-        if (b.matchCount === a.matchCount) {
-          return a.recipe.min_months - b.recipe.min_months;
-        }
-        return b.matchCount - a.matchCount;
-      })
-      .slice(0, 6)
-      .map(({ recipe, matchCount, missingIngredients }) => ({
-        recipe,
-        matchCount,
-        missingIngredients,
-      }));
-
-    setRecipeMatches(matches);
-    setHasGenerated(true);
   };
 
   const addIngredientToForm = () => {
@@ -782,8 +393,6 @@ const RecipeGeneratorScreen = () => {
         await loadRecipes();
       }
 
-      setHasGenerated(false);
-      setRecipeMatches([]);
       resetCreateForm();
       setShowCreateModal(false);
       Alert.alert('Erfolg', 'Dein Rezept wurde gespeichert.');
@@ -830,8 +439,6 @@ const RecipeGeneratorScreen = () => {
       }
 
       await loadRecipes();
-      setHasGenerated(false);
-      setRecipeMatches([]);
 
       Alert.alert(
         'Rezepte importiert',
@@ -856,7 +463,7 @@ const RecipeGeneratorScreen = () => {
           <View style={styles.overlayContainer}>
             <Header
               title='BLW-Rezepte'
-              subtitle='Aus euren Vorräten blitzschnell Ideen zaubern'
+              subtitle='Filter nach Alter & Allergien'
               showBackButton
               onBackPress={() => router.back()}
             />
@@ -890,9 +497,9 @@ const RecipeGeneratorScreen = () => {
                   <IconSymbol name='checklist' size={26} color={PRIMARY} />
                 </View>
                 <View style={styles.heroTextWrap}>
-                  <ThemedText style={styles.heroTitle}>Dein Vorrats-Assistent</ThemedText>
+                  <ThemedText style={styles.heroTitle}>Dein BLW-Filter</ThemedText>
                   <ThemedText style={styles.heroSubtitle}>
-                    Wähle Zutaten, setze Allergien, und entdecke passende BLW-Rezepte.
+                    Stell Alter und Allergien ein – wir zeigen passende Rezepte.
                   </ThemedText>
                 </View>
               </View>
@@ -901,9 +508,9 @@ const RecipeGeneratorScreen = () => {
             {/* Action Card - Eigenes Rezept */}
             <LiquidGlassCard
               style={styles.card}
-              intensity={24}
-              overlayColor='rgba(255,255,255,0.18)'
-              borderColor={GLASS_BORDER}
+              intensity={28}
+              overlayColor='rgba(94,61,179,0.16)'
+              borderColor='rgba(94,61,179,0.42)'
               onPress={() => {
                 resetCreateForm();
                 setShowCreateModal(true);
@@ -920,7 +527,9 @@ const RecipeGeneratorScreen = () => {
                     Teile eure Lieblingsgerichte mit allen Nutzer*innen.
                   </ThemedText>
                 </View>
-                <IconSymbol name='chevron.right' size={20} color={PRIMARY} />
+                <View style={styles.actionChevron}>
+                  <IconSymbol name='chevron.right' size={20} color={PRIMARY} />
+                </View>
               </View>
             </LiquidGlassCard>
 
@@ -1024,157 +633,6 @@ const RecipeGeneratorScreen = () => {
               </View>
             </LiquidGlassCard>
 
-            {/* Section Intro */}
-            <View style={styles.sectionIntro}>
-              <IconSymbol name='checklist' size={20} color={PRIMARY} />
-              <ThemedText style={styles.sectionIntroText}>
-                Hake eure verfügbaren Zutaten ab:
-              </ThemedText>
-            </View>
-
-            {/* Ingredients Groups */}
-            {INGREDIENT_GROUPS.map((group) => (
-              <LiquidGlassCard
-                key={group.key}
-                style={styles.card}
-                intensity={24}
-                overlayColor={GLASS_OVERLAY}
-                borderColor={GLASS_BORDER}
-              >
-                <ThemedText style={styles.ingredientsTitle}>{group.label}</ThemedText>
-                <View style={styles.ingredientsGrid}>
-                  {chunkItems(group.items, INGREDIENT_COLUMNS).map((row, rowIndex, rows) => (
-                    <View
-                      key={`${group.key}-row-${rowIndex}`}
-                      style={[
-                        styles.gridRow,
-                        rowIndex === rows.length - 1 && styles.gridRowLast,
-                      ]}
-                    >
-                      {row.map((ingredient, colIndex) => {
-                        if (!ingredient) {
-                          return (
-                            <View
-                              key={`${group.key}-placeholder-${rowIndex}-${colIndex}`}
-                              style={[
-                                styles.gridItem,
-                                colIndex === 0 && styles.gridItemLeft,
-                              ]}
-                            />
-                          );
-                        }
-                        const ingredientId = slugify(ingredient);
-                        const isSelected = selectedIngredientSet.has(ingredientId);
-                        return (
-                          <View
-                            key={ingredient}
-                            style={[
-                              styles.gridItem,
-                              colIndex === 0 && styles.gridItemLeft,
-                            ]}
-                          >
-                            <TouchableOpacity
-                              style={[
-                                styles.ingredientChip,
-                                isSelected && styles.ingredientChipSelected,
-                              ]}
-                              onPress={() => toggleIngredient(ingredientId)}
-                              activeOpacity={0.85}
-                            >
-                              <ThemedText
-                                style={[
-                                  styles.ingredientLabel,
-                                  isSelected && styles.ingredientLabelSelected,
-                                ]}
-                              >
-                                {ingredient}
-                              </ThemedText>
-                            </TouchableOpacity>
-                          </View>
-                        );
-                      })}
-                    </View>
-                  ))}
-                </View>
-              </LiquidGlassCard>
-            ))}
-
-            {/* Extra Ingredients */}
-            {extraIngredients.length > 0 && (
-              <LiquidGlassCard
-                style={styles.card}
-                intensity={24}
-                overlayColor='rgba(255,255,255,0.18)'
-                borderColor={GLASS_BORDER}
-              >
-                <ThemedText style={styles.ingredientsTitle}>Weitere Zutaten aus Rezepten</ThemedText>
-                <View style={styles.ingredientsGrid}>
-                  {chunkItems(extraIngredients, INGREDIENT_COLUMNS).map((row, rowIndex, rows) => (
-                    <View
-                      key={`extra-row-${rowIndex}`}
-                      style={[
-                        styles.gridRow,
-                        rowIndex === rows.length - 1 && styles.gridRowLast,
-                      ]}
-                    >
-                      {row.map((item, colIndex) => {
-                        if (!item) {
-                          return (
-                            <View
-                              key={`extra-placeholder-${rowIndex}-${colIndex}`}
-                              style={[
-                                styles.gridItem,
-                                colIndex === 0 && styles.gridItemLeft,
-                              ]}
-                            />
-                          );
-                        }
-                        const isSelected = selectedIngredientSet.has(item.id);
-                        return (
-                          <View
-                            key={item.id}
-                            style={[
-                              styles.gridItem,
-                              colIndex === 0 && styles.gridItemLeft,
-                            ]}
-                          >
-                            <CompactIngredientChip
-                              item={item}
-                              selected={isSelected}
-                              onPress={() => toggleIngredient(item.id)}
-                            />
-                          </View>
-                        );
-                      })}
-                    </View>
-                  ))}
-                </View>
-              </LiquidGlassCard>
-            )}
-
-            {/* Generate Button - REFERENZ-BREITE */}
-            <LiquidGlassCard
-              style={[
-                styles.card,
-                availableIngredientIds.length === 0 && styles.generateButtonDisabled,
-              ]}
-              intensity={28}
-              overlayColor='rgba(142,78,198,0.36)'
-              borderColor='rgba(255,255,255,0.4)'
-              onPress={computeMatches}
-              activeOpacity={0.85}
-            >
-              <View style={styles.generateButtonInner}>
-                <IconSymbol name='star.fill' size={22} color='#FFFFFF' />
-                <ThemedText style={styles.generateLabel}>Rezepte generieren</ThemedText>
-                <View style={styles.generateBadge}>
-                  <ThemedText style={styles.generateBadgeText}>
-                    {availableIngredientIds.length}
-                  </ThemedText>
-                </View>
-              </View>
-            </LiquidGlassCard>
-
             {/* Loading State */}
             {isLoading ? (
               <View style={styles.loadingWrapper}>
@@ -1183,82 +641,6 @@ const RecipeGeneratorScreen = () => {
               </View>
             ) : (
               <>
-                {/* Generated Results */}
-                {hasGenerated && (
-                  <View style={styles.resultsWrapper}>
-                    <ThemedText style={styles.resultsTitle}>Eure Top-Treffer</ThemedText>
-                    {recipeMatches.length === 0 ? (
-                      <LiquidGlassCard
-                        style={styles.card}
-                        intensity={26}
-                        overlayColor='rgba(255,255,255,0.26)'
-                        borderColor='rgba(255,255,255,0.3)'
-                      >
-                        <View style={styles.emptyStateBody}>
-                          <IconSymbol name='info.circle.fill' size={24} color={PRIMARY} />
-                          <ThemedText style={styles.emptyStateTitle}>
-                            Noch keine Treffer
-                          </ThemedText>
-                          <ThemedText style={styles.emptyStateText}>
-                            Probiere mehr Zutaten zu markieren oder passe das Alter an.
-                          </ThemedText>
-                        </View>
-                      </LiquidGlassCard>
-                    ) : (
-                      recipeMatches.map((match) => (
-                        <LiquidGlassCard
-                          key={match.recipe.id}
-                          style={[styles.card, styles.recipeCard]}
-                          intensity={26}
-                          overlayColor='rgba(255,255,255,0.24)'
-                          borderColor='rgba(255,255,255,0.35)'
-                          onPress={() => setSelectedRecipe(match.recipe)}
-                          activeOpacity={0.88}
-                        >
-                          <View style={styles.recipeHeader}>
-                            <ThemedText style={styles.recipeTitle}>{match.recipe.title}</ThemedText>
-                            <View style={styles.ageTag}>
-                              <IconSymbol name='clock' size={16} color='#FFFFFF' />
-                              <ThemedText style={styles.ageTagText}>
-                                ab {match.recipe.min_months} M
-                              </ThemedText>
-                            </View>
-                          </View>
-                          <ThemedText style={styles.recipeDescription}>
-                            {match.recipe.description ?? 'Perfekt passend zu euren Zutaten.'}
-                          </ThemedText>
-                          <View style={styles.recipeStatsRow}>
-                            <View style={styles.statPill}>
-                              <IconSymbol name='checklist' size={16} color={PRIMARY} />
-                              <ThemedText style={styles.statText}>
-                                {match.matchCount} / {match.recipe.ingredients.length} Zutaten
-                              </ThemedText>
-                            </View>
-                            {match.missingIngredients.length === 0 ? (
-                              <View style={[styles.statPill, styles.readyPill]}>
-                                <ThemedText style={styles.readyText}>Alles im Haus 🎉</ThemedText>
-                              </View>
-                            ) : (
-                              <View style={styles.missingList}>
-                                <ThemedText style={styles.missingLabel}>Noch besorgen:</ThemedText>
-                                <ThemedText style={styles.missingItems}>
-                                  {match.missingIngredients.join(', ')}
-                                </ThemedText>
-                              </View>
-                            )}
-                          </View>
-                          {match.recipe.tip && (
-                            <View style={styles.tipBox}>
-                              <IconSymbol name='info.circle.fill' size={16} color={PRIMARY} />
-                              <ThemedText style={styles.tipText}>{match.recipe.tip}</ThemedText>
-                            </View>
-                          )}
-                        </LiquidGlassCard>
-                      ))
-                    )}
-                  </View>
-                )}
-
                 {/* All Recipes Catalog */}
                 <View style={styles.catalogHeader}>
                   <ThemedText style={styles.catalogTitle}>Alle Rezepte</ThemedText>
@@ -1409,7 +791,7 @@ const RecipeGeneratorScreen = () => {
             )}
 
             {/* Allergie Notice */}
-            {selectedAllergies.length > 0 && (
+            {blockedRecipeCount > 0 && (
               <LiquidGlassCard
                 style={styles.card}
                 intensity={22}
@@ -1418,7 +800,7 @@ const RecipeGeneratorScreen = () => {
               >
                 <ThemedText style={styles.noticeTitle}>Allergie-Filter aktiv</ThemedText>
                 <ThemedText style={styles.noticeText}>
-                  Wir haben {disabledIngredientsCount} Rezepte ausgeblendet.
+                  Wir haben {blockedRecipeCount} Rezepte ausgeblendet.
                 </ThemedText>
               </LiquidGlassCard>
             )}
@@ -1807,53 +1189,6 @@ const RecipeGeneratorScreen = () => {
 
 export default RecipeGeneratorScreen;
 
-type CompactIngredientChipProps = {
-  item: CanonExtra;
-  selected: boolean;
-  onPress: () => void;
-};
-
-const CompactIngredientChip = ({ item, selected, onPress }: CompactIngredientChipProps) => {
-  const quantityBadge =
-    item.quantity && item.unit
-      ? `${item.quantity.replace('.', ',')} ${item.unit}`
-      : item.quantity
-        ? item.quantity.replace('.', ',')
-        : undefined;
-
-  return (
-    <TouchableOpacity
-      style={[styles.compactChip, selected && styles.compactChipSelected]}
-      onPress={onPress}
-      activeOpacity={0.85}
-    >
-      <ThemedText
-        style={[styles.compactChipLabel, selected && styles.compactChipLabelSelected]}
-        numberOfLines={1}
-      >
-        {item.label}
-      </ThemedText>
-      <View style={styles.compactChipBadges}>
-        {quantityBadge && (
-          <View style={styles.badge}>
-            <ThemedText style={styles.badgeText}>{quantityBadge}</ThemedText>
-          </View>
-        )}
-        {item.note && (
-          <View style={[styles.badge, styles.badgeSoft]}>
-            <ThemedText style={styles.badgeText}>{item.note}</ThemedText>
-          </View>
-        )}
-        {item.count > 1 && (
-          <View style={[styles.badge, styles.badgeSoft]}>
-            <ThemedText style={styles.badgeText}>×{item.count}</ThemedText>
-          </View>
-        )}
-      </View>
-    </TouchableOpacity>
-  );
-};
-
 // @ts-nocheck - StyleSheet.create type inference issues with strict mode
 const styles = StyleSheet.create({
   background: {
@@ -1977,34 +1312,37 @@ const styles = StyleSheet.create({
   },
   // Action Section
   actionContent: {
-    flexDirection: 'column',
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 16,
   },
   actionIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(142,78,198,0.12)',
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: 'rgba(94,61,179,0.18)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   actionTextWrap: {
-    alignItems: 'center',
-    gap: 8,
+    flex: 1,
+    gap: 6,
   },
   actionTitle: {
-    fontSize: 18, // Größere Schrift für bessere Sichtbarkeit
+    fontSize: 18,
     fontWeight: '700',
     color: '#7D5A50',
-    textAlign: 'center',
     lineHeight: 24,
   },
   actionHint: {
-    fontSize: 15, // Größere Schrift für bessere Lesbarkeit
+    fontSize: 15,
     color: '#7D5A50',
-    lineHeight: 22,
-    textAlign: 'center',
+    lineHeight: 20,
+  },
+  actionChevron: {
+    padding: 6,
+    borderRadius: 18,
+    backgroundColor: 'rgba(94,61,179,0.12)',
   },
   sectionHeader: {
     flexDirection: 'column',
@@ -2107,90 +1445,6 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     lineHeight: 18,
   },
-  sectionIntro: {
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: SECTION_GAP_TOP,
-    marginBottom: 16,
-  },
-  sectionIntroText: {
-    fontSize: 18, // Größere Schrift für bessere Sichtbarkeit
-    fontWeight: '700',
-    color: '#7D5A50',
-    textAlign: 'center',
-    lineHeight: 24,
-  },
-  ingredientsTitle: {
-    fontSize: 18, // Größere Schrift für bessere Sichtbarkeit
-    fontWeight: '700',
-    color: '#7D5A50',
-    marginBottom: 16,
-    textAlign: 'center',
-    lineHeight: 24,
-  },
-  ingredientsGrid: {
-    paddingHorizontal: GRID_GAP,
-    paddingTop: GRID_GAP,
-    paddingBottom: GRID_GAP,
-  },
-  ingredientChip: {
-    width: '100%',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  ingredientChipSelected: {
-    backgroundColor: 'rgba(142,78,198,0.28)',
-  },
-  compactChip: {
-    width: '100%',
-    minHeight: 44,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  compactChipSelected: {
-    backgroundColor: 'rgba(142,78,198,0.28)',
-  },
-  compactChipLabel: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#7D5A50',
-    flex: 1,
-  },
-  compactChipLabelSelected: {
-    color: '#FFFFFF',
-  },
-  compactChipBadges: {
-    flexDirection: 'row',
-    gap: 6,
-    marginLeft: 6,
-    flexWrap: 'wrap',
-    justifyContent: 'flex-end',
-  },
-  badge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.28)',
-  },
-  badgeSoft: {
-    backgroundColor: 'rgba(142,78,198,0.16)',
-  },
-  badgeText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#7D5A50',
-  },
   ingredientLabel: {
     fontSize: 15, // Größere Schrift für bessere Lesbarkeit
     fontWeight: '600',
@@ -2199,34 +1453,6 @@ const styles = StyleSheet.create({
   },
   ingredientLabelSelected: {
     color: '#FFFFFF',
-  },
-  generateButtonDisabled: {
-    opacity: 0.65,
-  },
-  generateButtonInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 56,
-    gap: 12,
-  },
-  generateLabel: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 18, // Größere Schrift für bessere Sichtbarkeit
-  },
-  generateBadge: {
-    marginLeft: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-  },
-  generateBadgeText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#FFFFFF',
-    fontVariant: ['tabular-nums'],
   },
   loadingWrapper: {
     marginTop: 40,
@@ -2237,18 +1463,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#7D5A50',
     fontWeight: '500',
-  },
-  resultsWrapper: {
-    marginTop: 24,
-  },
-  resultsTitle: {
-    fontSize: 20, // Größere Schrift für bessere Sichtbarkeit
-    fontWeight: '700',
-    color: '#7D5A50',
-    marginBottom: 16,
-    letterSpacing: -0.2,
-    textAlign: 'center',
-    lineHeight: 26,
   },
   emptyStateBody: {
     alignItems: 'center',
@@ -2309,10 +1523,6 @@ const styles = StyleSheet.create({
     marginBottom: 18, // Mehr Abstand für bessere Trennung
     paddingHorizontal: 8, // Mehr Abstand links/rechts - nichts direkt am Rand
   },
-  recipeStatsRow: {
-    gap: 10, // Mehr Abstand zwischen Stats
-    paddingHorizontal: 4, // Abstand vom Rand
-  },
   statPill: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2327,14 +1537,6 @@ const styles = StyleSheet.create({
     color: '#7D5A50',
     fontWeight: '500',
   },
-  readyPill: {
-    backgroundColor: 'rgba(142,78,198,0.3)',
-  },
-  readyText: {
-    fontSize: 14, // Größere Schrift für bessere Lesbarkeit
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
   ageTag: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2348,39 +1550,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 13, // Größere Schrift für bessere Lesbarkeit
     fontWeight: '600',
-  },
-  missingList: {
-    gap: 4,
-    paddingHorizontal: 4, // Abstand vom Rand
-  },
-  missingLabel: {
-    fontSize: 14, // Größere Schrift für bessere Lesbarkeit
-    fontWeight: '600',
-    color: '#7D5A50',
-    paddingHorizontal: 2, // Abstand vom Rand
-  },
-  missingItems: {
-    fontSize: 14, // Größere Schrift für bessere Lesbarkeit
-    color: '#7D5A50',
-    lineHeight: 20,
-    paddingHorizontal: 2, // Abstand vom Rand
-  },
-  tipBox: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-    marginTop: 16,
-    padding: 20, // Mehr Padding - nichts direkt am Rand
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.26)',
-    marginHorizontal: 4, // Zusätzlicher Abstand vom Container-Rand
-  },
-  tipText: {
-    fontSize: 14, // Größere Schrift für bessere Lesbarkeit
-    color: '#7D5A50',
-    flex: 1,
-    lineHeight: 20,
-    paddingLeft: 4, // Abstand vom Icon
   },
   noticeTitle: {
     fontSize: 16,
