@@ -16,6 +16,7 @@ import {
   View,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { BlurView } from 'expo-blur';
 import { Stack, useRouter } from 'expo-router';
 
 import { ThemedBackground } from '@/components/ThemedBackground';
@@ -1150,74 +1151,153 @@ const RecipeGeneratorScreen = () => {
       </ThemedBackground>
 
       {/* Recipe Detail Modal */}
-      <Modal
-        visible={!!selectedRecipe}
-        transparent
-        animationType='fade'
-        onRequestClose={() => setSelectedRecipe(null)}
-      >
-        <View style={styles.modalBackdrop}>
-          <LiquidGlassCard
-            style={styles.modalCard}
-            intensity={30}
-            overlayColor='rgba(255,255,255,0.4)'
-            borderColor='rgba(255,255,255,0.45)'
-          >
-            <ScrollView contentContainerStyle={styles.modalContent}>
-              <View style={styles.modalHeader}>
-                <ThemedText style={styles.modalTitle}>{selectedRecipe?.title}</ThemedText>
+      {selectedRecipe && (
+        <Modal
+          visible={!!selectedRecipe}
+          transparent
+          animationType='slide'
+          onRequestClose={() => setSelectedRecipe(null)}
+        >
+          <View style={styles.recipeModalOverlay}>
+            <TouchableOpacity
+              style={StyleSheet.absoluteFill}
+              onPress={() => setSelectedRecipe(null)}
+              activeOpacity={1}
+            />
+            <BlurView
+              style={styles.recipeModalCard}
+              intensity={90}
+              tint={colorScheme === 'dark' ? 'dark' : 'extraLight'}
+            >
+              <View style={styles.recipeModalHandle} />
+              <View style={styles.recipeModalHeaderRow}>
                 <TouchableOpacity
+                  style={styles.recipeModalHeaderButton}
                   onPress={() => setSelectedRecipe(null)}
-                  style={styles.modalClose}
                   activeOpacity={0.85}
                 >
-                  <IconSymbol name='xmark.circle.fill' size={26} color={PRIMARY} />
+                  <IconSymbol name='xmark' size={18} color='#7D5A50' />
                 </TouchableOpacity>
+                <View style={styles.recipeModalHeaderCenter}>
+                  <ThemedText style={styles.recipeModalHeaderTitle}>Rezept ansehen</ThemedText>
+                  <ThemedText style={styles.recipeModalHeaderSubtitle}>
+                    Ab {selectedRecipe.min_months} Monaten
+                  </ThemedText>
+                </View>
+                <View style={styles.recipeModalHeaderSpacer} />
               </View>
-              {selectedRecipe?.image_url && (
-                <Image source={{ uri: selectedRecipe.image_url }} style={styles.modalImage} />
-              )}
-              <ThemedText style={styles.modalSubtitle}>
-                Ab {selectedRecipe?.min_months} Monaten geeignet
-              </ThemedText>
-              {selectedRecipe?.description && (
-                <ThemedText style={styles.modalDescription}>{selectedRecipe.description}</ThemedText>
-              )}
-              <View style={styles.modalSection}>
-                <ThemedText style={styles.modalSectionTitle}>Zutaten</ThemedText>
-                {selectedRecipe?.ingredients.map((ingredient) => (
-                  <View key={ingredient} style={styles.modalIngredientRow}>
-                    <IconSymbol name='drop.fill' size={14} color={PRIMARY} />
-                    <ThemedText style={styles.modalIngredientText}>{ingredient}</ThemedText>
+              <ScrollView
+                contentContainerStyle={styles.recipeModalScroll}
+                showsVerticalScrollIndicator={false}
+              >
+                <View style={styles.recipeHero}>
+                  {selectedRecipe.image_url ? (
+                    <Image
+                      source={{ uri: selectedRecipe.image_url }}
+                      style={styles.recipeHeroImage}
+                      resizeMode='cover'
+                    />
+                  ) : (
+                    <View style={[styles.recipeHeroImage, styles.recipeHeroPlaceholder]}>
+                      <IconSymbol name='fork.knife' size={28} color='#FFFFFF' />
+                    </View>
+                  )}
+                  <View style={styles.recipeHeroOverlay} />
+                  <View style={styles.recipeHeroTextWrap}>
+                    <ThemedText style={styles.recipeHeroTitle} numberOfLines={2}>
+                      {selectedRecipe.title}
+                    </ThemedText>
+                    <View style={styles.recipeHeroBadgeRow}>
+                      <View style={styles.recipeHeroBadge}>
+                        <IconSymbol name='clock' size={14} color='#FFFFFF' />
+                        <ThemedText style={styles.recipeHeroBadgeText}>
+                          ab {selectedRecipe.min_months} M
+                        </ThemedText>
+                      </View>
+                      {selectedRecipe.allergens.length > 0 && (
+                        <View style={[styles.recipeHeroBadge, styles.recipeHeroWarningBadge]}>
+                          <IconSymbol name='exclamationmark.triangle.fill' size={14} color='#FFFFFF' />
+                          <ThemedText style={styles.recipeHeroBadgeText}>
+                            {selectedRecipe.allergens.join(', ')}
+                          </ThemedText>
+                        </View>
+                      )}
+                    </View>
                   </View>
-                ))}
-              </View>
-              {selectedRecipe?.instructions && (
-                <View style={styles.modalSection}>
-                  <ThemedText style={styles.modalSectionTitle}>Anleitung</ThemedText>
-                  <ThemedText style={styles.modalInstructions}>
-                    {selectedRecipe.instructions}
+                </View>
+
+                {selectedRecipe.description ? (
+                  <ThemedText style={styles.recipeModalDescription}>
+                    {selectedRecipe.description}
                   </ThemedText>
+                ) : null}
+
+                <View style={styles.recipeMetaRow}>
+                  <View style={styles.recipeMetaPill}>
+                    <IconSymbol name='checklist' size={16} color={PRIMARY} />
+                    <ThemedText style={styles.recipeMetaText}>
+                      {selectedRecipe.ingredients.length} Zutaten
+                    </ThemedText>
+                  </View>
+                  <View
+                    style={[
+                      styles.recipeMetaPill,
+                      selectedRecipe.allergens.length > 0 && styles.recipeAllergenPill,
+                    ]}
+                  >
+                    <IconSymbol
+                      name={
+                        selectedRecipe.allergens.length > 0
+                          ? 'exclamationmark.triangle.fill'
+                          : 'sparkles'
+                      }
+                      size={16}
+                      color={selectedRecipe.allergens.length > 0 ? '#FFFFFF' : PRIMARY}
+                    />
+                    <ThemedText
+                      style={
+                        selectedRecipe.allergens.length > 0
+                          ? styles.recipeAllergenText
+                          : styles.recipeMetaText
+                      }
+                    >
+                      {selectedRecipe.allergens.length > 0
+                        ? selectedRecipe.allergens.join(', ')
+                        : 'Allergiefreundlich'}
+                    </ThemedText>
+                  </View>
                 </View>
-              )}
-              {selectedRecipe?.tip && (
-                <View style={styles.modalTipBox}>
-                  <IconSymbol name='lightbulb.fill' size={18} color={PRIMARY} />
-                  <ThemedText style={styles.modalTipText}>{selectedRecipe.tip}</ThemedText>
+
+                <View style={styles.recipeSectionCard}>
+                  <ThemedText style={styles.recipeSectionTitle}>Zutaten</ThemedText>
+                  {selectedRecipe.ingredients.map((ingredient) => (
+                    <View key={ingredient} style={styles.recipeIngredientRow}>
+                      <View style={styles.recipeIngredientDot} />
+                      <ThemedText style={styles.recipeIngredientText}>{ingredient}</ThemedText>
+                    </View>
+                  ))}
                 </View>
-              )}
-              {selectedRecipe?.allergens.length ? (
-                <View style={styles.modalSection}>
-                  <ThemedText style={styles.modalSectionTitle}>Enthaltene Allergene</ThemedText>
-                  <ThemedText style={styles.modalAllergenText}>
-                    {selectedRecipe.allergens.join(', ')}
-                  </ThemedText>
-                </View>
-              ) : null}
-            </ScrollView>
-          </LiquidGlassCard>
-        </View>
-      </Modal>
+
+                {selectedRecipe.instructions ? (
+                  <View style={styles.recipeSectionCard}>
+                    <ThemedText style={styles.recipeSectionTitle}>Anleitung</ThemedText>
+                    <ThemedText style={styles.recipeInstructions}>
+                      {selectedRecipe.instructions}
+                    </ThemedText>
+                  </View>
+                ) : null}
+
+                {selectedRecipe.tip ? (
+                  <View style={[styles.recipeSectionCard, styles.recipeTipCard]}>
+                    <IconSymbol name='lightbulb.fill' size={18} color={PRIMARY} />
+                    <ThemedText style={styles.recipeTipText}>{selectedRecipe.tip}</ThemedText>
+                  </View>
+                ) : null}
+              </ScrollView>
+            </BlurView>
+          </View>
+        </Modal>
+      )}
 
       {/* Create Recipe Modal */}
       <Modal
@@ -1944,6 +2024,204 @@ const styles = StyleSheet.create({
   },
   disabledAgeTag: {
     backgroundColor: 'rgba(142,78,198,0.35)',
+  },
+  recipeModalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  recipeModalCard: {
+    width: '100%',
+    maxHeight: '92%',
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    overflow: 'hidden',
+    paddingTop: 16,
+    paddingHorizontal: 20,
+    paddingBottom: 32,
+  },
+  recipeModalHandle: {
+    width: 56,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255,255,255,0.8)',
+    alignSelf: 'center',
+    marginBottom: 16,
+  },
+  recipeModalHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  recipeModalHeaderButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.85)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  recipeModalHeaderSpacer: {
+    width: 44,
+    height: 44,
+  },
+  recipeModalHeaderCenter: {
+    flex: 1,
+    alignItems: 'center',
+    paddingHorizontal: 12,
+  },
+  recipeModalHeaderTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#7D5A50',
+  },
+  recipeModalHeaderSubtitle: {
+    fontSize: 13,
+    color: '#A8978E',
+    marginTop: 4,
+  },
+  recipeModalScroll: {
+    paddingBottom: 80,
+  },
+  recipeHero: {
+    borderRadius: 24,
+    overflow: 'hidden',
+    marginBottom: 20,
+  },
+  recipeHeroImage: {
+    width: '100%',
+    height: 220,
+  },
+  recipeHeroPlaceholder: {
+    backgroundColor: 'rgba(142,78,198,0.32)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  recipeHeroOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.25)',
+  },
+  recipeHeroTextWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+    gap: 10,
+  },
+  recipeHeroTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    lineHeight: 28,
+  },
+  recipeHeroBadgeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  recipeHeroBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  recipeHeroWarningBadge: {
+    backgroundColor: 'rgba(255,87,87,0.65)',
+  },
+  recipeHeroBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  recipeModalDescription: {
+    fontSize: 15,
+    color: '#7D5A50',
+    lineHeight: 22,
+    marginBottom: 20,
+  },
+  recipeMetaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 20,
+  },
+  recipeMetaPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+  },
+  recipeMetaText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#7D5A50',
+  },
+  recipeAllergenPill: {
+    backgroundColor: 'rgba(142,78,198,0.35)',
+  },
+  recipeAllergenText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  recipeSectionCard: {
+    borderRadius: 20,
+    padding: 20,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    marginBottom: 16,
+  },
+  recipeSectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#7D5A50',
+    marginBottom: 12,
+  },
+  recipeIngredientRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 10,
+  },
+  recipeIngredientDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: PRIMARY,
+  },
+  recipeIngredientText: {
+    fontSize: 14,
+    color: '#7D5A50',
+    flex: 1,
+  },
+  recipeInstructions: {
+    fontSize: 14,
+    color: '#7D5A50',
+    lineHeight: 22,
+  },
+  recipeTipCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    backgroundColor: 'rgba(142,78,198,0.12)',
+  },
+  recipeTipText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#7D5A50',
+    lineHeight: 20,
   },
   modalBackdrop: {
     flex: 1,
