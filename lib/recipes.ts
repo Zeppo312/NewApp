@@ -186,3 +186,200 @@ export const createRecipe = async (
 export const refreshRecipes = async () => {
   return fetchRecipes();
 };
+
+export const fetchMyRecipes = async (): Promise<{
+  data: RecipeRecord[];
+  error: PostgrestError | null;
+}> => {
+  try {
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    if (authError) {
+      return { data: [], error: authError };
+    }
+    const userId = authData.user?.id;
+    if (!userId) {
+      return { data: [], error: new Error('Benutzer ist nicht angemeldet.') as any };
+    }
+
+    const { data, error } = await supabase
+      .from('baby_recipes')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    return {
+      data: data ?? [],
+      error,
+    };
+  } catch (error) {
+    console.error('Failed to fetch my recipes:', error);
+    return { data: [], error: error as PostgrestError };
+  }
+};
+
+export type RecipeUpdate = {
+  title?: string;
+  description?: string | null;
+  min_months?: number;
+  ingredients?: string[];
+  allergens?: string[];
+  instructions?: string;
+  tip?: string | null;
+};
+
+type RecipeUpdateResult = {
+  data: RecipeRecord | null;
+  error: PostgrestError | Error | null;
+};
+
+export const updateRecipe = async (
+  recipeId: string,
+  payload: RecipeUpdate,
+  imageBase64?: string
+): Promise<RecipeUpdateResult> => {
+  try {
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    if (authError) {
+      return { data: null, error: authError };
+    }
+    const userId = authData.user?.id;
+    if (!userId) {
+      return { data: null, error: new Error('Benutzer ist nicht angemeldet.') };
+    }
+
+    // Prüfe, ob das Rezept dem Benutzer gehört
+    const { data: existingRecipe, error: fetchError } = await supabase
+      .from('baby_recipes')
+      .select('user_id')
+      .eq('id', recipeId)
+      .single();
+
+    if (fetchError || !existingRecipe) {
+      return { data: null, error: new Error('Rezept nicht gefunden.') };
+    }
+
+    if (existingRecipe.user_id !== userId) {
+      return { data: null, error: new Error('Du hast keine Berechtigung, dieses Rezept zu bearbeiten.') };
+    }
+
+    const updatePayload: any = {};
+
+    if (payload.title !== undefined) {
+      updatePayload.title = payload.title.trim();
+    }
+    if (payload.description !== undefined) {
+      updatePayload.description = payload.description?.trim() ?? null;
+    }
+    if (payload.min_months !== undefined) {
+      updatePayload.min_months = payload.min_months;
+    }
+    if (payload.ingredients !== undefined) {
+      const normalizedIngredients = sanitizeIngredients(payload.ingredients);
+      if (normalizedIngredients.length === 0) {
+        return {
+          data: null,
+          error: new Error('Bitte mindestens eine Zutat hinzufügen.'),
+        };
+      }
+      updatePayload.ingredients = normalizedIngredients;
+    }
+    if (payload.allergens !== undefined) {
+      updatePayload.allergens = sanitizeAllergens(payload.allergens);
+    }
+    if (payload.instructions !== undefined) {
+      updatePayload.instructions = payload.instructions.trim();
+    }
+    if (payload.tip !== undefined) {
+      updatePayload.tip = payload.tip?.trim() ?? null;
+    }
+
+    let imageUrl: string | null | undefined = undefined;
+    if (imageBase64 !== undefined) {
+      if (imageBase64 && imageBase64.length > 0) {
+        const { publicUrl, error: uploadError } = await uploadRecipeImage(
+          imageBase64,
+          userId
+        );
+        if (uploadError) {
+          return {
+            data: null,
+            error: uploadError,
+          };
+        }
+        imageUrl = publicUrl;
+      } else {
+        imageUrl = null; // Explizit auf null setzen, um Bild zu entfernen
+      }
+      updatePayload.image_url = imageUrl;
+    }
+
+    const { data, error } = await supabase
+      .from('baby_recipes')
+      .update(updatePayload)
+      .eq('id', recipeId)
+      .eq('user_id', userId)
+      .select()
+      .single();
+
+    return { data, error };
+  } catch (error) {
+    console.error('Failed to update recipe:', error);
+    return { data: null, error: error as Error };
+  }
+};
+
+type RecipeDeleteResult = {
+  error: PostgrestError | Error | null;
+};
+
+export const deleteRecipe = async (recipeId: string): Promise<RecipeDeleteResult> => {
+  try {
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    if (authError) {
+      return { error: authError };
+    }
+    const userId = authData.user?.id;
+    if (!userId) {
+      return { error: new Error('Benutzer ist nicht angemeldet.') };
+    }
+
+    // Prüfe, ob das Rezept dem Benutzer gehört
+    const { data: existingRecipe, error: fetchError } = await supabase
+      .from('baby_recipes')
+      .select('user_id, image_url')
+      .eq('id', recipeId)
+      .single();
+
+    if (fetchError || !existingRecipe) {
+      return { error: new Error('Rezept nicht gefunden.') };
+    }
+
+    if (existingRecipe.user_id !== userId) {
+      return { error: new Error('Du hast keine Berechtigung, dieses Rezept zu löschen.') };
+    }
+
+    // Lösche das Bild aus dem Storage, falls vorhanden
+    if (existingRecipe.image_url) {
+      try {
+        const urlParts = existingRecipe.image_url.split('/');
+        const filename = urlParts[urlParts.length - 1];
+        const path = `recipes/${userId}/${filename}`;
+        await supabase.storage.from(RECIPE_BUCKET).remove([path]);
+      } catch (storageError) {
+        console.warn('Failed to delete recipe image from storage:', storageError);
+        // Weiter mit dem Löschen des Rezepts, auch wenn das Bild nicht gelöscht werden konnte
+      }
+    }
+
+    const { error } = await supabase
+      .from('baby_recipes')
+      .delete()
+      .eq('id', recipeId)
+      .eq('user_id', userId);
+
+    return { error };
+  } catch (error) {
+    console.error('Failed to delete recipe:', error);
+    return { error: error as Error };
+  }
+};

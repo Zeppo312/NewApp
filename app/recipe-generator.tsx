@@ -595,12 +595,25 @@ const RecipeGeneratorScreen = () => {
       <ThemedBackground style={styles.background}>
         <SafeAreaView style={styles.safeArea}>
           <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
-          <Header
-            title='BLW-Rezepte'
-            subtitle='Aus euren Vorräten blitzschnell Ideen zaubern'
-            showBackButton
-            onBackPress={() => router.back()}
-          />
+          <View style={styles.overlayContainer}>
+            <Header
+              title='BLW-Rezepte'
+              subtitle='Aus euren Vorräten blitzschnell Ideen zaubern'
+              showBackButton
+              onBackPress={() => router.back()}
+            />
+            
+            <TouchableOpacity 
+              style={styles.myRecipesButton}
+              onPress={() => router.push('/my-recipes')}
+            >
+              <IconSymbol 
+                name='book.fill' 
+                size={24} 
+                color={PRIMARY} 
+              />
+            </TouchableOpacity>
+          </View>
           
           <ScrollView 
             contentContainerStyle={styles.scrollContent} 
@@ -1557,6 +1570,10 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: SCREEN_PADDING, // Minimales Padding für maximale Breite
   },
+  overlayContainer: {
+    width: '100%',
+    position: 'relative',
+  },
   scrollContent: {
     paddingBottom: 120,
     alignItems: 'center',
@@ -2461,5 +2478,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#FFFFFF',
+  },
+  myRecipesButton: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    padding: 8,
+    zIndex: 10,
   },
 });

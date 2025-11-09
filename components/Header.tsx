@@ -14,6 +14,7 @@ export interface HeaderProps {
   subtitle?: string;
   showBackButton?: boolean;
   onBackPress?: () => void;
+  leftContent?: React.ReactNode;
   rightContent?: React.ReactNode;
 }
 
@@ -22,6 +23,7 @@ const Header: React.FC<HeaderProps> = ({
   subtitle, 
   showBackButton = false, 
   onBackPress,
+  leftContent,
   rightContent
 }) => {
   const colorScheme = useColorScheme() ?? 'light';
@@ -42,15 +44,18 @@ const Header: React.FC<HeaderProps> = ({
     <View style={styles.header}>
       {/* Linker Bereich - absolut positioniert */}
       <View style={[styles.sideContainer, styles.left]}>
-        {showBackButton && (
-          <TouchableOpacity 
-            style={styles.backButton}
-            onPress={handleBackPress}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <IconSymbol name="chevron.left" size={20} color={theme.text} />
-          </TouchableOpacity>
-        )}
+        <View style={styles.leftContentWrapper}>
+          {showBackButton && (
+            <TouchableOpacity 
+              style={styles.backButton}
+              onPress={handleBackPress}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <IconSymbol name="chevron.left" size={20} color={theme.text} />
+            </TouchableOpacity>
+          )}
+          {leftContent}
+        </View>
       </View>
       
       {/* Mittlerer Bereich - immer bildschirmmittig */}
@@ -89,8 +94,13 @@ const styles = StyleSheet.create({
   },
   left: {
     left: 16,
-    width: 44,
+    minWidth: 44,
     height: 44, // gutes Tap-Target
+  },
+  leftContentWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   right: {
     right: 16,
