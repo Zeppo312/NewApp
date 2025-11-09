@@ -487,7 +487,7 @@ const RecipeGeneratorScreen = () => {
             <View style={[styles.contentContainer, { width: contentWidth }]}>
               {/* Hero Card */}
               <LiquidGlassCard
-                style={styles.card}
+                style={[styles.card, styles.topCard]}
                 intensity={28}
                 overlayColor='rgba(255,255,255,0.22)'
                 borderColor='rgba(255,255,255,0.35)'
@@ -507,7 +507,7 @@ const RecipeGeneratorScreen = () => {
 
             {/* Action Card - Eigenes Rezept */}
             <LiquidGlassCard
-              style={styles.card}
+              style={[styles.card, styles.topCard]}
               intensity={28}
               overlayColor='rgba(94,61,179,0.16)'
               borderColor='rgba(94,61,179,0.42)'
@@ -535,7 +535,7 @@ const RecipeGeneratorScreen = () => {
 
             {/* Baby-Alter Card */}
             <LiquidGlassCard
-              style={styles.card}
+              style={[styles.card, styles.topCard]}
               intensity={26}
               overlayColor='rgba(255,255,255,0.20)'
               borderColor={GLASS_BORDER}
@@ -571,7 +571,7 @@ const RecipeGeneratorScreen = () => {
 
             {/* Allergien Card */}
             <LiquidGlassCard
-              style={styles.card}
+              style={[styles.card, styles.topCard]}
               intensity={26}
               overlayColor='rgba(255,255,255,0.20)'
               borderColor={GLASS_BORDER}
@@ -1220,6 +1220,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 4,
+  },
+  topCard: {
+    marginBottom: CARD_SPACING * 0.35,
   },
   recipeCard: {
     // Gleiche Breite wie normale Cards - Padding wird durch innere Elemente erreicht
