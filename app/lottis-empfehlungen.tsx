@@ -12,6 +12,7 @@ import {
   Linking,
   Image,
   ActivityIndicator,
+  Clipboard,
 } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedBackground } from '@/components/ThemedBackground';
@@ -59,6 +60,7 @@ export default function LottisEmpfehlungenScreen() {
   const [formDiscountCode, setFormDiscountCode] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -232,6 +234,27 @@ export default function LottisEmpfehlungenScreen() {
     }
   };
 
+  const handleCopyDiscountCode = async (code: string) => {
+    try {
+      await Clipboard.setString(code);
+      setCopiedCode(code);
+      
+      // Feedback anzeigen
+      Alert.alert(
+        '✅ Kopiert!',
+        `Der Rabattcode "${code}" wurde in die Zwischenablage kopiert.`,
+        [{ text: 'OK', style: 'default' }]
+      );
+
+      // Reset nach 3 Sekunden
+      setTimeout(() => {
+        setCopiedCode(null);
+      }, 3000);
+    } catch (error) {
+      Alert.alert('Fehler', 'Code konnte nicht kopiert werden.');
+    }
+  };
+
   const renderRecommendationCard = (item: LottiRecommendation, index: number) => {
     return (
       <SlideInView
@@ -267,18 +290,43 @@ export default function LottisEmpfehlungenScreen() {
 
                 {/* Discount Code */}
                 {item.discount_code && (
-                  <BlurView intensity={20} tint={colorScheme} style={styles.discountCodeContainer}>
-                    <LinearGradient
-                      colors={['rgba(255,255,255,0.25)', 'rgba(255,255,255,0.15)']}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={styles.discountCodeGradient}
-                    >
-                      <IconSymbol name="tag.fill" size={16} color="#8E4EC6" />
-                      <ThemedText style={styles.discountCodeLabel}>Rabattcode:</ThemedText>
-                      <ThemedText style={styles.discountCodeText}>{item.discount_code}</ThemedText>
-                    </LinearGradient>
-                  </BlurView>
+                  <TouchableOpacity 
+                    onPress={() => handleCopyDiscountCode(item.discount_code!)}
+                    activeOpacity={0.7}
+                  >
+                    <BlurView intensity={20} tint={colorScheme} style={styles.discountCodeContainer}>
+                      <LinearGradient
+                        colors={
+                          copiedCode === item.discount_code
+                            ? ['rgba(56,161,105,0.3)', 'rgba(56,161,105,0.2)']
+                            : ['rgba(255,255,255,0.25)', 'rgba(255,255,255,0.15)']
+                        }
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={styles.discountCodeGradient}
+                      >
+                        <IconSymbol 
+                          name={copiedCode === item.discount_code ? "checkmark.circle.fill" : "tag.fill"} 
+                          size={16} 
+                          color={copiedCode === item.discount_code ? "#38A169" : "#8E4EC6"} 
+                        />
+                        <ThemedText style={styles.discountCodeLabel}>
+                          {copiedCode === item.discount_code ? 'Kopiert!' : 'Rabattcode:'}
+                        </ThemedText>
+                        <ThemedText style={[
+                          styles.discountCodeText,
+                          copiedCode === item.discount_code && styles.discountCodeTextCopied
+                        ]}>
+                          {item.discount_code}
+                        </ThemedText>
+                        <IconSymbol 
+                          name="doc.on.doc" 
+                          size={14} 
+                          color={copiedCode === item.discount_code ? "#38A169" : "#8E4EC6"} 
+                        />
+                      </LinearGradient>
+                    </BlurView>
+                  </TouchableOpacity>
                 )}
 
                 {/* Action Buttons */}
@@ -707,6 +755,9 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(0,0,0,0.1)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
+  },
+  discountCodeTextCopied: {
+    color: '#38A169',
   },
   cardActions: {
     flexDirection: 'row',
