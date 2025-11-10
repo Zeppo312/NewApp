@@ -264,112 +264,102 @@ export default function LottisEmpfehlungenScreen() {
         duration={600}
         easing="spring"
       >
-        <BlurView intensity={25} tint={colorScheme} style={styles.cardBlur}>
-          <LinearGradient
-            colors={['rgba(255,255,255,0.2)', 'rgba(255,255,255,0.1)']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.cardGradient}
-          >
-            <View style={styles.card}>
-              {/* Bild */}
-              {item.image_url && (
-                <View style={styles.imageContainer}>
-                  <Image
-                    source={{ uri: item.image_url }}
-                    style={styles.productImage}
-                    resizeMode="cover"
-                  />
+        <View style={styles.cardWrapper}>
+          <BlurView intensity={30} tint="light" style={styles.cardBlur}>
+            <LinearGradient
+              colors={['#f5eee0', '#e8dbf7']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 0, y: 1 }}
+              style={styles.cardGradient}
+            >
+              <View style={styles.card}>
+                {/* Lottis Favorit Badge */}
+                <View style={styles.favoriteBadge}>
+                  <ThemedText style={styles.favoriteBadgeText}>Lottis Favorit 💕</ThemedText>
                 </View>
-              )}
 
-              {/* Content */}
-              <View style={styles.cardContent}>
-                <ThemedText style={styles.cardTitle}>{item.title}</ThemedText>
-                <ThemedText style={styles.cardDescription}>{item.description}</ThemedText>
-
-                {/* Discount Code */}
-                {item.discount_code && (
-                  <TouchableOpacity 
-                    onPress={() => handleCopyDiscountCode(item.discount_code!)}
-                    activeOpacity={0.7}
-                  >
-                    <BlurView intensity={20} tint={colorScheme} style={styles.discountCodeContainer}>
-                      <LinearGradient
-                        colors={
-                          copiedCode === item.discount_code
-                            ? ['rgba(56,161,105,0.3)', 'rgba(56,161,105,0.2)']
-                            : ['rgba(255,255,255,0.25)', 'rgba(255,255,255,0.15)']
-                        }
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                        style={styles.discountCodeGradient}
-                      >
-                        <IconSymbol 
-                          name={copiedCode === item.discount_code ? "checkmark.circle.fill" : "tag.fill"} 
-                          size={16} 
-                          color={copiedCode === item.discount_code ? "#38A169" : "#8E4EC6"} 
-                        />
-                        <ThemedText style={styles.discountCodeLabel}>
-                          {copiedCode === item.discount_code ? 'Kopiert!' : 'Rabattcode:'}
-                        </ThemedText>
-                        <ThemedText style={[
-                          styles.discountCodeText,
-                          copiedCode === item.discount_code && styles.discountCodeTextCopied
-                        ]}>
-                          {item.discount_code}
-                        </ThemedText>
-                        <IconSymbol 
-                          name="doc.on.doc" 
-                          size={14} 
-                          color={copiedCode === item.discount_code ? "#38A169" : "#8E4EC6"} 
-                        />
-                      </LinearGradient>
-                    </BlurView>
-                  </TouchableOpacity>
+                {/* Produktbild - überlappend */}
+                {item.image_url && (
+                  <View style={styles.imageContainer}>
+                    <Image
+                      source={{ uri: item.image_url }}
+                      style={styles.productImage}
+                      resizeMode="cover"
+                    />
+                  </View>
                 )}
 
-                {/* Action Buttons */}
-                <View style={styles.cardActions}>
-                  <AnimatedButton onPress={() => handleOpenLink(item.product_link)} scaleValue={0.95}>
-                    <BlurView intensity={20} tint="light" style={styles.linkButton}>
-                      <LinearGradient
-                        colors={['rgba(142,78,198,0.8)', 'rgba(123,63,181,0.9)']}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                        style={styles.linkButtonGradient}
-                      >
-                        <IconSymbol name="link" size={18} color="#FFFFFF" />
-                        <ThemedText style={styles.linkButtonText}>Zum Produkt</ThemedText>
-                      </LinearGradient>
-                    </BlurView>
+                {/* Content */}
+                <View style={styles.cardContent}>
+                  {/* Baby-Symbol über Titel */}
+                  <View style={styles.titleIconContainer}>
+                    <IconSymbol name="heart.fill" size={20} color="#5E3DB3" />
+                  </View>
+
+                  <ThemedText style={styles.cardTitle}>{item.title}</ThemedText>
+                  <ThemedText style={styles.cardDescription}>{item.description}</ThemedText>
+
+                  {/* Rabattcode mit Sparkles */}
+                  {item.discount_code && (
+                    <TouchableOpacity 
+                      onPress={() => handleCopyDiscountCode(item.discount_code!)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={styles.discountCodeContainer}>
+                        <View style={styles.discountCodeInner}>
+                          <ThemedText style={styles.sparkle}>✨</ThemedText>
+                          <ThemedText style={styles.discountCodeLabel}>
+                            Rabattcode:
+                          </ThemedText>
+                          <ThemedText style={styles.discountCodeText}>
+                            {item.discount_code}
+                          </ThemedText>
+                          <ThemedText style={styles.sparkle}>✨</ThemedText>
+                          {copiedCode === item.discount_code && (
+                            <View style={styles.copiedIndicator}>
+                              <IconSymbol name="checkmark.circle.fill" size={16} color="#38A169" />
+                            </View>
+                          )}
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  )}
+
+                  {/* Zum Produkt Button */}
+                  <AnimatedButton onPress={() => handleOpenLink(item.product_link)} scaleValue={0.96}>
+                    <LinearGradient
+                      colors={['#5E3DB3', '#7B4BC7']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.linkButton}
+                    >
+                      <IconSymbol name="arrow.right.circle.fill" size={20} color="#FFFFFF" />
+                      <ThemedText style={styles.linkButtonText}>Zum Produkt</ThemedText>
+                    </LinearGradient>
                   </AnimatedButton>
 
+                  {/* Admin Actions */}
                   {isAdmin && (
                     <View style={styles.adminActions}>
                       <TouchableOpacity
                         style={[styles.adminButton, styles.editButton]}
                         onPress={() => handleEdit(item)}
                       >
-                        <BlurView intensity={15} tint="light" style={styles.adminButtonBlur}>
-                          <IconSymbol name="pencil" size={20} color="#4A90E2" />
-                        </BlurView>
+                        <IconSymbol name="pencil.circle.fill" size={28} color="#5E3DB3" />
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={[styles.adminButton, styles.deleteButton]}
                         onPress={() => handleDelete(item)}
                       >
-                        <BlurView intensity={15} tint="light" style={styles.adminButtonBlur}>
-                          <IconSymbol name="trash" size={20} color="#E74C3C" />
-                        </BlurView>
+                        <IconSymbol name="trash.circle.fill" size={28} color="#E74C3C" />
                       </TouchableOpacity>
                     </View>
                   )}
                 </View>
               </View>
-            </View>
-          </LinearGradient>
-        </BlurView>
+            </LinearGradient>
+          </BlurView>
+        </View>
       </SlideInView>
     );
   };
@@ -677,146 +667,167 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   listContainer: {
-    gap: 16,
+    gap: 24,
+    paddingVertical: 8,
+  },
+  cardWrapper: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
   },
   cardBlur: {
     borderRadius: 22,
     overflow: 'hidden',
-    marginHorizontal: TIMELINE_INSET,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.3)',
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
-    shadowRadius: 16,
-    elevation: 12,
+    backgroundColor: 'rgba(255,255,255,0.35)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.65)',
+    shadowColor: '#5E3DB3',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.2,
+    shadowRadius: 24,
+    elevation: 16,
   },
   cardGradient: {
     borderRadius: 22,
   },
   card: {
     overflow: 'hidden',
+    position: 'relative',
+  },
+  favoriteBadge: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    zIndex: 10,
+    shadowColor: '#5E3DB3',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 6,
+  },
+  favoriteBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#5E3DB3',
+    letterSpacing: 0.3,
   },
   imageContainer: {
     width: '100%',
-    height: 200,
-    backgroundColor: 'rgba(0,0,0,0.05)',
+    height: 240,
+    backgroundColor: 'rgba(255,255,255,0.5)',
+    marginTop: -10,
+    marginHorizontal: -1,
   },
   productImage: {
     width: '100%',
     height: '100%',
   },
   cardContent: {
-    padding: 20,
+    padding: 28,
+    alignItems: 'center',
+  },
+  titleIconContainer: {
+    marginBottom: 12,
+    backgroundColor: 'rgba(94,61,179,0.1)',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   cardTitle: {
     fontSize: 20,
     fontWeight: '800',
-    marginBottom: 10,
-    letterSpacing: 0.3,
-    textShadowColor: 'rgba(0,0,0,0.1)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+    marginBottom: 14,
+    letterSpacing: 0.4,
+    color: '#5E3DB3',
+    textAlign: 'center',
   },
   cardDescription: {
-    fontSize: 15,
-    lineHeight: 22,
-    marginBottom: 20,
-    opacity: 0.85,
-    textShadowColor: 'rgba(0,0,0,0.05)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 1,
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 24,
+    color: 'rgba(0,0,0,0.75)',
+    textAlign: 'center',
+    paddingHorizontal: 8,
   },
   discountCodeContainer: {
-    borderRadius: 12,
+    width: '100%',
+    backgroundColor: 'rgba(255,255,255,0.6)',
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#5E3DB3',
+    marginBottom: 20,
     overflow: 'hidden',
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(142,78,198,0.3)',
   },
-  discountCodeGradient: {
+  discountCodeInner: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 14,
+    justifyContent: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
     gap: 8,
+    position: 'relative',
+  },
+  sparkle: {
+    fontSize: 16,
   },
   discountCodeLabel: {
     fontSize: 13,
     fontWeight: '600',
-    opacity: 0.8,
+    color: 'rgba(0,0,0,0.7)',
   },
   discountCodeText: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '800',
-    color: '#8E4EC6',
-    letterSpacing: 0.5,
-    textShadowColor: 'rgba(0,0,0,0.1)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+    color: '#5E3DB3',
+    letterSpacing: 1,
   },
-  discountCodeTextCopied: {
-    color: '#38A169',
-  },
-  cardActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+  copiedIndicator: {
+    position: 'absolute',
+    right: 12,
+    top: '50%',
+    marginTop: -8,
   },
   linkButton: {
-    borderRadius: 16,
-    overflow: 'hidden',
-    flex: 1,
-    marginRight: 10,
-    shadowColor: '#8E4EC6',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 6,
-  },
-  linkButtonGradient: {
+    width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
+    justifyContent: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 28,
+    borderRadius: 20,
+    gap: 10,
+    shadowColor: '#5E3DB3',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    elevation: 10,
   },
   linkButtonText: {
     color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-    marginLeft: 8,
-    letterSpacing: 0.2,
+    fontSize: 17,
+    fontWeight: '800',
+    letterSpacing: 0.4,
   },
   adminActions: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 12,
+    marginTop: 16,
+    justifyContent: 'center',
   },
   adminButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    overflow: 'hidden',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 4,
-    shadowColor: '#000',
-  },
-  adminButtonBlur: {
-    width: '100%',
-    height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.6)',
   },
   editButton: {
-    borderWidth: 1,
-    borderColor: 'rgba(74,144,226,0.3)',
+    // No additional styles needed
   },
   deleteButton: {
-    borderWidth: 1,
-    borderColor: 'rgba(231,76,60,0.3)',
+    // No additional styles needed
   },
   // Modal Styles
   modalOverlay: {
