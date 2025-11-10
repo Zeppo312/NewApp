@@ -166,11 +166,24 @@ export default function LottisEmpfehlungenScreen() {
       if (formImageUri) {
         setIsUploadingImage(true);
         try {
+          console.log('📤 Starting upload for URI:', formImageUri);
           const fileName = `recommendation-${Date.now()}.jpg`;
           imageUrl = await uploadRecommendationImage(formImageUri, fileName);
+          console.log('✅ Upload successful, URL:', imageUrl);
         } catch (error) {
-          console.error('Error uploading image:', error);
-          Alert.alert('Fehler', 'Bild konnte nicht hochgeladen werden. Versuche es erneut.');
+          console.error('❌ Error uploading image:', error);
+          const errorMessage = error instanceof Error ? error.message : 'Unbekannter Fehler';
+          Alert.alert(
+            'Upload fehlgeschlagen', 
+            `${errorMessage}\n\nTipp: Stelle sicher, dass der "public-images" Bucket in Supabase existiert.`,
+            [
+              { text: 'Abbrechen', style: 'cancel' },
+              { text: 'Ohne Bild fortfahren', onPress: () => {
+                setFormImageUri(null);
+                // Continue without image
+              }}
+            ]
+          );
           setIsSaving(false);
           setIsUploadingImage(false);
           return;
@@ -197,7 +210,9 @@ export default function LottisEmpfehlungenScreen() {
       setModalVisible(false);
       Alert.alert('Erfolg', `Empfehlung wurde ${editingItem ? 'aktualisiert' : 'erstellt'}.`);
     } catch (error) {
-      Alert.alert('Fehler', 'Empfehlung konnte nicht gespeichert werden.');
+      console.error('❌ Error saving recommendation:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unbekannter Fehler';
+      Alert.alert('Fehler', `Empfehlung konnte nicht gespeichert werden.\n\n${errorMessage}`);
     } finally {
       setIsSaving(false);
       setIsUploadingImage(false);

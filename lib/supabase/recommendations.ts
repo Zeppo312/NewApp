@@ -168,37 +168,85 @@ export async function uploadRecommendationImage(
   fileName: string
 ): Promise<string> {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Nicht authentifiziert');
-
-    // Fetch the image as blob
-    const response = await fetch(uri);
-    const blob = await response.blob();
+    console.log('📤 Starting image upload...', { uri, fileName });
     
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      console.error('❌ User not authenticated');
+      throw new Error('Nicht authentifiziert');
+    }
+    console.log('✅ User authenticated:', user.id);
+
     // Generate unique filename
-    const fileExt = fileName.split('.').pop();
+    const fileExt = fileName.split('.').pop() || 'jpg';
     const uniqueFileName = `${user.id}/${Date.now()}.${fileExt}`;
     const filePath = `recommendation-images/${uniqueFileName}`;
+    console.log('📝 File path:', filePath);
+
+    // For React Native, we need to use FormData or ArrayBuffer
+    // Convert URI to base64 and then to ArrayBuffer
+    const response = await fetch(uri);
+    
+    if (!response.ok) {
+      console.error('❌ Failed to fetch image:', response.status);
+      throw new Error(`Bild konnte nicht geladen werden: ${response.status}`);
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    console.log('✅ Image fetched, size:', arrayBuffer.byteLength, 'bytes');
+
+    // Determine content type
+    const contentType = getContentType(fileExt);
+    console.log('📋 Content type:', contentType);
 
     // Upload to Supabase Storage
     const { data, error } = await supabase.storage
       .from('public-images')
-      .upload(filePath, blob, {
-        contentType: blob.type,
+      .upload(filePath, arrayBuffer, {
+        contentType,
         upsert: false,
       });
 
-    if (error) throw error;
+    if (error) {
+      console.error('❌ Supabase storage error:', error);
+      throw new Error(`Upload fehlgeschlagen: ${error.message}`);
+    }
+
+    console.log('✅ Upload successful:', data);
 
     // Get public URL
     const { data: { publicUrl } } = supabase.storage
       .from('public-images')
       .getPublicUrl(filePath);
 
+    console.log('✅ Public URL generated:', publicUrl);
     return publicUrl;
   } catch (error) {
-    console.error('Error uploading image:', error);
-    throw error;
+    console.error('❌ Error uploading image:', error);
+    if (error instanceof Error) {
+      throw new Error(`Upload-Fehler: ${error.message}`);
+    }
+    throw new Error('Unbekannter Fehler beim Upload');
+  }
+}
+
+/**
+ * Bestimmt den Content-Type basierend auf der Dateiendung
+ */
+function getContentType(fileExt: string): string {
+  const ext = fileExt.toLowerCase();
+  switch (ext) {
+    case 'jpg':
+    case 'jpeg':
+      return 'image/jpeg';
+    case 'png':
+      return 'image/png';
+    case 'gif':
+      return 'image/gif';
+    case 'webp':
+      return 'image/webp';
+    default:
+      return 'image/jpeg';
   }
 }
 
