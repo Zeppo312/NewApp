@@ -139,6 +139,7 @@ function RootLayoutNav() {
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="diary-entries" />
         <Stack.Screen name="mini-wiki" />
+        <Stack.Screen name="lotti-empfehlungen" />
         <Stack.Screen name="faq" />
         <Stack.Screen name="community" />
         <Stack.Screen name="chat/[id]" />
