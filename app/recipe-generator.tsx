@@ -1222,7 +1222,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   topCard: {
-    marginBottom: CARD_SPACING * 0.35,
+    marginBottom: CARD_SPACING * 0.2,
   },
   recipeCard: {
     // Gleiche Breite wie normale Cards - Padding wird durch innere Elemente erreicht
