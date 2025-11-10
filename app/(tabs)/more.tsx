@@ -167,6 +167,24 @@ export default function MoreScreen() {
 
             <TouchableOpacity
               style={styles.menuItem}
+              onPress={() => router.push('/lottis-empfehlungen')}
+            >
+              <View style={styles.menuItemIcon}>
+                <IconSymbol name="star.fill" size={24} color={theme.accent} />
+              </View>
+              <View style={styles.menuItemContent}>
+                <ThemedText style={styles.menuItemTitle}>
+                  Lottis Empfehlungen
+                </ThemedText>
+                <ThemedText style={styles.menuItemDescription}>
+                  Handverlesene Produkte für dich und dein Baby
+                </ThemedText>
+              </View>
+              <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.menuItem}
               onPress={() => router.push('/mini-wiki')}
             >
               <View style={styles.menuItemIcon}>
