@@ -45,8 +45,8 @@ const SCREEN_PADDING = 4; // Minimales Außen-Padding
 const contentWidth = screenWidth - 2 * SCREEN_PADDING; // Maximale Breite
 const isCompact = screenWidth < 380;
 
-const CARD_INTERNAL_PADDING = 32; // Noch großzügigerer Abstand zum Rand für bessere Lesbarkeit
-const CARD_SPACING = 16; // Abstand zwischen Cards
+const CARD_INTERNAL_PADDING = 20; // Sehr kompakter Abstand zum Rand
+const CARD_SPACING = 4; // Ultra minimaler Abstand zwischen Cards
 const ALLERGEN_COLUMNS = 2; // Immer 2 Buttons pro Reihe
 
 const chunkItems = <T,>(items: T[], columns: number): (T | null)[][] => {
@@ -1204,7 +1204,7 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   scrollContent: {
-    paddingBottom: 120,
+    paddingBottom: 100,
     alignItems: 'center',
   },
   contentContainer: {
@@ -1222,7 +1222,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   topCard: {
-    marginBottom: CARD_SPACING * 0.2,
+    marginBottom: CARD_SPACING,
   },
   recipeCard: {
     // Gleiche Breite wie normale Cards - Padding wird durch innere Elemente erreicht
@@ -1285,7 +1285,7 @@ const styles = StyleSheet.create({
   heroRow: {
     flexDirection: 'column',
     alignItems: 'center',
-    gap: 12,
+    gap: 6,
   },
   heroIcon: {
     width: 48,
@@ -1297,7 +1297,7 @@ const styles = StyleSheet.create({
   },
   heroTextWrap: {
     alignItems: 'center',
-    gap: 8,
+    gap: 4,
   },
   heroTitle: {
     fontSize: 24, // Größere Schrift für bessere Sichtbarkeit
@@ -1317,7 +1317,7 @@ const styles = StyleSheet.create({
   actionContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
+    gap: 10,
   },
   actionIcon: {
     width: 52,
@@ -1329,7 +1329,7 @@ const styles = StyleSheet.create({
   },
   actionTextWrap: {
     flex: 1,
-    gap: 6,
+    gap: 2,
   },
   actionTitle: {
     fontSize: 18,
@@ -1350,8 +1350,8 @@ const styles = StyleSheet.create({
   sectionHeader: {
     flexDirection: 'column',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 12,
+    gap: 4,
+    marginBottom: 6,
   },
   sectionTitle: {
     fontSize: 20, // Größere Schrift für bessere Sichtbarkeit
@@ -1364,7 +1364,7 @@ const styles = StyleSheet.create({
   sectionHint: {
     fontSize: 15, // Größere Schrift für bessere Lesbarkeit
     color: '#7D5A50',
-    marginBottom: 16,
+    marginBottom: 8,
     lineHeight: 22,
     textAlign: 'center',
   },
@@ -1458,9 +1458,9 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   loadingWrapper: {
-    marginTop: 40,
+    marginTop: 12,
     alignItems: 'center',
-    gap: 16,
+    gap: 8,
   },
   loadingText: {
     fontSize: 14,
@@ -1469,7 +1469,7 @@ const styles = StyleSheet.create({
   },
   emptyStateBody: {
     alignItems: 'center',
-    gap: 16,
+    gap: 8,
   },
   emptyStateTitle: {
     fontSize: 20, // Größere Schrift für bessere Sichtbarkeit
@@ -1507,8 +1507,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start', // Besser für mehrzeilige Titel
-    marginBottom: 14, // Noch mehr Abstand für bessere Trennung
-    gap: 12, // Abstand zwischen Titel und Tag
+    marginBottom: 8,
+    gap: 6,
   },
   recipeTitle: {
     fontSize: 18, // Größere Schrift für bessere Lesbarkeit
@@ -1516,15 +1516,15 @@ const styles = StyleSheet.create({
     color: '#7D5A50',
     flex: 1,
     lineHeight: 24,
-    paddingRight: 12, // Mehr Abstand vom rechten Rand
-    paddingLeft: 8, // Mehr Abstand vom linken Rand
+    paddingRight: 6,
+    paddingLeft: 2,
   },
   recipeDescription: {
     fontSize: 15, // Größere Schrift für bessere Lesbarkeit
     lineHeight: 22,
     color: '#7D5A50',
-    marginBottom: 18, // Mehr Abstand für bessere Trennung
-    paddingHorizontal: 8, // Mehr Abstand links/rechts - nichts direkt am Rand
+    marginBottom: 8,
+    paddingHorizontal: 2,
   },
   statPill: {
     flexDirection: 'row',
@@ -1570,9 +1570,9 @@ const styles = StyleSheet.create({
   catalogHeader: {
     flexDirection: 'column',
     alignItems: 'center',
-    marginTop: 32,
-    marginBottom: 16,
-    gap: 12,
+    marginTop: 12,
+    marginBottom: 4,
+    gap: 6,
   },
   catalogTitle: {
     fontSize: 20, // Größere Schrift für bessere Sichtbarkeit
@@ -1612,8 +1612,8 @@ const styles = StyleSheet.create({
   catalogMetaRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    paddingHorizontal: 4, // Abstand vom Rand
+    gap: 6,
+    paddingHorizontal: 2,
   },
   disabledRecipeCard: {
     opacity: 0.6,
@@ -1692,7 +1692,7 @@ const styles = StyleSheet.create({
   recipeHeroCard: {
     borderRadius: 28,
     overflow: 'hidden',
-    marginBottom: 24,
+    marginBottom: 16,
     minHeight: isCompact ? 220 : 260,
     backgroundColor: 'rgba(142,78,198,0.25)',
     justifyContent: 'flex-end',
@@ -1745,13 +1745,13 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#7D5A50',
     lineHeight: 22,
-    marginBottom: 20,
+    marginBottom: 16,
   },
   recipeInfoChipsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 12,
-    marginBottom: 20,
+    marginBottom: 16,
   },
   recipeInfoChip: {
     flexDirection: 'row',
