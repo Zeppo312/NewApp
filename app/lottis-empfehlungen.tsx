@@ -265,9 +265,9 @@ export default function LottisEmpfehlungenScreen() {
         easing="spring"
       >
         <View style={styles.cardWrapper}>
-          <BlurView intensity={30} tint="light" style={styles.cardBlur}>
+          <BlurView intensity={40} tint="light" style={styles.cardBlur}>
             <LinearGradient
-              colors={['#f5eee0', '#e8dbf7']}
+              colors={['rgba(245,238,224,0.3)', 'rgba(232,219,247,0.4)']}
               start={{ x: 0, y: 0 }}
               end={{ x: 0, y: 1 }}
               style={styles.cardGradient}
@@ -293,7 +293,7 @@ export default function LottisEmpfehlungenScreen() {
                 <View style={styles.cardContent}>
                   {/* Baby-Symbol über Titel */}
                   <View style={styles.titleIconContainer}>
-                    <IconSymbol name="heart.fill" size={20} color="#5E3DB3" />
+                    <IconSymbol name="heart.fill" size={18} color="#5E3DB3" />
                   </View>
 
                   <ThemedText style={styles.cardTitle}>{item.title}</ThemedText>
@@ -345,13 +345,13 @@ export default function LottisEmpfehlungenScreen() {
                         style={[styles.adminButton, styles.editButton]}
                         onPress={() => handleEdit(item)}
                       >
-                        <IconSymbol name="pencil.circle.fill" size={28} color="#5E3DB3" />
+                        <IconSymbol name="pencil.circle.fill" size={26} color="#5E3DB3" />
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={[styles.adminButton, styles.deleteButton]}
                         onPress={() => handleDelete(item)}
                       >
-                        <IconSymbol name="trash.circle.fill" size={28} color="#E74C3C" />
+                        <IconSymbol name="trash.circle.fill" size={26} color="#E74C3C" />
                       </TouchableOpacity>
                     </View>
                   )}
@@ -667,24 +667,24 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   listContainer: {
-    gap: 24,
-    paddingVertical: 8,
+    gap: 18,
+    paddingVertical: 6,
   },
   cardWrapper: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
   },
   cardBlur: {
     borderRadius: 22,
     overflow: 'hidden',
-    backgroundColor: 'rgba(255,255,255,0.35)',
+    backgroundColor: 'rgba(255,255,255,0.15)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.65)',
+    borderColor: 'rgba(255,255,255,0.4)',
     shadowColor: '#5E3DB3',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.2,
-    shadowRadius: 24,
-    elevation: 16,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 12,
   },
   cardGradient: {
     borderRadius: 22,
@@ -695,30 +695,32 @@ const styles = StyleSheet.create({
   },
   favoriteBadge: {
     position: 'absolute',
-    top: 16,
-    right: 16,
-    backgroundColor: 'rgba(255,255,255,0.95)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
+    top: 12,
+    right: 12,
+    backgroundColor: 'rgba(255,255,255,0.85)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 16,
     zIndex: 10,
     shadowColor: '#5E3DB3',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    elevation: 6,
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.5)',
   },
   favoriteBadgeText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
     color: '#5E3DB3',
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
   },
   imageContainer: {
     width: '100%',
-    height: 240,
-    backgroundColor: 'rgba(255,255,255,0.5)',
-    marginTop: -10,
+    height: 200,
+    backgroundColor: 'rgba(255,255,255,0.3)',
+    marginTop: -8,
     marginHorizontal: -1,
   },
   productImage: {
@@ -726,69 +728,71 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   cardContent: {
-    padding: 28,
+    padding: 22,
     alignItems: 'center',
   },
   titleIconContainer: {
-    marginBottom: 12,
-    backgroundColor: 'rgba(94,61,179,0.1)',
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    marginBottom: 10,
+    backgroundColor: 'rgba(94,61,179,0.12)',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(94,61,179,0.2)',
   },
   cardTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '800',
-    marginBottom: 14,
+    marginBottom: 10,
     letterSpacing: 0.4,
     color: '#5E3DB3',
     textAlign: 'center',
   },
   cardDescription: {
     fontSize: 14,
-    lineHeight: 20,
-    marginBottom: 24,
+    lineHeight: 19,
+    marginBottom: 18,
     color: 'rgba(0,0,0,0.75)',
     textAlign: 'center',
-    paddingHorizontal: 8,
+    paddingHorizontal: 6,
   },
   discountCodeContainer: {
     width: '100%',
-    backgroundColor: 'rgba(255,255,255,0.6)',
-    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.5)',
+    borderRadius: 14,
     borderWidth: 1.5,
-    borderColor: '#5E3DB3',
-    marginBottom: 20,
+    borderColor: 'rgba(94,61,179,0.4)',
+    marginBottom: 16,
     overflow: 'hidden',
   },
   discountCodeInner: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    gap: 8,
+    paddingVertical: 11,
+    paddingHorizontal: 16,
+    gap: 6,
     position: 'relative',
   },
   sparkle: {
-    fontSize: 16,
+    fontSize: 14,
   },
   discountCodeLabel: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
     color: 'rgba(0,0,0,0.7)',
   },
   discountCodeText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '800',
     color: '#5E3DB3',
-    letterSpacing: 1,
+    letterSpacing: 0.8,
   },
   copiedIndicator: {
     position: 'absolute',
-    right: 12,
+    right: 10,
     top: '50%',
     marginTop: -8,
   },
@@ -797,26 +801,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 28,
-    borderRadius: 20,
-    gap: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 18,
+    gap: 8,
     shadowColor: '#5E3DB3',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
-    shadowRadius: 12,
-    elevation: 10,
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 8,
   },
   linkButtonText: {
     color: '#FFFFFF',
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '800',
-    letterSpacing: 0.4,
+    letterSpacing: 0.3,
   },
   adminActions: {
     flexDirection: 'row',
-    gap: 12,
-    marginTop: 16,
+    gap: 10,
+    marginTop: 14,
     justifyContent: 'center',
   },
   adminButton: {
