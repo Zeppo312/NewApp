@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, ActivityIndicator, FlatList, Image } from 'react-native';
+import { StyleSheet, View, TouchableOpacity, ScrollView, ActivityIndicator, FlatList, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
 import { ThemedView } from '@/components/ThemedView';
@@ -15,8 +15,9 @@ import { FollowButton } from '@/components/FollowButton';
 import Header from '@/components/Header';
 import { getPosts } from '@/lib/community';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { LiquidGlassCard, GLASS_OVERLAY } from '@/constants/DesignGuide';
+import { LiquidGlassCard } from '@/constants/DesignGuide';
 import { Alert } from 'react-native';
+import { TagDisplay } from '@/components/TagDisplay';
 
 // Interface für das Benutzerprofil
 interface UserProfile {
@@ -35,6 +36,10 @@ interface Follower {
   last_name?: string;
   user_role?: string;
 }
+
+const TEXT_PRIMARY = '#5A3A2C';
+const TEXT_MUTED = 'rgba(90,58,44,0.75)';
+const POST_CARD_OVERLAY = 'rgba(255,255,255,0.78)';
 
 export default function ProfileScreen() {
   const { id } = useLocalSearchParams();
@@ -358,31 +363,90 @@ export default function ProfileScreen() {
     return { label: initial, bg };
   };
   
+  const getPostEmoji = (item: any) => {
+    const txt = (item.content || '').toLowerCase();
+    const hasTag = (key: string) => (item.tags || []).some((t: any) => t.name?.toLowerCase().includes(key));
+    if (txt.includes('still') || txt.includes('flasch') || hasTag('fütter')) return '🍼';
+    if (txt.includes('schlaf') || txt.includes('müd') || hasTag('schlaf')) return '🌙';
+    if (txt.includes('windel') || txt.includes('kack') || txt.includes('stuhl')) return '💩';
+    if (txt.includes('herz') || txt.includes('liebe')) return '❤️';
+    if (txt.includes('?') || txt.includes('hilfe')) return '❓';
+    return '💬';
+  };
+
   // Renderingfunktion für Beiträge – Community-Style Karten
   const renderPostItem = ({ item }: { item: any }) => {
     const avatar = getAvatar(item);
+    const iconEmoji = getPostEmoji(item);
+    const dateLabel = formatDate(item.created_at);
+    const displayName = item.is_anonymous ? 'Anonym' : (item.user_name || 'Profil');
+    const roleLabel = !item.is_anonymous ? getRoleInfo(item.user_role).label : null;
+    const metaLineParts = [roleLabel, dateLabel].filter(Boolean);
+    const metaLine = metaLineParts.join(' · ');
+
+    const handleProfilePress = () => {
+      if (!item.is_anonymous && item.user_id) {
+        router.push(`/profile/${item.user_id}` as any);
+      }
+    };
+
     return (
-      <LiquidGlassCard style={styles.feedCard} intensity={28} overlayColor={'rgba(255,255,255,0.18)'} borderColor={'rgba(255,255,255,0.4)'}>
-        <TouchableOpacity onPress={() => router.push({ pathname: '/community', params: { postId: item.id } } as any)}>
+      <LiquidGlassCard
+        style={styles.feedCard}
+        intensity={24}
+        overlayColor={POST_CARD_OVERLAY}
+        borderColor={'rgba(255,255,255,0.4)'}
+      >
+        <TouchableOpacity
+          activeOpacity={0.92}
+          onPress={() => router.push({ pathname: '/community', params: { postId: item.id } } as any)}
+        >
           <View style={styles.feedInner}>
             <View style={styles.postHeaderRow}>
-              <View style={styles.userInfoRow}>
+              <TouchableOpacity
+                style={styles.userInfoRow}
+                onPress={handleProfilePress}
+                disabled={item.is_anonymous}
+                activeOpacity={item.is_anonymous ? 1 : 0.85}
+              >
                 <View style={[styles.avatar, { backgroundColor: avatar.bg }]}>
                   <ThemedText style={styles.avatarText}>{item.is_anonymous ? '🍼' : avatar.label}</ThemedText>
                 </View>
-                <ThemedText style={styles.userNameText}>{item.user_name || 'Anonym'}</ThemedText>
-                <ThemedText style={styles.postDateText}>{formatDate(item.created_at)}</ThemedText>
-              </View>
+                <View style={styles.metaContainer}>
+                  <ThemedText style={[styles.userNameText, { color: theme.accent }]} numberOfLines={1}>
+                    {displayName}
+                  </ThemedText>
+                  {metaLine.length > 0 && (
+                    <ThemedText style={styles.metaSubLine} numberOfLines={1}>
+                      {metaLine}
+                    </ThemedText>
+                  )}
+                </View>
+              </TouchableOpacity>
+              <ThemedText style={styles.postEmoji}>{iconEmoji}</ThemedText>
             </View>
+
+            {item.tags && item.tags.length > 0 && (
+              <View style={styles.tagRow}>
+                <TagDisplay tags={item.tags} small />
+              </View>
+            )}
+
             <ThemedText style={styles.postBodyText}>{item.content}</ThemedText>
+
             {!!item.image_url && (
               <View style={styles.postImageContainer}>
                 <Image source={{ uri: item.image_url }} style={styles.postImage} resizeMode="cover" />
               </View>
             )}
+
             <View style={[styles.postActionsRow, { borderTopColor: colorScheme === 'dark' ? theme.border : '#EFEFEF' }]}>
               <View style={styles.actionItem}>
-                <IconSymbol name={item.has_liked ? 'heart.fill' : 'heart'} size={18} color={item.has_liked ? '#FF6B6B' : theme.tabIconDefault} />
+                <IconSymbol
+                  name={item.has_liked ? 'heart.fill' : 'heart'}
+                  size={18}
+                  color={item.has_liked ? '#FF6B6B' : theme.tabIconDefault}
+                />
                 <ThemedText style={styles.actionCount}>{item.likes_count || 0}</ThemedText>
               </View>
               <View style={styles.actionItem}>
@@ -448,16 +512,32 @@ export default function ProfileScreen() {
                     Dabei seit {formatJoinDate(profile.created_at)}
                   </ThemedText>
                 </View>
-                
-                {!isOwnProfile && (
+              </View>
+
+              {!isOwnProfile && (
+                <View style={styles.profileActions}>
                   <FollowButton 
                     userId={profile.id}
                     size="medium"
                     showIcon={false}
                     onFollowStatusChange={handleFollowStatusChange}
+                    style={styles.followButton}
                   />
-                )}
-              </View>
+                  <TouchableOpacity 
+                    style={[styles.dmButton, { backgroundColor: theme.accent }]}
+                    onPress={() => router.push(`/chat/${profile.id}` as any)}
+                  >
+                    <IconSymbol name="paperplane.fill" size={18} color="#FFFFFF" />
+                    <ThemedText style={styles.dmButtonText}>Direktnachricht</ThemedText>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {mutualFollow && !isOwnProfile && (
+                <ThemedText style={[styles.mutualBadge, { color: theme.accent }]}>
+                  Ihr folgt euch gegenseitig
+                </ThemedText>
+              )}
               
               {/* Statistiken: Beiträge (links), Follower (mitte), Folgt (rechts) */}
               <View style={styles.statsContainer}>
@@ -474,21 +554,7 @@ export default function ProfileScreen() {
                   <ThemedText style={styles.statLabel}>Folgt</ThemedText>
                 </View>
               </View>
-              
-              {/* Chat-Button für gegenseitige Follower */}
-              {mutualFollow && !isOwnProfile && (
-                <TouchableOpacity 
-                  style={[styles.chatButton, { backgroundColor: theme.accent }]}
-                  onPress={() => {
-                    // Zum Chat navigieren
-                    router.push(`/chat/${profile.id}` as any);
-                  }}
-                >
-                  <IconSymbol name="envelope.fill" size={20} color="#FFFFFF" />
-                  <Text style={styles.chatButtonText}>Nachricht senden</Text>
-                </TouchableOpacity>
-              )}
-          </LiquidGlassCard>
+            </LiquidGlassCard>
 
             {/* Friends/Following – IG-Stories-Style Row */}
             <View style={styles.friendsSection}>
@@ -615,30 +681,31 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
   },
   profileHeader: {
-    flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: 16,
   },
   avatarContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 96,
+    height: 96,
+    borderRadius: 48,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
+    marginBottom: 12,
   },
   nameContainer: {
-    flex: 1,
+    alignItems: 'center',
   },
   userName: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: 'bold',
-    marginBottom: 4,
+    marginBottom: 6,
+    textAlign: 'center',
   },
   roleChip: {
     paddingVertical: 4,
-    paddingHorizontal: 10,
-    borderRadius: 12,
-    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    alignSelf: 'center',
     marginBottom: 4,
   },
   roleChipText: {
@@ -649,6 +716,40 @@ const styles = StyleSheet.create({
   joinDate: {
     fontSize: 14,
     opacity: 0.7,
+    textAlign: 'center',
+  },
+  profileActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+    marginBottom: 12,
+  },
+  followButton: {
+    minWidth: 120,
+    marginRight: 12,
+    marginBottom: 8,
+  },
+  dmButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 24,
+    marginBottom: 8,
+  },
+  dmButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    marginLeft: 8,
+    fontSize: 14,
+  },
+  mutualBadge: {
+    textAlign: 'center',
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 8,
   },
   statsContainer: {
     flexDirection: 'row',
@@ -671,82 +772,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     opacity: 0.7,
   },
-  chatButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 20,
-    paddingVertical: 12,
-    borderRadius: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  chatButtonText: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-    fontSize: 16,
-    marginLeft: 8,
-  },
-  postItem: {
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0, 0, 0, 0.1)',
-  },
-  postHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  postDate: {
-    fontSize: 14,
-    opacity: 0.7,
-  },
-  postContent: {
-    fontSize: 16,
-  },
-  postStats: {
-    flexDirection: 'row',
-    marginTop: 8,
-  },
-  postStat: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  statText: {
-    fontSize: 14,
-    marginLeft: 4,
-  },
-  postsContainer: {
-    borderRadius: 12,
-    padding: 20,
-    marginTop: 16,
-    marginHorizontal: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  postsHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
   postsHeaderText: {
     fontSize: 22,
     fontWeight: 'bold',
   },
   // Feed styles
   feedCard: {
-    marginBottom: 12,
-    borderRadius: 12,
+    marginBottom: 16,
+    borderRadius: 16,
   },
   feedInner: {
-    padding: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
   },
   postHeaderRow: {
     flexDirection: 'row',
@@ -758,6 +795,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
+    flexShrink: 1,
   },
   avatar: {
     width: 28,
@@ -772,19 +810,35 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#4A4A4A',
   },
+  metaContainer: {
+    flexDirection: 'column',
+    flex: 1,
+  },
   userNameText: {
     fontSize: 16,
     fontWeight: 'bold',
   },
-  postDateText: {
+  metaSubLine: {
     fontSize: 12,
-    color: '#888',
-    marginLeft: 8,
+    fontWeight: '500',
+    color: TEXT_MUTED,
+    marginTop: 2,
+  },
+  postEmoji: {
+    fontSize: 18,
+    marginLeft: 12,
+  },
+  tagRow: {
+    marginBottom: 8,
   },
   postBodyText: {
     fontSize: 16,
     lineHeight: 24,
     marginBottom: 10,
+    color: TEXT_PRIMARY,
+    textShadowColor: 'rgba(255,255,255,0.5)',
+    textShadowOffset: { width: 0, height: 0.5 },
+    textShadowRadius: 0.5,
   },
   postImageContainer: {
     marginTop: 6,
@@ -804,6 +858,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderTopWidth: 1,
     paddingTop: 10,
+    marginTop: 8,
   },
   actionItem: {
     flexDirection: 'row',
@@ -813,7 +868,7 @@ const styles = StyleSheet.create({
   actionCount: {
     marginLeft: 6,
     fontSize: 14,
-    color: '#888',
+    color: TEXT_MUTED,
   },
   // Friends row
   friendsSection: {
