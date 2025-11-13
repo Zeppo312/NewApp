@@ -39,6 +39,14 @@ const ALLERGEN_OPTIONS: { id: AllergenId; label: string; hint: string }[] = [
   { id: 'fish', label: 'Fisch', hint: 'Lachs, Forelle' },
 ];
 
+const ALLERGEN_LABELS: Record<AllergenId, string> = {
+  milk: 'Milchprodukte',
+  gluten: 'Gluten',
+  egg: 'Ei',
+  nuts: 'Nüsse',
+  fish: 'Fisch',
+};
+
 // Layout-System mit maximaler Content-Breite
 const { width: screenWidth } = Dimensions.get('window');
 const SCREEN_PADDING = 4; // Minimales Außen-Padding
@@ -187,6 +195,9 @@ const SAMPLE_RECIPES: SampleRecipe[] = [
       'Reife Birne fein reiben, mit Buchweizenmehl, Ei, etwas Backpulver und Rapsöl zu einem Teig verrühren. In Mini-Muffinförmchen füllen und bei 180 °C etwa 12 Minuten backen.',
   },
 ];
+
+const formatAllergens = (allergens: string[] = []) =>
+  allergens.map((id) => ALLERGEN_LABELS[id as AllergenId] ?? id).join(', ');
 
 const RecipeGeneratorScreen = () => {
   const router = useRouter();
@@ -497,7 +508,7 @@ const RecipeGeneratorScreen = () => {
                   <IconSymbol name='checklist' size={26} color={PRIMARY} />
                 </View>
                 <View style={styles.heroTextWrap}>
-                  <ThemedText style={styles.heroTitle}>Dein BLW-Filter</ThemedText>
+                  <ThemedText style={styles.heroTitle}>Rezepte für kleine Entdecker</ThemedText>
                   <ThemedText style={styles.heroSubtitle}>
                     Stell Alter und Allergien ein – wir zeigen passende Rezepte.
                   </ThemedText>
@@ -507,7 +518,7 @@ const RecipeGeneratorScreen = () => {
 
             {/* Action Card - Eigenes Rezept */}
             <LiquidGlassCard
-              style={[styles.card, styles.topCard]}
+              style={[styles.card, styles.topCard, styles.actionCard]}
               intensity={28}
               overlayColor='rgba(94,61,179,0.16)'
               borderColor='rgba(94,61,179,0.42)'
@@ -522,10 +533,7 @@ const RecipeGeneratorScreen = () => {
                   <IconSymbol name='plus.circle.fill' size={26} color={PRIMARY} />
                 </View>
                 <View style={styles.actionTextWrap}>
-                  <ThemedText style={styles.actionTitle}>Eigenes Rezept ergänzen</ThemedText>
-                  <ThemedText style={styles.actionHint}>
-                    Teile eure Lieblingsgerichte mit allen Nutzer*innen.
-                  </ThemedText>
+                  <ThemedText style={styles.actionTitle}>Eigenes Rezept erstellen</ThemedText>
                 </View>
                 <View style={styles.actionChevron}>
                   <IconSymbol name='chevron.right' size={20} color={PRIMARY} />
@@ -756,7 +764,7 @@ const RecipeGeneratorScreen = () => {
                               <View style={[styles.imageHeaderBadge, styles.imageHeaderWarn]}>
                                 <IconSymbol name='exclamationmark.triangle.fill' size={14} color='#FFFFFF' />
                                 <ThemedText style={styles.imageHeaderBadgeText}>
-                                  {recipe.allergens.join(', ')}
+                                  {formatAllergens(recipe.allergens)}
                                 </ThemedText>
                               </View>
                             )}
@@ -877,7 +885,7 @@ const RecipeGeneratorScreen = () => {
                         <View style={[styles.recipeHeroChip, styles.recipeHeroChipWarn]}>
                           <IconSymbol name='exclamationmark.triangle.fill' size={14} color='#FFFFFF' />
                           <ThemedText style={styles.recipeHeroChipText}>
-                            {selectedRecipe.allergens.join(', ')}
+                            {formatAllergens(selectedRecipe.allergens)}
                           </ThemedText>
                         </View>
                       )}
@@ -920,7 +928,7 @@ const RecipeGeneratorScreen = () => {
                       ]}
                     >
                       {selectedRecipe.allergens.length > 0
-                        ? selectedRecipe.allergens.join(', ')
+                        ? formatAllergens(selectedRecipe.allergens)
                         : 'Allergiefreundlich'}
                     </ThemedText>
                   </View>
@@ -1314,10 +1322,14 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   // Action Section
+  actionCard: {
+    paddingHorizontal: CARD_INTERNAL_PADDING + 8,
+    paddingVertical: CARD_INTERNAL_PADDING + 6,
+  },
   actionContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 14,
   },
   actionIcon: {
     width: 52,
@@ -1326,6 +1338,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(94,61,179,0.18)',
     alignItems: 'center',
     justifyContent: 'center',
+    marginLeft: 6,
+    marginVertical: 4,
   },
   actionTextWrap: {
     flex: 1,
@@ -1337,15 +1351,12 @@ const styles = StyleSheet.create({
     color: '#7D5A50',
     lineHeight: 24,
   },
-  actionHint: {
-    fontSize: 15,
-    color: '#7D5A50',
-    lineHeight: 20,
-  },
   actionChevron: {
     padding: 6,
     borderRadius: 18,
     backgroundColor: 'rgba(94,61,179,0.12)',
+    marginRight: 6,
+    marginVertical: 4,
   },
   sectionHeader: {
     flexDirection: 'column',
