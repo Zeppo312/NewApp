@@ -24,6 +24,7 @@ interface UserProfile {
   last_name?: string;
   user_role?: string;
   username?: string | null;
+  avatar_url?: string | null;
   bio?: string;
   created_at: string;
 }
@@ -35,6 +36,7 @@ interface Follower {
   last_name?: string;
   user_role?: string;
   username?: string | null;
+  avatar_url?: string | null;
 }
 
 type NamedEntity = {
@@ -98,7 +100,7 @@ export default function CommunityProfileScreen() {
       // Benutzerinformationen abrufen
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select('id, first_name, last_name, user_role, username, created_at')
+        .select('id, first_name, last_name, user_role, username, avatar_url, created_at')
         .eq('id', user.id)
         .single();
 
@@ -170,7 +172,7 @@ export default function CommunityProfileScreen() {
           // Versuche zuerst, das Profil über die profiles-Tabelle zu finden
           const { data: profileData, error: profileError } = await supabase
             .from('profiles')
-            .select('id, first_name, last_name, user_role, username')
+            .select('id, first_name, last_name, user_role, username, avatar_url')
             .eq('id', followingId)
             .single();
             
@@ -181,6 +183,7 @@ export default function CommunityProfileScreen() {
               last_name: profileData.last_name || '',
               user_role: profileData.user_role || 'unknown',
               username: profileData.username || null,
+              avatar_url: profileData.avatar_url || null,
             });
             continue;
           }
@@ -192,27 +195,29 @@ export default function CommunityProfileScreen() {
               .rpc('get_user_profile', { user_id_param: followingId });
               
             if (!rpcError && rpcData && rpcData.length > 0) {
-              const rpcProfile = rpcData[0];
-              followingUsers.push({
-                id: followingId,
-                first_name: rpcProfile.first_name || 'Benutzer',
-                last_name: rpcProfile.last_name || '',
-                user_role: rpcProfile.user_role || 'unknown',
-                username: rpcProfile.username || null,
-              });
-              continue;
-            }
+            const rpcProfile = rpcData[0];
+            followingUsers.push({
+              id: followingId,
+              first_name: rpcProfile.first_name || 'Benutzer',
+              last_name: rpcProfile.last_name || '',
+              user_role: rpcProfile.user_role || 'unknown',
+              username: rpcProfile.username || null,
+              avatar_url: rpcProfile.avatar_url || null,
+            });
+            continue;
+          }
           }
           
           // Falls wir immer noch kein Profil haben, erstelle einen Platzhalter
           console.log(`No profile found for user ${followingId}, creating placeholder`);
-          followingUsers.push({
-            id: followingId,
-            first_name: 'Benutzer',
-            last_name: '',
-            user_role: 'unknown',
-            username: null,
-          });
+        followingUsers.push({
+          id: followingId,
+          first_name: 'Benutzer',
+          last_name: '',
+          user_role: 'unknown',
+          username: null,
+          avatar_url: null,
+        });
           
         } catch (followingError) {
           console.error(`Error processing following user ${followingId}:`, followingError);
@@ -326,6 +331,7 @@ export default function CommunityProfileScreen() {
   const renderUserItem = ({ item }: { item: Follower }) => {
     const roleInfo = getRoleInfo(item.user_role);
     const displayName = getProfileDisplayName(item);
+    const avatarUrl = item.avatar_url;
 
     return (
       <TouchableOpacity
@@ -333,7 +339,11 @@ export default function CommunityProfileScreen() {
         onPress={() => router.push(`/profile/${item.id}` as any)}
       >
         <View style={[styles.userAvatar, { backgroundColor: roleInfo.chipBg }]}>
-          <IconSymbol name={roleInfo.icon as any} size={24} color="#FFFFFF" />
+          {avatarUrl ? (
+            <Image source={{ uri: avatarUrl }} style={styles.userAvatarImage} />
+          ) : (
+            <IconSymbol name={roleInfo.icon as any} size={24} color="#FFFFFF" />
+          )}
         </View>
         <View style={styles.userInfo}>
           <ThemedText style={styles.userNameItem}>
@@ -364,7 +374,7 @@ export default function CommunityProfileScreen() {
     const name = (item.user_name || '').trim();
     const initial = name ? name.charAt(0).toUpperCase() : '👶';
     const bg = profile?.user_role === 'mama' ? 'rgba(255,159,159,0.25)' : profile?.user_role === 'papa' ? 'rgba(159,216,255,0.25)' : 'rgba(0,0,0,0.08)';
-    return { label: initial, bg };
+    return { label: initial, bg, uri: item.user_avatar_url };
   };
 
   const renderFeedItem = ({ item }: { item: any }) => {
@@ -376,7 +386,11 @@ export default function CommunityProfileScreen() {
             <View style={styles.postHeaderRow}>
               <View style={styles.userInfoRow}>
                 <View style={[styles.avatar, { backgroundColor: avatar.bg }]}>
-                  <ThemedText style={styles.avatarText}>{item.is_anonymous ? '🍼' : avatar.label}</ThemedText>
+                  {avatar.uri ? (
+                    <Image source={{ uri: avatar.uri }} style={styles.avatarImage} />
+                  ) : (
+                    <ThemedText style={styles.avatarText}>{item.is_anonymous ? '🍼' : avatar.label}</ThemedText>
+                  )}
                 </View>
                 <ThemedText style={styles.userNameText}>{item.user_name || 'Anonym'}</ThemedText>
                 <ThemedText style={styles.postDateText}>{formatDate(item.created_at)}</ThemedText>
@@ -441,7 +455,11 @@ export default function CommunityProfileScreen() {
               <View style={styles.profileHeader}>
                 {/* Profilbild */}
                 <View style={[styles.avatarContainer, { backgroundColor: getRoleInfo(profile.user_role).chipBg }]}>
-                  <IconSymbol name={getRoleInfo(profile.user_role).icon as any} size={40} color={getRoleInfo(profile.user_role).chipFg} />
+                  {profile.avatar_url ? (
+                    <Image source={{ uri: profile.avatar_url }} style={styles.profileAvatarImage} />
+                  ) : (
+                    <IconSymbol name={getRoleInfo(profile.user_role).icon as any} size={40} color={getRoleInfo(profile.user_role).chipFg} />
+                  )}
                 </View>
                 
                 {/* Profilinformationen */}
@@ -514,6 +532,7 @@ export default function CommunityProfileScreen() {
                   const role = getRoleInfo(u.user_role);
                   const initials = getProfileInitials(u);
                   const displayName = getProfileDisplayName(u);
+                  const hasAvatar = !!u.avatar_url;
                   return (
                     <TouchableOpacity key={u.id} style={styles.friendItem} onPress={() => router.push(`/profile/${u.id}` as any)}>
                       <LinearGradient
@@ -523,7 +542,11 @@ export default function CommunityProfileScreen() {
                         style={styles.friendRing}
                       >
                         <View style={[styles.friendCircle, { backgroundColor: role.chipBg }]}>
-                          <ThemedText style={[styles.friendInitials, { color: role.chipFg }]}>{initials}</ThemedText>
+                          {hasAvatar ? (
+                            <Image source={{ uri: u.avatar_url! }} style={styles.friendAvatarImage} />
+                          ) : (
+                            <ThemedText style={[styles.friendInitials, { color: role.chipFg }]}>{initials}</ThemedText>
+                          )}
                         </View>
                       </LinearGradient>
                       <ThemedText style={styles.friendName} numberOfLines={1}>
@@ -669,6 +692,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 8,
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 14,
+    resizeMode: 'cover',
   },
   avatarText: {
     fontSize: 13,
@@ -775,7 +805,13 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#EEE'
+    backgroundColor: '#EEE',
+    overflow: 'hidden',
+  },
+  friendAvatarImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 26,
   },
   friendInitials: {
     fontSize: 18,
@@ -806,6 +842,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
+  },
+  profileAvatarImage: {
+    width: 74,
+    height: 74,
+    borderRadius: 37,
+    resizeMode: 'cover',
   },
   nameContainer: {
     flex: 1,
@@ -913,6 +955,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
+  },
+  userAvatarImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 20,
+    resizeMode: 'cover',
   },
   userInfo: {
     flex: 1,
