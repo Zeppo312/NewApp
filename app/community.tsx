@@ -16,7 +16,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   Animated,
-  Modal
+  Modal,
+  GestureResponderEvent
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ThemedText } from '@/components/ThemedText';
@@ -42,6 +43,10 @@ import { NotificationBadge } from '@/components/NotificationBadge';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { FollowButton } from '@/components/FollowButton';
 import { GlassCard, LiquidGlassCard, PRIMARY, LAYOUT_PAD, GLASS_OVERLAY } from '@/constants/DesignGuide';
+
+const TEXT_PRIMARY = '#5A3A2C';
+const TEXT_MUTED = 'rgba(90,58,44,0.75)';
+const POST_CARD_OVERLAY = 'rgba(255,255,255,0.78)';
 
 export default function CommunityScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -83,6 +88,7 @@ export default function CommunityScreen() {
   const [refreshNotificationBadge, setRefreshNotificationBadge] = useState<number>(0);
   // UI-only reactions per post (mapped heart to likes)
   const [postReactions, setPostReactions] = useState<{[postId: string]: {heart: number; joy: number; sleep: number; clap: number; user?: {heart?: boolean; joy?: boolean; sleep?: boolean; clap?: boolean}}}>({});
+  const [activeReactionPicker, setActiveReactionPicker] = useState<string | null>(null);
   // Toolbar modals
   const [showSearch, setShowSearch] = useState(false);
   const [tempSearch, setTempSearch] = useState('');
@@ -595,6 +601,7 @@ export default function CommunityScreen() {
 
   // Erweitere oder reduziere einen Beitrag
   const togglePostExpansion = (postId: string) => {
+    setActiveReactionPicker(null);
     if (expandedPostId === postId) {
       setExpandedPostId(null);
     } else {
@@ -614,6 +621,37 @@ export default function CommunityScreen() {
     post.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
     (post.user_name || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const reactionMenu = [
+    { key: 'joy', emoji: '😂' },
+    { key: 'sleep', emoji: '😴' },
+    { key: 'clap', emoji: '👏' },
+  ] as const;
+
+  type CustomReactionKey = typeof reactionMenu[number]['key'];
+
+  const toggleReactionPicker = (postId: string) => {
+    setActiveReactionPicker(prev => (prev === postId ? null : postId));
+  };
+
+  const handleCustomReaction = (postId: string, reaction: CustomReactionKey, baseHeart = 0) => {
+    setPostReactions(prev => {
+      const current = prev[postId] || { heart: baseHeart, joy: 0, sleep: 0, clap: 0, user: {} };
+      const userState = { ...(current.user || {}) };
+      const nextValue = { ...current };
+
+      if (userState[reaction]) {
+        nextValue[reaction] = Math.max(0, (nextValue[reaction] || 0) - 1);
+        userState[reaction] = false;
+      } else {
+        nextValue[reaction] = (nextValue[reaction] || 0) + 1;
+        userState[reaction] = true;
+      }
+
+      nextValue.user = userState;
+      return { ...prev, [postId]: nextValue };
+    });
+  };
 
   // Keine Farben: neutraler Look mit Liquid Glass. Farbakzente abgeschaltet.
 
@@ -683,76 +721,78 @@ export default function CommunityScreen() {
     const isExpanded = expandedPostId === item.id;
     const comments = postComments[item.id] || [];
     const isOwnPost = user?.id === item.user_id;
-    const createdAt = new Date(item.created_at);
-    const isNew = (Date.now() - createdAt.getTime()) < 24 * 60 * 60 * 1000; // < 24h
     const avatar = getAvatar(item);
     const iconEmoji = getPostEmoji(item);
+    const roleChip = getRoleChip(item.user_role);
+    const dateLabel = formatDate(item.created_at);
+    const displayName = item.is_anonymous ? 'Anonym' : (item.user_name || 'Profil');
+    const metaLineParts = [!item.is_anonymous ? roleChip.label : null, dateLabel].filter(Boolean);
+    const metaLine = metaLineParts.join(' · ');
+    const reactionState = postReactions[item.id] || { heart: item.likes_count || 0, joy: 0, sleep: 0, clap: 0, user: {} };
+    const isReactionPickerVisible = activeReactionPicker === item.id;
+    const handleProfilePress = (event: GestureResponderEvent) => {
+      event.stopPropagation();
+      if (item.user_id) {
+        router.push(`/profile/${item.user_id}` as any);
+      }
+    };
 
     // Debug logging für Bilder
     if (item.image_url) {
       console.log(`Post ${item.id} has image_url: ${item.image_url}`);
     }
 
-    const baseOverlay = GLASS_OVERLAY; // helles, neutrales Glas
-    const overlayColor = index % 2 === 1 ? 'rgba(0,0,0,0.14)' : baseOverlay; // dunklere Scheibe
-    const cardIntensity = index % 2 === 1 ? 28 : 24;
+    const overlayColor = POST_CARD_OVERLAY;
+    const cardIntensity = 24;
     return (
       <LiquidGlassCard style={styles.postItem} overlayColor={overlayColor} intensity={cardIntensity}>
         <View style={styles.postInner}>
-        <TouchableOpacity
-          style={styles.postHeader}
-          onPress={() => togglePostExpansion(item.id)}
-        >
-            <View style={styles.userInfo}>
+          <View style={styles.postHeader}>
+            <TouchableOpacity
+              style={styles.postHeaderLeft}
+              onPress={() => togglePostExpansion(item.id)}
+              activeOpacity={0.9}
+            >
               <View style={[styles.avatar, { backgroundColor: avatar.bg }]}>
                 <ThemedText style={styles.avatarText}>{item.is_anonymous ? '🍼' : avatar.label}</ThemedText>
               </View>
-              {item.is_anonymous ? (
-                <ThemedText style={styles.userName}>Anonym</ThemedText>
-              ) : (
-                <TouchableOpacity onPress={() => item.user_id && router.push(`/profile/${item.user_id}` as any)}>
-                  <ThemedText style={[styles.userName, { textDecorationLine: 'underline' }]}>
-                    {item.user_name || 'Profil'}
+              <View style={styles.metaContainer}>
+                {item.is_anonymous ? (
+                  <ThemedText style={[styles.userName, { color: theme.accent }]}>Anonym</ThemedText>
+                ) : (
+                  <TouchableOpacity onPress={handleProfilePress} activeOpacity={0.8}>
+                    <ThemedText style={[styles.userName, styles.postMetaLink, { color: theme.accent }]} numberOfLines={1}>
+                      {displayName}
+                    </ThemedText>
+                  </TouchableOpacity>
+                )}
+                {metaLine.length > 0 && (
+                  <ThemedText style={[styles.metaSubLine, { color: theme.tabIconDefault }]} numberOfLines={1}>
+                    {metaLine}
                   </ThemedText>
+                )}
+              </View>
+            </TouchableOpacity>
+            <View style={styles.postHeaderActions}>
+              {!isOwnPost && !item.is_anonymous && (
+                <FollowButton 
+                  userId={item.user_id} 
+                  size="small"
+                  showIcon={false}
+                  showText={true}
+                  style={styles.followButton}
+                />
+              )}
+              {isOwnPost && (
+                <TouchableOpacity
+                  style={styles.deleteButton}
+                  onPress={() => handleDeletePost(item.id)}
+                >
+                  <IconSymbol name="trash" size={18} color="#FF6B6B" />
                 </TouchableOpacity>
               )}
-            {!item.is_anonymous && (
-              <View style={[styles.roleChip, { backgroundColor: getRoleChip(item.user_role).bg }] }>
-                <ThemedText style={[styles.roleChipText, { color: getRoleChip(item.user_role).fg }]}>{getRoleChip(item.user_role).label}</ThemedText>
-              </View>
-            )}
-            {__DEV__ && (
-              <ThemedText style={styles.debugText}>
-                [Debug: user_id: {item.user_id?.substring(0, 8)}... anonym: {String(item.is_anonymous)}]
-              </ThemedText>
-            )}
-            <ThemedText style={styles.postDate}>{formatDate(item.created_at)}</ThemedText>
-            {isNew && (
-              <View style={[styles.newBadge, { marginLeft: 8 }]}>
-                <ThemedText style={[styles.newBadgeText]}>Neu</ThemedText>
-              </View>
-            )}
-            
-            {!isOwnPost && !item.is_anonymous && (
-              <FollowButton 
-                userId={item.user_id} 
-                size="small"
-                showIcon={false}
-                showText={true}
-                style={styles.followButton}
-              />
-            )}
+            </View>
           </View>
-
-          {isOwnPost && (
-            <TouchableOpacity
-              style={styles.deleteButton}
-              onPress={() => handleDeletePost(item.id)}
-            >
-              <IconSymbol name="trash" size={18} color="#FF6B6B" />
-            </TouchableOpacity>
-          )}
-        </TouchableOpacity>
 
         <TouchableOpacity
           onPress={() => togglePostExpansion(item.id)}
@@ -799,48 +839,49 @@ export default function CommunityScreen() {
         </TouchableOpacity>
 
         <View style={[
-          styles.postActions,
+          styles.postActionsRow,
           { borderTopColor: colorScheme === 'dark' ? theme.border : '#EFEFEF' }
         ]}>
           <TouchableOpacity
-            style={styles.actionButton}
+            style={styles.compactActionButton}
             onPress={() => handleTogglePostLike(item.id)}
           >
             <IconSymbol
               name={item.has_liked ? "heart.fill" : "heart"}
-              size={20}
+              size={18}
               color={item.has_liked ? "#FF6B6B" : theme.tabIconDefault}
             />
-            <ThemedText style={styles.actionText}>{item.likes_count || 0}</ThemedText>
-          </TouchableOpacity>
-          {/* Additional lightweight reactions (UI only) */}
-          <TouchableOpacity
-            style={styles.reactionChip}
-            onPress={() => setPostReactions(prev => { const r = { ...(prev[item.id] || { heart: item.likes_count || 0, joy: 0, sleep: 0, clap: 0, user: {} }) }; const u = r.user || {}; if (u.joy) { r.joy = Math.max(0, r.joy - 1); u.joy = false; } else { r.joy += 1; u.joy = true; } r.user = u; return { ...prev, [item.id]: r }; })}
-          >
-            <ThemedText style={styles.reactionText}>😂 {postReactions[item.id]?.joy ?? 0}</ThemedText>
+            <ThemedText style={[styles.compactActionText, { color: theme.accent }]}>{item.likes_count || 0}</ThemedText>
           </TouchableOpacity>
           <TouchableOpacity
-            style={styles.reactionChip}
-            onPress={() => setPostReactions(prev => { const r = { ...(prev[item.id] || { heart: item.likes_count || 0, joy: 0, sleep: 0, clap: 0, user: {} }) }; const u = r.user || {}; if (u.sleep) { r.sleep = Math.max(0, r.sleep - 1); u.sleep = false; } else { r.sleep += 1; u.sleep = true; } r.user = u; return { ...prev, [item.id]: r }; })}
-          >
-            <ThemedText style={styles.reactionText}>😴 {postReactions[item.id]?.sleep ?? 0}</ThemedText>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.reactionChip}
-            onPress={() => setPostReactions(prev => { const r = { ...(prev[item.id] || { heart: item.likes_count || 0, joy: 0, sleep: 0, clap: 0, user: {} }) }; const u = r.user || {}; if (u.clap) { r.clap = Math.max(0, r.clap - 1); u.clap = false; } else { r.clap += 1; u.clap = true; } r.user = u; return { ...prev, [item.id]: r }; })}
-          >
-            <ThemedText style={styles.reactionText}>👏 {postReactions[item.id]?.clap ?? 0}</ThemedText>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.actionButton}
+            style={styles.compactActionButton}
             onPress={() => togglePostExpansion(item.id)}
           >
-            <IconSymbol name="bubble.right" size={20} color={theme.tabIconDefault} />
-            <ThemedText style={styles.actionText}>Antworten</ThemedText>
-            <ThemedText style={[styles.actionText, { marginLeft: 6 }]}>{item.comments_count || 0}</ThemedText>
+            <IconSymbol name="bubble.right" size={18} color={theme.tabIconDefault} />
+            <ThemedText style={[styles.compactActionText, { color: theme.accent }]}>{item.comments_count || 0}</ThemedText>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.compactActionButton}
+            onPress={() => toggleReactionPicker(item.id)}
+          >
+            <IconSymbol name={isReactionPickerVisible ? "xmark" : "ellipsis"} size={18} color={theme.tabIconDefault} />
           </TouchableOpacity>
         </View>
+        {isReactionPickerVisible && (
+          <View style={styles.reactionTray}>
+            {reactionMenu.map(({ key, emoji }) => (
+              <TouchableOpacity
+                key={key}
+                style={styles.reactionPill}
+                onPress={() => handleCustomReaction(item.id, key, item.likes_count || 0)}
+              >
+                <ThemedText style={[styles.reactionPillText, { color: theme.accent }]}>
+                  {emoji} {reactionState[key] ?? 0}
+                </ThemedText>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
 
         {/* Inline preview of first replies */}
         {(!isExpanded) && (previewComments[item.id]?.length || 0) > 0 && (
@@ -849,7 +890,6 @@ export default function CommunityScreen() {
               styles.commentsContainer,
               {
                 borderTopColor: colorScheme === 'dark' ? '#5C4033' : '#D8C8B8',
-                borderLeftColor: colorScheme === 'dark' ? '#8B6D5A' : '#6B4C3B',
               },
             ]}
           >
@@ -857,6 +897,11 @@ export default function CommunityScreen() {
               const cAvatar = comment.is_anonymous
                 ? { label: '👤', bg: 'rgba(0,0,0,0.08)' }
                 : { label: (comment.user_name || '👶').charAt(0).toUpperCase(), bg: comment.user_role === 'mama' ? 'rgba(255,159,159,0.25)' : comment.user_role === 'papa' ? 'rgba(159,216,255,0.25)' : 'rgba(0,0,0,0.08)' };
+              const handlePreviewProfilePress = () => {
+                if (!comment.is_anonymous && comment.user_id) {
+                  router.push(`/profile/${comment.user_id}` as any);
+                }
+              };
               return (
                 <ThemedView key={comment.id} style={styles.commentItem} lightColor="#F9F9F9" darkColor={theme.cardDark}>
                   <View style={styles.commentHeader}>
@@ -864,8 +909,16 @@ export default function CommunityScreen() {
                       <View style={[styles.avatar, { width: 28, height: 28, backgroundColor: cAvatar.bg }]}>
                         <ThemedText style={[styles.avatarText, { fontSize: 12 }]}>{cAvatar.label}</ThemedText>
                       </View>
-                      <ThemedText style={styles.userName}>{comment.user_name || 'Anonym'}</ThemedText>
-                      <ThemedText style={styles.commentDate}>{formatDate(comment.created_at)}</ThemedText>
+                      {comment.is_anonymous ? (
+                        <ThemedText style={styles.userName}>Anonym</ThemedText>
+                      ) : (
+                        <TouchableOpacity onPress={handlePreviewProfilePress} activeOpacity={0.8}>
+                          <ThemedText style={[styles.userName, styles.postMetaLink, { color: theme.accent }]}>
+                            {comment.user_name || 'Profil'}
+                          </ThemedText>
+                        </TouchableOpacity>
+                      )}
+                      <ThemedText style={[styles.commentDate, { color: theme.tabIconDefault }]}>{formatDate(comment.created_at)}</ThemedText>
                     </View>
                   </View>
                   <ThemedText style={styles.commentContent}>{comment.content}</ThemedText>
@@ -902,7 +955,6 @@ export default function CommunityScreen() {
                   styles.commentsContainer,
                   {
                     borderTopColor: colorScheme === 'dark' ? '#5C4033' : '#D8C8B8',
-                    borderLeftColor: colorScheme === 'dark' ? '#8B6D5A' : '#6B4C3B',
                   },
                 ]}
               >
@@ -913,37 +965,49 @@ export default function CommunityScreen() {
                 </View>
                 {comments.map(comment => {
                   const isOwnComment = user?.id === comment.user_id;
-                  const isOP = comment.user_id === item.user_id;
                   const cAvatar = comment.is_anonymous
                     ? { label: '👤', bg: 'rgba(0,0,0,0.08)' }
                     : { label: (comment.user_name || '👶').charAt(0).toUpperCase(), bg: comment.user_role === 'mama' ? 'rgba(255,159,159,0.25)' : comment.user_role === 'papa' ? 'rgba(159,216,255,0.25)' : 'rgba(0,0,0,0.08)' };
+                  const handleCommentProfilePress = () => {
+                    if (!comment.is_anonymous && comment.user_id) {
+                      router.push(`/profile/${comment.user_id}` as any);
+                    }
+                  };
+                  const canMessageAuthor = !comment.is_anonymous && comment.user_id && user?.id !== comment.user_id;
                   return (
                     <ThemedView key={comment.id} style={styles.commentItem} lightColor="#F9F9F9" darkColor={theme.cardDark}>
                       <View style={styles.commentHeader}>
-                        <View style={styles.userInfo}>
+                        <TouchableOpacity
+                          style={styles.commentProfile}
+                          onPress={handleCommentProfilePress}
+                          activeOpacity={comment.is_anonymous ? 1 : 0.85}
+                          disabled={comment.is_anonymous}
+                        >
                           <View style={[styles.avatar, { backgroundColor: cAvatar.bg }]}>
                             <ThemedText style={styles.avatarText}>{cAvatar.label}</ThemedText>
                           </View>
-                          <ThemedText style={styles.userName}>
-                            {comment.user_name || 'Anonym'}
-                          </ThemedText>
-                          {!comment.is_anonymous && (
-                            <View style={[styles.roleChip, { backgroundColor: getRoleChip(comment.user_role).bg }]}>
-                              <ThemedText style={[styles.roleChipText, { color: getRoleChip(comment.user_role).fg }]}>{getRoleChip(comment.user_role).label}</ThemedText>
-                            </View>
-                          )}
-                          {isOP && (
-                            <View style={styles.opBadge}>
-                              <ThemedText style={styles.opBadgeText}>Autor</ThemedText>
-                            </View>
-                          )}
-                          {__DEV__ && (
-                            <ThemedText style={styles.debugText}>
-                              [Debug: user_id: {comment.user_id?.substring(0, 8)}... anonym: {String(comment.is_anonymous)}]
+                          <View style={styles.commentMeta}>
+                            <ThemedText style={[styles.userName, !comment.is_anonymous && { color: theme.accent }]}>
+                              {comment.is_anonymous ? 'Anonym' : comment.user_name || 'Profil'}
                             </ThemedText>
+                            {__DEV__ && (
+                              <ThemedText style={styles.debugText}>
+                                [Debug: user_id: {comment.user_id?.substring(0, 8)}... anonym: {String(comment.is_anonymous)}]
+                              </ThemedText>
+                            )}
+                            <ThemedText style={[styles.commentDate, { color: theme.tabIconDefault }]}>{formatDate(comment.created_at)}</ThemedText>
+                          </View>
+                        </TouchableOpacity>
+                        <View style={styles.commentHeaderActions}>
+                          {canMessageAuthor && (
+                            <TouchableOpacity
+                              style={[styles.dmButton, { borderColor: theme.accent }]}
+                              onPress={() => router.push(`/chat/${comment.user_id}` as any)}
+                              activeOpacity={0.85}
+                            >
+                              <IconSymbol name="bubble.left.and.bubble.right" size={16} color={theme.accent} />
+                            </TouchableOpacity>
                           )}
-                          <ThemedText style={styles.commentDate}>{formatDate(comment.created_at)}</ThemedText>
-                          
                           {user?.id !== comment.user_id && !comment.is_anonymous && (
                             <FollowButton 
                               userId={comment.user_id} 
@@ -953,16 +1017,15 @@ export default function CommunityScreen() {
                               style={styles.followButton}
                             />
                           )}
+                          {isOwnComment && (
+                            <TouchableOpacity
+                              style={styles.deleteButton}
+                              onPress={() => handleDeleteComment(comment.id, item.id)}
+                            >
+                              <IconSymbol name="trash" size={16} color="#FF6B6B" />
+                            </TouchableOpacity>
+                          )}
                         </View>
-
-                        {isOwnComment && (
-                          <TouchableOpacity
-                            style={styles.deleteButton}
-                            onPress={() => handleDeleteComment(comment.id, item.id)}
-                          >
-                            <IconSymbol name="trash" size={16} color="#FF6B6B" />
-                          </TouchableOpacity>
-                        )}
                       </View>
                       <ThemedText style={styles.commentContent}>{comment.content}</ThemedText>
                       <View style={styles.commentActions}>
@@ -975,7 +1038,7 @@ export default function CommunityScreen() {
                             size={16}
                             color={comment.has_liked ? "#FF6B6B" : theme.tabIconDefault}
                           />
-                          <ThemedText style={styles.actionText}>{comment.likes_count || 0}</ThemedText>
+                          <ThemedText style={[styles.actionText, { color: theme.accent }]}>{comment.likes_count || 0}</ThemedText>
                         </TouchableOpacity>
                         
                         <TouchableOpacity
@@ -989,7 +1052,7 @@ export default function CommunityScreen() {
                           }}
                         >
                           <IconSymbol name="arrowshape.turn.up.left" size={16} color={theme.tabIconDefault} />
-                          <ThemedText style={styles.actionText}>Antworten</ThemedText>
+                          <ThemedText style={[styles.actionText, { color: theme.accent }]}>Antworten</ThemedText>
                         </TouchableOpacity>
                       </View>
                       
@@ -997,34 +1060,66 @@ export default function CommunityScreen() {
                       {nestedComments[comment.id] && nestedComments[comment.id].length > 0 && (
                         <View style={styles.nestedCommentsContainer}>
                           <ThemedText style={styles.nestedCommentsTitle}>Antworten:</ThemedText>
-                          {nestedComments[comment.id].map(nestedComment => (
-                            <ThemedView 
-                              key={nestedComment.id} 
-                              style={styles.nestedCommentItem} 
-                              lightColor="#F0F0F0" 
-                              darkColor={colorScheme === 'dark' ? '#1F2937' : undefined}
-                            >
-                              <View style={styles.commentHeader}>
-                                <View style={styles.userInfo}>
-                                  <View style={[
-                                    styles.userRoleIndicator,
-                                    { backgroundColor: nestedComment.user_role === 'mama' ? '#FF9F9F' : nestedComment.user_role === 'papa' ? '#9FD8FF' : '#D9D9D9' }
-                                  ]} />
-                                  <ThemedText style={styles.userName}>
-                                    {nestedComment.user_name || 'Anonym'}
-                                  </ThemedText>
-                                  <ThemedText style={styles.commentDate}>{formatDate(nestedComment.created_at)}</ThemedText>
-                                </View>
-                                
-                                {user?.id === nestedComment.user_id && (
+                          {nestedComments[comment.id].map(nestedComment => {
+                            const nestedBg = nestedComment.is_anonymous
+                              ? 'rgba(0,0,0,0.08)'
+                              : nestedComment.user_role === 'mama'
+                                ? 'rgba(255,159,159,0.25)'
+                                : nestedComment.user_role === 'papa'
+                                  ? 'rgba(159,216,255,0.25)'
+                                  : 'rgba(0,0,0,0.08)';
+                            const nestedInitial = nestedComment.is_anonymous
+                              ? '👤'
+                              : (nestedComment.user_name || '👶').charAt(0).toUpperCase();
+                            const canMessageNestedAuthor = !nestedComment.is_anonymous && nestedComment.user_id && user?.id !== nestedComment.user_id;
+                            return (
+                              <ThemedView 
+                                key={nestedComment.id} 
+                                style={styles.nestedCommentItem} 
+                                lightColor="#F0F0F0" 
+                                darkColor={colorScheme === 'dark' ? '#1F2937' : undefined}
+                              >
+                                <View style={styles.commentHeader}>
                                   <TouchableOpacity
-                                    style={styles.deleteButton}
-                                    onPress={() => handleDeleteNestedComment(nestedComment.id, comment.id)}
+                                    style={styles.commentProfile}
+                                    onPress={() => {
+                                      if (!nestedComment.is_anonymous && nestedComment.user_id) {
+                                        router.push(`/profile/${nestedComment.user_id}` as any);
+                                      }
+                                    }}
+                                    activeOpacity={nestedComment.is_anonymous ? 1 : 0.85}
+                                    disabled={nestedComment.is_anonymous}
                                   >
-                                    <IconSymbol name="trash" size={16} color="#FF6B6B" />
+                                    <View style={[styles.avatar, { backgroundColor: nestedBg }]}>
+                                      <ThemedText style={styles.avatarText}>{nestedInitial}</ThemedText>
+                                    </View>
+                                    <View style={styles.commentMeta}>
+                                      <ThemedText style={[styles.userName, !nestedComment.is_anonymous && { color: theme.accent }]}>
+                                        {nestedComment.is_anonymous ? 'Anonym' : nestedComment.user_name || 'Profil'}
+                                      </ThemedText>
+                                      <ThemedText style={[styles.commentDate, { color: theme.tabIconDefault }]}>{formatDate(nestedComment.created_at)}</ThemedText>
+                                    </View>
                                   </TouchableOpacity>
-                                )}
-                              </View>
+                                  <View style={styles.commentHeaderActions}>
+                                    {canMessageNestedAuthor && (
+                                      <TouchableOpacity
+                                        style={[styles.dmButton, { borderColor: theme.accent }]}
+                                        onPress={() => router.push(`/chat/${nestedComment.user_id}` as any)}
+                                        activeOpacity={0.85}
+                                      >
+                                        <IconSymbol name="bubble.left.and.bubble.right" size={16} color={theme.accent} />
+                                      </TouchableOpacity>
+                                    )}
+                                    {user?.id === nestedComment.user_id && (
+                                      <TouchableOpacity
+                                        style={styles.deleteButton}
+                                        onPress={() => handleDeleteNestedComment(nestedComment.id, comment.id)}
+                                      >
+                                        <IconSymbol name="trash" size={16} color="#FF6B6B" />
+                                      </TouchableOpacity>
+                                    )}
+                                  </View>
+                                </View>
                               <ThemedText style={styles.commentContent}>{nestedComment.content}</ThemedText>
                               <View style={styles.commentActions}>
                                 <TouchableOpacity
@@ -1036,7 +1131,7 @@ export default function CommunityScreen() {
                                     size={16}
                                     color={nestedComment.has_liked ? "#FF6B6B" : theme.tabIconDefault}
                                   />
-                                  <ThemedText style={styles.actionText}>{nestedComment.likes_count || 0}</ThemedText>
+                                  <ThemedText style={[styles.actionText, { color: theme.accent }]}>{nestedComment.likes_count || 0}</ThemedText>
                                 </TouchableOpacity>
                                 
                                 <TouchableOpacity
@@ -1050,11 +1145,11 @@ export default function CommunityScreen() {
                                   }}
                                 >
                                   <IconSymbol name="arrowshape.turn.up.left" size={16} color={theme.tabIconDefault} />
-                                  <ThemedText style={styles.actionText}>Antworten</ThemedText>
+                                  <ThemedText style={[styles.actionText, { color: theme.accent }]}>Antworten</ThemedText>
                                 </TouchableOpacity>
                               </View>
                             </ThemedView>
-                          ))}
+                          )})}
                         </View>
                       )}
                       
@@ -1676,7 +1771,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   postInner: {
-    padding: 20,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
     position: 'relative',
   },
   postAccent: {
@@ -1688,20 +1784,6 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 12,
     borderBottomLeftRadius: 12,
     opacity: 0.9,
-  },
-  // removed index bubble and top row — cleaner look
-  newBadge: {
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    backgroundColor: 'rgba(255,255,255,0.6)',
-    borderColor: '#BFBFBF',
-  },
-  newBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#6A6A6A',
   },
   avatar: {
     width: 28,
@@ -1716,6 +1798,10 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#4A4A4A',
   },
+  metaContainer: {
+    flexDirection: 'column',
+    flexShrink: 1,
+  },
   iconRow: {
     marginBottom: 4,
   },
@@ -1726,49 +1812,87 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
+  },
+  postHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  postHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 12,
   },
   userInfo: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
   },
-  userRoleIndicator: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    marginRight: 8,
-  },
   userName: {
     fontSize: 16,
     fontWeight: 'bold',
   },
-  postDate: {
+  metaSubLine: {
     fontSize: 12,
-    color: '#888',
-    marginLeft: 8,
+    fontWeight: '500',
+    color: TEXT_MUTED,
+  },
+  postMetaLink: {
+    textDecorationLine: 'underline',
+  },
+  postMetaPressable: {
+    flexShrink: 1,
   },
   postContent: {
     fontSize: 16,
     lineHeight: 24,
     marginBottom: 10,
+    color: TEXT_PRIMARY,
+    textShadowColor: 'rgba(255,255,255,0.6)',
+    textShadowOffset: { width: 0, height: 0.5 },
+    textShadowRadius: 0.5,
   },
-  postActions: {
+  postActionsRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     alignItems: 'center',
     borderTopWidth: 1,
-    paddingTop: 12,
+    paddingTop: 8,
+    marginTop: 8,
   },
-  reactionChip: {
-    backgroundColor: '#EFEFEF',
-    paddingHorizontal: 10,
+  compactActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+    marginRight: 12,
+  },
+  compactActionText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#4A4A4A',
+    marginLeft: 4,
+  },
+  reactionTray: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 6,
+    paddingHorizontal: 4,
     paddingVertical: 6,
     borderRadius: 16,
-    marginRight: 8,
+    backgroundColor: 'rgba(0,0,0,0.03)',
   },
-  reactionText: {
-    fontSize: 13,
+  reactionPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0,0,0,0.05)',
+    marginRight: 8,
+    marginBottom: 4,
+  },
+  reactionPillText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   actionButton: {
     flexDirection: 'row',
@@ -1778,14 +1902,13 @@ const styles = StyleSheet.create({
   actionText: {
     marginLeft: 4,
     fontSize: 14,
-    color: '#888',
+    color: TEXT_MUTED,
   },
   commentsContainer: {
     marginTop: 12,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderLeftWidth: 3,
-    paddingLeft: 12,
+    paddingLeft: 0,
   },
   commentsHeaderRow: {
     flexDirection: 'row',
@@ -1814,16 +1937,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#666',
   },
-  roleChip: {
-    marginLeft: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-  },
-  roleChipText: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
   commentItem: {
     borderRadius: 8,
     padding: 12,
@@ -1835,19 +1948,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8,
   },
-  opBadge: {
-    marginLeft: 8,
-    borderWidth: 1,
-    borderColor: '#FFD580',
-    backgroundColor: 'rgba(255, 213, 128, 0.25)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 10,
+  commentProfile: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
   },
-  opBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#A26E00',
+  commentMeta: {
+    marginLeft: 8,
+    flexShrink: 1,
+  },
+  commentHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 12,
+  },
+  dmButton: {
+    padding: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginRight: 6,
   },
   commentDate: {
     fontSize: 12,
@@ -1938,7 +2057,7 @@ const styles = StyleSheet.create({
   composerPlaceholder: {
     marginLeft: 8,
     fontSize: 14,
-    color: '#888',
+    color: TEXT_MUTED,
   },
   modalBackdrop: {
     flex: 1,
@@ -2211,10 +2330,6 @@ const styles = StyleSheet.create({
   contentTouchable: {
     marginBottom: 12,
     borderRadius: 8,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#EFEFEF',
-    backgroundColor: '#FAFAFA',
   },
   tapHint: {
     fontSize: 12,
@@ -2280,7 +2395,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 12,
     borderLeftWidth: 2,
-    borderLeftColor: '#B79B87',
+    borderLeftColor: '#E2D2C5',
   },
   nestedCommentsTitle: {
     fontSize: 14,
@@ -2295,6 +2410,7 @@ const styles = StyleSheet.create({
   },
   followButton: {
     marginLeft: 8,
+    flexShrink: 0,
   },
   floatingProfileButton: {
     flexDirection: 'row',

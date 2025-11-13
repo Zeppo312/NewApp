@@ -14,7 +14,7 @@ import { getFollowerCount, getFollowingCount, getFollowers } from '@/lib/follows
 import Header from '@/components/Header';
 import { getPosts } from '@/lib/community';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { GlassCard, LiquidGlassCard, GLASS_OVERLAY } from '@/constants/DesignGuide';
+import { LiquidGlassCard } from '@/constants/DesignGuide';
 import { FollowButton } from '@/components/FollowButton';
 
 // Interface für das Benutzerprofil
@@ -23,6 +23,7 @@ interface UserProfile {
   first_name: string;
   last_name?: string;
   user_role?: string;
+  username?: string | null;
   bio?: string;
   created_at: string;
 }
@@ -33,7 +34,14 @@ interface Follower {
   first_name: string;
   last_name?: string;
   user_role?: string;
+  username?: string | null;
 }
+
+type NamedEntity = {
+  username?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+};
 
 // Enum für Tabs
 enum ProfileTab {
@@ -90,7 +98,7 @@ export default function CommunityProfileScreen() {
       // Benutzerinformationen abrufen
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select('id, first_name, last_name, user_role, created_at')
+        .select('id, first_name, last_name, user_role, username, created_at')
         .eq('id', user.id)
         .single();
 
@@ -162,7 +170,7 @@ export default function CommunityProfileScreen() {
           // Versuche zuerst, das Profil über die profiles-Tabelle zu finden
           const { data: profileData, error: profileError } = await supabase
             .from('profiles')
-            .select('id, first_name, last_name, user_role')
+            .select('id, first_name, last_name, user_role, username')
             .eq('id', followingId)
             .single();
             
@@ -171,7 +179,8 @@ export default function CommunityProfileScreen() {
               id: profileData.id,
               first_name: profileData.first_name || 'Benutzer',
               last_name: profileData.last_name || '',
-              user_role: profileData.user_role || 'unknown'
+              user_role: profileData.user_role || 'unknown',
+              username: profileData.username || null,
             });
             continue;
           }
@@ -188,7 +197,8 @@ export default function CommunityProfileScreen() {
                 id: followingId,
                 first_name: rpcProfile.first_name || 'Benutzer',
                 last_name: rpcProfile.last_name || '',
-                user_role: rpcProfile.user_role || 'unknown'
+                user_role: rpcProfile.user_role || 'unknown',
+                username: rpcProfile.username || null,
               });
               continue;
             }
@@ -200,7 +210,8 @@ export default function CommunityProfileScreen() {
             id: followingId,
             first_name: 'Benutzer',
             last_name: '',
-            user_role: 'unknown'
+            user_role: 'unknown',
+            username: null,
           });
           
         } catch (followingError) {
@@ -210,7 +221,8 @@ export default function CommunityProfileScreen() {
             id: followingId,
             first_name: 'Benutzer',
             last_name: '',
-            user_role: 'unknown'
+            user_role: 'unknown',
+            username: null,
           });
         }
       }
@@ -291,9 +303,29 @@ export default function CommunityProfileScreen() {
     });
   };
 
+  const getProfileDisplayName = (entity?: NamedEntity | null) => {
+    if (!entity) return 'Profil';
+    const username = entity.username?.trim();
+    if (username) return username;
+    const first = entity.first_name?.trim() || '';
+    const last = entity.last_name?.trim() || '';
+    const fallback = `${first} ${last}`.trim();
+    return fallback || 'Profil';
+  };
+
+  const getProfileInitials = (entity?: NamedEntity | null) => {
+    const displayName = getProfileDisplayName(entity).replace(/\s+/g, '');
+    const alphanumeric = displayName.replace(/[^A-Za-z0-9]/g, '');
+    if (alphanumeric.length >= 2) return alphanumeric.slice(0, 2).toUpperCase();
+    if (alphanumeric.length === 1) return alphanumeric.toUpperCase();
+    const fallback = `${entity?.first_name?.[0] || ''}${entity?.last_name?.[0] || ''}`.trim();
+    return fallback ? fallback.toUpperCase() : 'LB';
+  };
+
   // Renderingfunktion für Follower und Following
   const renderUserItem = ({ item }: { item: Follower }) => {
     const roleInfo = getRoleInfo(item.user_role);
+    const displayName = getProfileDisplayName(item);
 
     return (
       <TouchableOpacity
@@ -305,7 +337,7 @@ export default function CommunityProfileScreen() {
         </View>
         <View style={styles.userInfo}>
           <ThemedText style={styles.userNameItem}>
-            {item.first_name} {item.last_name}
+            {displayName}
           </ThemedText>
           <View style={[styles.userRoleTag, { backgroundColor: roleInfo.chipBg }]}>
             <ThemedText style={styles.userRoleText}>{roleInfo.label}</ThemedText>
@@ -376,11 +408,12 @@ export default function CommunityProfileScreen() {
   };
 
   return (
-    <ThemedBackground style={{ backgroundColor: '#F4EFE6' }}>
+    <ThemedBackground style={{ backgroundColor: '#F6F0FF' }}>
       <SafeAreaView style={styles.container} edges={['top', 'left', 'right', 'bottom']}>
         <Stack.Screen options={{ headerShown: false }} />
         <Header 
-          title="Mein Community-Profil"
+          title="Profil"
+          showBackButton
           onBackPress={() => router.back()}
         />
 
@@ -414,7 +447,7 @@ export default function CommunityProfileScreen() {
                 {/* Profilinformationen */}
                 <View style={styles.nameContainer}>
                   <ThemedText style={styles.userName}>
-                    {profile.first_name} {profile.last_name}
+                    {getProfileDisplayName(profile)}
                   </ThemedText>
                   
                   <View style={[styles.roleChip, { backgroundColor: getRoleInfo(profile.user_role).chipBg }]}> 
@@ -479,7 +512,8 @@ export default function CommunityProfileScreen() {
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.friendsRow}>
                 {(following.length > 0 ? following : followers).slice(0, 12).map((u) => {
                   const role = getRoleInfo(u.user_role);
-                  const initials = `${(u.first_name || 'B')[0] || ''}${(u.last_name || '')[0] || ''}`.toUpperCase();
+                  const initials = getProfileInitials(u);
+                  const displayName = getProfileDisplayName(u);
                   return (
                     <TouchableOpacity key={u.id} style={styles.friendItem} onPress={() => router.push(`/profile/${u.id}` as any)}>
                       <LinearGradient
@@ -493,7 +527,7 @@ export default function CommunityProfileScreen() {
                         </View>
                       </LinearGradient>
                       <ThemedText style={styles.friendName} numberOfLines={1}>
-                        {u.first_name}
+                        {displayName}
                       </ThemedText>
                     </TouchableOpacity>
                   );
@@ -594,9 +628,20 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   profileCard: {
-    borderRadius: 16,
+    borderRadius: 20,
     padding: 20,
-    marginBottom: 16,
+    marginBottom: 20,
+    width: '100%',
+    maxWidth: 520,
+    alignSelf: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(151,117,250,0.35)',
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#9775FA',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.12,
+    shadowRadius: 24,
+    elevation: 6,
   },
   // Feed styles (Community-like)
   feedCard: {
@@ -674,9 +719,22 @@ const styles = StyleSheet.create({
     color: '#888',
   },
   friendsSection: {
-    marginTop: 4,
-    marginBottom: 12,
-    paddingHorizontal: 12,
+    marginTop: 8,
+    marginBottom: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    width: '100%',
+    maxWidth: 520,
+    alignSelf: 'center',
+    borderRadius: 20,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: 'rgba(151,117,250,0.18)',
+    shadowColor: '#9775FA',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 3,
   },
   friendsHeaderRow: {
     flexDirection: 'row',
@@ -692,7 +750,7 @@ const styles = StyleSheet.create({
   friendsAction: {
     fontSize: 13,
     fontWeight: '600',
-    opacity: 0.7,
+    color: '#9775FA',
   },
   friendsRow: {
     paddingHorizontal: 4,
@@ -826,8 +884,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   contentContainer: {
-    flex: 1,
-    marginBottom: 20,
+    flexGrow: 1,
+    width: '100%',
+    paddingHorizontal: 16,
+    paddingBottom: 32,
+    alignItems: 'center',
   },
   loadingContentContainer: {
     flex: 1,
@@ -931,7 +992,20 @@ const styles = StyleSheet.create({
   },
   tabContent: {
     flex: 1,
+    width: '100%',
+    maxWidth: 520,
+    alignSelf: 'center',
     padding: 16,
+    borderRadius: 20,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: 'rgba(151,117,250,0.15)',
+    shadowColor: '#9775FA',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.08,
+    shadowRadius: 20,
+    elevation: 4,
+    marginBottom: 24,
   },
   activeStatItem: {
     borderBottomWidth: 2,

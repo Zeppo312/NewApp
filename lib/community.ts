@@ -50,6 +50,24 @@ export interface Notification {
   is_read: boolean;
 }
 
+type ProfileLike = {
+  username?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  user_role?: string | null;
+};
+
+const resolveProfileDisplayName = (profile?: ProfileLike | null) => {
+  const username = profile?.username?.trim();
+  if (username) return username;
+  const firstName = profile?.first_name?.trim();
+  const lastName = profile?.last_name?.trim();
+  if (firstName || lastName) {
+    return [firstName, lastName].filter(Boolean).join(' ');
+  }
+  return '';
+};
+
 // Neue Funktion: Benachrichtigung erstellen
 export const createNotification = async (
   recipientId: string,
@@ -127,7 +145,7 @@ export const getNotifications = async () => {
       // Absenderinformationen abrufen
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select('first_name, last_name, user_role')
+        .select('first_name, last_name, username, user_role')
         .eq('id', notification.sender_id)
         .single();
 
@@ -277,7 +295,7 @@ export const getPosts = async (searchQuery: string = '', tagIds: string[] = [], 
       if (!profile) {
         const { data: directProfileData, error: directProfileErr } = await supabase
           .from('profiles')
-          .select('id, first_name, last_name, user_role')
+          .select('id, first_name, last_name, username, user_role')
           .eq('id', post.user_id)
           .single();
 
@@ -385,12 +403,11 @@ export const getPosts = async (searchQuery: string = '', tagIds: string[] = [], 
 
       console.log(`Post ${post.id} is_anonymous:`, post.is_anonymous, 'isAnonymous:', isAnonymous);
 
-      // Wenn nicht anonym und ein Profil gefunden wurde, zeige den Vornamen an
-      // Wichtig: Wir müssen sicherstellen, dass profile und first_name existieren
+      const displayName = resolveProfileDisplayName(profile) || 'Benutzer';
       let userName = 'Anonym';
 
-      if (!isAnonymous && profile && profile.first_name) {
-        userName = profile.first_name;
+      if (!isAnonymous) {
+        userName = displayName;
       }
 
       // Wenn der Beitrag vom aktuellen Benutzer stammt, füge "(Du)" hinzu
@@ -398,7 +415,7 @@ export const getPosts = async (searchQuery: string = '', tagIds: string[] = [], 
         userName = isAnonymous ? 'Anonym (Du)' : `${userName} (Du)`;
       }
 
-      console.log(`Post ${post.id} final userName:`, userName, 'profile exists:', !!profile, 'first_name exists:', !!profile?.first_name, 'is current user:', post.user_id === userData.user.id);
+      console.log(`Post ${post.id} final userName:`, userName, 'profile exists:', !!profile, 'username exists:', !!profile?.username, 'is current user:', post.user_id === userData.user.id);
 
       return {
         ...post,
@@ -462,7 +479,7 @@ export const getComments = async (postId: string) => {
       if (!profile) {
         const { data: directProfileData, error: directProfileErr } = await supabase
           .from('profiles')
-          .select('id, first_name, last_name, user_role')
+          .select('id, first_name, last_name, username, user_role')
           .eq('id', comment.user_id)
           .single();
 
@@ -536,11 +553,11 @@ export const getComments = async (postId: string) => {
 
       console.log(`Comment ${comment.id} is_anonymous:`, comment.is_anonymous, 'isAnonymous:', isAnonymous);
 
-      // Wenn nicht anonym und ein Profil gefunden wurde, zeige den Vornamen an
+      const displayName = resolveProfileDisplayName(profile) || 'Benutzer';
       let userName = 'Anonym';
 
-      if (!isAnonymous && profile && profile.first_name) {
-        userName = profile.first_name;
+      if (!isAnonymous) {
+        userName = displayName;
       }
 
       // Wenn der Kommentar vom aktuellen Benutzer stammt, füge "(Du)" hinzu
@@ -548,7 +565,7 @@ export const getComments = async (postId: string) => {
         userName = isAnonymous ? 'Anonym (Du)' : `${userName} (Du)`;
       }
 
-      console.log(`Comment ${comment.id} final userName:`, userName, 'profile exists:', !!profile, 'first_name exists:', !!profile?.first_name, 'is current user:', comment.user_id === userData.user.id);
+      console.log(`Comment ${comment.id} final userName:`, userName, 'profile exists:', !!profile, 'username exists:', !!profile?.username, 'is current user:', comment.user_id === userData.user.id);
 
       return {
         ...comment,
@@ -599,7 +616,7 @@ export const getCommentsPreview = async (postId: string, limit: number = 2) => {
       } else {
         const { data: directProfileData } = await supabase
           .from('profiles')
-          .select('id, first_name, last_name, user_role')
+          .select('id, first_name, last_name, username, user_role')
           .eq('id', comment.user_id)
           .maybeSingle();
         if (directProfileData) profile = directProfileData;
@@ -620,8 +637,9 @@ export const getCommentsPreview = async (postId: string, limit: number = 2) => {
         .maybeSingle();
 
       const isAnonymous = comment.is_anonymous === true;
+      const displayName = resolveProfileDisplayName(profile) || 'Benutzer';
       let userName = 'Anonym';
-      if (!isAnonymous && profile && profile.first_name) userName = profile.first_name;
+      if (!isAnonymous) userName = displayName;
       if (comment.user_id === userData.user.id) {
         userName = isAnonymous ? 'Anonym (Du)' : `${userName} (Du)`;
       }
@@ -1082,9 +1100,11 @@ export const getNestedComments = async (commentId: string) => {
         .eq('user_id', userData.user.id)
         .maybeSingle();
 
+      const displayName = resolveProfileDisplayName(profile) || 'Benutzer';
+
       return {
         ...comment,
-        user_name: comment.is_anonymous ? 'Anonym' : profile ? `${profile.first_name} ${profile.last_name}`.trim() : 'Benutzer',
+        user_name: comment.is_anonymous ? 'Anonym' : displayName,
         user_role: profile?.user_role || null,
         likes_count: likesCount || 0,
         has_liked: !!userLike

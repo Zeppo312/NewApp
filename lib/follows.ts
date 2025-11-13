@@ -15,6 +15,7 @@ export interface UserWithFollow {
   first_name: string;
   last_name?: string;
   user_role?: string;
+  username?: string | null;
   is_following: boolean;
 }
 
@@ -251,7 +252,7 @@ export const getFollowers = async () => {
         // Versuche zuerst, das Profil über die profiles-Tabelle zu finden
         const { data: profileData, error: profileError } = await supabase
           .from('profiles')
-          .select('id, first_name, last_name, user_role')
+          .select('id, first_name, last_name, user_role, username')
           .eq('id', followerId)
           .single();
           
@@ -260,7 +261,8 @@ export const getFollowers = async () => {
             id: profileData.id,
             first_name: profileData.first_name || 'Benutzer',
             last_name: profileData.last_name || '',
-            user_role: profileData.user_role || 'unknown'
+            user_role: profileData.user_role || 'unknown',
+            username: profileData.username || null,
           });
           continue;
         }
@@ -277,7 +279,8 @@ export const getFollowers = async () => {
               id: followerId,
               first_name: rpcProfile.first_name || 'Benutzer',
               last_name: rpcProfile.last_name || '',
-              user_role: rpcProfile.user_role || 'unknown'
+              user_role: rpcProfile.user_role || 'unknown',
+              username: rpcProfile.username || null,
             });
             continue;
           }
@@ -289,7 +292,8 @@ export const getFollowers = async () => {
           id: followerId,
           first_name: 'Benutzer',
           last_name: '',
-          user_role: 'unknown'
+          user_role: 'unknown',
+          username: null,
         });
         
       } catch (followerError) {
@@ -299,7 +303,8 @@ export const getFollowers = async () => {
           id: followerId,
           first_name: 'Benutzer',
           last_name: '',
-          user_role: 'unknown'
+          user_role: 'unknown',
+          username: null,
         });
       }
     }

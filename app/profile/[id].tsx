@@ -25,6 +25,7 @@ interface UserProfile {
   first_name: string;
   last_name?: string;
   user_role?: string;
+  username?: string | null;
   bio?: string;
   created_at: string;
 }
@@ -35,11 +36,13 @@ interface Follower {
   first_name: string;
   last_name?: string;
   user_role?: string;
+  username?: string | null;
 }
 
 const TEXT_PRIMARY = '#5A3A2C';
 const TEXT_MUTED = 'rgba(90,58,44,0.75)';
 const POST_CARD_OVERLAY = 'rgba(255,255,255,0.78)';
+const CONTENT_MAX_WIDTH = 520;
 
 export default function ProfileScreen() {
   const { id } = useLocalSearchParams();
@@ -100,23 +103,35 @@ export default function ProfileScreen() {
         try {
           const { data: p, error: perr } = await supabase
             .from('profiles')
-            .select('id, first_name, last_name, user_role')
+            .select('id, first_name, last_name, user_role, username')
             .eq('id', fid)
             .single();
           if (!perr && p) {
-            list.push({ id: p.id, first_name: p.first_name || 'Benutzer', last_name: p.last_name || '', user_role: p.user_role || 'unknown' });
+            list.push({
+              id: p.id,
+              first_name: p.first_name || 'Benutzer',
+              last_name: p.last_name || '',
+              user_role: p.user_role || 'unknown',
+              username: p.username || null,
+            });
             continue;
           }
           if (perr) {
             const { data: rpcData } = await supabase.rpc('get_user_profile', { user_id_param: fid });
             if (rpcData && rpcData.length > 0) {
-              list.push({ id: fid, first_name: rpcData[0].first_name || 'Benutzer', last_name: rpcData[0].last_name || '', user_role: rpcData[0].user_role || 'unknown' });
+              list.push({
+                id: fid,
+                first_name: rpcData[0].first_name || 'Benutzer',
+                last_name: rpcData[0].last_name || '',
+                user_role: rpcData[0].user_role || 'unknown',
+                username: rpcData[0].username || null,
+              });
               continue;
             }
           }
-          list.push({ id: fid, first_name: 'Benutzer', last_name: '', user_role: 'unknown' });
+          list.push({ id: fid, first_name: 'Benutzer', last_name: '', user_role: 'unknown', username: null });
         } catch (e) {
-          list.push({ id: fid, first_name: 'Benutzer', last_name: '', user_role: 'unknown' });
+          list.push({ id: fid, first_name: 'Benutzer', last_name: '', user_role: 'unknown', username: null });
         }
       }
       setFollowingUsers(list);
@@ -143,7 +158,7 @@ export default function ProfileScreen() {
         // 1. Erst versuchen, das Profil direkt aus der profiles Tabelle zu laden
         const { data: directProfileData, error: directProfileError } = await supabase
           .from('profiles')
-          .select('id, first_name, last_name, user_role, created_at')
+          .select('id, first_name, last_name, user_role, username, created_at')
           .eq('id', userId)
           .single();
           
@@ -164,6 +179,7 @@ export default function ProfileScreen() {
               first_name: rpcData[0].first_name || 'Benutzer',
               last_name: rpcData[0].last_name || '',
               user_role: rpcData[0].user_role || '',
+              username: rpcData[0].username || null,
               created_at: rpcData[0].created_at || new Date().toISOString()
             };
           } else {
@@ -183,6 +199,7 @@ export default function ProfileScreen() {
                 first_name: settingsData.first_name || settingsData.username || 'Benutzer',
                 last_name: settingsData.last_name || '',
                 user_role: '',
+                username: settingsData.username || null,
                 created_at: settingsData.created_at || new Date().toISOString()
               };
             } else {
@@ -195,6 +212,7 @@ export default function ProfileScreen() {
                 first_name: 'Benutzer',
                 last_name: '',
                 user_role: '',
+                username: null,
                 created_at: new Date().toISOString()
               };
               
@@ -338,10 +356,35 @@ export default function ProfileScreen() {
   // Format für das Beitrittsdatum
   const formatJoinDate = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString('de-DE', { 
-      year: 'numeric', 
+    return date.toLocaleDateString('de-DE', {
+      year: 'numeric',
       month: 'long'
     });
+  };
+
+  type NamedEntity = {
+    username?: string | null;
+    first_name?: string | null;
+    last_name?: string | null;
+  };
+
+  const getProfileDisplayName = (entity?: NamedEntity | null) => {
+    if (!entity) return 'Profil';
+    const username = entity.username?.trim();
+    if (username) return username;
+    const first = entity.first_name?.trim() || '';
+    const last = entity.last_name?.trim() || '';
+    const fallback = `${first} ${last}`.trim();
+    return fallback || 'Profil';
+  };
+
+  const getProfileInitials = (entity?: NamedEntity | null) => {
+    const displayName = getProfileDisplayName(entity).replace(/\s+/g, '');
+    const alphanumeric = displayName.replace(/[^A-Za-z0-9]/g, '');
+    if (alphanumeric.length >= 2) return alphanumeric.slice(0, 2).toUpperCase();
+    if (alphanumeric.length === 1) return alphanumeric.toUpperCase();
+    const fallback = `${entity?.first_name?.[0] || ''}${entity?.last_name?.[0] || ''}`.trim();
+    return fallback ? fallback.toUpperCase() : 'LB';
   };
 
   // Post-Helfer wie Community-Feed
@@ -467,8 +510,8 @@ export default function ProfileScreen() {
       <SafeAreaView style={styles.container} edges={['top', 'left', 'right', 'bottom']}>
         <Stack.Screen options={{ headerShown: false }} />
         <Header 
-          title={isOwnProfile ? "Mein Profil" : (profile ? `${profile.first_name} ${profile.last_name || ''}`.trim() : "Benutzerprofil")}
-          subtitle={isOwnProfile ? (profile ? `${profile.first_name} ${profile.last_name || ''}`.trim() : undefined) : undefined}
+          title="Profil"
+          showBackButton
           onBackPress={() => router.back()}
         />
         
@@ -501,7 +544,7 @@ export default function ProfileScreen() {
                 
                 <View style={styles.nameContainer}>
                   <ThemedText style={styles.userName}>
-                    {profile.first_name} {profile.last_name}
+                    {getProfileDisplayName(profile)}
                   </ThemedText>
                   
                   <View style={[styles.roleChip, { backgroundColor: roleInfo.color }]}>
@@ -557,7 +600,7 @@ export default function ProfileScreen() {
             </LiquidGlassCard>
 
             {/* Friends/Following – IG-Stories-Style Row */}
-            <View style={styles.friendsSection}>
+            <ThemedView style={styles.friendsSection} lightColor="#FFFFFF" darkColor={theme.cardDark}>
               <View style={styles.friendsHeaderRow}>
                 <ThemedText style={styles.friendsTitle}>Freunde</ThemedText>
                 {!!followingUsers?.length && (
@@ -568,7 +611,8 @@ export default function ProfileScreen() {
               </View>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.friendsRow}>
                 {(followingUsers || []).slice(0, 12).map((u) => {
-                  const initials = `${(u.first_name || 'B')[0] || ''}${(u.last_name || '')[0] || ''}`.toUpperCase();
+                  const initials = getProfileInitials(u);
+                  const displayName = getProfileDisplayName(u);
                   const chipBg = u.user_role === 'mama' ? '#9775FA' : u.user_role === 'papa' ? '#4DA3FF' : '#E6E6E6';
                   const chipFg = u.user_role === 'mama' || u.user_role === 'papa' ? '#FFFFFF' : '#333333';
                   return (
@@ -584,7 +628,7 @@ export default function ProfileScreen() {
                         </View>
                       </LinearGradient>
                       <ThemedText style={styles.friendName} numberOfLines={1}>
-                        {u.first_name}
+                        {displayName}
                       </ThemedText>
                     </TouchableOpacity>
                   );
@@ -596,10 +640,10 @@ export default function ProfileScreen() {
                   </View>
                 )}
               </ScrollView>
-            </View>
+            </ThemedView>
 
             {/* Benutzerbeiträge – Community-Style Feed */}
-            <View style={{ marginTop: 8, paddingHorizontal: 16 }}>
+            <View style={styles.postsHeaderContainer}>
               <ThemedText style={styles.postsHeaderText}>Beiträge</ThemedText>
             </View>
             {loadingPosts ? (
@@ -618,12 +662,13 @@ export default function ProfileScreen() {
               </View>
             ) : (
               <FlatList
+                style={styles.postsList}
                 data={posts}
                 renderItem={renderPostItem}
                 keyExtractor={item => item.id}
                 scrollEnabled={false}
                 nestedScrollEnabled={true}
-                contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 24 }}
+                contentContainerStyle={styles.postsListContent}
               />
             )}
           </ScrollView>
@@ -667,18 +712,25 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollViewContent: {
-    paddingBottom: 30,
+    paddingBottom: 40,
+    paddingHorizontal: 16,
+    alignItems: 'center',
   },
   profileCard: {
-    borderRadius: 12,
+    borderRadius: 20,
     padding: 20,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-    marginBottom: 16,
-    marginHorizontal: 16,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.12,
+    shadowRadius: 24,
+    elevation: 6,
+    marginBottom: 20,
+    width: '100%',
+    maxWidth: CONTENT_MAX_WIDTH,
+    alignSelf: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.04)',
   },
   profileHeader: {
     alignItems: 'center',
@@ -772,6 +824,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     opacity: 0.7,
   },
+  postsHeaderContainer: {
+    width: '100%',
+    maxWidth: CONTENT_MAX_WIDTH,
+    alignSelf: 'center',
+    marginTop: 8,
+    marginBottom: 8,
+  },
   postsHeaderText: {
     fontSize: 22,
     fontWeight: 'bold',
@@ -780,6 +839,7 @@ const styles = StyleSheet.create({
   feedCard: {
     marginBottom: 16,
     borderRadius: 16,
+    width: '100%',
   },
   feedInner: {
     paddingVertical: 16,
@@ -872,9 +932,21 @@ const styles = StyleSheet.create({
   },
   // Friends row
   friendsSection: {
-    marginTop: 8,
-    marginBottom: 12,
+    marginTop: 12,
+    marginBottom: 20,
     paddingHorizontal: 16,
+    paddingVertical: 16,
+    width: '100%',
+    maxWidth: CONTENT_MAX_WIDTH,
+    alignSelf: 'center',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.05)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 4,
   },
   friendsHeaderRow: {
     flexDirection: 'row',
@@ -923,6 +995,7 @@ const styles = StyleSheet.create({
   friendName: {
     fontSize: 12,
     maxWidth: 64,
+    textAlign: 'center',
   },
   friendsEmpty: {
     flexDirection: 'row',
@@ -935,14 +1008,24 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   loadingPostsContainer: {
-    flex: 1,
+    width: '100%',
+    maxWidth: CONTENT_MAX_WIDTH,
+    alignSelf: 'center',
     justifyContent: 'center',
     alignItems: 'center',
+    paddingVertical: 24,
   },
   emptyPostsContainer: {
-    flex: 1,
+    width: '100%',
+    maxWidth: CONTENT_MAX_WIDTH,
+    alignSelf: 'center',
     justifyContent: 'center',
     alignItems: 'center',
+    paddingVertical: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.06)',
+    backgroundColor: '#FFFFFF',
   },
   emptyPostsText: {
     fontSize: 16,
@@ -950,6 +1033,12 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   postsList: {
-    flex: 1,
+    width: '100%',
+    maxWidth: CONTENT_MAX_WIDTH,
+    alignSelf: 'center',
+  },
+  postsListContent: {
+    paddingTop: 8,
+    paddingBottom: 24,
   },
 });
