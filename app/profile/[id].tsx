@@ -403,7 +403,7 @@ export default function ProfileScreen() {
     const name = (item.user_name || '').trim();
     const initial = name ? name.charAt(0).toUpperCase() : '👶';
     const bg = profile?.user_role === 'mama' ? 'rgba(255,159,159,0.25)' : profile?.user_role === 'papa' ? 'rgba(159,216,255,0.25)' : 'rgba(0,0,0,0.08)';
-    return { label: initial, bg };
+    return { label: initial, bg, uri: item.user_avatar_url };
   };
   
   const getPostEmoji = (item: any) => {
@@ -453,7 +453,11 @@ export default function ProfileScreen() {
                 activeOpacity={item.is_anonymous ? 1 : 0.85}
               >
                 <View style={[styles.avatar, { backgroundColor: avatar.bg }]}>
-                  <ThemedText style={styles.avatarText}>{item.is_anonymous ? '🍼' : avatar.label}</ThemedText>
+                  {avatar.uri ? (
+                    <Image source={{ uri: avatar.uri }} style={styles.avatarImage} />
+                  ) : (
+                    <ThemedText style={styles.avatarText}>{item.is_anonymous ? '🍼' : avatar.label}</ThemedText>
+                  )}
                 </View>
                 <View style={styles.metaContainer}>
                   <ThemedText style={[styles.userNameText, { color: theme.accent }]} numberOfLines={1}>
@@ -539,7 +543,11 @@ export default function ProfileScreen() {
               {/* Profilbild und Name */}
               <View style={styles.profileHeader}>
                 <View style={[styles.avatarContainer, { backgroundColor: roleInfo.color }]}>
-                  <IconSymbol name={roleInfo.icon as any} size={40} color="#FFFFFF" />
+                  {profile?.avatar_url ? (
+                    <Image source={{ uri: profile.avatar_url }} style={styles.profileAvatarImage} />
+                  ) : (
+                    <IconSymbol name={roleInfo.icon as any} size={40} color="#FFFFFF" />
+                  )}
                 </View>
                 
                 <View style={styles.nameContainer}>
@@ -613,6 +621,7 @@ export default function ProfileScreen() {
                 {(followingUsers || []).slice(0, 12).map((u) => {
                   const initials = getProfileInitials(u);
                   const displayName = getProfileDisplayName(u);
+                  const hasAvatar = !!u.avatar_url;
                   const chipBg = u.user_role === 'mama' ? '#9775FA' : u.user_role === 'papa' ? '#4DA3FF' : '#E6E6E6';
                   const chipFg = u.user_role === 'mama' || u.user_role === 'papa' ? '#FFFFFF' : '#333333';
                   return (
@@ -624,7 +633,11 @@ export default function ProfileScreen() {
                         style={styles.friendRing}
                       >
                         <View style={[styles.friendCircle, { backgroundColor: chipBg }]}>
-                          <ThemedText style={[styles.friendInitials, { color: chipFg }]}>{initials}</ThemedText>
+                          {hasAvatar ? (
+                            <Image source={{ uri: u.avatar_url! }} style={styles.friendAvatarImage} />
+                          ) : (
+                            <ThemedText style={[styles.friendInitials, { color: chipFg }]}>{initials}</ThemedText>
+                          )}
                         </View>
                       </LinearGradient>
                       <ThemedText style={styles.friendName} numberOfLines={1}>
@@ -743,6 +756,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 12,
+  },
+  profileAvatarImage: {
+    width: 92,
+    height: 92,
+    borderRadius: 46,
+    resizeMode: 'cover',
   },
   nameContainer: {
     alignItems: 'center',
@@ -865,6 +884,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 8,
   },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 14,
+    resizeMode: 'cover',
+  },
   avatarText: {
     fontSize: 13,
     fontWeight: '700',
@@ -986,7 +1011,13 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#EEE'
+    backgroundColor: '#EEE',
+    overflow: 'hidden',
+  },
+  friendAvatarImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 28,
   },
   friendInitials: {
     fontSize: 18,

@@ -691,7 +691,7 @@ export default function CommunityScreen() {
     const initial = name ? name.charAt(0).toUpperCase() : '👶';
     const bg = item.user_role === 'mama' ? 'rgba(255,159,159,0.25)' : item.user_role === 'papa' ? 'rgba(159,216,255,0.25)' : 'rgba(0,0,0,0.08)';
     const label = name ? initial : '👶';
-    return { label, bg };
+    return { label, bg, uri: item.user_avatar_url };
   };
 
   const getPostEmoji = (item: Post) => {
@@ -754,7 +754,11 @@ export default function CommunityScreen() {
               activeOpacity={0.9}
             >
               <View style={[styles.avatar, { backgroundColor: avatar.bg }]}>
-                <ThemedText style={styles.avatarText}>{item.is_anonymous ? '🍼' : avatar.label}</ThemedText>
+                {avatar.uri ? (
+                  <Image source={{ uri: avatar.uri }} style={styles.avatarImage} />
+                ) : (
+                  <ThemedText style={styles.avatarText}>{item.is_anonymous ? '🍼' : avatar.label}</ThemedText>
+                )}
               </View>
               <View style={styles.metaContainer}>
                 {item.is_anonymous ? (
@@ -895,8 +899,12 @@ export default function CommunityScreen() {
           >
             {previewComments[item.id]!.map((comment) => {
               const cAvatar = comment.is_anonymous
-                ? { label: '👤', bg: 'rgba(0,0,0,0.08)' }
-                : { label: (comment.user_name || '👶').charAt(0).toUpperCase(), bg: comment.user_role === 'mama' ? 'rgba(255,159,159,0.25)' : comment.user_role === 'papa' ? 'rgba(159,216,255,0.25)' : 'rgba(0,0,0,0.08)' };
+                ? { label: '👤', bg: 'rgba(0,0,0,0.08)', uri: undefined }
+                : {
+                    label: (comment.user_name || '👶').charAt(0).toUpperCase(),
+                    bg: comment.user_role === 'mama' ? 'rgba(255,159,159,0.25)' : comment.user_role === 'papa' ? 'rgba(159,216,255,0.25)' : 'rgba(0,0,0,0.08)',
+                    uri: comment.user_avatar_url,
+                  };
               const handlePreviewProfilePress = () => {
                 if (!comment.is_anonymous && comment.user_id) {
                   router.push(`/profile/${comment.user_id}` as any);
@@ -907,7 +915,11 @@ export default function CommunityScreen() {
                   <View style={styles.commentHeader}>
                     <View style={styles.userInfo}>
                       <View style={[styles.avatar, { width: 28, height: 28, backgroundColor: cAvatar.bg }]}>
-                        <ThemedText style={[styles.avatarText, { fontSize: 12 }]}>{cAvatar.label}</ThemedText>
+                        {cAvatar.uri ? (
+                          <Image source={{ uri: cAvatar.uri }} style={[styles.avatarImage, { borderRadius: 14 }]} />
+                        ) : (
+                          <ThemedText style={[styles.avatarText, { fontSize: 12 }]}>{cAvatar.label}</ThemedText>
+                        )}
                       </View>
                       {comment.is_anonymous ? (
                         <ThemedText style={styles.userName}>Anonym</ThemedText>
@@ -966,8 +978,12 @@ export default function CommunityScreen() {
                 {comments.map(comment => {
                   const isOwnComment = user?.id === comment.user_id;
                   const cAvatar = comment.is_anonymous
-                    ? { label: '👤', bg: 'rgba(0,0,0,0.08)' }
-                    : { label: (comment.user_name || '👶').charAt(0).toUpperCase(), bg: comment.user_role === 'mama' ? 'rgba(255,159,159,0.25)' : comment.user_role === 'papa' ? 'rgba(159,216,255,0.25)' : 'rgba(0,0,0,0.08)' };
+                    ? { label: '👤', bg: 'rgba(0,0,0,0.08)', uri: undefined }
+                    : {
+                        label: (comment.user_name || '👶').charAt(0).toUpperCase(),
+                        bg: comment.user_role === 'mama' ? 'rgba(255,159,159,0.25)' : comment.user_role === 'papa' ? 'rgba(159,216,255,0.25)' : 'rgba(0,0,0,0.08)',
+                        uri: comment.user_avatar_url,
+                      };
                   const handleCommentProfilePress = () => {
                     if (!comment.is_anonymous && comment.user_id) {
                       router.push(`/profile/${comment.user_id}` as any);
@@ -984,7 +1000,11 @@ export default function CommunityScreen() {
                           disabled={comment.is_anonymous}
                         >
                           <View style={[styles.avatar, { backgroundColor: cAvatar.bg }]}>
-                            <ThemedText style={styles.avatarText}>{cAvatar.label}</ThemedText>
+                            {cAvatar.uri ? (
+                              <Image source={{ uri: cAvatar.uri }} style={styles.avatarImage} />
+                            ) : (
+                              <ThemedText style={styles.avatarText}>{cAvatar.label}</ThemedText>
+                            )}
                           </View>
                           <View style={styles.commentMeta}>
                             <ThemedText style={[styles.userName, !comment.is_anonymous && { color: theme.accent }]}>
@@ -1061,16 +1081,17 @@ export default function CommunityScreen() {
                         <View style={styles.nestedCommentsContainer}>
                           <ThemedText style={styles.nestedCommentsTitle}>Antworten:</ThemedText>
                           {nestedComments[comment.id].map(nestedComment => {
-                            const nestedBg = nestedComment.is_anonymous
-                              ? 'rgba(0,0,0,0.08)'
-                              : nestedComment.user_role === 'mama'
-                                ? 'rgba(255,159,159,0.25)'
-                                : nestedComment.user_role === 'papa'
-                                  ? 'rgba(159,216,255,0.25)'
-                                  : 'rgba(0,0,0,0.08)';
-                            const nestedInitial = nestedComment.is_anonymous
-                              ? '👤'
-                              : (nestedComment.user_name || '👶').charAt(0).toUpperCase();
+                          const nestedBg = nestedComment.is_anonymous
+                            ? 'rgba(0,0,0,0.08)'
+                            : nestedComment.user_role === 'mama'
+                              ? 'rgba(255,159,159,0.25)'
+                              : nestedComment.user_role === 'papa'
+                                ? 'rgba(159,216,255,0.25)'
+                                : 'rgba(0,0,0,0.08)';
+                          const nestedInitial = nestedComment.is_anonymous
+                            ? '👤'
+                            : (nestedComment.user_name || '👶').charAt(0).toUpperCase();
+                          const nestedAvatarUri = nestedComment.user_avatar_url;
                             const canMessageNestedAuthor = !nestedComment.is_anonymous && nestedComment.user_id && user?.id !== nestedComment.user_id;
                             return (
                               <ThemedView 
@@ -1091,7 +1112,11 @@ export default function CommunityScreen() {
                                     disabled={nestedComment.is_anonymous}
                                   >
                                     <View style={[styles.avatar, { backgroundColor: nestedBg }]}>
-                                      <ThemedText style={styles.avatarText}>{nestedInitial}</ThemedText>
+                                      {nestedAvatarUri ? (
+                                        <Image source={{ uri: nestedAvatarUri }} style={styles.avatarImage} />
+                                      ) : (
+                                        <ThemedText style={styles.avatarText}>{nestedInitial}</ThemedText>
+                                      )}
                                     </View>
                                     <View style={styles.commentMeta}>
                                       <ThemedText style={[styles.userName, !nestedComment.is_anonymous && { color: theme.accent }]}>
@@ -1792,6 +1817,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 8,
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 14,
+    resizeMode: 'cover',
   },
   avatarText: {
     fontSize: 13,

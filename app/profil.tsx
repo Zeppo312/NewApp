@@ -12,6 +12,7 @@ import {
   Switch,
   ActivityIndicator,
   Dimensions,
+  Image,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -30,6 +31,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { supabase } from '@/lib/supabase';
 import { getBabyInfo, saveBabyInfo } from '@/lib/baby';
+import * as ImagePicker from 'expo-image-picker';
+import { uploadProfileAvatar } from '@/lib/profile';
 
 const { width: screenWidth } = Dimensions.get('window');
 const TIMELINE_INSET = 8; // wie im Sleep-Tracker
@@ -49,6 +52,10 @@ export default function ProfilScreen() {
   const [username, setUsername]   = useState('');
   const [email, setEmail]         = useState('');
   const [userRole, setUserRole]   = useState<'mama' | 'papa' | ''>('');
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [avatarBase64, setAvatarBase64] = useState<string | null>(null);
+  const [avatarRemoved, setAvatarRemoved] = useState(false);
 
   // Baby-Informationen
   const [babyName, setBabyName]         = useState('');
@@ -87,6 +94,9 @@ export default function ProfilScreen() {
         setLastName(profileData.last_name || '');
         setUserRole((profileData.user_role as any) || '');
         setUsername(profileData.username || '');
+        setAvatarUrl(profileData.avatar_url || null);
+        setAvatarPreview(profileData.avatar_url || null);
+        setAvatarRemoved(false);
       }
 
       // Settings
@@ -120,6 +130,56 @@ export default function ProfilScreen() {
     }
   };
 
+  const pickAvatarImage = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Berechtigung erforderlich', 'Bitte erlaube den Zugriff auf deine Fotos.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.7,
+        base64: true,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        let base64String = asset.base64;
+
+        if (!base64String && asset.uri) {
+          const response = await fetch(asset.uri);
+          const blob = await response.blob();
+          const reader = new FileReader();
+          base64String = await new Promise<string | null>((resolve, reject) => {
+            reader.onload = () => {
+              resolve(reader.result as string);
+            };
+            reader.onerror = () => reject(null);
+            reader.readAsDataURL(blob);
+          });
+        }
+
+        setAvatarPreview(asset.uri || avatarUrl);
+        setAvatarBase64(base64String || null);
+        setAvatarRemoved(false);
+      }
+    } catch (error) {
+      console.error('Error picking avatar image:', error);
+      Alert.alert('Fehler', 'Das Profilbild konnte nicht ausgewählt werden.');
+    }
+  };
+
+  const removeAvatarImage = () => {
+    setAvatarPreview(null);
+    setAvatarBase64(null);
+    setAvatarUrl(null);
+    setAvatarRemoved(true);
+  };
+
   const saveUserData = async () => {
     try {
       if (!user) {
@@ -130,6 +190,15 @@ export default function ProfilScreen() {
 
       const normalizedUsername = username.trim();
 
+      let finalAvatarUrl = avatarUrl;
+      if (avatarBase64) {
+        const uploadResult = await uploadProfileAvatar(avatarBase64);
+        if (uploadResult.error) throw uploadResult.error;
+        finalAvatarUrl = uploadResult.url;
+      } else if (avatarRemoved) {
+        finalAvatarUrl = null;
+      }
+
       // profiles upsert
       const { data: existingProfile } = await supabase
         .from('profiles').select('id').eq('id', user.id).maybeSingle();
@@ -137,12 +206,13 @@ export default function ProfilScreen() {
       let profileResult;
       if (existingProfile?.id) {
         profileResult = await supabase.from('profiles').update({
-          first_name: firstName,
-          last_name: lastName,
-          user_role: userRole,
-          username: normalizedUsername || null,
-          updated_at: new Date().toISOString(),
-        }).eq('id', user.id);
+        first_name: firstName,
+        last_name: lastName,
+        user_role: userRole,
+        username: normalizedUsername || null,
+        avatar_url: finalAvatarUrl || null,
+        updated_at: new Date().toISOString(),
+      }).eq('id', user.id);
       } else {
         profileResult = await supabase.from('profiles').insert({
           id: user.id,
@@ -150,6 +220,7 @@ export default function ProfilScreen() {
           last_name: lastName,
           user_role: userRole,
           username: normalizedUsername || null,
+          avatar_url: finalAvatarUrl || null,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         });
@@ -194,8 +265,12 @@ export default function ProfilScreen() {
       console.error(e);
       Alert.alert('Fehler', e?.message || 'Deine Daten konnten nicht gespeichert werden.');
     } finally {
-      setIsSaving(false);
-    }
+        setIsSaving(false);
+        setAvatarUrl(finalAvatarUrl || null);
+        setAvatarPreview(finalAvatarUrl || null);
+        setAvatarBase64(null);
+        setAvatarRemoved(false);
+      }
   };
 
   const formatDate = (date: Date | null) =>
@@ -251,6 +326,34 @@ export default function ProfilScreen() {
                   overlayColor={GLASS_OVERLAY}
                 >
                   <ThemedText style={styles.sectionTitle}>Persönliche Daten</ThemedText>
+                  <View style={styles.avatarSelector}>
+                    <TouchableOpacity
+                      style={styles.avatarPreviewWrapper}
+                      onPress={pickAvatarImage}
+                      activeOpacity={0.8}
+                    >
+                      {avatarPreview ? (
+                        <Image
+                          source={{ uri: avatarPreview }}
+                          style={styles.avatarPreviewImage}
+                        />
+                      ) : (
+                        <View style={styles.avatarPlaceholder}>
+                          <IconSymbol name="camera" size={30} color="#FFFFFF" />
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                    <View style={styles.avatarActions}>
+                      <TouchableOpacity style={styles.avatarActionButton} onPress={pickAvatarImage}>
+                        <ThemedText style={styles.avatarActionText}>Foto wählen</ThemedText>
+                      </TouchableOpacity>
+                      {!!avatarPreview && (
+                        <TouchableOpacity style={styles.avatarActionButton} onPress={removeAvatarImage}>
+                          <ThemedText style={styles.avatarActionText}>Entfernen</ThemedText>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  </View>
                   <View style={styles.cardInner}>
                     <View style={styles.formGroup}>
                       <ThemedText style={styles.label}>E-Mail</ThemedText>
@@ -604,6 +707,43 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(200,200,200,0.35)',
   },
   numeric: { fontVariant: ['tabular-nums'] },
+
+  avatarSelector: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  avatarPreviewWrapper: {
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    backgroundColor: 'rgba(255,255,255,0.7)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+    overflow: 'hidden',
+  },
+  avatarPreviewImage: {
+    width: '100%',
+    height: '100%',
+  },
+  avatarPlaceholder: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#D8D8D8',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarActions: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+  },
+  avatarActionButton: {
+    marginHorizontal: 12,
+  },
+  avatarActionText: {
+    color: '#8E4EC6',
+    fontWeight: '700',
+  },
 
   // Glas-DateButton
   dateButtonGlass: {

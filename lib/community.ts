@@ -571,6 +571,7 @@ export const getComments = async (postId: string) => {
         ...comment,
         user_name: userName,
         user_role: isAnonymous ? 'unknown' : (profile?.user_role || 'unknown'),
+        user_avatar_url: isAnonymous ? null : (profile?.avatar_url || null),
         likes_count: likesCount || 0,
         has_liked: !!userLike,
         // Stelle sicher, dass is_anonymous immer einen Wert hat
