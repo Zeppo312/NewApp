@@ -701,8 +701,7 @@ const styles = StyleSheet.create({
     padding: 22,
     marginBottom: 24,
     width: '100%',
-    maxWidth: 520,
-    alignSelf: 'center',
+    alignSelf: 'stretch',
   },
   // Feed styles (Community-like)
   feedCard: {
@@ -792,8 +791,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 16,
     width: '100%',
-    maxWidth: 520,
-    alignSelf: 'center',
+    alignSelf: 'stretch',
     borderRadius: 24,
   },
   friendsHeaderRow: {
@@ -960,7 +958,8 @@ const styles = StyleSheet.create({
     width: '100%',
     paddingHorizontal: 0,
     paddingBottom: 32,
-    alignItems: 'center',
+    alignItems: 'stretch',
+    rowGap: 18,
   },
   loadingContentContainer: {
     flex: 1,
@@ -1071,8 +1070,7 @@ const styles = StyleSheet.create({
   },
   tabCard: {
     width: '100%',
-    maxWidth: 520,
-    alignSelf: 'center',
+    alignSelf: 'stretch',
     borderRadius: 28,
     marginBottom: 24,
   },
