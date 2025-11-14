@@ -14,8 +14,11 @@ import { getFollowerCount, getFollowingCount, getFollowers } from '@/lib/follows
 import Header from '@/components/Header';
 import { getPosts } from '@/lib/community';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { LiquidGlassCard } from '@/constants/DesignGuide';
-import { FollowButton } from '@/components/FollowButton';
+import { LiquidGlassCard, LAYOUT_PAD } from '@/constants/DesignGuide';
+const CARD_OVERLAY_LIGHT = 'rgba(255,255,255,0.18)';
+const CARD_OVERLAY_DARK = 'rgba(6,8,20,0.55)';
+const CARD_BORDER_LIGHT = 'rgba(255,255,255,0.45)';
+const CARD_BORDER_DARK = 'rgba(255,255,255,0.15)';
 
 // Interface für das Benutzerprofil
 interface UserProfile {
@@ -332,29 +335,37 @@ export default function CommunityProfileScreen() {
     const roleInfo = getRoleInfo(item.user_role);
     const displayName = getProfileDisplayName(item);
     const avatarUrl = item.avatar_url;
+    const overlayColor = colorScheme === 'dark' ? CARD_OVERLAY_DARK : CARD_OVERLAY_LIGHT;
+    const borderColor = colorScheme === 'dark' ? CARD_BORDER_DARK : CARD_BORDER_LIGHT;
 
     return (
-      <TouchableOpacity
-        style={styles.userItem}
+      <LiquidGlassCard
+        style={styles.userItemCard}
+        overlayColor={overlayColor}
+        borderColor={borderColor}
+        intensity={24}
         onPress={() => router.push(`/profile/${item.id}` as any)}
+        activeOpacity={0.85}
       >
-        <View style={[styles.userAvatar, { backgroundColor: roleInfo.chipBg }]}>
-          {avatarUrl ? (
-            <Image source={{ uri: avatarUrl }} style={styles.userAvatarImage} />
-          ) : (
-            <IconSymbol name={roleInfo.icon as any} size={24} color="#FFFFFF" />
-          )}
-        </View>
-        <View style={styles.userInfo}>
-          <ThemedText style={styles.userNameItem}>
-            {displayName}
-          </ThemedText>
-          <View style={[styles.userRoleTag, { backgroundColor: roleInfo.chipBg }]}>
-            <ThemedText style={styles.userRoleText}>{roleInfo.label}</ThemedText>
+        <View style={styles.userItemRow}>
+          <View style={[styles.userAvatar, { backgroundColor: roleInfo.chipBg }]}>
+            {avatarUrl ? (
+              <Image source={{ uri: avatarUrl }} style={styles.userAvatarImage} />
+            ) : (
+              <IconSymbol name={roleInfo.icon as any} size={24} color="#FFFFFF" />
+            )}
           </View>
+          <View style={styles.userInfo}>
+            <ThemedText style={styles.userNameItem}>
+              {displayName}
+            </ThemedText>
+            <View style={[styles.userRoleTag, { backgroundColor: roleInfo.chipBg }]}>
+              <ThemedText style={styles.userRoleText}>{roleInfo.label}</ThemedText>
+            </View>
+          </View>
+          <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
         </View>
-        <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
-      </TouchableOpacity>
+      </LiquidGlassCard>
     );
   };
 
@@ -379,8 +390,16 @@ export default function CommunityProfileScreen() {
 
   const renderFeedItem = ({ item }: { item: any }) => {
     const avatar = getAvatar(item);
+    const overlayColor = colorScheme === 'dark' ? CARD_OVERLAY_DARK : CARD_OVERLAY_LIGHT;
+    const borderColor = colorScheme === 'dark' ? CARD_BORDER_DARK : CARD_BORDER_LIGHT;
+    const dividerColor = colorScheme === 'dark' ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.5)';
     return (
-      <LiquidGlassCard style={styles.feedCard} intensity={28} overlayColor={'rgba(255,255,255,0.18)'} borderColor={'rgba(255,255,255,0.4)'}>
+      <LiquidGlassCard
+        style={styles.feedCard}
+        intensity={colorScheme === 'dark' ? 40 : 30}
+        overlayColor={overlayColor}
+        borderColor={borderColor}
+      >
         <TouchableOpacity onPress={() => router.push({ pathname: '/community', params: { postId: item.id } } as any)}>
           <View style={styles.feedInner}>
             <View style={styles.postHeaderRow}>
@@ -405,7 +424,7 @@ export default function CommunityProfileScreen() {
               </View>
             )}
 
-            <View style={[styles.postActionsRow, { borderTopColor: colorScheme === 'dark' ? theme.border : '#EFEFEF' }]}>
+            <View style={[styles.postActionsRow, { borderTopColor: dividerColor }]}>
               <View style={styles.actionItem}>
                 <IconSymbol name={item.has_liked ? 'heart.fill' : 'heart'} size={18} color={item.has_liked ? '#FF6B6B' : theme.tabIconDefault} />
                 <ThemedText style={styles.actionCount}>{item.likes_count || 0}</ThemedText>
@@ -422,36 +441,42 @@ export default function CommunityProfileScreen() {
   };
 
   return (
-    <ThemedBackground style={{ backgroundColor: '#F6F0FF' }}>
+    <ThemedBackground style={styles.backgroundImage}>
       <SafeAreaView style={styles.container} edges={['top', 'left', 'right', 'bottom']}>
         <Stack.Screen options={{ headerShown: false }} />
-        <Header 
-          title="Profil"
-          showBackButton
-          onBackPress={() => router.back()}
-        />
+        <View style={styles.overlayContainer}>
+          <Header 
+            title="Profil"
+            showBackButton
+            onBackPress={() => router.back()}
+          />
 
-        {loading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={theme.accent} />
-            <ThemedText style={styles.loadingText}>Profil wird geladen...</ThemedText>
-          </View>
-        ) : !profile ? (
-          <View style={styles.errorContainer}>
-            <IconSymbol name="person.crop.circle.badge.exclamationmark" size={48} color={theme.error} />
-            <ThemedText style={styles.errorTitle}>Fehler beim Laden</ThemedText>
-            <ThemedText style={styles.errorText}>
-              Dein Community-Profil konnte nicht geladen werden. Bitte versuche es später erneut.
-            </ThemedText>
-          </View>
-        ) : (
-          // Hauptansicht für das geladene Profil
-          <ScrollView 
-            contentContainerStyle={styles.contentContainer}
-            showsVerticalScrollIndicator={false}
-          >
-            {/* Profilkarte im Liquid Glass */}
-            <LiquidGlassCard style={styles.profileCard} intensity={32} overlayColor={'rgba(255,255,255,0.22)'} borderColor={'rgba(255,255,255,0.55)'}>
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={theme.accent} />
+              <ThemedText style={styles.loadingText}>Profil wird geladen...</ThemedText>
+            </View>
+          ) : !profile ? (
+            <View style={styles.errorContainer}>
+              <IconSymbol name="person.crop.circle.badge.exclamationmark" size={48} color={theme.error} />
+              <ThemedText style={styles.errorTitle}>Fehler beim Laden</ThemedText>
+              <ThemedText style={styles.errorText}>
+                Dein Community-Profil konnte nicht geladen werden. Bitte versuche es später erneut.
+              </ThemedText>
+            </View>
+          ) : (
+            // Hauptansicht für das geladene Profil
+            <ScrollView 
+              contentContainerStyle={styles.contentContainer}
+              showsVerticalScrollIndicator={false}
+            >
+              {/* Profilkarte im Liquid Glass */}
+              <LiquidGlassCard
+                style={styles.profileCard}
+                intensity={36}
+                overlayColor={colorScheme === 'dark' ? CARD_OVERLAY_DARK : CARD_OVERLAY_LIGHT}
+                borderColor={colorScheme === 'dark' ? CARD_BORDER_DARK : CARD_BORDER_LIGHT}
+              >
               <View style={styles.profileHeader}>
                 {/* Profilbild */}
                 <View style={[styles.avatarContainer, { backgroundColor: getRoleInfo(profile.user_role).chipBg }]}>
@@ -520,7 +545,12 @@ export default function CommunityProfileScreen() {
             </LiquidGlassCard>
 
             {/* Friends/Following – IG-Stories-Style Row */}
-            <View style={styles.friendsSection}>
+            <LiquidGlassCard
+              style={styles.friendsSection}
+              intensity={30}
+              overlayColor={colorScheme === 'dark' ? CARD_OVERLAY_DARK : CARD_OVERLAY_LIGHT}
+              borderColor={colorScheme === 'dark' ? CARD_BORDER_DARK : CARD_BORDER_LIGHT}
+            >
               <View style={styles.friendsHeaderRow}>
                 <ThemedText style={styles.friendsTitle}>Freunde</ThemedText>
                 <TouchableOpacity onPress={() => setActiveTab(ProfileTab.FOLLOWING)}>
@@ -562,59 +592,67 @@ export default function CommunityProfileScreen() {
                   </View>
                 )}
               </ScrollView>
-            </View>
+            </LiquidGlassCard>
 
             {/* Inhalte (Posts als Standard) */}
-            <View style={styles.tabContent}>
-              {activeTab === ProfileTab.FOLLOWERS && (
-                <FlatList
-                  data={followers}
-                  renderItem={renderUserItem}
-                  keyExtractor={(item) => item.id}
-                  ListEmptyComponent={() => (
-                    <View style={styles.emptyContainer}>
-                      <IconSymbol name="person.2.slash" size={32} color={theme.tabIconDefault} />
-                      <ThemedText style={styles.emptyText}>Keine Follower</ThemedText>
-                      <ThemedText style={styles.emptySubtext}>Du hast noch keine Follower.</ThemedText>
-                    </View>
-                  )}
-                  contentContainerStyle={styles.flatListContent}
-                />
-              )}
-              {activeTab === ProfileTab.FOLLOWING && (
-                <FlatList
-                  data={following}
-                  renderItem={renderUserItem}
-                  keyExtractor={(item) => item.id}
-                  ListEmptyComponent={() => (
-                    <View style={styles.emptyContainer}>
-                      <IconSymbol name="person.2.slash" size={32} color={theme.tabIconDefault} />
-                      <ThemedText style={styles.emptyText}>Folgt niemandem</ThemedText>
-                      <ThemedText style={styles.emptySubtext}>Du folgst noch keinem anderen Benutzer.</ThemedText>
-                    </View>
-                  )}
-                  contentContainerStyle={styles.flatListContent}
-                />
-              )}
-              {activeTab === ProfileTab.POSTS && (
-                posts.length === 0 ? (
-                  <View style={styles.emptyContainer}>
-                    <IconSymbol name="text.bubble" size={32} color={theme.tabIconDefault} />
-                    <ThemedText style={styles.emptyText}>Keine Beiträge</ThemedText>
-                    <ThemedText style={styles.emptySubtext}>Du hast noch keine Beiträge erstellt.</ThemedText>
-                  </View>
-                ) : (
+            <LiquidGlassCard
+              style={styles.tabCard}
+              intensity={34}
+              overlayColor={colorScheme === 'dark' ? CARD_OVERLAY_DARK : CARD_OVERLAY_LIGHT}
+              borderColor={colorScheme === 'dark' ? CARD_BORDER_DARK : CARD_BORDER_LIGHT}
+            >
+              <View style={styles.tabContent}>
+                {activeTab === ProfileTab.FOLLOWERS && (
                   <FlatList
-                    data={posts}
+                    data={followers}
+                    renderItem={renderUserItem}
                     keyExtractor={(item) => item.id}
-                    renderItem={renderFeedItem}
-                    contentContainerStyle={{ paddingTop: 4, paddingBottom: 12 }}
+                    ListEmptyComponent={() => (
+                      <View style={styles.emptyContainer}>
+                        <IconSymbol name="person.2.slash" size={32} color={theme.tabIconDefault} />
+                        <ThemedText style={styles.emptyText}>Keine Follower</ThemedText>
+                        <ThemedText style={styles.emptySubtext}>Du hast noch keine Follower.</ThemedText>
+                      </View>
+                    )}
+                    contentContainerStyle={styles.flatListContent}
                   />
-                )
-              )}
-            </View>
+                )}
+                {activeTab === ProfileTab.FOLLOWING && (
+                  <FlatList
+                    data={following}
+                    renderItem={renderUserItem}
+                    keyExtractor={(item) => item.id}
+                    ListEmptyComponent={() => (
+                      <View style={styles.emptyContainer}>
+                        <IconSymbol name="person.2.slash" size={32} color={theme.tabIconDefault} />
+                        <ThemedText style={styles.emptyText}>Folgt niemandem</ThemedText>
+                        <ThemedText style={styles.emptySubtext}>Du folgst noch keinem anderen Benutzer.</ThemedText>
+                      </View>
+                    )}
+                    contentContainerStyle={styles.flatListContent}
+                  />
+                )}
+                {activeTab === ProfileTab.POSTS && (
+                  posts.length === 0 ? (
+                    <View style={styles.emptyContainer}>
+                      <IconSymbol name="text.bubble" size={32} color={theme.tabIconDefault} />
+                      <ThemedText style={styles.emptyText}>Keine Beiträge</ThemedText>
+                      <ThemedText style={styles.emptySubtext}>Du hast noch keine Beiträge erstellt.</ThemedText>
+                    </View>
+                  ) : (
+                    <FlatList
+                      data={posts}
+                      keyExtractor={(item) => item.id}
+                      renderItem={renderFeedItem}
+                      contentContainerStyle={{ paddingTop: 4, paddingBottom: 12 }}
+                    />
+                  )
+                )}
+              </View>
+            </LiquidGlassCard>
           </ScrollView>
         )}
+        </View>
       </SafeAreaView>
     </ThemedBackground>
   );
@@ -623,6 +661,14 @@ export default function CommunityProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  backgroundImage: {
+    flex: 1,
+  },
+  overlayContainer: {
+    flex: 1,
+    paddingHorizontal: LAYOUT_PAD,
+    paddingBottom: 32,
   },
   loadingContainer: {
     flex: 1,
@@ -651,25 +697,17 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   profileCard: {
-    borderRadius: 20,
-    padding: 20,
-    marginBottom: 20,
+    borderRadius: 26,
+    padding: 22,
+    marginBottom: 24,
     width: '100%',
     maxWidth: 520,
     alignSelf: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(151,117,250,0.35)',
-    backgroundColor: '#FFFFFF',
-    shadowColor: '#9775FA',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.12,
-    shadowRadius: 24,
-    elevation: 6,
   },
   // Feed styles (Community-like)
   feedCard: {
-    marginBottom: 12,
-    borderRadius: 12,
+    marginBottom: 16,
+    borderRadius: 24,
   },
   feedInner: {
     padding: 16,
@@ -756,15 +794,7 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 520,
     alignSelf: 'center',
-    borderRadius: 20,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: 'rgba(151,117,250,0.18)',
-    shadowColor: '#9775FA',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
-    elevation: 3,
+    borderRadius: 24,
   },
   friendsHeaderRow: {
     flexDirection: 'row',
@@ -928,7 +958,7 @@ const styles = StyleSheet.create({
   contentContainer: {
     flexGrow: 1,
     width: '100%',
-    paddingHorizontal: 16,
+    paddingHorizontal: 0,
     paddingBottom: 32,
     alignItems: 'center',
   },
@@ -940,13 +970,14 @@ const styles = StyleSheet.create({
   listContent: {
     paddingBottom: 20,
   },
-  userItem: {
+  userItemCard: {
+    marginBottom: 10,
+    borderRadius: 18,
+  },
+  userItemRow: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 12,
-    borderRadius: 8,
-    marginBottom: 8,
-    backgroundColor: 'rgba(0, 0, 0, 0.05)',
   },
   userAvatar: {
     width: 40,
@@ -1038,22 +1069,16 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
   },
-  tabContent: {
-    flex: 1,
+  tabCard: {
     width: '100%',
     maxWidth: 520,
     alignSelf: 'center',
-    padding: 16,
-    borderRadius: 20,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: 'rgba(151,117,250,0.15)',
-    shadowColor: '#9775FA',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.08,
-    shadowRadius: 20,
-    elevation: 4,
+    borderRadius: 28,
     marginBottom: 24,
+  },
+  tabContent: {
+    flex: 1,
+    padding: 16,
   },
   activeStatItem: {
     borderBottomWidth: 2,

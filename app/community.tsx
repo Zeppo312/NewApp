@@ -46,7 +46,10 @@ import { GlassCard, LiquidGlassCard, PRIMARY, LAYOUT_PAD, GLASS_OVERLAY } from '
 
 const TEXT_PRIMARY = '#5A3A2C';
 const TEXT_MUTED = 'rgba(90,58,44,0.75)';
-const POST_CARD_OVERLAY = 'rgba(255,255,255,0.78)';
+const POST_CARD_OVERLAY = 'rgba(255,255,255,0.18)';
+const POST_CARD_OVERLAY_DARK = 'rgba(6,8,20,0.55)';
+const POST_CARD_BORDER = 'rgba(255,255,255,0.35)';
+const POST_CARD_BORDER_DARK = 'rgba(255,255,255,0.08)';
 
 export default function CommunityScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -742,10 +745,19 @@ export default function CommunityScreen() {
       console.log(`Post ${item.id} has image_url: ${item.image_url}`);
     }
 
-    const overlayColor = POST_CARD_OVERLAY;
-    const cardIntensity = 24;
+    const overlayColor = colorScheme === 'dark' ? POST_CARD_OVERLAY_DARK : POST_CARD_OVERLAY;
+    const borderColor = colorScheme === 'dark' ? POST_CARD_BORDER_DARK : POST_CARD_BORDER;
+    const cardIntensity = colorScheme === 'dark' ? 44 : 30;
+    const dividerColor = colorScheme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.4)';
+    const commentOverlay = colorScheme === 'dark' ? 'rgba(6,6,10,0.45)' : 'rgba(255,255,255,0.08)';
+    const commentBorder = colorScheme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.25)';
     return (
-      <LiquidGlassCard style={styles.postItem} overlayColor={overlayColor} intensity={cardIntensity}>
+      <LiquidGlassCard
+        style={[styles.postItem, styles.postCard]}
+        overlayColor={overlayColor}
+        borderColor={borderColor}
+        intensity={cardIntensity}
+      >
         <View style={styles.postInner}>
           <View style={styles.postHeader}>
             <TouchableOpacity
@@ -844,7 +856,7 @@ export default function CommunityScreen() {
 
         <View style={[
           styles.postActionsRow,
-          { borderTopColor: colorScheme === 'dark' ? theme.border : '#EFEFEF' }
+          { borderTopColor: dividerColor }
         ]}>
           <TouchableOpacity
             style={styles.compactActionButton}
@@ -893,7 +905,7 @@ export default function CommunityScreen() {
             style={[
               styles.commentsContainer,
               {
-                borderTopColor: colorScheme === 'dark' ? '#5C4033' : '#D8C8B8',
+                borderTopColor: dividerColor,
               },
             ]}
           >
@@ -911,30 +923,38 @@ export default function CommunityScreen() {
                 }
               };
               return (
-                <ThemedView key={comment.id} style={styles.commentItem} lightColor="#F9F9F9" darkColor={theme.cardDark}>
-                  <View style={styles.commentHeader}>
-                    <View style={styles.userInfo}>
-                      <View style={[styles.avatar, { width: 28, height: 28, backgroundColor: cAvatar.bg }]}>
-                        {cAvatar.uri ? (
-                          <Image source={{ uri: cAvatar.uri }} style={[styles.avatarImage, { borderRadius: 14 }]} />
+                <LiquidGlassCard
+                  key={comment.id}
+                  style={styles.commentPreviewCard}
+                  intensity={18}
+                  overlayColor={commentOverlay}
+                  borderColor={commentBorder}
+                >
+                  <View style={styles.commentItem}>
+                    <View style={styles.commentHeader}>
+                      <View style={styles.userInfo}>
+                        <View style={[styles.avatar, { width: 28, height: 28, backgroundColor: cAvatar.bg }]}>
+                          {cAvatar.uri ? (
+                            <Image source={{ uri: cAvatar.uri }} style={[styles.avatarImage, { borderRadius: 14 }]} />
+                          ) : (
+                            <ThemedText style={[styles.avatarText, { fontSize: 12 }]}>{cAvatar.label}</ThemedText>
+                          )}
+                        </View>
+                        {comment.is_anonymous ? (
+                          <ThemedText style={styles.userName}>Anonym</ThemedText>
                         ) : (
-                          <ThemedText style={[styles.avatarText, { fontSize: 12 }]}>{cAvatar.label}</ThemedText>
+                          <TouchableOpacity onPress={handlePreviewProfilePress} activeOpacity={0.8}>
+                            <ThemedText style={[styles.userName, styles.postMetaLink, { color: theme.accent }]}>
+                              {comment.user_name || 'Profil'}
+                            </ThemedText>
+                          </TouchableOpacity>
                         )}
+                        <ThemedText style={[styles.commentDate, { color: theme.tabIconDefault }]}>{formatDate(comment.created_at)}</ThemedText>
                       </View>
-                      {comment.is_anonymous ? (
-                        <ThemedText style={styles.userName}>Anonym</ThemedText>
-                      ) : (
-                        <TouchableOpacity onPress={handlePreviewProfilePress} activeOpacity={0.8}>
-                          <ThemedText style={[styles.userName, styles.postMetaLink, { color: theme.accent }]}>
-                            {comment.user_name || 'Profil'}
-                          </ThemedText>
-                        </TouchableOpacity>
-                      )}
-                      <ThemedText style={[styles.commentDate, { color: theme.tabIconDefault }]}>{formatDate(comment.created_at)}</ThemedText>
                     </View>
+                    <ThemedText style={styles.commentContent}>{comment.content}</ThemedText>
                   </View>
-                  <ThemedText style={styles.commentContent}>{comment.content}</ThemedText>
-                </ThemedView>
+                </LiquidGlassCard>
               );
             })}
             {(item.comments_count || 0) > (previewComments[item.id]?.length || 0) && (
@@ -966,7 +986,7 @@ export default function CommunityScreen() {
                 style={[
                   styles.commentsContainer,
                   {
-                    borderTopColor: colorScheme === 'dark' ? '#5C4033' : '#D8C8B8',
+                    borderTopColor: dividerColor,
                   },
                 ]}
               >
@@ -1404,33 +1424,34 @@ export default function CommunityScreen() {
             </Modal>
 
             {/* Benachrichtigungen */}
-            {showNotifications ? (
-              <ThemedView style={styles.notificationsContainer} lightColor={theme.card} darkColor={theme.card}>
-                <View style={styles.notificationsHeader}>
-                  <ThemedText style={styles.notificationsTitle}>Benachrichtigungen</ThemedText>
-                  <TouchableOpacity 
-                    style={styles.viewAllButton}
-                    onPress={() => {
-                      // Schließe Dropdown und navigiere zur vollen Notifications-Seite
-                      setShowNotifications(false);
-                      const notificationsRoute = '/notifications';
-                      if (router.canGoBack()) {
-                        router.push(notificationsRoute as any);
-                      } else {
-                        router.replace(notificationsRoute as any);
-                      }
-                    }}
-                  >
-                    <ThemedText style={[styles.viewAllText, { color: theme.accent }]}>
-                      Alle ansehen
-                    </ThemedText>
-                  </TouchableOpacity>
-                </View>
-                <NotificationsList onNotificationUpdate={handleNotificationUpdate} />
-              </ThemedView>
-            ) : (
-              <>
-                {/* Formular zum Erstellen einer Umfrage */}
+            <View style={styles.feedWrapper}>
+              {showNotifications ? (
+                <ThemedView style={styles.notificationsContainer} lightColor={theme.card} darkColor={theme.card}>
+                  <View style={styles.notificationsHeader}>
+                    <ThemedText style={styles.notificationsTitle}>Benachrichtigungen</ThemedText>
+                    <TouchableOpacity 
+                      style={styles.viewAllButton}
+                      onPress={() => {
+                        // Schließe Dropdown und navigiere zur vollen Notifications-Seite
+                        setShowNotifications(false);
+                        const notificationsRoute = '/notifications';
+                        if (router.canGoBack()) {
+                          router.push(notificationsRoute as any);
+                        } else {
+                          router.replace(notificationsRoute as any);
+                        }
+                      }}
+                    >
+                      <ThemedText style={[styles.viewAllText, { color: theme.accent }]}>
+                        Alle ansehen
+                      </ThemedText>
+                    </TouchableOpacity>
+                  </View>
+                  <NotificationsList onNotificationUpdate={handleNotificationUpdate} />
+                </ThemedView>
+              ) : (
+                <>
+                  {/* Formular zum Erstellen einer Umfrage */}
                 {showPollForm && selectedPostForPoll && (
                   <CreatePollForm
                     postId={selectedPostForPoll}
@@ -1672,6 +1693,7 @@ export default function CommunityScreen() {
                 )}
               </>
             )}
+            </View>
           </SafeAreaView>
         </KeyboardAvoidingView>
       </ThemedBackground>
@@ -1685,16 +1707,24 @@ const styles = StyleSheet.create({
   },
   backgroundImage: {
     flex: 1,
-    paddingHorizontal: 16,
+    paddingHorizontal: 0,
   },
   overlayContainer: {
     width: '100%',
     position: 'relative',
+    paddingHorizontal: LAYOUT_PAD,
+  },
+  feedWrapper: {
+    flex: 1,
+    width: '100%',
+    paddingHorizontal: LAYOUT_PAD,
+    paddingTop: 16,
+    paddingBottom: 40,
   },
   bellButton: {
     position: 'absolute',
     top: 16,
-    right: 16,
+    right: LAYOUT_PAD,
     padding: 8,
     zIndex: 10,
   },
@@ -1790,10 +1820,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   postsList: {
-    paddingBottom: 80,
+    paddingTop: 8,
+    paddingBottom: 140,
   },
   postItem: {
-    marginBottom: 16,
+    marginBottom: 18,
+  },
+  postCard: {
+    shadowColor: 'rgba(21,0,37,0.25)',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 6,
   },
   postInner: {
     paddingVertical: 16,
@@ -1970,8 +2008,10 @@ const styles = StyleSheet.create({
     color: '#666',
   },
   commentItem: {
-    borderRadius: 8,
+    borderRadius: 18,
     padding: 12,
+  },
+  commentPreviewCard: {
     marginBottom: 8,
   },
   commentHeader: {
