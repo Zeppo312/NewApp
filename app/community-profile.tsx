@@ -466,17 +466,19 @@ export default function CommunityProfileScreen() {
             </View>
           ) : (
             // Hauptansicht für das geladene Profil
-            <ScrollView 
+            <ScrollView
+              style={styles.scrollArea}
               contentContainerStyle={styles.contentContainer}
               showsVerticalScrollIndicator={false}
             >
-              {/* Profilkarte im Liquid Glass */}
-              <LiquidGlassCard
-                style={styles.profileCard}
-                intensity={36}
-                overlayColor={colorScheme === 'dark' ? CARD_OVERLAY_DARK : CARD_OVERLAY_LIGHT}
-                borderColor={colorScheme === 'dark' ? CARD_BORDER_DARK : CARD_BORDER_LIGHT}
-              >
+              <View style={styles.sectionColumn}>
+                {/* Profilkarte im Liquid Glass */}
+                <LiquidGlassCard
+                  style={styles.profileCard}
+                  intensity={36}
+                  overlayColor={colorScheme === 'dark' ? CARD_OVERLAY_DARK : CARD_OVERLAY_LIGHT}
+                  borderColor={colorScheme === 'dark' ? CARD_BORDER_DARK : CARD_BORDER_LIGHT}
+                >
               <View style={styles.profileHeader}>
                 {/* Profilbild */}
                 <View style={[styles.avatarContainer, { backgroundColor: getRoleInfo(profile.user_role).chipBg }]}>
@@ -650,7 +652,8 @@ export default function CommunityProfileScreen() {
                 )}
               </View>
             </LiquidGlassCard>
-          </ScrollView>
+          </View>
+        </ScrollView>
         )}
         </View>
       </SafeAreaView>
@@ -669,6 +672,15 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: LAYOUT_PAD,
     paddingBottom: 32,
+    alignItems: 'stretch',
+  },
+  scrollArea: {
+    flex: 1,
+    width: '100%',
+  },
+  sectionColumn: {
+    width: '100%',
+    alignSelf: 'stretch',
   },
   loadingContainer: {
     flex: 1,
@@ -786,13 +798,11 @@ const styles = StyleSheet.create({
     color: '#888',
   },
   friendsSection: {
-    marginTop: 8,
-    marginBottom: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
+    marginBottom: 24,
+    padding: 22,
     width: '100%',
     alignSelf: 'stretch',
-    borderRadius: 24,
+    borderRadius: 26,
   },
   friendsHeaderRow: {
     flexDirection: 'row',
@@ -924,19 +934,27 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     borderTopWidth: 1,
     borderTopColor: 'rgba(0, 0, 0, 0.1)',
+    width: '100%',
+    alignSelf: 'stretch',
   },
   statItem: {
     flex: 1,
+    flexBasis: 0,
     alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 0,
+    paddingHorizontal: 8,
   },
   statValue: {
     fontSize: 24,
     fontWeight: 'bold',
     marginBottom: 4,
+    textAlign: 'center',
   },
   statLabel: {
     fontSize: 14,
     opacity: 0.7,
+    textAlign: 'center',
   },
   tabContainer: {
     flexDirection: 'row',
@@ -956,10 +974,8 @@ const styles = StyleSheet.create({
   contentContainer: {
     flexGrow: 1,
     width: '100%',
-    paddingHorizontal: 0,
     paddingBottom: 32,
     alignItems: 'stretch',
-    rowGap: 18,
   },
   loadingContentContainer: {
     flex: 1,
@@ -1071,7 +1087,8 @@ const styles = StyleSheet.create({
   tabCard: {
     width: '100%',
     alignSelf: 'stretch',
-    borderRadius: 28,
+    borderRadius: 26,
+    padding: 22,
     marginBottom: 24,
   },
   tabContent: {
@@ -1079,6 +1096,7 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   activeStatItem: {
+    paddingBottom: 4,
     borderBottomWidth: 2,
     borderBottomColor: '#9775FA',
   },

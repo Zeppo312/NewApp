@@ -13,6 +13,7 @@ export interface Post {
   // Virtuelle Felder (werden durch Joins oder clientseitige Berechnungen gefüllt)
   user_name?: string;
   user_role?: string;
+  user_avatar_url?: string | null;
   likes_count?: number;
   comments_count?: number;
   has_liked?: boolean;
@@ -35,6 +36,7 @@ export interface Comment {
   // Virtuelle Felder
   user_name?: string;
   user_role?: string;
+  user_avatar_url?: string | null;
   likes_count?: number;
   has_liked?: boolean;
 }
@@ -55,6 +57,7 @@ type ProfileLike = {
   first_name?: string | null;
   last_name?: string | null;
   user_role?: string | null;
+  avatar_url?: string | null;
 };
 
 const resolveProfileDisplayName = (profile?: ProfileLike | null) => {
@@ -295,7 +298,7 @@ export const getPosts = async (searchQuery: string = '', tagIds: string[] = [], 
       if (!profile) {
         const { data: directProfileData, error: directProfileErr } = await supabase
           .from('profiles')
-          .select('id, first_name, last_name, username, user_role')
+          .select('id, first_name, last_name, username, user_role, avatar_url')
           .eq('id', post.user_id)
           .single();
 
@@ -421,6 +424,7 @@ export const getPosts = async (searchQuery: string = '', tagIds: string[] = [], 
         ...post,
         user_name: userName,
         user_role: isAnonymous ? 'unknown' : (profile?.user_role || 'unknown'),
+        user_avatar_url: isAnonymous ? null : (profile?.avatar_url || null),
         likes_count: likesCount || 0,
         comments_count: commentsCount || 0,
         has_liked: !!userLike,
@@ -479,7 +483,7 @@ export const getComments = async (postId: string) => {
       if (!profile) {
         const { data: directProfileData, error: directProfileErr } = await supabase
           .from('profiles')
-          .select('id, first_name, last_name, username, user_role')
+          .select('id, first_name, last_name, username, user_role, avatar_url')
           .eq('id', comment.user_id)
           .single();
 
@@ -617,7 +621,7 @@ export const getCommentsPreview = async (postId: string, limit: number = 2) => {
       } else {
         const { data: directProfileData } = await supabase
           .from('profiles')
-          .select('id, first_name, last_name, username, user_role')
+          .select('id, first_name, last_name, username, user_role, avatar_url')
           .eq('id', comment.user_id)
           .maybeSingle();
         if (directProfileData) profile = directProfileData;
@@ -649,6 +653,7 @@ export const getCommentsPreview = async (postId: string, limit: number = 2) => {
         ...comment,
         user_name: userName,
         user_role: isAnonymous ? 'unknown' : (profile?.user_role || 'unknown'),
+        user_avatar_url: isAnonymous ? null : (profile?.avatar_url || null),
         likes_count: likesCount || 0,
         has_liked: !!userLike,
         is_anonymous: isAnonymous
@@ -1087,6 +1092,18 @@ export const getNestedComments = async (commentId: string) => {
         profile = profileData[0];
       }
 
+      if (!profile) {
+        const { data: directProfileData, error: directProfileErr } = await supabase
+          .from('profiles')
+          .select('id, first_name, last_name, username, user_role, avatar_url')
+          .eq('id', comment.user_id)
+          .single();
+
+        if (!directProfileErr && directProfileData) {
+          profile = directProfileData;
+        }
+      }
+
       // Likes für diesen Kommentar zählen
       const { count: likesCount, error: likesError } = await supabase
         .from('community_comment_likes')
@@ -1107,6 +1124,7 @@ export const getNestedComments = async (commentId: string) => {
         ...comment,
         user_name: comment.is_anonymous ? 'Anonym' : displayName,
         user_role: profile?.user_role || null,
+        user_avatar_url: comment.is_anonymous ? null : (profile?.avatar_url || null),
         likes_count: likesCount || 0,
         has_liked: !!userLike
       };
