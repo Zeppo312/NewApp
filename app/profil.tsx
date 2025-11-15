@@ -32,7 +32,7 @@ import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { supabase } from '@/lib/supabase';
 import { getBabyInfo, saveBabyInfo } from '@/lib/baby';
 import * as ImagePicker from 'expo-image-picker';
-import { uploadProfileAvatar } from '@/lib/profile';
+import { uploadProfileAvatar, deleteProfileAvatar, deleteUserProfile } from '@/lib/profile';
 
 const { width: screenWidth } = Dimensions.get('window');
 const TIMELINE_INSET = 8; // wie im Sleep-Tracker
@@ -43,7 +43,7 @@ const BABY_BLUE = '#87CEEB';
 export default function ProfilScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const { isBabyBorn, setIsBabyBorn } = useBabyStatus();
 
   // Benutzerinformationen
@@ -70,6 +70,8 @@ export default function ProfilScreen() {
   const [showDueDatePicker, setShowDueDatePicker]   = useState(false);
   const [showBirthDatePicker, setShowBirthDatePicker] = useState(false);
   const [isSaving, setIsSaving]                     = useState(false);
+  const [isDeletingAvatar, setIsDeletingAvatar]     = useState(false);
+  const [isDeletingProfile, setIsDeletingProfile]   = useState(false);
 
   useEffect(() => {
     if (user) loadUserData();
@@ -85,7 +87,7 @@ export default function ProfilScreen() {
       // Profile
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select('first_name, last_name, user_role, username')
+        .select('first_name, last_name, user_role, username, avatar_url')
         .eq('id', user?.id)
         .single();
 
@@ -173,11 +175,81 @@ export default function ProfilScreen() {
     }
   };
 
-  const removeAvatarImage = () => {
+  const removeAvatarImage = (markRemoved = true) => {
     setAvatarPreview(null);
     setAvatarBase64(null);
     setAvatarUrl(null);
-    setAvatarRemoved(true);
+    setAvatarRemoved(markRemoved);
+  };
+
+  const handleAvatarDeletePress = () => {
+    if (!avatarUrl || isDeletingAvatar) return;
+    const urlToDelete = avatarUrl;
+    Alert.alert(
+      'Profilbild löschen',
+      'Möchtest du dein aktuelles Profilbild wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.',
+      [
+        { text: 'Abbrechen', style: 'cancel' },
+        { text: 'Löschen', style: 'destructive', onPress: () => deleteAvatarFromServer(urlToDelete) },
+      ],
+    );
+  };
+
+  const deleteAvatarFromServer = async (url: string) => {
+    try {
+      setIsDeletingAvatar(true);
+      const { error } = await deleteProfileAvatar(url);
+      if (error) throw error;
+      removeAvatarImage(false);
+      Alert.alert('Profilbild gelöscht', 'Dein Profilbild wurde entfernt.');
+    } catch (error) {
+      console.error('Error deleting profile avatar:', error);
+      Alert.alert('Fehler', 'Das Profilbild konnte nicht gelöscht werden.');
+    } finally {
+      setIsDeletingAvatar(false);
+    }
+  };
+
+  const handleDeleteProfileRequest = () => {
+    if (isDeletingProfile) return;
+    Alert.alert(
+      'Profil löschen',
+      'Möchtest du dein Profil wirklich löschen? Alle gespeicherten Daten werden entfernt.',
+      [
+        { text: 'Abbrechen', style: 'cancel' },
+        { text: 'Löschen', style: 'destructive', onPress: deleteProfileAndSignOut },
+      ],
+    );
+  };
+
+  const deleteProfileAndSignOut = async () => {
+    if (!user) {
+      Alert.alert('Hinweis', 'Bitte melde dich an, um dein Profil zu löschen.');
+      return;
+    }
+    try {
+      setIsDeletingProfile(true);
+      const { error } = await deleteUserProfile({ avatarUrl });
+      if (error) throw error;
+      setIsDeletingProfile(false);
+      Alert.alert(
+        'Profil gelöscht',
+        'Dein Profil wurde gelöscht. Du wirst jetzt abgemeldet.',
+        [
+          {
+            text: 'OK',
+            onPress: async () => {
+              await signOut();
+              router.replace('/(auth)/login');
+            },
+          },
+        ],
+      );
+    } catch (error) {
+      console.error('Error deleting profile:', error);
+      setIsDeletingProfile(false);
+      Alert.alert('Fehler', 'Dein Profil konnte nicht gelöscht werden.');
+    }
   };
 
   const saveUserData = async () => {
@@ -348,8 +420,23 @@ export default function ProfilScreen() {
                         <ThemedText style={styles.avatarActionText}>Foto wählen</ThemedText>
                       </TouchableOpacity>
                       {!!avatarPreview && (
-                        <TouchableOpacity style={styles.avatarActionButton} onPress={removeAvatarImage}>
-                          <ThemedText style={styles.avatarActionText}>Entfernen</ThemedText>
+                        <TouchableOpacity style={styles.avatarActionButton} onPress={() => removeAvatarImage()}>
+                          <ThemedText style={styles.avatarActionText}>Foto entfernen</ThemedText>
+                        </TouchableOpacity>
+                      )}
+                      {!!avatarUrl && (
+                        <TouchableOpacity
+                          style={styles.avatarActionButton}
+                          onPress={handleAvatarDeletePress}
+                          disabled={isDeletingAvatar}
+                        >
+                          {isDeletingAvatar ? (
+                            <ActivityIndicator size="small" color="#FF6B6B" />
+                          ) : (
+                            <ThemedText style={[styles.avatarActionText, styles.avatarDeleteText]}>
+                              Foto löschen
+                            </ThemedText>
+                          )}
                         </TouchableOpacity>
                       )}
                     </View>
@@ -652,6 +739,40 @@ export default function ProfilScreen() {
                     </BlurView>
                   </TouchableOpacity>
                 </View>
+
+                {/* Profil löschen */}
+                <View style={{ marginHorizontal: TIMELINE_INSET }}>
+                  <TouchableOpacity
+                    onPress={handleDeleteProfileRequest}
+                    activeOpacity={0.9}
+                    disabled={isDeletingProfile}
+                    style={{ borderRadius: 22, overflow: 'hidden', marginTop: 12 }}
+                  >
+                    <BlurView intensity={20} tint="light" style={{ borderRadius: 22, overflow: 'hidden' }}>
+                      <View
+                        style={[
+                          styles.saveCard,
+                          styles.dangerCard,
+                          { backgroundColor: 'rgba(255,130,130,0.5)' },
+                        ]}
+                      >
+                        <View style={[styles.saveIconWrap, { backgroundColor: '#FF6B6B' }]}>
+                          {isDeletingProfile ? (
+                            <ActivityIndicator color="#fff" />
+                          ) : (
+                            <IconSymbol name="trash.fill" size={24} color="#FFFFFF" />
+                          )}
+                        </View>
+                        <ThemedText style={[styles.saveTitle, styles.dangerText]}>
+                          {isDeletingProfile ? 'Profil wird gelöscht…' : 'Profil löschen'}
+                        </ThemedText>
+                        <ThemedText style={[styles.saveSub, styles.dangerSub]}>
+                          Entfernt deine Profildaten dauerhaft
+                        </ThemedText>
+                      </View>
+                    </BlurView>
+                  </TouchableOpacity>
+                </View>
               </>
             )}
           </ScrollView>
@@ -736,13 +857,19 @@ const styles = StyleSheet.create({
   avatarActions: {
     flexDirection: 'row',
     justifyContent: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
   },
   avatarActionButton: {
     marginHorizontal: 12,
+    marginVertical: 4,
   },
   avatarActionText: {
     color: '#8E4EC6',
     fontWeight: '700',
+  },
+  avatarDeleteText: {
+    color: '#FF6B6B',
   },
 
   // Glas-DateButton
@@ -812,4 +939,14 @@ const styles = StyleSheet.create({
   },
   saveTitle: { fontSize: 16, fontWeight: '800', color: PRIMARY_TEXT, marginBottom: 4 },
   saveSub: { fontSize: 11, color: PRIMARY_TEXT, opacity: 0.8 },
+  dangerCard: {
+    borderColor: 'rgba(255,107,107,0.6)',
+  },
+  dangerText: {
+    color: '#FF6B6B',
+  },
+  dangerSub: {
+    color: PRIMARY_TEXT,
+    opacity: 0.9,
+  },
 });
