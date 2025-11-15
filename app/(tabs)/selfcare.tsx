@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, TextInput, Alert, SafeAreaView, StatusBar, Animated, Dimensions } from 'react-native';
+import { StyleSheet, ScrollView, View, TouchableOpacity, TextInput, Alert, SafeAreaView, StatusBar, Animated, Dimensions, Text } from 'react-native';
 import { useRouter, Stack } from 'expo-router';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedBackground } from '@/components/ThemedBackground';
@@ -10,7 +10,7 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { supabase } from '@/lib/supabase';
 import Header from '@/components/Header';
 import { useSmartBack } from '@/contexts/NavigationContext';
-import { LiquidGlassCard, LAYOUT_PAD, TIMELINE_INSET, GlassCard } from '@/constants/DesignGuide';
+import { LiquidGlassCard, LAYOUT_PAD, TIMELINE_INSET, GlassCard, PRIMARY } from '@/constants/DesignGuide';
 import * as Haptics from 'expo-haptics';
 import { ProgressCircle } from '@/components/ProgressCircle';
 
@@ -208,6 +208,11 @@ export default function SelfcareScreen() {
       loadMonthEntries();
     }
   }, [user, monthOffset]);
+
+  useEffect(() => {
+    if (selectedTab === 'week') setWeekOffset(0);
+    if (selectedTab === 'month') setMonthOffset(0);
+  }, [selectedTab]);
 
   // Lade Benutzerdaten
   const loadUserData = async () => {
@@ -441,9 +446,9 @@ export default function SelfcareScreen() {
             onPress={() => setSelectedTab(tab)}
             activeOpacity={0.85}
           >
-            <ThemedText style={[styles.topTabText, selectedTab === tab && styles.activeTopTabText]}>
+            <Text style={[styles.topTabText, selectedTab === tab && styles.activeTopTabText]}>
               {tab === 'day' ? 'Tag' : tab === 'week' ? 'Woche' : 'Monat'}
-            </ThemedText>
+            </Text>
           </TouchableOpacity>
         </GlassCard>
       ))}
@@ -1119,31 +1124,29 @@ const styles = StyleSheet.create({
   },
   topTabsContainer: {
     flexDirection: 'row',
-    gap: 12,
-    marginBottom: 20,
+    justifyContent: 'center',
+    gap: 10,
+    marginTop: 6,
   },
   topTab: {
-    flex: 1,
-    borderRadius: 18,
+    borderRadius: 20,
     overflow: 'hidden',
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderColor: 'rgba(255,255,255,0.3)',
+    borderWidth: 1,
   },
   activeTopTab: {
-    borderColor: 'rgba(142, 78, 198, 0.65)',
-    backgroundColor: 'rgba(142, 78, 198, 0.18)',
+    borderColor: 'rgba(94,61,179,0.65)',
   },
   topTabInner: {
-    paddingVertical: 12,
-    alignItems: 'center',
+    paddingHorizontal: 18,
+    paddingVertical: 6,
   },
   topTabText: {
-    fontSize: 15,
-    fontWeight: '600',
+    fontSize: 13,
+    fontWeight: '700',
     color: '#7D5A50',
   },
   activeTopTabText: {
-    color: '#5D4A40',
+    color: PRIMARY,
   },
   weekViewContainer: {
     gap: 18,
