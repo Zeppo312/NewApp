@@ -1119,7 +1119,7 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     paddingHorizontal: LAYOUT_PAD,
-    paddingTop: 16,
+    paddingTop: 0,
     paddingBottom: 160,
   },
   topTabsContainer: {
