@@ -674,7 +674,8 @@ export default function SelfcareScreen() {
           </TouchableOpacity>
 
           <View style={styles.monthHeaderCenter}>
-            <ThemedText style={styles.monthHeaderTitle}>
+            <ThemedText style={styles.monthHeaderTitle}>Monatsübersicht</ThemedText>
+            <ThemedText style={styles.monthHeaderSubtitle}>
               {referenceMonth.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' })}
             </ThemedText>
           </View>
@@ -1127,6 +1128,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 10,
     marginTop: 6,
+    marginBottom: 12,
   },
   topTab: {
     borderRadius: 20,
@@ -1308,6 +1310,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: '#7D5A50',
+  },
+  monthHeaderSubtitle: {
+    fontSize: 13,
+    color: '#7D5A50',
+    opacity: 0.75,
   },
   weekdayHeader: {
     flexDirection: 'row',
