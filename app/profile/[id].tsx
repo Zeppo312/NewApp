@@ -42,7 +42,7 @@ interface Follower {
 
 const TEXT_PRIMARY = '#5A3A2C';
 const TEXT_MUTED = 'rgba(90,58,44,0.75)';
-const POST_CARD_OVERLAY = 'rgba(255,255,255,0.78)';
+const POST_CARD_OVERLAY = 'rgba(255,255,255,0.2)';
 const CONTENT_MAX_WIDTH = 520;
 
 export default function ProfileScreen() {
@@ -442,9 +442,9 @@ export default function ProfileScreen() {
     return (
       <LiquidGlassCard
         style={styles.feedCard}
-        intensity={24}
+        intensity={34}
         overlayColor={POST_CARD_OVERLAY}
-        borderColor={'rgba(255,255,255,0.4)'}
+        borderColor="rgba(255,255,255,0.55)"
       >
         <TouchableOpacity
           activeOpacity={0.92}
@@ -918,15 +918,19 @@ const styles = StyleSheet.create({
   // Feed styles
   feedCard: {
     marginBottom: 16,
-    borderRadius: 24,
+    borderRadius: 26,
     width: '100%',
-    borderWidth: 1.2,
-    borderColor: 'rgba(255,255,255,0.5)',
-    backgroundColor: 'rgba(255,255,255,0.62)',
+    borderWidth: 1.4,
+    borderColor: 'rgba(255,255,255,0.65)',
+    backgroundColor: 'rgba(255,255,255,0.08)',
   },
   feedInner: {
     paddingVertical: 16,
     paddingHorizontal: 20,
+    backgroundColor: 'rgba(255,255,255,0.35)',
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.45)',
   },
   postHeaderRow: {
     flexDirection: 'row',
