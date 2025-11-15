@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, TextInput, Alert, SafeAreaView, StatusBar, Animated } from 'react-native';
+import React, { useState, useEffect, useMemo } from 'react';
+import { StyleSheet, ScrollView, View, TouchableOpacity, TextInput, Alert, SafeAreaView, StatusBar, Animated, Dimensions } from 'react-native';
 import { useRouter, Stack } from 'expo-router';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedBackground } from '@/components/ThemedBackground';
@@ -10,7 +10,7 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { supabase } from '@/lib/supabase';
 import Header from '@/components/Header';
 import { useSmartBack } from '@/contexts/NavigationContext';
-import { LiquidGlassCard, LAYOUT_PAD, TIMELINE_INSET } from '@/constants/DesignGuide';
+import { LiquidGlassCard, LAYOUT_PAD, TIMELINE_INSET, GlassCard } from '@/constants/DesignGuide';
 import * as Haptics from 'expo-haptics';
 import { ProgressCircle } from '@/components/ProgressCircle';
 
@@ -82,6 +82,78 @@ const movementChoices = [
   { value: false, emoji: '⏳', label: 'Noch nicht' },
 ];
 
+const { width: screenWidth } = Dimensions.get('window');
+const contentWidth = screenWidth - 2 * LAYOUT_PAD;
+const WEEK_CONTENT_WIDTH = contentWidth - TIMELINE_INSET * 2;
+const WEEK_COLS = 7;
+const WEEK_GUTTER = 4;
+const WEEK_COL_WIDTH = Math.floor((WEEK_CONTENT_WIDTH - (WEEK_COLS - 1) * WEEK_GUTTER) / WEEK_COLS);
+const WEEK_COLS_WIDTH = WEEK_COLS * WEEK_COL_WIDTH;
+const WEEK_LEFTOVER = WEEK_CONTENT_WIDTH - (WEEK_COLS_WIDTH + (WEEK_COLS - 1) * WEEK_GUTTER);
+const MAX_BAR_HEIGHT = 140;
+
+const moodScoreMap: Record<MoodType, number> = {
+  great: 5,
+  good: 4,
+  okay: 3,
+  bad: 2,
+  awful: 1,
+};
+
+const getMoodScoreFromEntry = (entry: SelfcareEntry) => {
+  if (!entry.mood) return null;
+  return moodScoreMap[entry.mood as MoodType] ?? null;
+};
+
+const WEEKDAY_LABELS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+
+const describeMoodScore = (score: number | null) => {
+  if (!score) return 'Keine Daten';
+  if (score >= 4.5) return 'Strahlend';
+  if (score >= 3.5) return 'Gut';
+  if (score >= 2.5) return 'Durchwachsen';
+  if (score >= 1.5) return 'Herausfordernd';
+  return 'Braucht Liebe';
+};
+
+const toNumberArray = (values: Array<number | null | undefined>) =>
+  values.filter((value): value is number => typeof value === 'number' && !Number.isNaN(value));
+
+const averageNumber = (values: Array<number | null | undefined>) => {
+  const filtered = toNumberArray(values);
+  if (!filtered.length) return null;
+  return filtered.reduce((sum, val) => sum + val, 0) / filtered.length;
+};
+
+const isSameDay = (a: Date, b: Date) =>
+  a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+
+const getWeekStart = (date: Date) => {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  d.setDate(diff);
+  d.setHours(0, 0, 0, 0);
+  return d;
+};
+
+const getWeekEnd = (date: Date) => {
+  const weekStart = getWeekStart(date);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekStart.getDate() + 6);
+  weekEnd.setHours(23, 59, 59, 999);
+  return weekEnd;
+};
+
+const getWeekDays = (date: Date) => {
+  const start = getWeekStart(date);
+  return Array.from({ length: 7 }).map((_, index) => {
+    const day = new Date(start);
+    day.setDate(start.getDate() + index);
+    return day;
+  });
+};
+
 export default function SelfcareScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
@@ -102,6 +174,13 @@ export default function SelfcareScreen() {
   const [todayEntry, setTodayEntry] = useState<SelfcareEntry | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [exerciseTouched, setExerciseTouched] = useState(false);
+  const [selectedTab, setSelectedTab] = useState<'day' | 'week' | 'month'>('day');
+  const [weekEntries, setWeekEntries] = useState<SelfcareEntry[]>([]);
+  const [monthEntries, setMonthEntries] = useState<SelfcareEntry[]>([]);
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [monthOffset, setMonthOffset] = useState(0);
+  const [isWeekLoading, setIsWeekLoading] = useState(false);
+  const [isMonthLoading, setIsMonthLoading] = useState(false);
   // Animations
   const moodPulse = React.useRef(new Animated.Value(1)).current;
   const tipOpacity = React.useRef(new Animated.Value(1)).current;
@@ -117,6 +196,18 @@ export default function SelfcareScreen() {
       setIsLoading(false);
     }
   }, [user]);
+
+  useEffect(() => {
+    if (user) {
+      loadWeekEntries();
+    }
+  }, [user, weekOffset]);
+
+  useEffect(() => {
+    if (user) {
+      loadMonthEntries();
+    }
+  }, [user, monthOffset]);
 
   // Lade Benutzerdaten
   const loadUserData = async () => {
@@ -169,6 +260,68 @@ export default function SelfcareScreen() {
       console.error('Failed to load today entry:', err);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const loadWeekEntries = async () => {
+    if (!user) return;
+    try {
+      setIsWeekLoading(true);
+      const reference = new Date();
+      reference.setDate(reference.getDate() + weekOffset * 7);
+      const start = getWeekStart(reference);
+      const end = new Date(start);
+      end.setDate(start.getDate() + 7);
+
+      const { data, error } = await supabase
+        .from('selfcare_entries')
+        .select('*')
+        .eq('user_id', user.id)
+        .gte('date', start.toISOString())
+        .lt('date', end.toISOString())
+        .order('date', { ascending: true });
+
+      if (error) {
+        console.error('Error loading week entries:', error);
+      } else {
+        setWeekEntries(data ?? []);
+      }
+    } catch (err) {
+      console.error('Failed to load week entries:', err);
+    } finally {
+      setIsWeekLoading(false);
+    }
+  };
+
+  const loadMonthEntries = async () => {
+    if (!user) return;
+    try {
+      setIsMonthLoading(true);
+      const base = new Date();
+      base.setDate(1);
+      base.setMonth(base.getMonth() + monthOffset);
+      const start = new Date(base);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(start);
+      end.setMonth(start.getMonth() + 1);
+
+      const { data, error } = await supabase
+        .from('selfcare_entries')
+        .select('*')
+        .eq('user_id', user.id)
+        .gte('date', start.toISOString())
+        .lt('date', end.toISOString())
+        .order('date', { ascending: true });
+
+      if (error) {
+        console.error('Error loading month entries:', error);
+      } else {
+        setMonthEntries(data ?? []);
+      }
+    } catch (err) {
+      console.error('Failed to load month entries:', err);
+    } finally {
+      setIsMonthLoading(false);
     }
   };
 
@@ -279,6 +432,375 @@ export default function SelfcareScreen() {
     try { Haptics.selectionAsync(); } catch {}
   };
 
+  const TopTabs = () => (
+    <View style={styles.topTabsContainer}>
+      {(['day', 'week', 'month'] as const).map((tab) => (
+        <GlassCard key={tab} style={[styles.topTab, selectedTab === tab && styles.activeTopTab]} intensity={22}>
+          <TouchableOpacity
+            style={styles.topTabInner}
+            onPress={() => setSelectedTab(tab)}
+            activeOpacity={0.85}
+          >
+            <ThemedText style={[styles.topTabText, selectedTab === tab && styles.activeTopTabText]}>
+              {tab === 'day' ? 'Tag' : tab === 'week' ? 'Woche' : 'Monat'}
+            </ThemedText>
+          </TouchableOpacity>
+        </GlassCard>
+      ))}
+    </View>
+  );
+
+  const WeekView = () => {
+    const referenceDate = useMemo(() => {
+      const base = new Date();
+      base.setDate(base.getDate() + weekOffset * 7);
+      return base;
+    }, [weekOffset]);
+
+    const weekStart = useMemo(() => getWeekStart(referenceDate), [referenceDate]);
+    const weekEnd = useMemo(() => getWeekEnd(referenceDate), [referenceDate]);
+    const weekDays = useMemo(() => getWeekDays(referenceDate), [referenceDate]);
+
+    const getEntriesForDay = (day: Date) =>
+      weekEntries.filter((entry) => {
+        if (!entry.date && !entry.created_at) return false;
+        const entryDate = new Date(entry.date ?? entry.created_at!);
+        return isSameDay(entryDate, day);
+      });
+
+    const getMoodAverageForDay = (day: Date) =>
+      averageNumber(getEntriesForDay(day).map((entry) => getMoodScoreFromEntry(entry)));
+
+    const weekMoodScore = averageNumber(weekEntries.map((entry) => getMoodScoreFromEntry(entry)));
+    const avgSleep = averageNumber(weekEntries.map((entry) => entry.sleep_hours ?? null));
+    const avgWater = averageNumber(weekEntries.map((entry) => entry.water_intake ?? null));
+    const movementDays = weekEntries.filter((entry) => entry.exercise_done).length;
+    const checklistPercent = weekEntries.length
+      ? Math.round(
+          (weekEntries.reduce((sum, entry) => sum + (entry.selfcare_activities?.length ?? 0), 0) /
+            (weekEntries.length * selfcareActivities.length)) *
+            100,
+        )
+      : 0;
+
+    return (
+      <View style={styles.weekViewContainer}>
+        <View style={styles.weekNavigationContainer}>
+          <TouchableOpacity style={styles.weekNavButton} onPress={() => setWeekOffset((prev) => prev - 1)}>
+            <ThemedText style={styles.weekNavButtonText}>‹</ThemedText>
+          </TouchableOpacity>
+
+          <View style={styles.weekHeaderCenter}>
+            <ThemedText style={styles.weekHeaderTitle}>Wochenübersicht</ThemedText>
+            <ThemedText style={styles.weekHeaderSubtitle}>
+              {weekStart.toLocaleDateString('de-DE', { day: '2-digit', month: 'short' })} –{' '}
+              {weekEnd.toLocaleDateString('de-DE', { day: '2-digit', month: 'short' })}
+            </ThemedText>
+          </View>
+
+          <TouchableOpacity style={styles.weekNavButton} onPress={() => setWeekOffset((prev) => prev + 1)}>
+            <ThemedText style={styles.weekNavButtonText}>›</ThemedText>
+          </TouchableOpacity>
+        </View>
+
+        <LiquidGlassCard style={styles.analyticsCard} intensity={26}>
+          <View style={styles.analyticsInner}>
+            <ThemedText style={styles.chartTitle}>Stimmung diese Woche</ThemedText>
+            <ThemedText style={styles.chartSubtitle}>Ø pro Tag</ThemedText>
+            <View style={[styles.chartArea, { width: WEEK_CONTENT_WIDTH, alignSelf: 'center' }]}>
+              {weekDays.map((day, index) => {
+                const moodAvg = getMoodAverageForDay(day);
+                const height = moodAvg ? (moodAvg / 5) * MAX_BAR_HEIGHT : 0;
+                const extra = index < WEEK_LEFTOVER ? 1 : 0;
+                return (
+                  <View
+                    key={day.toISOString()}
+                    style={{
+                      width: WEEK_COL_WIDTH + extra,
+                      marginRight: index < WEEK_COLS - 1 ? WEEK_GUTTER : 0,
+                      alignItems: 'center',
+                    }}
+                  >
+                    <View style={[styles.chartBarContainer, { width: WEEK_COL_WIDTH + extra }]}>
+                      {height > 0 && (
+                        <View
+                          style={[
+                            styles.chartBar,
+                            { height, width: Math.max(10, Math.round(WEEK_COL_WIDTH * 0.6)) },
+                          ]}
+                        />
+                      )}
+                    </View>
+                    <View style={[styles.chartLabelContainer, { width: WEEK_COL_WIDTH + extra }]}>
+                      <ThemedText style={styles.chartLabel}>{WEEKDAY_LABELS[index]}</ThemedText>
+                      <ThemedText style={styles.chartValue}>
+                        {moodAvg ? moodAvg.toFixed(1) : '–'}
+                      </ThemedText>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+            {isWeekLoading && weekEntries.length === 0 && (
+              <ThemedText style={styles.loadingText}>Lade Selfcare-Daten…</ThemedText>
+            )}
+            {!isWeekLoading && weekEntries.length === 0 && (
+              <ThemedText style={styles.emptyHint}>Noch keine Einträge in dieser Woche</ThemedText>
+            )}
+          </View>
+        </LiquidGlassCard>
+
+        <LiquidGlassCard style={styles.analyticsCard} intensity={26}>
+          <View style={styles.analyticsInner}>
+            <ThemedText style={styles.chartTitle}>Selfcare-Kennzahlen</ThemedText>
+            <View style={styles.summaryStats}>
+              <View style={styles.statItem}>
+                <ThemedText style={styles.statEmoji}>😌</ThemedText>
+                <ThemedText style={styles.statValue}>{describeMoodScore(weekMoodScore)}</ThemedText>
+                <ThemedText style={styles.statLabel}>Ø Stimmung</ThemedText>
+              </View>
+              <View style={styles.statItem}>
+                <ThemedText style={styles.statEmoji}>💤</ThemedText>
+                <ThemedText style={styles.statValue}>
+                  {avgSleep !== null ? `${avgSleep.toFixed(1)}h` : '–'}
+                </ThemedText>
+                <ThemedText style={styles.statLabel}>Schlaf</ThemedText>
+              </View>
+              <View style={styles.statItem}>
+                <ThemedText style={styles.statEmoji}>💧</ThemedText>
+                <ThemedText style={styles.statValue}>
+                  {avgWater !== null ? `${avgWater.toFixed(1)}/8` : '–'}
+                </ThemedText>
+                <ThemedText style={styles.statLabel}>Ø Gläser</ThemedText>
+              </View>
+            </View>
+            <View style={styles.summaryStats}>
+              <View style={styles.statItem}>
+                <ThemedText style={styles.statEmoji}>🚶‍♀️</ThemedText>
+                <ThemedText style={styles.statValue}>{movementDays}</ThemedText>
+                <ThemedText style={styles.statLabel}>Bewegungstage</ThemedText>
+              </View>
+              <View style={styles.statItem}>
+                <ThemedText style={styles.statEmoji}>☑️</ThemedText>
+                <ThemedText style={styles.statValue}>
+                  {weekEntries.length ? `${checklistPercent}%` : '–'}
+                </ThemedText>
+                <ThemedText style={styles.statLabel}>Checkliste</ThemedText>
+              </View>
+              <View style={styles.statItem}>
+                <ThemedText style={styles.statEmoji}>🗓️</ThemedText>
+                <ThemedText style={styles.statValue}>{weekEntries.length}</ThemedText>
+                <ThemedText style={styles.statLabel}>Einträge</ThemedText>
+              </View>
+            </View>
+          </View>
+        </LiquidGlassCard>
+      </View>
+    );
+  };
+
+  const MonthView = () => {
+    const referenceMonth = useMemo(() => {
+      const base = new Date();
+      base.setDate(1);
+      base.setMonth(base.getMonth() + monthOffset);
+      return base;
+    }, [monthOffset]);
+
+    const monthStart = useMemo(() => new Date(referenceMonth.getFullYear(), referenceMonth.getMonth(), 1), [referenceMonth]);
+    const daysInMonth = useMemo(() => new Date(referenceMonth.getFullYear(), referenceMonth.getMonth() + 1, 0).getDate(), [referenceMonth]);
+
+    const calendarWeeks = useMemo(() => {
+      const weeks: Array<Array<Date | null>> = [];
+      const firstWeekday = monthStart.getDay() === 0 ? 6 : monthStart.getDay() - 1;
+      let currentWeek: Array<Date | null> = [];
+
+      for (let i = 0; i < firstWeekday; i++) {
+        currentWeek.push(null);
+      }
+
+      for (let day = 1; day <= daysInMonth; day++) {
+        currentWeek.push(new Date(monthStart.getFullYear(), monthStart.getMonth(), day));
+        if (currentWeek.length === 7) {
+          weeks.push(currentWeek);
+          currentWeek = [];
+        }
+      }
+
+      if (currentWeek.length) {
+        while (currentWeek.length < 7) {
+          currentWeek.push(null);
+        }
+        weeks.push(currentWeek);
+      }
+
+      return weeks;
+    }, [monthStart, daysInMonth]);
+
+    const getEntryForDate = (date: Date) =>
+      monthEntries.find((entry) => {
+        if (!entry.date && !entry.created_at) return false;
+        const entryDate = new Date(entry.date ?? entry.created_at!);
+        return isSameDay(entryDate, date);
+      });
+
+    const getCalendarColors = (mood?: MoodType | null, hasEntry?: boolean) => {
+      if (mood === 'great') return { bg: 'rgba(56,161,105,0.18)', border: 'rgba(56,161,105,0.45)', text: '#2F855A' };
+      if (mood === 'good') return { bg: 'rgba(56,161,105,0.12)', border: 'rgba(56,161,105,0.35)', text: '#2F855A' };
+      if (mood === 'okay') return { bg: 'rgba(245,166,35,0.16)', border: 'rgba(245,166,35,0.4)', text: '#975A16' };
+      if (mood === 'bad') return { bg: 'rgba(229,62,62,0.16)', border: 'rgba(229,62,62,0.4)', text: '#9B2C2C' };
+      if (mood === 'awful') return { bg: 'rgba(229,62,62,0.22)', border: 'rgba(229,62,62,0.5)', text: '#9B2C2C' };
+      if (hasEntry) return { bg: 'rgba(142,78,198,0.12)', border: 'rgba(142,78,198,0.35)', text: '#7D5A50' };
+      return { bg: 'rgba(255,255,255,0.08)', border: 'rgba(255,255,255,0.2)', text: '#7D5A50' };
+    };
+
+    const monthMoodScore = averageNumber(monthEntries.map((entry) => getMoodScoreFromEntry(entry)));
+    const avgSleep = averageNumber(monthEntries.map((entry) => entry.sleep_hours ?? null));
+    const avgWater = averageNumber(monthEntries.map((entry) => entry.water_intake ?? null));
+    const hydratedDays = monthEntries.filter((entry) => (entry.water_intake ?? 0) >= 8).length;
+    const movementDays = monthEntries.filter((entry) => entry.exercise_done).length;
+    const focusedDays = monthEntries.filter((entry) => (entry.selfcare_activities?.length ?? 0) >= 4).length;
+
+    return (
+      <View style={styles.monthViewContainer}>
+        <View style={styles.monthNavigationContainer}>
+          <TouchableOpacity style={styles.monthNavButton} onPress={() => setMonthOffset((prev) => prev - 1)}>
+            <ThemedText style={styles.weekNavButtonText}>‹</ThemedText>
+          </TouchableOpacity>
+
+          <View style={styles.monthHeaderCenter}>
+            <ThemedText style={styles.monthHeaderTitle}>
+              {referenceMonth.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' })}
+            </ThemedText>
+          </View>
+
+          <TouchableOpacity
+            style={[styles.monthNavButton, monthOffset >= 0 && styles.disabledNavButton]}
+            disabled={monthOffset >= 0}
+            onPress={() => setMonthOffset((prev) => Math.min(prev + 1, 0))}
+          >
+            <ThemedText style={styles.weekNavButtonText}>›</ThemedText>
+          </TouchableOpacity>
+        </View>
+
+        <LiquidGlassCard style={styles.analyticsCard} intensity={26}>
+          <View style={styles.analyticsInner}>
+            <ThemedText style={styles.chartTitle}>Selfcare-Kalender</ThemedText>
+            <View style={{ width: WEEK_CONTENT_WIDTH, alignSelf: 'center', paddingVertical: 12 }}>
+              <View style={styles.weekdayHeader}>
+                {WEEKDAY_LABELS.map((label, index) => {
+                  const extra = index < WEEK_LEFTOVER ? 1 : 0;
+                  return (
+                    <View
+                      key={label}
+                      style={{
+                        width: WEEK_COL_WIDTH + extra,
+                        marginRight: index < WEEK_COLS - 1 ? WEEK_GUTTER : 0,
+                        alignItems: 'center',
+                      }}
+                    >
+                      <ThemedText style={styles.weekdayLabel}>{label}</ThemedText>
+                    </View>
+                  );
+                })}
+              </View>
+
+              {calendarWeeks.map((week, weekIndex) => (
+                <View key={`week-${weekIndex}`} style={styles.calendarWeek}>
+                  {week.map((date, dayIndex) => {
+                    const extra = dayIndex < WEEK_LEFTOVER ? 1 : 0;
+                    return (
+                      <View
+                        key={`day-${weekIndex}-${dayIndex}`}
+                        style={{
+                          width: WEEK_COL_WIDTH + extra,
+                          marginRight: dayIndex < WEEK_COLS - 1 ? WEEK_GUTTER : 0,
+                        }}
+                      >
+                        {date ? (
+                          (() => {
+                            const entry = getEntryForDate(date);
+                            const colors = getCalendarColors(entry?.mood as MoodType | undefined, !!entry);
+                            return (
+                              <View style={[styles.calendarDayButton, { backgroundColor: colors.bg, borderColor: colors.border }]}>
+                                <ThemedText style={[styles.calendarDayNumber, { color: colors.text }]}>{date.getDate()}</ThemedText>
+                                {entry?.mood ? (
+                                  <ThemedText style={[styles.calendarMoodEmoji, { color: colors.text }]}>
+                                    {getMoodEmoji(entry.mood as MoodType)}
+                                  </ThemedText>
+                                ) : entry ? (
+                                  <ThemedText style={[styles.calendarProgressText, { color: colors.text }]}>
+                                    {(entry.selfcare_activities?.length ?? 0)}/{selfcareActivities.length}
+                                  </ThemedText>
+                                ) : null}
+                              </View>
+                            );
+                          })()
+                        ) : (
+                          <View style={styles.calendarDayEmpty} />
+                        )}
+                      </View>
+                    );
+                  })}
+                </View>
+              ))}
+            </View>
+            {isMonthLoading && monthEntries.length === 0 && (
+              <ThemedText style={styles.loadingText}>Kalender wird geladen…</ThemedText>
+            )}
+            {!isMonthLoading && monthEntries.length === 0 && (
+              <ThemedText style={styles.emptyHint}>Noch keine Einträge in diesem Monat</ThemedText>
+            )}
+          </View>
+        </LiquidGlassCard>
+
+        <LiquidGlassCard style={styles.analyticsCard} intensity={26}>
+          <View style={styles.analyticsInner}>
+            <ThemedText style={styles.chartTitle}>Monatsübersicht</ThemedText>
+            <View style={styles.summaryStats}>
+              <View style={styles.statItem}>
+                <ThemedText style={styles.statEmoji}>😌</ThemedText>
+                <ThemedText style={styles.statValue}>{describeMoodScore(monthMoodScore)}</ThemedText>
+                <ThemedText style={styles.statLabel}>Ø Stimmung</ThemedText>
+              </View>
+              <View style={styles.statItem}>
+                <ThemedText style={styles.statEmoji}>💤</ThemedText>
+                <ThemedText style={styles.statValue}>
+                  {avgSleep !== null ? `${avgSleep.toFixed(1)}h` : '–'}
+                </ThemedText>
+                <ThemedText style={styles.statLabel}>Ø Schlaf</ThemedText>
+              </View>
+              <View style={styles.statItem}>
+                <ThemedText style={styles.statEmoji}>💧</ThemedText>
+                <ThemedText style={styles.statValue}>
+                  {avgWater !== null ? `${avgWater.toFixed(1)}/8` : '–'}
+                </ThemedText>
+                <ThemedText style={styles.statLabel}>Ø Gläser</ThemedText>
+              </View>
+            </View>
+            <View style={styles.summaryStats}>
+              <View style={styles.statItem}>
+                <ThemedText style={styles.statEmoji}>🚶‍♀️</ThemedText>
+                <ThemedText style={styles.statValue}>{movementDays}</ThemedText>
+                <ThemedText style={styles.statLabel}>Bewegung</ThemedText>
+              </View>
+              <View style={styles.statItem}>
+                <ThemedText style={styles.statEmoji}>💦</ThemedText>
+                <ThemedText style={styles.statValue}>{hydratedDays}</ThemedText>
+                <ThemedText style={styles.statLabel}>Hydriert</ThemedText>
+              </View>
+              <View style={styles.statItem}>
+                <ThemedText style={styles.statEmoji}>☑️</ThemedText>
+                <ThemedText style={styles.statValue}>{focusedDays}</ThemedText>
+                <ThemedText style={styles.statLabel}>Checkliste 4+</ThemedText>
+              </View>
+            </View>
+          </View>
+        </LiquidGlassCard>
+      </View>
+    );
+  };
+
   return (
     <ThemedBackground style={styles.container}>
       <SafeAreaView style={{ flex: 1 }}>
@@ -288,285 +810,296 @@ export default function SelfcareScreen() {
         <Header title="Mama Selfcare" subtitle="Dein täglicher Check‑in" showBackButton />
         
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
-          {/* 1. Persönliche Begrüßung & Daily Check-In */}
-          <LiquidGlassCard style={styles.glassCard} intensity={26}>
-            <View style={styles.glassInner}>
-            <ThemedText style={styles.cardTitle}>{userName ? `Wie geht’s dir, ${userName}?` : 'Wie geht’s dir, Mama?'}</ThemedText>
-            <ThemedText style={styles.cardSubtitle}>Nimm dir kurz einen Moment nur für dich 💭</ThemedText>
+          <TopTabs />
 
-            <View style={styles.moodContainer}>
-              <TouchableOpacity
-                style={[styles.moodButton, currentMood === 'great' && styles.selectedMoodButton]}
-                onPress={() => selectMood('great')}
-              >
-                <Animated.Text style={[styles.moodEmoji, currentMood === 'great' && { transform: [{ scale: moodPulse }] }]}>😃</Animated.Text>
-              </TouchableOpacity>
+          {selectedTab === 'day' ? (
+            <>
+              {/* 1. Persönliche Begrüßung & Daily Check-In */}
+              <LiquidGlassCard style={styles.glassCard} intensity={26}>
+                <View style={styles.glassInner}>
+                  <ThemedText style={styles.cardTitle}>{userName ? `Wie geht’s dir, ${userName}?` : 'Wie geht’s dir, Mama?'}</ThemedText>
+                  <ThemedText style={styles.cardSubtitle}>Nimm dir kurz einen Moment nur für dich 💭</ThemedText>
 
-              <TouchableOpacity
-                style={[styles.moodButton, currentMood === 'good' && styles.selectedMoodButton]}
-                onPress={() => selectMood('good')}
-              >
-                <Animated.Text style={[styles.moodEmoji, currentMood === 'good' && { transform: [{ scale: moodPulse }] }]}>🙂</Animated.Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.moodButton, currentMood === 'okay' && styles.selectedMoodButton]}
-                onPress={() => selectMood('okay')}
-              >
-                <Animated.Text style={[styles.moodEmoji, currentMood === 'okay' && { transform: [{ scale: moodPulse }] }]}>😐</Animated.Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.moodButton, currentMood === 'bad' && styles.selectedMoodButton]}
-                onPress={() => selectMood('bad')}
-              >
-                <Animated.Text style={[styles.moodEmoji, currentMood === 'bad' && { transform: [{ scale: moodPulse }] }]}>😔</Animated.Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.moodButton, currentMood === 'awful' && styles.selectedMoodButton]}
-                onPress={() => selectMood('awful')}
-              >
-                <Animated.Text style={[styles.moodEmoji, currentMood === 'awful' && { transform: [{ scale: moodPulse }] }]}>😢</Animated.Text>
-              </TouchableOpacity>
-            </View>
-
-            {currentMood && (
-              <ThemedText style={styles.moodFeedback}>
-                {getMoodFeedback(currentMood)}
-              </ThemedText>
-            )}
-
-            <ThemedText style={styles.sectionTitle}>💭 Tagebuch</ThemedText>
-            <TextInput
-              style={styles.glassInput}
-              value={journalEntry}
-              onChangeText={setJournalEntry}
-              placeholder="Wie geht es dir heute? Was beschäftigt dich?"
-              placeholderTextColor={'rgba(125,90,80,0.5)'}
-              multiline
-              numberOfLines={4}
-            />
-            </View>
-          </LiquidGlassCard>
-
-          {/* 2. Selbstfürsorge-Tipps & Anleitungen */}
-          <LiquidGlassCard style={styles.glassCard} intensity={26}>
-            <View style={styles.glassInner}>
-              <ThemedText style={styles.cardTitle}>💡 Tipp des Tages</ThemedText>
-
-            <View style={styles.tipContainer}>
-              <IconSymbol name="lightbulb.fill" size={24} color="#FFD700" />
-              <Animated.View style={{ flex: 1, opacity: tipOpacity }}>
-                <ThemedText style={styles.tipText}>{dailyTip}</ThemedText>
-              </Animated.View>
-            </View>
-
-            <TouchableOpacity
-              style={styles.refreshButton}
-              onPress={refreshTipAnimated}
-            >
-              <IconSymbol name="arrow.clockwise" size={16} color={theme.text} />
-              <ThemedText style={styles.refreshButtonText}>Neuer Tipp</ThemedText>
-            </TouchableOpacity>
-            </View>
-          </LiquidGlassCard>
-
-          {/* 3. Gesundheit & Wohlbefinden */}
-          <LiquidGlassCard style={styles.glassCard} intensity={26}>
-            <View style={styles.glassInner}>
-              <ThemedText style={styles.cardTitle}>💧 Gesundheit & Wohlbefinden</ThemedText>
-
-              <View style={styles.healthStack}>
-                <View style={styles.healthCard}>
-                  <View style={styles.healthHeader}>
-                    <View style={[styles.healthIcon, { backgroundColor: 'rgba(135, 206, 235, 0.55)' }]}>
-                      <IconSymbol name="moon.fill" size={18} color="#FFFFFF" />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <ThemedText style={styles.healthTitle}>Schlafdauer</ThemedText>
-                      <ThemedText style={styles.healthSubtitle}>Letzte Nacht</ThemedText>
-                    </View>
-                    <View style={styles.healthValueBadge}>
-                      <ThemedText style={styles.healthValueText}>{sleepHours}h</ThemedText>
-                    </View>
-                  </View>
-                  <View style={styles.healthControlsRow}>
+                  <View style={styles.moodContainer}>
                     <TouchableOpacity
-                      style={styles.controlCircle}
-                      onPress={() => setSleepHours(Math.max(0, sleepHours - 1))}
-                      activeOpacity={0.85}
+                      style={[styles.moodButton, currentMood === 'great' && styles.selectedMoodButton]}
+                      onPress={() => selectMood('great')}
                     >
-                      <IconSymbol name="minus" size={16} color="#7D5A50" />
+                      <Animated.Text style={[styles.moodEmoji, currentMood === 'great' && { transform: [{ scale: moodPulse }] }]}>😃</Animated.Text>
                     </TouchableOpacity>
-                    <ThemedText style={styles.healthControlValue}>{sleepHours} Stunden</ThemedText>
+
                     <TouchableOpacity
-                      style={styles.controlCircle}
-                      onPress={() => setSleepHours(Math.min(24, sleepHours + 1))}
-                      activeOpacity={0.85}
+                      style={[styles.moodButton, currentMood === 'good' && styles.selectedMoodButton]}
+                      onPress={() => selectMood('good')}
                     >
-                      <IconSymbol name="plus" size={16} color="#7D5A50" />
+                      <Animated.Text style={[styles.moodEmoji, currentMood === 'good' && { transform: [{ scale: moodPulse }] }]}>🙂</Animated.Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.moodButton, currentMood === 'okay' && styles.selectedMoodButton]}
+                      onPress={() => selectMood('okay')}
+                    >
+                      <Animated.Text style={[styles.moodEmoji, currentMood === 'okay' && { transform: [{ scale: moodPulse }] }]}>😐</Animated.Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.moodButton, currentMood === 'bad' && styles.selectedMoodButton]}
+                      onPress={() => selectMood('bad')}
+                    >
+                      <Animated.Text style={[styles.moodEmoji, currentMood === 'bad' && { transform: [{ scale: moodPulse }] }]}>😔</Animated.Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.moodButton, currentMood === 'awful' && styles.selectedMoodButton]}
+                      onPress={() => selectMood('awful')}
+                    >
+                      <Animated.Text style={[styles.moodEmoji, currentMood === 'awful' && { transform: [{ scale: moodPulse }] }]}>😢</Animated.Text>
                     </TouchableOpacity>
                   </View>
-                </View>
 
-                <View style={styles.healthCard}>
-                  <View style={styles.healthHeader}>
-                    <View style={[styles.healthIcon, { backgroundColor: 'rgba(142, 78, 198, 0.6)' }]}>
-                      <IconSymbol name="drop.fill" size={18} color="#FFFFFF" />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <ThemedText style={styles.healthTitle}>Wasseraufnahme</ThemedText>
-                      <ThemedText style={styles.healthSubtitle}>Ziel 8 Gläser</ThemedText>
-                    </View>
-                    <View style={styles.healthValueBadge}>
-                      <ThemedText style={styles.healthValueText}>{waterIntake}/8</ThemedText>
-                    </View>
-                  </View>
-                  <View style={styles.waterMeterWrapper}>
-                    <View style={styles.waterMeterTrack}>
-                      <View
-                        style={[
-                          styles.waterMeterFill,
-                          { width: `${Math.min(100, (waterIntake / 8) * 100)}%` },
-                        ]}
-                      />
-                    </View>
-                    <ThemedText style={styles.waterHint}>
-                      {Math.max(0, 8 - waterIntake)} noch offen
+                  {currentMood && (
+                    <ThemedText style={styles.moodFeedback}>
+                      {getMoodFeedback(currentMood)}
                     </ThemedText>
-                  </View>
-                  <View style={styles.healthControlsRow}>
-                    <TouchableOpacity
-                      style={styles.controlCircle}
-                      onPress={() => setWaterIntake(Math.max(0, waterIntake - 1))}
-                      activeOpacity={0.85}
-                    >
-                      <IconSymbol name="minus" size={16} color="#7D5A50" />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.controlPrimary}
-                      onPress={() => setWaterIntake(Math.min(8, waterIntake + 1))}
-                      activeOpacity={0.9}
-                    >
-                      <IconSymbol name="plus.circle.fill" size={18} color="#FFFFFF" />
-                      <ThemedText style={styles.controlPrimaryText}>Glas hinzufügen</ThemedText>
-                    </TouchableOpacity>
-                  </View>
-                </View>
+                  )}
 
-                <View style={styles.healthCard}>
-                  <View style={styles.healthHeader}>
-                    <View style={[styles.healthIcon, { backgroundColor: 'rgba(168, 196, 162, 0.65)' }]}>
-                      <IconSymbol name="figure.walk" size={18} color="#FFFFFF" />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <ThemedText style={styles.healthTitle}>Bewegung heute</ThemedText>
-                      <ThemedText style={styles.healthSubtitle}>Sanfte Aktivität zählt</ThemedText>
-                    </View>
+                  <ThemedText style={styles.sectionTitle}>💭 Tagebuch</ThemedText>
+                  <TextInput
+                    style={styles.glassInput}
+                    value={journalEntry}
+                    onChangeText={setJournalEntry}
+                    placeholder="Wie geht es dir heute? Was beschäftigt dich?"
+                    placeholderTextColor={'rgba(125,90,80,0.5)'}
+                    multiline
+                    numberOfLines={4}
+                  />
+                </View>
+              </LiquidGlassCard>
+
+              {/* 2. Selbstfürsorge-Tipps & Anleitungen */}
+              <LiquidGlassCard style={styles.glassCard} intensity={26}>
+                <View style={styles.glassInner}>
+                  <ThemedText style={styles.cardTitle}>💡 Tipp des Tages</ThemedText>
+
+                  <View style={styles.tipContainer}>
+                    <IconSymbol name="lightbulb.fill" size={24} color="#FFD700" />
+                    <Animated.View style={{ flex: 1, opacity: tipOpacity }}>
+                      <ThemedText style={styles.tipText}>{dailyTip}</ThemedText>
+                    </Animated.View>
                   </View>
-                  <View style={styles.segmentRow}>
-                    {movementChoices.map((choice) => (
-                      <TouchableOpacity
-                        key={choice.label}
-                        style={[
-                          styles.segmentButton,
-                          exerciseTouched && exerciseDone === choice.value && styles.segmentButtonActive,
-                        ]}
-                        onPress={() => handleMovementSelect(choice.value)}
-                        activeOpacity={0.9}
-                      >
-                        <ThemedText style={styles.segmentEmoji}>{choice.emoji}</ThemedText>
-                        <ThemedText
-                          style={[
-                            styles.segmentLabel,
-                            exerciseTouched && exerciseDone === choice.value && styles.segmentLabelActive,
-                          ]}
+
+                  <TouchableOpacity
+                    style={styles.refreshButton}
+                    onPress={refreshTipAnimated}
+                  >
+                    <IconSymbol name="arrow.clockwise" size={16} color={theme.text} />
+                    <ThemedText style={styles.refreshButtonText}>Neuer Tipp</ThemedText>
+                  </TouchableOpacity>
+                </View>
+              </LiquidGlassCard>
+
+              {/* 3. Gesundheit & Wohlbefinden */}
+              <LiquidGlassCard style={styles.glassCard} intensity={26}>
+                <View style={styles.glassInner}>
+                  <ThemedText style={styles.cardTitle}>💧 Gesundheit & Wohlbefinden</ThemedText>
+
+                  <View style={styles.healthStack}>
+                    <View style={styles.healthCard}>
+                      <View style={styles.healthHeader}>
+                        <View style={[styles.healthIcon, { backgroundColor: 'rgba(135, 206, 235, 0.55)' }]}>
+                          <IconSymbol name="moon.fill" size={18} color="#FFFFFF" />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <ThemedText style={styles.healthTitle}>Schlafdauer</ThemedText>
+                          <ThemedText style={styles.healthSubtitle}>Letzte Nacht</ThemedText>
+                        </View>
+                        <View style={styles.healthValueBadge}>
+                          <ThemedText style={styles.healthValueText}>{sleepHours}h</ThemedText>
+                        </View>
+                      </View>
+                      <View style={styles.healthControlsRow}>
+                        <TouchableOpacity
+                          style={styles.controlCircle}
+                          onPress={() => setSleepHours(Math.max(0, sleepHours - 1))}
+                          activeOpacity={0.85}
                         >
-                          {choice.label}
+                          <IconSymbol name="minus" size={16} color="#7D5A50" />
+                        </TouchableOpacity>
+                        <ThemedText style={styles.healthControlValue}>{sleepHours} Stunden</ThemedText>
+                        <TouchableOpacity
+                          style={styles.controlCircle}
+                          onPress={() => setSleepHours(Math.min(24, sleepHours + 1))}
+                          activeOpacity={0.85}
+                        >
+                          <IconSymbol name="plus" size={16} color="#7D5A50" />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+
+                    <View style={styles.healthCard}>
+                      <View style={styles.healthHeader}>
+                        <View style={[styles.healthIcon, { backgroundColor: 'rgba(142, 78, 198, 0.6)' }]}>
+                          <IconSymbol name="drop.fill" size={18} color="#FFFFFF" />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <ThemedText style={styles.healthTitle}>Wasseraufnahme</ThemedText>
+                          <ThemedText style={styles.healthSubtitle}>Ziel 8 Gläser</ThemedText>
+                        </View>
+                        <View style={styles.healthValueBadge}>
+                          <ThemedText style={styles.healthValueText}>{waterIntake}/8</ThemedText>
+                        </View>
+                      </View>
+                      <View style={styles.waterMeterWrapper}>
+                        <View style={styles.waterMeterTrack}>
+                          <View
+                            style={[
+                              styles.waterMeterFill,
+                              { width: `${Math.min(100, (waterIntake / 8) * 100)}%` },
+                            ]}
+                          />
+                        </View>
+                        <ThemedText style={styles.waterHint}>
+                          {Math.max(0, 8 - waterIntake)} noch offen
                         </ThemedText>
-                      </TouchableOpacity>
-                    ))}
+                      </View>
+                      <View style={styles.healthControlsRow}>
+                        <TouchableOpacity
+                          style={styles.controlCircle}
+                          onPress={() => setWaterIntake(Math.max(0, waterIntake - 1))}
+                          activeOpacity={0.85}
+                        >
+                          <IconSymbol name="minus" size={16} color="#7D5A50" />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.controlPrimary}
+                          onPress={() => setWaterIntake(Math.min(8, waterIntake + 1))}
+                          activeOpacity={0.9}
+                        >
+                          <IconSymbol name="plus.circle.fill" size={18} color="#FFFFFF" />
+                          <ThemedText style={styles.controlPrimaryText}>Glas hinzufügen</ThemedText>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+
+                    <View style={styles.healthCard}>
+                      <View style={styles.healthHeader}>
+                        <View style={[styles.healthIcon, { backgroundColor: 'rgba(168, 196, 162, 0.65)' }]}>
+                          <IconSymbol name="figure.walk" size={18} color="#FFFFFF" />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <ThemedText style={styles.healthTitle}>Bewegung heute</ThemedText>
+                          <ThemedText style={styles.healthSubtitle}>Sanfte Aktivität zählt</ThemedText>
+                        </View>
+                      </View>
+                      <View style={styles.segmentRow}>
+                        {movementChoices.map((choice) => (
+                          <TouchableOpacity
+                            key={choice.label}
+                            style={[
+                              styles.segmentButton,
+                              exerciseTouched && exerciseDone === choice.value && styles.segmentButtonActive,
+                            ]}
+                            onPress={() => handleMovementSelect(choice.value)}
+                            activeOpacity={0.9}
+                          >
+                            <ThemedText style={styles.segmentEmoji}>{choice.emoji}</ThemedText>
+                            <ThemedText
+                              style={[
+                                styles.segmentLabel,
+                                exerciseTouched && exerciseDone === choice.value && styles.segmentLabelActive,
+                              ]}
+                            >
+                              {choice.label}
+                            </ThemedText>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </View>
                   </View>
                 </View>
-              </View>
-            </View>
-          </LiquidGlassCard>
+              </LiquidGlassCard>
 
-          {/* 4. Rückbildung & Körperpflege */}
-          <LiquidGlassCard style={styles.glassCard} intensity={26}>
-            <View style={styles.glassInner}>
-              <ThemedText style={styles.cardTitle}>Rückbildung & Körperpflege</ThemedText>
+              {/* 4. Rückbildung & Körperpflege */}
+              <LiquidGlassCard style={styles.glassCard} intensity={26}>
+                <View style={styles.glassInner}>
+                  <ThemedText style={styles.cardTitle}>Rückbildung & Körperpflege</ThemedText>
 
-              <ThemedText style={styles.sectionTitle}>🌸 Rückbildungsübung des Tages</ThemedText>
-            {(() => {
-              const exercise = postpartumExercises[Math.floor(Math.random() * postpartumExercises.length)];
-              return (
-                <View style={styles.exerciseCard}>
-                  <ThemedText style={styles.exerciseTitle}>
-                    {exercise.title}
-                  </ThemedText>
-                  <ThemedText style={styles.exerciseDescription}>
-                    {exercise.description}
-                  </ThemedText>
+                  <ThemedText style={styles.sectionTitle}>🌸 Rückbildungsübung des Tages</ThemedText>
+                  {(() => {
+                    const exercise = postpartumExercises[Math.floor(Math.random() * postpartumExercises.length)];
+                    return (
+                      <View style={styles.exerciseCard}>
+                        <ThemedText style={styles.exerciseTitle}>
+                          {exercise.title}
+                        </ThemedText>
+                        <ThemedText style={styles.exerciseDescription}>
+                          {exercise.description}
+                        </ThemedText>
+                      </View>
+                    );
+                  })()}
+
+                  <ThemedText style={styles.sectionTitle}>☑️ Meine Selfcare‑Checkliste</ThemedText>
+                  <View style={{ alignItems: 'center', marginBottom: 12 }}>
+                    <ProgressCircle
+                      progress={(checkedActivities.length / selfcareActivities.length) * 100}
+                      size={58}
+                      strokeWidth={6}
+                      progressColor={'#8E4EC6'}
+                      backgroundColor={'rgba(255,255,255,0.25)'}
+                      textColor={'transparent'}
+                    />
+                    <ThemedText style={{ marginTop: 6, color: '#7D5A50', fontWeight: '700' }}>{checkedActivities.length}/{selfcareActivities.length} erledigt</ThemedText>
+                  </View>
+                  {selfcareActivities.map(activity => (
+                    <TouchableOpacity
+                      key={activity.id}
+                      style={styles.checklistItem}
+                      onPress={() => toggleActivity(activity.id)}
+                    >
+                      <IconSymbol
+                        name={checkedActivities.includes(activity.id) ? "checkmark.square.fill" : "square"}
+                        size={24}
+                        color={checkedActivities.includes(activity.id) ? Colors.light.success : theme.text}
+                      />
+                      <ThemedText
+                        style={[
+                          styles.checklistText,
+                          checkedActivities.includes(activity.id) && styles.checklistTextDone
+                        ]}
+                      >
+                        {activity.title}
+                      </ThemedText>
+                    </TouchableOpacity>
+                  ))}
                 </View>
-              );
-            })()}
+              </LiquidGlassCard>
 
-            <ThemedText style={styles.sectionTitle}>☑️ Meine Selfcare‑Checkliste</ThemedText>
-            <View style={{ alignItems: 'center', marginBottom: 12 }}>
-              <ProgressCircle
-                progress={(checkedActivities.length / selfcareActivities.length) * 100}
-                size={58}
-                strokeWidth={6}
-                progressColor={'#8E4EC6'}
-                backgroundColor={'rgba(255,255,255,0.25)'}
-                textColor={'transparent'}
-              />
-              <ThemedText style={{ marginTop: 6, color: '#7D5A50', fontWeight: '700' }}>{checkedActivities.length}/{selfcareActivities.length} erledigt</ThemedText>
-            </View>
-            {selfcareActivities.map(activity => (
-              <TouchableOpacity
-                key={activity.id}
-                style={styles.checklistItem}
-                onPress={() => toggleActivity(activity.id)}
-              >
-                <IconSymbol
-                  name={checkedActivities.includes(activity.id) ? "checkmark.square.fill" : "square"}
-                  size={24}
-                  color={checkedActivities.includes(activity.id) ? Colors.light.success : theme.text}
-                />
-                <ThemedText
-                  style={[
-                    styles.checklistText,
-                    checkedActivities.includes(activity.id) && styles.checklistTextDone
-                  ]}
-                >
-                  {activity.title}
-                </ThemedText>
-              </TouchableOpacity>
-            ))}
-            </View>
-          </LiquidGlassCard>
-
-          {/* Spacer for sticky CTA */}
-          <View style={{ height: 110 }} />
-
+              {/* Spacer for sticky CTA */}
+              <View style={{ height: 110 }} />
+            </>
+          ) : selectedTab === 'week' ? (
+            <WeekView />
+          ) : (
+            <MonthView />
+          )}
         </ScrollView>
-        {/* Sticky CTA */}
-        <View style={styles.stickyCtaContainer}>
-          <LiquidGlassCard 
-            style={styles.stickyCtaCard} 
-            onPress={saveEntry}
-            intensity={26}
-            overlayColor="rgba(142, 78, 198, 0.16)"
-            borderColor="rgba(142, 78, 198, 0.35)"
-          >
-            <View style={styles.saveButtonInner}>
-              <ThemedText style={styles.saveButtonText}>💜 Speichern & Weitermachen</ThemedText>
-            </View>
-          </LiquidGlassCard>
-        </View>
+
+        {selectedTab === 'day' && (
+          <View style={styles.stickyCtaContainer}>
+            <LiquidGlassCard 
+              style={styles.stickyCtaCard} 
+              onPress={saveEntry}
+              intensity={26}
+              overlayColor="rgba(142, 78, 198, 0.16)"
+              borderColor="rgba(142, 78, 198, 0.35)"
+            >
+              <View style={styles.saveButtonInner}>
+                <ThemedText style={styles.saveButtonText}>💜 Speichern & Weitermachen</ThemedText>
+              </View>
+            </LiquidGlassCard>
+          </View>
+        )}
       </SafeAreaView>
     </ThemedBackground>
   );
@@ -583,6 +1116,230 @@ const styles = StyleSheet.create({
     paddingHorizontal: LAYOUT_PAD,
     paddingTop: 16,
     paddingBottom: 160,
+  },
+  topTabsContainer: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 20,
+  },
+  topTab: {
+    flex: 1,
+    borderRadius: 18,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderColor: 'rgba(255,255,255,0.3)',
+  },
+  activeTopTab: {
+    borderColor: 'rgba(142, 78, 198, 0.65)',
+    backgroundColor: 'rgba(142, 78, 198, 0.18)',
+  },
+  topTabInner: {
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  topTabText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#7D5A50',
+  },
+  activeTopTabText: {
+    color: '#5D4A40',
+  },
+  weekViewContainer: {
+    gap: 18,
+    paddingBottom: 100,
+  },
+  weekNavigationContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  weekNavButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.3,
+    borderColor: 'rgba(255,255,255,0.35)',
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  weekNavButtonText: {
+    fontSize: 22,
+    color: '#7D5A50',
+    fontWeight: '700',
+  },
+  weekHeaderCenter: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  weekHeaderTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#7D5A50',
+  },
+  weekHeaderSubtitle: {
+    fontSize: 13,
+    color: '#7D5A50',
+    opacity: 0.75,
+  },
+  analyticsCard: {
+    marginBottom: 18,
+  },
+  analyticsInner: {
+    padding: 20,
+  },
+  chartTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#7D5A50',
+  },
+  chartSubtitle: {
+    fontSize: 13,
+    color: '#7D5A50',
+    opacity: 0.7,
+    marginTop: 4,
+  },
+  chartArea: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 16,
+  },
+  chartBarContainer: {
+    height: MAX_BAR_HEIGHT,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    paddingBottom: 4,
+  },
+  chartBar: {
+    backgroundColor: 'rgba(142,78,198,0.85)',
+    borderRadius: 12,
+  },
+  chartLabelContainer: {
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  chartLabel: {
+    fontSize: 12,
+    color: '#7D5A50',
+    fontWeight: '600',
+  },
+  chartValue: {
+    fontSize: 13,
+    color: '#5D4A40',
+    fontWeight: '700',
+  },
+  loadingText: {
+    textAlign: 'center',
+    marginTop: 12,
+    color: '#7D5A50',
+    opacity: 0.7,
+  },
+  emptyHint: {
+    textAlign: 'center',
+    marginTop: 12,
+    color: '#7D5A50',
+    opacity: 0.7,
+  },
+  summaryStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginTop: 16,
+  },
+  statItem: {
+    flex: 1,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 18,
+    borderColor: 'rgba(255,255,255,0.3)',
+    paddingVertical: 12,
+  },
+  statEmoji: {
+    fontSize: 20,
+    marginBottom: 4,
+  },
+  statValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#5D4A40',
+  },
+  statLabel: {
+    fontSize: 12,
+    color: '#7D5A50',
+    opacity: 0.7,
+    marginTop: 2,
+    textAlign: 'center',
+  },
+  monthViewContainer: {
+    gap: 18,
+    paddingBottom: 100,
+  },
+  monthNavigationContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  monthNavButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1.3,
+    borderColor: 'rgba(255,255,255,0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  disabledNavButton: {
+    opacity: 0.35,
+  },
+  monthHeaderCenter: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  monthHeaderTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#7D5A50',
+  },
+  weekdayHeader: {
+    flexDirection: 'row',
+    marginBottom: 8,
+  },
+  weekdayLabel: {
+    fontSize: 12,
+    color: '#7D5A50',
+    fontWeight: '700',
+  },
+  calendarWeek: {
+    flexDirection: 'row',
+    marginBottom: 6,
+  },
+  calendarDayButton: {
+    height: 72,
+    borderRadius: 18,
+    borderWidth: 1.2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  calendarDayNumber: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  calendarMoodEmoji: {
+    fontSize: 18,
+  },
+  calendarProgressText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  calendarDayEmpty: {
+    height: 72,
   },
   // Liquid Glass card wrappers
   glassCard: {
