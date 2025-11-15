@@ -890,7 +890,8 @@ const styles = StyleSheet.create({
   },
   statLabel: {
     fontSize: 14,
-    opacity: 0.7,
+    color: '#7D5A50',
+    fontWeight: '700',
   },
   postsSection: {
     width: '100%',
@@ -920,8 +921,8 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     width: '100%',
     borderWidth: 1.2,
-    borderColor: 'rgba(255,255,255,0.65)',
-    backgroundColor: 'rgba(255,255,255,0.75)',
+    borderColor: 'rgba(255,255,255,0.5)',
+    backgroundColor: 'rgba(255,255,255,0.62)',
   },
   feedInner: {
     paddingVertical: 16,
