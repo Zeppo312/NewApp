@@ -64,6 +64,10 @@ export default function ProfilScreen() {
   const [birthDate, setBirthDate]       = useState<Date | null>(null);
   const [babyWeight, setBabyWeight]     = useState('');
   const [babyHeight, setBabyHeight]     = useState('');
+  const [babyPhotoUrl, setBabyPhotoUrl] = useState<string | null>(null);
+  const [babyPhotoPreview, setBabyPhotoPreview] = useState<string | null>(null);
+  const [babyPhotoBase64, setBabyPhotoBase64] = useState<string | null>(null);
+  const [babyPhotoRemoved, setBabyPhotoRemoved] = useState(false);
 
   // UI
   const [isLoading, setIsLoading]                   = useState(true);
@@ -122,6 +126,10 @@ export default function ProfilScreen() {
         setBabyGender(babyData.baby_gender || '');
         setBabyWeight(babyData.weight || '');
         setBabyHeight(babyData.height || '');
+        setBabyPhotoUrl(babyData.photo_url || null);
+        setBabyPhotoPreview(babyData.photo_url || null);
+        setBabyPhotoBase64(null);
+        setBabyPhotoRemoved(false);
         if (babyData.birth_date) setBirthDate(new Date(babyData.birth_date));
       }
     } catch (e) {
@@ -180,6 +188,68 @@ export default function ProfilScreen() {
     setAvatarBase64(null);
     setAvatarUrl(null);
     setAvatarRemoved(markRemoved);
+  };
+
+  const pickBabyPhoto = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Berechtigung erforderlich', 'Bitte erlaube den Zugriff auf deine Fotos.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.5,
+        base64: true,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        let base64Data: string | null = null;
+
+        if (asset.base64) {
+          base64Data = `data:image/jpeg;base64,${asset.base64}`;
+        } else if (asset.uri) {
+          try {
+            const response = await fetch(asset.uri);
+            const blob = await response.blob();
+            const reader = new FileReader();
+            base64Data = await new Promise((resolve, reject) => {
+              reader.onload = () => resolve(reader.result as string);
+              reader.onerror = reject;
+              reader.readAsDataURL(blob);
+            });
+          } catch (error) {
+            console.error('Fehler bei der Bildkonvertierung:', error);
+            Alert.alert('Fehler', 'Das Bild konnte nicht verarbeitet werden.');
+            return;
+          }
+        }
+
+        if (!base64Data) {
+          Alert.alert('Fehler', 'Das Bild konnte nicht verarbeitet werden.');
+          return;
+        }
+
+        setBabyPhotoPreview(base64Data);
+        setBabyPhotoBase64(base64Data);
+        setBabyPhotoUrl(null);
+        setBabyPhotoRemoved(false);
+      }
+    } catch (error) {
+      console.error('Error picking baby photo:', error);
+      Alert.alert('Fehler', 'Das Babyfoto konnte nicht ausgewählt werden.');
+    }
+  };
+
+  const removeBabyPhoto = () => {
+    setBabyPhotoPreview(null);
+    setBabyPhotoBase64(null);
+    setBabyPhotoUrl(null);
+    setBabyPhotoRemoved(true);
   };
 
   const handleAvatarDeletePress = () => {
@@ -253,22 +323,30 @@ export default function ProfilScreen() {
   };
 
   const saveUserData = async () => {
+    if (!user) {
+      Alert.alert('Hinweis', 'Bitte melde dich an, um deine Daten zu speichern.');
+      return;
+    }
+
+    setIsSaving(true);
+
+    const normalizedUsername = username.trim();
+    let finalAvatarUrl = avatarUrl;
+    let finalBabyPhoto = babyPhotoUrl;
+
     try {
-      if (!user) {
-        Alert.alert('Hinweis', 'Bitte melde dich an, um deine Daten zu speichern.');
-        return;
-      }
-      setIsSaving(true);
-
-      const normalizedUsername = username.trim();
-
-      let finalAvatarUrl = avatarUrl;
       if (avatarBase64) {
         const uploadResult = await uploadProfileAvatar(avatarBase64);
         if (uploadResult.error) throw uploadResult.error;
         finalAvatarUrl = uploadResult.url;
       } else if (avatarRemoved) {
         finalAvatarUrl = null;
+      }
+
+      if (babyPhotoBase64) {
+        finalBabyPhoto = babyPhotoBase64;
+      } else if (babyPhotoRemoved) {
+        finalBabyPhoto = null;
       }
 
       // profiles upsert
@@ -278,13 +356,13 @@ export default function ProfilScreen() {
       let profileResult;
       if (existingProfile?.id) {
         profileResult = await supabase.from('profiles').update({
-        first_name: firstName,
-        last_name: lastName,
-        user_role: userRole,
-        username: normalizedUsername || null,
-        avatar_url: finalAvatarUrl || null,
-        updated_at: new Date().toISOString(),
-      }).eq('id', user.id);
+          first_name: firstName,
+          last_name: lastName,
+          user_role: userRole,
+          username: normalizedUsername || null,
+          avatar_url: finalAvatarUrl || null,
+          updated_at: new Date().toISOString(),
+        }).eq('id', user.id);
       } else {
         profileResult = await supabase.from('profiles').insert({
           id: user.id,
@@ -327,6 +405,7 @@ export default function ProfilScreen() {
         birth_date: birthDate ? birthDate.toISOString() : null,
         weight: babyWeight,
         height: babyHeight,
+        photo_url: finalBabyPhoto,
       });
       if (babyError) throw babyError;
 
@@ -337,12 +416,16 @@ export default function ProfilScreen() {
       console.error(e);
       Alert.alert('Fehler', e?.message || 'Deine Daten konnten nicht gespeichert werden.');
     } finally {
-        setIsSaving(false);
-        setAvatarUrl(finalAvatarUrl || null);
-        setAvatarPreview(finalAvatarUrl || null);
-        setAvatarBase64(null);
-        setAvatarRemoved(false);
-      }
+      setIsSaving(false);
+      setAvatarUrl(finalAvatarUrl || null);
+      setAvatarPreview(finalAvatarUrl || null);
+      setAvatarBase64(null);
+      setAvatarRemoved(false);
+      setBabyPhotoUrl(finalBabyPhoto || null);
+      setBabyPhotoPreview(finalBabyPhoto || null);
+      setBabyPhotoBase64(null);
+      setBabyPhotoRemoved(false);
+    }
   };
 
   const formatDate = (date: Date | null) =>
@@ -553,6 +636,39 @@ export default function ProfilScreen() {
                 >
                   <ThemedText style={styles.sectionTitle}>Baby-Informationen</ThemedText>
                   <View style={styles.cardInner}>
+                    <View style={styles.formGroup}>
+                      <ThemedText style={styles.label}>Babyfoto</ThemedText>
+                      <View style={styles.babyPhotoSelector}>
+                        {babyPhotoPreview ? (
+                          <Image source={{ uri: babyPhotoPreview }} style={styles.babyPhotoPreview} />
+                        ) : (
+                          <View style={styles.babyPhotoPlaceholder}>
+                            <IconSymbol name="person.fill" size={40} color="#FFFFFF" />
+                          </View>
+                        )}
+                        <View style={styles.babyPhotoActions}>
+                          <TouchableOpacity
+                            style={styles.babyPhotoActionButton}
+                            onPress={pickBabyPhoto}
+                            activeOpacity={0.9}
+                            disabled={isSaving}
+                          >
+                            <ThemedText style={styles.babyPhotoActionText}>Foto wählen</ThemedText>
+                          </TouchableOpacity>
+                          {!!babyPhotoPreview && (
+                            <TouchableOpacity
+                              style={styles.babyPhotoActionButton}
+                              onPress={removeBabyPhoto}
+                              activeOpacity={0.9}
+                              disabled={isSaving}
+                            >
+                              <ThemedText style={styles.babyPhotoActionText}>Foto entfernen</ThemedText>
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      </View>
+                    </View>
+
                     <View style={styles.formGroup}>
                       <ThemedText style={styles.label}>Errechneter Geburtstermin</ThemedText>
                       <TouchableOpacity
@@ -828,6 +944,47 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(200,200,200,0.35)',
   },
   numeric: { fontVariant: ['tabular-nums'] },
+
+  babyPhotoSelector: {
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  babyPhotoPreview: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    marginBottom: 12,
+  },
+  babyPhotoPlaceholder: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: 'rgba(255,255,255,0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.7)',
+  },
+  babyPhotoActions: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+  },
+  babyPhotoActionButton: {
+    borderRadius: 999,
+    paddingVertical: 8,
+    paddingHorizontal: 18,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.6)',
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    marginHorizontal: 8,
+    marginBottom: 8,
+  },
+  babyPhotoActionText: {
+    color: ACCENT_PURPLE,
+    fontWeight: '700',
+  },
 
   avatarSelector: {
     alignItems: 'center',

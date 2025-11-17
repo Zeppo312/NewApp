@@ -51,6 +51,7 @@ export default function HomeScreen() {
   const [selectedActivityType, setSelectedActivityType] = useState<'feeding' | 'diaper' | 'other'>('feeding');
   const [selectedSubType, setSelectedSubType] = useState<string | null>(null);
   const [todaySleepMinutes, setTodaySleepMinutes] = useState(0);
+  const [profileAvatarUrl, setProfileAvatarUrl] = useState<string | null>(null);
   const [showSleepModal, setShowSleepModal] = useState(false);
   const [sleepModalStart, setSleepModalStart] = useState(new Date());
 
@@ -90,14 +91,17 @@ export default function HomeScreen() {
       // Benutzernamen laden
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select('first_name')
+        .select('first_name, avatar_url')
         .eq('id', user?.id)
         .single();
 
       if (profileError) {
         console.error('Error loading user profile:', profileError);
-      } else if (profileData && profileData.first_name) {
-        setUserName(profileData.first_name);
+      } else if (profileData) {
+        if (profileData.first_name) {
+          setUserName(profileData.first_name);
+        }
+        setProfileAvatarUrl(profileData.avatar_url || null);
       }
 
       // Baby-Informationen laden
@@ -355,6 +359,8 @@ export default function HomeScreen() {
     // Verwende den Benutzernamen aus der profiles-Tabelle
     const displayName = userName || 'Mama';
 
+    const displayPhoto = babyInfo?.photo_url || profileAvatarUrl || null;
+
     return (
       <View style={styles.liquidGlassWrapper}>
         <BlurView 
@@ -375,16 +381,16 @@ export default function HomeScreen() {
                 </ThemedText>
               </View>
 
-              {babyInfo?.photo_url && (
+              {displayPhoto && (
                 <View style={styles.profileImageWrapper}>
                                      <Image
-                     source={{ uri: babyInfo.photo_url }}
+                     source={{ uri: displayPhoto }}
                      style={styles.profileImage}
                    />
                 </View>
               )}
 
-              {!babyInfo?.photo_url && (
+              {!displayPhoto && (
                 <View style={[styles.profileImage, styles.profilePlaceholder, styles.liquidGlassProfilePlaceholder]}>
                   <IconSymbol name="person.fill" size={30} color="#FFFFFF" />
                 </View>

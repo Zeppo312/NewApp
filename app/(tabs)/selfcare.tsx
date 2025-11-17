@@ -154,6 +154,12 @@ const getWeekDays = (date: Date) => {
   });
 };
 
+const normalizeDate = (date: Date) => {
+  const normalized = new Date(date);
+  normalized.setHours(0, 0, 0, 0);
+  return normalized;
+};
+
 export default function SelfcareScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
@@ -164,6 +170,7 @@ export default function SelfcareScreen() {
   const router = useRouter();
 
   const [userName, setUserName] = useState<string>('');
+  const [selectedDate, setSelectedDate] = useState<Date>(() => normalizeDate(new Date()));
   const [currentMood, setCurrentMood] = useState<MoodType | null>(null);
   const [journalEntry, setJournalEntry] = useState('');
   const [sleepHours, setSleepHours] = useState<number>(7);
@@ -171,7 +178,7 @@ export default function SelfcareScreen() {
   const [exerciseDone, setExerciseDone] = useState(false);
   const [dailyTip, setDailyTip] = useState('');
   const [checkedActivities, setCheckedActivities] = useState<string[]>([]);
-  const [todayEntry, setTodayEntry] = useState<SelfcareEntry | null>(null);
+  const [selectedEntry, setSelectedEntry] = useState<SelfcareEntry | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [exerciseTouched, setExerciseTouched] = useState(false);
   const [selectedTab, setSelectedTab] = useState<'day' | 'week' | 'month'>('day');
@@ -189,13 +196,17 @@ export default function SelfcareScreen() {
   useEffect(() => {
     if (user) {
       loadUserData();
-      loadTodayEntry();
-      // Setze einen zufälligen Tipp für den Tag
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (user) {
+      loadEntryForDate(selectedDate);
       setDailyTip(selfcareTips[Math.floor(Math.random() * selfcareTips.length)]);
     } else {
       setIsLoading(false);
     }
-  }, [user]);
+  }, [user, selectedDate]);
 
   useEffect(() => {
     if (user) {
@@ -233,36 +244,50 @@ export default function SelfcareScreen() {
     }
   };
 
-  // Lade den heutigen Eintrag
-  const loadTodayEntry = async () => {
+  const resetEntryState = () => {
+    setCurrentMood(null);
+    setJournalEntry('');
+    setSleepHours(7);
+    setWaterIntake(0);
+    setExerciseDone(false);
+    setExerciseTouched(false);
+    setCheckedActivities([]);
+  };
+
+  // Lade den Eintrag für ein bestimmtes Datum
+  const loadEntryForDate = async (date: Date) => {
     try {
       setIsLoading(true);
 
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      const dayStart = normalizeDate(date);
+      const dayEnd = new Date(dayStart);
+      dayEnd.setDate(dayStart.getDate() + 1);
 
       const { data, error } = await supabase
         .from('selfcare_entries')
         .select('*')
         .eq('user_id', user?.id)
-        .gte('date', today.toISOString())
-        .lt('date', new Date(today.getTime() + 24 * 60 * 60 * 1000).toISOString())
+        .gte('date', dayStart.toISOString())
+        .lt('date', dayEnd.toISOString())
         .maybeSingle();
 
       if (error) {
-        console.error('Error loading today entry:', error);
+        console.error('Error loading entry:', error);
       } else if (data) {
-        setTodayEntry(data);
-        setCurrentMood(data.mood as MoodType || null);
-        setJournalEntry(data.journal_entry || '');
-        setSleepHours(data.sleep_hours || 7);
-        setWaterIntake(data.water_intake || 0);
-        setExerciseDone(data.exercise_done || false);
+        setSelectedEntry(data);
+        setCurrentMood((data.mood as MoodType) ?? null);
+        setJournalEntry(data.journal_entry ?? '');
+        setSleepHours(typeof data.sleep_hours === 'number' ? data.sleep_hours : 7);
+        setWaterIntake(typeof data.water_intake === 'number' ? data.water_intake : 0);
+        setExerciseDone(!!data.exercise_done);
         setExerciseTouched(data.exercise_done !== undefined && data.exercise_done !== null);
         setCheckedActivities(data.selfcare_activities || []);
+      } else {
+        setSelectedEntry(null);
+        resetEntryState();
       }
     } catch (err) {
-      console.error('Failed to load today entry:', err);
+      console.error('Failed to load entry:', err);
     } finally {
       setIsLoading(false);
     }
@@ -338,12 +363,12 @@ export default function SelfcareScreen() {
         return;
       }
 
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      const targetDate = new Date(selectedDate);
+      targetDate.setHours(0, 0, 0, 0);
 
       const entryData: SelfcareEntry = {
         user_id: user.id,
-        date: today.toISOString(),
+        date: targetDate.toISOString(),
         mood: currentMood || undefined,
         journal_entry: journalEntry,
         sleep_hours: sleepHours,
@@ -354,12 +379,12 @@ export default function SelfcareScreen() {
 
       let result;
 
-      if (todayEntry?.id) {
+      if (selectedEntry?.id) {
         // Update existing entry
         result = await supabase
           .from('selfcare_entries')
           .update(entryData)
-          .eq('id', todayEntry.id);
+          .eq('id', selectedEntry.id);
       } else {
         // Create new entry
         result = await supabase
@@ -372,7 +397,7 @@ export default function SelfcareScreen() {
         Alert.alert('Fehler', 'Deine Daten konnten nicht gespeichert werden.');
       } else {
         Alert.alert('Erfolg', 'Deine Selfcare-Daten wurden gespeichert!');
-        loadTodayEntry(); // Lade den aktualisierten Eintrag
+        await loadEntryForDate(targetDate); // Lade den aktualisierten Eintrag
       }
     } catch (err) {
       console.error('Failed to save entry:', err);
@@ -436,6 +461,27 @@ export default function SelfcareScreen() {
     setExerciseTouched(true);
     try { Haptics.selectionAsync(); } catch {}
   };
+
+  const handleWeekDayPress = (day: Date) => {
+    const normalized = normalizeDate(day);
+    setSelectedDate(normalized);
+    setSelectedTab('day');
+    try { Haptics.selectionAsync(); } catch {}
+  };
+
+  const goToAdjacentDay = (offset: number) => {
+    setSelectedDate((prevDate) => {
+      const next = new Date(prevDate);
+      next.setDate(next.getDate() + offset);
+      next.setHours(0, 0, 0, 0);
+      const today = normalizeDate(new Date());
+      if (next.getTime() > today.getTime()) return prevDate;
+      return next;
+    });
+  };
+
+  const goToPreviousDay = () => goToAdjacentDay(-1);
+  const goToNextDay = () => goToAdjacentDay(1);
 
   const TopTabs = () => (
     <View style={styles.topTabsContainer}>
@@ -517,16 +563,25 @@ export default function SelfcareScreen() {
                 const moodAvg = getMoodAverageForDay(day);
                 const height = moodAvg ? (moodAvg / 5) * MAX_BAR_HEIGHT : 0;
                 const extra = index < WEEK_LEFTOVER ? 1 : 0;
+                const isSelectedDay = isSameDay(day, selectedDate);
                 return (
-                  <View
+                  <TouchableOpacity
                     key={day.toISOString()}
                     style={{
                       width: WEEK_COL_WIDTH + extra,
                       marginRight: index < WEEK_COLS - 1 ? WEEK_GUTTER : 0,
                       alignItems: 'center',
                     }}
+                    activeOpacity={0.85}
+                    onPress={() => handleWeekDayPress(day)}
                   >
-                    <View style={[styles.chartBarContainer, { width: WEEK_COL_WIDTH + extra }]}>
+                    <View
+                      style={[
+                        styles.chartBarContainer,
+                        { width: WEEK_COL_WIDTH + extra },
+                        isSelectedDay && styles.selectedChartBarContainer,
+                      ]}
+                    >
                       {height > 0 && (
                         <View
                           style={[
@@ -537,12 +592,14 @@ export default function SelfcareScreen() {
                       )}
                     </View>
                     <View style={[styles.chartLabelContainer, { width: WEEK_COL_WIDTH + extra }]}>
-                      <ThemedText style={styles.chartLabel}>{WEEKDAY_LABELS[index]}</ThemedText>
-                      <ThemedText style={styles.chartValue}>
+                      <ThemedText style={[styles.chartLabel, isSelectedDay && styles.selectedChartLabel]}>
+                        {WEEKDAY_LABELS[index]}
+                      </ThemedText>
+                      <ThemedText style={[styles.chartValue, isSelectedDay && styles.selectedChartValue]}>
                         {moodAvg ? moodAvg.toFixed(1) : '–'}
                       </ThemedText>
                     </View>
-                  </View>
+                  </TouchableOpacity>
                 );
               })}
             </View>
@@ -574,7 +631,7 @@ export default function SelfcareScreen() {
               <View style={styles.statItem}>
                 <ThemedText style={styles.statEmoji}>💧</ThemedText>
                 <ThemedText style={styles.statValue}>
-                  {avgWater !== null ? `${avgWater.toFixed(1)}/8` : '–'}
+                  {avgWater !== null ? `${avgWater.toFixed(1)}` : '–'}
                 </ThemedText>
                 <ThemedText style={styles.statLabel}>Ø Gläser</ThemedText>
               </View>
@@ -727,19 +784,48 @@ export default function SelfcareScreen() {
                           (() => {
                             const entry = getEntryForDate(date);
                             const colors = getCalendarColors(entry?.mood as MoodType | undefined, !!entry);
+                            const isSelected = isSameDay(date, selectedDate);
                             return (
-                              <View style={[styles.calendarDayButton, { backgroundColor: colors.bg, borderColor: colors.border }]}>
-                                <ThemedText style={[styles.calendarDayNumber, { color: colors.text }]}>{date.getDate()}</ThemedText>
+                              <TouchableOpacity
+                                activeOpacity={0.85}
+                                onPress={() => handleWeekDayPress(date)}
+                                style={[
+                                  styles.calendarDayButton,
+                                  { backgroundColor: colors.bg, borderColor: colors.border },
+                                  isSelected && styles.selectedCalendarDayButton,
+                                ]}
+                              >
+                                <ThemedText
+                                  style={[
+                                    styles.calendarDayNumber,
+                                    { color: colors.text },
+                                    isSelected && styles.selectedCalendarDayText,
+                                  ]}
+                                >
+                                  {date.getDate()}
+                                </ThemedText>
                                 {entry?.mood ? (
-                                  <ThemedText style={[styles.calendarMoodEmoji, { color: colors.text }]}>
+                                  <ThemedText
+                                    style={[
+                                      styles.calendarMoodEmoji,
+                                      { color: colors.text },
+                                      isSelected && styles.selectedCalendarDayText,
+                                    ]}
+                                  >
                                     {getMoodEmoji(entry.mood as MoodType)}
                                   </ThemedText>
                                 ) : entry ? (
-                                  <ThemedText style={[styles.calendarProgressText, { color: colors.text }]}>
+                                  <ThemedText
+                                    style={[
+                                      styles.calendarProgressText,
+                                      { color: colors.text },
+                                      isSelected && styles.selectedCalendarDayText,
+                                    ]}
+                                  >
                                     {(entry.selfcare_activities?.length ?? 0)}/{selfcareActivities.length}
                                   </ThemedText>
                                 ) : null}
-                              </View>
+                              </TouchableOpacity>
                             );
                           })()
                         ) : (
@@ -779,7 +865,7 @@ export default function SelfcareScreen() {
               <View style={styles.statItem}>
                 <ThemedText style={styles.statEmoji}>💧</ThemedText>
                 <ThemedText style={styles.statValue}>
-                  {avgWater !== null ? `${avgWater.toFixed(1)}/8` : '–'}
+                  {avgWater !== null ? `${avgWater.toFixed(1)}` : '–'}
                 </ThemedText>
                 <ThemedText style={styles.statLabel}>Ø Gläser</ThemedText>
               </View>
@@ -807,6 +893,14 @@ export default function SelfcareScreen() {
     );
   };
 
+  const todayNormalized = normalizeDate(new Date());
+  const isNextDayDisabled = selectedDate.getTime() >= todayNormalized.getTime();
+  const selectedDateLabel = selectedDate.toLocaleDateString('de-DE', {
+    weekday: 'long',
+    day: '2-digit',
+    month: 'short',
+  });
+
   return (
     <ThemedBackground style={styles.container}>
       <SafeAreaView style={{ flex: 1 }}>
@@ -817,6 +911,27 @@ export default function SelfcareScreen() {
         
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
           <TopTabs />
+
+          {selectedTab === 'day' && (
+            <View style={styles.dayNavigationContainer}>
+              <TouchableOpacity style={styles.weekNavButton} onPress={goToPreviousDay}>
+                <ThemedText style={styles.weekNavButtonText}>‹</ThemedText>
+              </TouchableOpacity>
+
+              <View style={styles.weekHeaderCenter}>
+                <ThemedText style={styles.weekHeaderTitle}>Tagesübersicht</ThemedText>
+                <ThemedText style={styles.weekHeaderSubtitle}>{selectedDateLabel}</ThemedText>
+              </View>
+
+              <TouchableOpacity
+                style={[styles.weekNavButton, isNextDayDisabled && styles.disabledNavButton]}
+                onPress={goToNextDay}
+                disabled={isNextDayDisabled}
+              >
+                <ThemedText style={styles.weekNavButtonText}>›</ThemedText>
+              </TouchableOpacity>
+            </View>
+          )}
 
           {selectedTab === 'day' ? (
             <>
@@ -952,7 +1067,7 @@ export default function SelfcareScreen() {
                           <ThemedText style={styles.healthSubtitle}>Ziel 8 Gläser</ThemedText>
                         </View>
                         <View style={styles.healthValueBadge}>
-                          <ThemedText style={styles.healthValueText}>{waterIntake}/8</ThemedText>
+                          <ThemedText style={styles.healthValueText}>{waterIntake} Gläser</ThemedText>
                         </View>
                       </View>
                       <View style={styles.waterMeterWrapper}>
@@ -978,7 +1093,7 @@ export default function SelfcareScreen() {
                         </TouchableOpacity>
                         <TouchableOpacity
                           style={styles.controlPrimary}
-                          onPress={() => setWaterIntake(Math.min(8, waterIntake + 1))}
+                          onPress={() => setWaterIntake(waterIntake + 1)}
                           activeOpacity={0.9}
                         >
                           <IconSymbol name="plus.circle.fill" size={18} color="#FFFFFF" />
@@ -1130,6 +1245,13 @@ const styles = StyleSheet.create({
     marginTop: 6,
     marginBottom: 12,
   },
+  dayNavigationContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+    marginTop: 0,
+  },
   topTab: {
     borderRadius: 20,
     overflow: 'hidden',
@@ -1219,6 +1341,11 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     paddingBottom: 4,
   },
+  selectedChartBarContainer: {
+    borderWidth: 1,
+    borderColor: 'rgba(142,78,198,0.45)',
+    backgroundColor: 'rgba(142,78,198,0.16)',
+  },
   chartBar: {
     backgroundColor: 'rgba(142,78,198,0.85)',
     borderRadius: 12,
@@ -1232,10 +1359,16 @@ const styles = StyleSheet.create({
     color: '#7D5A50',
     fontWeight: '600',
   },
+  selectedChartLabel: {
+    color: PRIMARY,
+  },
   chartValue: {
     fontSize: 13,
     color: '#5D4A40',
     fontWeight: '700',
+  },
+  selectedChartValue: {
+    color: PRIMARY,
   },
   loadingText: {
     textAlign: 'center',
@@ -1337,9 +1470,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 4,
   },
+  selectedCalendarDayButton: {
+    borderColor: 'rgba(142,78,198,0.6)',
+    backgroundColor: 'rgba(142,78,198,0.15)',
+  },
   calendarDayNumber: {
     fontSize: 14,
     fontWeight: '700',
+  },
+  selectedCalendarDayText: {
+    color: PRIMARY,
   },
   calendarMoodEmoji: {
     fontSize: 18,
