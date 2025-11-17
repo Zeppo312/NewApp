@@ -985,24 +985,25 @@ export default function DailyScreen() {
 
     return (
       <View style={s.monthViewContainer}>
-        {/* Monats-Navigation - Design Guide konform */}
-        <View style={s.monthNavigationContainer}>
-          <TouchableOpacity style={s.monthNavButton} onPress={() => setMonthOffset(o => o - 1)}>
-            <Text style={s.monthNavButtonText}>‹</Text>
+        {/* Monats-Navigation - exakt gleich wie Wochenübersicht */}
+        <View style={s.weekNavigationContainer}>
+          <TouchableOpacity style={s.weekNavButton} onPress={() => setMonthOffset(o => o - 1)}>
+            <Text style={s.weekNavButtonText}>‹</Text>
           </TouchableOpacity>
 
-          <View style={s.monthHeaderCenter}>
-            <Text style={s.monthHeaderTitle}>
+          <View style={s.weekHeaderCenter}>
+            <Text style={s.weekHeaderTitle}>Monatsübersicht</Text>
+            <Text style={s.weekHeaderSubtitle}>
               {refMonthDate.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' })}
             </Text>
           </View>
 
           <TouchableOpacity
-            style={[s.monthNavButton, monthOffset >= 0 && { opacity: 0.4 }]}
+            style={[s.weekNavButton, monthOffset >= 0 && s.disabledNavButton]}
             disabled={monthOffset >= 0}
             onPress={() => setMonthOffset(o => o + 1)}
           >
-            <Text style={s.monthNavButtonText}>›</Text>
+            <Text style={s.weekNavButtonText}>›</Text>
           </TouchableOpacity>
         </View>
 
@@ -1512,6 +1513,9 @@ kpiValueCentered: { textAlign: 'center', width: '100%' },
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.3)',
     padding: 6,
+  },
+  disabledNavButton: {
+    opacity: 0.35,
   },
   weekNavButtonText: {
     fontSize: 24,

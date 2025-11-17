@@ -12,11 +12,9 @@ import { useRouter, Stack } from 'expo-router';
 import Header from '@/components/Header';
 import { useSmartBack } from '@/contexts/NavigationContext';
 import * as Notifications from 'expo-notifications';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { defineMilestoneCheckerTask, saveBabyInfoForBackgroundTask, isTaskRegistered } from '@/tasks/milestoneCheckerTask';
 import { LAYOUT_PAD, TIMELINE_INSET, LiquidGlassCard } from '@/constants/DesignGuide';
 import { useFocusEffect } from '@react-navigation/native';
-import { supabase } from '@/lib/supabase';
 
 export default function BabyScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -32,7 +30,6 @@ export default function BabyScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [backgroundTaskStatus, setBackgroundTaskStatus] = useState<{status: string, isRegistered: boolean} | null>(null);
-  const [profileAvatarUrl, setProfileAvatarUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -94,26 +91,6 @@ export default function BabyScreen() {
     }
   };
 
-  const loadProfileAvatar = async () => {
-    if (!user) return;
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('avatar_url')
-        .eq('id', user.id)
-        .maybeSingle();
-
-      if (error && error.code !== 'PGRST116') {
-        console.error('Error loading profile avatar:', error);
-        return;
-      }
-
-      setProfileAvatarUrl(data?.avatar_url || null);
-    } catch (err) {
-      console.error('Failed to load profile avatar:', err);
-    }
-  };
-
   useFocusEffect(
     useCallback(() => {
       if (!user) {
@@ -121,7 +98,6 @@ export default function BabyScreen() {
       }
 
       loadBabyInfo();
-      loadProfileAvatar();
 
       const handleHardwareBack = () => {
         router.push('/(tabs)/home');
@@ -133,7 +109,7 @@ export default function BabyScreen() {
     }, [user, router])
   );
 
-  const displayPhoto = babyInfo.photo_url || profileAvatarUrl || null;
+  const displayPhoto = babyInfo.photo_url || null;
 
   const handleSave = async () => {
     try {
@@ -198,6 +174,19 @@ export default function BabyScreen() {
                 </View>
               )}
 
+              <View style={styles.photoHintContainer}>
+                <ThemedText style={styles.photoHintText}>
+                  Das Babyfoto kannst du im Profil bearbeiten.
+                </ThemedText>
+                <TouchableOpacity
+                  style={styles.photoHintButton}
+                  onPress={() => router.push('/profil')}
+                >
+                  <ThemedText style={styles.photoHintButtonText}>
+                    Zum Profil
+                  </ThemedText>
+                </TouchableOpacity>
+              </View>
             </View>
 
             <View style={styles.infoContainer}>
@@ -453,6 +442,27 @@ const styles = StyleSheet.create({
     borderRadius: 75,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  photoHintContainer: {
+    marginTop: 16,
+    alignItems: 'center',
+  },
+  photoHintText: {
+    fontSize: 14,
+    color: '#7D5A50',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  photoHintButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(125, 90, 80, 0.15)',
+  },
+  photoHintButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#7D5A50',
   },
   infoContainer: {
     width: '100%',

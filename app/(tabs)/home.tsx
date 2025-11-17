@@ -359,7 +359,7 @@ export default function HomeScreen() {
     // Verwende den Benutzernamen aus der profiles-Tabelle
     const displayName = userName || 'Mama';
 
-    const displayPhoto = babyInfo?.photo_url || profileAvatarUrl || null;
+    const displayPhoto = profileAvatarUrl || null;
 
     return (
       <View style={styles.liquidGlassWrapper}>

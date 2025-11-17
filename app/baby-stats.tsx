@@ -1,16 +1,16 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { StyleSheet, ScrollView, View, ActivityIndicator, SafeAreaView } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/contexts/AuthContext';
 import { getBabyInfo, BabyInfo } from '@/lib/baby';
-import { Stack, useRouter } from 'expo-router';
-import { BackButton } from '@/components/BackButton';
+import { Stack } from 'expo-router';
 import Header from '@/components/Header';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { LiquidGlassCard, LAYOUT_PAD, TIMELINE_INSET } from '@/constants/DesignGuide';
+import { LiquidGlassCard, LAYOUT_PAD, TIMELINE_INSET, TEXT_PRIMARY, GLASS_BORDER } from '@/constants/DesignGuide';
 import {
   differenceInYears,
   differenceInMonths,
@@ -27,15 +27,43 @@ const initialStats = {
   totalDays: 0,
   totalWeeks: 0,
   totalMonths: 0,
-  milestones: [] as Array<{ name: string; reached: boolean; date?: Date }>
+  milestones: [] as { name: string; reached: boolean; date?: Date }[]
 };
+
+const HEADER_TEXT_COLOR = TEXT_PRIMARY;
+
+const pastelPalette = {
+  peach: 'rgba(255, 223, 209, 0.85)',
+  rose: 'rgba(255, 210, 224, 0.8)',
+  honey: 'rgba(255, 239, 214, 0.85)',
+  sage: 'rgba(214, 236, 220, 0.78)',
+  lavender: 'rgba(236, 224, 255, 0.78)',
+  sky: 'rgba(222, 238, 255, 0.85)',
+  blush: 'rgba(255, 218, 230, 0.8)',
+};
+
+const GlassLayer = ({
+  tint = 'rgba(255,255,255,0.22)',
+  sheenOpacity = 0.35,
+}: {
+  tint?: string;
+  sheenOpacity?: number;
+}) => (
+  <>
+    <LinearGradient
+      colors={[tint, 'rgba(255,255,255,0.06)']}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={styles.glassLayerGradient}
+    />
+    <View style={[styles.glassSheen, { opacity: sheenOpacity }]} />
+  </>
+);
 
 export default function BabyStatsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const { user } = useAuth();
-  const router = useRouter();
-
   const [babyInfo, setBabyInfo] = useState<BabyInfo>({});
   const [isLoading, setIsLoading] = useState(true);
   
@@ -164,79 +192,149 @@ export default function BabyStatsScreen() {
   };
 
   const renderMilestoneStatus = (milestone: { name: string; reached: boolean; date?: Date }) => {
-    if (milestone.reached) {
-      return (
-        <View style={styles.milestoneRow}>
-          <View style={styles.milestoneCheck}>
-            <IconSymbol name="checkmark.circle" size={18} color="#4CAF50" />
-          </View>
-          <View style={styles.milestoneInfo}>
-            <ThemedText style={styles.milestoneName}>{milestone.name}</ThemedText>
-            {milestone.date && (
-              <ThemedText style={styles.milestoneDate}>
-                Erreicht am {formatDate(milestone.date)}
-              </ThemedText>
-            )}
-          </View>
+    const reached = milestone.reached;
+
+    const tint = reached ? 'rgba(213,245,231,0.75)' : 'rgba(244,236,230,0.78)';
+
+    return (
+      <View
+        style={[styles.milestoneRow, styles.glassSurface]}
+      >
+        <GlassLayer tint={tint} sheenOpacity={reached ? 0.22 : 0.16} />
+        <View
+          style={[
+            styles.milestoneIcon,
+            reached ? styles.milestoneIconReached : styles.milestoneIconUpcoming
+          ]}
+        >
+          <IconSymbol
+            name={reached ? 'star.fill' : 'calendar.badge.exclamationmark'}
+            size={18}
+            color={reached ? '#E88368' : '#9E8F86'}
+          />
         </View>
-      );
-    } else {
-      return (
-        <View style={styles.milestoneRow}>
-          <View style={styles.milestonePending}>
-            <IconSymbol name="timer" size={18} color={theme.textSecondary} />
-          </View>
-          <View style={styles.milestoneInfo}>
-            <ThemedText style={styles.milestoneName}>{milestone.name}</ThemedText>
-            <ThemedText style={styles.milestoneDate}>
-              Noch nicht erreicht
-            </ThemedText>
-          </View>
+        <View style={styles.milestoneInfo}>
+          <ThemedText style={styles.milestoneName}>{milestone.name}</ThemedText>
+          <ThemedText style={styles.milestoneDate}>
+            {reached && milestone.date ? `Erreicht am ${formatDate(milestone.date)}` : 'Noch nicht erreicht'}
+          </ThemedText>
         </View>
-      );
-    }
+      </View>
+    );
   };
 
   const renderInterestingFacts = () => {
     if (!babyInfo.birth_date) return null;
     
-    // Altersabhängige Berechnung der interessanten Fakten
     const totalMonths = stats.years * 12 + stats.months;
-    
-    // Calculate some interesting facts with age-adjusted rates
     const heartbeats = Math.round(stats.totalDays * 24 * 60 * getAvgHeartRate(totalMonths));
     const breaths = Math.round(stats.totalDays * 24 * 60 * getAvgBreathRate(totalMonths));
     const diapers = Math.round(stats.totalDays * getAvgDiapers(totalMonths));
     const sleep = Math.round(stats.totalDays * getAvgSleepHours(totalMonths));
+
+    const factItems = [
+      {
+        key: 'heart',
+        label: 'Herzschläge',
+        value: heartbeats.toLocaleString('de-DE'),
+        caption: 'geschätzt',
+        icon: 'heart.fill' as const,
+        accent: pastelPalette.rose,
+        iconColor: '#D06262',
+        iconBg: 'rgba(255,255,255,0.8)',
+      },
+      {
+        key: 'breath',
+        label: 'Atemzüge',
+        value: breaths.toLocaleString('de-DE'),
+        caption: 'seit Geburt',
+        icon: 'wind' as const,
+        accent: pastelPalette.sage,
+        iconColor: '#5A8F80',
+        iconBg: 'rgba(255,255,255,0.8)',
+      },
+      {
+        key: 'diapers',
+        label: 'Windeln',
+        value: diapers.toLocaleString('de-DE'),
+        caption: 'insgesamt',
+        icon: 'drop.fill' as const,
+        accent: pastelPalette.honey,
+        iconColor: '#B98160',
+        iconBg: 'rgba(255,255,255,0.85)',
+      },
+      {
+        key: 'sleep',
+        label: 'Schlafstunden',
+        value: sleep.toLocaleString('de-DE'),
+        caption: 'seit Geburt',
+        icon: 'moon.stars.fill' as const,
+        accent: pastelPalette.sky,
+        iconColor: '#7A6FD1',
+        iconBg: 'rgba(255,255,255,0.85)',
+      },
+    ];
     
     return (
       <LiquidGlassCard style={styles.glassCard}>
         <View style={styles.glassInner}>
           <ThemedText style={styles.sectionTitle}>Interessante Fakten</ThemedText>
-          
-          <View style={styles.factRow}>
-            <ThemedText style={styles.factLabel}>Geschätzte Herzschläge:</ThemedText>
-            <ThemedText style={styles.factValue}>{heartbeats.toLocaleString('de-DE')}</ThemedText>
-          </View>
-          
-          <View style={styles.factRow}>
-            <ThemedText style={styles.factLabel}>Geschätzte Atemzüge:</ThemedText>
-            <ThemedText style={styles.factValue}>{breaths.toLocaleString('de-DE')}</ThemedText>
-          </View>
-          
-          <View style={styles.factRow}>
-            <ThemedText style={styles.factLabel}>Geschätzte Windeln:</ThemedText>
-            <ThemedText style={styles.factValue}>{diapers.toLocaleString('de-DE')}</ThemedText>
-          </View>
-          
-          <View style={styles.factRow}>
-            <ThemedText style={styles.factLabel}>Geschätzte Schlafstunden:</ThemedText>
-            <ThemedText style={styles.factValue}>{sleep.toLocaleString('de-DE')} Stunden</ThemedText>
+          <View style={styles.factGrid}>
+            {factItems.map((fact) => (
+              <View key={fact.key} style={[styles.factTile, styles.glassSurface]}>
+                <GlassLayer tint={fact.accent} sheenOpacity={0.18} />
+                <View style={[styles.factIcon, { backgroundColor: fact.iconBg }]}>
+                  <IconSymbol name={fact.icon} size={18} color={fact.iconColor} />
+                </View>
+                <ThemedText style={styles.factLabel}>{fact.label}</ThemedText>
+                <ThemedText style={styles.factValue}>{fact.value}</ThemedText>
+                <ThemedText style={styles.factCaption}>{fact.caption}</ThemedText>
+              </View>
+            ))}
           </View>
         </View>
       </LiquidGlassCard>
     );
   };
+
+  const ageChips = [
+    { key: 'years', label: 'Jahre', value: stats.years, accent: pastelPalette.rose },
+    { key: 'months', label: 'Monate', value: stats.months, accent: pastelPalette.honey },
+    { key: 'days', label: 'Tage', value: stats.days, accent: pastelPalette.sky },
+  ];
+
+  const statChips = [
+    { key: 'total-days', label: 'Tage gesamt', value: stats.totalDays.toLocaleString('de-DE'), icon: 'calendar' as const, accent: pastelPalette.peach, iconColor: '#C17055' },
+    { key: 'total-weeks', label: 'Wochen', value: stats.totalWeeks.toLocaleString('de-DE'), icon: 'clock' as const, accent: pastelPalette.lavender, iconColor: '#7A6FD1' },
+    { key: 'total-months', label: 'Monate', value: stats.totalMonths.toLocaleString('de-DE'), icon: 'moon.stars.fill' as const, accent: pastelPalette.blush, iconColor: '#CF6F8B' },
+  ];
+
+  const bodyMetrics = [
+    {
+      key: 'height',
+      label: 'Größe',
+      value: babyInfo.height ? `${babyInfo.height} cm` : 'Nicht angegeben',
+      icon: 'person.fill' as const,
+      accent: pastelPalette.sky,
+      iconColor: '#6C87C1',
+    },
+    {
+      key: 'weight',
+      label: 'Gewicht',
+      value: babyInfo.weight ? `${babyInfo.weight} kg` : 'Nicht angegeben',
+      icon: 'chart.bar.fill' as const,
+      accent: pastelPalette.honey,
+      iconColor: '#B7745D',
+    },
+    {
+      key: 'gender',
+      label: 'Geschlecht',
+      value: genderLabels[babyInfo.baby_gender as keyof typeof genderLabels] || genderLabels.unknown,
+      icon: 'person.2.fill' as const,
+      accent: pastelPalette.lavender,
+      iconColor: '#8C6AC3',
+    },
+  ];
 
   return (
     <ThemedBackground style={styles.container}>
@@ -263,23 +361,39 @@ export default function BabyStatsScreen() {
                 <LiquidGlassCard style={[styles.glassCard, styles.firstGlassCard]}>
                   <View style={styles.glassInner}>
                     <ThemedText style={styles.sectionTitle}>Alter</ThemedText>
-                    <ThemedText style={styles.ageValue}>{renderAgeDescription()}</ThemedText>
+
+                    <View style={[styles.ageHighlight, styles.glassSurface]}>
+                      <GlassLayer tint="rgba(255,232,220,0.75)" sheenOpacity={0.22} />
+                      <View style={styles.ageHighlightIcon}>
+                        <IconSymbol name="clock" size={18} color="#E88368" />
+                      </View>
+                      <View style={styles.ageHighlightText}>
+                        <ThemedText style={styles.ageValue}>{renderAgeDescription()}</ThemedText>
+                        <ThemedText style={styles.ageSubline}>Stand heute</ThemedText>
+                      </View>
+                    </View>
+
+                    <View style={styles.ageChipRow}>
+                      {ageChips.map((chip) => (
+                        <View key={chip.key} style={[styles.ageChip, styles.glassSurface]}>
+                          <GlassLayer tint={chip.accent} sheenOpacity={0.25} />
+                          <ThemedText style={styles.ageChipValue}>{chip.value}</ThemedText>
+                          <ThemedText style={styles.ageChipLabel}>{chip.label}</ThemedText>
+                        </View>
+                      ))}
+                    </View>
                   
                     <View style={styles.statRow}>
-                      <View style={styles.statItem}>
-                        <ThemedText style={styles.statValue}>{stats.totalDays}</ThemedText>
-                        <ThemedText style={styles.statLabel}>Tage</ThemedText>
-                      </View>
-                      
-                      <View style={styles.statItem}>
-                        <ThemedText style={styles.statValue}>{stats.totalWeeks}</ThemedText>
-                        <ThemedText style={styles.statLabel}>Wochen</ThemedText>
-                      </View>
-                      
-                      <View style={styles.statItem}>
-                        <ThemedText style={styles.statValue}>{stats.totalMonths}</ThemedText>
-                        <ThemedText style={styles.statLabel}>Monate</ThemedText>
-                      </View>
+                      {statChips.map((stat) => (
+                        <View key={stat.key} style={[styles.statItem, styles.glassSurface]}>
+                          <GlassLayer tint={stat.accent} sheenOpacity={0.2} />
+                          <View style={styles.statIcon}>
+                            <IconSymbol name={stat.icon} size={16} color={stat.iconColor} />
+                          </View>
+                          <ThemedText style={styles.statValue}>{stat.value}</ThemedText>
+                          <ThemedText style={styles.statLabel}>{stat.label}</ThemedText>
+                        </View>
+                      ))}
                     </View>
                   </View>
                 </LiquidGlassCard>
@@ -287,26 +401,19 @@ export default function BabyStatsScreen() {
                 <LiquidGlassCard style={styles.glassCard}>
                   <View style={styles.glassInner}>
                     <ThemedText style={styles.sectionTitle}>Körperliche Entwicklung</ThemedText>
-                    
-                    <View style={styles.factRow}>
-                      <ThemedText style={styles.factLabel}>Größe:</ThemedText>
-                      <ThemedText style={styles.factValue}>
-                        {babyInfo.height ? `${babyInfo.height} cm` : 'Nicht angegeben'}
-                      </ThemedText>
-                    </View>
-                    
-                    <View style={styles.factRow}>
-                      <ThemedText style={styles.factLabel}>Gewicht:</ThemedText>
-                      <ThemedText style={styles.factValue}>
-                        {babyInfo.weight ? `${babyInfo.weight} kg` : 'Nicht angegeben'}
-                      </ThemedText>
-                    </View>
-                    
-                    <View style={styles.factRow}>
-                      <ThemedText style={styles.factLabel}>Geschlecht:</ThemedText>
-                      <ThemedText style={styles.factValue}>
-                        {genderLabels[babyInfo.baby_gender as keyof typeof genderLabels] || genderLabels.unknown}
-                      </ThemedText>
+                    <View style={styles.bodyGrid}>
+                      {bodyMetrics.map((metric) => (
+                        <View key={metric.key} style={[styles.bodyBadge, styles.glassSurface]}>
+                          <GlassLayer tint={metric.accent} sheenOpacity={0.18} />
+                          <View style={styles.bodyIcon}>
+                            <IconSymbol name={metric.icon} size={18} color={metric.iconColor} />
+                          </View>
+                          <View style={styles.bodyCopy}>
+                            <ThemedText style={styles.bodyValue}>{metric.value}</ThemedText>
+                            <ThemedText style={styles.bodyLabel}>{metric.label}</ThemedText>
+                          </View>
+                        </View>
+                      ))}
                     </View>
                   </View>
                 </LiquidGlassCard>
@@ -355,17 +462,43 @@ const styles = StyleSheet.create({
   contentContainer: {
     paddingHorizontal: LAYOUT_PAD,
     paddingBottom: 40,
+    alignItems: 'center',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  // Liquid Glass wrappers to match app design
+  glassSurface: {
+    position: 'relative',
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: GLASS_BORDER,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
+  glassLayerGradient: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  glassSheen: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '55%',
+    backgroundColor: 'rgba(255,255,255,0.25)',
+  },
   glassCard: {
     marginHorizontal: TIMELINE_INSET,
     marginBottom: 20,
     borderRadius: 22,
+    width: '100%',
+    maxWidth: 520,
+    alignSelf: 'center',
   },
   glassInner: {
     padding: 20,
@@ -376,49 +509,167 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#7D5A50',
+    color: HEADER_TEXT_COLOR,
     marginBottom: 12,
     textAlign: 'center',
+    letterSpacing: 0.2,
+  },
+  ageHighlight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 18,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginBottom: 16,
+  },
+  ageHighlightIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  ageHighlightText: {
+    flex: 1,
   },
   ageValue: {
     fontSize: 22,
     fontWeight: '800',
-    color: '#7D5A50',
-    marginBottom: 14,
-    textAlign: 'center',
+    color: HEADER_TEXT_COLOR,
+  },
+  ageSubline: {
+    fontSize: 12,
+    color: HEADER_TEXT_COLOR,
+    opacity: 0.75,
+    marginTop: 2,
+  },
+  ageChipRow: {
+    flexDirection: 'row',
+    marginBottom: 6,
+    marginTop: 4,
+  },
+  ageChip: {
+    flex: 1,
+    borderRadius: 14,
+    paddingVertical: 10,
+    alignItems: 'center',
+    marginHorizontal: 4,
+  },
+  ageChipValue: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: HEADER_TEXT_COLOR,
+  },
+  ageChipLabel: {
+    fontSize: 12,
+    color: HEADER_TEXT_COLOR,
+    opacity: 0.8,
   },
   statRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 8,
+    marginTop: 12,
   },
   statItem: {
     alignItems: 'center',
     flex: 1,
+    borderRadius: 18,
+    paddingVertical: 14,
+    paddingHorizontal: 8,
+    marginHorizontal: 4,
+  },
+  statIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 6,
   },
   statValue: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '800',
-    color: '#7D5A50',
+    color: HEADER_TEXT_COLOR,
   },
   statLabel: {
     fontSize: 12,
-    marginTop: 4,
-    color: '#7D5A50',
+    marginTop: 2,
+    color: HEADER_TEXT_COLOR,
+    opacity: 0.8,
+    textAlign: 'center',
   },
-  factRow: {
+  bodyGrid: {
+    marginTop: 4,
+  },
+  bodyBadge: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 18,
     marginBottom: 12,
   },
+  bodyIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  bodyCopy: {
+    flex: 1,
+  },
+  bodyValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: HEADER_TEXT_COLOR,
+  },
+  bodyLabel: {
+    fontSize: 12,
+    color: HEADER_TEXT_COLOR,
+    opacity: 0.8,
+    marginTop: 2,
+  },
+  factGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginTop: 4,
+  },
+  factTile: {
+    width: '48%',
+    borderRadius: 18,
+    padding: 14,
+    marginBottom: 12,
+  },
+  factIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
   factLabel: {
-    fontSize: 14,
-    color: '#7D5A50',
+    fontSize: 12,
+    color: HEADER_TEXT_COLOR,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
   },
   factValue: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#7D5A50',
+    fontSize: 18,
+    fontWeight: '800',
+    color: HEADER_TEXT_COLOR,
+  },
+  factCaption: {
+    fontSize: 12,
+    color: HEADER_TEXT_COLOR,
+    opacity: 0.8,
+    marginTop: 2,
   },
   milestoneContainer: {
     marginTop: 8,
@@ -426,25 +677,23 @@ const styles = StyleSheet.create({
   milestoneRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    borderRadius: 18,
+    padding: 14,
+    marginBottom: 12,
   },
-  milestoneCheck: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: 'rgba(56,161,105,0.18)',
+  milestoneIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
   },
-  milestonePending: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
+  milestoneIconReached: {
+    backgroundColor: 'rgba(255,255,255,0.85)',
+  },
+  milestoneIconUpcoming: {
+    backgroundColor: 'rgba(255,255,255,0.75)',
   },
   milestoneInfo: {
     flex: 1,
@@ -452,17 +701,18 @@ const styles = StyleSheet.create({
   milestoneName: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#7D5A50',
+    color: HEADER_TEXT_COLOR,
   },
   milestoneDate: {
     fontSize: 12,
     marginTop: 2,
-    color: '#7D5A50',
+    color: HEADER_TEXT_COLOR,
+    opacity: 0.8,
   },
   noDataText: {
     fontSize: 14,
     textAlign: 'center',
     padding: 20,
-    color: '#7D5A50',
-  }
+    color: HEADER_TEXT_COLOR,
+  },
 });
