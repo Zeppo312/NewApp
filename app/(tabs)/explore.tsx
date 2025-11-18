@@ -1,23 +1,40 @@
-import { StyleSheet, TouchableOpacity, Alert, ActivityIndicator, View } from 'react-native';
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { StyleSheet, TouchableOpacity, Alert, ActivityIndicator, View, SafeAreaView, StatusBar, ScrollView } from 'react-native';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 
-import { useRouter } from 'expo-router';
-
-import ParallaxScrollView from '@/components/ParallaxScrollView';
+import Header from '@/components/Header';
 import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
+import { ThemedBackground } from '@/components/ThemedBackground';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { ChecklistCategory } from '@/components/ChecklistCategory';
 import { AddChecklistItem } from '@/components/AddChecklistItem';
 import { ProgressCircle } from '@/components/ProgressCircle';
 
-import { useAuth } from '@/contexts/AuthContext';
 import { ChecklistItem, getHospitalChecklist, addChecklistItem, toggleChecklistItem, deleteChecklistItem, supabaseUrl } from '@/lib/supabase';
+import { LiquidGlassCard, LAYOUT_PAD, SECTION_GAP_TOP, PRIMARY, TEXT_PRIMARY } from '@/constants/DesignGuide';
+import { useColorScheme } from '@/hooks/useColorScheme';
+
+const ACCENT_PURPLE = '#A47AD4';
+const DEEP_TEXT = '#5C4033';
+const SOFT_CARD_BG = 'rgba(255, 246, 237, 0.88)';
+const SOFT_BORDER = 'rgba(255,255,255,0.65)';
+const TIP_ICON = '#B896FF';
+const BADGE_TINT = 'rgba(255,255,255,0.92)';
+
+const deduplicateChecklist = (items: ChecklistItem[]) => {
+  const seen = new Set<string>();
+  return items.filter(item => {
+    const key = `${item.position ?? ''}|${item.category ?? ''}|${(item.item_name || '').toLowerCase()}`;
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+};
 
 export default function TabTwoScreen() {
-  const { } = useAuth(); // signOut wurde zur Mehr-Seite verschoben
-  const router = useRouter();
+  const colorScheme = useColorScheme() ?? 'light';
 
   // State für die Checkliste
   const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
@@ -83,8 +100,7 @@ export default function TabTwoScreen() {
     { item_name: 'Maxicar/Babyschale für Heimfahrt', category: 'Sonstiges', notes: null }
   ];
 
-  // State für die Initialisierung der Checkliste
-  const [isInitialized, setIsInitialized] = useState(false);
+  const hasSeededDefaults = useRef(false);
 
   // Laden der Checkliste beim ersten Rendern und bei Fokus auf den Tab
   const loadChecklist = useCallback(async () => {
@@ -97,9 +113,9 @@ export default function TabTwoScreen() {
 
       // Wenn die Checkliste leer ist und noch nicht initialisiert wurde,
       // fügen wir die vordefinierten Einträge hinzu
-      if ((!data || data.length === 0) && !isInitialized) {
+      if ((!data || data.length === 0) && !hasSeededDefaults.current) {
         console.log('Initializing checklist with default items...');
-        setIsInitialized(true);
+        hasSeededDefaults.current = true;
 
         // Vorbereitete Einträge hinzufügen
         const initializedItems: ChecklistItem[] = [];
@@ -125,10 +141,10 @@ export default function TabTwoScreen() {
           }
         }
 
-        setChecklist(initializedItems);
+        setChecklist(deduplicateChecklist(initializedItems));
       } else {
         // Wenn bereits Daten vorhanden sind, verwenden wir diese
-        setChecklist(data || []);
+        setChecklist(deduplicateChecklist(data || []));
       }
     } catch (err) {
       console.error('Error loading checklist:', err);
@@ -152,7 +168,7 @@ export default function TabTwoScreen() {
     } finally {
       setLoading(false);
     }
-  }, [isInitialized]);
+  }, []);
 
   useEffect(() => {
     loadChecklist();
@@ -178,7 +194,7 @@ export default function TabTwoScreen() {
       const { data, error } = await addChecklistItem(newItem);
       if (error) throw error;
       if (data) {
-        setChecklist([...checklist, data]);
+        setChecklist(prev => deduplicateChecklist([...prev, data]));
       }
     } catch (err) {
       console.error('Error adding checklist item:', err);
@@ -244,178 +260,236 @@ export default function TabTwoScreen() {
     return Math.round((checkedItems / totalItems) * 100);
   }, [checklist]);
 
-  // Abmelden-Funktion wurde zur Mehr-Seite verschoben
+  const checkedItems = useMemo(() => checklist.filter(item => item.is_checked).length, [checklist]);
+  const totalItems = checklist.length;
+  const totalCategories = Object.keys(groupedItems).length || categories.length;
 
-  // Zurück-Button zur Pregnancy-Home-Seite
-  const backButton = (
-    <TouchableOpacity
-      style={styles.backButton}
-      onPress={() => router.push({ pathname: '/(tabs)/pregnancy-home' })}
-    >
-      <IconSymbol name="chevron.left" size={24} color="#E57373" />
-    </TouchableOpacity>
-  );
-
-  // Funktion für Swipe nach rechts
-  const handleSwipeRight = () => {
-    router.push({ pathname: '/(tabs)/pregnancy-home' });
-  };
+  const progressNote = useMemo(() => {
+    if (totalProgress === 0) {
+      return 'Starte mit den wichtigsten Dokumenten – so bleibt alles entspannt.';
+    }
+    if (totalProgress < 50) {
+      return 'Du bist mittendrin! Kleine Schritte bringen dich ans Ziel.';
+    }
+    if (totalProgress < 90) {
+      return 'Nur noch ein paar Teile – der große Tag kann kommen.';
+    }
+    return 'Wow, fast erledigt! Lass dir nur die letzten Kleinigkeiten bestätigen.';
+  }, [totalProgress]);
 
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#F9F1EC', dark: '#353636' }}
-      headerImage={
-        <IconSymbol
-          size={310}
-          color="#E9C9B6"
-          name="checklist"
-          style={styles.headerImage}
+    <ThemedBackground>
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
+        <Header
+          title="Krankenhaus-Checkliste"
+          subtitle="Alles was du für die Klinik brauchst"
+          showBackButton
         />
-      }
-      backButton={backButton}
-      onSwipeRight={handleSwipeRight}>
-      <View style={styles.headerContainer}>
-        <View style={styles.progressCircleContainer}>
-          <ProgressCircle progress={totalProgress} size={50} />
-        </View>
-        <ThemedView style={styles.titleContainer}>
-          <ThemedText type="title">Krankenhaus-Checkliste</ThemedText>
-        </ThemedView>
-      </View>
 
-      <ThemedText style={styles.description}>
-        Hier kannst du alle wichtigen Dinge für deinen Krankenhausaufenthalt notieren.
-        Hake die Einträge ab, sobald du sie eingepackt hast.
-      </ThemedText>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
 
-      {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#E9C9B6" />
-          <ThemedText style={styles.loadingText}>Checkliste wird geladen...</ThemedText>
-        </View>
-      ) : error ? (
-        <ThemedView style={styles.errorContainer}>
-          <ThemedText style={styles.errorText}>{error}</ThemedText>
-          <TouchableOpacity style={styles.retryButton} onPress={loadChecklist}>
-            <ThemedText style={styles.retryButtonText}>Erneut versuchen</ThemedText>
-          </TouchableOpacity>
-        </ThemedView>
-      ) : (
-        <>
-          {/* Kategorien mit Einträgen anzeigen */}
-          {Object.keys(groupedItems).length === 0 ? (
-            <ThemedView style={styles.emptyContainer}>
-              <ThemedText style={styles.emptyText}>
-                Deine Checkliste ist noch leer. Füge unten neue Einträge hinzu.
-              </ThemedText>
-            </ThemedView>
-          ) : (
-            Object.entries(groupedItems).map(([category, items]) => (
-              <ChecklistCategory
-                key={category}
-                title={category}
-                items={items}
-                onToggleItem={handleToggleItem}
-                onDeleteItem={handleDeleteItem}
+          <LiquidGlassCard style={[styles.cardBase, styles.summaryCard, { backgroundColor: SOFT_CARD_BG, borderColor: SOFT_BORDER }]}>
+            <View style={styles.summaryHeader}>
+              <ProgressCircle
+                progress={totalProgress}
+                size={70}
+                progressColor={ACCENT_PURPLE}
+                backgroundColor="rgba(255,255,255,0.3)"
+                textColor={DEEP_TEXT}
               />
-            ))
+              <View style={styles.summaryTextBlock}>
+                <ThemedText style={styles.summaryTitle} lightColor={DEEP_TEXT}>
+                  Bereit für den großen Tag
+                </ThemedText>
+                <ThemedText style={styles.summaryLead} lightColor="rgba(92,64,51,0.8)">
+                  Deine Liste wächst mit dir – hake ab, ergänze und bleib entspannt.
+                </ThemedText>
+                <View style={styles.summaryBadges}>
+                  <View style={[styles.summaryBadge, { backgroundColor: BADGE_TINT, borderColor: SOFT_BORDER }]}>
+                    <IconSymbol name="doc.text" size={16} color={DEEP_TEXT} />
+                    <ThemedText style={styles.summaryBadgeText} lightColor={DEEP_TEXT}>
+                      {totalCategories} Kategorien
+                    </ThemedText>
+                  </View>
+                  <View style={[styles.summaryBadge, { backgroundColor: BADGE_TINT, borderColor: SOFT_BORDER }]}>
+                    <IconSymbol name="checkmark.seal.fill" size={16} color={DEEP_TEXT} />
+                    <ThemedText style={styles.summaryBadgeText} lightColor={DEEP_TEXT}>
+                      {checkedItems}/{totalItems || 0} erledigt
+                    </ThemedText>
+                  </View>
+                </View>
+              </View>
+            </View>
+            <View style={styles.summaryFooter}>
+              <ThemedText style={styles.summaryFooterText} lightColor="rgba(92,64,51,0.85)">
+                {progressNote}
+              </ThemedText>
+            </View>
+          </LiquidGlassCard>
+
+          <LiquidGlassCard style={[styles.cardBase, styles.tipCard, { backgroundColor: SOFT_CARD_BG, borderColor: SOFT_BORDER }]}>
+            <View style={styles.tipContent}>
+              <IconSymbol name="sparkles" size={20} color={TIP_ICON} />
+              <ThemedText style={styles.tipText} lightColor={DEEP_TEXT}>
+                Tipp: Überprüfe am Abend vor der Abreise alles noch einmal gemeinsam mit deiner Begleitung.
+              </ThemedText>
+            </View>
+          </LiquidGlassCard>
+
+          {loading ? (
+            <LiquidGlassCard style={[styles.cardBase, styles.stateCard, { backgroundColor: SOFT_CARD_BG, borderColor: SOFT_BORDER }]}>
+              <ActivityIndicator size="small" color={ACCENT_PURPLE} />
+              <ThemedText style={styles.stateText} lightColor={DEEP_TEXT}>
+                Checkliste wird geladen...
+              </ThemedText>
+            </LiquidGlassCard>
+          ) : error ? (
+            <LiquidGlassCard style={[styles.cardBase, styles.stateCard, styles.errorCard, { backgroundColor: SOFT_CARD_BG, borderColor: '#EFB0B6' }]}>
+              <ThemedText style={[styles.stateText, styles.errorText]} lightColor="#A8464C">
+                {error}
+              </ThemedText>
+              <TouchableOpacity style={styles.retryButton} onPress={loadChecklist}>
+                <ThemedText style={styles.retryText} lightColor={DEEP_TEXT}>
+                  Erneut versuchen
+                </ThemedText>
+              </TouchableOpacity>
+            </LiquidGlassCard>
+          ) : (
+            <>
+              {Object.keys(groupedItems).length === 0 ? (
+                <LiquidGlassCard style={[styles.cardBase, styles.stateCard, { backgroundColor: SOFT_CARD_BG, borderColor: SOFT_BORDER }]}>
+                  <ThemedText style={styles.stateText} lightColor={DEEP_TEXT}>
+                    Deine Checkliste ist noch leer. Füge unten neue Einträge hinzu.
+                  </ThemedText>
+                </LiquidGlassCard>
+              ) : (
+                Object.entries(groupedItems).map(([category, items]) => (
+                  <ChecklistCategory
+                    key={category}
+                    title={category}
+                    items={items}
+                    onToggleItem={handleToggleItem}
+                    onDeleteItem={handleDeleteItem}
+                  />
+                ))
+              )}
+
+              <AddChecklistItem onAdd={handleAddItem} categories={categories} />
+            </>
           )}
-
-          {/* Formular zum Hinzufügen neuer Einträge */}
-          <AddChecklistItem onAdd={handleAddItem} categories={categories} />
-        </>
-      )}
-
-      {/* Logout Section wurde zur Mehr-Seite verschoben */}
-    </ParallaxScrollView>
+        </ScrollView>
+      </SafeAreaView>
+    </ThemedBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  headerImage: {
-    color: '#E9C9B6',
-    bottom: -90,
-    left: -35,
-    position: 'absolute',
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  headerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  progressCircleContainer: {
-    marginRight: 15,
-  },
-  titleContainer: {
+  safeArea: {
     flex: 1,
+  },
+  scrollContent: {
+    paddingHorizontal: LAYOUT_PAD,
+    paddingBottom: 120,
+    paddingTop: SECTION_GAP_TOP,
+    gap: SECTION_GAP_TOP,
+  },
+  cardBase: {
+    borderRadius: 26,
+    borderWidth: 1,
+  },
+  summaryCard: {
+    paddingHorizontal: 22,
+    paddingVertical: 26,
+    gap: 18,
+  },
+  summaryHeader: {
     flexDirection: 'row',
-    color:'black',
+    alignItems: 'flex-start',
+    gap: 18,
+  },
+  summaryTextBlock: {
+    flex: 1,
+    gap: 10,
+  },
+  summaryTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: TEXT_PRIMARY,
+    lineHeight: 28,
+  },
+  summaryLead: {
+    fontSize: 15,
+    lineHeight: 20,
+  },
+  summaryBadges: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
   },
-  description: {
-    marginBottom: 20,
+  summaryBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+  },
+  summaryBadgeText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  summaryFooter: {
+    paddingTop: 8,
+    paddingBottom: 6,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.35)',
+  },
+  summaryFooterText: {
+    fontSize: 15,
     lineHeight: 22,
   },
-  loadingContainer: {
-    padding: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
+  tipCard: {
+    paddingVertical: 14,
+    paddingHorizontal: 18,
   },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    opacity: 0.7,
-  },
-  errorContainer: {
-    padding: 20,
-    marginVertical: 20,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E9C9B6',
+  tipContent: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 10,
+  },
+  tipText: {
+    flex: 1,
+    fontSize: 15,
+    lineHeight: 20,
+  },
+  stateCard: {
+    padding: 24,
+    alignItems: 'center',
+    gap: 12,
+  },
+  stateText: {
+    fontSize: 15,
+    textAlign: 'center',
+  },
+  errorCard: {
+    borderColor: 'rgba(230, 108, 119, 0.65)',
   },
   errorText: {
-    marginBottom: 16,
-    textAlign: 'center',
-    color: '#E9C9B6',
+    fontWeight: '600',
   },
   retryButton: {
-    backgroundColor: '#E9C9B6',
     paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 20,
-  },
-  retryButtonText: {
-    color: '#5C4033',
-    fontWeight: 'bold',
-  },
-  emptyContainer: {
-    padding: 30,
-    alignItems: 'center',
-    justifyContent: 'center',
+    paddingHorizontal: 22,
+    borderRadius: 999,
     borderWidth: 1,
-    borderColor: '#E9E9E9',
-    borderRadius: 8,
-    borderStyle: 'dashed',
-    marginBottom: 20,
+    borderColor: 'rgba(255,255,255,0.5)',
+    backgroundColor: 'rgba(255,255,255,0.75)',
   },
-  emptyText: {
-    textAlign: 'center',
-    opacity: 0.7,
-    lineHeight: 22,
+  retryText: {
+    fontWeight: '600',
   },
-  // Logout-Styles wurden zur Mehr-Seite verschoben
 });
