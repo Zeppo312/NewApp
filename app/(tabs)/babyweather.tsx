@@ -1424,8 +1424,8 @@ const styles = StyleSheet.create({
   },
   clothingContainer: {
     borderRadius: 15,
-    padding: 20,
-    marginBottom: 20,
+    padding: 18,
+    marginBottom: 14,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -1433,8 +1433,8 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   clotheslineContainer: {
-    marginTop: 20,
-    marginBottom: 20,
+    marginTop: 14,
+    marginBottom: 14,
     alignItems: 'center',
     position: 'relative',
   },
@@ -1453,7 +1453,7 @@ const styles = StyleSheet.create({
   },
   clothingItem: {
     alignItems: 'center',
-    marginVertical: 15,
+    marginVertical: 10,
     width: '33%',
   },
   clothesPin: {
@@ -1651,7 +1651,7 @@ const styles = StyleSheet.create({
     width: '100%',
     borderRadius: 22,
     padding: 18,
-    marginBottom: 20,
+    marginBottom: 14,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -1684,7 +1684,7 @@ const styles = StyleSheet.create({
   },
   sectionCard: {
     width: '100%',
-    marginBottom: 20,
+    marginBottom: 14,
     borderRadius: 22,
     padding: 18,
     overflow: 'hidden',
@@ -1695,19 +1695,19 @@ const styles = StyleSheet.create({
   },
   columnWrapper: {
     justifyContent: 'space-around',
-    marginVertical: 10,
+    marginVertical: 6,
     width: TIMELINE_CONTENT_WIDTH,
     alignSelf: 'center',
   },
   metaCardsContainer: {
     width: '100%',
-    marginBottom: 16,
+    marginBottom: 10,
   },
   metaCard: {
     width: '100%',
     borderRadius: 22,
     padding: 18,
-    marginBottom: 14,
+    marginBottom: 10,
     overflow: 'hidden',
   },
   metaCardHeader: {
