@@ -1,33 +1,103 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, ImageBackground, SafeAreaView, StatusBar, Text, Alert, Platform, Modal } from 'react-native';
-import { useRouter } from 'expo-router';
-import { useColorScheme } from '@/hooks/useColorScheme';
-import { IconSymbol } from '@/components/ui/IconSymbol';
-import { supabase, updateDueDateAndSync } from '@/lib/supabase';
-import { useAuth } from '@/contexts/AuthContext';
-import Svg, { Circle, Path, G, Text as SvgText } from 'react-native-svg';
+import React, { useEffect, useState } from 'react';
+import {
+  StyleSheet,
+  ScrollView,
+  View,
+  ActivityIndicator,
+  SafeAreaView,
+  Platform,
+  Modal,
+  TouchableOpacity,
+  Alert
+} from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { LinearGradient } from 'expo-linear-gradient';
+import Svg, { Circle, Path, G, Text as SvgText } from 'react-native-svg';
+import { Stack, useRouter } from 'expo-router';
+import Header from '@/components/Header';
+import { IconSymbol } from '@/components/ui/IconSymbol';
+import { ThemedText } from '@/components/ThemedText';
+import { ThemedBackground } from '@/components/ThemedBackground';
+import { Colors } from '@/constants/Colors';
+import { useColorScheme } from '@/hooks/useColorScheme';
+import { useAuth } from '@/contexts/AuthContext';
+import { LiquidGlassCard, LAYOUT_PAD, TIMELINE_INSET, TEXT_PRIMARY, GLASS_BORDER } from '@/constants/DesignGuide';
+import { supabase, updateDueDateAndSync } from '@/lib/supabase';
+
+type PregnancyStats = {
+  daysLeft: number;
+  currentWeek: number;
+  currentDay: number;
+  progress: number;
+  trimester: string;
+  daysPregnant: number;
+  calendarMonth: number;
+  pregnancyMonth: number;
+};
+
+const initialStats: PregnancyStats = {
+  daysLeft: 0,
+  currentWeek: 1,
+  currentDay: 0,
+  progress: 0,
+  trimester: '1. Trimester',
+  daysPregnant: 0,
+  calendarMonth: 1,
+  pregnancyMonth: 1,
+};
+
+const pastelPalette = {
+  peach: 'rgba(255, 223, 209, 0.85)',
+  rose: 'rgba(255, 210, 224, 0.8)',
+  honey: 'rgba(255, 239, 214, 0.85)',
+  sage: 'rgba(214, 236, 220, 0.78)',
+  lavender: 'rgba(236, 224, 255, 0.78)',
+  sky: 'rgba(222, 238, 255, 0.85)',
+  blush: 'rgba(255, 218, 230, 0.8)',
+};
+
+const GlassLayer = ({
+  tint = 'rgba(255,255,255,0.22)',
+  sheenOpacity = 0.35,
+}: {
+  tint?: string;
+  sheenOpacity?: number;
+}) => (
+  <>
+    <LinearGradient
+      colors={[tint, 'rgba(255,255,255,0.06)']}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={styles.glassLayerGradient}
+    />
+    <View style={[styles.glassSheen, { opacity: sheenOpacity }]} />
+  </>
+);
+
+const getArcPath = (progress: number) => {
+  const capped = Math.min(1, Math.max(0, progress));
+  const angle = 2 * Math.PI * capped;
+  const largeArcFlag = capped > 0.5 ? 1 : 0;
+  const endX = 50 + 45 * Math.sin(angle);
+  const endY = 50 - 45 * Math.cos(angle);
+
+  return `
+    M 50 5
+    A 45 45 0 ${largeArcFlag} 1 ${endX} ${endY}
+  `;
+};
 
 export default function PregnancyStatsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
+  const theme = Colors[colorScheme];
   const router = useRouter();
   const { user } = useAuth();
 
-  // Schwangerschaftsdaten
   const [dueDate, setDueDate] = useState<Date | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [stats, setStats] = useState({
-    daysLeft: 0,
-    currentWeek: 0,
-    currentDay: 0,
-    progress: 0,
-    trimester: '',
-    daysPregnant: 0,
-    calendarMonth: 0,
-    pregnancyMonth: 0
-  });
   const [tempDate, setTempDate] = useState<Date | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [stats, setStats] = useState<PregnancyStats>(initialStats);
 
   useEffect(() => {
     if (user) {
@@ -58,8 +128,6 @@ export default function PregnancyStatsScreen() {
         console.error('Error loading due date:', error);
       } else if (data && data.due_date) {
         setDueDate(new Date(data.due_date));
-      } else {
-        console.log('No due date found for user:', user?.id);
       }
     } catch (err) {
       console.error('Failed to load due date:', err);
@@ -71,77 +139,53 @@ export default function PregnancyStatsScreen() {
   const calculateStats = () => {
     if (!dueDate) return;
 
-    // Aktuelles Datum ohne Uhrzeit (nur Tag)
     const now = new Date();
     now.setHours(0, 0, 0, 0);
 
-    // Geburtstermin ohne Uhrzeit (nur Tag)
-    const dueDateCopy = new Date(dueDate);
-    dueDateCopy.setHours(0, 0, 0, 0);
+    const dueCopy = new Date(dueDate);
+    dueCopy.setHours(0, 0, 0, 0);
 
-    // Berechne die Differenz in Millisekunden
-    const difference = dueDateCopy.getTime() - now.getTime();
+    const difference = dueCopy.getTime() - now.getTime();
+    const daysRemaining = Math.max(0, Math.round(difference / (1000 * 60 * 60 * 24)));
 
-    // Berechne die Tage bis zum Geburtstermin (immer ganze Tage)
-    const days = Math.round(difference / (1000 * 60 * 60 * 24));
+    const totalDaysInPregnancy = 280;
+    const daysPregnant = Math.min(totalDaysInPregnancy, Math.max(0, totalDaysInPregnancy - daysRemaining));
 
-    // Schwangerschaft dauert ca. 40 Wochen
-    const totalDaysInPregnancy = 280; // 40 Wochen * 7 Tage
-
-    // Berechne die Tage der Schwangerschaft
-    const daysRemaining = Math.max(0, days);
-    const daysPregnant = totalDaysInPregnancy - daysRemaining;
-
-    // Berechne SSW und Tag
-    // weeksPregnant ist die Anzahl der vollständig abgeschlossenen Wochen
     const weeksPregnant = Math.floor(daysPregnant / 7);
-    // daysInCurrentWeek ist die Anzahl der Tage in der aktuellen Woche (0-6)
     const daysInCurrentWeek = daysPregnant % 7;
+    const currentWeek = Math.min(40, weeksPregnant + 1);
 
-    // currentWeek ist die aktuelle Schwangerschaftswoche (1-basiert)
-    // Wenn du 37+3 bist, bedeutet das, du bist in der 38. SSW
-    const currentWeek = weeksPregnant + 1;
-
-    // Berechne den Fortschritt (0-1)
     const progress = Math.min(1, Math.max(0, daysPregnant / totalDaysInPregnancy));
 
-    // Berechne das Trimester basierend auf der aktuellen SSW (1-basiert)
-    let trimester = '';
-    if (currentWeek <= 13) {
-      trimester = '1. Trimester';
-    } else if (currentWeek <= 27) {
-      trimester = '2. Trimester';
-    } else {
+    let trimester = '1. Trimester';
+    if (currentWeek >= 28) {
       trimester = '3. Trimester';
+    } else if (currentWeek >= 14) {
+      trimester = '2. Trimester';
     }
 
-    // Berechne den Kalendermonat
-    const calendarMonth = Math.ceil(daysPregnant / 30);
-
-    // Berechne den Schwangerschaftsmonat (jeweils 4 Wochen)
-    // Basierend auf der aktuellen SSW (1-basiert)
-    const pregnancyMonth = Math.ceil(currentWeek / 4);
+    const calendarMonth = Math.max(1, Math.ceil(daysPregnant / 30));
+    const pregnancyMonth = Math.max(1, Math.ceil(currentWeek / 4));
 
     setStats({
       daysLeft: daysRemaining,
-      currentWeek: currentWeek, // Verwende die korrekte SSW (1-basiert)
+      currentWeek,
       currentDay: daysInCurrentWeek,
       progress,
       trimester,
       daysPregnant,
       calendarMonth,
-      pregnancyMonth
+      pregnancyMonth,
     });
   };
 
   const saveDueDate = async (date: Date) => {
-    try {
-      if (!user) {
-        Alert.alert('Hinweis', 'Bitte melde dich an, um deinen Geburtstermin zu speichern.');
-        return;
-      }
+    if (!user) {
+      Alert.alert('Hinweis', 'Bitte melde dich an, um deinen Geburtstermin zu speichern.');
+      return;
+    }
 
-      // Verwenden der Funktion zum Aktualisieren des Entbindungstermins und Synchronisieren
+    try {
       const result = await updateDueDateAndSync(user.id, date);
 
       if (!result.success) {
@@ -150,30 +194,16 @@ export default function PregnancyStatsScreen() {
         return;
       }
 
-      // Aktualisieren des lokalen Zustands
       setDueDate(date);
-
-      // Erfolgreiche Speicherung mit Erfolgsmeldung
-      console.log(`Geburtstermin erfolgreich gespeichert: ${date.toLocaleDateString()}`);
-      
-      // Prüfen, ob Benutzer synchronisiert wurden
-      const syncedUsers = result.syncResult?.linkedUsers || [];
-
-      if (syncedUsers.length > 0) {
-        const linkedUserNames = syncedUsers
-          .map((user: any) => user.firstName)
-          .join(', ');
-
-        Alert.alert(
-          'Erfolg',
-          `Dein Geburtstermin wurde erfolgreich gespeichert und mit ${linkedUserNames} synchronisiert.`
-        );
-      } else {
-        Alert.alert('Erfolg', 'Dein Geburtstermin wurde erfolgreich gespeichert.');
-      }
-
-      // Stats neu berechnen
       calculateStats();
+
+      const syncedUsers = result.syncResult?.linkedUsers || [];
+      if (syncedUsers.length > 0) {
+        const linkedUserNames = syncedUsers.map((linkedUser: any) => linkedUser.firstName).join(', ');
+        Alert.alert('Erfolg', `Geburtstermin gespeichert und mit ${linkedUserNames} synchronisiert.`);
+      } else {
+        Alert.alert('Erfolg', 'Geburtstermin erfolgreich gespeichert.');
+      }
     } catch (err) {
       console.error('Failed to save due date:', err);
       Alert.alert('Fehler', 'Der Geburtstermin konnte nicht gespeichert werden.');
@@ -186,11 +216,8 @@ export default function PregnancyStatsScreen() {
       if (selectedDate) {
         saveDueDate(selectedDate);
       }
-    } else {
-      // Auf iOS speichern wir das Datum temporär und warten auf die Bestätigung
-      if (selectedDate) {
-        setTempDate(selectedDate);
-      }
+    } else if (selectedDate) {
+      setTempDate(selectedDate);
     }
   };
 
@@ -203,470 +230,597 @@ export default function PregnancyStatsScreen() {
 
   const showDatepicker = () => {
     if (Platform.OS === 'ios') {
-      // Aktuellen Geburtstermin als Ausgangswert setzen
       setTempDate(dueDate || new Date());
       setShowDatePicker(true);
     } else {
-      // Auf Android direkt den Picker anzeigen
       setShowDatePicker(true);
     }
   };
 
-  // Teilen-Funktionalität wurde entfernt
+  const factItems = [
+    {
+      key: 'progress',
+      label: 'Fortschritt',
+      value: `${(stats.progress * 100).toFixed(1).replace('.', ',')} %`,
+      caption: 'von 280 Tagen',
+      icon: 'waveform.path.ecg' as const,
+      accent: pastelPalette.rose,
+      iconColor: '#D06262',
+    },
+    {
+      key: 'days-pregnant',
+      label: 'Tage schwanger',
+      value: stats.daysPregnant.toLocaleString('de-DE'),
+      caption: 'seit Beginn',
+      icon: 'hourglass.bottomhalf.fill' as const,
+      accent: pastelPalette.sage,
+      iconColor: '#5A8F80',
+    },
+    {
+      key: 'days-left',
+      label: 'Tage bis EGT',
+      value: stats.daysLeft.toLocaleString('de-DE'),
+      caption: 'verbleibend',
+      icon: 'calendar.badge.clock' as const,
+      accent: pastelPalette.honey,
+      iconColor: '#B7745D',
+    },
+    {
+      key: 'trimester',
+      label: 'Trimester',
+      value: stats.trimester,
+      caption: 'laufend',
+      icon: 'sparkles' as const,
+      accent: pastelPalette.sky,
+      iconColor: '#7A6FD1',
+    },
+  ];
 
-  if (!dueDate) {
+  const statTiles = [
+    {
+      key: 'week',
+      label: 'Aktuelle SSW',
+      value: `${stats.currentWeek}. SSW`,
+      icon: 'calendar' as const,
+      accent: pastelPalette.lavender,
+      iconColor: '#7A6FD1',
+    },
+    {
+      key: 'days',
+      label: 'Tag der Woche',
+      value: `${stats.currentDay} Tag${stats.currentDay === 1 ? '' : 'e'}`,
+      icon: 'sunrise' as const,
+      accent: pastelPalette.peach,
+      iconColor: '#C17055',
+    },
+    {
+      key: 'trimester-card',
+      label: 'Trimester',
+      value: stats.trimester,
+      icon: 'circle.grid.hex' as const,
+      accent: pastelPalette.blush,
+      iconColor: '#CF6F8B',
+    },
+    {
+      key: 'calendar-month',
+      label: 'Kalendermonat',
+      value: `${stats.calendarMonth}. Monat`,
+      icon: 'chart.bar.xaxis' as const,
+      accent: pastelPalette.sage,
+      iconColor: '#5A8F80',
+    },
+    {
+      key: 'pregnancy-month',
+      label: 'Schwangerschaftsmonat',
+      value: `${stats.pregnancyMonth}. Monat`,
+      icon: 'moon.stars.fill' as const,
+      accent: pastelPalette.sky,
+      iconColor: '#6C87C1',
+    },
+    {
+      key: 'days-left-card',
+      label: 'Tage bis zum EGT',
+      value: stats.daysLeft.toLocaleString('de-DE'),
+      icon: 'arrow.down' as const,
+      accent: pastelPalette.honey,
+      iconColor: '#B7745D',
+    },
+  ];
+
+  if (!dueDate && !isLoading) {
     return (
-      <ImageBackground
-        source={require('@/assets/images/Background_Hell.png')}
-        style={styles.backgroundImage}
-        resizeMode="repeat"
-      >
-        <SafeAreaView style={styles.container}>
-        <StatusBar hidden={true} />
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <IconSymbol name="chevron.left" size={24} color="#7D5A50" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Meine Schwangerschaft</Text>
-          <View style={styles.headerRight} />
-        </View>
-          <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
-
-            <View style={[styles.statsCard, { padding: 25 }]}>
-              <View style={{ alignItems: 'center' }}>
-                <IconSymbol name="exclamationmark.circle" size={50} color="#E8B7A9" style={{ marginBottom: 15 }} />
-                <Text style={styles.noDateText}>
-                  Bitte setze zuerst deinen Geburtstermin in der Countdown-Ansicht.
-                </Text>
+      <ThemedBackground style={styles.container}>
+        <SafeAreaView style={styles.safeArea}>
+          <Stack.Screen options={{ headerShown: false }} />
+          <Header
+            title="Schwangerschaft"
+            subtitle="Countdown noch nicht gesetzt"
+            showBackButton
+          />
+          <ScrollView
+            style={styles.scrollView}
+            contentContainerStyle={styles.contentContainer}
+          >
+            <LiquidGlassCard style={styles.glassCard}>
+              <View style={styles.glassInner}>
+                <ThemedText style={styles.sectionTitle}>Geburtstermin fehlt</ThemedText>
+                <ThemedText style={styles.noDataText}>
+                  Bitte setze zuerst deinen Geburtstermin in der Countdown-Ansicht, um alle Details zu sehen.
+                </ThemedText>
                 <TouchableOpacity
-                  style={[styles.shareButton, { marginTop: 20 }]}
+                  style={[styles.dueDateAction, styles.glassSurface]}
                   onPress={() => router.push('/countdown')}
                 >
-                  <View style={[styles.shareButtonInner, { backgroundColor: '#E8B7A9' }]}>
-                    <IconSymbol name="calendar" size={20} color="#FFFFFF" />
-                    <Text style={[styles.shareButtonText, { color: '#FFFFFF' }]}>
-                      Zum Countdown
-                    </Text>
-                  </View>
+                  <GlassLayer tint={pastelPalette.lavender} sheenOpacity={0.22} />
+                  <IconSymbol name="calendar" size={18} color="#7A6FD1" style={styles.dueDateActionIcon} />
+                  <ThemedText style={styles.dueDateActionText}>Zum Countdown</ThemedText>
                 </TouchableOpacity>
               </View>
-            </View>
+            </LiquidGlassCard>
           </ScrollView>
         </SafeAreaView>
-      </ImageBackground>
+      </ThemedBackground>
     );
   }
 
   return (
-    <ImageBackground
-      source={require('@/assets/images/Background_Hell.png')}
-      style={styles.backgroundImage}
-      resizeMode="repeat"
-    >
-      <SafeAreaView style={styles.container}>
-      <StatusBar hidden={true} />
-        {/* Modal für iOS DatePicker */}
-        {Platform.OS === 'ios' && showDatePicker && (
-          <Modal
-            animationType="fade"
-            transparent={true}
-            visible={showDatePicker}
-            onRequestClose={() => setShowDatePicker(false)}
+    <ThemedBackground style={styles.container}>
+      <SafeAreaView style={styles.safeArea}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <Header
+          title="Schwangerschaft"
+          subtitle="Countdown & Status"
+          showBackButton
+        />
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={theme.primary} />
+          </View>
+        ) : (
+          <ScrollView
+            style={styles.scrollView}
+            contentContainerStyle={styles.contentContainer}
           >
-            <View style={styles.centeredView}>
-              <View style={styles.modalView}>
-                <View style={styles.pickerHeader}>
-                  <Text style={styles.pickerTitle}>Geburtstermin auswählen</Text>
-                  <TouchableOpacity onPress={() => setShowDatePicker(false)}>
-                    <IconSymbol name="xmark.circle.fill" size={28} color="#7D5A50" style={{opacity: 0.8}} />
-                  </TouchableOpacity>
-                </View>
-                
-                <View style={styles.pickerContainer}>
+            {dueDate ? (
+              <>
+                <LiquidGlassCard style={[styles.glassCard, styles.firstGlassCard]}>
+                  <View style={styles.glassInner}>
+                    <ThemedText style={styles.sectionTitle}>Fortschritt</ThemedText>
+                    <View style={[styles.progressPanel, styles.glassSurface]}>
+                      <GlassLayer tint="rgba(255,255,255,0.22)" sheenOpacity={0.2} />
+                      <View style={styles.progressWrapper}>
+                        <View style={[styles.progressCircleContainer, styles.glassSurface]}>
+                          <GlassLayer tint="rgba(255,255,255,0.75)" sheenOpacity={0.2} />
+                          <Svg height="120" width="120" viewBox="0 0 100 100">
+                            <Circle
+                              cx="50"
+                              cy="50"
+                              r="45"
+                              stroke="rgba(255,255,255,0.35)"
+                              strokeWidth="6"
+                              fill="transparent"
+                            />
+                            <Path
+                              d={getArcPath(stats.progress)}
+                              stroke="#7D5A50"
+                              strokeWidth="6"
+                              fill="transparent"
+                              strokeLinecap="round"
+                            />
+                            <G>
+                              <SvgText
+                                x="50"
+                                y="48"
+                                fontSize="22"
+                                textAnchor="middle"
+                                fill="#5D4037"
+                                fontWeight="bold"
+                              >
+                                {(stats.progress * 100).toFixed(1).replace('.', ',')}
+                              </SvgText>
+                              <SvgText
+                                x="50"
+                                y="64"
+                                fontSize="14"
+                                textAnchor="middle"
+                                fill="#5D4037"
+                              >
+                                %
+                              </SvgText>
+                            </G>
+                          </Svg>
+                        </View>
+                        <View style={styles.progressTextBlock}>
+                          <ThemedText style={styles.progressHeadline}>Deine Schwangerschaft</ThemedText>
+                          <ThemedText style={styles.progressSubtext}>Noch {stats.daysLeft} Tage bis EGT</ThemedText>
+                          <ThemedText style={styles.progressSubtext}>{stats.daysPregnant} Tage seit Beginn</ThemedText>
+                        </View>
+                      </View>
+                      <View style={styles.heartsContainer}>
+                        {Array.from({ length: 10 }).map((_, index) => (
+                          <IconSymbol
+                            key={index}
+                            name={index < Math.round(stats.progress * 10) ? 'heart.fill' : 'heart'}
+                            size={18}
+                            color="#7D5A50"
+                            style={styles.heartIcon}
+                          />
+                        ))}
+                      </View>
+                    </View>
+                  </View>
+                </LiquidGlassCard>
+
+                <LiquidGlassCard style={styles.glassCard}>
+                  <View style={styles.glassInner}>
+                    <ThemedText style={styles.sectionTitle}>Errechneter Geburtstermin</ThemedText>
+                    <TouchableOpacity
+                      style={styles.dueDateTouch}
+                      onPress={showDatepicker}
+                      activeOpacity={0.9}
+                    >
+                      <View style={[styles.dueDateDisplay, styles.glassSurface]}>
+                        <GlassLayer tint={pastelPalette.peach} sheenOpacity={0.22} />
+                        <View style={styles.dueDateRow}>
+                          <View style={styles.dueDateIconWrap}>
+                            <IconSymbol name="calendar" size={20} color="#C17055" />
+                          </View>
+                          <ThemedText style={styles.dueDateValue}>
+                            {dueDate.toLocaleDateString('de-DE', {
+                              day: '2-digit',
+                              month: '2-digit',
+                              year: '2-digit',
+                            })}
+                          </ThemedText>
+                        </View>
+                      </View>
+                      <View style={styles.editHintContainer}>
+                        <IconSymbol name="pencil" size={14} color="#7D5A50" style={{ marginRight: 6, opacity: 0.7 }} />
+                        <ThemedText style={styles.editHint}>Tippen zum Ändern</ThemedText>
+                      </View>
+                    </TouchableOpacity>
+                  </View>
+                </LiquidGlassCard>
+
+                <LiquidGlassCard style={styles.glassCard}>
+                  <View style={styles.glassInner}>
+                    <ThemedText style={styles.sectionTitle}>Schwangerschafts-Details</ThemedText>
+                    <View style={styles.statGrid}>
+                      {statTiles.map((tile) => (
+                        <View key={tile.key} style={[styles.statItem, styles.glassSurface]}>
+                          <GlassLayer tint={tile.accent} sheenOpacity={0.18} />
+                          <View style={styles.statIcon}>
+                            <IconSymbol name={tile.icon} size={16} color={tile.iconColor} />
+                          </View>
+                          <ThemedText style={styles.statValue}>{tile.value}</ThemedText>
+                          <ThemedText style={styles.statLabel}>{tile.label}</ThemedText>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                </LiquidGlassCard>
+
+                <LiquidGlassCard style={styles.glassCard}>
+                  <View style={styles.glassInner}>
+                    <ThemedText style={styles.sectionTitle}>Interessante Fakten</ThemedText>
+                    <View style={styles.factGrid}>
+                      {factItems.map((fact) => (
+                        <View key={fact.key} style={[styles.factTile, styles.glassSurface]}>
+                          <GlassLayer tint={fact.accent} sheenOpacity={0.18} />
+                          <View style={[styles.factIcon, { backgroundColor: 'rgba(255,255,255,0.85)' }]}> 
+                            <IconSymbol name={fact.icon} size={18} color={fact.iconColor} />
+                          </View>
+                          <ThemedText style={styles.factLabel}>{fact.label}</ThemedText>
+                          <ThemedText style={styles.factValue}>{fact.value}</ThemedText>
+                          <ThemedText style={styles.factCaption}>{fact.caption}</ThemedText>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                </LiquidGlassCard>
+
+                {Platform.OS === 'android' && showDatePicker && (
                   <DateTimePicker
-                    value={tempDate || dueDate || new Date()}
+                    value={dueDate || new Date()}
                     mode="date"
                     display="spinner"
                     onChange={handleDateChange}
                     minimumDate={new Date()}
-                    maximumDate={new Date(Date.now() + 1000 * 60 * 60 * 24 * 280)} // ca. 40 Wochen
-                    style={styles.datePicker}
-                    textColor="#333333"
+                    maximumDate={new Date(Date.now() + 1000 * 60 * 60 * 24 * 280)}
                   />
-                </View>
-                
-                <TouchableOpacity 
-                  style={styles.confirmButton}
-                  onPress={confirmIOSDate}
-                >
-                  <Text style={styles.confirmButtonText}>Bestätigen</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </Modal>
+                )}
+
+                {Platform.OS === 'ios' && (
+                  <Modal
+                    animationType="fade"
+                    transparent
+                    visible={showDatePicker}
+                    onRequestClose={() => setShowDatePicker(false)}
+                  >
+                    <View style={styles.centeredView}>
+                      <View style={styles.modalView}>
+                        <View style={styles.pickerHeader}>
+                          <ThemedText style={styles.pickerTitle}>Geburtstermin auswählen</ThemedText>
+                          <TouchableOpacity onPress={() => setShowDatePicker(false)}>
+                            <IconSymbol name="xmark.circle.fill" size={28} color="#7D5A50" style={{ opacity: 0.8 }} />
+                          </TouchableOpacity>
+                        </View>
+                        <View style={styles.pickerContainer}>
+                          <DateTimePicker
+                            value={tempDate || dueDate || new Date()}
+                            mode="date"
+                            display="spinner"
+                            onChange={handleDateChange}
+                            minimumDate={new Date()}
+                            maximumDate={new Date(Date.now() + 1000 * 60 * 60 * 24 * 280)}
+                            textColor="#5D4037"
+                          />
+                        </View>
+                        <TouchableOpacity style={styles.confirmButton} onPress={confirmIOSDate}>
+                          <ThemedText style={styles.confirmButtonText}>Bestätigen</ThemedText>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  </Modal>
+                )}
+              </>
+            ) : null}
+          </ScrollView>
         )}
-
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <IconSymbol name="xmark" size={24} color="#7D5A50" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Meine Schwangerschaft</Text>
-          <View style={styles.headerRight} />
-        </View>
-
-        <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
-          <View style={styles.progressSection}>
-            <View style={styles.progressCircleContainer}>
-              <Svg height="200" width="200" viewBox="0 0 100 100">
-                {/* Hintergrundkreis */}
-                <Circle
-                  cx="50"
-                  cy="50"
-                  r="45"
-                  stroke="#E8D5C4"
-                  strokeWidth="8"
-                  fill="transparent"
-                />
-                {/* Fortschrittskreis */}
-                <Path
-                  d={`
-                    M 50 5
-                    A 45 45 0 ${stats.progress > 0.5 ? 1 : 0} 1 ${50 + 45 * Math.sin(2 * Math.PI * stats.progress)} ${50 - 45 * Math.cos(2 * Math.PI * stats.progress)}
-                  `}
-                  stroke="#7D5A50"
-                  strokeWidth="8"
-                  fill="transparent"
-                  strokeLinecap="round"
-                />
-                {/* Prozentanzeige in der Mitte */}
-                <G>
-                  <SvgText
-                    x="50"
-                    y="45"
-                    fontSize="16"
-                    textAnchor="middle"
-                    fill="#5D4037"
-                    fontWeight="bold"
-                  >
-                    {(stats.progress * 100).toFixed(1).replace('.', ',')}
-                  </SvgText>
-                  <SvgText
-                    x="50"
-                    y="65"
-                    fontSize="16"
-                    textAnchor="middle"
-                    fill="#5D4037"
-                  >
-                    %
-                  </SvgText>
-                </G>
-              </Svg>
-            </View>
-            <Text style={styles.progressText}>
-              der Schwangerschaft liegen hinter Ihnen
-            </Text>
-            <Text style={styles.progressDays}>
-              ({stats.daysPregnant} von 280 Tagen)
-            </Text>
-
-            <View style={styles.heartsContainer}>
-              {Array(10).fill(0).map((_, i) => (
-                <IconSymbol
-                  key={i}
-                  name={i < Math.floor(stats.progress * 10) ? "heart.fill" : "heart"}
-                  size={24}
-                  color="#7D5A50"
-                />
-              ))}
-            </View>
-          </View>
-
-          <TouchableOpacity 
-            style={styles.statsSection} 
-            onPress={showDatepicker}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.sectionTitle}>ERRECHNETER GEBURTSTERMIN</Text>
-            <View style={styles.dueDateContainer}>
-              <IconSymbol name="calendar" size={22} color="#7D5A50" style={{ marginRight: 12 }} />
-            <Text style={styles.dueDateValue}>
-                {dueDate.toLocaleDateString('de-DE', { 
-                  day: '2-digit', 
-                  month: '2-digit', 
-                  year: '2-digit' 
-                })}
-            </Text>
-          </View>
-            <View style={styles.editHintContainer}>
-              <IconSymbol name="pencil" size={14} color="#7D5A50" style={{ marginRight: 5, opacity: 0.7 }} />
-              <Text style={styles.editHint}>Tippen zum Ändern</Text>
-            </View>
-          </TouchableOpacity>
-
-          {/* DatePicker nur für Android direkt im Screen */}
-          {Platform.OS === 'android' && showDatePicker && (
-            <DateTimePicker
-              value={dueDate || new Date()}
-              mode="date"
-              display="spinner"
-              onChange={handleDateChange}
-              minimumDate={new Date()}
-              maximumDate={new Date(Date.now() + 1000 * 60 * 60 * 24 * 280)} // ca. 40 Wochen
-            />
-          )}
-
-          <View style={styles.statsGrid}>
-            <View style={styles.statsCard}>
-              <Text style={styles.statTitle}>WOCHE</Text>
-              <Text style={styles.statValue}>{stats.currentWeek}</Text>
-            </View>
-
-            <View style={styles.statsCard}>
-              <Text style={styles.statTitle}>ICH BIN SCHWANGER SEIT</Text>
-              <Text style={styles.statValue}>{stats.currentWeek-1} W + {stats.currentDay} T</Text>
-            </View>
-
-            <View style={styles.statsCard}>
-              <Text style={styles.statTitle}>TRIMESTER</Text>
-              <Text style={styles.statValue}>{stats.trimester.charAt(0)}</Text>
-            </View>
-
-            <View style={styles.statsCard}>
-              <Text style={styles.statTitle}>KALENDERMONAT</Text>
-              <Text style={styles.statValue}>{stats.calendarMonth}</Text>
-            </View>
-
-            <View style={styles.statsCard}>
-              <Text style={styles.statTitle}>SCHWANGERSCHAFTS-MONAT</Text>
-              <Text style={styles.statValue}>{stats.pregnancyMonth}</Text>
-            </View>
-
-            <View style={styles.statsCard}>
-              <Text style={styles.statTitle}>VERBLEIBENDE TAGE BIS ZUM EGT</Text>
-              <Text style={styles.statValue}>{stats.daysLeft}</Text>
-            </View>
-          </View>
-
-          {/* Truhe und Frucht-Link wurden entfernt */}
-
-          {/* Teilen-Button wurde entfernt */}
-        </ScrollView>
       </SafeAreaView>
-    </ImageBackground>
+    </ThemedBackground>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFF8F0',
   },
-  backgroundImage: {
+  safeArea: {
     flex: 1,
-    width: '100%',
-    height: '100%',
-  },
-  // Nicht mehr benötigte Styles wurden entfernt
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-    zIndex: 10,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#7D5A50',
-    textAlign: 'center',
-  },
-  headerRight: {
-    width: 40,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   scrollView: {
     flex: 1,
   },
   contentContainer: {
-    padding: 20,
+    paddingHorizontal: LAYOUT_PAD,
     paddingBottom: 40,
-  },
-  progressSection: {
-    backgroundColor: '#F7EFE5',
-    borderRadius: 20,
-    padding: 15,
     alignItems: 'center',
-    marginBottom: 25,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  glassSurface: {
+    position: 'relative',
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: GLASS_BORDER,
+    backgroundColor: 'rgba(255,255,255,0.15)',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-    elevation: 5,
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
+  glassLayerGradient: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  glassSheen: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '55%',
+    backgroundColor: 'rgba(255,255,255,0.25)',
+  },
+  glassCard: {
+    marginHorizontal: TIMELINE_INSET,
+    marginBottom: 20,
+    borderRadius: 22,
     width: '100%',
+    maxWidth: 520,
+    alignSelf: 'center',
+  },
+  firstGlassCard: {
+    marginTop: 12,
+  },
+  glassInner: {
+    padding: 20,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: TEXT_PRIMARY,
+    marginBottom: 12,
+    textAlign: 'center',
+    letterSpacing: 0.2,
+  },
+  progressPanel: {
+    borderRadius: 20,
+    padding: 18,
+    marginTop: 6,
+  },
+  progressWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
   },
   progressCircleContainer: {
-    alignItems: 'center',
+    width: 120,
+    height: 120,
+    borderRadius: 70,
+    backgroundColor: 'transparent',
     justifyContent: 'center',
-    marginVertical: 10,
+    alignItems: 'center',
+    overflow: 'hidden',
+    marginRight: 16,
   },
-  progressPercentage: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#5D4037',
-    textAlign: 'center',
-    marginVertical: 10,
+  progressTextBlock: {
+    flex: 1,
+    paddingLeft: 16,
+    minWidth: 0,
   },
-  percentSymbol: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#5D4037',
+  progressHeadline: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: TEXT_PRIMARY,
+    marginBottom: 6,
   },
-  progressText: {
-    fontSize: 16,
-    color: '#7D5A50',
-    textAlign: 'center',
-    marginBottom: 5,
-  },
-  progressDays: {
+  progressSubtext: {
     fontSize: 14,
-    color: '#7D5A50',
-    marginBottom: 15,
+    color: TEXT_PRIMARY,
+    opacity: 0.8,
   },
   heartsContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginTop: 10,
+    marginTop: 16,
   },
-  statsSection: {
-    padding: 20,
-    borderRadius: 20,
-    marginBottom: 15,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    backgroundColor: '#F7EFE5',
+  heartIcon: {
+    marginHorizontal: 2,
+  },
+  dueDateTouch: {
     width: '100%',
-    flexDirection: 'column',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(125, 90, 80, 0.1)',
+    marginTop: 4,
+    alignItems: 'center',
   },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: 'bold',
-    color: '#7D5A50',
-    marginBottom: 12,
-    letterSpacing: 1,
+  dueDateDisplay: {
+    width: '100%',
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    borderRadius: 20,
+    marginBottom: 8,
+  },
+  dueDateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+  },
+  dueDateIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
   },
   dueDateValue: {
     fontSize: 28,
-    fontWeight: 'bold',
-    color: '#5D4037',
-  },
-  statsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    marginBottom: 20,
-  },
-  statsCard: {
-    width: '48%',
-    padding: 15,
-    borderRadius: 20,
-    marginBottom: 15,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-    elevation: 5,
-    backgroundColor: '#F7EFE5',
-  },
-  statTitle: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    color: '#7D5A50',
+    fontWeight: '800',
+    color: TEXT_PRIMARY,
+    flexShrink: 1,
     textAlign: 'center',
-    marginBottom: 8,
-  },
-  statValue: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#5D4037',
-    textAlign: 'center',
-  },
-  // Truhe und Frucht-Link Stile wurden entfernt
-  shareButton: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 15,
-    marginBottom: 10,
-  },
-  shareButtonInner: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 15,
-    paddingHorizontal: 30,
-    borderRadius: 30,
-    width: '100%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 5,
-    elevation: 5,
-    backgroundColor: '#F7EFE5',
-  },
-  shareButtonText: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#7D5A50',
-  },
-  noDateText: {
-    fontSize: 16,
-    textAlign: 'center',
-    marginVertical: 20,
-    color: '#7D5A50',
-  },
-  // SVG-Stile wurden entfernt, da sie nicht mehr benötigt werden
-  dateContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  editHint: {
-    fontSize: 12,
-    fontStyle: 'italic',
-    color: '#7D5A50',
-    marginTop: 5,
-    opacity: 0.8,
-  },
-  dueDateContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 8,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.5)',
-    borderRadius: 15,
-    shadowColor: '#7D5A50',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 1,
   },
   editHintContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 8,
+  },
+  editHint: {
+    fontSize: 12,
+    color: TEXT_PRIMARY,
+    opacity: 0.7,
+  },
+  dueDateAction: {
+    marginTop: 12,
+    borderRadius: 18,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dueDateActionText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: TEXT_PRIMARY,
+  },
+  dueDateActionIcon: {
+    marginRight: 8,
+  },
+  statGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginTop: 6,
+  },
+  statItem: {
+    width: '48%',
+    borderRadius: 18,
+    paddingVertical: 14,
+    paddingHorizontal: 10,
+    marginBottom: 12,
+    alignItems: 'center',
+  },
+  statIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  statValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: TEXT_PRIMARY,
+    textAlign: 'center',
+  },
+  statLabel: {
+    fontSize: 12,
+    color: TEXT_PRIMARY,
+    opacity: 0.75,
+    textAlign: 'center',
+    marginTop: 4,
+  },
+  factGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginTop: 4,
+  },
+  factTile: {
+    width: '48%',
+    borderRadius: 18,
+    padding: 14,
+    marginBottom: 12,
+  },
+  factIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  factLabel: {
+    fontSize: 12,
+    color: TEXT_PRIMARY,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  factValue: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: TEXT_PRIMARY,
+  },
+  factCaption: {
+    fontSize: 12,
+    color: TEXT_PRIMARY,
+    opacity: 0.8,
+    marginTop: 2,
+  },
+  noDataText: {
+    fontSize: 15,
+    textAlign: 'center',
+    color: TEXT_PRIMARY,
+    opacity: 0.8,
+    marginBottom: 12,
   },
   centeredView: {
     flex: 1,
@@ -699,7 +853,7 @@ const styles = StyleSheet.create({
     borderBottomColor: 'rgba(125, 90, 80, 0.15)',
   },
   pickerTitle: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '600',
     color: '#7D5A50',
   },
@@ -712,17 +866,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E2D9D0',
   },
-  datePicker: {
-    width: '100%',
-    height: 215,
-  },
   confirmButton: {
     backgroundColor: '#7D5A50',
-    padding: 15,
+    padding: 14,
     borderRadius: 30,
     width: '100%',
     alignItems: 'center',
-    marginTop: 10,
+    marginTop: 6,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.25,
@@ -730,9 +880,9 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   confirmButtonText: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
-    color: 'white',
-    letterSpacing: 0.5,
+    color: '#fff',
+    letterSpacing: 0.4,
   },
 });
