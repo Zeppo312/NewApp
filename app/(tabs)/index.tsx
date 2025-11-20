@@ -1,7 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
-import { StyleSheet, TouchableOpacity, ScrollView, Alert, View, StatusBar, SafeAreaView, ActivityIndicator, AppState, Platform, ImageBackground, RefreshControl, Dimensions, Animated } from 'react-native';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { StyleSheet, TouchableOpacity, ScrollView, Alert, View, StatusBar, SafeAreaView, ActivityIndicator, AppState, Platform, RefreshControl, Dimensions, Animated, Text, Modal } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import VerticalContractionTimeline from '@/components/VerticalContractionTimeline';
 import { Colors } from '@/constants/Colors';
@@ -16,14 +15,14 @@ import {
   getContractionTimerState, 
   setupNotifications,
   setupDynamicIsland,
-  ContractionTimerData,
   formatTime as formatBackgroundTime
 } from '@/lib/background-tasks';
 import Header from '@/components/Header';
-import { LiquidGlassCard, GLASS_OVERLAY, TIMELINE_INSET, LAYOUT_PAD, RADIUS } from '@/constants/DesignGuide';
+import { GlassCard, LiquidGlassCard, GLASS_OVERLAY, TIMELINE_INSET, LAYOUT_PAD, RADIUS, SECTION_GAP_BOTTOM, SECTION_GAP_TOP, PRIMARY } from '@/constants/DesignGuide';
 import { BlurView } from 'expo-blur';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { ProgressCircle } from '@/components/ProgressCircle';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 type Contraction = {
   id: string;
@@ -33,6 +32,75 @@ type Contraction = {
   interval: number | null; // time since last contraction in seconds
   intensity: string | null; // Stärke der Wehe (schwach, mittel, stark)
 };
+
+const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+const endOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
+const startOfWeek = (d: Date) => {
+  const copy = new Date(d);
+  const day = copy.getDay();
+  const diff = copy.getDate() - day + (day === 0 ? -6 : 1); // Montag als Wochenstart
+  return startOfDay(new Date(copy.setDate(diff)));
+};
+const endOfWeek = (d: Date) => {
+  const start = startOfWeek(d);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 7);
+  return end;
+};
+const startOfMonth = (d: Date) => new Date(d.getFullYear(), d.getMonth(), 1);
+const endOfMonth = (d: Date) => new Date(d.getFullYear(), d.getMonth() + 1, 1);
+const shiftDateForTab = (date: Date, tab: 'day' | 'week' | 'month', step: number) => {
+  const next = new Date(date);
+  if (tab === 'day') {
+    next.setDate(date.getDate() + step);
+  } else if (tab === 'week') {
+    next.setDate(date.getDate() + 7 * step);
+  } else {
+    next.setMonth(date.getMonth() + step);
+  }
+  return next;
+};
+const formatSecondsCompact = (seconds?: number | null) => {
+  if (!seconds || Number.isNaN(seconds)) return '—';
+  const safeSeconds = Math.max(0, Math.round(seconds));
+  const mins = Math.floor(safeSeconds / 60);
+  const secs = safeSeconds % 60;
+  if (mins === 0) return `${secs}s`;
+  return `${mins}m ${secs.toString().padStart(2, '0')}s`;
+};
+const formatAgo = (start?: Date | null) => {
+  if (!start) return '—';
+  const diffMinutes = Math.max(0, Math.floor((Date.now() - start.getTime()) / 60000));
+  if (diffMinutes < 1) return 'Gerade eben';
+  if (diffMinutes < 60) return `${diffMinutes}m`;
+  const hours = Math.floor(diffMinutes / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  return `${days}d`;
+};
+
+const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+const contentWidth = screenWidth - 2 * LAYOUT_PAD;
+const GRID_COLS = 2;
+const GRID_GUTTER = 12;
+const GRID_COL_W = Math.floor((contentWidth - (GRID_COLS - 1) * GRID_GUTTER) / GRID_COLS);
+const INTENSITY_STYLES = {
+  schwach: {
+    background: 'rgba(56,161,105,0.18)',
+    border: 'rgba(56,161,105,0.6)',
+    text: '#2F855A',
+  },
+  mittel: {
+    background: 'rgba(245,166,35,0.18)',
+    border: 'rgba(245,166,35,0.6)',
+    text: '#B4690E',
+  },
+  stark: {
+    background: 'rgba(229,62,62,0.18)',
+    border: 'rgba(229,62,62,0.6)',
+    text: '#C53030',
+  },
+} as const;
 
 export default function HomeScreen() {
   const [contractions, setContractions] = useState<Contraction[]>([]);
@@ -44,12 +112,95 @@ export default function HomeScreen() {
   const [syncInfo, setSyncInfo] = useState<any>(null);
   const [linkedUsers, setLinkedUsers] = useState<any[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const [selectedTab, setSelectedTab] = useState<'day' | 'week' | 'month'>('day');
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [manualModalVisible, setManualModalVisible] = useState(false);
+  const [manualStartTime, setManualStartTime] = useState(new Date());
+  const [manualEndTime, setManualEndTime] = useState(new Date(Date.now() + 60 * 1000));
+  const [manualIntensity, setManualIntensity] = useState<'schwach' | 'mittel' | 'stark' | null>(null);
+  const [showManualStartPicker, setShowManualStartPicker] = useState(false);
+  const [showManualEndPicker, setShowManualEndPicker] = useState(false);
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const { user } = useAuth();
   const appState = useRef(AppState.currentState);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  const selectedRange = useMemo(() => {
+    if (selectedTab === 'week') {
+      return { start: startOfWeek(selectedDate), end: endOfWeek(selectedDate) };
+    }
+    if (selectedTab === 'month') {
+      return { start: startOfMonth(selectedDate), end: endOfMonth(selectedDate) };
+    }
+    return { start: startOfDay(selectedDate), end: endOfDay(selectedDate) };
+  }, [selectedDate, selectedTab]);
+
+  const filteredContractions = useMemo(
+    () =>
+      contractions.filter(
+        (c) => c.startTime >= selectedRange.start && c.startTime < selectedRange.end
+      ),
+    [contractions, selectedRange.start, selectedRange.end]
+  );
+
+  const stats = useMemo(() => {
+    const durations = filteredContractions
+      .map((c) => c.duration)
+      .filter((v): v is number => typeof v === 'number' && v > 0);
+    const intervals = filteredContractions
+      .map((c) => c.interval)
+      .filter((v): v is number => typeof v === 'number' && v > 0);
+
+    const average = (values: number[]) =>
+      values.length ? values.reduce((sum, v) => sum + v, 0) / values.length : 0;
+
+    const last = filteredContractions[0];
+
+    return {
+      count: filteredContractions.length,
+      avgDuration: average(durations),
+      longestDuration: durations.length ? Math.max(...durations) : 0,
+      avgInterval: average(intervals),
+      lastStart: last?.startTime ?? null,
+      lastIntensity: last?.intensity ?? null,
+    };
+  }, [filteredContractions]);
+
+  const nextRangeDisabled = useMemo(() => {
+    const candidate = shiftDateForTab(selectedDate, selectedTab, 1);
+    const candidateStart =
+      selectedTab === 'week'
+        ? startOfWeek(candidate)
+        : selectedTab === 'month'
+          ? startOfMonth(candidate)
+          : startOfDay(candidate);
+    const todayBoundary = endOfDay(startOfDay(new Date()));
+    return candidateStart >= todayBoundary;
+  }, [selectedDate, selectedTab]);
+
+  const rangeTitle =
+    selectedTab === 'week' ? 'Wochenansicht' : selectedTab === 'month' ? 'Monatsansicht' : 'Tagesansicht';
+
+  const rangeSubtitle = useMemo(() => {
+    if (selectedTab === 'week') {
+      const start = startOfWeek(selectedDate);
+      const end = endOfWeek(selectedDate);
+      const displayEnd = new Date(end);
+      displayEnd.setDate(end.getDate() - 1);
+      return `${start.toLocaleDateString('de-DE', { day: '2-digit', month: 'short' })} – ${displayEnd.toLocaleDateString('de-DE', { day: '2-digit', month: 'short' })}`;
+    }
+    if (selectedTab === 'month') {
+      return selectedDate.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' });
+    }
+    return selectedDate.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long' });
+  }, [selectedDate, selectedTab]);
+
+  const changeRange = (direction: 'prev' | 'next') => {
+    if (direction === 'next' && nextRangeDisabled) return;
+    setSelectedDate((prev) => shiftDateForTab(prev, selectedTab, direction === 'next' ? 1 : -1));
+  };
 
   // Hilfsfunktion zur Generierung einer eindeutigen ID
   const generateUniqueId = (): string => {
@@ -641,6 +792,259 @@ export default function HomeScreen() {
     setIsRefreshing(false);
   };
 
+  const openManualModal = () => {
+    const now = new Date();
+    setManualStartTime(now);
+    setManualEndTime(new Date(now.getTime() + 60 * 1000));
+    setManualIntensity(null);
+    setShowManualStartPicker(false);
+    setShowManualEndPicker(false);
+    setManualModalVisible(true);
+  };
+
+  const closeManualModal = () => {
+    setManualModalVisible(false);
+    setShowManualStartPicker(false);
+    setShowManualEndPicker(false);
+  };
+
+  const computeIntervalBefore = (start: Date) => {
+    const previous = [...contractions]
+      .sort((a, b) => b.startTime.getTime() - a.startTime.getTime())
+      .find(c => c.startTime.getTime() < start.getTime());
+    if (!previous) return null;
+    const seconds = Math.floor((start.getTime() - previous.startTime.getTime()) / 1000);
+    return seconds > 0 ? seconds : null;
+  };
+
+  const handleManualSave = async () => {
+    if (!manualEndTime) {
+      Alert.alert('Fehler', 'Bitte wähle eine Endzeit für die Wehe.');
+      return;
+    }
+
+    if (manualEndTime <= manualStartTime) {
+      Alert.alert('Fehler', 'Die Endzeit muss nach der Startzeit liegen.');
+      return;
+    }
+
+    const durationSeconds = Math.max(
+      1,
+      Math.round((manualEndTime.getTime() - manualStartTime.getTime()) / 1000)
+    );
+    const interval = computeIntervalBefore(manualStartTime);
+
+    const manualContraction: Contraction = {
+      id: generateUniqueId(),
+      startTime: manualStartTime,
+      endTime: manualEndTime,
+      duration: durationSeconds,
+      interval,
+      intensity: null,
+    };
+
+    await saveContractionWithIntensity(manualContraction, manualIntensity);
+    closeManualModal();
+    await loadContractions();
+  };
+
+  const TopTabs = () => (
+    <View style={styles.topTabsContainer}>
+      {(['day', 'week', 'month'] as const).map((tab) => (
+        <GlassCard
+          key={tab}
+          style={[styles.topTab, selectedTab === tab && styles.activeTopTab]}
+          intensity={22}
+        >
+          <TouchableOpacity
+            style={styles.topTabInner}
+            onPress={() => setSelectedTab(tab)}
+            activeOpacity={0.85}
+          >
+            <Text style={[styles.topTabText, selectedTab === tab && styles.activeTopTabText]}>
+              {tab === 'day' ? 'Tag' : tab === 'week' ? 'Woche' : 'Monat'}
+            </Text>
+          </TouchableOpacity>
+        </GlassCard>
+      ))}
+    </View>
+  );
+
+  const StatusMetricsBar = () => (
+    <>
+      <View style={styles.kpiRow}>
+        <GlassCard
+          style={styles.kpiCard}
+          intensity={20}
+          overlayColor="rgba(142, 78, 198, 0.1)"
+          borderColor="rgba(142, 78, 198, 0.25)"
+        >
+          <View style={styles.kpiHeaderRow}>
+            <IconSymbol name="waveform.path.ecg" size={12} color="#8E4EC6" />
+            <Text style={styles.kpiTitle}>Wehen</Text>
+          </View>
+          <Text style={[styles.kpiValue, styles.kpiValueCentered]}>{stats.count}</Text>
+        </GlassCard>
+
+        <GlassCard
+          style={styles.kpiCard}
+          intensity={20}
+          overlayColor="rgba(255, 140, 66, 0.1)"
+          borderColor="rgba(255, 140, 66, 0.25)"
+        >
+          <View style={styles.kpiHeaderRow}>
+            <IconSymbol name="timer" size={12} color="#FF8C42" />
+            <Text style={styles.kpiTitle}>Ø Dauer</Text>
+          </View>
+          <Text style={[styles.kpiValue, styles.kpiValueCentered]}>
+            {formatSecondsCompact(stats.avgDuration)}
+          </Text>
+        </GlassCard>
+      </View>
+
+      <View style={styles.kpiRow}>
+        <GlassCard
+          style={styles.kpiCard}
+          intensity={20}
+          overlayColor="rgba(168, 196, 162, 0.1)"
+          borderColor="rgba(168, 196, 162, 0.25)"
+        >
+          <View style={styles.kpiHeaderRow}>
+            <IconSymbol name="clock.fill" size={12} color="#A8C4A2" />
+            <Text style={styles.kpiTitle}>Ø Intervall</Text>
+          </View>
+          <Text style={[styles.kpiValue, styles.kpiValueCentered]}>
+            {formatSecondsCompact(stats.avgInterval)}
+          </Text>
+        </GlassCard>
+
+        <GlassCard
+          style={styles.kpiCard}
+          intensity={20}
+          overlayColor="rgba(255, 155, 155, 0.1)"
+          borderColor="rgba(255, 155, 155, 0.25)"
+        >
+          <View style={styles.kpiHeaderRow}>
+            <IconSymbol name="heart.fill" size={12} color="#FF9B9B" />
+            <Text style={styles.kpiTitle}>Letzte Wehe</Text>
+          </View>
+          <Text style={[styles.kpiValue, styles.kpiValueCentered]}>
+            {formatAgo(stats.lastStart)}
+          </Text>
+        </GlassCard>
+      </View>
+    </>
+  );
+
+  const RangeNavigation = () => (
+    <View style={styles.weekNavigationContainer}>
+      <TouchableOpacity style={styles.weekNavButton} onPress={() => changeRange('prev')} activeOpacity={0.85}>
+        <ThemedText style={styles.weekNavButtonText}>‹</ThemedText>
+      </TouchableOpacity>
+      <View style={styles.weekHeaderCenter}>
+        <ThemedText style={styles.weekHeaderTitle}>{rangeTitle}</ThemedText>
+        <ThemedText style={styles.weekHeaderSubtitle}>{rangeSubtitle}</ThemedText>
+      </View>
+      <TouchableOpacity
+        style={[styles.weekNavButton, nextRangeDisabled && { opacity: 0.4 }]}
+        onPress={() => changeRange('next')}
+        disabled={nextRangeDisabled}
+        activeOpacity={0.85}
+      >
+        <ThemedText style={styles.weekNavButtonText}>›</ThemedText>
+      </TouchableOpacity>
+    </View>
+  );
+
+  const ActionButtons = () => (
+    <View style={styles.cardsGrid}>
+      {timerRunning ? (
+        <TouchableOpacity
+          style={styles.fullWidthStopButton}
+          onPress={stopContraction}
+          activeOpacity={0.9}
+        >
+          <BlurView intensity={24} tint="light" style={styles.liquidGlassCardBackground}>
+            <View
+              style={[
+                styles.card,
+                styles.liquidGlassCard,
+                { backgroundColor: 'rgba(255, 190, 190, 0.6)', borderColor: 'rgba(255, 255, 255, 0.6)' },
+              ]}
+            >
+              <View
+                style={[
+                  styles.iconContainer,
+                  { backgroundColor: 'rgba(255, 140, 160, 0.9)' },
+                ]}
+              >
+                <IconSymbol name="stop.fill" size={28} color="#FFFFFF" />
+              </View>
+              <Text style={styles.cardTitle}>Wehe beenden</Text>
+              <Text style={styles.cardDescription}>Timer stoppen</Text>
+            </View>
+          </BlurView>
+        </TouchableOpacity>
+      ) : (
+        <>
+          <TouchableOpacity
+            style={[styles.liquidGlassCardWrapper, { width: GRID_COL_W, marginRight: GRID_GUTTER }]}
+            onPress={startContraction}
+            activeOpacity={0.9}
+          >
+            <BlurView intensity={24} tint="light" style={styles.liquidGlassCardBackground}>
+              <View
+                style={[
+                  styles.card,
+                  styles.liquidGlassCard,
+                  { backgroundColor: 'rgba(220, 200, 255, 0.6)', borderColor: 'rgba(255, 255, 255, 0.6)' },
+                ]}
+              >
+                <View
+                  style={[
+                    styles.iconContainer,
+                    { backgroundColor: 'rgba(142, 78, 198, 0.9)' },
+                  ]}
+                >
+                  <IconSymbol name="waveform.path.ecg" size={28} color="#FFFFFF" />
+                </View>
+                <Text style={styles.cardTitle}>Wehe starten</Text>
+                <Text style={styles.cardDescription}>Timer beginnen</Text>
+              </View>
+            </BlurView>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.liquidGlassCardWrapper, { width: GRID_COL_W }]}
+            onPress={openManualModal}
+            activeOpacity={0.9}
+          >
+            <BlurView intensity={24} tint="light" style={styles.liquidGlassCardBackground}>
+              <View
+                style={[
+                  styles.card,
+                  styles.liquidGlassCard,
+                  { backgroundColor: 'rgba(168, 196, 193, 0.6)', borderColor: 'rgba(255, 255, 255, 0.6)' },
+                ]}
+              >
+                <View
+                  style={[
+                    styles.iconContainer,
+                    { backgroundColor: 'rgba(168, 196, 193, 0.9)' },
+                  ]}
+                >
+                  <IconSymbol name="plus.circle.fill" size={28} color="#FFFFFF" />
+                </View>
+                <Text style={styles.cardTitle}>Manuell</Text>
+                <Text style={styles.cardDescription}>Eintrag hinzufügen</Text>
+              </View>
+            </BlurView>
+          </TouchableOpacity>
+        </>
+      )}
+    </View>
+  );
+
   return (
     <ThemedBackground style={styles.background}>
       <SafeAreaView style={styles.safeArea}>
@@ -672,14 +1076,17 @@ export default function HomeScreen() {
           )}
           
           <View style={styles.container}>
-            <LiquidGlassCard style={[styles.timerGlass, styles.fullWidthCard]} intensity={26} overlayColor={GLASS_OVERLAY}>
+            <TopTabs />
+            <StatusMetricsBar />
+            <RangeNavigation />
+
+            <View style={[styles.timerWrapper, styles.fullWidthCard]}>
               <View style={styles.centralTimerContainer}>
                 <Animated.View style={[styles.centralContainer, { transform: [{ scale: pulseAnim }] }]}>
                   {(() => {
-                    const { width: screenWidth } = Dimensions.get('window');
-                    const ringSize = Math.min(screenWidth * 0.82, 380);
-                    const circleSize = Math.round(ringSize * 0.87);
-                    const progress = timerRunning ? Math.min((elapsedTime / 120) * 100, 100) : 0; // 120s Ziel
+                    const ringSize = screenWidth * 0.75;
+                    const circleSize = Math.round(ringSize * 0.8);
+                    const progress = timerRunning ? Math.min((elapsedTime / 120) * 100, 100) : 0;
                     return (
                       <View style={[styles.circleArea, { width: circleSize, height: circleSize, borderRadius: circleSize / 2 }]}>
                         <View style={[styles.glassCircle, { width: circleSize, height: circleSize, borderRadius: circleSize / 2 }]}>
@@ -700,68 +1107,58 @@ export default function HomeScreen() {
                         </View>
 
                         <View pointerEvents="none" style={styles.centerOverlay}>
-                          <ThemedText style={[styles.centralTime, { color: '#6B4C3B', fontWeight: '800' }]}>
+                          <Text style={[styles.centralTime, { color: '#6B4C3B', fontWeight: '800' }]}>
                             {formatTime(elapsedTime)}
-                          </ThemedText>
+                          </Text>
                         </View>
 
                         <View pointerEvents="none" style={styles.upperContent}>
-                          <View style={[styles.centralIcon, { backgroundColor: timerRunning ? 'rgba(135,206,235,0.9)' : 'rgba(168,196,193,0.9)', borderRadius: 30, padding: 8, borderWidth: 2, borderColor: 'rgba(255,255,255,0.6)' }]}>
+                          <View
+                            style={[
+                              styles.centralIcon,
+                              {
+                                backgroundColor: timerRunning ? 'rgba(135, 206, 235, 0.9)' : 'rgba(255, 140, 66, 0.9)',
+                                borderRadius: 30,
+                                padding: 8,
+                                borderWidth: 2,
+                                borderColor: 'rgba(255,255,255,0.6)',
+                                shadowColor: 'rgba(255, 255, 255, 0.3)',
+                                shadowOffset: { width: 0, height: 1 },
+                                shadowOpacity: 0.12,
+                                shadowRadius: 2,
+                                elevation: 4,
+                              },
+                            ]}
+                          >
                             <IconSymbol name={timerRunning ? 'waveform.path.ecg' : 'heart.fill'} size={28} color="#FFFFFF" />
                           </View>
                         </View>
 
                         <View pointerEvents="none" style={styles.lowerContent}>
-                          <ThemedText style={[styles.centralStatus, { color: '#6B4C3B', fontWeight: '700' }]}>
+                          <Text style={[styles.centralStatus, { color: '#6B4C3B', fontWeight: '700' }]}>
                             {timerRunning ? 'Wehe läuft' : 'Bereit'}
-                          </ThemedText>
-                          <ThemedText style={[styles.centralHint, { color: '#7D5A50', fontWeight: '500' }]}>
-                            {timerRunning ? 'Timer läuft auch im Hintergrund weiter' : 'Tippe unten, um eine neue Wehe zu starten'}
-                          </ThemedText>
+                          </Text>
+                          {timerRunning ? (
+                            <Text style={[styles.centralHint, { color: '#7D5A50', fontWeight: '500' }]}>
+                              Timer läuft auch im Hintergrund weiter
+                            </Text>
+                          ) : (
+                            <Text style={[styles.centralHint, { color: '#7D5A50', fontWeight: '500' }]}>
+                              Tippe unten, um eine neue Wehe zu starten
+                            </Text>
+                          )}
                         </View>
                       </View>
                     );
                   })()}
                 </Animated.View>
               </View>
-            
-              {/* Action Button(s) im Sleep‑Stil */}
-              <View style={styles.actionsRow}>
-                {!timerRunning ? (
-                  <LiquidGlassCard
-                    style={styles.actionCard}
-                    intensity={24}
-                    overlayColor={'rgba(142,78,198,0.32)'}
-                    borderColor={'rgba(255,255,255,0.7)'}
-                    onPress={startContraction}
-                  >
-                    <View style={styles.actionCardInner}>
-                      <View style={[styles.actionIcon, { backgroundColor: 'rgba(142,78,198,0.9)' }]}>
-                        <IconSymbol name="waveform.path.ecg" size={24} color="#FFFFFF" />
-                      </View>
-                      <ThemedText style={styles.actionTitle}>Wehe starten</ThemedText>
-                      <ThemedText style={styles.actionDesc}>Timer beginnen</ThemedText>
-                    </View>
-                  </LiquidGlassCard>
-                ) : (
-                  <LiquidGlassCard
-                    style={styles.actionCard}
-                    intensity={24}
-                    overlayColor={'rgba(255,155,155,0.32)'}
-                    borderColor={'rgba(255,255,255,0.7)'}
-                    onPress={stopContraction}
-                  >
-                    <View style={styles.actionCardInner}>
-                      <View style={[styles.actionIcon, { backgroundColor: 'rgba(255, 140, 160, 0.9)' }]}>
-                        <IconSymbol name="stop.fill" size={24} color="#FFFFFF" />
-                      </View>
-                      <ThemedText style={styles.actionTitle}>Wehe beenden</ThemedText>
-                      <ThemedText style={styles.actionDesc}>Timer stoppen</ThemedText>
-                    </View>
-                  </LiquidGlassCard>
-                )}
-              </View>
-            </LiquidGlassCard>
+            </View>
+
+            <View style={styles.captureSection}>
+              <Text style={styles.sectionTitle}>Wehenerfassung</Text>
+              <ActionButtons />
+            </View>
 
             <View style={styles.historySection}>
               <View style={[styles.historyHeader, styles.fullWidthCard] }>
@@ -771,7 +1168,7 @@ export default function HomeScreen() {
                   lightColor="#5C4033"
                   darkColor="#F2E6DD"
                 >
-                  Wehen Verlauf
+                  Wehenverlauf
                 </ThemedText>
               </View>
 
@@ -785,9 +1182,9 @@ export default function HomeScreen() {
                 </LiquidGlassCard>
               )}
 
-              {!isLoading && contractions.length > 0 && (
+              {!isLoading && filteredContractions.length > 0 && (
                 <VerticalContractionTimeline
-                  contractions={contractions}
+                  contractions={filteredContractions}
                   lightColor="rgba(255, 255, 255, 0.8)"
                   darkColor="rgba(50, 50, 50, 0.8)"
                   onDelete={handleDeleteContraction}
@@ -805,11 +1202,11 @@ export default function HomeScreen() {
                     </ThemedText>
                   </View>
                 </LiquidGlassCard>
-              ) : contractions.length === 0 ? (
+              ) : filteredContractions.length === 0 ? (
                 <LiquidGlassCard style={[styles.emptyGlass, styles.fullWidthCard]} intensity={26} overlayColor={GLASS_OVERLAY}>
                   <View style={styles.emptyInner}>
                     <ThemedText lightColor={theme.text} darkColor={theme.text}>
-                      Noch keine Wehen aufgezeichnet
+                      Noch keine Wehen im Zeitraum aufgezeichnet
                     </ThemedText>
                   </View>
                 </LiquidGlassCard>
@@ -817,6 +1214,149 @@ export default function HomeScreen() {
             </View>
           </View>
         </ScrollView>
+        {manualModalVisible && (
+          <Modal
+            visible={manualModalVisible}
+            transparent
+            animationType="fade"
+            onRequestClose={closeManualModal}
+          >
+            <View style={styles.manualModalOverlay}>
+              <TouchableOpacity style={StyleSheet.absoluteFill} onPress={closeManualModal} />
+              <BlurView intensity={80} tint="extraLight" style={styles.manualModalCard}>
+                <View style={styles.manualHeader}>
+                  <TouchableOpacity style={styles.manualHeaderButton} onPress={closeManualModal}>
+                    <Text style={styles.manualHeaderButtonText}>✕</Text>
+                  </TouchableOpacity>
+                  <View style={styles.manualHeaderCenter}>
+                    <Text style={styles.manualTitle}>Manuelle Wehe</Text>
+                    <Text style={styles.manualSubtitle}>Trage Start- und Endzeit ein</Text>
+                  </View>
+                  <TouchableOpacity style={[styles.manualHeaderButton, styles.manualSaveButton]} onPress={handleManualSave}>
+                    <Text style={styles.manualSaveButtonText}>✓</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <ScrollView style={styles.manualScroll} showsVerticalScrollIndicator={false}>
+                  <View style={styles.manualContent}>
+                    <View style={styles.manualSection}>
+                      <Text style={styles.manualSectionTitle}>⏰ Zeitraum</Text>
+                      <View style={styles.manualTimeRow}>
+                        <TouchableOpacity
+                          style={styles.manualTimeButton}
+                          onPress={() => setShowManualStartPicker(true)}
+                        >
+                          <Text style={styles.manualTimeLabel}>Start</Text>
+                          <Text style={styles.manualTimeValue}>
+                            {manualStartTime.toLocaleString('de-DE', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              day: '2-digit',
+                              month: '2-digit',
+                            })}
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.manualTimeButton}
+                          onPress={() => setShowManualEndPicker(true)}
+                        >
+                          <Text style={styles.manualTimeLabel}>Ende</Text>
+                          <Text style={styles.manualTimeValue}>
+                            {manualEndTime.toLocaleString('de-DE', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              day: '2-digit',
+                              month: '2-digit',
+                            })}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+
+                      {showManualStartPicker && (
+                        <View style={styles.manualPickerContainer}>
+                          <DateTimePicker
+                            value={manualStartTime}
+                            mode="datetime"
+                            display={Platform.OS === 'ios' ? 'compact' : 'default'}
+                            onChange={(_, date) => {
+                              if (date) {
+                                setManualStartTime(date);
+                                if (manualEndTime <= date) {
+                                  setManualEndTime(new Date(date.getTime() + 60 * 1000));
+                                }
+                              }
+                            }}
+                            style={styles.manualPicker}
+                          />
+                          <TouchableOpacity
+                            style={styles.manualPickerDone}
+                            onPress={() => setShowManualStartPicker(false)}
+                          >
+                            <Text style={styles.manualPickerDoneText}>Fertig</Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
+
+                      {showManualEndPicker && (
+                        <View style={styles.manualPickerContainer}>
+                          <DateTimePicker
+                            value={manualEndTime}
+                            mode="datetime"
+                            display={Platform.OS === 'ios' ? 'compact' : 'default'}
+                            onChange={(_, date) => {
+                              if (date) {
+                                if (date <= manualStartTime) {
+                                  Alert.alert('Hinweis', 'Die Endzeit muss nach der Startzeit liegen.');
+                                } else {
+                                  setManualEndTime(date);
+                                }
+                              }
+                            }}
+                            style={styles.manualPicker}
+                          />
+                          <TouchableOpacity
+                            style={styles.manualPickerDone}
+                            onPress={() => setShowManualEndPicker(false)}
+                          >
+                            <Text style={styles.manualPickerDoneText}>Fertig</Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
+                    </View>
+
+                    <View style={styles.manualSection}>
+                      <Text style={styles.manualSectionTitle}>💪 Intensität</Text>
+                      <View style={styles.manualIntensityRow}>
+                        {(['schwach', 'mittel', 'stark'] as const).map(level => (
+                          <TouchableOpacity
+                            key={level}
+                            style={[
+                              styles.intensityPill,
+                              manualIntensity === level && {
+                                backgroundColor: INTENSITY_STYLES[level].background,
+                                borderColor: INTENSITY_STYLES[level].border,
+                              },
+                            ]}
+                            onPress={() => setManualIntensity(level)}
+                          >
+                            <Text
+                              style={[
+                                styles.intensityPillText,
+                                manualIntensity === level && { color: INTENSITY_STYLES[level].text },
+                              ]}
+                            >
+                              {level === 'schwach' ? 'Schwach' : level === 'mittel' ? 'Mittel' : 'Stark'}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </View>
+                  </View>
+                </ScrollView>
+              </BlurView>
+            </View>
+          </Modal>
+        )}
       </SafeAreaView>
     </ThemedBackground>
   );
@@ -873,9 +1413,74 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  topTabsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 10,
+    marginTop: 6,
+    marginBottom: 0,
+    alignSelf: 'center',
+    width: contentWidth,
+  },
+  topTab: {
+    borderRadius: 20,
+    overflow: 'hidden',
+    borderWidth: 1,
+  },
+  topTabInner: { paddingHorizontal: 18, paddingVertical: 6 },
+  activeTopTab: { borderColor: 'rgba(94,61,179,0.65)' },
+  topTabText: { fontSize: 13, fontWeight: '700', color: '#7D5A50' },
+  activeTopTabText: { color: PRIMARY },
+  kpiRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignSelf: 'center',
+    width: contentWidth,
+    marginTop: 6,
+    marginBottom: 4,
+  },
+  kpiCard: {
+    width: '48%',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    overflow: 'hidden',
+    minHeight: 64,
+  },
+  kpiHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 3,
+  },
+  kpiTitle: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#7D5A50',
+    marginLeft: 4,
+  },
+  kpiValue: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: PRIMARY,
+    marginTop: 1,
+    letterSpacing: -0.5,
+    fontVariant: ['tabular-nums'],
+  },
+  kpiValueCentered: {
+    textAlign: 'center',
+    width: '100%',
+  },
+  kpiSub: {
+    marginTop: 2,
+    fontSize: 9,
+    color: '#7D5A50',
+    textAlign: 'center',
+    opacity: 0.8,
+  },
   scrollView: {
-    paddingBottom: 40,
-    paddingTop: 30, // Add more padding at the top for better visibility
+    paddingBottom: 140,
+    paddingTop: 0,
     paddingHorizontal: LAYOUT_PAD,
   },
   header: {
@@ -894,11 +1499,49 @@ const styles = StyleSheet.create({
     opacity: 0.8,
     fontStyle: 'italic',
   },
-  timerGlass: {
+  weekNavigationContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: SECTION_GAP_TOP,
+    marginBottom: SECTION_GAP_BOTTOM,
+    paddingHorizontal: LAYOUT_PAD,
+  },
+  weekNavButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    padding: 6,
+  },
+  weekNavButtonText: {
+    fontSize: 24,
+    color: '#8E4EC6',
+    fontWeight: 'bold',
+  },
+  weekHeaderCenter: {
+    flex: 1,
+    alignItems: 'center',
+    marginHorizontal: 16,
+  },
+  weekHeaderTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#7D5A50',
+    marginBottom: 4,
+  },
+  weekHeaderSubtitle: {
+    fontSize: 12,
+    color: '#7D5A50',
+    textAlign: 'center',
+  },
+  timerWrapper: {
     alignItems: 'center',
     marginBottom: 10,
-    borderRadius: RADIUS,
-    overflow: 'hidden',
   },
   // Central timer styles (align with sleep-tracker)
   centralTimerContainer: {
@@ -986,17 +1629,19 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
     textAlign: 'center',
     lineHeight: 32,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
     textAlignVertical: 'center',
     includeFontPadding: false,
     fontVariant: ['tabular-nums'],
   },
   centralHint: {
-    fontSize: 11,
+    fontSize: 12,
     textAlign: 'center',
-    lineHeight: 11,
-    maxWidth: 220,
+    lineHeight: 16,
+    maxWidth: 200,
     textAlignVertical: 'center',
     includeFontPadding: false,
+    marginTop: 2,
   },
   timerDisplay: {
     marginVertical: 25, // More vertical margin
@@ -1034,64 +1679,74 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   // Neuer Glass-Button
-  glassButton: {
-    alignSelf: 'center',
-    marginHorizontal: 16, // Abstand zu den Card-Rändern
-    marginTop: 6,
-    marginBottom: 10,
-    borderRadius: 28,
-    overflow: 'hidden',
-    minWidth: 240,
+  captureSection: {
+    alignItems: 'center',
+    marginTop: SECTION_GAP_TOP,
+    marginBottom: SECTION_GAP_BOTTOM,
   },
-  actionsRow: {
-    marginHorizontal: TIMELINE_INSET,
-    marginTop: 10,
+  sectionTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#7D5A50',
+    textAlign: 'center',
     marginBottom: 8,
-    alignItems: 'center',
+    letterSpacing: -0.1,
   },
-  actionCard: {
-    borderRadius: RADIUS,
-    overflow: 'hidden',
-    width: '100%',
-  },
-  actionCardInner: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 12,
-    minHeight: 96,
-  },
-  actionIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 8,
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.6)'
-  },
-  actionTitle: { fontSize: 15, fontWeight: '800', color: '#7D5A50' },
-  actionDesc: { fontSize: 12, opacity: 0.9, color: '#7D5A50' },
-  glassButtonInner: {
-    paddingVertical: 14,
-    paddingHorizontal: 22,
+  cardsGrid: {
     flexDirection: 'row',
+    alignSelf: 'center',
+    width: contentWidth,
+    marginBottom: 4,
+  },
+  liquidGlassCardWrapper: {
+    marginBottom: 16,
+    borderRadius: 22,
+    overflow: 'hidden',
+  },
+  fullWidthStopButton: {
+    width: '100%',
+    borderRadius: 22,
+    overflow: 'hidden',
+    marginBottom: 16,
+  },
+  liquidGlassCardBackground: {
+    borderRadius: 22,
+    overflow: 'hidden',
+  },
+  card: {
+    borderRadius: 22,
+    padding: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
+    minHeight: 128,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.6)',
+    shadowColor: 'rgba(255, 255, 255, 0.3)',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 5,
   },
-  glassButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '800',
-    fontSize: 18,
-    letterSpacing: 0.3,
+  liquidGlassCard: {
+    backgroundColor: 'transparent',
   },
-  buttonText: {
-    color: 'white',
-    fontWeight: 'bold',
-    fontSize: 20, // Larger text
-    letterSpacing: 0.5,
+  iconContainer: {
+    width: 54,
+    height: 54,
+    borderRadius: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 10,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.6)',
+    shadowColor: 'rgba(255, 255, 255, 0.3)',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.12,
+    shadowRadius: 2,
+    elevation: 4,
   },
+  cardTitle: { fontSize: 15, fontWeight: '700', color: '#7D5A50' },
+  cardDescription: { fontSize: 12, fontWeight: '500', color: '#7D5A50', opacity: 0.9 },
   historySection: {
     marginTop: 30, // More margin
   },
@@ -1243,5 +1898,141 @@ const styles = StyleSheet.create({
   },
   syncingText: {
     marginLeft: 10,
+  },
+  manualModalOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+  },
+  manualModalCard: {
+    width: '100%',
+    borderRadius: 28,
+    overflow: 'hidden',
+  },
+  manualHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 18,
+    paddingBottom: 12,
+  },
+  manualHeaderButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.25)',
+  },
+  manualHeaderButtonText: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#7D5A50',
+  },
+  manualHeaderCenter: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+  },
+  manualTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#7D5A50',
+  },
+  manualSubtitle: {
+    fontSize: 12,
+    color: '#7D5A50',
+    opacity: 0.8,
+  },
+  manualSaveButton: {
+    backgroundColor: '#8E4EC6',
+  },
+  manualSaveButtonText: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  manualScroll: {
+    maxHeight: screenHeight * 0.6,
+  },
+  manualContent: {
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+  },
+  manualSection: {
+    marginBottom: 20,
+  },
+  manualSectionTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#7D5A50',
+    marginBottom: 10,
+  },
+  manualTimeRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  manualTimeButton: {
+    flex: 1,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.6)',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+  },
+  manualTimeLabel: {
+    fontSize: 11,
+    color: '#7D5A50',
+    marginBottom: 4,
+  },
+  manualTimeValue: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#7D5A50',
+  },
+  manualPickerContainer: {
+    marginTop: 12,
+    borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  manualPicker: {
+    width: '100%',
+  },
+  manualPickerDone: {
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+  manualPickerDoneText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#7D5A50',
+  },
+  manualIntensityRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  intensityPill: {
+    flex: 1,
+    borderRadius: 20,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.6)',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  intensityPillText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#7D5A50',
   },
 });

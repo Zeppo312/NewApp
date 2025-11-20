@@ -19,7 +19,8 @@ const DEEP_TEXT = '#5C4033';
 const SOFT_CARD_BG = 'rgba(255, 246, 237, 0.88)';
 const SOFT_BORDER = 'rgba(255,255,255,0.65)';
 const TIP_ICON = '#B896FF';
-const BADGE_TINT = 'rgba(255,255,255,0.92)';
+const BADGE_TINT = 'rgba(142, 78, 198, 0.14)';
+const BADGE_BORDER = 'rgba(142, 78, 198, 0.35)';
 
 const deduplicateChecklist = (items: ChecklistItem[]) => {
   const seen = new Set<string>();
@@ -309,15 +310,23 @@ export default function TabTwoScreen() {
                   Deine Liste wächst mit dir – hake ab, ergänze und bleib entspannt.
                 </ThemedText>
                 <View style={styles.summaryBadges}>
-                  <View style={[styles.summaryBadge, { backgroundColor: BADGE_TINT, borderColor: SOFT_BORDER }]}>
-                    <IconSymbol name="doc.text" size={16} color={DEEP_TEXT} />
-                    <ThemedText style={styles.summaryBadgeText} lightColor={DEEP_TEXT}>
+                  <View style={[styles.summaryBadge, { backgroundColor: BADGE_TINT, borderColor: BADGE_BORDER }]}>
+                    <IconSymbol name="doc.text" size={16} color={PRIMARY} />
+                    <ThemedText
+                      style={styles.summaryBadgeText}
+                      lightColor={PRIMARY}
+                      darkColor={PRIMARY}
+                    >
                       {totalCategories} Kategorien
                     </ThemedText>
                   </View>
-                  <View style={[styles.summaryBadge, { backgroundColor: BADGE_TINT, borderColor: SOFT_BORDER }]}>
-                    <IconSymbol name="checkmark.seal.fill" size={16} color={DEEP_TEXT} />
-                    <ThemedText style={styles.summaryBadgeText} lightColor={DEEP_TEXT}>
+                  <View style={[styles.summaryBadge, { backgroundColor: BADGE_TINT, borderColor: BADGE_BORDER }]}>
+                    <IconSymbol name="checkmark.seal.fill" size={16} color={PRIMARY} />
+                    <ThemedText
+                      style={styles.summaryBadgeText}
+                      lightColor={PRIMARY}
+                      darkColor={PRIMARY}
+                    >
                       {checkedItems}/{totalItems || 0} erledigt
                     </ThemedText>
                   </View>

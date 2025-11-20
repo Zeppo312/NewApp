@@ -21,7 +21,7 @@ import { ThemedBackground } from '@/components/ThemedBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/contexts/AuthContext';
-import { LiquidGlassCard, LAYOUT_PAD, TIMELINE_INSET, TEXT_PRIMARY, GLASS_BORDER } from '@/constants/DesignGuide';
+import { LiquidGlassCard, LAYOUT_PAD, TIMELINE_INSET, TEXT_PRIMARY, GLASS_BORDER, PRIMARY } from '@/constants/DesignGuide';
 import { supabase, updateDueDateAndSync } from '@/lib/supabase';
 
 type PregnancyStats = {
@@ -55,6 +55,9 @@ const pastelPalette = {
   sky: 'rgba(222, 238, 255, 0.85)',
   blush: 'rgba(255, 218, 230, 0.8)',
 };
+
+const PURPLE_GLASS = 'rgba(142, 78, 198, 0.22)';
+const PURPLE_GLASS_LIGHT = 'rgba(142, 78, 198, 0.12)';
 
 const GlassLayer = ({
   tint = 'rgba(255,255,255,0.22)',
@@ -402,7 +405,7 @@ export default function PregnancyStatsScreen() {
                             />
                             <Path
                               d={getArcPath(stats.progress)}
-                              stroke="#7D5A50"
+                              stroke={PRIMARY}
                               strokeWidth="6"
                               fill="transparent"
                               strokeLinecap="round"
@@ -413,7 +416,7 @@ export default function PregnancyStatsScreen() {
                                 y="48"
                                 fontSize="22"
                                 textAnchor="middle"
-                                fill="#5D4037"
+                                fill={PRIMARY}
                                 fontWeight="bold"
                               >
                                 {(stats.progress * 100).toFixed(1).replace('.', ',')}
@@ -423,7 +426,7 @@ export default function PregnancyStatsScreen() {
                                 y="64"
                                 fontSize="14"
                                 textAnchor="middle"
-                                fill="#5D4037"
+                                fill={PRIMARY}
                               >
                                 %
                               </SvgText>
@@ -431,7 +434,7 @@ export default function PregnancyStatsScreen() {
                           </Svg>
                         </View>
                         <View style={styles.progressTextBlock}>
-                          <ThemedText style={styles.progressHeadline}>Deine Schwangerschaft</ThemedText>
+                          <ThemedText style={styles.progressHeadline}>Deine Reise</ThemedText>
                           <ThemedText style={styles.progressSubtext}>Noch {stats.daysLeft} Tage bis EGT</ThemedText>
                           <ThemedText style={styles.progressSubtext}>{stats.daysPregnant} Tage seit Beginn</ThemedText>
                         </View>
@@ -442,7 +445,7 @@ export default function PregnancyStatsScreen() {
                             key={index}
                             name={index < Math.round(stats.progress * 10) ? 'heart.fill' : 'heart'}
                             size={18}
-                            color="#7D5A50"
+                            color={PRIMARY}
                             style={styles.heartIcon}
                           />
                         ))}
@@ -460,10 +463,10 @@ export default function PregnancyStatsScreen() {
                       activeOpacity={0.9}
                     >
                       <View style={[styles.dueDateDisplay, styles.glassSurface]}>
-                        <GlassLayer tint={pastelPalette.peach} sheenOpacity={0.22} />
+                        <GlassLayer tint={PURPLE_GLASS} sheenOpacity={0.26} />
                         <View style={styles.dueDateRow}>
                           <View style={styles.dueDateIconWrap}>
-                            <IconSymbol name="calendar" size={20} color="#C17055" />
+                            <IconSymbol name="calendar" size={20} color={PRIMARY} />
                           </View>
                           <ThemedText style={styles.dueDateValue}>
                             {dueDate.toLocaleDateString('de-DE', {
@@ -475,7 +478,7 @@ export default function PregnancyStatsScreen() {
                         </View>
                       </View>
                       <View style={styles.editHintContainer}>
-                        <IconSymbol name="pencil" size={14} color="#7D5A50" style={{ marginRight: 6, opacity: 0.7 }} />
+                        <IconSymbol name="pencil" size={14} color={TEXT_PRIMARY} style={{ marginRight: 6, opacity: 0.7 }} />
                         <ThemedText style={styles.editHint}>Tippen zum Ändern</ThemedText>
                       </View>
                     </TouchableOpacity>
@@ -542,7 +545,7 @@ export default function PregnancyStatsScreen() {
                         <View style={styles.pickerHeader}>
                           <ThemedText style={styles.pickerTitle}>Geburtstermin auswählen</ThemedText>
                           <TouchableOpacity onPress={() => setShowDatePicker(false)}>
-                            <IconSymbol name="xmark.circle.fill" size={28} color="#7D5A50" style={{ opacity: 0.8 }} />
+                            <IconSymbol name="xmark.circle.fill" size={28} color={PRIMARY} style={{ opacity: 0.9 }} />
                           </TouchableOpacity>
                         </View>
                         <View style={styles.pickerContainer}>
@@ -553,7 +556,7 @@ export default function PregnancyStatsScreen() {
                             onChange={handleDateChange}
                             minimumDate={new Date()}
                             maximumDate={new Date(Date.now() + 1000 * 60 * 60 * 24 * 280)}
-                            textColor="#5D4037"
+                            textColor={TEXT_PRIMARY}
                           />
                         </View>
                         <TouchableOpacity style={styles.confirmButton} onPress={confirmIOSDate}>
@@ -689,8 +692,8 @@ const styles = StyleSheet.create({
   },
   dueDateDisplay: {
     width: '100%',
-    paddingVertical: 14,
-    paddingHorizontal: 18,
+    paddingVertical: 20,
+    paddingHorizontal: 22,
     borderRadius: 20,
     marginBottom: 8,
   },
@@ -704,7 +707,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.8)',
+    backgroundColor: PURPLE_GLASS_LIGHT,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -715,6 +718,7 @@ const styles = StyleSheet.create({
     color: TEXT_PRIMARY,
     flexShrink: 1,
     textAlign: 'center',
+    lineHeight: 34,
   },
   editHintContainer: {
     flexDirection: 'row',
@@ -829,18 +833,18 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
   },
   modalView: {
-    backgroundColor: '#F8F4ED',
-    padding: 20,
-    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    padding: 22,
+    borderRadius: 24,
     width: '90%',
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
     elevation: 15,
     borderWidth: 1,
-    borderColor: 'rgba(125, 90, 80, 0.25)',
+    borderColor: 'rgba(142,78,198,0.25)',
   },
   pickerHeader: {
     flexDirection: 'row',
@@ -850,12 +854,12 @@ const styles = StyleSheet.create({
     paddingBottom: 15,
     marginBottom: 10,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(125, 90, 80, 0.15)',
+    borderBottomColor: 'rgba(142,78,198,0.2)',
   },
   pickerTitle: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#7D5A50',
+    color: TEXT_PRIMARY,
   },
   pickerContainer: {
     width: '100%',
@@ -864,10 +868,10 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     marginVertical: 15,
     borderWidth: 1,
-    borderColor: '#E2D9D0',
+    borderColor: 'rgba(142,78,198,0.25)',
   },
   confirmButton: {
-    backgroundColor: '#7D5A50',
+    backgroundColor: PRIMARY,
     padding: 14,
     borderRadius: 30,
     width: '100%',
@@ -875,7 +879,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
+    shadowOpacity: 0.2,
     shadowRadius: 5,
     elevation: 5,
   },

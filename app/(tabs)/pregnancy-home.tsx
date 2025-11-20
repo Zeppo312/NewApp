@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, View, SafeAreaView, StatusBar, TouchableOpacity, ScrollView, ActivityIndicator, Alert, RefreshControl, Platform, ToastAndroid, Animated, Text } from 'react-native';
+import { StyleSheet, View, SafeAreaView, StatusBar, TouchableOpacity, ScrollView, ActivityIndicator, Alert, RefreshControl, Platform, ToastAndroid, Animated, Text, Image } from 'react-native';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { ThemedText } from '@/components/ThemedText';
@@ -68,6 +68,7 @@ export default function PregnancyHomeScreen() {
   const [dueDate, setDueDate] = useState<Date | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [userName, setUserName] = useState('');
+  const [profileAvatarUrl, setProfileAvatarUrl] = useState<string | null>(null);
   const [currentWeek, setCurrentWeek] = useState<number | null>(null);
   const [currentDay, setCurrentDay] = useState<number | null>(null);
   const [debugCounter, setDebugCounter] = useState<number>(0);
@@ -273,7 +274,7 @@ export default function PregnancyHomeScreen() {
       // Benutzername laden
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select('first_name')
+        .select('first_name, avatar_url')
         .eq('id', user?.id)
         .single();
 
@@ -281,6 +282,7 @@ export default function PregnancyHomeScreen() {
       if (profileData) {
         setUserName(profileData.first_name || '');
       }
+      setProfileAvatarUrl(profileData?.avatar_url || null);
 
       // Entbindungstermin laden
       const result = await getDueDateWithLinkedUsers(user?.id || '');
@@ -426,9 +428,15 @@ export default function PregnancyHomeScreen() {
                   </View>
 
                   {user && (
-                    <View style={[styles.profileImage, styles.liquidGlassProfilePlaceholder]}>
-                      <IconSymbol name="person.fill" size={30} color="#FFFFFF" />
-                    </View>
+                    profileAvatarUrl ? (
+                      <View style={styles.profileImage}>
+                        <Image source={{ uri: profileAvatarUrl }} style={styles.profileAvatarImage} />
+                      </View>
+                    ) : (
+                      <View style={[styles.profileImage, styles.liquidGlassProfilePlaceholder]}>
+                        <IconSymbol name="person.fill" size={30} color="#FFFFFF" />
+                      </View>
+                    )
                   )}
                 </View>
 
@@ -834,10 +842,17 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.3)',
     justifyContent: 'center',
     alignItems: 'center',
+    overflow: 'hidden',
   },
   liquidGlassProfilePlaceholder: {
     backgroundColor: 'rgba(125, 90, 80, 0.8)',
     borderColor: 'rgba(125, 90, 80, 0.6)',
+  },
+  profileAvatarImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+    borderRadius: 32,
   },
 
   // Tip Container - Enhanced Liquid Glass
