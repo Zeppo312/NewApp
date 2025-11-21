@@ -51,8 +51,6 @@ const MAX_WEEK = babySizeData[babySizeData.length - 1]?.week ?? 40;
 
 const clampWeek = (week: number) => Math.min(Math.max(week, 1), MAX_WEEK);
 
-const HERO_WEEK_LABEL = 'Schwangerschafts\u00ADwoche'; // Soft hyphen to allow wrapping
-
 const deriveWeekFromDueDate = (dueDate: Date) => {
   const now = new Date();
   now.setHours(0, 0, 0, 0);
@@ -187,22 +185,36 @@ function BabySizeContent() {
             <View style={styles.glassInner}>
               <View style={[styles.heroHighlight, styles.glassSurface]}>
                 <GlassLayer tint={pastelPalette.honey} sheenOpacity={0.22} />
-                <View style={styles.heroTextBlock}>
-                  <ThemedText style={styles.heroWeek} numberOfLines={2}>
-                    {HERO_WEEK_LABEL}
-                  </ThemedText>
-                  <ThemedText style={styles.heroSubline}>
-                    Diese Woche ist dein Baby so groß wie {article ? `${article}` : ''}
-                  </ThemedText>
-                  <ThemedText style={styles.heroFruit} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
-                    {fruit}
-                  </ThemedText>
+                <ThemedText
+                  style={styles.heroWeek}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.75}
+                >
+                  Schwangerschaftswoche
+                </ThemedText>
+
+                <View style={styles.heroContentRow}>
+                  <View style={styles.heroTextBlock}>
+                    <ThemedText style={styles.heroSubline}>
+                      Diese Woche ist dein Baby so groß wie {article ? `${article}` : ''}
+                    </ThemedText>
+                    <ThemedText
+                      style={styles.heroFruit}
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.85}
+                    >
+                      {fruit}
+                    </ThemedText>
+                  </View>
+
+                  <Image
+                    source={require('@/assets/images/Baby_Icon.png')}
+                    style={styles.heroImage}
+                    resizeMode="contain"
+                  />
                 </View>
-                <Image
-                  source={require('@/assets/images/Baby_Icon.png')}
-                  style={styles.heroImage}
-                  resizeMode="contain"
-                />
               </View>
 
               <View style={styles.quickStatRow}>
@@ -322,12 +334,15 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.25)',
   },
   heroHighlight: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
     borderRadius: 24,
     padding: 18,
     marginBottom: 18,
+    gap: 10,
+  },
+  heroContentRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
     gap: 10,
   },
   heroTextBlock: {
@@ -343,6 +358,7 @@ const styles = StyleSheet.create({
     color: TEXT_PRIMARY,
     textTransform: 'uppercase',
     opacity: 0.7,
+    marginBottom: 4,
   },
   heroSubline: {
     fontSize: 14,

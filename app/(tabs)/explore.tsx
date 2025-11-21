@@ -340,15 +340,6 @@ export default function TabTwoScreen() {
             </View>
           </LiquidGlassCard>
 
-          <LiquidGlassCard style={[styles.cardBase, styles.tipCard, { backgroundColor: SOFT_CARD_BG, borderColor: SOFT_BORDER }]}>
-            <View style={styles.tipContent}>
-              <IconSymbol name="sparkles" size={20} color={TIP_ICON} />
-              <ThemedText style={styles.tipText} lightColor={DEEP_TEXT}>
-                Tipp: Überprüfe am Abend vor der Abreise alles noch einmal gemeinsam mit deiner Begleitung.
-              </ThemedText>
-            </View>
-          </LiquidGlassCard>
-
           {loading ? (
             <LiquidGlassCard style={[styles.cardBase, styles.stateCard, { backgroundColor: SOFT_CARD_BG, borderColor: SOFT_BORDER }]}>
               <ActivityIndicator size="small" color={ACCENT_PURPLE} />
@@ -369,6 +360,8 @@ export default function TabTwoScreen() {
             </LiquidGlassCard>
           ) : (
             <>
+              <AddChecklistItem onAdd={handleAddItem} categories={categories} />
+
               {Object.keys(groupedItems).length === 0 ? (
                 <LiquidGlassCard style={[styles.cardBase, styles.stateCard, { backgroundColor: SOFT_CARD_BG, borderColor: SOFT_BORDER }]}>
                   <ThemedText style={styles.stateText} lightColor={DEEP_TEXT}>
@@ -386,10 +379,17 @@ export default function TabTwoScreen() {
                   />
                 ))
               )}
-
-              <AddChecklistItem onAdd={handleAddItem} categories={categories} />
             </>
           )}
+
+          <LiquidGlassCard style={[styles.cardBase, styles.tipCard, { backgroundColor: SOFT_CARD_BG, borderColor: SOFT_BORDER }]}>
+            <View style={styles.tipContent}>
+              <IconSymbol name="sparkles" size={20} color={TIP_ICON} />
+              <ThemedText style={styles.tipText} lightColor={DEEP_TEXT}>
+                Tipp: Überprüfe am Abend vor der Abreise alles noch einmal gemeinsam mit deiner Begleitung.
+              </ThemedText>
+            </View>
+          </LiquidGlassCard>
         </ScrollView>
       </SafeAreaView>
     </ThemedBackground>

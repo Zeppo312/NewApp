@@ -49,7 +49,6 @@ export default function ProfilScreen() {
   // Benutzerinformationen
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName]   = useState('');
-  const [username, setUsername]   = useState('');
   const [email, setEmail]         = useState('');
   const [userRole, setUserRole]   = useState<'mama' | 'papa' | ''>('');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
@@ -91,7 +90,7 @@ export default function ProfilScreen() {
       // Profile
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select('first_name, last_name, user_role, username, avatar_url')
+        .select('first_name, last_name, user_role, avatar_url')
         .eq('id', user?.id)
         .single();
 
@@ -99,7 +98,6 @@ export default function ProfilScreen() {
         setFirstName(profileData.first_name || '');
         setLastName(profileData.last_name || '');
         setUserRole((profileData.user_role as any) || '');
-        setUsername(profileData.username || '');
         setAvatarUrl(profileData.avatar_url || null);
         setAvatarPreview(profileData.avatar_url || null);
         setAvatarRemoved(false);
@@ -330,7 +328,6 @@ export default function ProfilScreen() {
 
     setIsSaving(true);
 
-    const normalizedUsername = username.trim();
     let finalAvatarUrl = avatarUrl;
     let finalBabyPhoto = babyPhotoUrl;
 
@@ -359,7 +356,6 @@ export default function ProfilScreen() {
           first_name: firstName,
           last_name: lastName,
           user_role: userRole,
-          username: normalizedUsername || null,
           avatar_url: finalAvatarUrl || null,
           updated_at: new Date().toISOString(),
         }).eq('id', user.id);
@@ -369,7 +365,6 @@ export default function ProfilScreen() {
           first_name: firstName,
           last_name: lastName,
           user_role: userRole,
-          username: normalizedUsername || null,
           avatar_url: finalAvatarUrl || null,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
@@ -556,23 +551,6 @@ export default function ProfilScreen() {
                         placeholder="Dein Nachname"
                         placeholderTextColor="#9BA0A6"
                       />
-                    </View>
-
-                    <View style={styles.formGroup}>
-                      <ThemedText style={styles.label}>Community-Name</ThemedText>
-                      <TextInput
-                        style={styles.inputGlass}
-                        value={username}
-                        onChangeText={setUsername}
-                        placeholder="z.B. lotti_mama"
-                        placeholderTextColor="#9BA0A6"
-                        autoCapitalize="none"
-                        autoCorrect={false}
-                        maxLength={32}
-                      />
-                      <ThemedText style={styles.helperText}>
-                        Dieser Name wird in der Community angezeigt (anstatt des Vornamens).
-                      </ThemedText>
                     </View>
 
                     <View style={styles.formGroup}>
@@ -927,7 +905,6 @@ const styles = StyleSheet.create({
   formRow2: { flexDirection: 'row', gap: 12 },
 
   label: { fontSize: 14, marginBottom: 8, color: PRIMARY_TEXT, fontWeight: '700' },
-  helperText: { fontSize: 12, color: '#7D7D85', marginTop: 6 },
 
   // Glas-Inputs wie Sleep-Tracker
   inputGlass: {

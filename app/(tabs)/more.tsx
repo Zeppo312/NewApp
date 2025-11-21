@@ -201,23 +201,6 @@ export default function MoreScreen() {
               <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={() => router.push('/faq')}
-            >
-              <View style={styles.menuItemIcon}>
-                <IconSymbol name="questionmark.circle.fill" size={24} color={theme.accent} />
-              </View>
-              <View style={styles.menuItemContent}>
-                <ThemedText style={styles.menuItemTitle}>
-                  Häufige Fragen
-                </ThemedText>
-                <ThemedText style={styles.menuItemDescription}>
-                  Antworten auf typische Fragen nach der Geburt
-                </ThemedText>
-              </View>
-              <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
-            </TouchableOpacity>
           </LiquidGlassCard>
 
           <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>

@@ -7,6 +7,9 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { LiquidGlassCard, GlassCard, TEXT_PRIMARY } from '@/constants/DesignGuide';
 
 const CTA_ACCENT = '#9D7BD8';
+const LILAC_GLASS_OVERLAY = 'rgba(142, 78, 198, 0.25)';
+const LILAC_BORDER_COLOR = 'rgba(255,255,255,0.6)';
+const LILAC_ICON_BG = 'rgba(255,255,255,0.32)';
 
 interface AddChecklistItemProps {
   onAdd: (itemName: string, category: string, notes: string) => Promise<void>;
@@ -49,11 +52,14 @@ export const AddChecklistItem: React.FC<AddChecklistItemProps> = ({ onAdd, categ
       <LiquidGlassCard
         onPress={() => setModalVisible(true)}
         style={styles.addButton}
-        activeOpacity={0.85}
+        overlayColor={LILAC_GLASS_OVERLAY}
+        borderColor={LILAC_BORDER_COLOR}
+        intensity={30}
+        activeOpacity={0.9}
       >
         <View style={styles.addButtonContent}>
-          <View style={[styles.addButtonIcon, { backgroundColor: CTA_ACCENT }]}>
-            <Ionicons name="plus" size={18} color="#fff" />
+          <View style={[styles.addButtonIcon, { backgroundColor: LILAC_ICON_BG }]}>
+            <Ionicons name="add" size={22} color="#fff" />
           </View>
           <View>
             <ThemedText style={styles.addButtonLabel} lightColor={TEXT_PRIMARY}>
@@ -157,11 +163,13 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   addButtonIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.8)',
   },
   addButtonLabel: {
     fontSize: 16,

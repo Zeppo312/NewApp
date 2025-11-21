@@ -107,11 +107,20 @@ const TimerBanner: React.FC<{
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const timerLabel =
+    timer.type === 'BREAST'
+      ? '🤱 Stillen'
+      : timer.type === 'BOTTLE'
+      ? '🍼 Fläschchen'
+      : timer.type === 'SOLIDS'
+      ? '🥄 Beikost'
+      : '🧷 Wickeln';
+
   return (
     <GlassCard style={[s.timerBanner, { paddingVertical: 12, paddingHorizontal: 16 }]} intensity={28}>
       <View style={{ flex: 1 }}>
         <Text style={[s.timerType, { color: PRIMARY }]}>
-          {timer.type === 'BREAST' ? '🤱 Stillen' : '🍼 Fläschchen'} • läuft seit {new Date(timer.start).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
+          {timerLabel} • läuft seit {new Date(timer.start).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
         </Text>
         <Text style={[s.timerTime, { color: '#7D5A50' }]}>{formatTime(elapsed)}</Text>
       </View>
@@ -150,7 +159,7 @@ export default function DailyScreen() {
 
   const [activeTimer, setActiveTimer] = useState<{
     id: string;
-    type: 'BOTTLE' | 'BREAST';
+    type: 'BOTTLE' | 'BREAST' | 'SOLIDS' | 'DIAPER';
     start: number;
   } | null>(null);
 
@@ -421,10 +430,11 @@ export default function DailyScreen() {
     setShowInputModal(true);
   };
 
-  const handleSaveEntry = async (payload: any) => {
+  const handleSaveEntry = async (payload: any, options?: { startTimer?: boolean }) => {
     console.log('handleSaveEntry - Received payload:', JSON.stringify(payload, null, 2));
     console.log('handleSaveEntry - selectedActivityType:', selectedActivityType);
     console.log('handleSaveEntry - selectedSubType:', selectedSubType);
+    const timerRequested = !!options?.startTimer;
     
     if (selectedActivityType === 'feeding') {
       const feedingType = (payload.feeding_type as 'BREAST' | 'BOTTLE' | 'SOLIDS' | undefined) ?? undefined;
@@ -455,18 +465,24 @@ export default function DailyScreen() {
         Alert.alert('Fehler', String((error as any)?.message ?? error ?? 'Fehler beim Speichern der Fütterung'));
         return;
       }
-      if (feedingType === 'BREAST' || feedingType === 'BOTTLE') {
-        const timerType = feedingType;
-        setActiveTimer({ id: data?.id || `temp_${Date.now()}`, type: timerType, start: Date.now() });
+      if (timerRequested && feedingType) {
+        const startMs = payload.start_time ? new Date(payload.start_time).getTime() : Date.now();
+        const timerType = feedingType as 'BREAST' | 'BOTTLE' | 'SOLIDS';
+        setActiveTimer({
+          id: data?.id || editingEntry?.id || `temp_${Date.now()}`,
+          type: timerType,
+          start: startMs,
+        });
       }
       showSuccessSplash(
         feedingType === 'BREAST' ? '#8E4EC6' : feedingType === 'BOTTLE' ? '#4A90E2' : '#F5A623',
         feedingType === 'BREAST' ? '🤱' : feedingType === 'BOTTLE' ? '🍼' : '🥄',
-        feedingType === 'BREAST' ? 'feeding_breast' : feedingType === 'BOTTLE' ? 'feeding_bottle' : 'feeding_solids'
+        feedingType === 'BREAST' ? 'feeding_breast' : feedingType === 'BOTTLE' ? 'feeding_bottle' : 'feeding_solids',
+        timerRequested
       );
     } else if (selectedActivityType === 'diaper') {
       const diaperType = (payload.diaper_type as 'WET' | 'DIRTY' | 'BOTH' | undefined) ?? undefined;
-      let error;
+      let data, error;
       if (editingEntry?.id) {
         const res = await updateBabyCareEntry(editingEntry.id, {
           start_time: payload.start_time,
@@ -474,7 +490,7 @@ export default function DailyScreen() {
           notes: payload.notes ?? null,
           diaper_type: diaperType,
         });
-        error = res.error;
+        data = res.data; error = res.error;
       } else {
         const res = await addBabyCareEntry({
           entry_type: 'diaper',
@@ -483,16 +499,25 @@ export default function DailyScreen() {
           notes: payload.notes ?? null,
           diaper_type: diaperType,
         });
-        error = res.error;
+        data = res.data; error = res.error;
       }
       if (error) {
         Alert.alert('Fehler', String((error as any)?.message ?? error ?? 'Fehler beim Speichern'));
         return;
       }
+      if (timerRequested) {
+        const startMs = payload.start_time ? new Date(payload.start_time).getTime() : Date.now();
+        setActiveTimer({
+          id: data?.id || editingEntry?.id || `temp_${Date.now()}`,
+          type: 'DIAPER',
+          start: startMs,
+        });
+      }
       showSuccessSplash(
         diaperType === 'WET' ? '#3498DB' : diaperType === 'DIRTY' ? '#8E5A2B' : '#38A169',
         diaperType === 'WET' ? '💧' : diaperType === 'DIRTY' ? '💩' : '💧💩',
-        diaperType === 'WET' ? 'diaper_wet' : diaperType === 'DIRTY' ? 'diaper_dirty' : 'diaper_both'
+        diaperType === 'WET' ? 'diaper_wet' : diaperType === 'DIRTY' ? 'diaper_dirty' : 'diaper_both',
+        timerRequested
       );
     } else {
       Alert.alert('Hinweis', 'Sonstige Einträge sind in der neuen Ansicht nicht verfügbar.');
@@ -502,7 +527,7 @@ export default function DailyScreen() {
     loadEntries();
   };
 
-  const showSuccessSplash = (hex: string, emoji: string, kind: string) => {
+  const showSuccessSplash = (hex: string, emoji: string, kind: string, timerStarted = false) => {
     const rgba = (h: string, a: number) => {
       const c = h.replace('#','');
       const r = parseInt(c.substring(0,2),16);
@@ -514,28 +539,28 @@ export default function DailyScreen() {
     setSplashEmoji(emoji);
     // Texte je Kontext
     if (kind === 'feeding_breast') {
-      setSplashTitle('Stillen läuft');
-      setSplashSubtitle('Nimm dir Zeit. Genieße diese besonderen Momente.');
-      setSplashStatus('Wird gestartet...');
-      setSplashHint('Du gibst deinem Baby alles, was es braucht 💕');
+      setSplashTitle(timerStarted ? 'Stillen läuft' : 'Stillen gespeichert');
+      setSplashSubtitle(timerStarted ? 'Nimm dir Zeit. Genieße diese besonderen Momente.' : 'Eintrag ohne Timer gesichert.');
+      setSplashStatus(timerStarted ? 'Timer gestartet...' : '');
+      setSplashHint(timerStarted ? 'Stoppe, wenn ihr fertig seid 💕' : 'Du gibst deinem Baby alles, was es braucht 💕');
       setSplashText('');
     } else if (kind === 'feeding_bottle') {
-      setSplashTitle('Fläschchen läuft');
-      setSplashSubtitle('Ganz in Ruhe – du machst das super.');
-      setSplashStatus('Wird gestartet...');
-      setSplashHint('Nähe und Ernährung – perfekt kombiniert 🤍');
+      setSplashTitle(timerStarted ? 'Fläschchen läuft' : 'Fläschchen gespeichert');
+      setSplashSubtitle(timerStarted ? 'Ganz in Ruhe – du machst das super.' : 'Eintrag ohne Timer gesichert.');
+      setSplashStatus(timerStarted ? 'Timer gestartet...' : '');
+      setSplashHint(timerStarted ? 'Stoppe, wenn ihr fertig seid 🤍' : 'Nähe und Ernährung – perfekt kombiniert 🤍');
       setSplashText('');
     } else if (kind === 'feeding_solids') {
-      setSplashTitle('Beikost gespeichert');
-      setSplashSubtitle('Jeder Löffel ein kleiner Fortschritt.');
-      setSplashStatus('');
-      setSplashHint('Weiter so – ihr wachst gemeinsam!');
+      setSplashTitle(timerStarted ? 'Beikost läuft' : 'Beikost gespeichert');
+      setSplashSubtitle(timerStarted ? 'Timer läuft mit, bis du stoppst.' : 'Jeder Löffel ein kleiner Fortschritt.');
+      setSplashStatus(timerStarted ? 'Timer gestartet...' : '');
+      setSplashHint(timerStarted ? 'Stoppe, sobald ihr fertig seid.' : 'Weiter so – ihr wachst gemeinsam!');
       setSplashText('');
     } else {
-      setSplashTitle('Wickeln gespeichert');
-      setSplashSubtitle('Alles frisch – wohlfühlen ist wichtig.');
-      setSplashStatus('');
-      setSplashHint('Danke für deine liebevolle Fürsorge ✨');
+      setSplashTitle(timerStarted ? 'Wickeln läuft' : 'Wickeln gespeichert');
+      setSplashSubtitle(timerStarted ? 'Timer läuft mit, bis du stoppst.' : 'Alles frisch – wohlfühlen ist wichtig.');
+      setSplashStatus(timerStarted ? 'Timer gestartet...' : '');
+      setSplashHint(timerStarted ? 'Stoppe, wenn du fertig bist ✨' : 'Danke für deine liebevolle Fürsorge ✨');
       setSplashText('');
     }
     setSplashVisible(true);

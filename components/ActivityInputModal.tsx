@@ -30,7 +30,7 @@ interface ActivityInputModalProps {
   initialSubType?: string | null;
   date?: Date;
   onClose: () => void;
-  onSave: (data: any) => void; // data ist DB-ready für baby_care_entries
+  onSave: (data: any, options?: { startTimer?: boolean }) => void; // data ist DB-ready für baby_care_entries
   initialData?: Partial<{
     id: string;
     feeding_type: 'BREAST' | 'BOTTLE' | 'SOLIDS';
@@ -75,6 +75,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   const [showEndPicker, setShowEndPicker] = useState(false);
   const [notes, setNotes] = useState('');
   const [isNotesVisible, setNotesVisible] = useState(false);
+  const [startTimer, setStartTimer] = useState(false);
 
   // Feeding States
   const [feedingType, setFeedingType] = useState<FeedingType>('bottle');
@@ -98,6 +99,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
       setEndTimeVisible(!!initialData?.end_time);
       setNotes(initialData?.notes ?? '');
       setNotesVisible(false);
+      setStartTimer(false);
       
       // Standardwerte setzen
       if (activityType === 'feeding') {
@@ -161,7 +163,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
     // other: nur base + notes
 
     console.log('ActivityInputModal - Sending payload:', JSON.stringify(payload, null, 2));
-    onSave(payload);
+    onSave(payload, { startTimer });
     onClose();
   };
 
@@ -183,11 +185,24 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
           </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.timeButton} onPress={() => { setEndTimeVisible(true); setShowEndPicker(true); }}>
+        <TouchableOpacity
+          style={[styles.timeButton, startTimer && styles.timeButtonDisabled]}
+          onPress={() => {
+            if (startTimer) return;
+            setEndTimeVisible(true);
+            setShowEndPicker(true);
+          }}
+          activeOpacity={startTimer ? 1 : 0.7}
+        >
           <Text style={styles.timeLabel}>Ende</Text>
-          <Text style={styles.timeValue}>
-            {endTime ? endTime.toLocaleString('de-DE', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : 'Offen'}
+          <Text style={[styles.timeValue, startTimer && styles.timeDisabledText]}>
+            {startTimer
+              ? 'Timer läuft'
+              : endTime
+              ? endTime.toLocaleString('de-DE', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })
+              : 'Offen'}
           </Text>
+          {startTimer && <Text style={styles.timeHint}>Stoppe später, Ende wird gesetzt</Text>}
         </TouchableOpacity>
       </View>
 
@@ -223,6 +238,35 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
             </TouchableOpacity>
           </View>
         </View>
+      )}
+
+      {(activityType === 'feeding' || activityType === 'diaper') && (
+        <TouchableOpacity
+          style={[styles.timerToggle, startTimer && styles.timerToggleActive]}
+          onPress={() => {
+            setStartTimer((prev) => {
+              const next = !prev;
+              if (next) {
+                setEndTime(null);
+                setEndTimeVisible(false);
+              }
+              return next;
+            });
+          }}
+          activeOpacity={0.85}
+        >
+          <View style={[styles.timerTogglePill, startTimer && styles.timerTogglePillActive]}>
+            <View style={[styles.timerToggleKnob, startTimer && styles.timerToggleKnobActive]} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.timerToggleLabel, { color: theme.text }]}>
+              Timer optional mitlaufen lassen
+            </Text>
+            <Text style={[styles.timerToggleSub, { color: theme.textSecondary }]}>
+              {startTimer ? 'Läuft, bis du stoppst' : 'Ohne Timer speichern'}
+            </Text>
+          </View>
+        </TouchableOpacity>
       )}
     </View>
   );
@@ -619,8 +663,13 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     elevation: 3,
   },
+  timeButtonDisabled: {
+    opacity: 0.72,
+  },
   timeLabel: { fontSize: 12, color: '#888888', fontWeight: '600', marginBottom: 5 },
   timeValue: { fontSize: 16, color: '#333333', fontWeight: 'bold' },
+  timeDisabledText: { color: '#777' },
+  timeHint: { marginTop: 6, fontSize: 12, color: '#777' },
   datePickerContainer: {
     marginTop: 15,
     backgroundColor: 'rgba(255, 255, 255, 0.9)',
@@ -676,6 +725,58 @@ const styles = StyleSheet.create({
   quickVolumeText: {
     fontSize: 14,
     fontWeight: '600',
+  },
+  timerToggle: {
+    width: '90%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    marginTop: 18,
+    backgroundColor: 'rgba(255,255,255,0.8)',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.05)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  timerToggleActive: {
+    borderColor: 'rgba(74,144,226,0.45)',
+    backgroundColor: 'rgba(74,144,226,0.12)',
+  },
+  timerTogglePill: {
+    width: 48,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#D6D6D6',
+    padding: 4,
+    justifyContent: 'center',
+  },
+  timerTogglePillActive: {
+    backgroundColor: '#4A90E2',
+  },
+  timerToggleKnob: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#fff',
+    alignSelf: 'flex-start',
+  },
+  timerToggleKnobActive: {
+    alignSelf: 'flex-end',
+  },
+  timerToggleLabel: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  timerToggleSub: {
+    fontSize: 13,
+    marginTop: 2,
+    fontWeight: '500',
   },
   sideSelectorContainer: {
     flexDirection: 'row',
