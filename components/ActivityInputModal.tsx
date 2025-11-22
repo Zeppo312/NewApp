@@ -12,10 +12,13 @@ import {
   TextInput,
   LayoutAnimation,
   UIManager,
+  Image,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { RECIPE_SAMPLES } from '@/lib/recipes-samples';
+import { fetchRecipes, RecipeRecord } from '@/lib/recipes';
 
 // Typ-Definitionen
 type ActivityType = 'feeding' | 'diaper' | 'other';
@@ -76,6 +79,12 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   const [notes, setNotes] = useState('');
   const [isNotesVisible, setNotesVisible] = useState(false);
   const [startTimer, setStartTimer] = useState(false);
+  const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
+  const [recipeDropdownOpen, setRecipeDropdownOpen] = useState(false);
+  const [recipeOptions, setRecipeOptions] = useState<
+    { id: string; title: string; minMonths?: number; image?: string | null; emoji?: string; source: 'live' | 'sample' }[]
+  >(RECIPE_SAMPLES.map((r) => ({ id: r.id, title: r.title, minMonths: r.min_months, image: r.image, emoji: r.emoji, source: 'sample' })));
+  const [isLoadingRecipes, setIsLoadingRecipes] = useState(false);
 
   // Feeding States
   const [feedingType, setFeedingType] = useState<FeedingType>('bottle');
@@ -100,6 +109,8 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
       setNotes(initialData?.notes ?? '');
       setNotesVisible(false);
       setStartTimer(false);
+      setSelectedRecipeId(null);
+      setRecipeDropdownOpen(false);
       
       // Standardwerte setzen
       if (activityType === 'feeding') {
@@ -120,14 +131,46 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
     }
   }, [visible, initialSubType, date, initialData, activityType]);
 
+  // Rezepte laden (Supabase), fallback auf Samples
+  useEffect(() => {
+    const loadRecipes = async () => {
+      if (!(visible && activityType === 'feeding' && feedingType === 'solids')) return;
+      try {
+        setIsLoadingRecipes(true);
+        const { data, error } = await fetchRecipes();
+        if (!error && data && data.length > 0) {
+          const mapped = data.map((r: RecipeRecord) => ({
+            id: r.id,
+            title: r.title,
+            minMonths: r.min_months,
+            image: r.image_url,
+            emoji: '🥄',
+            source: 'live' as const,
+          }));
+          setRecipeOptions(mapped);
+        } else {
+          // Fallback auf Samples
+          setRecipeOptions(RECIPE_SAMPLES.map((r) => ({ id: r.id, title: r.title, minMonths: r.min_months, image: r.image, emoji: r.emoji, source: 'sample' })));
+        }
+      } finally {
+        setIsLoadingRecipes(false);
+      }
+    };
+    loadRecipes();
+  }, [visible, activityType, feedingType]);
+
   // Speichern: Payload für baby_care_entries
   const handleSave = () => {
     const entryDateISO = startTime.toISOString();
+    const selectedRecipe = recipeOptions.find((r) => r.id === selectedRecipeId);
+    const recipeTitle = selectedRecipe?.title?.trim() || (selectedRecipe ? 'BLW-Rezept' : null);
+    const recipeNote = recipeTitle ? `BLW: ${recipeTitle}` : null;
+    const combinedNotes = [notes?.trim(), recipeNote ?? ''].filter(Boolean).join('\n');
     const base = {
       entry_type: activityType,           // 'feeding' | 'diaper'
       start_time: entryDateISO,
       end_time: endTime ? endTime.toISOString() : null as string | null,
-      notes: notes || null,
+      notes: combinedNotes || null,
     };
 
     let payload: any = base;
@@ -401,9 +444,70 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
         )}
         {feedingType === 'solids' && (
           <View style={{width: '100%', alignItems: 'center', paddingTop: 20}}>
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>🥦 Beikost</Text>
-            <Text style={[styles.infoText, {marginTop: 10}]}>
-              Weitere Details zur Beikost folgen in Kürze.
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>🥦 BLW-Rezepte</Text>
+            <TouchableOpacity
+              style={styles.recipeDropdown}
+              onPress={() => setRecipeDropdownOpen((v) => !v)}
+              activeOpacity={0.9}
+            >
+              <Text style={[styles.recipeDropdownLabel, { color: theme.text }]}>
+                {selectedRecipeId
+                  ? recipeOptions.find((r) => r.id === selectedRecipeId)?.title?.trim() || 'Rezept wählen'
+                  : isLoadingRecipes
+                  ? 'Lade Rezepte...'
+                  : 'Rezept auswählen (optional)'}
+              </Text>
+              <Text style={styles.recipeDropdownCaret}>{recipeDropdownOpen ? '▲' : '▼'}</Text>
+            </TouchableOpacity>
+
+            {recipeDropdownOpen && (
+              <View style={styles.recipeList}>
+                {isLoadingRecipes ? (
+                  <View style={styles.recipeLoadingRow}>
+                    <Text style={styles.recipeRowTitle}>Lade Rezepte ...</Text>
+                  </View>
+                ) : recipeOptions.length === 0 ? (
+                  <View style={styles.recipeLoadingRow}>
+                    <Text style={styles.recipeRowTitle}>Keine Rezepte gefunden</Text>
+                  </View>
+                ) : recipeOptions.map((recipe) => {
+                  const isSelected = selectedRecipeId === recipe.id;
+                  const displayTitle = recipe.title?.trim() || 'Rezept';
+                  const subtitle = recipe.min_months ? `${recipe.min_months}+ Monate` : recipe.source === 'sample' ? 'Sample' : '';
+                  return (
+                    <TouchableOpacity
+                      key={recipe.id}
+                      style={[styles.recipeRow, isSelected && styles.recipeRowSelected]}
+                      onPress={() => {
+                        setSelectedRecipeId(isSelected ? null : recipe.id);
+                        setRecipeDropdownOpen(false);
+                      }}
+                      activeOpacity={0.9}
+                      >
+                        {recipe.image ? (
+                          <Image source={{ uri: recipe.image }} style={styles.recipeThumb} resizeMode="cover" />
+                        ) : (
+                          <View style={[styles.recipeThumb, styles.recipeThumbFallback]}>
+                          <Text style={styles.recipeThumbEmoji}>{recipe.emoji ?? '🥄'}</Text>
+                          </View>
+                        )}
+                        <View style={styles.recipeRowText}>
+                        <Text numberOfLines={2} style={styles.recipeRowTitle}>{displayTitle}</Text>
+                        {subtitle.length > 0 && (
+                          <Text style={styles.recipeRowSub}>{subtitle}</Text>
+                        )}
+                        </View>
+                        <View style={[styles.recipeCheckbox, isSelected && styles.recipeCheckboxActive]}>
+                          {isSelected && <Text style={styles.recipeCheckboxTick}>✓</Text>}
+                        </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+
+            <Text style={[styles.infoText, {marginTop: 12}]}>
+              Der gewählte Rezepttitel erscheint als Hinweis in der Timeline.
             </Text>
           </View>
         )}
@@ -725,6 +829,106 @@ const styles = StyleSheet.create({
   quickVolumeText: {
     fontSize: 14,
     fontWeight: '600',
+  },
+  recipeDropdown: {
+    width: '90%',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.85)',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.06)',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  recipeDropdownLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  recipeDropdownCaret: {
+    fontSize: 16,
+    color: '#666',
+  },
+  recipeList: {
+    width: '90%',
+    marginTop: 10,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.05)',
+    overflow: 'hidden',
+    alignSelf: 'center',
+  },
+  recipeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    minHeight: 64,
+    width: '100%',
+  },
+  recipeRowSelected: {
+    backgroundColor: 'rgba(74,144,226,0.12)',
+  },
+  recipeThumb: {
+    width: 48,
+    height: 48,
+    borderRadius: 10,
+    backgroundColor: '#f2f2f2',
+  },
+  recipeThumbFallback: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  recipeThumbEmoji: {
+    fontSize: 22,
+  },
+  recipeRowText: {
+    flex: 1,
+    flexShrink: 1,
+    paddingRight: 8,
+    marginLeft: 12,
+  },
+  recipeRowTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1F1F1F',
+  },
+  recipeRowSub: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 2,
+  },
+  recipeLoadingRow: {
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    alignItems: 'flex-start',
+  },
+  recipeCheckbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    borderColor: '#4A90E2',
+    backgroundColor: 'rgba(74,144,226,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 12,
+  },
+  recipeCheckboxActive: {
+    backgroundColor: '#4A90E2',
+    borderColor: '#4A90E2',
+  },
+  recipeCheckboxTick: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '800',
   },
   timerToggle: {
     width: '90%',

@@ -26,6 +26,7 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { GLASS_BORDER, LiquidGlassCard, PRIMARY, GRID_GAP } from '@/constants/DesignGuide';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { createRecipe, fetchRecipes, RecipeRecord } from '@/lib/recipes';
+import { RECIPE_SAMPLES, RecipeSample } from '@/lib/recipes-samples';
 
 type AllergenId = 'milk' | 'gluten' | 'egg' | 'nuts' | 'fish';
 
@@ -75,126 +76,7 @@ const chunkItems = <T,>(items: T[], columns: number): (T | null)[][] => {
   return rows;
 };
 
-type SampleRecipe = {
-  title: string;
-  description: string;
-  min_months: number;
-  ingredients: string[];
-  allergens?: AllergenId[];
-  instructions: string;
-  tip?: string;
-};
-
-const SAMPLE_RECIPES: SampleRecipe[] = [
-  {
-    title: 'Süßkartoffel & Kichererbsen Mash',
-    description: 'Cremiger BLW-Mash mit milden Kräutern – perfekt zum Löffeln oder Dippen.',
-    min_months: 6,
-    ingredients: ['Süßkartoffel', 'Kichererbsen', 'Rapsöl', 'Kräuter'],
-    instructions:
-      'Süßkartoffel schälen, würfeln und in wenig Wasser oder im Dampfgarer weich garen. Kichererbsen gründlich abspülen und mit der warmen Süßkartoffel zerdrücken. Rapsöl und fein gehackte Kräuter unterrühren, bis eine cremige Konsistenz entsteht.',
-    tip: 'Kichererbsen kurz pürieren, damit kleine Hände sie gut greifen können.',
-  },
-  {
-    title: 'Apfel-Hafer-Porridge',
-    description: 'Warmer Haferschmaus mit Apfelstückchen und optional einem Klecks Joghurt.',
-    min_months: 6,
-    ingredients: ['Haferflocken', 'Apfel', 'Naturjoghurt', 'Rapsöl'],
-    allergens: ['gluten', 'milk'],
-    instructions:
-      'Haferflocken mit Wasser oder Milchalternative sanft köcheln lassen. Apfel fein reiben und kurz mitziehen lassen. Vom Herd nehmen, Rapsöl und bei Bedarf Naturjoghurt einrühren und servieren.',
-    tip: 'Für milchfreie Variante den Joghurt durch Haferdrink ersetzen.',
-  },
-  {
-    title: 'Brokkoli-Lachs-Bällchen',
-    description: 'Weiche Fingerfood-Bällchen mit Omega-3-Power – lassen sich gut vorbereiten.',
-    min_months: 7,
-    ingredients: ['Brokkoli', 'Lachs', 'Kartoffel', 'Olivenöl'],
-    allergens: ['fish'],
-    instructions:
-      'Kartoffeln und Brokkoli im Dampf weich garen. Lachs ohne Haut schonend dämpfen und fein zupfen. Alles miteinander zerdrücken, kleine Bällchen formen, mit Olivenöl bepinseln und im Ofen bei 180 °C 10 Minuten backen.',
-    tip: 'Im Ofen backen, bis sie außen leicht gold werden – dann zerfallen sie nicht.',
-  },
-  {
-    title: 'Banane-Hirse-Puffer',
-    description: 'Schnelle Puffer ohne Zucker – ideal als Frühstück oder Snack.',
-    min_months: 8,
-    ingredients: ['Banane', 'Hirse', 'Ei', 'Rapsöl'],
-    allergens: ['egg'],
-    instructions:
-      'Gekochte Hirse mit zerdrückter Banane und geschlagenem Ei verrühren. Kleine Puffer formen und in wenig Rapsöl bei mittlerer Hitze goldbraun ausbacken. Kurz auf Küchenpapier abtropfen lassen.',
-    tip: 'Für allergiefreundliche Variante das Ei durch Apfelmus ersetzen.',
-  },
-  {
-    title: 'Avocado-Erbsen-Toast',
-    description: 'Weicher Toast mit cremigem Belag – prima zum Selbstschmieren üben.',
-    min_months: 9,
-    ingredients: ['Vollkornbrot', 'Avocado', 'Erbsen', 'Frischkäse'],
-    allergens: ['gluten', 'milk'],
-    instructions:
-      'Erbsen kurz blanchieren und mit Avocado und Frischkäse zu einer Creme zerdrücken. Vollkornbrot leicht toasten, Rinde entfernen, Creme darauf streichen und in babygerechte Streifen schneiden.',
-    tip: 'Rinde entfernen, damit es kleine Esser leichter haben.',
-  },
-  {
-    title: 'Zucchini-Linsen-Gulasch',
-    description: 'Sämiger Gemüse-Linsen-Eintopf, ideal zum Löffeln.',
-    min_months: 8,
-    ingredients: ['Zucchini', 'Rote Linsen', 'Karotte', 'Tomate', 'Olivenöl', 'Kräuter'],
-    instructions:
-      'Karotte und Zucchini klein würfeln und in Olivenöl anschwitzen. Rote Linsen und gewürfelte Tomate dazugeben, mit Wasser bedecken und weich köcheln. Mit milden Kräutern abschmecken und grob zerdrücken.',
-  },
-  {
-    title: 'Karotten-Polenta-Sticks',
-    description: 'Knusprige Sticks, die innen schön weich bleiben.',
-    min_months: 9,
-    ingredients: ['Polenta', 'Karotte', 'Butter', 'Kräuter'],
-    allergens: ['milk'],
-    instructions:
-      'Polenta nach Packungsangabe mit Wasser und etwas Butter kochen. Fein geriebene Karotte und Kräuter unterheben, Masse in eine Form streichen, auskühlen lassen und in Sticks schneiden. Kurz im Ofen knusprig backen.',
-  },
-  {
-    title: 'Apfel-Birnen-Kompott mit Hirse',
-    description: 'Fruchtiger Kompott mit extra Eisen aus der Hirse.',
-    min_months: 6,
-    ingredients: ['Apfel', 'Birne', 'Hirse', 'Zimt'],
-    instructions:
-      'Apfel und Birne schälen, würfeln und mit etwas Wasser sowie einer Prise Zimt weich köcheln. Gekochte Hirse unterrühren, alles grob pürieren und lauwarm servieren.',
-  },
-  {
-    title: 'Hühnchen-Reis-Bowl',
-    description: 'Herzhafte Schüssel mit zarten Hühnchenstreifen und Gemüse.',
-    min_months: 9,
-    ingredients: ['Hühnchen', 'Reis', 'Brokkoli', 'Erbsen', 'Rapsöl'],
-    instructions:
-      'Reis garen und warm halten. Hühnchen in feine Streifen schneiden und in wenig Wasser gar ziehen lassen. Brokkoli und Erbsen dämpfen, alles zusammen mit etwas Rapsöl vermengen und servieren.',
-  },
-  {
-    title: 'Kürbis-Kokos-Suppe',
-    description: 'Samtene Suppe, leicht süßlich und sanft gewürzt.',
-    min_months: 7,
-    ingredients: ['Kürbis', 'Kartoffel', 'Kokosmilch', 'Rapsöl'],
-    instructions:
-      'Kürbis und Kartoffel würfeln, in Rapsöl anschwitzen und mit Wasser bedecken. Weich kochen, Kokosmilch zugeben und fein pürieren. Nach Belieben mit mildem Curry abschmecken.',
-  },
-  {
-    title: 'Spinat-Ricotta-Pasta',
-    description: 'Cremige Pasta mit mildem Spinat und Ricotta.',
-    min_months: 10,
-    ingredients: ['Vollkornnudeln', 'Spinat', 'Ricotta', 'Olivenöl'],
-    allergens: ['gluten', 'milk'],
-    instructions:
-      'Vollkornnudeln weich kochen. Spinat kurz dämpfen und fein hacken. Ricotta mit etwas Nudelwasser cremig rühren, Spinat und Olivenöl hinzufügen und mit den Nudeln vermengen.',
-  },
-  {
-    title: 'Birnen-Buchweizen-Muffins',
-    description: 'Saftige Mini-Muffins ohne Zuckerzusatz.',
-    min_months: 10,
-    ingredients: ['Birne', 'Buchweizenmehl', 'Ei', 'Rapsöl', 'Backpulver'],
-    allergens: ['egg'],
-    instructions:
-      'Reife Birne fein reiben, mit Buchweizenmehl, Ei, etwas Backpulver und Rapsöl zu einem Teig verrühren. In Mini-Muffinförmchen füllen und bei 180 °C etwa 12 Minuten backen.',
-  },
-];
+const SAMPLE_RECIPES: RecipeSample[] = RECIPE_SAMPLES;
 
 const formatAllergens = (allergens: string[] = []) =>
   allergens.map((id) => ALLERGEN_LABELS[id as AllergenId] ?? id).join(', ');

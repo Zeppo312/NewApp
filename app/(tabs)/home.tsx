@@ -768,6 +768,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginBottom: 6,
     letterSpacing: -0.5,
+    lineHeight: 34,
   },
   dateText: {
     fontSize: 16,

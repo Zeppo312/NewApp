@@ -198,6 +198,17 @@ const ActivityCard: React.FC<ActivityCardProps> = ({ entry, onDelete, onEdit, ma
     }
   };
 
+  // BLW-Rezept-Hinweis aus den Notizen ziehen (erste Zeile mit "BLW:")
+  const recipeNote = (() => {
+    if (!entry.notes) return null;
+    const line = entry.notes
+      .split('\n')
+      .map((l) => l.trim())
+      .find((l) => l.toLowerCase().startsWith('blw:'));
+    if (!line) return null;
+    return line.replace(/blw:/i, '').trim();
+  })();
+
   // Berechne Dauer
   const duration = entry.end_time
     ? calculateDuration(entry.start_time!, entry.end_time)
@@ -279,6 +290,11 @@ const ActivityCard: React.FC<ActivityCardProps> = ({ entry, onDelete, onEdit, ma
                     />
                   </Animated.View>
                 </View>
+                {recipeNote ? (
+                  <View style={styles.badgeRow}>
+                    <ThemedText style={styles.badgeText}>🥄 BLW: {recipeNote}</ThemedText>
+                  </View>
+                ) : null}
 
                 {/* Zeiten nur zeigen, wenn vorhanden */}
                 {(entry.start_time || entry.end_time || duration > 0) && (
@@ -367,6 +383,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 8,
     flexWrap: 'wrap'
+  },
+  badgeRow: {
+    marginTop: 6,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(94,61,179,0.12)',
+    borderColor: 'rgba(94,61,179,0.28)',
+    borderWidth: 1,
+    borderRadius: 10,
+  },
+  badgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#5E3DB3',
   },
   time: {
     fontSize: 13,

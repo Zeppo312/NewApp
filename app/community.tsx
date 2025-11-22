@@ -92,6 +92,8 @@ export default function CommunityScreen() {
   const statusBarStyle = colorScheme === 'dark' ? 'light-content' : 'dark-content';
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
+  const headerTextColor = '#7D5A50';
+  const primaryTextOnCommunity = colorScheme === 'dark' ? theme.text : headerTextColor;
 
   const [posts, setPosts] = useState<BlogPost[]>([]);
   const [expandedPostId, setExpandedPostId] = useState<string | null>(null);
@@ -293,7 +295,7 @@ export default function CommunityScreen() {
           {isAdmin ? (
             <View style={styles.adminOverlay}>
               <TouchableOpacity style={[styles.adminOverlayButton, { backgroundColor: '#FFFFFF' }]} onPress={() => openModal(!item.is_published, item)}>
-                <IconSymbol name="pencil" size={14} color={theme.textPrimary} />
+                <IconSymbol name="pencil" size={14} color={primaryTextOnCommunity} />
               </TouchableOpacity>
               <TouchableOpacity style={[styles.adminOverlayButton, { backgroundColor: '#C25B5B' }]} onPress={handleDelete}>
                 <IconSymbol name="trash" size={14} color="#fff" />
@@ -316,12 +318,12 @@ export default function CommunityScreen() {
           ) : null}
           <View style={styles.cardBodyBlock}>
             <View style={styles.cardHeaderRow}>
-              <ThemedText type="subtitle" style={[styles.cardTitle, { color: theme.textPrimary }]}>
+              <ThemedText type="subtitle" style={[styles.cardTitle, { color: primaryTextOnCommunity }]}>
                 {item.title}
               </ThemedText>
               <View style={[styles.metaPill, { backgroundColor: colorScheme === 'dark' ? '#3D3330' : '#FFE2CF' }]}>
-                <IconSymbol name="doc.text.fill" size={14} color={theme.textPrimary} />
-                <ThemedText style={[styles.metaPillText, { color: theme.textPrimary }]}>{formatDate(item.published_at)}</ThemedText>
+                <IconSymbol name="doc.text.fill" size={14} color={primaryTextOnCommunity} />
+                <ThemedText style={[styles.metaPillText, { color: primaryTextOnCommunity }]}>{formatDate(item.published_at)}</ThemedText>
               </View>
             </View>
             <ThemedText style={[styles.metaText, { color: theme.textTertiary }]}>von {item.authorName}</ThemedText>
@@ -340,17 +342,17 @@ export default function CommunityScreen() {
         </View>
       );
     },
-    [colorScheme, expandedPostId, theme.border, theme.cardDark, theme.textPrimary, theme.textSecondary, theme.textTertiary, theme.tint],
+    [colorScheme, expandedPostId, primaryTextOnCommunity, theme.border, theme.cardDark, theme.textSecondary, theme.textTertiary, theme.tint],
   );
 
   const renderEmptyState = useMemo(
     () => (
       <View style={styles.emptyState}>
-        <ThemedText style={[styles.emptyTitle, { color: theme.textPrimary }]}>Hier wächst gerade etwas Neues...</ThemedText>
+        <ThemedText style={[styles.emptyTitle, { color: primaryTextOnCommunity }]}>Hier wächst gerade etwas Neues...</ThemedText>
         <ThemedText style={[styles.emptyDescription, { color: theme.textSecondary }]}>Die Redaktion bereitet aktuell neue Inhalte vor. Schau später noch einmal rein.</ThemedText>
       </View>
     ),
-    [theme.textPrimary, theme.textSecondary],
+    [primaryTextOnCommunity, theme.textSecondary],
   );
 
   const hero = (
@@ -358,27 +360,27 @@ export default function CommunityScreen() {
       <View style={styles.heroBubbleOne} />
       <View style={styles.heroBubbleTwo} />
       <View style={styles.heroTextBlock}>
-        <ThemedText type="title" style={[styles.heroTitle, { color: theme.textPrimary }]}>Lotti Baby Blog</ThemedText>
+        <ThemedText type="title" style={[styles.heroTitle, { color: primaryTextOnCommunity }]}>Lotti Baby Blog</ThemedText>
         <ThemedText style={[styles.heroSubtitle, { color: theme.textSecondary }]}>Sanfte Stories, Tipps von Hebammen und echte Erfahrungen aus der Community – alles an einem Ort.</ThemedText>
         <View style={styles.heroChips}>
           <View style={[styles.heroChip, { backgroundColor: '#FFD8C2' }]}>
             <IconSymbol name="heart.fill" size={14} color="#7D5A50" />
-            <ThemedText style={styles.heroChipText}>Warm & liebevoll</ThemedText>
+            <ThemedText style={[styles.heroChipText, { color: primaryTextOnCommunity }]}>Warm & liebevoll</ThemedText>
           </View>
           <View style={[styles.heroChip, { backgroundColor: '#E7F2ED' }]}>
-            <IconSymbol name="star.fill" size={14} color="#5C4033" />
-            <ThemedText style={styles.heroChipText}>Expertinnen geprüft</ThemedText>
+            <IconSymbol name="star.fill" size={14} color="#7D5A50" />
+            <ThemedText style={[styles.heroChipText, { color: primaryTextOnCommunity }]}>Expertinnen geprüft</ThemedText>
           </View>
         </View>
       </View>
       {isAdmin ? (
         <View style={styles.heroStats}>
           <View style={[styles.statCard, { backgroundColor: colorScheme === 'dark' ? '#2F2522' : '#FFFFFF', borderColor: theme.border }]}>
-            <ThemedText style={[styles.statNumber, { color: theme.textPrimary }]}>{published.length}</ThemedText>
+            <ThemedText style={[styles.statNumber, { color: primaryTextOnCommunity }]}>{published.length}</ThemedText>
             <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>veröffentlichte Artikel</ThemedText>
           </View>
           <View style={[styles.statCard, { backgroundColor: colorScheme === 'dark' ? '#2F2522' : '#FFFFFF', borderColor: theme.border }]}>
-            <ThemedText style={[styles.statNumber, { color: theme.textPrimary }]}>{drafts.length}</ThemedText>
+            <ThemedText style={[styles.statNumber, { color: primaryTextOnCommunity }]}>{drafts.length}</ThemedText>
             <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>in Vorbereitung</ThemedText>
           </View>
         </View>
@@ -394,7 +396,7 @@ export default function CommunityScreen() {
             <IconSymbol name="star.fill" size={14} color="#fff" />
             <ThemedText style={styles.adminBadgeText}>Admin</ThemedText>
           </View>
-          <ThemedText style={[styles.adminTitle, { color: theme.textPrimary }]}>Redaktionsbereich</ThemedText>
+          <ThemedText style={[styles.adminTitle, { color: primaryTextOnCommunity }]}>Redaktionsbereich</ThemedText>
         </View>
       </View>
       <ThemedText style={[styles.adminSubtitle, { color: theme.textSecondary }]}>Veröffentliche einen neuen Artikel oder speichere ihn als Entwurf, um später weiterzuschreiben.</ThemedText>
@@ -402,7 +404,7 @@ export default function CommunityScreen() {
         <View style={styles.draftRow}>
           {drafts.slice(0, 3).map((draft) => (
             <View key={draft.id} style={[styles.draftCard, { borderColor: theme.border }]}> 
-              <ThemedText style={[styles.draftTitle, { color: theme.textPrimary }]} numberOfLines={1}>{draft.title}</ThemedText>
+              <ThemedText style={[styles.draftTitle, { color: primaryTextOnCommunity }]} numberOfLines={1}>{draft.title}</ThemedText>
               <ThemedText style={[styles.draftMeta, { color: theme.textTertiary }]}>{formatDate(draft.updated_at)}</ThemedText>
             </View>
           ))}
@@ -422,7 +424,7 @@ export default function CommunityScreen() {
       {hero}
       {adminPanel}
       <View style={styles.sectionHeader}>
-        <ThemedText style={[styles.sectionTitle, { color: theme.textPrimary }]}>Aktuelle Artikel</ThemedText>
+        <ThemedText style={[styles.sectionTitle, { color: primaryTextOnCommunity }]}>Aktuelle Artikel</ThemedText>
         <ThemedText style={[styles.sectionSubtitle, { color: theme.textSecondary }]}>Frisch für dich zusammengestellt</ThemedText>
       </View>
     </View>
@@ -472,12 +474,12 @@ export default function CommunityScreen() {
                 style={[styles.fab, styles.fabGhost, { borderColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.1)' : theme.border }]}
                 onPress={() => setShowDraftList(true)}
               >
-                <IconSymbol name="tray.full.fill" size={16} color={theme.textPrimary} />
-                <ThemedText style={[styles.fabLabelSecondary, { color: theme.textPrimary }]}>Entwürfe ({drafts.length})</ThemedText>
+                <IconSymbol name="tray.full.fill" size={16} color={primaryTextOnCommunity} />
+                <ThemedText style={[styles.fabLabelSecondary, { color: primaryTextOnCommunity }]}>Entwürfe ({drafts.length})</ThemedText>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.fab, styles.fabSecondary]} onPress={() => openModal(false)}>
-                <IconSymbol name="plus" size={16} color={theme.textPrimary} />
-                <ThemedText style={[styles.fabLabelSecondary, { color: theme.textPrimary }]}>Entwurf</ThemedText>
+                <IconSymbol name="plus" size={16} color={primaryTextOnCommunity} />
+                <ThemedText style={[styles.fabLabelSecondary, { color: primaryTextOnCommunity }]}>Entwurf</ThemedText>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.fab, styles.fabPrimary]} onPress={() => openModal(true)}>
                 <IconSymbol name="plus" size={18} color="#fff" />
@@ -506,7 +508,7 @@ export default function CommunityScreen() {
                     },
                   ]}
                 >
-                <ThemedText type="subtitle" style={[styles.modalTitle, { color: theme.textPrimary }]}>Neue Publikation</ThemedText>
+                <ThemedText type="subtitle" style={[styles.modalTitle, { color: primaryTextOnCommunity }]}>Neue Publikation</ThemedText>
                 <ThemedText style={[styles.modalSubtitle, { color: theme.textTertiary }]}>Veröffentlicht als {currentUserName}</ThemedText>
 
               <TextInput
@@ -518,7 +520,7 @@ export default function CommunityScreen() {
                   styles.input,
                   {
                     borderColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.08)' : theme.border,
-                    color: theme.textPrimary,
+                    color: primaryTextOnCommunity,
                     backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.9)',
                   },
                 ]}
@@ -533,7 +535,7 @@ export default function CommunityScreen() {
                   styles.input,
                   {
                     borderColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.08)' : theme.border,
-                    color: theme.textPrimary,
+                    color: primaryTextOnCommunity,
                     backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.9)',
                   },
                 ]}
@@ -550,10 +552,10 @@ export default function CommunityScreen() {
                 onPress={pickCoverImage}
               >
                 <View style={[styles.coverPickerIcon, { backgroundColor: colorScheme === 'dark' ? '#3A2E2A' : '#FADBC7' }]}>
-                  <IconSymbol name="photo" size={18} color={theme.textPrimary} />
+                  <IconSymbol name="photo" size={18} color={primaryTextOnCommunity} />
                 </View>
                 <View style={styles.coverPickerTextBlock}>
-                  <ThemedText style={[styles.coverPickerTitle, { color: theme.textPrimary }]}>Titelbild hinzufügen</ThemedText>
+                  <ThemedText style={[styles.coverPickerTitle, { color: primaryTextOnCommunity }]}>Titelbild hinzufügen</ThemedText>
                   <ThemedText style={[styles.coverPickerSubtitle, { color: theme.textSecondary }]}>Optionales Cover für den Artikel.</ThemedText>
                 </View>
                 {coverImageUri ? <View style={[styles.coverStatusDot, { backgroundColor: theme.success }]} /> : null}
@@ -572,7 +574,7 @@ export default function CommunityScreen() {
                   styles.multiline,
                   {
                     borderColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.08)' : theme.border,
-                    color: theme.textPrimary,
+                    color: primaryTextOnCommunity,
                     backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.9)',
                   },
                 ]}
@@ -582,7 +584,7 @@ export default function CommunityScreen() {
 
               <View style={styles.publishRow}>
                 <View>
-                  <ThemedText style={[styles.publishLabel, { color: theme.textPrimary }]}>Sofort veröffentlichen</ThemedText>
+                  <ThemedText style={[styles.publishLabel, { color: primaryTextOnCommunity }]}>Sofort veröffentlichen</ThemedText>
                   <ThemedText style={[styles.publishHint, { color: theme.textSecondary }]}>Wenn deaktiviert, bleibt der Beitrag als Entwurf gespeichert.</ThemedText>
                 </View>
                 <Switch value={isPublished} onValueChange={setIsPublished} thumbColor={isPublished ? theme.tint : '#ccc'} />
@@ -645,7 +647,7 @@ export default function CommunityScreen() {
                       },
                     ]}
                   >
-                    <ThemedText type="subtitle" style={[styles.modalTitle, { color: theme.textPrimary }]}>Entwürfe</ThemedText>
+                    <ThemedText type="subtitle" style={[styles.modalTitle, { color: primaryTextOnCommunity }]}>Entwürfe</ThemedText>
                     <ThemedText style={[styles.modalSubtitle, { color: theme.textTertiary }]}>Tippe auf einen Entwurf, um weiterzuschreiben.</ThemedText>
 
                     {drafts.length > 0 ? (
@@ -666,7 +668,7 @@ export default function CommunityScreen() {
                             }}
                           >
                             <View style={styles.draftListText}>
-                              <ThemedText style={[styles.draftListTitle, { color: theme.textPrimary }]} numberOfLines={1}>
+                              <ThemedText style={[styles.draftListTitle, { color: primaryTextOnCommunity }]} numberOfLines={1}>
                                 {draft.title || 'Ohne Titel'}
                               </ThemedText>
                               <ThemedText style={[styles.draftListMeta, { color: theme.textSecondary }]}>
@@ -774,7 +776,7 @@ const styles = StyleSheet.create({
   },
   heroChipText: {
     fontSize: 13,
-    color: '#5C4033',
+    color: '#7D5A50',
     fontWeight: '600',
   },
   heroStats: {
