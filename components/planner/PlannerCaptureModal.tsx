@@ -5,21 +5,30 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   TouchableWithoutFeedback,
   View,
   Keyboard,
   LayoutAnimation,
   UIManager,
+  StyleProp,
+  ViewStyle,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { BlurView } from 'expo-blur';
 
 import { PRIMARY, GLASS_OVERLAY } from '@/constants/PlannerDesign';
 import { PlannerAssignee, PlannerEvent, PlannerTodo } from '@/services/planner';
+import TextInputOverlay from '@/components/modals/TextInputOverlay';
 
 export type PlannerCaptureType = 'todo' | 'event' | 'note';
+type FocusField = 'title' | 'location' | 'notes';
+type FocusConfig = {
+  field: FocusField;
+  label: string;
+  placeholder?: string;
+  multiline?: boolean;
+};
 
 export type PlannerCapturePayload = {
   id?: string;
@@ -75,6 +84,8 @@ export const PlannerCaptureModal: React.FC<Props> = ({ visible, type, baseDate, 
   const [notesExpanded, setNotesExpanded] = useState(false);
   const [currentType, setCurrentType] = useState<PlannerCaptureType>(type);
   const [assignee, setAssignee] = useState<PlannerAssignee>('me');
+  const [focusConfig, setFocusConfig] = useState<FocusConfig | null>(null);
+  const [focusValue, setFocusValue] = useState('');
 
   useEffect(() => {
     if (!visible) return;
@@ -226,6 +237,65 @@ export const PlannerCaptureModal: React.FC<Props> = ({ visible, type, baseDate, 
     return date.toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
   };
 
+  const openFocusEditor = (config: FocusConfig) => {
+    if (config.field === 'title') {
+      setFocusValue(title);
+    } else if (config.field === 'location') {
+      setFocusValue(location);
+    } else {
+      setFocusValue(notes);
+    }
+    setFocusConfig(config);
+  };
+
+  const closeFocusEditor = () => {
+    setFocusConfig(null);
+    setFocusValue('');
+  };
+
+  const saveFocusEditor = (nextVal?: string) => {
+    if (!focusConfig) return;
+    const next = typeof nextVal === 'string' ? nextVal : focusValue;
+    if (focusConfig.field === 'title') {
+      setTitle(next);
+    } else if (focusConfig.field === 'location') {
+      setLocation(next);
+    } else {
+      setNotes(next);
+    }
+    closeFocusEditor();
+  };
+
+  useEffect(() => {
+    if (!visible) {
+      setFocusConfig(null);
+      setFocusValue('');
+    }
+  }, [visible]);
+
+  const renderInlineField = (
+    value: string,
+    placeholder: string,
+    onPress: () => void,
+    style: StyleProp<ViewStyle>,
+    multiline = false,
+  ) => {
+    const mergedStyle = Array.isArray(style)
+      ? [styles.inlineFieldBase, ...style, multiline && styles.inlineFieldMultiline]
+      : [styles.inlineFieldBase, style, multiline && styles.inlineFieldMultiline];
+
+    return (
+      <TouchableOpacity style={mergedStyle} activeOpacity={0.9} onPress={onPress}>
+        <Text
+          style={value ? styles.inputValue : styles.inputPlaceholder}
+          numberOfLines={multiline ? 3 : 1}
+        >
+          {value || placeholder}
+        </Text>
+      </TouchableOpacity>
+    );
+  };
+
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={styles.overlay}>
@@ -268,13 +338,17 @@ export const PlannerCaptureModal: React.FC<Props> = ({ visible, type, baseDate, 
                     </TouchableOpacity>
                   ))}
                 </View>
-                <TextInput
-                  value={title}
-                  onChangeText={setTitle}
-                  placeholder={currentType === 'note' ? 'Titel oder Betreff' : 'Titel'}
-                  placeholderTextColor={THEME.textSecondary}
-                  style={styles.titleInput}
-                />
+                {renderInlineField(
+                  title,
+                  currentType === 'note' ? 'Titel oder Betreff' : 'Titel',
+                  () =>
+                    openFocusEditor({
+                      field: 'title',
+                      label: currentType === 'note' ? 'Titel oder Betreff' : 'Titel',
+                      placeholder: currentType === 'note' ? 'Titel oder Betreff' : 'Titel',
+                    }),
+                  styles.titleInput,
+                )}
 
                 {currentType === 'event' && (
                   <View style={styles.section}>
@@ -312,19 +386,17 @@ export const PlannerCaptureModal: React.FC<Props> = ({ visible, type, baseDate, 
                         <Text style={styles.timeButtonLabel}>Ende hinzufügen</Text>
                       </TouchableOpacity>
                     )}
-                    <TouchableOpacity
-                      style={styles.locationField}
-                      onPress={() => {}}
-                      activeOpacity={1}
-                    >
-                      <TextInput
-                        value={location}
-                        onChangeText={setLocation}
-                        placeholder="Ort (optional)"
-                        placeholderTextColor={THEME.textSecondary}
-                        style={styles.locationInput}
-                      />
-                    </TouchableOpacity>
+                    {renderInlineField(
+                      location,
+                      'Ort (optional)',
+                      () =>
+                        openFocusEditor({
+                          field: 'location',
+                          label: 'Ort',
+                          placeholder: 'Ort (optional)',
+                        }),
+                      [styles.locationField, styles.locationInput],
+                    )}
                   </View>
                 )}
 
@@ -362,20 +434,36 @@ export const PlannerCaptureModal: React.FC<Props> = ({ visible, type, baseDate, 
                     </Text>
                   </TouchableOpacity>
                   {notesExpanded && (
-                    <TextInput
-                      value={notes}
-                      onChangeText={setNotes}
-                      placeholder="Details hinzufügen..."
-                      placeholderTextColor={THEME.textSecondary}
-                      multiline
-                      style={styles.notesInput}
-                    />
+                    renderInlineField(
+                      notes,
+                      'Details hinzufügen...',
+                      () =>
+                        openFocusEditor({
+                          field: 'notes',
+                          label: 'Notizen',
+                          placeholder: 'Details hinzufügen...',
+                          multiline: true,
+                        }),
+                      styles.notesInput,
+                      true,
+                    )
                   )}
                 </View>
               </View>
             </TouchableWithoutFeedback>
           </ScrollView>
         </BlurView>
+
+        <TextInputOverlay
+          visible={!!focusConfig}
+          label={focusConfig?.label ?? ''}
+          value={focusValue}
+          placeholder={focusConfig?.placeholder}
+          multiline={!!focusConfig?.multiline}
+          accentColor={PRIMARY}
+          onClose={closeFocusEditor}
+          onSubmit={(next) => saveFocusEditor(next)}
+        />
 
       </View>
     </Modal>
@@ -470,6 +558,21 @@ const styles = StyleSheet.create({
     backgroundColor: THEME.field,
     fontSize: 16,
     color: THEME.text,
+  },
+  inlineFieldBase: {
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+  },
+  inlineFieldMultiline: {
+    justifyContent: 'flex-start',
+  },
+  inputValue: {
+    color: THEME.text,
+    fontSize: 16,
+  },
+  inputPlaceholder: {
+    color: THEME.textSecondary,
+    fontSize: 16,
   },
   section: {
     gap: 12,

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, TextInput, SafeAreaView, StatusBar, FlatList, ActivityIndicator, Alert } from 'react-native';
+import { StyleSheet, ScrollView, View, TouchableOpacity, TextInput, SafeAreaView, StatusBar, FlatList, ActivityIndicator, Alert, Modal, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard } from 'react-native';
+import { BlurView } from 'expo-blur';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { Colors } from '@/constants/Colors';
@@ -11,6 +12,7 @@ import Header from '@/components/Header';
 import { LiquidGlassCard, GLASS_OVERLAY, LAYOUT_PAD, TIMELINE_INSET, TEXT_PRIMARY } from '@/constants/DesignGuide';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { isUserAdmin } from '@/lib/supabase/recommendations';
 
 // Fallback-Daten für Babynamen, falls die Datenbank nicht verfügbar ist
 const FALLBACK_NAMES = {
@@ -47,10 +49,11 @@ const CATEGORIES = [
 ];
 
 interface Name {
+  id?: string;
   name: string;
-  meaning: string;
-  origin: string;
-  gender?: 'male' | 'female' | 'unisex';
+  meaning?: string | null;
+  origin?: string | null;
+  gender?: 'male' | 'female' | 'unisex' | null;
   isFavorite?: boolean;
 }
 
@@ -66,6 +69,14 @@ export default function BabyNamesScreen() {
   const [favorites, setFavorites] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isCreatingName, setIsCreatingName] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editingNameId, setEditingNameId] = useState<string | null>(null);
+  const [newName, setNewName] = useState('');
+  const [persistedMeaning, setPersistedMeaning] = useState('');
+  const [persistedOrigin, setPersistedOrigin] = useState('');
+  const [persistedGender, setPersistedGender] = useState<'male' | 'female' | 'unisex'>('unisex');
   const [allNames, setAllNames] = useState<{
     male: Name[];
     female: Name[];
@@ -81,6 +92,7 @@ export default function BabyNamesScreen() {
     if (user) {
       loadFavorites();
     }
+    checkAdminStatus();
   }, [user]);
 
   useEffect(() => {
@@ -93,6 +105,11 @@ export default function BabyNamesScreen() {
     }
   }, [searchQuery]);
 
+  const checkAdminStatus = async () => {
+    const adminStatus = await isUserAdmin();
+    setIsAdmin(adminStatus);
+  };
+
   // Lade alle Babynamen aus der Datenbank
   const loadBabyNames = async () => {
     try {
@@ -100,7 +117,7 @@ export default function BabyNamesScreen() {
 
       const { data, error } = await supabase
         .from('baby_names')
-        .select('name, meaning, origin, gender');
+        .select('id, name, meaning, origin, gender');
 
       if (error) {
         console.error('Error loading baby names:', error);
@@ -263,6 +280,110 @@ export default function BabyNamesScreen() {
     }
   };
 
+  const handleOpenCreateModal = () => {
+    setNewName('');
+    setPersistedMeaning('');
+    setPersistedOrigin('');
+    setPersistedGender('unisex');
+    setEditingNameId(null);
+    setShowCreateModal(true);
+  };
+
+  const handleEditName = (item: Name) => {
+    setEditingNameId(item.id ?? null);
+    setNewName(item.name);
+    setPersistedMeaning(item.meaning || '');
+    setPersistedOrigin(item.origin || '');
+    setPersistedGender(item.gender || 'unisex');
+    setShowCreateModal(true);
+  };
+
+  const handleDeleteName = (item: Name) => {
+    if (!item.id) return;
+    Alert.alert(
+      'Name löschen',
+      `Möchtest du "${item.name}" wirklich entfernen?`,
+      [
+        { text: 'Abbrechen', style: 'cancel' },
+        {
+          text: 'Löschen',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setIsCreatingName(true);
+              const { error } = await supabase.from('baby_names').delete().eq('id', item.id);
+              if (error) throw error;
+              await loadBabyNames();
+              setShowCreateModal(false);
+              Alert.alert('Erfolg', 'Der Name wurde gelöscht.');
+            } catch (err) {
+              console.error('Error deleting baby name:', err);
+              Alert.alert('Fehler', 'Der Name konnte nicht gelöscht werden.');
+            } finally {
+              setIsCreatingName(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleCreateName = async () => {
+    if (!isAdmin) {
+      Alert.alert('Hinweis', 'Nur Admins können Babynamen hinzufügen.');
+      return;
+    }
+
+    const nameValue = newName.trim();
+    if (!nameValue) {
+      Alert.alert('Fehler', 'Bitte gib einen Namen ein.');
+      return;
+    }
+
+    const existingNames = [
+      ...allNames.male,
+      ...allNames.female,
+      ...allNames.unisex,
+    ];
+    const duplicate = existingNames.some(
+      n => n.name.trim().toLowerCase() === nameValue.toLowerCase() && (!editingNameId || n.id !== editingNameId)
+    );
+    if (duplicate) {
+      Alert.alert('Hinweis', 'Dieser Name existiert bereits.');
+      return;
+    }
+
+    try {
+      setIsCreatingName(true);
+      const payload = {
+        name: nameValue,
+        meaning: (persistedMeaning || '').trim() || null,
+        origin: (persistedOrigin || '').trim() || null,
+        gender: persistedGender || 'unisex',
+      };
+
+      if (editingNameId) {
+        const { error } = await supabase.from('baby_names').update(payload).eq('id', editingNameId);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('baby_names').insert(payload);
+        if (error) throw error;
+      }
+
+      await loadBabyNames();
+      setShowCreateModal(false);
+      setSelectedCategory('all');
+      setSearchQuery('');
+      setEditingNameId(null);
+      Alert.alert('Erfolg', editingNameId ? 'Der Name wurde aktualisiert.' : 'Der Name wurde hinzugefügt.');
+    } catch (err) {
+      console.error('Failed to create baby name:', err);
+      Alert.alert('Fehler', 'Ein unerwarteter Fehler ist aufgetreten.');
+    } finally {
+      setIsCreatingName(false);
+    }
+  };
+
   const renderCategoryItem = ({ item }: { item: typeof CATEGORIES[0] }) => (
     <TouchableOpacity
       style={[
@@ -288,37 +409,53 @@ export default function BabyNamesScreen() {
     return 'rgba(168,196,193,0.32)'; // Neutral grünlich
   };
 
-  const renderNameItem = ({ item }: { item: Name }) => (
-    <LiquidGlassCard
-      style={[styles.fullWidthCard, styles.glassCard]}
-      intensity={26}
-      overlayColor={genderOverlay(item.gender)}
-      borderColor={'rgba(255,255,255,0.7)'}
-    >
-      <TouchableOpacity style={styles.nameItemInner} onPress={() => {}}>
-        <View style={styles.nameHeader}>
-          <ThemedText style={styles.nameTitle}>{item.name}</ThemedText>
-          <TouchableOpacity
-            style={styles.favoriteButton}
-            onPress={() => toggleFavorite(item.name)}
-            disabled={isSaving}
-          >
-            {isSaving && favorites.includes(item.name) === item.isFavorite ? (
-              <ActivityIndicator size="small" color={theme.accent} />
-            ) : (
-              <IconSymbol
-                name={item.isFavorite ? 'heart.fill' : 'heart'}
-                size={20}
-                color={item.isFavorite ? theme.accent : theme.tabIconDefault}
-              />
-            )}
-          </TouchableOpacity>
+  const renderNameItem = ({ item }: { item: Name }) => {
+    const originText = item.origin || 'Herkunft unbekannt';
+    const meaningText = item.meaning || 'Keine Bedeutung hinterlegt.';
+    return (
+      <LiquidGlassCard
+        style={[styles.fullWidthCard, styles.glassCard]}
+        intensity={26}
+        overlayColor={genderOverlay(item.gender)}
+        borderColor={'rgba(255,255,255,0.7)'}
+      >
+        <View style={styles.nameItemInner}>
+          <View style={styles.nameHeader}>
+            <ThemedText style={styles.nameTitle}>{item.name}</ThemedText>
+            <View style={styles.nameActions}>
+              {isAdmin && item.id && (
+                <>
+                  <TouchableOpacity style={styles.iconButton} onPress={() => handleEditName(item)}>
+                    <IconSymbol name="pencil" size={18} color={theme.text} />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.iconButton, { marginLeft: 6 }]} onPress={() => handleDeleteName(item)}>
+                    <IconSymbol name="trash" size={18} color="#C94A4A" />
+                  </TouchableOpacity>
+                </>
+              )}
+              <TouchableOpacity
+                style={[styles.favoriteButton, { marginLeft: 8 }]}
+                onPress={() => toggleFavorite(item.name)}
+                disabled={isSaving}
+              >
+                {isSaving && favorites.includes(item.name) === item.isFavorite ? (
+                  <ActivityIndicator size="small" color={theme.accent} />
+                ) : (
+                  <IconSymbol
+                    name={item.isFavorite ? 'heart.fill' : 'heart'}
+                    size={20}
+                    color={item.isFavorite ? theme.accent : theme.tabIconDefault}
+                  />
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+          <ThemedText style={[styles.nameOrigin, { color: TEXT_PRIMARY }]}>{originText}</ThemedText>
+          <ThemedText style={[styles.nameMeaning, { color: TEXT_PRIMARY }]}>{meaningText}</ThemedText>
         </View>
-        <ThemedText style={[styles.nameOrigin, { color: TEXT_PRIMARY }]}>{item.origin}</ThemedText>
-        <ThemedText style={[styles.nameMeaning, { color: TEXT_PRIMARY }]}>{item.meaning}</ThemedText>
-      </TouchableOpacity>
-    </LiquidGlassCard>
-  );
+      </LiquidGlassCard>
+    );
+  };
 
   return (
     <>
@@ -395,18 +532,125 @@ export default function BabyNamesScreen() {
           ) : (
             <View style={styles.namesContainer}>
               {names.map((item, index) => (
-                <View key={index} style={{ width: '100%', marginBottom: 12 }}>
+                <View key={item.id ?? index} style={{ width: '100%', marginBottom: 12 }}>
                   {renderNameItem({ item })}
                 </View>
               ))}
             </View>
           )}
           </ScrollView>
+
+          {isAdmin && (
+            <TouchableOpacity
+              style={[styles.adminFab, { backgroundColor: theme.accent }]}
+              onPress={handleOpenCreateModal}
+              activeOpacity={0.9}
+            >
+              <IconSymbol name="plus" size={22} color="#FFFFFF" />
+            </TouchableOpacity>
+          )}
+
+          <Modal
+            visible={showCreateModal}
+            transparent
+            animationType="slide"
+            onRequestClose={() => setShowCreateModal(false)}
+          >
+            <KeyboardAvoidingView
+              behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+              style={styles.dailyModalWrapper}
+            >
+              <View style={styles.dailyModalOverlay}>
+                <TouchableWithoutFeedback
+                  onPress={() => {
+                    setShowCreateModal(false);
+                    Keyboard.dismiss();
+                  }}
+                >
+                  <View style={StyleSheet.absoluteFill} />
+                </TouchableWithoutFeedback>
+
+                <BlurView style={styles.dailyModalContent} tint="extraLight" intensity={82}>
+                  <View style={styles.modalHeaderRow}>
+                    <View style={styles.headerLeft}>
+                      <TouchableOpacity onPress={() => setShowCreateModal(false)} style={styles.headerCircleButton}>
+                        <IconSymbol name="xmark" size={18} color={BABY_LILA} />
+                      </TouchableOpacity>
+                    </View>
+                    <View style={styles.headerCenter}>
+                      <ThemedText style={[styles.modalTitle, { color: BABY_LILA }]}>
+                        {editingNameId ? 'Name bearbeiten' : 'Neuen Namen hinzufügen'}
+                      </ThemedText>
+                    </View>
+                    <View style={styles.headerRight}>
+                      <TouchableOpacity
+                        style={[styles.headerCircleButton, { backgroundColor: BABY_LILA }]}
+                        onPress={handleCreateName}
+                        disabled={isCreatingName}
+                      >
+                        {isCreatingName ? (
+                          <ActivityIndicator color="#FFFFFF" />
+                        ) : (
+                          <IconSymbol name="checkmark" size={18} color="#FFFFFF" />
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  <ScrollView
+                    showsVerticalScrollIndicator={false}
+                    keyboardShouldPersistTaps="handled"
+                    contentContainerStyle={{ paddingBottom: 12 }}
+                  >
+                    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+                      <View>
+                        <View style={styles.modalField}>
+                          <ThemedText style={[styles.modalLabel, { color: BABY_LILA }]}>Name</ThemedText>
+                          <TextInput
+                            style={[styles.modalInput, { color: theme.text }]}
+                            value={newName}
+                            onChangeText={setNewName}
+                            placeholder="z.B. Mila"
+                            placeholderTextColor={theme.tabIconDefault}
+                            autoFocus
+                          />
+                        </View>
+
+                        <View style={styles.modalField}>
+                          <ThemedText style={[styles.modalLabel, { color: BABY_LILA }]}>Bedeutung</ThemedText>
+                          <TextInput
+                            style={[styles.modalInput, { color: theme.text }]}
+                            value={persistedMeaning}
+                            onChangeText={setPersistedMeaning}
+                            placeholder="z.B. Wunder, Hoffnung"
+                            placeholderTextColor={theme.tabIconDefault}
+                          />
+                        </View>
+
+                        <View style={styles.modalField}>
+                          <ThemedText style={[styles.modalLabel, { color: BABY_LILA }]}>Herkunft</ThemedText>
+                          <TextInput
+                            style={[styles.modalInput, { color: theme.text }]}
+                            value={persistedOrigin}
+                            onChangeText={setPersistedOrigin}
+                            placeholder="z.B. Hebräisch"
+                            placeholderTextColor={theme.tabIconDefault}
+                          />
+                        </View>
+                      </View>
+                    </TouchableWithoutFeedback>
+                  </ScrollView>
+                </BlurView>
+              </View>
+            </KeyboardAvoidingView>
+          </Modal>
         </SafeAreaView>
       </ThemedBackground>
     </>
   );
 }
+
+const BABY_LILA = '#8E4EC6';
 
 const styles = StyleSheet.create({
   backgroundImage: {
@@ -480,6 +724,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8,
   },
+  nameActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  iconButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+  },
   nameTitle: {
     fontSize: 18,
     fontWeight: 'bold',
@@ -527,5 +787,133 @@ const styles = StyleSheet.create({
   emptyButtonText: {
     color: '#FFFFFF',
     fontWeight: 'bold',
+  },
+  adminFab: {
+    position: 'absolute',
+    right: LAYOUT_PAD + 6,
+    bottom: 28,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  dailyModalWrapper: {
+    flex: 1,
+  },
+  dailyModalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  dailyModalContent: {
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    width: '100%',
+    maxHeight: '78%',
+    overflow: 'hidden',
+    padding: 20,
+    paddingBottom: 28,
+    backgroundColor: 'rgba(142,78,198,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(142,78,198,0.2)',
+  },
+  modalHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  headerLeft: { flex: 1, alignItems: 'flex-start' },
+  headerCenter: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  headerRight: { flex: 1, alignItems: 'flex-end' },
+  headerCircleButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.96)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  modalSubtitle: {
+    fontSize: 13,
+    color: BABY_LILA,
+    opacity: 0.85,
+    marginTop: 2,
+    textAlign: 'center',
+  },
+  closeButton: {
+    padding: 8,
+  },
+  modalField: {
+    marginBottom: 14,
+  },
+  modalLabel: {
+    fontSize: 14,
+    marginBottom: 6,
+    fontWeight: '600',
+  },
+  modalInput: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(142,78,198,0.25)',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: 'rgba(255,255,255,0.96)',
+    fontSize: 16,
+  },
+  genderRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  genderPill: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.06)',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.8)',
+  },
+  genderPillText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#7D5A50',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+    marginTop: 6,
+  },
+  modalActionButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 110,
+  },
+  modalCancelButton: {
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.05)',
+  },
+  modalActionText: {
+    fontSize: 15,
+    fontWeight: '700',
   },
 });
