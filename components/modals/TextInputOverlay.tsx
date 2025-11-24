@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   TouchableWithoutFeedback,
   View,
+  TextInputProps,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 
@@ -19,6 +20,8 @@ type Props = {
   placeholder?: string;
   multiline?: boolean;
   accentColor?: string;
+  keyboardType?: TextInputProps['keyboardType'];
+  inputMode?: TextInputProps['inputMode'];
   onClose: () => void;
   onSubmit: (next: string) => void;
 };
@@ -32,6 +35,8 @@ const TextInputOverlay: React.FC<Props> = ({
   placeholder,
   multiline,
   accentColor = DEFAULT_ACCENT,
+  keyboardType,
+  inputMode,
   onClose,
   onSubmit,
 }) => {
@@ -65,10 +70,12 @@ const TextInputOverlay: React.FC<Props> = ({
             value={text}
             onChangeText={setText}
             placeholder={placeholder}
-            placeholderTextColor="rgba(0,0,0,0.35)"
+            placeholderTextColor="rgba(125,90,80,0.55)"
             autoFocus
             multiline={!!multiline}
             textAlignVertical={multiline ? 'top' : 'center'}
+            keyboardType={keyboardType}
+            inputMode={inputMode}
           />
           <View style={styles.actions}>
             <TouchableOpacity style={styles.actionGhost} onPress={onClose}>
@@ -111,7 +118,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 17,
     fontWeight: '700',
-    color: '#6B4C3B',
+    color: '#7D5A50',
     textAlign: 'center',
     marginBottom: 10,
   },
@@ -123,7 +130,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 16,
-    color: '#2D2A32',
+    color: '#7D5A50',
   },
   inputMultiline: {
     minHeight: 170,

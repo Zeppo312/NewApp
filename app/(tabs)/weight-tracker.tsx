@@ -1,6 +1,8 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { StyleSheet, View, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator, Platform, Modal, SafeAreaView, StatusBar, Text, InputAccessoryView, KeyboardAvoidingView, Keyboard, TouchableWithoutFeedback } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { StyleSheet, View, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Modal, SafeAreaView, StatusBar, Text, TouchableWithoutFeedback, Platform, TextInputProps } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { BlurView } from 'expo-blur';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { Colors } from '@/constants/Colors';
@@ -8,13 +10,14 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { LineChart } from 'react-native-chart-kit';
 import { Dimensions } from 'react-native';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import { saveWeightEntry, getWeightEntries, deleteWeightEntry, WeightEntry, WeightSubject } from '@/lib/weight';
-import { supabase } from '@/lib/supabase';
+import { getWeightEntries, deleteWeightEntry, WeightEntry, WeightSubject, saveWeightEntry } from '@/lib/weight';
 import { Stack } from 'expo-router';
 import Header from '@/components/Header';
 import { LiquidGlassCard, GLASS_OVERLAY, LAYOUT_PAD, SECTION_GAP_TOP, SECTION_GAP_BOTTOM } from '@/constants/DesignGuide';
 import ActivityCard from '@/components/ActivityCard';
+import { PRIMARY as PLANNER_PRIMARY } from '@/constants/PlannerDesign';
+import FloatingAddButton from '@/components/planner/FloatingAddButton';
+import TextInputOverlay from '@/components/modals/TextInputOverlay';
 
 const SUBJECT_LABELS: Record<WeightSubject, string> = {
   mom: 'Ich',
@@ -32,9 +35,7 @@ const SUBJECT_COLORS: Record<WeightSubject, string> = {
 };
 
 const SUBJECT_OPTIONS: WeightSubject[] = ['mom', 'baby'];
-const WEIGHT_ACCESSORY_ID = 'weightInputAccessory';
-const NOTES_ACCESSORY_ID = 'notesInputAccessory';
-
+const HEADER_TEXT_COLOR = '#7D5A50';
 const toRgba = (hex: string, opacity = 1) => {
   const cleanHex = hex.replace('#', '');
   const int = parseInt(cleanHex, 16);
@@ -48,21 +49,26 @@ export default function WeightTrackerScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   // router wird durch die BackButton-Komponente verwaltet
+  const insets = useSafeAreaInsets();
 
   const [weightEntries, setWeightEntries] = useState<WeightEntry[]>([]);
   const [selectedSubject, setSelectedSubject] = useState<WeightSubject>('mom');
-  const [entrySubject, setEntrySubject] = useState<WeightSubject>('mom');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [showInputModal, setShowInputModal] = useState(false);
-  const [activeInput, setActiveInput] = useState<'weight' | 'notes' | null>(null);
-  const [editingEntry, setEditingEntry] = useState<WeightEntry | null>(null);
   const [selectedRange, setSelectedRange] = useState<'week' | 'month' | 'year' | 'all'>('month');
-  const [weight, setWeight] = useState('');
-  const [notes, setNotes] = useState('');
-  const [date, setDate] = useState(new Date());
+  const [weightModalVisible, setWeightModalVisible] = useState(false);
+  const [weightModalSubject, setWeightModalSubject] = useState<WeightSubject>('mom');
+  const [weightInput, setWeightInput] = useState('');
+  const [weightNotes, setWeightNotes] = useState('');
+  const [editingEntry, setEditingEntry] = useState<WeightEntry | null>(null);
+  const [weightDate, setWeightDate] = useState<Date>(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  });
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const scrollRef = useRef<ScrollView | null>(null);
+  const [focusConfig, setFocusConfig] = useState<{ field: 'weight' | 'notes'; label: string; placeholder?: string; multiline?: boolean; keyboardType?: TextInputProps['keyboardType']; inputMode?: TextInputProps['inputMode']; } | null>(null);
+  const [focusValue, setFocusValue] = useState('');
 
   // Lade Gewichtsdaten beim ersten Rendern
   useEffect(() => {
@@ -84,80 +90,6 @@ export default function WeightTrackerScreen() {
       console.error('Error loading weight entries:', error);
       Alert.alert('Fehler', 'Beim Laden der Gewichtsdaten ist ein Fehler aufgetreten.');
     } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Speichere einen neuen Gewichtseintrag
-  const handleSaveWeightEntry = async () => {
-    if (!weight.trim()) {
-      Alert.alert('Hinweis', 'Bitte gib ein Gewicht ein.');
-      return;
-    }
-
-    const weightValue = parseFloat(weight.replace(',', '.'));
-    if (isNaN(weightValue) || weightValue <= 0) {
-      Alert.alert('Hinweis', 'Bitte gib ein gültiges Gewicht ein.');
-      return;
-    }
-
-    try {
-      const formattedDate = date.toISOString().split('T')[0]; // Format: YYYY-MM-DD
-      const subject = entrySubject ?? 'mom';
-      if (editingEntry) {
-        const conflictingEntry = weightEntries.find(
-          (entry) =>
-            entry.id !== editingEntry.id &&
-            entry.date === formattedDate &&
-            (entry.subject ?? 'mom') === subject
-        );
-        if (conflictingEntry) {
-          Alert.alert('Hinweis', `Für ${SUBJECT_COPY_LABELS[subject]} gibt es an diesem Datum bereits einen Eintrag.`);
-          return;
-        }
-      }
-
-      setIsSaving(true);
-      if (editingEntry?.id) {
-        const nowIso = new Date().toISOString();
-        const { error } = await supabase
-          .from('weight_entries')
-          .update({
-            date: formattedDate,
-            weight: weightValue,
-            subject,
-            notes: notes.trim() || null,
-            updated_at: nowIso,
-          })
-          .eq('id', editingEntry.id);
-        if (error) throw error;
-      } else {
-        const { error } = await saveWeightEntry({
-          date: formattedDate,
-          weight: weightValue,
-          subject,
-          notes: notes.trim() || undefined
-        });
-        if (error) throw error;
-      }
-
-      // Lade Gewichtsdaten neu
-      setIsLoading(true);
-      await loadWeightEntries();
-      setWeight('');
-      setNotes('');
-      setDate(new Date());
-      setShowInputModal(false);
-      setEditingEntry(null);
-      setSelectedSubject(subject);
-      setEntrySubject(subject);
-      setActiveInput(null);
-      Alert.alert('Erfolg', `Der Eintrag für ${SUBJECT_COPY_LABELS[subject]} wurde gespeichert.`);
-    } catch (error) {
-      console.error('Error saving weight entry:', error);
-      Alert.alert('Fehler', 'Beim Speichern des Gewichtseintrags ist ein Fehler aufgetreten.');
-    } finally {
-      setIsSaving(false);
       setIsLoading(false);
     }
   };
@@ -193,6 +125,118 @@ export default function WeightTrackerScreen() {
         }
       ]
     );
+  };
+
+  const openWeightModal = (subject?: WeightSubject) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    setWeightDate(today);
+    setWeightModalSubject(subject ?? selectedSubject);
+    setWeightInput('');
+    setWeightNotes('');
+    setEditingEntry(null);
+    setShowDatePicker(false);
+    setWeightModalVisible(true);
+    setFocusConfig(null);
+    setFocusValue('');
+  };
+
+  const closeWeightModal = () => {
+    setWeightModalVisible(false);
+    setShowDatePicker(false);
+    setEditingEntry(null);
+    setFocusConfig(null);
+    setFocusValue('');
+  };
+
+  const formatDisplayDate = (date: Date) =>
+    date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+  const toDateString = (date: Date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const parseDateOnly = (dateStr: string) => {
+    const parts = dateStr.split('-').map((p) => Number(p));
+    if (parts.length === 3 && parts.every((n) => !Number.isNaN(n))) {
+      const [y, m, d] = parts;
+      const parsed = new Date();
+      parsed.setFullYear(y, (m ?? 1) - 1, d ?? 1);
+      parsed.setHours(12, 0, 0, 0);
+      return parsed;
+    }
+    const fallback = new Date(dateStr);
+    fallback.setHours(12, 0, 0, 0);
+    return fallback;
+  };
+
+  const handleSaveWeightEntry = async () => {
+    const normalizedWeight = parseFloat(weightInput.replace(',', '.'));
+    if (!weightInput.trim() || Number.isNaN(normalizedWeight) || normalizedWeight <= 0) {
+      Alert.alert('Hinweis', 'Bitte gib ein gültiges Gewicht in Kilogramm ein.');
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      const { error } = await saveWeightEntry({
+        date: toDateString(weightDate),
+        weight: normalizedWeight,
+        subject: weightModalSubject,
+        notes: weightNotes.trim() ? weightNotes.trim() : undefined,
+      });
+      if (error) throw error;
+
+      await loadWeightEntries();
+      setSelectedSubject(weightModalSubject);
+      setEditingEntry(null);
+      setWeightModalVisible(false);
+      Alert.alert('Erfolg', 'Gewichtseintrag gespeichert.');
+    } catch (error) {
+      console.error('Error saving weight entry:', error);
+      Alert.alert('Fehler', 'Beim Speichern des Gewichtseintrags ist ein Fehler aufgetreten.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const openFocusEditor = (cfg: { field: 'weight' | 'notes'; label: string; placeholder?: string; multiline?: boolean; keyboardType?: TextInputProps['keyboardType']; inputMode?: TextInputProps['inputMode']; }) => {
+    setFocusConfig(cfg);
+    setFocusValue(cfg.field === 'weight' ? weightInput : weightNotes);
+  };
+
+  const closeFocusEditor = () => {
+    setFocusConfig(null);
+    setFocusValue('');
+  };
+
+  const saveFocusEditor = (next?: string) => {
+    if (!focusConfig) return;
+    const val = typeof next === 'string' ? next : focusValue;
+    if (focusConfig.field === 'weight') {
+      setWeightInput(val);
+    } else {
+      setWeightNotes(val);
+    }
+    closeFocusEditor();
+  };
+
+  const handleEditWeightEntry = (entry: any) => {
+    const source = weightEntries.find((e) => e.id === entry.id);
+    if (!source) return;
+    const parsedDate = parseDateOnly(source.date);
+    setWeightModalSubject(source.subject ?? 'mom');
+    setWeightInput(String(source.weight).replace('.', ','));
+    setWeightNotes(source.notes ?? '');
+    setWeightDate(parsedDate);
+    setEditingEntry(source);
+    setShowDatePicker(false);
+    setWeightModalVisible(true);
+    setFocusConfig(null);
+    setFocusValue('');
   };
 
   // Bereite die Daten für das Diagramm vor (nach Range)
@@ -427,6 +471,11 @@ export default function WeightTrackerScreen() {
       // Custom Anzeige wie im Sleep-Tracker (über emoji/label)
       emoji: subject === 'baby' ? '👶' : '🤰',
       label: `${SUBJECT_LABELS[subject]}: ${e.weight} kg`,
+      weightValue: e.weight,
+      weightSubject: subject,
+      weightNotes: e.notes ?? '',
+      weightDate: e.date,
+      rawWeightEntry: e,
     };
   };
 
@@ -451,24 +500,13 @@ export default function WeightTrackerScreen() {
       <View style={styles.timelineSection}>
         <Text style={[styles.sectionTitleSleepLike]}>Gewichtseinträge für {subjectLabel}</Text>
         <View style={{ alignSelf: 'center', width: contentWidth }}>
-          <View style={[styles.entriesContainer, { paddingHorizontal: TIMELINE_INSET }]}> 
+          <View style={[styles.entriesContainer, { paddingHorizontal: TIMELINE_INSET }]}>
             {filteredEntries.map((entry) => (
               <ActivityCard
                 key={entry.id}
                 entry={convertWeightToDailyEntry(entry)}
                 onDelete={(id) => handleDeleteWeightEntry(id)}
-                onEdit={() => {
-                  setEditingEntry(entry);
-                  const weightStr = String(entry.weight);
-                  setWeight(weightStr);
-                  const notesStr = entry.notes || '';
-                  setNotes(notesStr);
-                  setDate(new Date(entry.date));
-                  setEntrySubject(entry.subject ?? 'mom');
-                  setSelectedSubject(entry.subject ?? 'mom');
-                  setShowDatePicker(false);
-                  setShowInputModal(true);
-                }}
+                onEdit={(cardEntry) => handleEditWeightEntry(cardEntry)}
                 marginHorizontal={8}
               />
             ))}
@@ -493,7 +531,7 @@ export default function WeightTrackerScreen() {
             <TouchableOpacity
               key={subjectKey}
               style={[styles.subjectPill, isActive && [styles.subjectPillActive, { borderColor: toRgba(SUBJECT_COLORS[subjectKey], 0.6) }]]}
-              onPress={() => { setSelectedSubject(subjectKey); setEntrySubject(subjectKey); }}
+              onPress={() => setSelectedSubject(subjectKey)}
               activeOpacity={0.85}
             >
               <Text style={[styles.subjectPillText, isActive && styles.subjectPillTextActive]}>
@@ -504,6 +542,175 @@ export default function WeightTrackerScreen() {
         })}
       </View>
     </LiquidGlassCard>
+  );
+
+  const renderWeightCaptureModal = () => (
+    <Modal
+      visible={weightModalVisible}
+      transparent
+      animationType="slide"
+      onRequestClose={closeWeightModal}
+    >
+      <View style={styles.modalOverlay}>
+        <TouchableWithoutFeedback onPress={closeWeightModal}>
+          <View style={StyleSheet.absoluteFill} />
+        </TouchableWithoutFeedback>
+
+        <BlurView
+          intensity={80}
+          tint="extraLight"
+          style={[styles.modalContent, { paddingBottom: Math.max(28, insets.bottom + 16) }]}
+        >
+          <View style={styles.header}>
+            <TouchableOpacity
+              style={[styles.headerButton, styles.headerButtonGhost]}
+              onPress={closeWeightModal}
+            >
+              <Text style={styles.closeHeaderButtonText}>✕</Text>
+            </TouchableOpacity>
+            <View style={styles.headerCenter}>
+              <Text style={styles.modalTitle}>{editingEntry ? 'Gewicht bearbeiten' : 'Gewicht hinzufügen'}</Text>
+              <Text style={styles.modalSubtitle}>Für dich oder Mini</Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.headerButton, styles.saveHeaderButton, { backgroundColor: PLANNER_PRIMARY }]}
+              onPress={handleSaveWeightEntry}
+            >
+              <Text style={styles.saveHeaderButtonText}>✓</Text>
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.modalScrollContent}
+          >
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>Für wen?</Text>
+              <View style={styles.typeSwitchRow}>
+                {SUBJECT_OPTIONS.map((subjectKey) => {
+                  const isActive = weightModalSubject === subjectKey;
+                  return (
+                    <TouchableOpacity
+                      key={subjectKey}
+                      style={[styles.typeSwitchButton, isActive && styles.typeSwitchButtonActive]}
+                      onPress={() => setWeightModalSubject(subjectKey)}
+                      activeOpacity={0.88}
+                    >
+                      <Text style={[styles.typeSwitchLabel, isActive && styles.typeSwitchLabelActive]}>
+                        {SUBJECT_LABELS[subjectKey]}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>Gewicht (kg)</Text>
+              <View style={styles.pickerBlock}>
+                <TouchableOpacity
+                  style={styles.inlineField}
+                  activeOpacity={0.9}
+                    onPress={() =>
+                      openFocusEditor({
+                        field: 'weight',
+                        label: 'Gewicht (kg)',
+                        placeholder: 'z. B. 65,4',
+                        keyboardType: 'decimal-pad',
+                        inputMode: 'decimal',
+                      })
+                    }
+                >
+                  <Text style={styles.inlineFieldLabel}>Gewicht</Text>
+                  <Text style={weightInput.trim() ? styles.inlineFieldValue : styles.inlineFieldPlaceholder}>
+                    {weightInput.trim() ? `${weightInput.trim()} kg` : 'Tippe zum Eingeben'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>Datum</Text>
+              <View style={styles.pickerBlock}>
+                <TouchableOpacity style={styles.selectorHeader} onPress={() => setShowDatePicker((prev) => !prev)} activeOpacity={0.9}>
+                  <Text style={styles.pickerLabel}>Messdatum</Text>
+                  <Text style={styles.selectorValue}>{formatDisplayDate(weightDate)}</Text>
+                </TouchableOpacity>
+                {showDatePicker && (
+                  <View style={styles.pickerInner}>
+                    <DateTimePicker
+                      value={weightDate}
+                      mode="date"
+                      display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                      onChange={(event, date) => {
+                        if (date) {
+                          const normalized = new Date(date);
+                          normalized.setHours(12, 0, 0, 0);
+                          setWeightDate(normalized);
+                        }
+                        if (Platform.OS !== 'ios') {
+                          setShowDatePicker(false);
+                        } else if (event?.type === 'dismissed') {
+                          setShowDatePicker(false);
+                        }
+                      }}
+                      maximumDate={new Date()}
+                      style={styles.dateTimePicker}
+                    />
+                    {Platform.OS === 'ios' && (
+                      <View style={styles.datePickerActions}>
+                        <TouchableOpacity style={styles.datePickerCancel} onPress={() => setShowDatePicker(false)}>
+                          <Text style={styles.datePickerCancelText}>Fertig</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </View>
+                )}
+              </View>
+            </View>
+
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>Notizen</Text>
+              <View style={styles.pickerBlock}>
+                <TouchableOpacity
+                  style={[styles.inlineField, styles.inlineFieldMultiline]}
+                  activeOpacity={0.9}
+                  onPress={() =>
+                    openFocusEditor({
+                      field: 'notes',
+                      label: 'Notizen',
+                      placeholder: 'z. B. Messzeitpunkt oder besondere Hinweise',
+                      multiline: true,
+                    })
+                  }
+                >
+                  <Text style={styles.inlineFieldLabel}>Details</Text>
+                  <Text
+                    style={weightNotes.trim() ? styles.inlineFieldValue : styles.inlineFieldPlaceholder}
+                    numberOfLines={3}
+                  >
+                    {weightNotes.trim() || 'Tippe zum Hinzufügen'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </ScrollView>
+          <TextInputOverlay
+            visible={!!focusConfig}
+            label={focusConfig?.label ?? ''}
+            value={focusValue}
+            placeholder={focusConfig?.placeholder}
+            multiline={!!focusConfig?.multiline}
+            accentColor={PLANNER_PRIMARY}
+            keyboardType={focusConfig?.keyboardType}
+            inputMode={focusConfig?.inputMode}
+            onClose={closeFocusEditor}
+            onSubmit={(next) => saveFocusEditor(next)}
+          />
+        </BlurView>
+      </View>
+    </Modal>
   );
 
   // Rendere die SaveView-Komponente
@@ -530,8 +737,6 @@ export default function WeightTrackerScreen() {
   const screenWidth = Dimensions.get('window').width;
   const contentWidth = screenWidth - 2 * LAYOUT_PAD;
   const TIMELINE_INSET = 8;
-  const selectedSubjectColor = SUBJECT_COLORS[selectedSubject];
-  const entrySubjectColor = SUBJECT_COLORS[entrySubject];
 
   return (
     <>
@@ -542,6 +747,7 @@ export default function WeightTrackerScreen() {
       >
         {/* SaveView Modal */}
         {renderSaveView()}
+        {renderWeightCaptureModal()}
 
         <SafeAreaView style={styles.safeArea}>
           <StatusBar hidden={true} />
@@ -564,198 +770,8 @@ export default function WeightTrackerScreen() {
               </>
             )}
             </ScrollView>
-
-            {/* Floating Add Button - nur anzeigen, wenn nicht im Formular-Modus */}
-            {!showInputModal && !isLoading && (
-          <TouchableOpacity
-            style={[styles.floatingAddButton, { backgroundColor: selectedSubjectColor }]}
-            onPress={() => {
-              setEditingEntry(null);
-              setWeight('');
-              setNotes('');
-              setDate(new Date());
-              setEntrySubject(selectedSubject);
-              setActiveInput(null);
-              setShowDatePicker(false);
-              setShowInputModal(true);
-            }}
-          >
-            <IconSymbol name="plus" size={24} color="#FFFFFF" />
-              </TouchableOpacity>
-            )}
-            {/* Add Entry Modal (like sleep-tracker) */}
-            <Modal 
-              visible={showInputModal}
-              transparent={true}
-              animationType="slide"
-              onRequestClose={() => {
-                setShowInputModal(false);
-                setShowDatePicker(false);
-                setActiveInput(null);
-              }}
-            >
-              <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-                <View style={{ flex: 1, justifyContent: 'flex-end' }}>
-                  <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.4)' }]} />
-                  <KeyboardAvoidingView
-                    style={{ width: '100%' }}
-                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                    keyboardVerticalOffset={0}
-                  >
-                    <BlurView
-                      style={styles.modalContent}
-                      tint="extraLight"
-                      intensity={80}
-                    >
-                      {/* Header */}
-                      <View style={styles.header}>
-                        <TouchableOpacity
-                          style={styles.headerButton}
-                    onPress={() => {
-                      setShowInputModal(false);
-                      setShowDatePicker(false);
-                      setActiveInput(null);
-                      Keyboard.dismiss();
-                    }}
-                        >
-                          <Text style={styles.closeHeaderButtonText}>✕</Text>
-                        </TouchableOpacity>
-                        <View style={styles.headerCenter}>
-                          <Text style={styles.modalTitle}>{editingEntry ? 'Gewicht bearbeiten' : 'Gewicht hinzufügen'}</Text>
-                          <Text style={styles.modalSubtitle}>{editingEntry ? 'Daten anpassen' : 'Neuen Eintrag erstellen'}</Text>
-                        </View>
-                        <TouchableOpacity
-                          style={[styles.headerButton, styles.saveHeaderButton, { backgroundColor: entrySubjectColor }]}
-                          onPress={handleSaveWeightEntry}
-                          disabled={isLoading || isSaving}
-                        >
-                          <Text style={styles.saveHeaderButtonText}>✓</Text>
-                        </TouchableOpacity>
-                      </View>
-
-                      <ScrollView
-                        ref={scrollRef}
-                        showsVerticalScrollIndicator={false}
-                        keyboardShouldPersistTaps="handled"
-                        contentContainerStyle={{
-                          paddingBottom: 24,
-                        }}
-                      >
-                        <TouchableOpacity activeOpacity={1}>
-                          <View style={{ width: '100%', alignItems: 'center' }}>
-                            {/* Für wen */}
-                            <View style={styles.section}>
-                              <Text style={styles.sectionTitleSleepLike}>👤 Für wen?</Text>
-                              <View style={styles.modalSubjectPills}>
-                                {SUBJECT_OPTIONS.map((subjectKey) => {
-                                  const isActive = entrySubject === subjectKey;
-                                  return (
-                                    <TouchableOpacity
-                                      key={subjectKey}
-                                      style={[styles.modalSubjectPill, isActive && [styles.modalSubjectPillActive, { borderColor: toRgba(SUBJECT_COLORS[subjectKey], 0.6) }]]}
-                                      onPress={() => setEntrySubject(subjectKey)}
-                                      activeOpacity={0.9}
-                                    >
-                                      <Text style={[styles.modalSubjectPillText, isActive && styles.modalSubjectPillTextActive]}>
-                                        {SUBJECT_LABELS[subjectKey]}
-                                      </Text>
-                                    </TouchableOpacity>
-                                  );
-                                })}
-                              </View>
-                            </View>
-
-                            {/* Datum */}
-                            <View style={styles.section}>
-                              <Text style={styles.sectionTitleSleepLike}>⏰ Datum</Text>
-                              <TouchableOpacity style={styles.timeButton} onPress={() => setShowDatePicker(true)}>
-                                <Text style={styles.timeLabel}>Datum</Text>
-                                <Text style={styles.timeValue}>{date.toLocaleDateString('de-DE')}</Text>
-                              </TouchableOpacity>
-
-                              {showDatePicker && (
-                                <View style={styles.datePickerContainer}>
-                                  <DateTimePicker
-                                    value={date}
-                                    mode="date"
-                                    display={Platform.OS === 'ios' ? 'compact' : 'default'}
-                                    onChange={(_, selectedDate) => {
-                                      setShowDatePicker(false);
-                                      if (selectedDate) setDate(selectedDate);
-                                    }}
-                                    style={styles.dateTimePicker}
-                                  />
-                                  <View style={styles.datePickerActions}>
-                                    <TouchableOpacity style={[styles.datePickerCancel, { backgroundColor: entrySubjectColor }]} onPress={() => setShowDatePicker(false)}>
-                                      <Text style={styles.datePickerCancelText}>Fertig</Text>
-                                    </TouchableOpacity>
-                                  </View>
-                                </View>
-                              )}
-                            </View>
-
-                            {/* Gewicht */}
-                            <View style={styles.section}>
-                              <Text style={styles.sectionTitleSleepLike}>⚖️ Gewicht</Text>
-                              <View style={styles.timeButton}>
-                                <Text style={styles.timeLabel}>kg</Text>
-                                <TextInput
-                                  style={[styles.timeValue, { width: '100%', textAlign: 'center', color: '#333333' }]}
-                                  placeholder="z.B. 65.5"
-                                  placeholderTextColor="#888888"
-                                  keyboardType="decimal-pad"
-                                  value={weight}
-                                  onChangeText={setWeight}
-                                  inputAccessoryViewID={WEIGHT_ACCESSORY_ID}
-                                />
-                              </View>
-                            </View>
-
-                            {/* Notizen */}
-                            <View style={styles.section}>
-                              <Text style={styles.sectionTitleSleepLike}>📝 Notizen</Text>
-                              <TextInput
-                                style={styles.modalNotesInput}
-                                placeholder="z.B. Nach dem Sport gemessen"
-                                placeholderTextColor="#888888"
-                                value={notes}
-                                onChangeText={setNotes}
-                                multiline
-                                inputAccessoryViewID={NOTES_ACCESSORY_ID}
-                              />
-                            </View>
-                          </View>
-                        </TouchableOpacity>
-                      </ScrollView>
-                    </BlurView>
-                  </KeyboardAvoidingView>
-                </View>
-              </TouchableWithoutFeedback>
-            </Modal>
-
-            {/* Native InputAccessory for iOS to show a docked, fokussierbares Feld */}
-            {Platform.OS === 'ios' && (
-              <>
-                <InputAccessoryView nativeID={WEIGHT_ACCESSORY_ID}>
-                  <View style={styles.accessoryContainer}>
-                    <View style={{ flex: 1 }} />
-                    <TouchableOpacity onPress={Keyboard.dismiss}>
-                      <Text style={styles.accessoryButtonText}>Fertig</Text>
-                    </TouchableOpacity>
-                  </View>
-                </InputAccessoryView>
-
-                <InputAccessoryView nativeID={NOTES_ACCESSORY_ID}>
-                  <View style={styles.accessoryContainer}>
-                    <View style={{ flex: 1 }} />
-                    <TouchableOpacity onPress={Keyboard.dismiss}>
-                      <Text style={styles.accessoryButtonText}>Fertig</Text>
-                    </TouchableOpacity>
-                  </View>
-                </InputAccessoryView>
-              </>
-            )}
           </View>
+          <FloatingAddButton onPress={() => openWeightModal(selectedSubject)} bottomInset={Math.max(88, insets.bottom + 54)} rightInset={18} />
         </SafeAreaView>
       </ThemedBackground>
     </>
@@ -923,25 +939,29 @@ const styles = StyleSheet.create({
   activeTopTab: { backgroundColor: 'rgba(255,255,255,0.9)' },
   topTabText: { fontSize: 13, fontWeight: '700', color: '#7D5A50' },
   activeTopTabText: { fontWeight: '800' },
-  // Modal styles (aligned with sleep-tracker)
+  // Modal styles (match Planner Capture)
   modalOverlay: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'rgba(0,0,0,0.35)',
   },
   modalContent: {
     borderTopLeftRadius: 30,
     borderTopRightRadius: 30,
     width: '100%',
     overflow: 'hidden',
-    padding: 20,
-    paddingBottom: 20,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+  },
+  modalScrollContent: {
+    paddingBottom: 24,
+    gap: 20,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 25,
+    marginBottom: 18,
   },
   headerButton: {
     width: 44,
@@ -950,23 +970,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: 22,
   },
+  headerButtonGhost: {
+    backgroundColor: 'rgba(0,0,0,0.08)',
+  },
   closeHeaderButtonText: {
     fontSize: 20,
-    fontWeight: '400',
-    color: '#888888',
+    fontWeight: '700',
+    color: HEADER_TEXT_COLOR,
   },
   headerCenter: {
     alignItems: 'center',
+    flex: 1,
   },
   modalTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#7D5A50',
+    fontWeight: '700',
+    color: HEADER_TEXT_COLOR,
   },
   modalSubtitle: {
-    fontSize: 14,
+    fontSize: 13,
     marginTop: 2,
-    color: '#A8978E',
+    color: HEADER_TEXT_COLOR,
   },
   saveHeaderButton: {
     shadowColor: '#000',
@@ -981,79 +1005,120 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   section: {
-    marginBottom: 22,
     width: '100%',
-    alignItems: 'center',
+    gap: 12,
   },
-  timeButton: {
-    width: '90%',
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
-    borderRadius: 15,
-    padding: 15,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
-  },
-  timeLabel: {
-    fontSize: 12,
-    color: '#888888',
+  sectionLabel: {
+    fontSize: 14,
     fontWeight: '600',
-    marginBottom: 5,
+    color: HEADER_TEXT_COLOR,
   },
-  timeValue: {
-    fontSize: 16,
-    color: '#333333',
-    fontWeight: 'bold',
+  typeSwitchRow: {
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
   },
-  modalNotesInput: {
-    width: '90%',
-    minHeight: 80,
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
-    borderRadius: 15,
-    padding: 15,
-    fontSize: 16,
-    color: '#333333',
-    textAlignVertical: 'top',
+  typeSwitchButton: {
+    flex: 1,
+    borderRadius: 16,
+    paddingVertical: 12,
+    backgroundColor: 'rgba(255,255,255,0.6)',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.05)',
+  },
+  typeSwitchButtonActive: {
+    backgroundColor: PLANNER_PRIMARY,
+    borderColor: PLANNER_PRIMARY,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
   },
-  datePickerContainer: {
-    marginTop: 15,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    borderRadius: 15,
-    padding: 15,
-    width: '90%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 4,
+  typeSwitchLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: HEADER_TEXT_COLOR,
+  },
+  typeSwitchLabelActive: {
+    color: '#fff',
+  },
+  pickerBlock: {
+    backgroundColor: 'rgba(255,255,255,0.85)',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.05)',
+    padding: 12,
+    gap: 8,
+  },
+  selectorHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  pickerLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: HEADER_TEXT_COLOR,
+  },
+  selectorValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: HEADER_TEXT_COLOR,
+  },
+  pickerInner: {
+    borderRadius: 14,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    paddingVertical: Platform.OS === 'ios' ? 0 : 8,
   },
   dateTimePicker: {
-    width: '100%',
-    backgroundColor: 'transparent',
+    alignSelf: 'stretch',
   },
   datePickerActions: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
-    marginTop: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   datePickerCancel: {
     paddingVertical: 8,
     paddingHorizontal: 16,
-    borderRadius: 8,
-    backgroundColor: '#5E3DB3',
+    borderRadius: 10,
+    backgroundColor: PLANNER_PRIMARY,
   },
   datePickerCancelText: {
     color: '#FFFFFF',
     fontSize: 14,
+    fontWeight: '700',
+  },
+  inlineField: {
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.05)',
+    gap: 6,
+  },
+  inlineFieldMultiline: {
+    minHeight: 110,
+    justifyContent: 'flex-start',
+  },
+  inlineFieldLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: HEADER_TEXT_COLOR,
+  },
+  inlineFieldValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: HEADER_TEXT_COLOR,
+  },
+  inlineFieldPlaceholder: {
+    fontSize: 16,
     fontWeight: '600',
+    color: 'rgba(125,90,80,0.7)',
   },
   subjectSwitcherCard: {
     borderRadius: 20,
@@ -1103,52 +1168,5 @@ const styles = StyleSheet.create({
   },
   subjectPillTextActive: {
     color: '#2D2A32',
-  },
-  modalSubjectPills: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 10,
-    width: '90%',
-  },
-  modalSubjectPill: {
-    flex: 1,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.06)',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    backgroundColor: 'rgba(255,255,255,0.85)',
-    alignItems: 'center',
-  },
-  modalSubjectPillActive: {
-    backgroundColor: 'rgba(255,255,255,1)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  modalSubjectPillText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#7D5A50',
-  },
-  modalSubjectPillTextActive: {
-    color: '#2D2A32',
-  },
-  accessoryContainer: {
-    backgroundColor: '#F0F0F6',
-    borderTopWidth: 1,
-    borderTopColor: '#C8C8CD',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-  },
-  accessoryButtonText: {
-    fontSize: 17,
-    color: '#007AFF',
-    fontWeight: '600',
   },
 });

@@ -302,7 +302,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({ visible, type, baseDate, 
         <TouchableWithoutFeedback onPress={onClose}>
           <View style={StyleSheet.absoluteFill} />
         </TouchableWithoutFeedback>
-        <BlurView intensity={85} tint="extraLight" style={styles.sheet}>
+        <BlurView intensity={80} tint="extraLight" style={styles.sheet}>
           <View style={styles.header}>
             <TouchableOpacity style={[styles.roundButton, { backgroundColor: 'rgba(0,0,0,0.08)' }]} onPress={onClose}>
               <Text style={styles.roundButtonLabel}>✕</Text>
@@ -477,7 +477,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.35)',
   },
   sheet: {
-    backgroundColor: THEME.background,
+    backgroundColor: 'transparent',
     borderTopLeftRadius: 30,
     borderTopRightRadius: 30,
     overflow: 'hidden',
