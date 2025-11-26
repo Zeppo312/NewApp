@@ -175,17 +175,21 @@ export const PlannerCaptureModal: React.FC<Props> = ({ visible, type, baseDate, 
             mode="datetime"
             display={Platform.OS === 'ios' ? 'inline' : 'spinner'}
             onChange={(event, date) => {
+              if (event?.type === 'dismissed') {
+                toggle();
+                return;
+              }
               if (date) {
                 onChange(date);
-                if (Platform.OS !== 'ios' || event?.type === 'set') {
-                  toggle();
-                }
-              } else if (Platform.OS !== 'ios' && event?.type === 'dismissed') {
-                toggle();
               }
             }}
             style={styles.dateTimePicker}
           />
+          <View style={styles.pickerActions}>
+            <TouchableOpacity style={styles.pickerActionButton} onPress={toggle}>
+              <Text style={styles.pickerActionLabel}>Fertig</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       )}
     </View>
@@ -613,6 +617,23 @@ const styles = StyleSheet.create({
   },
   dateTimePicker: {
     alignSelf: 'stretch',
+  },
+  pickerActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingHorizontal: 8,
+    paddingBottom: 6,
+  },
+  pickerActionButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: 'rgba(94,61,179,0.08)',
+  },
+  pickerActionLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: PRIMARY,
   },
   timeButton: {
     borderRadius: 16,

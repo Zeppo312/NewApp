@@ -463,16 +463,16 @@ export default function PlannerScreen() {
           </View>
         </View>
 
-        <ScrollView contentContainerStyle={{ paddingHorizontal: 0, paddingTop: contentTopPadding, paddingBottom: SECTION_GAP_BOTTOM + 96 }} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={{ paddingHorizontal: 0, paddingTop: contentTopPadding, paddingBottom: SECTION_GAP_BOTTOM + 54 }} showsVerticalScrollIndicator={false}>
           {selectedTab === 'day' ? (
             <>
               <View style={{ paddingHorizontal: LAYOUT_PAD }}>
                 <View style={{ marginHorizontal: -LAYOUT_PAD }}>
                   <GreetingCard title={greeting.title} emoji={greeting.emoji} subline={greeting.subline} />
                 </View>
-                <View style={{ height: SECTION_GAP_TOP }} />
+                <View style={{ height: 2 }} />
                 <TodayOverviewCard summary={summary} />
-                <View style={{ height: SECTION_GAP_TOP }} />
+                <View style={{ height: 2 }} />
                 <ThemedText style={[styles.sectionTitle, { paddingHorizontal: 4 }]}>Heute</ThemedText>
               </View>
 
@@ -493,7 +493,7 @@ export default function PlannerScreen() {
                 );
               })()}
 
-              <View style={{ height: SECTION_GAP_TOP }} />
+              <View style={{ height: 2 }} />
               <View style={styles.reflectionWrapper}>
                 <EveningReflectionCard
                   mood={summary.mood}
@@ -711,8 +711,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     gap: 10,
-    marginTop: 6,
-    marginBottom: 12,
+    marginTop: 0,
+    marginBottom: 6,
   },
   topTab: {
     borderRadius: 20,
@@ -727,7 +727,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    marginBottom: 6,
     marginTop: 0,
   },
   weekNavButton: {

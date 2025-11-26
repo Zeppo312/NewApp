@@ -142,10 +142,10 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     width: '108%',
     marginHorizontal: -LAYOUT_PAD, // zieht bewusst über den Außen-Padding hinaus
-    paddingHorizontal: LAYOUT_PAD + 30,
-    paddingVertical: LAYOUT_PAD + 36,
+    paddingHorizontal: LAYOUT_PAD + 24,
+    paddingVertical: LAYOUT_PAD + 14,
     borderRadius: 36,
-    minHeight: 240,
+    minHeight: 180,
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOpacity: 0.08,

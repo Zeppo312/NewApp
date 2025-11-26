@@ -16,7 +16,7 @@ export const TodayOverviewCard: React.FC<Props> = ({ summary }) => {
     <GlassCard style={styles.card} borderColor={GLASS_BORDER} overlayColor={GLASS_OVERLAY} intensity={26}>
       <View style={styles.row} accessible accessibilityRole="summary" accessibilityLabel={`Heute: ${summary.tasksDone} von ${summary.tasksTotal} Aufgaben, ${summary.eventsCount} Termine${summary.babySleepHours ? `, Levi hat ${summary.babySleepHours} Stunden geschlafen` : ''}.`}>
         <View style={styles.item}>
-          <ThemedText style={styles.label} lightColor={TEXT_PRIMARY} darkColor={TEXT_PRIMARY}>Tasks</ThemedText>
+          <ThemedText style={styles.label} lightColor={TEXT_PRIMARY} darkColor={TEXT_PRIMARY}>Aufgaben</ThemedText>
           <ThemedText style={styles.value}>{summary.tasksDone}<ThemedText style={styles.slash}>/</ThemedText>{summary.tasksTotal}</ThemedText>
         </View>
         <View style={styles.item}>
