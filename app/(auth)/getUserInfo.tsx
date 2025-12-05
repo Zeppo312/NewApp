@@ -10,6 +10,7 @@ import { supabase } from '@/lib/supabase';
 import { saveBabyInfo } from '@/lib/baby';
 import { router, Stack } from 'expo-router';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { markPaywallShown, shouldShowPaywall } from '@/lib/paywall';
 
 export default function GetUserInfoScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -159,12 +160,24 @@ export default function GetUserInfoScreen() {
         throw new Error('Baby-Informationen konnten nicht gespeichert werden.');
       }
 
-      // Nach dem Speichern zur entsprechenden Seite navigieren
-      if (babyBorn) {
-        router.replace('/(tabs)/home');
-      } else {
-        router.replace('/(tabs)/countdown');
+      // Nach dem Speichern zur entsprechenden Seite navigieren oder Paywall zeigen
+      const nextRoute = babyBorn ? '/(tabs)/home' : '/(tabs)/countdown';
+
+      try {
+        const { shouldShow } = await shouldShowPaywall();
+        if (shouldShow) {
+          await markPaywallShown('onboarding');
+          router.replace({
+            pathname: '/paywall',
+            params: { next: nextRoute, origin: 'onboarding' }
+          });
+          return;
+        }
+      } catch (paywallError) {
+        console.error('Paywall check after onboarding failed:', paywallError);
       }
+
+      router.replace(nextRoute);
     } catch (err) {
       console.error('Failed to save user data:', err);
       Alert.alert('Fehler', err instanceof Error ? err.message : 'Deine Daten konnten nicht gespeichert werden.');

@@ -142,6 +142,7 @@ function RootLayoutNav() {
         <Stack.Screen name="community" />
         <Stack.Screen name="chat/[id]" />
         <Stack.Screen name="notifications" />
+        <Stack.Screen name="paywall" />
         <Stack.Screen name="pregnancy-stats" />
         <Stack.Screen name="account-linking" />
         <Stack.Screen name="sync-test" />

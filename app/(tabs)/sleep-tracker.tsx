@@ -16,6 +16,7 @@ import {
   Platform,
   Dimensions,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
@@ -38,6 +39,7 @@ import type { ViewStyle } from 'react-native';
 import { GlassCard, LiquidGlassCard, LAYOUT_PAD, SECTION_GAP_TOP, SECTION_GAP_BOTTOM, RADIUS, PRIMARY, GLASS_BORDER, GLASS_OVERLAY, FONT_SM, FONT_MD, FONT_LG } from '@/constants/DesignGuide';
 import { getBabyInfo } from '@/lib/baby';
 import { predictNextSleepWindow, updatePersonalizationAfterNap, type SleepWindowPrediction } from '@/lib/sleep-window';
+import { markPaywallShown, shouldShowPaywall } from '@/lib/paywall';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -220,6 +222,7 @@ export default function SleepTrackerScreen() {
   const theme = Colors[colorScheme];
   const router = useRouter();
   const { user } = useAuth();
+  const paywallCheckInFlight = useRef(false);
 
   // State management
   const [sleepEntries, setSleepEntries] = useState<ClassifiedSleepEntry[]>([]);
@@ -256,6 +259,32 @@ export default function SleepTrackerScreen() {
     quality: null as SleepQuality | null,
     notes: ''
   });
+
+  const checkPaywallGate = useCallback(async () => {
+    if (paywallCheckInFlight.current || !user) return;
+    paywallCheckInFlight.current = true;
+
+    try {
+      const { shouldShow } = await shouldShowPaywall();
+      if (shouldShow) {
+        await markPaywallShown('sleep-tracker');
+        router.push({
+          pathname: '/paywall',
+          params: { next: '/(tabs)/sleep-tracker', origin: 'sleep-tracker' }
+        });
+      }
+    } catch (err) {
+      console.error('Paywall check on sleep tracker failed:', err);
+    } finally {
+      paywallCheckInFlight.current = false;
+    }
+  }, [router, user]);
+
+  useFocusEffect(
+    useCallback(() => {
+      checkPaywallGate();
+    }, [checkPaywallGate])
+  );
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
 
