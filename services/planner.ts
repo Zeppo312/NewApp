@@ -54,6 +54,8 @@ export type PlannerDay = {
   summary: PlannerDaySummary;
 };
 
+export type PlannerFloatingTodos = PlannerTodo[];
+
 type PlannerDayRow = {
   id: string;
   user_id: string;
@@ -87,6 +89,7 @@ type LoadedPlannerData = {
   baseDayId: string | null;
   itemsMap: Record<string, PlannerItemRow>;
   dayMap: Record<string, string>;
+  floatingTodos: PlannerFloatingTodos;
 };
 
 type BlockDefinition = {
@@ -316,6 +319,7 @@ function buildAggregatedData(date: Date, dayRows: PlannerDayRow[], itemRows: Pla
     baseDayId: baseDayRow?.id ?? null,
     itemsMap,
     dayMap,
+    floatingTodos: [],
   };
 }
 
@@ -342,6 +346,7 @@ export function usePlannerDay(date: Date) {
   const [itemsMap, setItemsMap] = useState<Record<string, PlannerItemRow>>({});
   const [dayDateById, setDayDateById] = useState<Record<string, string>>({});
   const [linkedUserIds, setLinkedUserIds] = useState<string[]>([]);
+  const [floatingTodos, setFloatingTodos] = useState<PlannerFloatingTodos>([]);
 
   useEffect(() => {
     setBlocks(buildEmptyBlocks(normalizedDate));
@@ -387,6 +392,7 @@ export function usePlannerDay(date: Date) {
         summary: EMPTY_SUMMARY,
         baseDayId: null,
         itemsMap: {},
+        floatingTodos: [],
       };
     }
 
@@ -416,9 +422,33 @@ export function usePlannerDay(date: Date) {
 
     if (itemsError) throw itemsError;
 
+    const { data: floatingRows, error: floatingError } = await supabase
+      .from('planner_items')
+      .select(
+        'id,user_id,day_id,block_id,entry_type,title,completed,assignee,notes,location,due_at,start_at,end_at,created_at,updated_at',
+      )
+      .in('user_id', ownerIds)
+      .is('due_at', null)
+      .eq('entry_type', 'todo')
+      .eq('completed', false)
+      .order('created_at', { ascending: true });
+
+    if (floatingError) throw floatingError;
+
     const aggregated = buildAggregatedData(normalizedDate, dayRows ?? [], itemRows ?? [], user.id);
     return {
       ...aggregated,
+      floatingTodos: (floatingRows ?? []).map((row) => ({
+        id: row.id,
+        title: row.title,
+        completed: row.completed,
+        dueAt: row.due_at ?? undefined,
+        blockId: row.block_id ?? undefined,
+        notes: row.notes ?? undefined,
+        assignee: row.assignee ?? undefined,
+        userId: row.user_id,
+        entryType: row.entry_type,
+      })),
       baseDayId: aggregated.baseDayId ?? ensuredDayId,
     };
   }, [user?.id, linkedKey, normalizedKey, dateIso, normalizedDate]);
@@ -436,6 +466,7 @@ export function usePlannerDay(date: Date) {
     setBaseDayId(data.baseDayId);
     setItemsMap(data.itemsMap);
     setDayDateById(data.dayMap);
+    setFloatingTodos(data.floatingTodos ?? []);
   }, []);
 
   useEffect(() => {
@@ -791,6 +822,7 @@ export function usePlannerDay(date: Date) {
     day,
     blocks,
     summary,
+    floatingTodos,
     loading,
     error,
     addTodo,

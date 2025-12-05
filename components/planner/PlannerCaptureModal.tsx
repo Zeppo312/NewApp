@@ -77,6 +77,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({ visible, type, baseDate, 
   const [endTime, setEndTime] = useState<Date | null>(null);
   const [showEnd, setShowEnd] = useState(type === 'event');
   const [dueTime, setDueTime] = useState<Date | null>(null);
+  const [hasDueTime, setHasDueTime] = useState<boolean>(false);
   const [location, setLocation] = useState('');
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
@@ -119,6 +120,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({ visible, type, baseDate, 
         setEndTime(null);
         setShowEnd(false);
         setDueTime(due);
+        setHasDueTime(!!due);
         setLocation('');
         setAssignee(item.assignee ?? 'me');
       }
@@ -131,7 +133,8 @@ export const PlannerCaptureModal: React.FC<Props> = ({ visible, type, baseDate, 
       setStartTime(reset);
       setEndTime(type === 'event' ? new Date(reset.getTime() + 30 * 60000) : null);
       setShowEnd(type === 'event');
-      setDueTime(type === 'todo' ? reset : null);
+      setDueTime(null);
+      setHasDueTime(false);
       setLocation('');
       setNotesExpanded(type === 'note');
       setAssignee('me');
@@ -147,7 +150,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({ visible, type, baseDate, 
       setShowEnd(true);
     } else {
       setShowEnd(false);
-      setDueTime((prev) => prev ?? new Date(startTime));
+      setDueTime((prev) => prev);
     }
   }, [currentType, visible]);
 
@@ -214,7 +217,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({ visible, type, baseDate, 
     };
 
     if (currentType === 'todo') {
-      payload.dueAt = dueTime || undefined;
+      payload.dueAt = hasDueTime ? dueTime || startTime : null;
       payload.assignee = assignee;
     }
 
@@ -407,7 +410,32 @@ export const PlannerCaptureModal: React.FC<Props> = ({ visible, type, baseDate, 
                 {currentType !== 'event' && (
                   <View style={styles.section}>
                     <Text style={styles.sectionLabel}>🕒 Zeitpunkt</Text>
-                    {renderDateSelector('Fällig', dueTime ?? startTime, showDuePicker, () => setShowDuePicker((prev) => !prev), (date) => setDueTime(date))}
+                    {hasDueTime ? (
+                      <>
+                        {renderDateSelector('Fällig', dueTime ?? startTime, showDuePicker, () => setShowDuePicker((prev) => !prev), (date) => setDueTime(date))}
+                        <TouchableOpacity
+                          style={styles.timeButton}
+                          onPress={() => {
+                            setHasDueTime(false);
+                            setDueTime(null);
+                            setShowDuePicker(false);
+                          }}
+                        >
+                          <Text style={styles.timeButtonLabel}>Kein Datum setzen</Text>
+                        </TouchableOpacity>
+                      </>
+                    ) : (
+                      <TouchableOpacity
+                        style={styles.timeButton}
+                        onPress={() => {
+                          setHasDueTime(true);
+                          setDueTime(dueTime ?? startTime);
+                          setShowDuePicker(true);
+                        }}
+                      >
+                        <Text style={styles.timeButtonLabel}>Datum hinzufügen</Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
                 )}
 

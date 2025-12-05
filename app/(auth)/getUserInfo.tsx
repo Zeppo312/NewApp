@@ -25,7 +25,7 @@ export default function GetUserInfoScreen() {
   const [babyName, setBabyName] = useState('');
   const [babyGender, setBabyGender] = useState<'male' | 'female' | 'unknown'>('unknown');
   const [dueDate, setDueDate] = useState<Date | null>(null);
-  const [isBabyBorn, setIsBabyBorn] = useState(false);
+  const [isBabyBorn, setIsBabyBorn] = useState<boolean | null>(null);
   const [birthDate, setBirthDate] = useState<Date | null>(null);
   // Gewicht und Größe werden in dieser Version nicht verwendet, aber für zukünftige Erweiterungen vorbereitet
   const [babyWeight] = useState('');
@@ -39,7 +39,7 @@ export default function GetUserInfoScreen() {
 
   // Schrittweise Abfrage
   const [currentStep, setCurrentStep] = useState(0);
-  const totalSteps = 8; // Gesamtanzahl der Schritte
+  const totalSteps = 7; // Gesamtanzahl der Schritte
 
   // Formatieren eines Datums für die Anzeige
   const formatDate = (date: Date | null) => {
@@ -76,6 +76,9 @@ export default function GetUserInfoScreen() {
       }
 
       setIsSaving(true);
+      const babyBorn = isBabyBorn === true;
+      const calculatedDueDate = !babyBorn && dueDate ? dueDate.toISOString() : null;
+      const calculatedBirthDate = babyBorn && birthDate ? birthDate.toISOString() : null;
 
       // Speichern der Profildaten (Vorname, Nachname, Rolle)
       const profileResult = await supabase
@@ -113,8 +116,8 @@ export default function GetUserInfoScreen() {
         settingsResult = await supabase
           .from('user_settings')
           .update({
-            due_date: dueDate ? dueDate.toISOString() : null,
-            is_baby_born: isBabyBorn,
+            due_date: calculatedDueDate,
+            is_baby_born: babyBorn,
             theme: 'light', // Standard-Theme
             notifications_enabled: true, // Benachrichtigungen standardmäßig aktiviert
             updated_at: new Date().toISOString()
@@ -126,8 +129,8 @@ export default function GetUserInfoScreen() {
           .from('user_settings')
           .insert({
             user_id: user.id,
-            due_date: dueDate ? dueDate.toISOString() : null,
-            is_baby_born: isBabyBorn,
+            due_date: calculatedDueDate,
+            is_baby_born: babyBorn,
             theme: 'light', // Standard-Theme
             notifications_enabled: true, // Benachrichtigungen standardmäßig aktiviert
             created_at: new Date().toISOString(),
@@ -144,7 +147,7 @@ export default function GetUserInfoScreen() {
       const babyInfo = {
         name: babyName,
         baby_gender: babyGender,
-        birth_date: birthDate ? birthDate.toISOString() : null,
+        birth_date: calculatedBirthDate,
         weight: babyWeight,
         height: babyHeight
       };
@@ -157,7 +160,7 @@ export default function GetUserInfoScreen() {
       }
 
       // Nach dem Speichern zur entsprechenden Seite navigieren
-      if (isBabyBorn) {
+      if (babyBorn) {
         router.replace('/(tabs)/home');
       } else {
         router.replace('/(tabs)/countdown');
@@ -188,32 +191,31 @@ export default function GetUserInfoScreen() {
       return;
     }
 
-    if (currentStep === 3 && !dueDate) {
-      Alert.alert('Hinweis', 'Bitte wähle den errechneten Geburtstermin aus.');
-      return;
-    }
-
-    if (currentStep === 4 && isBabyBorn === null) {
+    if (currentStep === 3 && isBabyBorn === null) {
       Alert.alert('Hinweis', 'Bitte gib an, ob dein Baby bereits geboren ist.');
       return;
     }
 
-    // Wenn das Baby geboren ist und wir beim Schritt für das Geburtsdatum sind
-    if (currentStep === 5 && isBabyBorn && !birthDate) {
-      Alert.alert('Hinweis', 'Bitte gib das Geburtsdatum deines Babys ein.');
-      return;
+    if (currentStep === 4) {
+      if (isBabyBorn === false && !dueDate) {
+        Alert.alert('Hinweis', 'Bitte wähle den errechneten Geburtstermin aus.');
+        return;
+      }
+
+      if (isBabyBorn === true && !birthDate) {
+        Alert.alert('Hinweis', 'Bitte gib das Geburtsdatum deines Babys ein.');
+        return;
+      }
+
+      if (isBabyBorn === null) {
+        Alert.alert('Hinweis', 'Bitte gib an, ob dein Baby bereits geboren ist.');
+        return;
+      }
     }
 
     // Wenn wir beim letzten Schritt sind, speichern wir die Daten
     if (currentStep === totalSteps - 1) {
       saveUserData();
-      return;
-    }
-
-    // Wenn das Baby nicht geboren ist und wir beim Schritt für den Baby-Status sind,
-    // überspringen wir die Schritte für Geburtsdatum
-    if (currentStep === 4 && !isBabyBorn) {
-      setCurrentStep(6); // Springe zum Schritt für Baby-Name und Geschlecht
       return;
     }
 
@@ -225,13 +227,6 @@ export default function GetUserInfoScreen() {
   const goToPreviousStep = () => {
     // Wenn wir beim ersten Schritt sind, können wir nicht zurück
     if (currentStep === 0) {
-      return;
-    }
-
-    // Wenn wir beim Schritt für Baby-Name und Geschlecht sind und das Baby nicht geboren ist,
-    // gehen wir zurück zum Schritt für den Baby-Status
-    if (currentStep === 6 && !isBabyBorn) {
-      setCurrentStep(4);
       return;
     }
 
@@ -323,46 +318,32 @@ export default function GetUserInfoScreen() {
           </ThemedView>
         );
 
-      case 3: // Errechneter Geburtstermin
+      case 3: // Baby bereits geboren?
         return (
           <ThemedView style={styles.stepContainer} lightColor="#FFFFFF" darkColor="#333333">
-            <ThemedText style={styles.stepTitle}>Wann ist der errechnete Geburtstermin?</ThemedText>
-            <TouchableOpacity
-              style={styles.dateButton}
-              onPress={() => setShowDueDatePicker(true)}
-            >
-              <ThemedText style={styles.dateButtonText}>
-                {dueDate ? formatDate(dueDate) : 'Geburtstermin auswählen'}
-              </ThemedText>
-              <IconSymbol name="calendar" size={20} color={theme.tabIconDefault} />
-            </TouchableOpacity>
-
-            {showDueDatePicker && (
-              <DateTimePicker
-                value={dueDate || new Date()}
-                mode="date"
-                display="default"
-                onChange={handleDueDateChange}
-              />
-            )}
-          </ThemedView>
-        );
-
-      case 4: // Baby bereits geboren?
-        return (
-          <ThemedView style={styles.stepContainer} lightColor="#FFFFFF" darkColor="#333333">
+            <Image
+              source={require('@/assets/images/babyborn.png')}
+              style={styles.babyImage}
+              resizeMode="contain"
+            />
             <ThemedText style={styles.stepTitle}>Ist dein Baby bereits geboren?</ThemedText>
             <View style={styles.booleanButtonsContainer}>
               <TouchableOpacity
-                style={[styles.booleanButton, isBabyBorn && styles.booleanButtonActive]}
-                onPress={() => setIsBabyBorn(true)}
+                style={[styles.booleanButton, isBabyBorn === true && styles.booleanButtonActive]}
+                onPress={() => {
+                  setIsBabyBorn(true);
+                  setShowDueDatePicker(false);
+                }}
               >
-                <ThemedText style={[styles.booleanButtonText, isBabyBorn && styles.booleanButtonTextActive]}>Ja</ThemedText>
+                <ThemedText style={[styles.booleanButtonText, isBabyBorn === true && styles.booleanButtonTextActive]}>Ja</ThemedText>
               </TouchableOpacity>
 
               <TouchableOpacity
                 style={[styles.booleanButton, isBabyBorn === false && styles.booleanButtonActive]}
-                onPress={() => setIsBabyBorn(false)}
+                onPress={() => {
+                  setIsBabyBorn(false);
+                  setShowBirthDatePicker(false);
+                }}
               >
                 <ThemedText style={[styles.booleanButtonText, isBabyBorn === false && styles.booleanButtonTextActive]}>Nein</ThemedText>
               </TouchableOpacity>
@@ -370,35 +351,60 @@ export default function GetUserInfoScreen() {
           </ThemedView>
         );
 
-      case 5: // Geburtsdatum (nur wenn Baby geboren ist)
+      case 4: { // Datum abhängig vom Baby-Status
+        const isBorn = isBabyBorn === true;
+        const selectedDate = isBorn ? birthDate : dueDate;
+        const title = isBorn ? 'Wann wurde dein Baby geboren?' : 'Wann ist der errechnete Geburtstermin?';
+        const placeholder = isBorn ? 'Geburtsdatum auswählen' : 'Geburtstermin auswählen';
+
         return (
           <ThemedView style={styles.stepContainer} lightColor="#FFFFFF" darkColor="#333333">
-            <ThemedText style={styles.stepTitle}>Wann wurde dein Baby geboren?</ThemedText>
+            <Image
+              source={require('@/assets/images/BabyBirth.png')}
+              style={styles.babyImageSmall}
+              resizeMode="contain"
+            />
+            <ThemedText style={styles.stepTitle}>{title}</ThemedText>
             <TouchableOpacity
               style={styles.dateButton}
-              onPress={() => setShowBirthDatePicker(true)}
+              onPress={() => (isBorn ? setShowBirthDatePicker(true) : setShowDueDatePicker(true))}
             >
               <ThemedText style={styles.dateButtonText}>
-                {birthDate ? formatDate(birthDate) : 'Geburtsdatum auswählen'}
+                {selectedDate ? formatDate(selectedDate) : placeholder}
               </ThemedText>
               <IconSymbol name="calendar" size={20} color={theme.tabIconDefault} />
             </TouchableOpacity>
 
-            {showBirthDatePicker && (
+            {isBorn && showBirthDatePicker && (
               <DateTimePicker
-                value={birthDate || new Date()}
+                value={selectedDate || new Date()}
                 mode="date"
                 display="default"
                 onChange={handleBirthDateChange}
                 maximumDate={new Date()}
               />
             )}
+
+            {!isBorn && showDueDatePicker && (
+              <DateTimePicker
+                value={selectedDate || new Date()}
+                mode="date"
+                display="default"
+                onChange={handleDueDateChange}
+              />
+            )}
           </ThemedView>
         );
+      }
 
-      case 6: // Baby-Informationen (Name, Geschlecht)
+      case 5: // Baby-Informationen (Name, Geschlecht)
         return (
           <ThemedView style={styles.stepContainer} lightColor="#FFFFFF" darkColor="#333333">
+            <Image
+              source={require('@/assets/images/BabyName.png')}
+              style={styles.babyImageSmall}
+              resizeMode="contain"
+            />
             <ThemedText style={styles.stepTitle}>Wie heißt dein Baby?</ThemedText>
             <TextInput
               style={[styles.input, { color: theme.text }]}
@@ -456,7 +462,7 @@ export default function GetUserInfoScreen() {
           </ThemedView>
         );
 
-      case 7: // Zusammenfassung und Speichern
+      case 6: // Zusammenfassung und Speichern
         return (
           <ThemedView style={styles.stepContainer} lightColor="#FFFFFF" darkColor="#333333">
             <ThemedText style={styles.stepTitle}>Zusammenfassung</ThemedText>
@@ -472,22 +478,22 @@ export default function GetUserInfoScreen() {
             </View>
 
             <View style={styles.summaryItem}>
-              <ThemedText style={styles.summaryLabel}>Errechneter Geburtstermin:</ThemedText>
-              <ThemedText style={styles.summaryValue}>{dueDate ? formatDate(dueDate) : 'Nicht festgelegt'}</ThemedText>
-            </View>
-
-            <View style={styles.summaryItem}>
               <ThemedText style={styles.summaryLabel}>Baby geboren:</ThemedText>
               <ThemedText style={styles.summaryValue}>{isBabyBorn ? 'Ja' : 'Nein'}</ThemedText>
             </View>
 
+            {isBabyBorn === false && (
+              <View style={styles.summaryItem}>
+                <ThemedText style={styles.summaryLabel}>Errechneter Geburtstermin:</ThemedText>
+                <ThemedText style={styles.summaryValue}>{dueDate ? formatDate(dueDate) : 'Nicht festgelegt'}</ThemedText>
+              </View>
+            )}
+
             {isBabyBorn && (
-              <>
-                <View style={styles.summaryItem}>
-                  <ThemedText style={styles.summaryLabel}>Geburtsdatum:</ThemedText>
-                  <ThemedText style={styles.summaryValue}>{birthDate ? formatDate(birthDate) : 'Nicht festgelegt'}</ThemedText>
-                </View>
-              </>
+              <View style={styles.summaryItem}>
+                <ThemedText style={styles.summaryLabel}>Geburtsdatum:</ThemedText>
+                <ThemedText style={styles.summaryValue}>{birthDate ? formatDate(birthDate) : 'Nicht festgelegt'}</ThemedText>
+              </View>
             )}
 
             <View style={styles.summaryItem}>

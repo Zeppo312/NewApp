@@ -7,9 +7,9 @@ import { ThemedBackground } from '@/components/ThemedBackground';
 import { ThemedText } from '@/components/ThemedText';
 import GreetingCard from '@/components/planner/GreetingCard';
 import TodayOverviewCard from '@/components/planner/TodayOverviewCard';
-import EveningReflectionCard from '@/components/planner/EveningReflectionCard';
 import { FloatingAddButton } from '@/components/planner/FloatingAddButton';
 import StructuredTimeline from '@/components/planner/StructuredTimeline';
+import { SwipeableListItem } from '@/components/planner/SwipeableListItem';
 import PlannerCaptureModal, { PlannerCapturePayload, PlannerCaptureType } from '@/components/planner/PlannerCaptureModal';
 import { PlannerEvent, PlannerTodo, usePlannerDay } from '@/services/planner';
 import { PRIMARY, BACKGROUND, LAYOUT_PAD, SECTION_GAP_BOTTOM, SECTION_GAP_TOP, TEXT_PRIMARY } from '@/constants/PlannerDesign';
@@ -76,14 +76,13 @@ export default function PlannerScreen() {
   const {
     blocks,
     summary,
+    floatingTodos,
     toggleTodo,
     moveToTomorrow,
     addTodo,
     addEvent,
     updateTodo,
     updateEvent,
-    updateMood,
-    saveReflection,
   } = usePlannerDay(selectedDate);
 
   const [captureVisible, setCaptureVisible] = useState(false);
@@ -383,7 +382,7 @@ export default function PlannerScreen() {
           addEvent(payload.title, startIso, endIso, payload.location);
         }
       } else if (payload.type === 'todo') {
-        const dueIso = payload.dueAt ? payload.dueAt.toISOString() : undefined;
+        const dueIso = payload.dueAt === null ? null : payload.dueAt ? payload.dueAt.toISOString() : undefined;
         if (payload.id) {
           updateTodo(payload.id, {
             title: payload.title,
@@ -395,7 +394,7 @@ export default function PlannerScreen() {
           addTodo(payload.title, undefined, dueIso, payload.notes, payload.assignee);
         }
       } else if (payload.type === 'note') {
-        const dueIso = payload.dueAt ? payload.dueAt.toISOString() : undefined;
+        const dueIso = payload.dueAt === null ? null : payload.dueAt ? payload.dueAt.toISOString() : undefined;
         if (payload.id) {
           updateTodo(payload.id, {
             title: payload.title,
@@ -493,14 +492,40 @@ export default function PlannerScreen() {
                 );
               })()}
 
-              <View style={{ height: 2 }} />
-              <View style={styles.reflectionWrapper}>
-                <EveningReflectionCard
-                  mood={summary.mood}
-                  reflection={summary.reflection}
-                  onChangeMood={(m) => updateMood(m)}
-                  onChangeReflection={(text) => saveReflection(text)}
-                />
+              <View style={{ paddingHorizontal: LAYOUT_PAD, marginTop: 10 }}>
+                <LiquidGlassCard style={styles.floatingCard} intensity={20} overlayColor="rgba(255,255,255,0.12)">
+                  <View style={styles.timelineHeaderRow}>
+                    <ThemedText style={[styles.sectionTitle, styles.timelineTitleLabel]}>Aufgaben</ThemedText>
+                    <View style={styles.timelineBadge}>
+                      <Text style={styles.timelineBadgeText}>{floatingTodos.length} offen</Text>
+                    </View>
+                  </View>
+                  <View style={styles.floatingList}>
+                    {floatingTodos.map((todo, idx) => (
+                      <View key={todo.id}>
+                        <SwipeableListItem
+                          id={todo.id}
+                          title={todo.title}
+                          type="todo"
+                          completed={todo.completed}
+                          onComplete={() => toggleTodo(todo.id)}
+                          onMoveTomorrow={() => moveToTomorrow(todo.id)}
+                          onPress={() => handleEditTodo(todo.id)}
+                          showLeadingCheckbox={false}
+                          trailingCheckbox
+                          style={styles.floatingItem}
+                          subtitle="Flexibel"
+                        />
+                        {idx < floatingTodos.length - 1 && <View style={styles.floatingDivider} />}
+                      </View>
+                    ))}
+                    {floatingTodos.length === 0 && (
+                      <View style={styles.emptyFloating}>
+                        <Text style={styles.emptyFloatingText}>Keine offenen Aufgaben ohne Datum</Text>
+                      </View>
+                    )}
+                  </View>
+                </LiquidGlassCard>
               </View>
             </>
           ) : selectedTab === 'week' ? (
@@ -702,10 +727,53 @@ const styles = StyleSheet.create({
     color: TEXT_PRIMARY,
     opacity: 0.9,
   },
-  reflectionWrapper: {
-    marginHorizontal: LAYOUT_PAD / 2,
+  timelineHeaderRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    alignSelf: 'stretch',
+    justifyContent: 'space-between',
+    paddingHorizontal: LAYOUT_PAD,
+    paddingTop: 6,
+  },
+  timelineTitleLabel: {
+    paddingHorizontal: 0,
+  },
+  timelineBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.28)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.5)',
+  },
+  timelineBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: TEXT_PRIMARY,
+  },
+  floatingCard: {
+    paddingBottom: 12,
+  },
+  floatingList: {
+    paddingHorizontal: LAYOUT_PAD,
+    paddingTop: 4,
+    gap: 0,
+  },
+  floatingItem: {
+    paddingVertical: 10,
+    paddingHorizontal: 0,
+  },
+  floatingDivider: {
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.5)',
+    marginVertical: 6,
+  },
+  emptyFloating: {
+    paddingVertical: 12,
+  },
+  emptyFloatingText: {
+    fontSize: 12,
+    color: TEXT_PRIMARY,
+    opacity: 0.7,
   },
   topTabsContainer: {
     flexDirection: 'row',

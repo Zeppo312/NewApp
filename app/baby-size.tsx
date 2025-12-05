@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { StyleSheet, View, SafeAreaView, ScrollView, Image, TouchableOpacity } from 'react-native';
+import { StyleSheet, View, SafeAreaView, ScrollView, Image, TouchableOpacity, ImageSourcePropType } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ThemedText } from '@/components/ThemedText';
@@ -80,6 +80,7 @@ function BabySizeContent() {
   const weekParam = params.week;
   const { user } = useAuth();
   const [dueWeek, setDueWeek] = useState<number | null>(null);
+  const [imageError, setImageError] = useState(false);
   const splitFruit = (comparison: string) => {
     const parts = comparison.split(' ');
     if (parts.length <= 1) {
@@ -146,7 +147,18 @@ function BabySizeContent() {
     return babySizeData.find((item) => item.week === currentWeek) ?? babySizeData[0];
   }, [currentWeek]);
 
+  useEffect(() => {
+    setImageError(false);
+  }, [babyData.imageUrl, babyData.week]);
+
   const { article, fruit } = useMemo(() => splitFruit(babyData.fruitComparison), [babyData.fruitComparison]);
+
+  const heroImageSource: ImageSourcePropType = useMemo(() => {
+    if (!imageError && babyData.imageUrl) {
+      return { uri: babyData.imageUrl };
+    }
+    return require('@/assets/images/Baby_Icon.png');
+  }, [babyData.imageUrl, imageError]);
 
   const quickStats = [
     {
@@ -210,9 +222,10 @@ function BabySizeContent() {
                   </View>
 
                   <Image
-                    source={require('@/assets/images/Baby_Icon.png')}
+                    source={heroImageSource}
                     style={styles.heroImage}
                     resizeMode="contain"
+                    onError={() => setImageError(true)}
                   />
                 </View>
               </View>
@@ -379,8 +392,8 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   heroImage: {
-    width: 96,
-    height: 96,
+    width: 120,
+    height: 120,
     marginLeft: 10,
     marginTop: 6,
     alignSelf: 'center',

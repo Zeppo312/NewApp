@@ -288,14 +288,21 @@ const styles = StyleSheet.create({
   },
   hourLabel: {
     position: 'absolute',
-    left: LAYOUT_PAD,
+    left: LAYOUT_PAD - 6,
     zIndex: 2,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    backgroundColor: 'transparent',
   },
   hourText: {
     fontSize: 11,
-    opacity: 0.45,
+    opacity: 0.9,
     fontVariant: ['tabular-nums'] as any,
     color: TEXT_PRIMARY,
+    fontWeight: '700',
+    textShadowColor: 'rgba(255,255,255,0.65)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 6,
   },
   line: {
     position: 'absolute',

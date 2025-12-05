@@ -305,42 +305,6 @@ export default function MoreScreen() {
             )}
           </LiquidGlassCard>
 
-          <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
-            <ThemedText style={styles.sectionTitle}>
-              Über die App
-            </ThemedText>
-
-            <TouchableOpacity style={styles.menuItem}>
-              <View style={styles.menuItemIcon}>
-                <IconSymbol name="info.circle.fill" size={24} color={theme.accent} />
-              </View>
-              <View style={styles.menuItemContent}>
-                <ThemedText style={styles.menuItemTitle}>
-                  Informationen
-                </ThemedText>
-                <ThemedText style={styles.menuItemDescription}>
-                  Version, Datenschutz, Impressum
-                </ThemedText>
-              </View>
-              <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.menuItem}>
-              <View style={styles.menuItemIcon}>
-                <IconSymbol name="star.fill" size={24} color={theme.accent} />
-              </View>
-              <View style={styles.menuItemContent}>
-                <ThemedText style={styles.menuItemTitle}>
-                  Bewerten
-                </ThemedText>
-                <ThemedText style={styles.menuItemDescription}>
-                  Bewerte die App im App Store
-                </ThemedText>
-              </View>
-              <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
-            </TouchableOpacity>
-          </LiquidGlassCard>
-
           {/* Logout Section */}
           <View style={styles.logoutSection}>
             <TouchableOpacity

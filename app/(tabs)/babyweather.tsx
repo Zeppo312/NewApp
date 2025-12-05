@@ -38,6 +38,8 @@ const getClothingImage = (imageName: string | null) => {
       return require('@/assets/images/Muetze.png');
     case 'Socken.png':
       return require('@/assets/images/Socken.png');
+    case 'Strumpfhose.png':
+      return require('@/assets/images/Strumpfhose.png');
     case 'Shorts.png':
       return require('@/assets/images/Shorts.png');
     case 'Schlafsack.png':
@@ -50,6 +52,16 @@ const getClothingImage = (imageName: string | null) => {
       return require('@/assets/images/DuennerPulli.png');
     case 'Handschuhe.png':
       return require('@/assets/images/Handschuhe.png');
+    case 'Fleecejacke.png':
+      return require('@/assets/images/Fleecejacke.png');
+    case 'Softshellanzug.png':
+      return require('@/assets/images/Softshellanzug.png');
+    case 'Regenjacke.png':
+      return require('@/assets/images/Regenjacke.png');
+    case 'Schal.png':
+      return require('@/assets/images/Schal.png');
+    case 'Kinderwagendecke.png':
+      return require('@/assets/images/Kinderwagendecke.png');
     
     default:
       return null;
@@ -106,18 +118,18 @@ const clothingCatalogue: Record<ClothingCategory, ClothingItem[]> = {
   bottom: [
     { id: '4', name: 'Hose', image: 'Hose.png', recommended: false, category: 'bottom', tempRange: { min: -20, max: 25 } },
     { id: '5', name: 'Shorts', image: 'Shorts.png', recommended: false, category: 'bottom', tempRange: { min: 25, max: 40 } },
-    { id: '16', name: 'Strumpfhose', image: null, recommended: false, category: 'bottom', tempRange: { min: -15, max: 18 } },
+    { id: '16', name: 'Strumpfhose', image: 'Strumpfhose.png', recommended: false, category: 'bottom', tempRange: { min: -15, max: 18 } },
   ],
   mid: [
     { id: '6', name: 'Dünner Pullover', image: 'DuennerPulli.png', recommended: false, category: 'mid', tempRange: { min: 11, max: 20 } },
     { id: '7', name: 'Pullover', image: 'Pullover.png', recommended: false, category: 'mid', tempRange: { min: -20, max: 15 } },
-    { id: '17', name: 'Fleecejacke', image: null, recommended: false, category: 'mid', tempRange: { min: -10, max: 12 } },
+    { id: '17', name: 'Fleecejacke', image: 'Fleecejacke.png', recommended: false, category: 'mid', tempRange: { min: -10, max: 12 } },
   ],
   outer: [
     { id: '8', name: 'Jacke', image: 'Jacke.png', recommended: false, category: 'outer', tempRange: { min: -20, max: 10 } },
     { id: '9', name: 'Overall', image: 'Overall.png', recommended: false, category: 'outer', tempRange: { min: -20, max: 5 } },
-    { id: '18', name: 'Softshellanzug', image: null, recommended: false, category: 'outer', tempRange: { min: 5, max: 15 } },
-    { id: '19', name: 'Regenjacke', image: null, recommended: false, category: 'outer', tempRange: { min: 5, max: 20 } },
+    { id: '18', name: 'Softshellanzug', image: 'Softshellanzug.png', recommended: false, category: 'outer', tempRange: { min: 5, max: 15 } },
+    { id: '19', name: 'Regenjacke', image: 'Regenjacke.png', recommended: false, category: 'outer', tempRange: { min: 5, max: 20 } },
   ],
   accessory: [
     { id: '10', name: 'Mütze', image: 'Muetze.png', recommended: false, category: 'accessory', tempRange: { min: -20, max: 15 } },
@@ -125,9 +137,9 @@ const clothingCatalogue: Record<ClothingCategory, ClothingItem[]> = {
     { id: '12', name: 'Handschuhe', image: 'Handschuhe.png', recommended: false, category: 'accessory', tempRange: { min: -20, max: 10 } },
     { id: '20', name: 'Sonnenhut', image: null, recommended: false, category: 'accessory', tempRange: { min: 20, max: 40 } },
     { id: '21', name: 'Halstuch', image: null, recommended: false, category: 'accessory', tempRange: { min: 8, max: 20 } },
-    { id: '22', name: 'Schal', image: null, recommended: false, category: 'accessory', tempRange: { min: -20, max: 10 } },
+    { id: '22', name: 'Schal', image: 'Schal.png', recommended: false, category: 'accessory', tempRange: { min: -20, max: 10 } },
     { id: '23', name: 'Schuhe', image: null, recommended: false, category: 'accessory', tempRange: { min: -10, max: 20 } },
-    { id: '24', name: 'Kinderwagen-Decke', image: null, recommended: false, category: 'accessory', tempRange: { min: -20, max: 15 } },
+    { id: '24', name: 'Kinderwagen-Decke', image: 'Kinderwagendecke.png', recommended: false, category: 'accessory', tempRange: { min: -20, max: 15 } },
   ],
   sleep: [
     { id: '13', name: 'Schlafsack 0.5 TOG', image: 'Schlafsack.png', recommended: false, category: 'sleep', tempRange: { min: 24, max: 27 } },

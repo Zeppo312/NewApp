@@ -3,12 +3,12 @@ import { StyleSheet, View, SafeAreaView, StatusBar, TouchableOpacity, ScrollView
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useRouter, Stack } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { getAppSettings, saveAppSettings, AppSettings } from '@/lib/supabase';
+import { exportUserData } from '@/lib/dataExport';
 import Header from '@/components/Header';
 import { LiquidGlassCard, GLASS_OVERLAY, LAYOUT_PAD } from '@/constants/DesignGuide';
 
@@ -21,6 +21,7 @@ export default function AppSettingsScreen() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   // no extra width logic; match "Mehr" padding rhythm via ScrollView
 
@@ -81,6 +82,44 @@ export default function AppSettingsScreen() {
 
   const handleToggleNotifications = async (value: boolean) => {
     await handleSaveSettings({ notifications_enabled: value });
+  };
+
+  const handleExportData = async () => {
+    if (!user) {
+      Alert.alert('Fehler', 'Bitte melde dich erneut an.');
+      return;
+    }
+
+    try {
+      setIsExporting(true);
+      const result = await exportUserData('pdf');
+
+      if (!result.success) {
+        Alert.alert('Fehler', result.error ?? 'Datenexport fehlgeschlagen.');
+        return;
+      }
+
+      const totalRecords = result.summary
+        ? Object.values(result.summary).reduce((sum, val) => sum + (typeof val === 'number' ? val : 0), 0)
+        : undefined;
+      const sizeKb = result.bytesWritten ? (result.bytesWritten / 1024).toFixed(1) : null;
+      const warningText = result.warnings && result.warnings.length
+        ? `\n\nHinweise:\n- ${result.warnings.slice(0, 3).join('\n- ')}`
+        : '';
+      const locationHint = result.shared || !result.fileUri
+        ? ''
+        : `\n\nDatei gespeichert unter:\n${result.fileUri}`;
+
+      Alert.alert(
+        'Export abgeschlossen',
+        `Deine Daten wurden als PDF vorbereitet${totalRecords !== undefined ? ` (${totalRecords} Einträge)` : ''}${sizeKb ? `, ca. ${sizeKb} KB` : ''}.${locationHint}${warningText}`
+      );
+    } catch (err) {
+      console.error('Failed to export data:', err);
+      Alert.alert('Fehler', 'Datenexport fehlgeschlagen. Bitte versuche es erneut.');
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   return (
@@ -172,7 +211,11 @@ export default function AppSettingsScreen() {
                   <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
                     <ThemedText style={styles.sectionTitle}>Daten verwalten</ThemedText>
 
-                    <TouchableOpacity style={styles.rowItem}>
+                    <TouchableOpacity
+                      style={[styles.rowItem, isExporting && styles.disabledRow]}
+                      onPress={handleExportData}
+                      disabled={isExporting}
+                    >
                       <View style={styles.rowIcon}>
                         <IconSymbol name="arrow.down.doc" size={24} color={theme.accent} />
                       </View>
@@ -180,7 +223,13 @@ export default function AppSettingsScreen() {
                         <ThemedText style={styles.rowTitle}>Daten exportieren</ThemedText>
                         <ThemedText style={styles.rowDescription}>Exportiere deine Daten als Backup</ThemedText>
                       </View>
-                      <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
+                      <View style={styles.trailing}>
+                        {isExporting ? (
+                          <ActivityIndicator size="small" color={theme.accent} />
+                        ) : (
+                          <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
+                        )}
+                      </View>
                     </TouchableOpacity>
 
                     <TouchableOpacity
@@ -323,6 +372,9 @@ const styles = StyleSheet.create({
   },
   dangerItem: {
     borderBottomWidth: 0,
+  },
+  disabledRow: {
+    opacity: 0.6,
   },
   dangerText: {
     color: '#FF6B6B',
