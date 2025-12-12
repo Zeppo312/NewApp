@@ -150,16 +150,39 @@ RETURNS SETOF sleep_entries
 LANGUAGE sql
 SECURITY DEFINER
 AS $$
-  -- Eigene Einträge
-  SELECT se.* FROM sleep_entries se
-  WHERE se.user_id = auth.uid()
+  WITH caller AS (
+    SELECT 
+      current_setting('request.jwt.claims', true)::jsonb->>'sub' AS sub_text
+  ),
+  caller_uid AS (
+    SELECT 
+      CASE 
+        WHEN sub_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' 
+        THEN sub_text::uuid 
+        ELSE NULL 
+      END AS uid
+    FROM caller
+  )
+  -- Eigene + Partner + legacy shared_with_user_id
+  SELECT se.* 
+  FROM sleep_entries se
+  CROSS JOIN caller_uid c
+  WHERE c.uid IS NOT NULL
+    AND (
+      se.user_id = c.uid
+      OR se.partner_id = c.uid
+      OR se.shared_with_user_id = c.uid
+    )
   
   UNION
   
-  -- Mit mir geteilte Einträge
-  SELECT se.* FROM sleep_entries se
+  -- Mit mir geteilte Einträge über die Share-Tabelle
+  SELECT se.* 
+  FROM sleep_entries se
   JOIN sleep_entry_shares ses ON se.id = ses.entry_id
-  WHERE ses.shared_with_id = auth.uid()
+  CROSS JOIN caller_uid c
+  WHERE c.uid IS NOT NULL
+    AND ses.shared_with_id = c.uid
   
   ORDER BY start_time DESC;
 $$;

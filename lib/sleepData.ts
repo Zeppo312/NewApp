@@ -282,7 +282,8 @@ export async function syncAllExistingSleepEntries(): Promise<{
 
 // Sleep tracking start - angepasst für Partner-Funktionalität
 export async function startSleepTracking(
-  targetUserId?: string // Optional: Benutzer, für den der Eintrag gestartet wird
+  targetUserId?: string, // Optional: Benutzer, für den der Eintrag gestartet wird
+  partnerOverride?: string | null // Optional: explizite Partner-ID (z. B. aus dem UI-State)
 ): Promise<{
   success: boolean;
   entry?: SleepEntry;
@@ -307,7 +308,7 @@ export async function startSleepTracking(
     }
     
     // Partnerinformationen aus account_links-Beziehungen
-    let partnerId: string | null = null;
+    let partnerId: string | null = partnerOverride ?? null;
     
     // Log verbundene Benutzer
     if (linkedUsers && linkedUsers.length > 0) {
@@ -329,10 +330,12 @@ export async function startSleepTracking(
       }
       
       console.log(`startSleepTracking: Erstelle Eintrag für Partner ${matchingPartner.displayName}`);
-      partnerId = userData.user.id; // Wenn wir für den Partner aufzeichnen, sind wir selbst der Partner
+      partnerId = partnerOverride ?? userData.user.id; // Wenn wir für den Partner aufzeichnen, sind wir selbst der Partner
     } else {
       // Wenn wir für uns selbst aufzeichnen, verwenden wir den ersten Partner aus account_links
-      if (linkedUsers && linkedUsers.length > 0) {
+      if (partnerId) {
+        console.log(`startSleepTracking: Partner-ID via Override: ${partnerId}`);
+      } else if (linkedUsers && linkedUsers.length > 0) {
         partnerId = linkedUsers[0].userId;
         console.log(`startSleepTracking: Setze Partner-ID auf ${partnerId} (${linkedUsers[0].displayName})`);
       } else {

@@ -26,74 +26,59 @@ export async function loadAllVisibleSleepEntries(): Promise<{
     }
 
     console.log('loadAllVisibleSleepEntries: Lade Einträge für Benutzer', user.user.id);
-    
-    // Neue Funktion nutzen, die alles in einem Rutsch lädt
-    const { data, error } = await supabase.rpc('get_all_visible_sleep_entries');
 
-    if (error) {
-      console.error('loadAllVisibleSleepEntries: Fehler beim Laden der Einträge:', error);
-      
-      // Fallback: Direkte Abfrage
-      console.log('loadAllVisibleSleepEntries: Fallback - Direktabfrage');
-      
-      // Eigene Einträge
-      const { data: ownEntries, error: ownError } = await supabase
-        .from('sleep_entries')
-        .select('*')
-        .eq('user_id', user.user.id);
-        
-      if (ownError) {
-        console.error('loadAllVisibleSleepEntries: Fehler beim Laden eigener Einträge:', ownError);
-        return { success: false, error: ownError.message };
-      }
-      
-      // Mit dem Benutzer geteilte Einträge
-      const { data: sharedEntries, error: sharedError } = await supabase
-        .from('sleep_entries')
-        .select('*')
-        .eq('shared_with_user_id', user.user.id);
-        
-      if (sharedError && !sharedError.message.includes('does not exist')) {
-        console.error('loadAllVisibleSleepEntries: Fehler beim Laden geteilter Einträge:', sharedError);
-        // Ignoriere Fehler wegen nicht existierender Spalte
-      }
-      
-      // Alternative Methode über die neue Verknüpfungstabelle
-      const { data: linkedEntries, error: linkedError } = await supabase
-        .from('sleep_entries')
-        .select(`
-          *,
-          sleep_entry_shares!inner (
-            id
-          )
-        `)
-        .eq('sleep_entry_shares.shared_with_id', user.user.id);
-        
-      if (linkedError && !linkedError.message.includes('does not exist')) {
-        console.error('loadAllVisibleSleepEntries: Fehler beim Laden verknüpfter Einträge:', linkedError);
-        // Ignoriere Fehler wegen nicht existierender Tabelle
-      }
-      
-      // Kombiniere alle Einträge und entferne Duplikate
-      const allEntries = [
-        ...(ownEntries || []),
-        ...(sharedEntries || []),
-        ...(linkedEntries || [])
-      ];
-      
-      // Deduplizieren nach ID
-      const uniqueEntries = allEntries.reduce((acc, entry) => {
-        if (!acc.some((e: SleepEntry) => e.id === entry.id)) {
-          acc.push(entry);
-        }
-        return acc;
-      }, [] as SleepEntry[]);
-      
-      return { success: true, entries: uniqueEntries };
+    const allEntries: SleepEntry[] = [];
+
+    // 1) RPC (falls die Funktion korrekt deployed ist)
+    const { data: rpcEntries, error: rpcError } = await supabase.rpc('get_all_visible_sleep_entries');
+    if (rpcError) {
+      console.error('loadAllVisibleSleepEntries: Fehler beim Laden per RPC:', rpcError);
+    } else if (rpcEntries) {
+      allEntries.push(...rpcEntries);
     }
 
-    console.log(`loadAllVisibleSleepEntries: ${data?.length || 0} Einträge geladen`);
-    return { success: true, entries: data || [] };
+    // 2) Direkter Abruf, der auch partner_id und legacy shared_with_user_id berücksichtigt
+    const { data: partnerVisible, error: partnerError } = await supabase
+      .from('sleep_entries')
+      .select('*')
+      .or(`user_id.eq.${user.user.id},partner_id.eq.${user.user.id},shared_with_user_id.eq.${user.user.id}`)
+      .order('start_time', { ascending: false });
+
+    if (partnerError && !partnerError.message?.includes('does not exist')) {
+      console.error('loadAllVisibleSleepEntries: Fehler beim Laden von Partner-Einträgen:', partnerError);
+    } else if (partnerVisible) {
+      allEntries.push(...partnerVisible);
+    }
+
+    // 3) Einträge, die über die neue Share-Tabelle geteilt wurden
+    const { data: tableShared, error: tableSharedError } = await supabase
+      .from('sleep_entries')
+      .select('*, sleep_entry_shares!inner(shared_with_id)')
+      .eq('sleep_entry_shares.shared_with_id', user.user.id)
+      .order('start_time', { ascending: false });
+
+    if (tableSharedError && !tableSharedError.message?.includes('does not exist')) {
+      console.error('loadAllVisibleSleepEntries: Fehler beim Laden der über Tabelle geteilten Einträge:', tableSharedError);
+    } else if (tableShared) {
+      allEntries.push(...tableShared);
+    }
+
+    // Deduplizieren nach ID und sortieren (neueste zuerst)
+    const deduped = Object.values(
+      allEntries.reduce((acc, entry) => {
+        if (entry.id && !acc[entry.id]) {
+          acc[entry.id] = entry;
+        }
+        return acc;
+      }, {} as Record<string, SleepEntry>)
+    ).sort((a, b) => {
+      const aTime = a.start_time ? new Date(a.start_time).getTime() : 0;
+      const bTime = b.start_time ? new Date(b.start_time).getTime() : 0;
+      return bTime - aTime;
+    });
+
+    console.log(`loadAllVisibleSleepEntries: ${deduped.length} Einträge geladen (inkl. Partner & Shares)`);
+    return { success: true, entries: deduped };
   } catch (error) {
     console.error('loadAllVisibleSleepEntries: Unerwarteter Fehler:', error);
     return { success: false, error: String(error) };

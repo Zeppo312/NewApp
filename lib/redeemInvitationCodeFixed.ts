@@ -200,6 +200,22 @@ export const redeemInvitationCodeFixed = async (userId: string, invitationCode: 
       // Ignorieren des Fehlers, da die Einladung trotzdem akzeptiert wurde
     }
 
+    // Bestehende Schlaf-Einträge des Einladenden mit dem neuen Partner verknüpfen
+    try {
+      const { data: syncResult, error: syncError } = await supabase.rpc(
+        'sync_sleep_entries_for_partner',
+        { p_inviter: invitation.creator_id, p_partner: userId }
+      );
+
+      if (syncError) {
+        console.error('Error syncing existing sleep entries to new partner:', syncError);
+      } else {
+        console.log('Synced existing sleep entries to new partner:', syncResult);
+      }
+    } catch (syncErr) {
+      console.error('Unhandled error while syncing sleep entries to new partner:', syncErr);
+    }
+
     // Erfolg zurückgeben
     return {
       success: true,

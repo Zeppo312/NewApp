@@ -348,7 +348,6 @@ export const getBabyCareEntriesForDate = async (date: Date) => {
     const { data, error } = await supabase
       .from('baby_care_entries')
       .select('*')
-      .eq('user_id', userData.user.id)
       .gte('start_time', startOfDay.toISOString())
       .lte('start_time', endOfDay.toISOString())
       .order('start_time', { ascending: false });
@@ -367,7 +366,6 @@ export const getBabyCareEntriesForDateRange = async (startDate: Date, endDate: D
     const { data, error } = await supabase
       .from('baby_care_entries')
       .select('*')
-      .eq('user_id', userData.user.id)
       .gte('start_time', startDate.toISOString())
       .lte('start_time', endDate.toISOString())
       .order('start_time', { ascending: true });
@@ -386,8 +384,7 @@ export const deleteBabyCareEntry = async (id: string) => {
     const { error } = await supabase
       .from('baby_care_entries')
       .delete()
-      .eq('id', id)
-      .eq('user_id', userData.user.id);
+      .eq('id', id);
     return { error };
   } catch (err) {
     return { error: err };
@@ -403,7 +400,6 @@ export const stopBabyCareEntryTimer = async (id: string) => {
       .from('baby_care_entries')
       .update({ end_time: new Date().toISOString(), updated_at: new Date().toISOString() })
       .eq('id', id)
-      .eq('user_id', userData.user.id)
       .select()
       .single();
     return { data, error };
@@ -442,7 +438,6 @@ export const updateBabyCareEntry = async (
       .from('baby_care_entries')
       .update(payload)
       .eq('id', id)
-      .eq('user_id', userData.user.id)
       .select()
       .single();
 

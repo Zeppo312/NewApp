@@ -10,8 +10,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { TablerIcon } from '@/components/ui/TablerIcon';
-import { getBabyInfo, getDiaryEntries, getCurrentPhase, getPhaseProgress, getMilestonesByPhase, getDailyEntries } from '@/lib/baby';
-import { supabase } from '@/lib/supabase';
+import { getBabyInfo, getDiaryEntries, getCurrentPhase, getPhaseProgress, getMilestonesByPhase } from '@/lib/baby';
+import { supabase, addBabyCareEntry } from '@/lib/supabase';
 import { BlurView } from 'expo-blur';
 import ActivityInputModal from '@/components/ActivityInputModal';
 import SleepQuickAddModal, { SleepQuickEntry } from '@/components/SleepQuickAddModal';
@@ -126,7 +126,6 @@ export default function HomeScreen() {
         .select('*')
         .gte('start_time', startOfDay.toISOString())
         .lte('start_time', endOfDay.toISOString())
-        .eq('user_id', user?.id)
         .order('start_time', { ascending: false });
 
       if (!dailyError && dailyData) {
@@ -242,7 +241,6 @@ export default function HomeScreen() {
         .select('*')
         .gte('start_time', startOfDay.toISOString())
         .lte('start_time', endOfDay.toISOString())
-        .eq('user_id', user?.id)
         .order('start_time', { ascending: false });
 
       if (error) {
@@ -306,10 +304,33 @@ export default function HomeScreen() {
   // Handle save entry from modal
   const handleSaveEntry = async (payload: any) => {
     console.log('handleSaveEntry - Received payload:', JSON.stringify(payload, null, 2));
-    console.log('handleSaveEntry - selectedActivityType:', selectedActivityType);
-    console.log('handleSaveEntry - selectedSubType:', selectedSubType);
+    const entryType =
+      payload?.entry_type === 'feeding' || payload?.entry_type === 'diaper'
+        ? payload.entry_type
+        : selectedActivityType;
 
-    // Close modal
+    if (entryType !== 'feeding' && entryType !== 'diaper') {
+      Alert.alert('Fehler', 'Unbekannter Eintragstyp. Bitte erneut versuchen.');
+      return;
+    }
+
+    const { error } = await addBabyCareEntry({
+      entry_type: entryType,
+      start_time: payload.start_time,
+      end_time: payload.end_time ?? null,
+      notes: payload.notes ?? null,
+      feeding_type: payload.feeding_type ?? null,
+      feeding_volume_ml: payload.feeding_volume_ml ?? null,
+      feeding_side: payload.feeding_side ?? null,
+      diaper_type: payload.diaper_type ?? null,
+    });
+
+    if (error) {
+      console.error('Error saving baby care entry:', error);
+      Alert.alert('Fehler', 'Eintrag konnte nicht gespeichert werden.');
+      return;
+    }
+
     setShowInputModal(false);
     setSelectedActivityType('feeding');
     setSelectedSubType(null);

@@ -11,7 +11,8 @@
     "test": "jest --watchAll",
     "lint": "expo lint",
     "preupdate": "node ./scripts/prep-eas-update.js",
-    "update": "cross-env CI=1 eas update --auto"
+    "update": "cross-env CI=1 eas update --auto",
+    "update:dev": "eas update --branch main"
   },
   "jest": {
     "preset": "jest-expo"

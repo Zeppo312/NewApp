@@ -25,7 +25,7 @@ import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
-import { SleepEntry, SleepQuality, startSleepTracking, stopSleepTracking } from '@/lib/sleepData';
+import { SleepEntry, SleepQuality, startSleepTracking, stopSleepTracking, loadConnectedUsers } from '@/lib/sleepData';
 import { loadAllVisibleSleepEntries } from '@/lib/sleepSharing';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import Header from '@/components/Header';
@@ -233,6 +233,8 @@ export default function SleepTrackerScreen() {
   const [selectedTab, setSelectedTab] = useState<'day' | 'week' | 'month'>('day');
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [editingEntry, setEditingEntry] = useState<ClassifiedSleepEntry | null>(null);
+  const hasAutoSelectedDateRef = useRef(false);
+  const [partnerId, setPartnerId] = useState<string | null>(null);
 
   // Navigation offsets für Woche und Monat
   const [weekOffset, setWeekOffset] = useState(0);   // 0 = diese Woche, -1 = letzte, +1 = nächste
@@ -310,6 +312,34 @@ export default function SleepTrackerScreen() {
   useEffect(() => {
     loadSleepData();
   }, []);
+
+  // Lade die aktuelle Partner-ID (aus account_links) für neue Einträge
+  const refreshPartnerId = useCallback(async () => {
+    if (!user?.id) {
+      setPartnerId(null);
+      return null;
+    }
+    try {
+      const { success, linkedUsers } = await loadConnectedUsers(true);
+      if (success && linkedUsers && linkedUsers.length > 0) {
+        setPartnerId(linkedUsers[0].userId);
+        return linkedUsers[0].userId;
+      }
+    } catch (err) {
+      console.error('Failed to load partner id:', err);
+    }
+    setPartnerId(null);
+    return null;
+  }, [user?.id]);
+
+  const getEffectivePartnerId = useCallback(async () => {
+    if (partnerId) return partnerId;
+    return refreshPartnerId();
+  }, [partnerId, refreshPartnerId]);
+
+  useEffect(() => {
+    refreshPartnerId();
+  }, [refreshPartnerId]);
 
   useEffect(() => {
     if (!user?.id) {
@@ -455,6 +485,33 @@ export default function SleepTrackerScreen() {
         // Find active entry
         const active = classifiedEntries.find(entry => entry.isActive);
         setActiveSleepEntry(active || null);
+
+        // Wenn kein Eintrag für das aktuell ausgewählte Datum vorhanden ist,
+        // springe beim ersten Laden automatisch zum jüngsten Eintrag.
+        if (
+          !hasAutoSelectedDateRef.current &&
+          classifiedEntries.length > 0 &&
+          !classifiedEntries.some(e => {
+            const s = new Date(e.start_time);
+            const ee = e.end_time ? new Date(e.end_time) : new Date();
+            const ds = startOfDay(selectedDate);
+            const de = endOfDay(selectedDate);
+            return overlapMinutes(s, ee, ds, de) > 0;
+          })
+        ) {
+          const latest = classifiedEntries.reduce((latestEntry, entry) => {
+            if (!latestEntry) return entry;
+            return new Date(entry.start_time).getTime() > new Date(latestEntry.start_time).getTime()
+              ? entry
+              : latestEntry;
+          }, null as ClassifiedSleepEntry | null);
+
+          if (latest) {
+            hasAutoSelectedDateRef.current = true;
+            setSelectedTab('day');
+            setSelectedDate(new Date(latest.start_time));
+          }
+        }
       } else {
         console.error('Error loading sleep data:', error);
       }
@@ -476,7 +533,8 @@ export default function SleepTrackerScreen() {
   // Start sleep tracking
   const handleStartSleep = async (_period: SleepPeriod) => {
     try {
-      const { success, entry, error } = await startSleepTracking();
+      const effectivePartnerId = await getEffectivePartnerId();
+      const { success, entry, error } = await startSleepTracking(undefined, effectivePartnerId || undefined);
       
       if (success && entry) {
         const classifiedEntry = classifySleepEntry(entry);
@@ -554,6 +612,8 @@ export default function SleepTrackerScreen() {
       console.log('🔍 handleSaveEntry called with:', payload);
       console.log('🔍 editingEntry:', editingEntry);
 
+      const effectivePartnerId = await getEffectivePartnerId();
+
       // SleepInputModal sendet die Daten direkt als Objekt
       const sleepData = payload;
 
@@ -575,7 +635,8 @@ export default function SleepTrackerScreen() {
             notes: sleepData.notes ?? null,
             duration_minutes: sleepData.end_time
               ? Math.round((new Date(sleepData.end_time).getTime() - new Date(sleepData.start_time).getTime()) / 60000)
-            : null
+            : null,
+            partner_id: editingEntry.partner_id ?? effectivePartnerId ?? null
         })
           .eq('id', editingEntry.id)
           .select();
@@ -602,7 +663,8 @@ export default function SleepTrackerScreen() {
             notes: sleepData.notes ?? null,
             duration_minutes: sleepData.end_time
               ? Math.round((new Date(sleepData.end_time).getTime() - new Date(sleepData.start_time).getTime()) / 60000)
-            : null
+            : null,
+            partner_id: effectivePartnerId ?? null
           })
           .select();
 
@@ -851,6 +913,34 @@ export default function SleepTrackerScreen() {
     backgroundColor:
       q === 'good' ? 'rgba(56,161,105,0.25)' : q === 'medium' ? 'rgba(245,166,35,0.25)' : 'rgba(229,62,62,0.25)',
   });
+
+  // Einträge für den aktuell ausgewählten Tag (Tag-Ansicht)
+  const dayEntries = useMemo(() => {
+    const ds = startOfDay(selectedDate);
+    const de = endOfDay(selectedDate);
+    return sleepEntries
+      .filter(e => {
+        const s = new Date(e.start_time);
+        const ee = e.end_time ? new Date(e.end_time) : new Date();
+        return overlapMinutes(s, ee, ds, de) > 0;
+      })
+      .sort((a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime());
+  }, [sleepEntries, selectedDate]);
+
+  const jumpToLatestEntry = useCallback(() => {
+    if (sleepEntries.length === 0) return;
+    const latest = sleepEntries.reduce((latestEntry, entry) => {
+      if (!latestEntry) return entry;
+      return new Date(entry.start_time).getTime() > new Date(latestEntry.start_time).getTime()
+        ? entry
+        : latestEntry;
+    }, null as ClassifiedSleepEntry | null);
+
+    if (latest) {
+      setSelectedTab('day');
+      setSelectedDate(new Date(latest.start_time));
+    }
+  }, [sleepEntries]);
 
     // Setze die Modal-Daten beim Öffnen
     useEffect(() => {
@@ -1656,18 +1746,12 @@ export default function SleepTrackerScreen() {
               </View>
 
               {/* Timeline Section - nur in Tag-Ansicht */}
-              <View style={styles.timelineSection}>
-                <Text style={[styles.sectionTitle, styles.sectionTitleTight]}>Timeline</Text>
+            <View style={styles.timelineSection}>
+              <Text style={[styles.sectionTitle, styles.sectionTitleTight]}>Timeline</Text>
 
-                {/* Sleep Entries - Timeline Style like daily_old.tsx - nur in Tag-Ansicht */}
-                <View style={styles.entriesContainer}>
-            {sleepEntries.filter(e => {
-                const s = new Date(e.start_time);
-                const ee = e.end_time ? new Date(e.end_time) : new Date();
-                const ds = startOfDay(selectedDate);
-                const de = endOfDay(selectedDate);
-                return overlapMinutes(s, ee, ds, de) > 0;
-              }).map((entry, index) => (
+              {/* Sleep Entries - Timeline Style like daily_old.tsx - nur in Tag-Ansicht */}
+              <View style={styles.entriesContainer}>
+            {dayEntries.map((entry, index) => (
                 <ActivityCard
                   key={entry.id || index}
                   entry={convertSleepToDailyEntry(entry)}
@@ -1679,11 +1763,23 @@ export default function SleepTrackerScreen() {
                   marginHorizontal={8}
                 />
             ))}
-          {sleepEntries.length === 0 && !isLoading && (
+          {dayEntries.length === 0 && !isLoading && (
             <LiquidGlassCard style={styles.emptyState}>
               <Text style={styles.emptyEmoji}>💤</Text>
-              <Text style={styles.emptyTitle}>Noch keine Schlafphasen</Text>
-              <Text style={styles.emptySubtitle}>Starte den ersten Schlaf-Eintrag!</Text>
+              <Text style={styles.emptyTitle}>Keine Einträge für diesen Tag</Text>
+              <Text style={styles.emptySubtitle}>
+                {sleepEntries.length > 0
+                  ? 'Wechsle das Datum oder springe zum letzten Eintrag.'
+                  : 'Starte den ersten Schlaf-Eintrag!'}
+              </Text>
+              {sleepEntries.length > 0 && (
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.manualButton, { marginTop: 12 }]}
+                  onPress={jumpToLatestEntry}
+                >
+                  <Text style={styles.actionButtonText}>Zum letzten Eintrag</Text>
+                </TouchableOpacity>
+              )}
                 <TouchableOpacity style={[styles.actionButton, styles.manualButton, { marginTop: 16 }]} onPress={() => {
                   setEditingEntry(null);
                   setShowInputModal(true);
