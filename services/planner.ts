@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { supabase, getLinkedUsers } from '@/lib/supabase';
+import { getLinkedUsers, supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 
 export type PlannerView = 'day' | 'week' | 'month';
@@ -90,6 +90,7 @@ type LoadedPlannerData = {
   itemsMap: Record<string, PlannerItemRow>;
   dayMap: Record<string, string>;
   floatingTodos: PlannerFloatingTodos;
+  completedFloatingTodos: PlannerFloatingTodos;
 };
 
 type BlockDefinition = {
@@ -117,6 +118,16 @@ const EMPTY_SUMMARY: PlannerDaySummary = {
 
 function uniqueStrings(values: string[]) {
   return Array.from(new Set(values.filter((v): v is string => typeof v === 'string' && v.length > 0)));
+}
+
+function convertAssigneePerspective(
+  assignee: PlannerAssignee | null | undefined,
+  fromUserId: string,
+  toUserId: string,
+) {
+  if (!assignee) return undefined;
+  if (fromUserId === toUserId) return assignee;
+  return assignee === 'me' ? 'partner' : 'me';
 }
 
 function minutesSinceMidnight(date: Date) {
@@ -268,7 +279,7 @@ function buildAggregatedData(date: Date, dayRows: PlannerDayRow[], itemRows: Pla
       dueAt: row.due_at ?? undefined,
       blockId: row.block_id ?? undefined,
       notes: row.notes ?? undefined,
-      assignee: row.assignee ?? undefined,
+      assignee: convertAssigneePerspective(row.assignee, row.user_id, baseUserId),
       userId: row.user_id,
       entryType: row.entry_type,
     };
@@ -320,6 +331,7 @@ function buildAggregatedData(date: Date, dayRows: PlannerDayRow[], itemRows: Pla
     itemsMap,
     dayMap,
     floatingTodos: [],
+    completedFloatingTodos: [],
   };
 }
 
@@ -347,13 +359,17 @@ export function usePlannerDay(date: Date) {
   const [dayDateById, setDayDateById] = useState<Record<string, string>>({});
   const [linkedUserIds, setLinkedUserIds] = useState<string[]>([]);
   const [floatingTodos, setFloatingTodos] = useState<PlannerFloatingTodos>([]);
+  const [completedFloatingTodos, setCompletedFloatingTodos] = useState<PlannerFloatingTodos>([]);
 
   useEffect(() => {
     setBlocks(buildEmptyBlocks(normalizedDate));
     setSummary(EMPTY_SUMMARY);
     setItemsMap({});
     setBaseDayId(null);
-  }, [normalizedKey]);
+    setDayDateById({});
+    setFloatingTodos([]);
+    setCompletedFloatingTodos([]);
+  }, [normalizedKey, user?.id]);
 
   useEffect(() => {
     if (!user?.id) {
@@ -392,7 +408,9 @@ export function usePlannerDay(date: Date) {
         summary: EMPTY_SUMMARY,
         baseDayId: null,
         itemsMap: {},
+        dayMap: {},
         floatingTodos: [],
+        completedFloatingTodos: [],
       };
     }
 
@@ -422,7 +440,7 @@ export function usePlannerDay(date: Date) {
 
     if (itemsError) throw itemsError;
 
-    const { data: floatingRows, error: floatingError } = await supabase
+    const { data: floatingOpenRows, error: floatingOpenError } = await supabase
       .from('planner_items')
       .select(
         'id,user_id,day_id,block_id,entry_type,title,completed,assignee,notes,location,due_at,start_at,end_at,created_at,updated_at',
@@ -433,19 +451,51 @@ export function usePlannerDay(date: Date) {
       .eq('completed', false)
       .order('created_at', { ascending: true });
 
-    if (floatingError) throw floatingError;
+    if (floatingOpenError) throw floatingOpenError;
+
+    const { data: floatingDoneRows, error: floatingDoneError } = await supabase
+      .from('planner_items')
+      .select(
+        'id,user_id,day_id,block_id,entry_type,title,completed,assignee,notes,location,due_at,start_at,end_at,created_at,updated_at',
+      )
+      .in('user_id', ownerIds)
+      .is('due_at', null)
+      .eq('entry_type', 'todo')
+      .eq('completed', true)
+      .order('updated_at', { ascending: false })
+      .limit(50);
+
+    if (floatingDoneError) throw floatingDoneError;
 
     const aggregated = buildAggregatedData(normalizedDate, dayRows ?? [], itemRows ?? [], user.id);
+    const floatingItemsMap: Record<string, PlannerItemRow> = {};
+    [...(floatingOpenRows ?? []), ...(floatingDoneRows ?? [])].forEach((row) => {
+      if (!row?.id) return;
+      floatingItemsMap[row.id] = row as PlannerItemRow;
+    });
+    const mergedItemsMap = { ...aggregated.itemsMap, ...floatingItemsMap };
     return {
       ...aggregated,
-      floatingTodos: (floatingRows ?? []).map((row) => ({
+      itemsMap: mergedItemsMap,
+      floatingTodos: (floatingOpenRows ?? []).map((row) => ({
         id: row.id,
         title: row.title,
         completed: row.completed,
         dueAt: row.due_at ?? undefined,
         blockId: row.block_id ?? undefined,
         notes: row.notes ?? undefined,
-        assignee: row.assignee ?? undefined,
+        assignee: convertAssigneePerspective(row.assignee, row.user_id, user.id),
+        userId: row.user_id,
+        entryType: row.entry_type,
+      })),
+      completedFloatingTodos: (floatingDoneRows ?? []).map((row) => ({
+        id: row.id,
+        title: row.title,
+        completed: row.completed,
+        dueAt: row.due_at ?? undefined,
+        blockId: row.block_id ?? undefined,
+        notes: row.notes ?? undefined,
+        assignee: convertAssigneePerspective(row.assignee, row.user_id, user.id),
         userId: row.user_id,
         entryType: row.entry_type,
       })),
@@ -467,6 +517,7 @@ export function usePlannerDay(date: Date) {
     setItemsMap(data.itemsMap);
     setDayDateById(data.dayMap);
     setFloatingTodos(data.floatingTodos ?? []);
+    setCompletedFloatingTodos(data.completedFloatingTodos ?? []);
   }, []);
 
   useEffect(() => {
@@ -541,10 +592,18 @@ export function usePlannerDay(date: Date) {
   );
 
   const addTodo = useCallback(
-    async (title: string, blockId?: string, dueAt?: string, notes?: string, assignee: PlannerAssignee = 'me') => {
+    async (
+      title: string,
+      blockId?: string,
+      dueAt?: string | null,
+      notes?: string,
+      assignee: PlannerAssignee = 'me',
+      ownerIdOverride?: string,
+    ) => {
       if (!user?.id) return;
-      const ownerId = user.id;
-      let targetDayId = baseDayIdRef.current;
+      const viewerId = user.id;
+      const ownerId = ownerIdOverride ?? viewerId;
+      let targetDayId = ownerId === viewerId ? baseDayIdRef.current : null;
       let targetBlockId = blockId ?? null;
 
       if (!targetDayId) {
@@ -573,7 +632,7 @@ export function usePlannerDay(date: Date) {
         entry_type: 'todo' as const,
         title,
         completed: false,
-        assignee,
+        assignee: convertAssigneePerspective(assignee, viewerId, ownerId),
         notes: notes ?? null,
         due_at: dueAt ?? null,
       };
@@ -589,10 +648,18 @@ export function usePlannerDay(date: Date) {
   );
 
   const addEvent = useCallback(
-    async (title: string, start: string, end: string, location?: string, blockId?: string) => {
+    async (
+      title: string,
+      start: string,
+      end: string,
+      location?: string,
+      blockId?: string,
+      ownerIdOverride?: string,
+    ) => {
       if (!user?.id) return;
-      const ownerId = user.id;
-      let targetDayId = baseDayIdRef.current;
+      const viewerId = user.id;
+      const ownerId = ownerIdOverride ?? viewerId;
+      let targetDayId = ownerId === viewerId ? baseDayIdRef.current : null;
       let targetBlockId = blockId ?? null;
 
       if (!targetDayId) {
@@ -634,13 +701,17 @@ export function usePlannerDay(date: Date) {
   );
 
   const updateTodo = useCallback(
-    async (id: string, updates: { title?: string; notes?: string; dueAt?: string; assignee?: PlannerAssignee }) => {
+    async (id: string, updates: { title?: string; notes?: string; dueAt?: string | null; assignee?: PlannerAssignee }) => {
       const row = itemsMapRef.current[id];
       if (!row || (row.entry_type !== 'todo' && row.entry_type !== 'note')) return;
+      if (!user?.id) return;
+      const viewerId = user.id;
       const payload: Record<string, any> = {};
       if (updates.title !== undefined) payload.title = updates.title;
       if (updates.notes !== undefined) payload.notes = updates.notes ?? null;
-      if (updates.assignee !== undefined) payload.assignee = updates.assignee;
+      if (updates.assignee !== undefined) {
+        payload.assignee = convertAssigneePerspective(updates.assignee, viewerId, row.user_id);
+      }
 
       let newDayId: string | undefined;
       if (updates.dueAt !== undefined) {
@@ -764,6 +835,8 @@ export function usePlannerDay(date: Date) {
         const due = new Date(row.due_at);
         due.setDate(due.getDate() + 1);
         nextDueAt = due.toISOString();
+      } else if (row.entry_type === 'todo') {
+        nextDueAt = isoForMinutes(tomorrow, 12 * 60);
       }
       const { error: updateError } = await supabase
         .from('planner_items')
@@ -823,6 +896,7 @@ export function usePlannerDay(date: Date) {
     blocks,
     summary,
     floatingTodos,
+    completedFloatingTodos,
     loading,
     error,
     addTodo,

@@ -34,12 +34,18 @@ export type PlannerCapturePayload = {
   id?: string;
   type: PlannerCaptureType;
   title: string;
-  dueAt?: Date;
+  dueAt?: Date | null;
   start?: Date;
   end?: Date | null;
   location?: string;
   notes?: string;
   assignee?: PlannerAssignee;
+  ownerId?: string;
+};
+
+type OwnerOption = {
+  id: string;
+  label: string;
 };
 
 type Props = {
@@ -47,6 +53,8 @@ type Props = {
   type: PlannerCaptureType;
   baseDate: Date;
   editingItem?: { type: 'todo' | 'event'; item: PlannerTodo | PlannerEvent } | null;
+  ownerOptions?: OwnerOption[];
+  defaultOwnerId?: string;
   onClose: () => void;
   onSave: (payload: PlannerCapturePayload) => void;
 };
@@ -64,7 +72,16 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-export const PlannerCaptureModal: React.FC<Props> = ({ visible, type, baseDate, editingItem, onClose, onSave }) => {
+export const PlannerCaptureModal: React.FC<Props> = ({
+  visible,
+  type,
+  baseDate,
+  editingItem,
+  ownerOptions,
+  defaultOwnerId,
+  onClose,
+  onSave,
+}) => {
   const initialStart = useMemo(() => {
     const d = new Date(baseDate);
     d.setHours(new Date().getHours(), new Date().getMinutes(), 0, 0);
@@ -84,7 +101,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({ visible, type, baseDate, 
   const [showDuePicker, setShowDuePicker] = useState(false);
   const [notesExpanded, setNotesExpanded] = useState(false);
   const [currentType, setCurrentType] = useState<PlannerCaptureType>(type);
-  const [assignee, setAssignee] = useState<PlannerAssignee>('me');
+  const [ownerId, setOwnerId] = useState<string | null>(defaultOwnerId ?? null);
   const [focusConfig, setFocusConfig] = useState<FocusConfig | null>(null);
   const [focusValue, setFocusValue] = useState('');
 
@@ -113,7 +130,6 @@ export const PlannerCaptureModal: React.FC<Props> = ({ visible, type, baseDate, 
         setShowEnd(true);
         setDueTime(null);
         setLocation(item.location ?? '');
-        setAssignee('me');
       } else {
         const due = item.dueAt ? new Date(item.dueAt) : null;
         setStartTime(due ?? new Date(initialStart));
@@ -122,7 +138,6 @@ export const PlannerCaptureModal: React.FC<Props> = ({ visible, type, baseDate, 
         setDueTime(due);
         setHasDueTime(!!due);
         setLocation('');
-        setAssignee(item.assignee ?? 'me');
       }
     } else {
       const reset = new Date(baseDate);
@@ -137,9 +152,26 @@ export const PlannerCaptureModal: React.FC<Props> = ({ visible, type, baseDate, 
       setHasDueTime(false);
       setLocation('');
       setNotesExpanded(type === 'note');
-      setAssignee('me');
     }
   }, [visible, type, baseDate, editingItem]);
+
+  useEffect(() => {
+    if (!visible) return;
+
+    const options = Array.isArray(ownerOptions) ? ownerOptions : [];
+    const availableOwnerIds = options.map((opt) => opt.id);
+    const fallbackOwnerId = defaultOwnerId ?? availableOwnerIds[0] ?? null;
+
+    if (editingItem?.item?.userId) {
+      setOwnerId(editingItem.item.userId);
+      return;
+    }
+
+    setOwnerId((prev) => {
+      if (prev && availableOwnerIds.includes(prev)) return prev;
+      return fallbackOwnerId;
+    });
+  }, [visible, ownerOptions, defaultOwnerId, editingItem]);
 
   useEffect(() => {
     if (!visible) return;
@@ -214,11 +246,15 @@ export const PlannerCaptureModal: React.FC<Props> = ({ visible, type, baseDate, 
       type: currentType,
       title: currentType === 'note' ? (trimmedTitle || trimmedNotes || 'Notiz') : trimmedTitle,
       notes: trimmedNotes || undefined,
+      ownerId: ownerId ?? undefined,
     };
 
     if (currentType === 'todo') {
       payload.dueAt = hasDueTime ? dueTime || startTime : null;
-      payload.assignee = assignee;
+      const viewerId = defaultOwnerId;
+      const derivedAssignee: PlannerAssignee =
+        ownerId && viewerId ? (ownerId === viewerId ? 'me' : 'partner') : 'me';
+      payload.assignee = derivedAssignee;
     }
 
     if (currentType === 'event') {
@@ -357,6 +393,43 @@ export const PlannerCaptureModal: React.FC<Props> = ({ visible, type, baseDate, 
                   styles.titleInput,
                 )}
 
+                {Array.isArray(ownerOptions) && ownerOptions.length > 1 && (
+                  <View style={styles.section}>
+                    <Text style={styles.sectionLabel}>👤 Für</Text>
+                    <View style={styles.assignRow}>
+                      {ownerOptions.map((opt) => {
+                        const selected = ownerId === opt.id;
+                        const disabled = !!editingItem;
+                        return (
+                          <TouchableOpacity
+                            key={opt.id}
+                            style={[
+                              styles.assignButton,
+                              selected && styles.assignButtonActive,
+                              disabled && styles.ownerButtonDisabled,
+                            ]}
+                            onPress={() => {
+                              if (disabled) return;
+                              setOwnerId(opt.id);
+                            }}
+                            disabled={disabled}
+                          >
+                            <Text
+                              style={[
+                                styles.assignLabel,
+                                selected && styles.assignLabelActive,
+                                disabled && styles.ownerLabelDisabled,
+                              ]}
+                            >
+                              {opt.label}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+                )}
+
                 {currentType === 'event' && (
                   <View style={styles.section}>
                     <Text style={styles.sectionLabel}>⏰ Zeitraum</Text>
@@ -436,25 +509,6 @@ export const PlannerCaptureModal: React.FC<Props> = ({ visible, type, baseDate, 
                         <Text style={styles.timeButtonLabel}>Datum hinzufügen</Text>
                       </TouchableOpacity>
                     )}
-                  </View>
-                )}
-
-                {currentType === 'todo' && (
-                  <View style={styles.section}>
-                    <Text style={styles.sectionLabel}>👥 Zuständig</Text>
-                    <View style={styles.assignRow}>
-                      {(['me', 'partner'] as PlannerAssignee[]).map((role) => (
-                        <TouchableOpacity
-                          key={role}
-                          style={[styles.assignButton, assignee === role && styles.assignButtonActive]}
-                          onPress={() => setAssignee(role)}
-                        >
-                          <Text style={[styles.assignLabel, assignee === role && styles.assignLabelActive]}>
-                            {role === 'me' ? 'Ich' : 'Partner'}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
                   </View>
                 )}
 
@@ -716,6 +770,12 @@ const styles = StyleSheet.create({
   },
   assignLabelActive: {
     color: '#fff',
+  },
+  ownerButtonDisabled: {
+    opacity: 0.7,
+  },
+  ownerLabelDisabled: {
+    opacity: 0.85,
   },
   locationField: {
     borderRadius: 16,

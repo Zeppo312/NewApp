@@ -9,7 +9,6 @@ import {
   Keyboard,
   Platform,
   ScrollView,
-  TextInput,
   LayoutAnimation,
   UIManager,
   Image,
@@ -19,6 +18,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { RECIPE_SAMPLES } from '@/lib/recipes-samples';
 import { fetchRecipes, RecipeRecord } from '@/lib/recipes';
+import TextInputOverlay from '@/components/modals/TextInputOverlay';
 
 // Typ-Definitionen
 type ActivityType = 'feeding' | 'diaper' | 'other';
@@ -78,6 +78,8 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   const [showEndPicker, setShowEndPicker] = useState(false);
   const [notes, setNotes] = useState('');
   const [isNotesVisible, setNotesVisible] = useState(false);
+  const [focusConfig, setFocusConfig] = useState<{ label: string; placeholder?: string; multiline?: boolean } | null>(null);
+  const [focusValue, setFocusValue] = useState('');
   const [startTimer, setStartTimer] = useState(false);
   const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
   const [recipeDropdownOpen, setRecipeDropdownOpen] = useState(false);
@@ -108,6 +110,8 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
       setEndTimeVisible(!!initialData?.end_time);
       setNotes(initialData?.notes ?? '');
       setNotesVisible(false);
+      setFocusConfig(null);
+      setFocusValue('');
       setStartTimer(false);
       setSelectedRecipeId(null);
       setRecipeDropdownOpen(false);
@@ -552,6 +556,26 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
     setNotesVisible(!isNotesVisible);
   };
 
+  const openNotesEditor = () => {
+    setFocusValue(notes);
+    setFocusConfig({
+      label: 'Notizen',
+      placeholder: 'Details hinzufügen...',
+      multiline: true,
+    });
+  };
+
+  const closeNotesEditor = () => {
+    setFocusConfig(null);
+    setFocusValue('');
+  };
+
+  const saveNotesEditor = (next?: string) => {
+    const val = typeof next === 'string' ? next : focusValue;
+    setNotes(val);
+    closeNotesEditor();
+  };
+
   const renderNotes = () => (
       <View style={styles.section}>
          <TouchableOpacity style={styles.notesHeader} onPress={toggleNotes}>
@@ -559,14 +583,18 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
            <Text style={{ fontSize: 20, transform: [{ rotate: isNotesVisible ? '90deg' : '0deg' }] }}>›</Text>
          </TouchableOpacity>
          {isNotesVisible && (
-            <TextInput
-                style={[styles.notesInput, { color: theme.text, backgroundColor: theme.lightGray }]}
-                value={notes}
-                onChangeText={setNotes}
-                placeholder="Details hinzufügen..."
-                placeholderTextColor={theme.textSecondary}
-                multiline
-            />
+            <TouchableOpacity
+              style={[styles.notesInput, { backgroundColor: theme.lightGray }]}
+              activeOpacity={0.9}
+              onPress={openNotesEditor}
+            >
+              <Text
+                style={{ color: notes.trim() ? theme.text : theme.textSecondary, fontSize: 14 }}
+                numberOfLines={3}
+              >
+                {notes.trim() || 'Details hinzufügen...'}
+              </Text>
+            </TouchableOpacity>
          )}
       </View>
   );
@@ -599,6 +627,15 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
         </BlurView>
       </View>
 
+      <TextInputOverlay
+        visible={!!focusConfig}
+        label={focusConfig?.label ?? ''}
+        value={focusValue}
+        placeholder={focusConfig?.placeholder}
+        multiline={!!focusConfig?.multiline}
+        onClose={closeNotesEditor}
+        onSubmit={(next) => saveNotesEditor(next)}
+      />
     </Modal>
   );
 };

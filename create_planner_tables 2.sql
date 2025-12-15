@@ -281,7 +281,17 @@ CREATE POLICY "planner_items_select_own" ON public.planner_items
 DROP POLICY IF EXISTS "planner_items_insert_own" ON public.planner_items;
 CREATE POLICY "planner_items_insert_own" ON public.planner_items
   FOR INSERT WITH CHECK (
-    auth.uid() = user_id AND
+    (auth.uid() = user_id OR
+      EXISTS (
+        SELECT 1
+        FROM public.account_links al
+        WHERE al.status = 'accepted'
+          AND (
+            (al.creator_id = auth.uid() AND al.invited_id = user_id) OR
+            (al.invited_id = auth.uid() AND al.creator_id = user_id)
+          )
+      )
+    ) AND
     EXISTS (
       SELECT 1
       FROM public.planner_days d

@@ -209,7 +209,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({ entry, onDelete, onEdit, ma
     return line.replace(/blw:/i, '').trim();
   })();
 
-  // Fallback: bei Beikost ohne Rezept Notizen als Badge zeigen
+  // Notizen ohne evtl. BLW-Rezept-Zeile (wird separat als Badge gezeigt)
   const notesWithoutRecipe = (() => {
     if (!entry.notes) return null;
     const lines = entry.notes
@@ -221,11 +221,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({ entry, onDelete, onEdit, ma
     return lines.join('\n');
   })();
 
-  const showSolidsNotesBadge =
-    entry.entry_type === 'feeding' &&
-    entry.feeding_type === 'SOLIDS' &&
-    !recipeNote &&
-    !!notesWithoutRecipe;
+  const showNotesBadge = !!notesWithoutRecipe;
 
   // Berechne Dauer
   const duration = entry.end_time
@@ -312,7 +308,8 @@ const ActivityCard: React.FC<ActivityCardProps> = ({ entry, onDelete, onEdit, ma
                   <View style={styles.badgeRow}>
                     <ThemedText style={styles.badgeText}>🥄 BLW: {recipeNote}</ThemedText>
                   </View>
-                ) : showSolidsNotesBadge ? (
+                ) : null}
+                {showNotesBadge ? (
                   <View style={styles.badgeRow}>
                     <ThemedText style={styles.badgeText}>📝 {notesWithoutRecipe}</ThemedText>
                   </View>

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { SafeAreaView, ScrollView, StyleSheet, TouchableOpacity, View, Text, Dimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -15,7 +15,7 @@ import { PlannerEvent, PlannerTodo, usePlannerDay } from '@/services/planner';
 import { PRIMARY, BACKGROUND, LAYOUT_PAD, SECTION_GAP_BOTTOM, SECTION_GAP_TOP, TEXT_PRIMARY } from '@/constants/PlannerDesign';
 import * as Haptics from 'expo-haptics';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/lib/supabase';
+import { getLinkedUsers, supabase } from '@/lib/supabase';
 import { GlassCard, LiquidGlassCard } from '@/constants/DesignGuide';
 
 function formatDateHeader(d: Date) {
@@ -63,6 +63,25 @@ const WEEK_BLOCKS = [
   { key: 'evening', label: 'Abend', start: 18, end: 23.99 },
 ];
 
+type LinkedUser = {
+  userId: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  userRole?: string | null;
+  relationshipType?: string | null;
+};
+
+function displayNameForLinkedUser(linkedUser: LinkedUser, index: number) {
+  const firstName = linkedUser.firstName?.trim();
+  const lastName = linkedUser.lastName?.trim();
+  if (firstName && lastName) return `${firstName} ${lastName.charAt(0)}.`;
+  if (firstName) return firstName;
+  if (lastName) return lastName;
+  const role = linkedUser.userRole?.trim();
+  if (role) return role;
+  return `Partner ${index + 1}`;
+}
+
 export default function PlannerScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
@@ -73,10 +92,13 @@ export default function PlannerScreen() {
     return d;
   });
   const [selectedTab, setSelectedTab] = useState<'day' | 'week' | 'month'>('day');
+  const [linkedUsers, setLinkedUsers] = useState<LinkedUser[]>([]);
+
   const {
     blocks,
     summary,
     floatingTodos,
+    completedFloatingTodos,
     toggleTodo,
     moveToTomorrow,
     addTodo,
@@ -92,6 +114,79 @@ export default function PlannerScreen() {
   const contentTopPadding = Math.max(SECTION_GAP_TOP - 24, 0);
   const [weekAgenda, setWeekAgenda] = useState<Record<string, any>>({});
   const [monthSummary, setMonthSummary] = useState<Record<string, { tasks: number; events: number }>>({});
+  const [showCompletedFloatingTodos, setShowCompletedFloatingTodos] = useState(false);
+
+  const ownerOptions = useMemo(() => {
+    if (!user?.id) return [];
+    const options = [
+      { id: user.id, label: 'Ich' },
+      ...linkedUsers.map((linkedUser, idx) => ({
+        id: linkedUser.userId,
+        label: displayNameForLinkedUser(linkedUser, idx),
+      })),
+    ];
+    const seen = new Set<string>();
+    return options.filter((opt) => {
+      if (!opt.id || seen.has(opt.id)) return false;
+      seen.add(opt.id);
+      return true;
+    });
+  }, [user?.id, linkedUsers]);
+
+  const ownerLabelById = useMemo(() => {
+    const map: Record<string, string> = {};
+    ownerOptions.forEach((opt) => {
+      map[opt.id] = opt.label;
+    });
+    return map;
+  }, [ownerOptions]);
+
+  const getOwnerLabel = useCallback(
+    (ownerId?: string) => {
+      if (!ownerId) return undefined;
+      return ownerLabelById[ownerId] ?? 'Partner';
+    },
+    [ownerLabelById],
+  );
+
+  useEffect(() => {
+    setCaptureVisible(false);
+    setEditingItem(null);
+  }, [user?.id]);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      if (!user?.id) {
+        if (active) setLinkedUsers([]);
+        return;
+      }
+      try {
+        const result = await getLinkedUsers(user.id);
+        if (!active) return;
+        if (result?.success && Array.isArray(result.linkedUsers)) {
+          const next = result.linkedUsers
+            .map((entry: any) => ({
+              userId: entry?.userId,
+              firstName: entry?.firstName ?? null,
+              lastName: entry?.lastName ?? null,
+              userRole: entry?.userRole ?? null,
+              relationshipType: entry?.relationshipType ?? null,
+            }))
+            .filter((entry: any): entry is LinkedUser => typeof entry.userId === 'string' && entry.userId.length > 0);
+          setLinkedUsers(next);
+        } else {
+          setLinkedUsers([]);
+        }
+      } catch (err) {
+        console.error('Planner: failed to load linked users', err);
+        if (active) setLinkedUsers([]);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [user?.id]);
 
   const headerTitle = useMemo(() => {
     if (selectedTab === 'week') return formatWeekRangeHeader(selectedDate);
@@ -201,30 +296,17 @@ export default function PlannerScreen() {
 
         const startIso = toDateKey(start);
         const endIso = toDateKey(end);
+        const ownerIds = Array.from(new Set([user.id, ...linkedUsers.map((linkedUser) => linkedUser.userId)]));
 
-        const { data: dayRows, error: dayError } = await supabase
-          .from('planner_days')
-          .select('id,day')
-          .eq('user_id', user.id)
-          .gte('day', startIso)
-          .lte('day', endIso);
-        if (dayError) throw dayError;
-
-        const dayIds = (dayRows ?? []).map((row) => row.id);
-        const { data: itemRows, error: itemError } = dayIds.length
-          ? await supabase
-              .from('planner_items')
-              .select(
-                'id,day_id,entry_type,title,completed,assignee,notes,location,due_at,start_at,end_at,created_at,updated_at',
-              )
-              .in('day_id', dayIds)
-          : { data: [], error: null };
+        const { data: itemRows, error: itemError } = await supabase
+          .from('planner_items')
+          .select(
+            'id,user_id,day_id,entry_type,title,completed,assignee,notes,location,due_at,start_at,end_at,created_at,updated_at,planner_days!inner(day)',
+          )
+          .in('user_id', ownerIds)
+          .gte('planner_days.day', startIso)
+          .lte('planner_days.day', endIso);
         if (itemError) throw itemError;
-
-        const dayMap: Record<string, string> = {};
-        (dayRows ?? []).forEach((row) => {
-          if (row?.id && row?.day) dayMap[row.id] = row.day;
-        });
 
         const agenda: Record<string, any> = {};
         const monthAgg: Record<string, { tasks: number; events: number }> = {};
@@ -249,7 +331,7 @@ export default function PlannerScreen() {
         };
 
         (itemRows ?? []).forEach((item) => {
-          const dayIso = dayMap[item.day_id];
+          const dayIso = Array.isArray(item?.planner_days) ? item.planner_days[0]?.day : item?.planner_days?.day;
           if (!dayIso) return;
           if (!monthAgg[dayIso]) monthAgg[dayIso] = { tasks: 0, events: 0 };
           if (item.entry_type === 'event') monthAgg[dayIso].events += 1;
@@ -274,18 +356,21 @@ export default function PlannerScreen() {
     if (selectedTab === 'week' || selectedTab === 'month') {
       loadRange();
     }
-  }, [selectedTab, selectedDate, user?.id]);
+  }, [selectedTab, selectedDate, user?.id, linkedUsers]);
 
   useEffect(() => {
     if (selectedTab !== 'week') return;
     const todayIso = toDateKey(new Date());
-    const idx = weekDays.findIndex((d) => toDateKey(d) === todayIso);
+    const selectedIso = toDateKey(selectedDate);
+    const idxToday = weekDays.findIndex((d) => toDateKey(d) === todayIso);
+    const idxSelected = weekDays.findIndex((d) => toDateKey(d) === selectedIso);
+    const idx = idxToday >= 0 ? idxToday : idxSelected;
     if (idx < 0) return;
     const offset = idx * (weekDayWidth + 8);
     requestAnimationFrame(() => {
       weekScrollRef.current?.scrollTo({ x: offset, y: 0, animated: false });
     });
-  }, [selectedTab, weekDays, weekDayWidth]);
+  }, [selectedTab, weekDays, weekDayWidth, selectedDate]);
 
   const handleSelectDate = (next: Date) => {
     const normalized = new Date(next);
@@ -340,6 +425,10 @@ export default function PlannerScreen() {
         }
       }
     }
+    const floating = floatingTodos.find((todo) => todo.id === id);
+    if (floating) return floating;
+    const completedFloating = completedFloatingTodos.find((todo) => todo.id === id);
+    if (completedFloating) return completedFloating;
     return undefined;
   };
 
@@ -379,7 +468,7 @@ export default function PlannerScreen() {
             location: payload.location,
           });
         } else {
-          addEvent(payload.title, startIso, endIso, payload.location);
+          addEvent(payload.title, startIso, endIso, payload.location, undefined, payload.ownerId);
         }
       } else if (payload.type === 'todo') {
         const dueIso = payload.dueAt === null ? null : payload.dueAt ? payload.dueAt.toISOString() : undefined;
@@ -391,7 +480,7 @@ export default function PlannerScreen() {
             assignee: payload.assignee,
           });
         } else {
-          addTodo(payload.title, undefined, dueIso, payload.notes, payload.assignee);
+          addTodo(payload.title, undefined, dueIso, payload.notes, payload.assignee, payload.ownerId);
         }
       } else if (payload.type === 'note') {
         const dueIso = payload.dueAt === null ? null : payload.dueAt ? payload.dueAt.toISOString() : undefined;
@@ -402,7 +491,7 @@ export default function PlannerScreen() {
             notes: payload.notes,
           });
         } else {
-          addTodo(payload.title, undefined, dueIso, payload.notes);
+          addTodo(payload.title, undefined, dueIso, payload.notes, 'me', payload.ownerId);
         }
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -484,6 +573,7 @@ export default function PlannerScreen() {
                     date={selectedDate}
                     events={events}
                     todos={todos}
+                    getOwnerLabel={getOwnerLabel}
                     onToggleTodo={(id) => toggleTodo(id)}
                     onMoveTomorrow={(id) => moveToTomorrow(id)}
                     onEditTodo={handleEditTodo}
@@ -499,36 +589,91 @@ export default function PlannerScreen() {
                     <View style={styles.timelineBadge}>
                       <Text style={styles.timelineBadgeText}>{floatingTodos.length} offen</Text>
                     </View>
-                  </View>
-                  <View style={styles.floatingList}>
-                    {floatingTodos.map((todo, idx) => (
-                      <View key={todo.id}>
-                        <SwipeableListItem
-                          id={todo.id}
-                          title={todo.title}
-                          type="todo"
-                          completed={todo.completed}
-                          onComplete={() => toggleTodo(todo.id)}
-                          onMoveTomorrow={() => moveToTomorrow(todo.id)}
-                          onPress={() => handleEditTodo(todo.id)}
-                          showLeadingCheckbox={false}
-                          trailingCheckbox
-                          style={styles.floatingItem}
-                          subtitle="Flexibel"
-                        />
-                        {idx < floatingTodos.length - 1 && <View style={styles.floatingDivider} />}
-                      </View>
-                    ))}
-                    {floatingTodos.length === 0 && (
-                      <View style={styles.emptyFloating}>
-                        <Text style={styles.emptyFloatingText}>Keine offenen Aufgaben ohne Datum</Text>
-                      </View>
-                    )}
-                  </View>
-                </LiquidGlassCard>
-              </View>
-            </>
-          ) : selectedTab === 'week' ? (
+	                  </View>
+	                  <View style={styles.floatingList}>
+	                    {floatingTodos.map((todo, idx) => {
+	                      const ownerLabel = getOwnerLabel(todo.userId);
+	                      const subtitle = ownerLabel && ownerLabel !== 'Ich' ? `Flexibel · ${ownerLabel}` : 'Flexibel';
+
+                      return (
+                        <View key={todo.id}>
+	                          <SwipeableListItem
+	                            id={todo.id}
+	                            title={todo.title}
+	                            type="todo"
+	                            completed={todo.completed}
+	                            onComplete={() => {
+	                              setShowCompletedFloatingTodos(true);
+	                              toggleTodo(todo.id);
+	                            }}
+	                            onMoveTomorrow={() => moveToTomorrow(todo.id)}
+	                            onPress={() => handleEditTodo(todo.id)}
+	                            showLeadingCheckbox={false}
+	                            trailingCheckbox
+	                            style={styles.floatingItem}
+                            subtitle={subtitle}
+                          />
+                          {idx < floatingTodos.length - 1 && <View style={styles.floatingDivider} />}
+                        </View>
+                      );
+                    })}
+	                    {floatingTodos.length === 0 && (
+	                      <View style={styles.emptyFloating}>
+	                        <Text style={styles.emptyFloatingText}>Keine offenen Aufgaben ohne Datum</Text>
+	                      </View>
+	                    )}
+	                  </View>
+	                  {completedFloatingTodos.length > 0 && (
+	                    <>
+	                      <View style={styles.sectionDivider} />
+	                      <TouchableOpacity
+	                        style={styles.completedToggleRow}
+	                        activeOpacity={0.85}
+	                        onPress={() => setShowCompletedFloatingTodos((prev) => !prev)}
+	                        accessibilityRole="button"
+	                        accessibilityLabel={showCompletedFloatingTodos ? 'Erledigte Aufgaben ausblenden' : 'Erledigte Aufgaben anzeigen'}
+	                      >
+	                        <ThemedText style={styles.completedToggleLabel}>Erledigt</ThemedText>
+	                        <View style={styles.completedToggleRight}>
+	                          <View style={styles.timelineBadge}>
+	                            <Text style={styles.timelineBadgeText}>{completedFloatingTodos.length}</Text>
+	                          </View>
+	                          <Text style={styles.completedChevron}>{showCompletedFloatingTodos ? '˄' : '˅'}</Text>
+	                        </View>
+	                      </TouchableOpacity>
+	                      {showCompletedFloatingTodos && (
+	                        <View style={styles.completedList}>
+	                          {completedFloatingTodos.map((todo, idx) => {
+	                            const ownerLabel = getOwnerLabel(todo.userId);
+	                            const subtitle = ownerLabel && ownerLabel !== 'Ich' ? `Flexibel · ${ownerLabel}` : 'Flexibel';
+
+	                            return (
+	                              <View key={todo.id}>
+	                                <SwipeableListItem
+	                                  id={todo.id}
+	                                  title={todo.title}
+	                                  type="todo"
+	                                  completed={todo.completed}
+	                                  onComplete={() => toggleTodo(todo.id)}
+	                                  onMoveTomorrow={() => moveToTomorrow(todo.id)}
+	                                  onPress={() => handleEditTodo(todo.id)}
+	                                  showLeadingCheckbox={false}
+	                                  trailingCheckbox
+	                                  style={styles.floatingItem}
+	                                  subtitle={subtitle}
+	                                />
+	                                {idx < completedFloatingTodos.length - 1 && <View style={styles.floatingDivider} />}
+	                              </View>
+	                            );
+	                          })}
+	                        </View>
+	                      )}
+	                    </>
+	                  )}
+	                </LiquidGlassCard>
+	              </View>
+	            </>
+	          ) : selectedTab === 'week' ? (
             <View style={{ paddingHorizontal: LAYOUT_PAD }}>
               <LiquidGlassCard style={styles.calendarCard} intensity={24}>
                 <ThemedText style={styles.calendarTitle}>Wochenplan</ThemedText>
@@ -554,12 +699,14 @@ export default function PlannerScreen() {
                         id: ev.id,
                         title: ev.title,
                         time: ev.start_at ?? ev.due_at ?? null,
+                        ownerId: ev.user_id,
                         type: 'event' as const,
                       })),
                       ...todos.map((todo: any) => ({
                         id: todo.id,
                         title: todo.title,
                         time: todo.due_at ?? null,
+                        ownerId: todo.user_id,
                         type: 'todo' as const,
                       })),
                     ].sort((a, b) => {
@@ -620,6 +767,8 @@ export default function PlannerScreen() {
                                   minute: '2-digit',
                                 }).format(new Date(item.time))
                               : '—';
+                            const ownerLabel = getOwnerLabel(item.ownerId);
+                            const showOwnerLabel = ownerLabel && ownerLabel !== 'Ich';
                             return (
                               <View key={item.id} style={styles.timelineRow}>
                                 <View
@@ -629,7 +778,14 @@ export default function PlannerScreen() {
                                   ]}
                                 />
                                 <View style={styles.timelineContent}>
-                                  <Text style={styles.timelineTime}>{timeLabel}</Text>
+                                  <View style={styles.timelineMetaRow}>
+                                    <Text style={styles.timelineTime}>{timeLabel}</Text>
+                                    {showOwnerLabel && (
+                                      <View style={styles.ownerPill}>
+                                        <Text style={styles.ownerPillText}>{ownerLabel}</Text>
+                                      </View>
+                                    )}
+                                  </View>
                                   <Text numberOfLines={2} style={styles.timelineTitle}>
                                     {item.title}
                                   </Text>
@@ -705,7 +861,9 @@ export default function PlannerScreen() {
           )}
         </ScrollView>
 
-        <FloatingAddButton onPress={() => openCapture('todo')} bottomInset={insets.bottom + 16} rightInset={16} />
+        {user?.id && (
+          <FloatingAddButton onPress={() => openCapture('todo')} bottomInset={insets.bottom + 16} rightInset={16} />
+        )}
       </SafeAreaView>
 
       <PlannerCaptureModal
@@ -713,6 +871,8 @@ export default function PlannerScreen() {
         type={captureType}
         baseDate={selectedDate}
         editingItem={editingItem}
+        ownerOptions={ownerOptions}
+        defaultOwnerId={user?.id}
         onClose={handleCaptureClose}
         onSave={handleCaptureSave}
       />
@@ -774,6 +934,42 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: TEXT_PRIMARY,
     opacity: 0.7,
+  },
+  sectionDivider: {
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.5)',
+    marginTop: 10,
+    marginBottom: 6,
+    marginHorizontal: LAYOUT_PAD,
+  },
+  completedToggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: LAYOUT_PAD,
+    paddingVertical: 8,
+  },
+  completedToggleLabel: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: TEXT_PRIMARY,
+    opacity: 0.85,
+  },
+  completedToggleRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  completedChevron: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: TEXT_PRIMARY,
+    opacity: 0.75,
+    paddingHorizontal: 4,
+  },
+  completedList: {
+    paddingHorizontal: LAYOUT_PAD,
+    paddingBottom: 6,
   },
   topTabsContainer: {
     flexDirection: 'row',
@@ -909,10 +1105,30 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 2,
   },
+  timelineMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
   timelineTime: {
     fontSize: 11,
     color: TEXT_PRIMARY,
     opacity: 0.7,
+  },
+  ownerPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.24)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.5)',
+  },
+  ownerPillText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: TEXT_PRIMARY,
+    opacity: 0.85,
   },
   timelineTitle: {
     fontSize: 12,

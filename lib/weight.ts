@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { getPartnerId } from './accountLinks';
 
 export type WeightSubject = 'mom' | 'baby';
 
@@ -45,7 +46,7 @@ export const saveWeightEntry = async (entry: Omit<WeightEntry, 'id' | 'user_id' 
         .update({
           weight: entry.weight,
           subject,
-          notes: entry.notes,
+          notes: entry.notes && entry.notes.trim().length > 0 ? entry.notes.trim() : null,
           updated_at: now
         })
         .eq('id', existingData.id)
@@ -78,17 +79,36 @@ export const saveWeightEntry = async (entry: Omit<WeightEntry, 'id' | 'user_id' 
 // Alle Gewichtsdaten abrufen
 export const getWeightEntries = async (subject?: WeightSubject) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData, error: userErr } = await supabase.auth.getUser();
+    if (userErr) return { data: null, error: userErr };
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
+
+    const myId = userData.user.id;
+    const partnerId = await getPartnerId();
 
     let query = supabase
       .from('weight_entries')
       .select('*')
-      .eq('user_id', userData.user.id)
       .order('date', { ascending: true });
 
-    if (subject) {
-      query = query.eq('subject', subject);
+    if (subject === 'baby') {
+      if (partnerId) {
+        query = query.or(
+          `and(user_id.eq.${myId},subject.eq.baby),and(user_id.eq.${partnerId},subject.eq.baby)`
+        );
+      } else {
+        query = query.eq('user_id', myId).eq('subject', 'baby');
+      }
+    } else if (subject === 'mom') {
+      query = query.eq('user_id', myId).eq('subject', 'mom');
+    } else {
+      if (partnerId) {
+        query = query.or(
+          `user_id.eq.${myId},and(user_id.eq.${partnerId},subject.eq.baby)`
+        );
+      } else {
+        query = query.eq('user_id', myId);
+      }
     }
 
     const { data, error } = await query;

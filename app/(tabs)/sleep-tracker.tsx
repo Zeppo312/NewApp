@@ -4,7 +4,6 @@ import {
   SafeAreaView,
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
@@ -24,6 +23,7 @@ import { ThemedBackground } from '@/components/ThemedBackground';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import TextInputOverlay from '@/components/modals/TextInputOverlay';
 
 import { SleepEntry, SleepQuality, startSleepTracking, stopSleepTracking, loadConnectedUsers } from '@/lib/sleepData';
 import { loadAllVisibleSleepEntries } from '@/lib/sleepSharing';
@@ -261,6 +261,32 @@ export default function SleepTrackerScreen() {
     quality: null as SleepQuality | null,
     notes: ''
   });
+
+  // Notes overlay (wie Planner)
+  const [notesOverlayVisible, setNotesOverlayVisible] = useState(false);
+  const [notesOverlayValue, setNotesOverlayValue] = useState('');
+
+  const openNotesEditor = () => {
+    setNotesOverlayValue(sleepModalData.notes ?? '');
+    setNotesOverlayVisible(true);
+  };
+
+  const closeNotesEditor = () => {
+    setNotesOverlayVisible(false);
+    setNotesOverlayValue('');
+  };
+
+  const saveNotesEditor = (next?: string) => {
+    const val = typeof next === 'string' ? next : notesOverlayValue;
+    setSleepModalData((prev) => ({ ...prev, notes: val }));
+    closeNotesEditor();
+  };
+
+  useEffect(() => {
+    if (!showInputModal) {
+      closeNotesEditor();
+    }
+  }, [showInputModal]);
 
   const checkPaywallGate = useCallback(async () => {
     if (paywallCheckInFlight.current || !user) return;
@@ -1973,15 +1999,18 @@ export default function SleepTrackerScreen() {
                     {/* Notizen Sektion */}
                     <View style={styles.section}>
                       <Text style={styles.sectionTitle}>📝 Notizen</Text>
-                      <TextInput
+                      <TouchableOpacity
                         style={styles.notesInput}
-                        placeholder="Optionale Notizen zum Schlaf..."
-                        placeholderTextColor="#A8978E"
-                        value={sleepModalData.notes}
-                        onChangeText={notes => setSleepModalData(prev => ({ ...prev, notes }))}
-                        multiline
-                        numberOfLines={3}
-                      />
+                        activeOpacity={0.9}
+                        onPress={openNotesEditor}
+                      >
+                        <Text
+                          style={sleepModalData.notes.trim() ? styles.notesText : styles.notesPlaceholder}
+                          numberOfLines={3}
+                        >
+                          {sleepModalData.notes.trim() || 'Optionale Notizen zum Schlaf...'}
+                        </Text>
+                      </TouchableOpacity>
                     </View>
 
                     {/* Delete Button für Bearbeitung */}
@@ -2004,11 +2033,22 @@ export default function SleepTrackerScreen() {
 
                   </View>
                 </TouchableOpacity>
-              </ScrollView>
-            </BlurView>
-          </View>
+	              </ScrollView>
+	            </BlurView>
+	          </View>
 
-        </Modal>
+	          <TextInputOverlay
+	            visible={notesOverlayVisible}
+	            label="Notizen"
+	            value={notesOverlayValue}
+	            placeholder="Optionale Notizen zum Schlaf..."
+	            multiline
+	            accentColor={PRIMARY}
+	            onClose={closeNotesEditor}
+	            onSubmit={(next) => saveNotesEditor(next)}
+	          />
+
+	        </Modal>
       </SafeAreaView>
 
       {/* Splash Popup wie in daily_old.tsx */}
@@ -2584,14 +2624,19 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.8)',
     borderRadius: 15,
     padding: 15,
-    fontSize: 16,
-    color: '#333333',
-    textAlignVertical: 'top',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 3,
     elevation: 3,
+  },
+  notesText: {
+    fontSize: 16,
+    color: '#333333',
+  },
+  notesPlaceholder: {
+    fontSize: 16,
+    color: '#A8978E',
   },
   deleteButton: {
     backgroundColor: '#FF6B6B',
