@@ -17,6 +17,7 @@ import {
 import { BlurView } from 'expo-blur';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { router, Stack } from 'expo-router';
+import * as Linking from 'expo-linking';
 
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedBackground } from '@/components/ThemedBackground';
@@ -75,6 +76,7 @@ export default function ProfilScreen() {
   const [isSaving, setIsSaving]                     = useState(false);
   const [isDeletingAvatar, setIsDeletingAvatar]     = useState(false);
   const [isDeletingProfile, setIsDeletingProfile]   = useState(false);
+  const [isSendingPasswordReset, setIsSendingPasswordReset] = useState(false);
 
   useEffect(() => {
     if (user) loadUserData();
@@ -318,6 +320,50 @@ export default function ProfilScreen() {
       setIsDeletingProfile(false);
       Alert.alert('Fehler', 'Dein Profil konnte nicht gelöscht werden.');
     }
+  };
+
+  const sendPasswordResetEmail = async () => {
+    if (!user?.email) {
+      Alert.alert('Fehler', 'Keine E-Mail-Adresse gefunden.');
+      return;
+    }
+    if (isSendingPasswordReset) return;
+
+    try {
+      setIsSendingPasswordReset(true);
+      const redirectTo = Linking.createURL('auth/callback');
+      const { error } = await supabase.auth.resetPasswordForEmail(user.email, { redirectTo });
+      if (error) throw error;
+
+      Alert.alert(
+        'E-Mail gesendet',
+        'Wir haben dir eine E-Mail mit einem Link zum Ändern deines Passworts geschickt. Bitte prüfe deinen Posteingang (ggf. auch Spam).',
+      );
+    } catch (error: any) {
+      console.error('Failed to send password reset email:', error);
+      Alert.alert(
+        'Fehler',
+        error?.message || 'Die E-Mail zum Passwort-Reset konnte nicht gesendet werden.',
+      );
+    } finally {
+      setIsSendingPasswordReset(false);
+    }
+  };
+
+  const handlePasswordChangePress = () => {
+    if (!user?.email) {
+      Alert.alert('Fehler', 'Keine E-Mail-Adresse gefunden.');
+      return;
+    }
+
+    Alert.alert(
+      'Passwort ändern',
+      'Wir senden dir eine Bestätigungs-E-Mail mit einem Link zum Ändern deines Passworts.',
+      [
+        { text: 'Abbrechen', style: 'cancel' },
+        { text: 'E-Mail senden', onPress: sendPasswordResetEmail },
+      ],
+    );
   };
 
   const saveUserData = async () => {
@@ -834,8 +880,36 @@ export default function ProfilScreen() {
                   </TouchableOpacity>
                 </View>
 
-                {/* Profil löschen */}
+                {/* Sicherheit */}
                 <View style={{ marginHorizontal: TIMELINE_INSET }}>
+                  <TouchableOpacity
+                    onPress={handlePasswordChangePress}
+                    activeOpacity={0.9}
+                    disabled={isSendingPasswordReset}
+                    style={{ borderRadius: 22, overflow: 'hidden', marginTop: 12 }}
+                  >
+                    <BlurView intensity={24} tint="light" style={{ borderRadius: 22, overflow: 'hidden' }}>
+                      <View
+                        style={[
+                          styles.saveCard,
+                          { backgroundColor: isSendingPasswordReset ? 'rgba(168,168,168,0.5)' : 'rgba(135,206,235,0.45)' },
+                        ]}
+                      >
+                        <View style={[styles.saveIconWrap, { backgroundColor: BABY_BLUE }]}>
+                          {isSendingPasswordReset ? (
+                            <ActivityIndicator color="#fff" />
+                          ) : (
+                            <ThemedText style={{ fontSize: 24, color: '#FFFFFF' }}>🔑</ThemedText>
+                          )}
+                        </View>
+                        <ThemedText style={styles.saveTitle}>
+                          {isSendingPasswordReset ? 'Sende E-Mail…' : 'Passwort ändern'}
+                        </ThemedText>
+                        <ThemedText style={styles.saveSub}>Bestätigungslink per E-Mail</ThemedText>
+                      </View>
+                    </BlurView>
+                  </TouchableOpacity>
+
                   <TouchableOpacity
                     onPress={handleDeleteProfileRequest}
                     activeOpacity={0.9}
