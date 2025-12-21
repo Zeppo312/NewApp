@@ -10,8 +10,8 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "buildNumber": "1",
-      "version": "1.0.2",
+      "buildNumber": "2",
+      "version": "1.0.5",
       "bundleIdentifier": "com.LottiBaby.app",
       "infoPlist": {
         "NSCalendarsUsageDescription": "Diese App benötigt Zugriff auf deinen Kalender, um Termine zu synchronisieren.",
