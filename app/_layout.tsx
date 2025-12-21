@@ -10,7 +10,6 @@ import 'react-native-reanimated';
 import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
 
-
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { BabyStatusProvider } from '@/contexts/BabyStatusContext';
@@ -148,6 +147,7 @@ function RootLayoutNav() {
         <Stack.Screen name="sync-test" />
         <Stack.Screen name="+not-found" />
         <Stack.Screen name="auth/callback" />
+        <Stack.Screen name="auth/reset-password" />
       </Stack>
       <StatusBar hidden={true} />
     </ThemeProvider>

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -9,7 +9,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { BlurView } from 'expo-blur';
 
 import Header from '@/components/Header';
@@ -22,35 +22,52 @@ const ACCENT_PURPLE = '#8E4EC6';
 
 export default function ResetPasswordScreen() {
   const router = useRouter();
+  const searchParams = useLocalSearchParams();
   const [password, setPassword] = useState('');
   const [passwordConfirm, setPasswordConfirm] = useState('');
   const [isCheckingSession, setIsCheckingSession] = useState(true);
   const [hasSession, setHasSession] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+
+  const code = useMemo(() => {
+    const raw = searchParams.code;
+    return Array.isArray(raw) ? raw[0] : raw;
+  }, [searchParams.code]);
 
   useEffect(() => {
     let isMounted = true;
 
-    const checkSession = async () => {
+    const bootstrap = async () => {
       try {
+        if (code) {
+          if (isMounted) setStatus('Link wird verarbeitet…');
+          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+          if (exchangeError) throw exchangeError;
+        }
+
         const { data, error } = await supabase.auth.getSession();
         if (!isMounted) return;
         if (error) throw error;
         setHasSession(!!data.session);
+        setStatus(null);
       } catch (err) {
         console.error('Reset password session check failed:', err);
-        if (isMounted) setHasSession(false);
+        if (isMounted) {
+          setHasSession(false);
+          setStatus('Link konnte nicht verarbeitet werden.');
+        }
       } finally {
         if (isMounted) setIsCheckingSession(false);
       }
     };
 
-    checkSession();
+    bootstrap();
 
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [code]);
 
   const handleUpdatePassword = async () => {
     if (isSubmitting) return;
@@ -103,8 +120,8 @@ export default function ResetPasswordScreen() {
               <View style={styles.center}>
                 <ThemedText style={styles.infoTitle}>Link ungültig</ThemedText>
                 <ThemedText style={styles.infoText}>
-                  Der Link ist abgelaufen oder wurde bereits verwendet. Bitte fordere eine neue
-                  E-Mail an.
+                  {status ||
+                    'Der Link ist abgelaufen oder wurde bereits verwendet. Bitte fordere eine neue E-Mail an.'}
                 </ThemedText>
                 <TouchableOpacity
                   onPress={() => router.replace('/(auth)/login')}
@@ -228,4 +245,3 @@ const styles = StyleSheet.create({
   },
   secondaryButtonText: { color: ACCENT_PURPLE, fontWeight: '800', fontSize: 15 },
 });
-

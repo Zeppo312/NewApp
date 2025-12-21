@@ -305,6 +305,30 @@ export default function MoreScreen() {
             )}
           </LiquidGlassCard>
 
+          <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
+            <ThemedText style={styles.sectionTitle}>
+              Support
+            </ThemedText>
+
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => router.push('/support' as any)}
+            >
+              <View style={styles.menuItemIcon}>
+                <IconSymbol name="envelope.fill" size={24} color={theme.accent} />
+              </View>
+              <View style={styles.menuItemContent}>
+                <ThemedText style={styles.menuItemTitle}>
+                  Support kontaktieren
+                </ThemedText>
+                <ThemedText style={styles.menuItemDescription}>
+                  support@lottibaby.de
+                </ThemedText>
+              </View>
+              <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
+            </TouchableOpacity>
+          </LiquidGlassCard>
+
           {/* Logout Section */}
           <View style={styles.logoutSection}>
             <TouchableOpacity

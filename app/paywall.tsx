@@ -5,41 +5,156 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 
 import { ThemedBackground } from '@/components/ThemedBackground';
+import { useAuth } from '@/contexts/AuthContext';
 import { markPaywallShown } from '@/lib/paywall';
-import { fetchProducts, initIAP, PRODUCT_IDS, purchaseProduct } from '@/lib/iap';
+import Purchases from '@/lib/purchasesClient';
+import {
+  hasRevenueCatEntitlement,
+  initRevenueCat,
+  purchaseMonthlyPackage,
+  restoreRevenueCatPurchases,
+  REVENUECAT_OFFERING_ID,
+  REVENUECAT_PACKAGE_ID,
+} from '@/lib/revenuecat';
 
 export default function PaywallScreen() {
   const { next, origin } = useLocalSearchParams<{ next?: string; origin?: string }>();
   const router = useRouter();
+  const { user } = useAuth();
+
   const nextRoute = typeof next === 'string' && next.length > 0 ? next : '/(tabs)/home';
   const [step, setStep] = useState(0);
-  const [pendingProduct, setPendingProduct] = useState<string | null>(null);
-  const [iapError, setIapError] = useState<string | null>(null);
-  const [products, setProducts] = useState<any[]>([]);
-  const isIapSupported = Platform.OS !== 'web';
+  const [pendingAction, setPendingAction] = useState<'purchase' | 'restore' | null>(null);
+  const [purchaseError, setPurchaseError] = useState<string | null>(null);
+  const [monthlyPriceLabel, setMonthlyPriceLabel] = useState<string | null>(null);
+  const isPurchasesSupported = Platform.OS !== 'web';
 
   const CTA_LABEL = 'Weiter';
 
-  useEffect(() => {
-    if (!isIapSupported) return;
-    initIAP().catch(() => {
-      setIapError('In-App-Käufe konnten nicht initialisiert werden.');
-    });
-  }, [isIapSupported]);
+  const isRevenueCatConfigured = useMemo(() => {
+    if (Platform.OS === 'ios') return Boolean(process.env.EXPO_PUBLIC_RC_IOS_KEY);
+    if (Platform.OS === 'android') return Boolean(process.env.EXPO_PUBLIC_RC_ANDROID_KEY);
+    return false;
+  }, []);
+
+  const isPurchaseActionDisabled = isPurchasesSupported && (!isRevenueCatConfigured || !user || !!pendingAction);
+
+  const billingLabel =
+    Platform.OS === 'ios'
+      ? 'Zahlung über den App Store'
+      : Platform.OS === 'android'
+        ? 'Zahlung über Google Play'
+        : 'Zahlung';
 
   useEffect(() => {
-    if (!isIapSupported) return;
-    const load = async () => {
+    // Anzeige registrieren, damit das 2h-Fenster in Supabase gesetzt ist
+    markPaywallShown(origin);
+  }, [origin]);
+
+  useEffect(() => {
+    if (!isPurchasesSupported || !user || !isRevenueCatConfigured) return;
+
+    let cancelled = false;
+
+    const loadPrice = async () => {
       try {
-        const items = await fetchProducts();
-        setProducts(items);
-      } catch (err: any) {
-        setIapError('Produkte konnten nicht geladen werden.');
-        console.warn('Fehler beim Laden der Produkte', err);
+        await initRevenueCat(user.id);
+        const offerings = await Purchases.getOfferings();
+        const offering = offerings?.all?.[REVENUECAT_OFFERING_ID] ?? offerings?.current ?? null;
+        const pkg = offering?.availablePackages?.find((p: any) => p?.identifier === REVENUECAT_PACKAGE_ID) ?? null;
+        const priceString = pkg?.product?.priceString;
+        if (!cancelled && typeof priceString === 'string' && priceString.length > 0) {
+          setMonthlyPriceLabel(priceString);
+        }
+      } catch (err) {
+        console.warn('RevenueCat offerings load failed', err);
       }
     };
-    load();
-  }, [isIapSupported]);
+
+    loadPrice();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isPurchasesSupported, isRevenueCatConfigured, user]);
+
+  const purchaseAndNavigate = async () => {
+    if (!isPurchasesSupported) {
+      router.replace(nextRoute as any);
+      return;
+    }
+
+    if (!user) {
+      setPurchaseError('Bitte zuerst anmelden.');
+      return;
+    }
+
+    if (!isRevenueCatConfigured) {
+      setPurchaseError('Zahlungen sind aktuell nicht verfügbar (RevenueCat nicht konfiguriert).');
+      return;
+    }
+
+    setPurchaseError(null);
+    setPendingAction('purchase');
+
+    try {
+      const hasAccess = await purchaseMonthlyPackage(user.id);
+      if (!hasAccess) {
+        setPurchaseError(
+          'Kauf abgeschlossen – der Status wird noch synchronisiert. Bitte tippe „Status aktualisieren“.',
+        );
+        return;
+      }
+
+      router.replace(nextRoute as any);
+    } catch (err: any) {
+      if (err?.userCancelled === true) return;
+      if (typeof err?.message === 'string' && err.message.toLowerCase().includes('cancel')) return;
+      setPurchaseError(err?.message ?? 'Kauf fehlgeschlagen. Bitte versuche es erneut.');
+    } finally {
+      setPendingAction(null);
+    }
+  };
+
+  const restoreAndRefresh = async () => {
+    if (!isPurchasesSupported) {
+      router.replace(nextRoute as any);
+      return;
+    }
+
+    if (!user) {
+      setPurchaseError('Bitte zuerst anmelden.');
+      return;
+    }
+
+    if (!isRevenueCatConfigured) {
+      setPurchaseError('Zahlungen sind aktuell nicht verfügbar (RevenueCat nicht konfiguriert).');
+      return;
+    }
+
+    setPurchaseError(null);
+    setPendingAction('restore');
+
+    try {
+      const restored = await restoreRevenueCatPurchases(user.id);
+      if (restored) {
+        router.replace(nextRoute as any);
+        return;
+      }
+
+      const current = await hasRevenueCatEntitlement(user.id);
+      if (current) {
+        router.replace(nextRoute as any);
+        return;
+      }
+
+      setPurchaseError('Kein aktives Abo gefunden.');
+    } catch (err: any) {
+      setPurchaseError(err?.message ?? 'Status-Aktualisierung fehlgeschlagen. Bitte versuche es erneut.');
+    } finally {
+      setPendingAction(null);
+    }
+  };
 
   const slides = useMemo(
     () => [
@@ -64,15 +179,15 @@ export default function PaywallScreen() {
             <View style={styles.previewCard}>
               <View style={styles.previewRow}>
                 <Text style={styles.previewLabel}>Schlaf</Text>
-                <Text style={styles.previewValue}>11h 30m</Text>
+                <Text style={styles.previewValue}>✨ smarter</Text>
               </View>
               <View style={styles.previewRow}>
-                <Text style={styles.previewLabel}>Mahlzeiten</Text>
-                <Text style={styles.previewValue}>6×</Text>
+                <Text style={styles.previewLabel}>Planner</Text>
+                <Text style={styles.previewValue}>✔︎ organisiert</Text>
               </View>
               <View style={[styles.previewRow, styles.previewRowLast]}>
-                <Text style={styles.previewLabel}>Nächster Schlaf</Text>
-                <Text style={[styles.previewValue, styles.previewAccent]}>in 40 Min</Text>
+                <Text style={styles.previewLabel}>Insights</Text>
+                <Text style={[styles.previewValue, styles.previewAccent]}>in Sekunden</Text>
               </View>
             </View>
           </BlurView>
@@ -91,18 +206,11 @@ export default function PaywallScreen() {
                 <Text style={styles.timelineDesc}>Alle Funktionen sofort freischalten</Text>
               </View>
             </View>
-            <View style={styles.timelineRow}>
+            <View style={[styles.timelineRow, { marginBottom: 0 }]}>
               <View style={styles.dot} />
               <View style={styles.timelineTextWrap}>
-                <Text style={styles.timelineLabel}>14 Tage kostenlos testen</Text>
-                <Text style={styles.timelineDesc}>Danach 3,33 € / Monat – flexibel kündbar</Text>
-              </View>
-            </View>
-            <View style={styles.timelineRow}>
-              <View style={styles.dot} />
-              <View style={styles.timelineTextWrap}>
-                <Text style={styles.timelineLabel}>Direkt starten</Text>
-                <Text style={styles.timelineDesc}>1,80 € / Monat – erste Zahlung heute, 46 % günstiger</Text>
+                <Text style={styles.timelineLabel}>Monatlich kündbar</Text>
+                <Text style={styles.timelineDesc}>{billingLabel}</Text>
               </View>
             </View>
           </View>
@@ -110,8 +218,8 @@ export default function PaywallScreen() {
       },
       {
         id: 'pricing',
-        title: 'Wähle dein Modell',
-        subtitle: 'Maximale Flexibilität: monatlich zahlen oder günstiger direkt starten.',
+        title: 'Premium freischalten',
+        subtitle: 'Ein Abo – alle Funktionen. Monatlich kündbar.',
         body: (
           <View style={styles.pricingBody}>
             <Text style={styles.socialProof}>Schon viele Mamas nutzen Lotti Baby täglich.</Text>
@@ -134,37 +242,8 @@ export default function PaywallScreen() {
         ),
       },
     ],
-    [],
+    [billingLabel],
   );
-
-  useEffect(() => {
-    // Anzeige registrieren, damit das 2h-Fenster in Supabase gesetzt ist
-    markPaywallShown(origin);
-  }, [origin]);
-
-  const purchaseAndNavigate = async (productId: string) => {
-    if (!isIapSupported) {
-      router.replace(nextRoute);
-      return;
-    }
-    if (products.length === 0) {
-      setIapError('Produkt konnte nicht geladen werden.');
-      return;
-    }
-    setIapError(null);
-    setPendingProduct(productId);
-    try {
-      await purchaseProduct(productId);
-      router.replace(nextRoute);
-    } catch (err: any) {
-      setIapError(err?.message ?? 'Kauf fehlgeschlagen. Bitte versuche es erneut.');
-    } finally {
-      setPendingProduct(null);
-    }
-  };
-
-  const handleSelectDirect = () => purchaseAndNavigate(PRODUCT_IDS.directMonthly);
-  const handleSelectTrial = () => purchaseAndNavigate(PRODUCT_IDS.trialMonthly);
 
   return (
     <ThemedBackground style={styles.shell}>
@@ -179,7 +258,7 @@ export default function PaywallScreen() {
       <ScrollView contentContainerStyle={styles.container}>
         <View style={styles.topBar}>
           <View style={styles.badge}>
-            <Text style={styles.badgeText}>Trial</Text>
+            <Text style={styles.badgeText}>Premium</Text>
           </View>
           <Text style={styles.logo}>Lotti Baby</Text>
         </View>
@@ -193,9 +272,7 @@ export default function PaywallScreen() {
           </>
         )}
 
-        <View style={styles.hero}>
-          {slides[step].body}
-        </View>
+        <View style={styles.hero}>{slides[step].body}</View>
 
         <View style={styles.stepDots}>
           {slides.map((s, idx) => (
@@ -205,10 +282,7 @@ export default function PaywallScreen() {
 
         {step < slides.length - 1 ? (
           <View style={styles.ctaCard}>
-            <Pressable
-              style={styles.primaryButton}
-              onPress={() => setStep(prev => Math.min(prev + 1, slides.length - 1))}
-            >
+            <Pressable style={styles.primaryButton} onPress={() => setStep(prev => Math.min(prev + 1, slides.length - 1))}>
               <LinearGradient
                 colors={['#FFCFAE', '#FEB493']}
                 start={{ x: 0, y: 0 }}
@@ -217,57 +291,40 @@ export default function PaywallScreen() {
               />
               <Text style={styles.primaryText}>{CTA_LABEL}</Text>
             </Pressable>
-            <Pressable onPress={handleSelectTrial} hitSlop={8}>
-              <Text style={styles.secondaryAction}>14 Tage kostenlos testen</Text>
-            </Pressable>
           </View>
         ) : (
           <View style={styles.planStack}>
             <View style={[styles.planCard, styles.planCardHighlight]}>
               <View style={styles.planBadgeRow}>
-                <Text style={styles.planBadge}>Bester Deal</Text>
-                <Text style={styles.planSave}>46 % günstiger</Text>
+                <Text style={styles.planBadge}>Monatsabo</Text>
+                <Text style={styles.planSave}>{monthlyPriceLabel ? `${monthlyPriceLabel} / Monat` : 'Jederzeit kündbar'}</Text>
               </View>
-              <Text style={styles.planTitle}>Direkt starten – 1,80 € / Monat</Text>
-              <Text style={styles.planPrice}>Erste Zahlung heute · kein Trial</Text>
-              <Text style={styles.planDesc}>46 % günstiger als nach dem Test.</Text>
-              <Pressable style={styles.primaryButton} disabled={pendingProduct === PRODUCT_IDS.directMonthly} onPress={handleSelectDirect}>
+              <Text style={styles.planTitle}>Premium freischalten</Text>
+              <Text style={styles.planPrice}>{billingLabel}</Text>
+              <Text style={styles.planDesc}>Alle Premium-Funktionen freischalten · jederzeit kündbar</Text>
+              <Pressable style={styles.primaryButton} disabled={isPurchaseActionDisabled} onPress={purchaseAndNavigate}>
                 <LinearGradient
                   colors={['#FFCFAE', '#FEB493']}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={StyleSheet.absoluteFill}
                 />
-                <Text style={styles.primaryText}>
-                  {pendingProduct === PRODUCT_IDS.directMonthly ? 'Bitte warten…' : 'Direkt starten & sparen'}
-                </Text>
+                <Text style={styles.primaryText}>{pendingAction === 'purchase' ? 'Bitte warten…' : 'Premium aktivieren'}</Text>
               </Pressable>
             </View>
 
-            <View style={styles.planCard}>
-              <Text style={styles.planTitle}>14 Tage kostenlos testen</Text>
-              <Text style={styles.planPrice}>Danach 3,33 € / Monat</Text>
-              <Text style={styles.planDesc}>Flexibel · monatlich kündbar · direkt freischalten</Text>
-              <Pressable
-                style={styles.secondaryButton}
-                disabled={pendingProduct === PRODUCT_IDS.trialMonthly}
-                onPress={handleSelectTrial}
-              >
-                <Text style={styles.secondaryButtonText}>
-                  {pendingProduct === PRODUCT_IDS.trialMonthly ? 'Bitte warten…' : '14 Tage gratis testen'}
-                </Text>
-              </Pressable>
-            </View>
+            <Pressable onPress={restoreAndRefresh} hitSlop={8} disabled={isPurchaseActionDisabled}>
+              <Text style={styles.secondaryAction}>
+                {pendingAction === 'restore' ? 'Aktualisiere…' : 'Käufe wiederherstellen / Status aktualisieren'}
+              </Text>
+            </Pressable>
 
             <Text style={styles.legal}>
-              Zahlung wird bei Kaufbestätigung deinem iTunes-/App-Store-Konto belastet. Abos verlängern sich automatisch, wenn sie nicht mindestens 24 Stunden vor Ablauf in den Apple-ID-Einstellungen gekündigt werden.
-            </Text>
-            <Text style={styles.legal}>
-              Beim Direktstart wird der erste Monat (1,80 €) heute fällig. Nach 14 Tagen Test fallen 3,33 € / Monat an.
+              Zahlung wird bei Kaufbestätigung deinem App-Store/Google-Play-Konto belastet. Abos verlängern sich automatisch, wenn sie nicht rechtzeitig gekündigt werden.
             </Text>
           </View>
         )}
-        {iapError ? <Text style={styles.errorText}>{iapError}</Text> : null}
+        {purchaseError ? <Text style={styles.errorText}>{purchaseError}</Text> : null}
       </ScrollView>
     </ThemedBackground>
   );
@@ -553,19 +610,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '800',
   },
-  secondaryButton: {
-    paddingVertical: 14,
-    borderRadius: 14,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(94,61,179,0.35)',
-    backgroundColor: 'rgba(255,255,255,0.8)',
-  },
-  secondaryButtonText: {
-    color: '#5E3DB3',
-    fontSize: 15,
-    fontWeight: '800',
-  },
   errorText: {
     color: '#B00020',
     fontSize: 12,
@@ -580,3 +624,4 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 });
+

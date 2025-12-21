@@ -331,7 +331,7 @@ export default function ProfilScreen() {
 
     try {
       setIsSendingPasswordReset(true);
-      const redirectTo = Linking.createURL('auth/callback');
+      const redirectTo = Linking.createURL('auth/reset-password');
       const { error } = await supabase.auth.resetPasswordForEmail(user.email, { redirectTo });
       if (error) throw error;
 

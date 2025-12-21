@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { hasRevenueCatEntitlement } from './revenuecat';
 
 export const PAYWALL_INTERVAL_MS = 2 * 60 * 60 * 1000; // 2 Stunden
 
@@ -7,8 +8,8 @@ export type PaywallState = {
   lastShownAt: Date | null;
 };
 
-const mapRowToState = (row: any): PaywallState => ({
-  isPro: !!row?.is_pro,
+const mapRowToState = (row: any, isPro: boolean): PaywallState => ({
+  isPro,
   lastShownAt: row?.paywall_last_shown_at ? new Date(row.paywall_last_shown_at) : null,
 });
 
@@ -19,20 +20,25 @@ export const fetchPaywallState = async (): Promise<PaywallState> => {
   }
 
   try {
-    const { data, error } = await supabase
-      .from('user_settings')
-      .select('is_pro, paywall_last_shown_at')
-      .eq('user_id', userData.user.id)
-      .order('updated_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    const userId = userData.user.id;
+    const [isPro, settings] = await Promise.all([
+      hasRevenueCatEntitlement(userId),
+      supabase
+        .from('user_settings')
+        .select('paywall_last_shown_at')
+        .eq('user_id', userId)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+    const { data, error } = settings;
 
     if (error && (error as any).code !== 'PGRST116') {
       console.error('Failed to fetch paywall state:', error);
       return { isPro: false, lastShownAt: null };
     }
 
-    return mapRowToState(data);
+    return mapRowToState(data, isPro);
   } catch (err) {
     console.error('Exception while fetching paywall state:', err);
     return { isPro: false, lastShownAt: null };
