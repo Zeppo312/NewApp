@@ -87,18 +87,32 @@ export const deleteProfileAvatar = async (avatarUrl: string) => {
   }
 };
 
-type TableDeletion = {
-  table: string;
-  column: string;
+type DeleteUserDataOptions = {
+  deleteAuth?: boolean;
+  avatarUrl?: string | null;
 };
 
-export const deleteUserProfile = async (options?: { avatarUrl?: string | null }) => {
+const parseDeleteUserResponse = (data: any) => {
+  if (!data || typeof data !== 'object') {
+    return { error: null };
+  }
+
+  if (data.success === false) {
+    const message = typeof data.error === 'string' && data.error.trim()
+      ? data.error
+      : 'Unbekannter Fehler beim Löschen';
+    return { error: new Error(message) };
+  }
+
+  return { error: null };
+};
+
+export const deleteUserData = async (options: DeleteUserDataOptions = {}) => {
   try {
     const { data: userData } = await supabase.auth.getUser();
     if (!userData?.user) {
       return { error: new Error('Nicht angemeldet') };
     }
-    const userId = userData.user.id;
 
     if (options?.avatarUrl) {
       const { error } = await deleteProfileAvatar(options.avatarUrl);
@@ -106,27 +120,19 @@ export const deleteUserProfile = async (options?: { avatarUrl?: string | null })
         return { error };
       }
     }
-
-    const targets: TableDeletion[] = [
-      { table: 'baby_info', column: 'user_id' },
-      { table: 'baby_diary', column: 'user_id' },
-      { table: 'user_settings', column: 'user_id' },
-      { table: 'profiles', column: 'id' },
-    ];
-
-    for (const target of targets) {
-      const { error } = await supabase
-        .from(target.table)
-        .delete()
-        .eq(target.column, userId);
-      if (error && error.code !== 'PGRST116') {
-        return { error };
-      }
+    const { data, error } = await supabase.rpc('delete_user_data', {
+      delete_auth: options.deleteAuth ?? false,
+    });
+    if (error) {
+      return { error };
     }
 
-    return { error: null };
+    return parseDeleteUserResponse(data);
   } catch (error) {
-    console.error('Error deleting user profile:', error);
+    console.error('Error deleting user data:', error);
     return { error: error as Error };
   }
 };
+
+export const deleteUserAccount = async (options?: { avatarUrl?: string | null }) =>
+  deleteUserData({ ...options, deleteAuth: true });

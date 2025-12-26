@@ -13,6 +13,7 @@ import {
   Image,
   ActivityIndicator,
   Clipboard,
+  Switch,
 } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedBackground } from '@/components/ThemedBackground';
@@ -57,6 +58,8 @@ export default function LottisEmpfehlungenScreen() {
   const [formImageUrl, setFormImageUrl] = useState('');
   const [formImageUri, setFormImageUri] = useState<string | null>(null);
   const [formProductLink, setFormProductLink] = useState('');
+  const [formButtonText, setFormButtonText] = useState('Zum Produkt');
+  const [formIsFavorite, setFormIsFavorite] = useState(false);
   const [formDiscountCode, setFormDiscountCode] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
@@ -90,6 +93,8 @@ export default function LottisEmpfehlungenScreen() {
     setFormImageUrl('');
     setFormImageUri(null);
     setFormProductLink('');
+    setFormButtonText('Zum Produkt');
+    setFormIsFavorite(false);
     setFormDiscountCode('');
     setModalVisible(true);
   };
@@ -101,6 +106,8 @@ export default function LottisEmpfehlungenScreen() {
     setFormImageUrl(item.image_url || '');
     setFormImageUri(null);
     setFormProductLink(item.product_link);
+    setFormButtonText(item.button_text?.trim() || 'Zum Produkt');
+    setFormIsFavorite(item.is_favorite ?? false);
     setFormDiscountCode(item.discount_code || '');
     setModalVisible(true);
   };
@@ -193,11 +200,14 @@ export default function LottisEmpfehlungenScreen() {
         setIsUploadingImage(false);
       }
 
+      const buttonText = formButtonText.trim() || 'Zum Produkt';
       const input: CreateRecommendationInput = {
         title: formTitle.trim(),
         description: formDescription.trim(),
         image_url: imageUrl || undefined,
         product_link: formProductLink.trim(),
+        button_text: buttonText,
+        is_favorite: formIsFavorite,
         discount_code: formDiscountCode.trim() || undefined,
         order_index: editingItem?.order_index || recommendations.length,
       };
@@ -256,6 +266,7 @@ export default function LottisEmpfehlungenScreen() {
   };
 
   const renderRecommendationCard = (item: LottiRecommendation, index: number) => {
+    const buttonText = item.button_text?.trim() || 'Zum Produkt';
     return (
       <SlideInView
         key={item.id}
@@ -265,6 +276,18 @@ export default function LottisEmpfehlungenScreen() {
         easing="spring"
       >
         <View style={styles.cardWrapper}>
+          {/* Lottis Favorit Badge */}
+          {item.is_favorite && (
+            <View style={styles.favoriteBadgeWrapper} pointerEvents="none">
+              <View style={styles.favoritePin}>
+                <View style={styles.favoritePinHead} />
+                <View style={styles.favoritePinStem} />
+              </View>
+              <View style={styles.favoriteBadge}>
+                <ThemedText style={styles.favoriteBadgeText}>Lottis Favorit</ThemedText>
+              </View>
+            </View>
+          )}
           <BlurView intensity={40} tint="light" style={styles.cardBlur}>
             <LinearGradient
               colors={['rgba(245,238,224,0.3)', 'rgba(232,219,247,0.4)']}
@@ -273,11 +296,6 @@ export default function LottisEmpfehlungenScreen() {
               style={styles.cardGradient}
             >
               <View style={styles.card}>
-                {/* Lottis Favorit Badge */}
-                <View style={styles.favoriteBadge}>
-                  <ThemedText style={styles.favoriteBadgeText}>Lottis Favorit 💕</ThemedText>
-                </View>
-
                 {/* Produktbild - überlappend */}
                 {item.image_url && (
                   <View style={styles.imageContainer}>
@@ -334,7 +352,7 @@ export default function LottisEmpfehlungenScreen() {
                       style={styles.linkButton}
                     >
                       <IconSymbol name="arrow.right.circle.fill" size={20} color="#FFFFFF" />
-                      <ThemedText style={styles.linkButtonText}>Zum Produkt</ThemedText>
+                      <ThemedText style={styles.linkButtonText}>{buttonText}</ThemedText>
                     </LinearGradient>
                   </AnimatedButton>
 
@@ -546,6 +564,36 @@ export default function LottisEmpfehlungenScreen() {
                   </View>
 
                   <View style={styles.formGroup}>
+                    <View style={styles.switchRow}>
+                      <ThemedText style={[styles.label, styles.switchLabel]}>Lottis Favorit</ThemedText>
+                      <Switch
+                        value={formIsFavorite}
+                        onValueChange={setFormIsFavorite}
+                        trackColor={{ false: 'rgba(0,0,0,0.15)', true: '#C9A188' }}
+                        thumbColor={formIsFavorite ? '#FFF4E9' : '#F1ECE6'}
+                        ios_backgroundColor="rgba(0,0,0,0.15)"
+                      />
+                    </View>
+                    <ThemedText style={styles.fieldHint}>
+                      Optional: Zeigt den angepinnten Favorit-Badge
+                    </ThemedText>
+                  </View>
+
+                  <View style={styles.formGroup}>
+                    <ThemedText style={styles.label}>Button-Text</ThemedText>
+                    <TextInput
+                      style={[styles.input, { color: theme.text, borderColor: theme.tabIconDefault }]}
+                      value={formButtonText}
+                      onChangeText={setFormButtonText}
+                      placeholder="Zum Produkt"
+                      placeholderTextColor={theme.tabIconDefault}
+                    />
+                    <ThemedText style={styles.fieldHint}>
+                      Optional: Standard ist "Zum Produkt"
+                    </ThemedText>
+                  </View>
+
+                  <View style={styles.formGroup}>
                     <ThemedText style={styles.label}>Rabattcode</ThemedText>
                     <TextInput
                       style={[styles.input, { color: theme.text, borderColor: theme.tabIconDefault }]}
@@ -673,6 +721,7 @@ const styles = StyleSheet.create({
   cardWrapper: {
     paddingHorizontal: 16,
     paddingVertical: 8,
+    position: 'relative',
   },
   cardBlur: {
     borderRadius: 22,
@@ -693,27 +742,59 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     position: 'relative',
   },
-  favoriteBadge: {
+  favoriteBadgeWrapper: {
     position: 'absolute',
-    top: 12,
-    right: 12,
-    backgroundColor: 'rgba(255,255,255,0.85)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 16,
+    top: 2,
+    right: 8,
     zIndex: 10,
-    shadowColor: '#5E3DB3',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 4,
+    elevation: 14,
+    alignItems: 'flex-end',
+    transform: [{ rotate: '-2deg' }],
+  },
+  favoritePin: {
+    position: 'absolute',
+    top: -8,
+    right: 14,
+    alignItems: 'center',
+    zIndex: 11,
+  },
+  favoritePinHead: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#D8B8A4',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.5)',
+    borderColor: 'rgba(143,107,87,0.4)',
+    shadowColor: '#8C6A58',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.25,
+    shadowRadius: 2,
+    elevation: 3,
+  },
+  favoritePinStem: {
+    width: 2,
+    height: 10,
+    backgroundColor: '#B58C74',
+    marginTop: -1,
+    borderRadius: 1,
+  },
+  favoriteBadge: {
+    backgroundColor: 'rgba(255,248,236,0.98)',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(185,141,116,0.4)',
+    shadowColor: '#8C6A58',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.22,
+    shadowRadius: 6,
+    elevation: 6,
   },
   favoriteBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#5E3DB3',
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#8A6A58',
     letterSpacing: 0.2,
   },
   imageContainer: {
@@ -872,6 +953,14 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 8,
   },
+  switchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  switchLabel: {
+    marginBottom: 0,
+  },
   input: {
     borderWidth: 1.5,
     borderRadius: 12,
@@ -992,4 +1081,3 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 });
-

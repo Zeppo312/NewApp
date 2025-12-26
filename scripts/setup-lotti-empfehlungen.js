@@ -25,30 +25,40 @@ async function runMigration() {
   console.log('🚀 Starte Setup für Lottis Empfehlungen...\n');
 
   try {
-    // Lese die Migration
-    const migrationPath = path.join(__dirname, '..', 'supabase', 'migrations', '20260603000000_create_lotti_recommendations.sql');
-    const migrationSQL = fs.readFileSync(migrationPath, 'utf8');
+    const migrationFiles = [
+      '20260603000000_create_lotti_recommendations.sql',
+      '20261226000002_add_button_text_to_lotti_recommendations.sql',
+      '20261226000003_add_is_favorite_to_lotti_recommendations.sql',
+    ];
+    const migrations = migrationFiles.map(file => ({
+      file,
+      sql: fs.readFileSync(path.join(__dirname, '..', 'supabase', 'migrations', file), 'utf8'),
+    }));
 
-    console.log('📋 Führe Datenbank-Migration aus...');
-    
-    // Führe die Migration aus
-    const { error } = await supabase.rpc('exec_sql', { sql: migrationSQL });
-    
-    if (error) {
-      // Falls exec_sql nicht verfügbar ist, versuche direkt mit dem SQL
-      console.log('⚠️  exec_sql nicht verfügbar, verwende direkten SQL-Import...');
-      console.log('\n📝 Bitte führe die Migration manuell im Supabase Dashboard aus:');
-      console.log('   1. Gehe zum Supabase Dashboard -> SQL Editor');
-      console.log('   2. Kopiere den Inhalt von: supabase/migrations/20260603000000_create_lotti_recommendations.sql');
-      console.log('   3. Füge ihn ein und führe ihn aus\n');
-      
-      // Zeige den SQL Code an
-      console.log('--- SQL CODE (START) ---');
-      console.log(migrationSQL);
-      console.log('--- SQL CODE (ENDE) ---\n');
-    } else {
-      console.log('✅ Migration erfolgreich ausgeführt!\n');
+    console.log('📋 Führe Datenbank-Migrationen aus...');
+
+    for (const migration of migrations) {
+      const { error } = await supabase.rpc('exec_sql', { sql: migration.sql });
+      if (error) {
+        console.log('⚠️  exec_sql nicht verfügbar, verwende direkten SQL-Import...');
+        console.log('\n📝 Bitte führe die Migrationen manuell im Supabase Dashboard aus:');
+        console.log('   1. Gehe zum Supabase Dashboard -> SQL Editor');
+        migrations.forEach((item, index) => {
+          console.log(`   ${index + 2}. Kopiere den Inhalt von: supabase/migrations/${item.file}`);
+        });
+        console.log('   ' + (migrations.length + 2) + '. Füge sie nacheinander ein und führe sie aus\n');
+
+        console.log('--- SQL CODE (START) ---');
+        migrations.forEach(item => {
+          console.log(`-- ${item.file}`);
+          console.log(item.sql);
+        });
+        console.log('--- SQL CODE (ENDE) ---\n');
+        return;
+      }
+      console.log(`✅ ${migration.file} erfolgreich ausgeführt!`);
     }
+    console.log('✅ Alle Migrationen erfolgreich ausgeführt!\n');
 
     // Prüfe, ob die Tabelle existiert
     console.log('🔍 Prüfe Tabellen...');
@@ -110,4 +120,3 @@ async function setUserAsAdmin(userEmail) {
     await setUserAsAdmin(adminEmail);
   }
 })();
-

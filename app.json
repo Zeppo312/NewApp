@@ -19,6 +19,7 @@
         "NSRemindersUsageDescription": "Diese App benötigt Zugriff auf deine Erinnerungen, um Termine zu synchronisieren.",
         "NSLocationWhenInUseUsageDescription": "Benötigt, um dir wetterbasierte Kleidungsempfehlungen für dein Baby anzuzeigen.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Benötigt, um dich bei Wetteränderungen auch im Hintergrund zu informieren.",
+        "NSPhotoLibraryUsageDescription": "Benötigt, um Produktbilder für Lottis Empfehlungen aus deiner Fotomediathek auszuwählen.",
         "UIBackgroundModes": [
           "processing",
           "fetch",

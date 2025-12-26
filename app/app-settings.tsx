@@ -9,6 +9,7 @@ import { useRouter, Stack } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { getAppSettings, saveAppSettings, AppSettings } from '@/lib/supabase';
 import { exportUserData } from '@/lib/dataExport';
+import { deleteUserAccount, deleteUserData } from '@/lib/profile';
 import Header from '@/components/Header';
 import { LiquidGlassCard, GLASS_OVERLAY, LAYOUT_PAD } from '@/constants/DesignGuide';
 
@@ -16,12 +17,13 @@ export default function AppSettingsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
 
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [isDeletingData, setIsDeletingData] = useState(false);
 
   // no extra width logic; match "Mehr" padding rhythm via ScrollView
 
@@ -120,6 +122,70 @@ export default function AppSettingsScreen() {
     } finally {
       setIsExporting(false);
     }
+  };
+
+  const runDeleteDataFlow = async (deleteAccount: boolean) => {
+    if (!user) {
+      Alert.alert('Fehler', 'Bitte melde dich erneut an.');
+      return;
+    }
+
+    try {
+      setIsDeletingData(true);
+      const { error } = deleteAccount ? await deleteUserAccount() : await deleteUserData();
+      if (error) throw error;
+
+      if (deleteAccount) {
+        Alert.alert(
+          'Konto gelöscht',
+          'Dein Profil und Konto wurden gelöscht. Du wirst jetzt abgemeldet.',
+          [
+            {
+              text: 'OK',
+              onPress: async () => {
+                await signOut();
+                router.replace('/(auth)/login');
+              },
+            },
+          ],
+        );
+        return;
+      }
+
+      await loadSettings();
+      Alert.alert('Daten gelöscht', 'Deine gespeicherten Daten wurden entfernt.');
+    } catch (err: any) {
+      console.error('Failed to delete user data:', err);
+      Alert.alert('Fehler', err?.message || 'Daten konnten nicht gelöscht werden.');
+    } finally {
+      setIsDeletingData(false);
+    }
+  };
+
+  const handleDeleteDataRequest = () => {
+    if (isDeletingData) return;
+    Alert.alert(
+      'Daten löschen',
+      'Möchtest du wirklich alle deine Daten löschen? Diese Aktion kann nicht rückgängig gemacht werden.',
+      [
+        { text: 'Abbrechen', style: 'cancel' },
+        {
+          text: 'Weiter',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert(
+              'Konto ebenfalls löschen?',
+              'Soll dein Konto auch dauerhaft gelöscht werden?',
+              [
+                { text: 'Abbrechen', style: 'cancel' },
+                { text: 'Nur Daten löschen', style: 'destructive', onPress: () => runDeleteDataFlow(false) },
+                { text: 'Daten + Konto löschen', style: 'destructive', onPress: () => runDeleteDataFlow(true) },
+              ],
+            );
+          },
+        },
+      ],
+    );
   };
 
   return (
@@ -233,24 +299,9 @@ export default function AppSettingsScreen() {
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                      style={styles.rowItem}
-                      onPress={() => {
-                        Alert.alert(
-                          'Daten löschen',
-                          'Möchtest du wirklich alle deine Daten löschen? Diese Aktion kann nicht rückgängig gemacht werden.',
-                          [
-                            { text: 'Abbrechen', style: 'cancel' },
-                            {
-                              text: 'Löschen',
-                              style: 'destructive',
-                              onPress: () => {
-                                // Hier würde die Funktion zum Löschen aller Daten aufgerufen werden
-                                Alert.alert('Info', 'Diese Funktion ist noch nicht implementiert.');
-                              }
-                            }
-                          ]
-                        );
-                      }}
+                      style={[styles.rowItem, isDeletingData && styles.disabledRow]}
+                      onPress={handleDeleteDataRequest}
+                      disabled={isDeletingData}
                     >
                       <View style={styles.rowIcon}>
                         <IconSymbol name="trash" size={24} color="#FF6B6B" />
@@ -259,7 +310,13 @@ export default function AppSettingsScreen() {
                         <ThemedText style={[styles.rowTitle, styles.dangerText]}>Alle Daten löschen</ThemedText>
                         <ThemedText style={styles.rowDescription}>Lösche alle deine gespeicherten Daten</ThemedText>
                       </View>
-                      <IconSymbol name="chevron.right" size={20} color="#FF6B6B" />
+                      <View style={styles.trailing}>
+                        {isDeletingData ? (
+                          <ActivityIndicator size="small" color="#FF6B6B" />
+                        ) : (
+                          <IconSymbol name="chevron.right" size={20} color="#FF6B6B" />
+                        )}
+                      </View>
                     </TouchableOpacity>
                   </LiquidGlassCard>
                 </>

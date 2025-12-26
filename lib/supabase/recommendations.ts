@@ -6,6 +6,8 @@ export interface LottiRecommendation {
   description: string;
   image_url: string | null;
   product_link: string;
+  button_text: string | null;
+  is_favorite: boolean;
   discount_code: string | null;
   order_index: number;
   created_at: string;
@@ -18,6 +20,8 @@ export interface CreateRecommendationInput {
   description: string;
   image_url?: string;
   product_link: string;
+  button_text?: string;
+  is_favorite?: boolean;
   discount_code?: string;
   order_index?: number;
 }
@@ -84,6 +88,8 @@ export async function createRecommendation(
         description: input.description,
         image_url: input.image_url || null,
         product_link: input.product_link,
+        button_text: input.button_text || null,
+        is_favorite: input.is_favorite ?? false,
         discount_code: input.discount_code || null,
         order_index: input.order_index || 0,
         created_by: user.id,
@@ -249,4 +255,3 @@ function getContentType(fileExt: string): string {
       return 'image/jpeg';
   }
 }
-

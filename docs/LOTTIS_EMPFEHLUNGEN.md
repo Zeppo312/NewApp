@@ -10,7 +10,8 @@
 - ✅ Anzeige aller Produktempfehlungen
 - ✅ Produktbilder, Titel und Beschreibungen
 - ✅ Rabattcodes sichtbar mit Glasoptik-Badge
-- ✅ Direkter Link zu den Produkten
+- ✅ Direkter Link zu den Produkten (mit individuellem Button-Text)
+- ✅ "Lottis Favorit" Badge nur bei markierten Empfehlungen
 - ✅ Schönes Liquid Glass Design mit Animationen
 - ✅ Buttons mit Glasoptik (BlurView + LinearGradient)
 
@@ -20,6 +21,8 @@
 - ✅ Bestehende Empfehlungen bearbeiten
 - ✅ Empfehlungen löschen
 - ✅ Bilder hochladen oder URL eingeben
+- ✅ Button-Text für den Produkt-Link anpassen
+- ✅ "Lottis Favorit" per Schalter aktivieren/deaktivieren
 - ✅ Rabattcodes hinzufügen (z.B. LOTTI10)
 - ✅ Reihenfolge der Empfehlungen anpassen (über order_index)
 - ✅ Image Picker mit Vorschau
@@ -49,6 +52,10 @@ node scripts/setup-lotti-empfehlungen.js "user@example.com"
 2. Öffne den **SQL Editor**
 3. Kopiere den Inhalt von `supabase/migrations/20260603000000_create_lotti_recommendations.sql`
 4. Füge ihn ein und führe ihn aus
+5. Kopiere den Inhalt von `supabase/migrations/20261226000002_add_button_text_to_lotti_recommendations.sql`
+6. Füge ihn ein und führe ihn aus
+7. Kopiere den Inhalt von `supabase/migrations/20261226000003_add_is_favorite_to_lotti_recommendations.sql`
+8. Füge ihn ein und führe ihn aus
 
 ### 2. Admin-User festlegen
 
@@ -92,6 +99,8 @@ supabase db execute --sql "UPDATE profiles SET is_admin = true WHERE email = 'us
 | `description` | TEXT | Beschreibung des Produkts |
 | `image_url` | TEXT | URL zum Produktbild (optional) |
 | `product_link` | TEXT | Link zum Produkt (Amazon, Shop, etc.) |
+| `button_text` | TEXT | Button-Text für den Produkt-Link (optional, default: "Zum Produkt") |
+| `is_favorite` | BOOLEAN | Markiert eine Empfehlung als "Lottis Favorit" (default: false) |
 | `discount_code` | TEXT | Rabattcode für das Produkt (optional) |
 | `order_index` | INTEGER | Sortierreihenfolge (niedrigere Zahlen zuerst) |
 | `created_at` | TIMESTAMPTZ | Erstellungszeitpunkt |
@@ -136,6 +145,8 @@ await createRecommendation({
   description: "Super bequem für Baby und Eltern...",
   image_url: "https://example.com/image.jpg",
   product_link: "https://amazon.de/...",
+  button_text: "Jetzt ansehen",
+  is_favorite: true,
   order_index: 0
 });
 ```
@@ -193,8 +204,10 @@ await updateRecommendationsOrder([
    - Fülle Titel und Beschreibung aus (Pflichtfelder)
    - **Bild hinzufügen:**
      - Option 1: Tippe auf "Bild auswählen" und wähle ein Foto aus deiner Galerie
-     - Option 2: Gib eine Bild-URL ein
+   - Option 2: Gib eine Bild-URL ein
    - Gib den Produkt-Link ein (Pflichtfeld)
+   - Optional: Aktiviere "Lottis Favorit" für den angepinnten Badge
+   - Optional: Passe den Button-Text an (Standard: "Zum Produkt")
    - Optional: Füge einen Rabattcode hinzu (z.B. LOTTI10)
    - Tippe auf "Speichern"
 
@@ -212,7 +225,7 @@ await updateRecommendationsOrder([
 
 1. Gehe zu **Mehr** → **Lottis Empfehlungen**
 2. Browse durch die Empfehlungen
-3. Tippe auf "Zum Produkt" um den Link zu öffnen
+3. Tippe auf den Button, um den Link zu öffnen
 
 ## Tipps
 
@@ -296,4 +309,3 @@ Bei Fragen oder Problemen:
 1. Prüfe diese Dokumentation
 2. Schau in die Console Logs für Error Messages
 3. Prüfe die Supabase Logs im Dashboard
-

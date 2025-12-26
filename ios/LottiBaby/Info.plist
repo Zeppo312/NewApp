@@ -67,6 +67,8 @@
     <string>Benötigt, um dich bei Wetteränderungen auch im Hintergrund zu informieren.</string>
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>Benötigt, um dir wetterbasierte Kleidungsempfehlungen für dein Baby anzuzeigen.</string>
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>Benötigt, um Produktbilder für Lottis Empfehlungen aus deiner Fotomediathek auszuwählen.</string>
     <key>NSRemindersFullAccessUsageDescription</key>
     <string>Allow $(PRODUCT_NAME) to access your reminders</string>
     <key>NSRemindersUsageDescription</key>

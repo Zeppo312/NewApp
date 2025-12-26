@@ -23,6 +23,7 @@ import { ThemedText } from '@/components/ThemedText';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import Header from '@/components/Header';
+import TextInputOverlay from '@/components/modals/TextInputOverlay';
 
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
@@ -33,7 +34,7 @@ import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { supabase } from '@/lib/supabase';
 import { getBabyInfo, saveBabyInfo } from '@/lib/baby';
 import * as ImagePicker from 'expo-image-picker';
-import { uploadProfileAvatar, deleteProfileAvatar, deleteUserProfile } from '@/lib/profile';
+import { uploadProfileAvatar, deleteProfileAvatar, deleteUserAccount } from '@/lib/profile';
 
 const { width: screenWidth } = Dimensions.get('window');
 const TIMELINE_INSET = 8; // wie im Sleep-Tracker
@@ -77,6 +78,9 @@ export default function ProfilScreen() {
   const [isDeletingAvatar, setIsDeletingAvatar]     = useState(false);
   const [isDeletingProfile, setIsDeletingProfile]   = useState(false);
   const [isSendingPasswordReset, setIsSendingPasswordReset] = useState(false);
+  const [isUpdatingEmail, setIsUpdatingEmail] = useState(false);
+  const [emailOverlayVisible, setEmailOverlayVisible] = useState(false);
+  const [emailOverlayValue, setEmailOverlayValue] = useState('');
 
   useEffect(() => {
     if (user) loadUserData();
@@ -283,8 +287,8 @@ export default function ProfilScreen() {
   const handleDeleteProfileRequest = () => {
     if (isDeletingProfile) return;
     Alert.alert(
-      'Profil löschen',
-      'Möchtest du dein Profil wirklich löschen? Alle gespeicherten Daten werden entfernt.',
+      'Profil & Konto löschen',
+      'Möchtest du dein Profil und dein Konto wirklich löschen? Alle gespeicherten Daten werden dauerhaft entfernt.',
       [
         { text: 'Abbrechen', style: 'cancel' },
         { text: 'Löschen', style: 'destructive', onPress: deleteProfileAndSignOut },
@@ -299,12 +303,12 @@ export default function ProfilScreen() {
     }
     try {
       setIsDeletingProfile(true);
-      const { error } = await deleteUserProfile({ avatarUrl });
+      const { error } = await deleteUserAccount({ avatarUrl });
       if (error) throw error;
       setIsDeletingProfile(false);
       Alert.alert(
-        'Profil gelöscht',
-        'Dein Profil wurde gelöscht. Du wirst jetzt abgemeldet.',
+        'Konto gelöscht',
+        'Dein Profil und Konto wurden gelöscht. Du wirst jetzt abgemeldet.',
         [
           {
             text: 'OK',
@@ -364,6 +368,78 @@ export default function ProfilScreen() {
         { text: 'E-Mail senden', onPress: sendPasswordResetEmail },
       ],
     );
+  };
+
+  const isLikelyEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+
+  const requestEmailChange = (nextEmailRaw: string) => {
+    if (!user) {
+      Alert.alert('Hinweis', 'Bitte melde dich an, um deine E-Mail zu ändern.');
+      return;
+    }
+
+    const nextEmail = nextEmailRaw.trim().toLowerCase();
+    if (!nextEmail) {
+      Alert.alert('Hinweis', 'Bitte gib eine E-Mail-Adresse ein.');
+      return;
+    }
+    if (!isLikelyEmail(nextEmail)) {
+      Alert.alert('Hinweis', 'Bitte gib eine gültige E-Mail-Adresse ein.');
+      return;
+    }
+    if (user.email && nextEmail === user.email.trim().toLowerCase()) {
+      Alert.alert('Hinweis', 'Diese E-Mail ist bereits hinterlegt.');
+      return;
+    }
+
+    setEmailOverlayVisible(false);
+
+    Alert.alert(
+      'E-Mail ändern',
+      `Möchtest du deine E-Mail-Adresse auf\n${nextEmail}\nändern?\n\nWir senden dir eine Bestätigungs-E-Mail an die neue Adresse.`,
+      [
+        {
+          text: 'Abbrechen',
+          style: 'cancel',
+          onPress: () => {
+            setEmailOverlayValue(nextEmail);
+            setEmailOverlayVisible(true);
+          },
+        },
+        {
+          text: 'E-Mail ändern',
+          onPress: () => updateEmail(nextEmail),
+        },
+      ],
+    );
+  };
+
+  const updateEmail = async (nextEmail: string) => {
+    if (!user) return;
+    if (isUpdatingEmail) return;
+
+    try {
+      setIsUpdatingEmail(true);
+      const emailRedirectTo = Linking.createURL('auth/callback');
+      const { error } = await supabase.auth.updateUser(
+        { email: nextEmail },
+        { emailRedirectTo },
+      );
+      if (error) throw error;
+
+      Alert.alert(
+        'Fast fertig',
+        `Wir haben dir eine Bestätigungs-E-Mail an ${nextEmail} gesendet.\n\nBitte öffne den Link in der E-Mail, um die Änderung abzuschließen.`,
+      );
+    } catch (error: any) {
+      console.error('Failed to update email:', error);
+      Alert.alert(
+        'Fehler',
+        error?.message || 'Die E-Mail konnte nicht geändert werden. Bitte versuche es später erneut.',
+      );
+    } finally {
+      setIsUpdatingEmail(false);
+    }
   };
 
   const saveUserData = async () => {
@@ -575,6 +651,29 @@ export default function ProfilScreen() {
                         placeholder="Deine E-Mail-Adresse"
                         placeholderTextColor="#9BA0A6"
                       />
+                      <View style={styles.inlineActions}>
+                        <TouchableOpacity
+                          style={styles.inlineActionButton}
+                          onPress={() => {
+                            setEmailOverlayValue(user?.new_email || '');
+                            setEmailOverlayVisible(true);
+                          }}
+                          activeOpacity={0.9}
+                          disabled={isUpdatingEmail}
+                        >
+                          {isUpdatingEmail ? (
+                            <ActivityIndicator size="small" color={ACCENT_PURPLE} />
+                          ) : (
+                            <IconSymbol name="envelope.fill" size={18} color={ACCENT_PURPLE} />
+                          )}
+                          <ThemedText style={styles.inlineActionText}>E-Mail ändern</ThemedText>
+                        </TouchableOpacity>
+                      </View>
+                      {!!user?.new_email && user?.new_email !== user?.email && (
+                        <ThemedText style={styles.helperText}>
+                          Neue E-Mail ausstehend: {user.new_email} (bitte bestätigen)
+                        </ThemedText>
+                      )}
                     </View>
 
                     <View style={styles.formGroup}>
@@ -932,10 +1031,10 @@ export default function ProfilScreen() {
                           )}
                         </View>
                         <ThemedText style={[styles.saveTitle, styles.dangerText]}>
-                          {isDeletingProfile ? 'Profil wird gelöscht…' : 'Profil löschen'}
+                          {isDeletingProfile ? 'Profil wird gelöscht…' : 'Profil & Konto löschen'}
                         </ThemedText>
                         <ThemedText style={[styles.saveSub, styles.dangerSub]}>
-                          Entfernt deine Profildaten dauerhaft
+                          Entfernt Profil, Konto und alle Daten dauerhaft
                         </ThemedText>
                       </View>
                     </BlurView>
@@ -946,6 +1045,18 @@ export default function ProfilScreen() {
           </ScrollView>
         </SafeAreaView>
       </ThemedBackground>
+
+      <TextInputOverlay
+        visible={emailOverlayVisible}
+        label="Neue E-Mail-Adresse"
+        value={emailOverlayValue}
+        placeholder="deine@email.de"
+        keyboardType="email-address"
+        inputMode="email"
+        accentColor={ACCENT_PURPLE}
+        onClose={() => setEmailOverlayVisible(false)}
+        onSubmit={(next) => requestEmailChange(next)}
+      />
     </>
   );
 }
@@ -1156,5 +1267,32 @@ const styles = StyleSheet.create({
   dangerSub: {
     color: PRIMARY_TEXT,
     opacity: 0.9,
+  },
+  inlineActions: {
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+  },
+  inlineActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderRadius: 999,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.6)',
+    backgroundColor: 'rgba(255,255,255,0.25)',
+  },
+  inlineActionText: {
+    color: ACCENT_PURPLE,
+    fontWeight: '700',
+  },
+  helperText: {
+    marginTop: 8,
+    fontSize: 12,
+    color: PRIMARY_TEXT,
+    opacity: 0.8,
   },
 });
