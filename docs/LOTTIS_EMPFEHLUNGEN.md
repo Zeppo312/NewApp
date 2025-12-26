@@ -23,6 +23,7 @@
 - ✅ Bilder hochladen oder URL eingeben
 - ✅ Button-Text für den Produkt-Link anpassen
 - ✅ "Lottis Favorit" per Schalter aktivieren/deaktivieren
+- ✅ Reihenfolge per Drag & Drop ändern (lang drücken)
 - ✅ Rabattcodes hinzufügen (z.B. LOTTI10)
 - ✅ Reihenfolge der Empfehlungen anpassen (über order_index)
 - ✅ Image Picker mit Vorschau
@@ -220,6 +221,11 @@ await updateRecommendationsOrder([
 3. **Empfehlung löschen:**
    - Tippe auf den Mülleimer-Button (mit Glasoptik)
    - Bestätige das Löschen
+
+4. **Reihenfolge ändern:**
+   - Halte eine Empfehlung kurz gedrückt
+   - Ziehe sie an die gewünschte Stelle
+   - Die Reihenfolge wird automatisch gespeichert
 
 ### Als normaler User:
 

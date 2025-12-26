@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   StyleSheet,
   ScrollView,
@@ -14,7 +14,13 @@ import {
   ActivityIndicator,
   Clipboard,
   Switch,
+  Animated,
+  Easing,
 } from 'react-native';
+import DraggableFlatList, {
+  RenderItemParams,
+  ScaleDecorator,
+} from 'react-native-draggable-flatlist';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { Colors } from '@/constants/Colors';
@@ -35,11 +41,61 @@ import {
   deleteRecommendation,
   isUserAdmin,
   uploadRecommendationImage,
+  updateRecommendationsOrder,
   LottiRecommendation,
   CreateRecommendationInput,
 } from '@/lib/supabase/recommendations';
 
 const TIMELINE_INSET = 8;
+
+function WiggleView({
+  enabled,
+  children,
+}: {
+  enabled: boolean;
+  children: React.ReactNode;
+}) {
+  const rotation = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!enabled) {
+      rotation.stopAnimation();
+      rotation.setValue(0);
+      return;
+    }
+
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(rotation, {
+          toValue: 1,
+          duration: 90,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        }),
+        Animated.timing(rotation, {
+          toValue: -1,
+          duration: 90,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    animation.start();
+    return () => animation.stop();
+  }, [enabled, rotation]);
+
+  const rotate = rotation.interpolate({
+    inputRange: [-1, 1],
+    outputRange: ['-1.2deg', '1.2deg'],
+  });
+
+  return (
+    <Animated.View style={{ transform: [{ rotate }] }}>
+      {children}
+    </Animated.View>
+  );
+}
 
 export default function LottisEmpfehlungenScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -51,6 +107,7 @@ export default function LottisEmpfehlungenScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
   const [editingItem, setEditingItem] = useState<LottiRecommendation | null>(null);
+  const [isReordering, setIsReordering] = useState(false);
 
   // Form State
   const [formTitle, setFormTitle] = useState('');
@@ -269,7 +326,6 @@ export default function LottisEmpfehlungenScreen() {
     const buttonText = item.button_text?.trim() || 'Zum Produkt';
     return (
       <SlideInView
-        key={item.id}
         direction={index % 2 === 0 ? 'left' : 'right'}
         delay={300 + index * 100}
         duration={600}
@@ -382,6 +438,83 @@ export default function LottisEmpfehlungenScreen() {
     );
   };
 
+  const handleDragEnd = async (data: LottiRecommendation[]) => {
+    if (!isAdmin) {
+      setIsReordering(false);
+      return;
+    }
+
+    const previous = recommendations;
+    const reordered = data.map((item, index) => ({
+      ...item,
+      order_index: index,
+    }));
+    setRecommendations(reordered);
+    setIsReordering(false);
+
+    try {
+      const updates = reordered.map((item, index) => ({
+        id: item.id,
+        order_index: index,
+      }));
+      await updateRecommendationsOrder(updates);
+    } catch (error) {
+      console.error('Error updating recommendations order:', error);
+      setRecommendations(previous);
+      Alert.alert('Fehler', 'Reihenfolge konnte nicht gespeichert werden.');
+    }
+  };
+
+  const listData = useMemo(
+    () => (isLoading ? [] : recommendations),
+    [isLoading, recommendations]
+  );
+
+  const renderListHeader = () => (
+    <>
+      {isAdmin && (
+        <SlideInView direction="down" delay={100} duration={500} easing="spring">
+          <AnimatedButton onPress={handleAddNew} scaleValue={0.95}>
+            <LinearGradient
+              colors={['#38A169', '#2F855A']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.addButton}
+            >
+              <IconSymbol name="plus.circle.fill" size={24} color="#FFFFFF" />
+              <ThemedText style={styles.addButtonText}>Neue Empfehlung</ThemedText>
+            </LinearGradient>
+          </AnimatedButton>
+        </SlideInView>
+      )}
+    </>
+  );
+
+  const renderEmptyState = () => {
+    if (isLoading) {
+      return (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.accent} />
+          <ThemedText style={styles.loadingText}>Lade Empfehlungen...</ThemedText>
+        </View>
+      );
+    }
+
+    return (
+      <SlideInView direction="up" delay={200} duration={600}>
+        <LiquidGlassCard style={styles.emptyCard} intensity={26} overlayColor={GLASS_OVERLAY}>
+          <IconSymbol name="star.fill" size={60} color={theme.accent} />
+          <ThemedText style={styles.emptyTitle}>Noch keine Empfehlungen</ThemedText>
+          <ThemedText style={styles.emptyDescription}>
+            {isAdmin
+              ? 'Füge die erste Empfehlung hinzu!'
+              : 'Schau bald wieder vorbei für tolle Produktempfehlungen!'}
+          </ThemedText>
+        </LiquidGlassCard>
+      </SlideInView>
+    );
+  };
+
   return (
     <ThemedBackground style={styles.backgroundImage}>
       <SafeAreaView style={styles.container}>
@@ -393,54 +526,34 @@ export default function LottisEmpfehlungenScreen() {
           showBackButton={true}
         />
 
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.contentContainer}
+        <DraggableFlatList
+          data={listData}
+          keyExtractor={(item) => item.id}
           showsVerticalScrollIndicator={false}
-        >
-          {/* Admin Add Button */}
-          {isAdmin && (
-            <SlideInView direction="down" delay={100} duration={500} easing="spring">
-              <AnimatedButton onPress={handleAddNew} scaleValue={0.95}>
-                <LinearGradient
-                  colors={['#38A169', '#2F855A']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.addButton}
+          contentContainerStyle={styles.contentContainer}
+          ListHeaderComponent={renderListHeader}
+          ListEmptyComponent={renderEmptyState}
+          onDragBegin={() => setIsReordering(true)}
+          onDragEnd={({ data }) => handleDragEnd(data)}
+          renderItem={({ item, index, drag, isActive }: RenderItemParams<LottiRecommendation>) => (
+            <ScaleDecorator>
+              <WiggleView enabled={isAdmin && isReordering && !isActive}>
+                <TouchableOpacity
+                  activeOpacity={1}
+                  delayLongPress={220}
+                  disabled={!isAdmin}
+                  onLongPress={() => {
+                    if (!isAdmin) return;
+                    drag();
+                  }}
+                  style={isActive ? styles.draggingCard : undefined}
                 >
-                  <IconSymbol name="plus.circle.fill" size={24} color="#FFFFFF" />
-                  <ThemedText style={styles.addButtonText}>Neue Empfehlung</ThemedText>
-                </LinearGradient>
-              </AnimatedButton>
-            </SlideInView>
+                  {renderRecommendationCard(item, index)}
+                </TouchableOpacity>
+              </WiggleView>
+            </ScaleDecorator>
           )}
-
-          {/* Loading State */}
-          {isLoading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={theme.accent} />
-              <ThemedText style={styles.loadingText}>Lade Empfehlungen...</ThemedText>
-            </View>
-          ) : recommendations.length === 0 ? (
-            /* Empty State */
-            <SlideInView direction="up" delay={200} duration={600}>
-              <LiquidGlassCard style={styles.emptyCard} intensity={26} overlayColor={GLASS_OVERLAY}>
-                <IconSymbol name="star.fill" size={60} color={theme.accent} />
-                <ThemedText style={styles.emptyTitle}>Noch keine Empfehlungen</ThemedText>
-                <ThemedText style={styles.emptyDescription}>
-                  {isAdmin
-                    ? 'Füge die erste Empfehlung hinzu!'
-                    : 'Schau bald wieder vorbei für tolle Produktempfehlungen!'}
-                </ThemedText>
-              </LiquidGlassCard>
-            </SlideInView>
-          ) : (
-            /* Recommendations List */
-            <View style={styles.listContainer}>
-              {recommendations.map((item, index) => renderRecommendationCard(item, index))}
-            </View>
-          )}
-        </ScrollView>
+        />
 
         {/* Add/Edit Modal */}
         <Modal
@@ -714,13 +827,12 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 22,
   },
-  listContainer: {
-    gap: 18,
-    paddingVertical: 6,
+  draggingCard: {
+    opacity: 0.96,
   },
   cardWrapper: {
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 14,
     position: 'relative',
   },
   cardBlur: {
