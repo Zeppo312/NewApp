@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, Text, SafeAreaView, StatusBar, Image, ActivityIndicator, RefreshControl, Platform, Alert } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { StyleSheet, ScrollView, View, TouchableOpacity, Text, SafeAreaView, StatusBar, Image, ActivityIndicator, RefreshControl, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
@@ -7,11 +7,10 @@ import { ThemedBackground } from '@/components/ThemedBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/contexts/AuthContext';
-import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { TablerIcon } from '@/components/ui/TablerIcon';
 import { getBabyInfo, getDiaryEntries, getCurrentPhase, getPhaseProgress, getMilestonesByPhase } from '@/lib/baby';
 import { supabase, addBabyCareEntry } from '@/lib/supabase';
+import { getRecommendations, LottiRecommendation } from '@/lib/supabase/recommendations';
 import { BlurView } from 'expo-blur';
 import ActivityInputModal from '@/components/ActivityInputModal';
 import SleepQuickAddModal, { SleepQuickEntry } from '@/components/SleepQuickAddModal';
@@ -34,8 +33,10 @@ export default function HomeScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const { user } = useAuth();
-  const { isBabyBorn } = useBabyStatus();
   const router = useRouter();
+  const DEFAULT_OVERVIEW_HEIGHT = 230;
+  const PRODUCT_ROTATION_INITIAL_DELAY_MS = 10000;
+  const PRODUCT_ROTATION_INTERVAL_MS = 20000;
 
   const [babyInfo, setBabyInfo] = useState<any>(null);
   const [diaryEntries, setDiaryEntries] = useState<any[]>([]);
@@ -46,6 +47,10 @@ export default function HomeScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [dailyTip, setDailyTip] = useState("");
   const [userName, setUserName] = useState("");
+  const [recommendations, setRecommendations] = useState<LottiRecommendation[]>([]);
+  const [overviewIndex, setOverviewIndex] = useState(0);
+  const [overviewWidth, setOverviewWidth] = useState(0);
+  const [overviewCardHeight, setOverviewCardHeight] = useState<number>(DEFAULT_OVERVIEW_HEIGHT);
   const [refreshing, setRefreshing] = useState(false);
   const [showInputModal, setShowInputModal] = useState(false);
   const [selectedActivityType, setSelectedActivityType] = useState<'feeding' | 'diaper' | 'other'>('feeding');
@@ -54,6 +59,89 @@ export default function HomeScreen() {
   const [profileAvatarUrl, setProfileAvatarUrl] = useState<string | null>(null);
   const [showSleepModal, setShowSleepModal] = useState(false);
   const [sleepModalStart, setSleepModalStart] = useState(new Date());
+  const overviewScrollRef = useRef<ScrollView | null>(null);
+  const overviewIndexRef = useRef(0);
+  const overviewSlideCount = 2;
+  const [recommendationImageRetryKey, setRecommendationImageRetryKey] = useState(0);
+  const [recommendationImageErrorCount, setRecommendationImageErrorCount] = useState(0);
+  const [recommendationImageFailed, setRecommendationImageFailed] = useState(false);
+  const MAX_IMAGE_RETRIES = 1;
+  const [productIndex, setProductIndex] = useState(0);
+  const productIndexRef = useRef(0);
+  const productRotationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const productRotationCycleRef = useRef(0);
+  const imageRetryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const rotationCandidates = recommendations;
+
+  const featuredRecommendation = rotationCandidates[productIndex] ?? null;
+
+  const buildImageUri = (imageUrl?: string | null, retryKey = recommendationImageRetryKey) => {
+    if (!imageUrl) return '';
+    if (retryKey <= 0) return imageUrl;
+    return `${imageUrl}${imageUrl.includes('?') ? '&' : '?'}r=${retryKey}`;
+  };
+
+  useEffect(() => {
+    if (featuredRecommendation?.image_url) {
+      Image.prefetch(featuredRecommendation.image_url).catch(() => {});
+    }
+  }, [featuredRecommendation?.image_url]);
+
+  useEffect(() => {
+    setRecommendationImageRetryKey(0);
+    setRecommendationImageErrorCount(0);
+    setRecommendationImageFailed(false);
+    if (imageRetryTimeoutRef.current) {
+      clearTimeout(imageRetryTimeoutRef.current);
+      imageRetryTimeoutRef.current = null;
+    }
+  }, [featuredRecommendation?.id, featuredRecommendation?.image_url]);
+
+  useEffect(() => {
+    productIndexRef.current = productIndex;
+  }, [productIndex]);
+
+  useEffect(() => {
+    productIndexRef.current = 0;
+    setProductIndex(0);
+    productRotationCycleRef.current = 0;
+  }, [rotationCandidates]);
+
+  useEffect(() => {
+    if (overviewIndex !== 1 || rotationCandidates.length <= 1) {
+      if (productRotationTimeoutRef.current) {
+        clearTimeout(productRotationTimeoutRef.current);
+        productRotationTimeoutRef.current = null;
+      }
+      productRotationCycleRef.current = 0;
+      return;
+    }
+
+    const scheduleNextRotation = () => {
+      const delay =
+        productRotationCycleRef.current === 0
+          ? PRODUCT_ROTATION_INITIAL_DELAY_MS
+          : PRODUCT_ROTATION_INTERVAL_MS;
+
+      productRotationTimeoutRef.current = setTimeout(() => {
+        const nextIndex = (productIndexRef.current + 1) % rotationCandidates.length;
+        productIndexRef.current = nextIndex;
+        setProductIndex(nextIndex);
+        productRotationCycleRef.current += 1;
+        scheduleNextRotation();
+      }, delay);
+    };
+
+    scheduleNextRotation();
+
+    return () => {
+      if (productRotationTimeoutRef.current) {
+        clearTimeout(productRotationTimeoutRef.current);
+        productRotationTimeoutRef.current = null;
+      }
+    };
+  }, [overviewIndex, rotationCandidates, PRODUCT_ROTATION_INITIAL_DELAY_MS, PRODUCT_ROTATION_INTERVAL_MS]);
 
   useEffect(() => {
     if (user) {
@@ -65,6 +153,31 @@ export default function HomeScreen() {
       setIsLoading(false);
     }
   }, [user]);
+
+  useEffect(() => {
+    overviewIndexRef.current = overviewIndex;
+  }, [overviewIndex]);
+
+  useEffect(() => {
+    if (!overviewWidth) return;
+    const interval = setInterval(() => {
+      const nextIndex = (overviewIndexRef.current + 1) % overviewSlideCount;
+      overviewScrollRef.current?.scrollTo({ x: nextIndex * overviewWidth, animated: true });
+      overviewIndexRef.current = nextIndex;
+      setOverviewIndex(nextIndex);
+    }, 20000);
+
+    return () => clearInterval(interval);
+  }, [overviewWidth, overviewSlideCount]);
+
+  useEffect(() => {
+    if (overviewWidth > 0) {
+      overviewScrollRef.current?.scrollTo({
+        x: overviewIndexRef.current * overviewWidth,
+        animated: false,
+      });
+    }
+  }, [overviewWidth]);
 
   // Funktion für Pull-to-Refresh
   const onRefresh = async () => {
@@ -148,6 +261,13 @@ export default function HomeScreen() {
         if (milestonesData) {
           setMilestones(milestonesData);
         }
+      }
+
+      try {
+        const recommendationData = await getRecommendations();
+        setRecommendations(recommendationData);
+      } catch (error) {
+        console.error('Error loading recommendations:', error);
       }
     } catch (err) {
       console.error('Failed to load home data:', err);
@@ -375,6 +495,24 @@ export default function HomeScreen() {
     }
   };
 
+  const handleSummaryLayout = (event: any) => {
+    const { height } = event.nativeEvent.layout;
+    if (height && height !== overviewCardHeight) {
+      setOverviewCardHeight(height);
+    }
+  };
+
+  const handleFocusRecommendation = (recommendationId?: string | null) => {
+    if (!recommendationId) {
+      router.push('/lottis-empfehlungen');
+      return;
+    }
+    router.push({
+      pathname: '/lottis-empfehlungen',
+      params: { focusId: recommendationId },
+    });
+  };
+
   // Rendere den Begrüßungsbereich
   const renderGreetingSection = () => {
     // Verwende den Benutzernamen aus der profiles-Tabelle
@@ -441,16 +579,17 @@ export default function HomeScreen() {
   };
 
   // Rendere die Tagesübersicht
-  const renderDailySummary = () => {
+  const renderDailySummary = (options?: { wrapperStyle?: any; onBlurLayout?: (event: any) => void }) => {
     const todayFeedings = getTodayFeedings();
     const todayDiaperChanges = getTodayDiaperChanges();
 
     return (
-      <View style={styles.liquidGlassWrapper}>
+      <View style={[styles.liquidGlassWrapper, options?.wrapperStyle]}>
         <BlurView 
           intensity={22} 
           tint={colorScheme === 'dark' ? 'dark' : 'light'} 
           style={styles.liquidGlassBackground}
+          onLayout={options?.onBlurLayout}
         >
           <ThemedView style={[styles.summaryContainer, styles.liquidGlassContainer]} 
                       lightColor="rgba(255, 255, 255, 0.04)" 
@@ -531,6 +670,177 @@ export default function HomeScreen() {
             </View>
           </ThemedView>
         </BlurView>
+      </View>
+    );
+  };
+
+  const handleRecommendationImageError = () => {
+    setRecommendationImageErrorCount((prev) => {
+      if (prev >= MAX_IMAGE_RETRIES) {
+        setRecommendationImageFailed(true);
+        return prev;
+      }
+      const next = prev + 1;
+      if (imageRetryTimeoutRef.current) {
+        clearTimeout(imageRetryTimeoutRef.current);
+      }
+      imageRetryTimeoutRef.current = setTimeout(() => {
+        setRecommendationImageRetryKey((key) => key + 1);
+      }, 600);
+      return next;
+    });
+  };
+
+  const handleRecommendationImageLoadStart = () => {
+    if (recommendationImageRetryKey >= MAX_IMAGE_RETRIES) return;
+    if (imageRetryTimeoutRef.current) {
+      clearTimeout(imageRetryTimeoutRef.current);
+    }
+    imageRetryTimeoutRef.current = setTimeout(() => {
+      if (!recommendationImageFailed) {
+        setRecommendationImageRetryKey((key) => key + 1);
+      }
+    }, 1500);
+  };
+
+  const handleRecommendationImageLoad = () => {
+    if (imageRetryTimeoutRef.current) {
+      clearTimeout(imageRetryTimeoutRef.current);
+      imageRetryTimeoutRef.current = null;
+    }
+    setRecommendationImageFailed(false);
+  };
+
+  const renderRecommendationCard = () => {
+    const cardHeightStyle = { height: overviewCardHeight };
+    const rawButtonLabel = featuredRecommendation?.button_text?.trim() || 'Zum Produkt';
+    const buttonLabel = rawButtonLabel.includes('→') ? rawButtonLabel : `${rawButtonLabel} →`;
+    const showRecommendationImage = Boolean(featuredRecommendation?.image_url) && !recommendationImageFailed;
+    const isRecommendationActive = overviewIndex === 1;
+    const imageUri = buildImageUri(featuredRecommendation?.image_url);
+
+    return (
+      <View style={[styles.liquidGlassWrapper, styles.carouselCardWrapper]}>
+        <BlurView
+          intensity={22}
+          tint={colorScheme === 'dark' ? 'dark' : 'light'}
+          style={[styles.liquidGlassBackground, cardHeightStyle]}
+        >
+          <ThemedView
+            style={[
+              styles.liquidGlassContainer,
+              styles.recommendationContainer,
+              cardHeightStyle,
+            ]}
+            lightColor="rgba(255, 255, 255, 0.04)"
+            darkColor="rgba(255, 255, 255, 0.02)"
+          >
+            {featuredRecommendation ? (
+              <TouchableOpacity
+                style={styles.recommendationCard}
+                onPress={() => handleFocusRecommendation(featuredRecommendation.id)}
+                activeOpacity={0.9}
+              >
+                <View style={styles.recommendationImagePane}>
+                  {isRecommendationActive && showRecommendationImage ? (
+                    <Image
+                      key={`${featuredRecommendation.id}-${recommendationImageRetryKey}-${overviewWidth}-${overviewCardHeight}`}
+                      source={{ uri: imageUri }}
+                      style={styles.recommendationImage}
+                      onLoadStart={handleRecommendationImageLoadStart}
+                      onError={handleRecommendationImageError}
+                      onLoad={handleRecommendationImageLoad}
+                    />
+                  ) : (
+                    <View style={styles.recommendationImageFallback}>
+                      <IconSymbol name="bag.fill" size={22} color="#6B4C3B" />
+                    </View>
+                  )}
+                </View>
+                <View style={styles.recommendationContentPane}>
+                  <View style={styles.recommendationTextWrap}>
+                    <ThemedText style={styles.recommendationTitle}>
+                      {featuredRecommendation.title}
+                    </ThemedText>
+                    <ThemedText style={styles.recommendationDescription} numberOfLines={2} ellipsizeMode="tail">
+                      {featuredRecommendation.description}
+                    </ThemedText>
+                  </View>
+                  <View style={styles.recommendationButton}>
+                    <ThemedText style={styles.recommendationButtonText} numberOfLines={1}>
+                      {buttonLabel}
+                    </ThemedText>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.recommendationEmpty}>
+                <IconSymbol name="bag.fill" size={20} color="#7D5A50" />
+                <ThemedText style={styles.recommendationEmptyText}>
+                  Noch keine Empfehlungen verfügbar.
+                </ThemedText>
+              </View>
+            )}
+          </ThemedView>
+        </BlurView>
+      </View>
+    );
+  };
+
+  const renderOverviewCarousel = () => {
+    const slideWidthStyle = { width: overviewWidth };
+
+    return (
+      <View
+        style={styles.overviewCarouselWrapper}
+        onLayout={(event) => {
+          const { width } = event.nativeEvent.layout;
+          if (width && width !== overviewWidth) {
+            setOverviewWidth(width);
+          }
+        }}
+      >
+        <ScrollView
+          ref={overviewScrollRef}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          decelerationRate="fast"
+          removeClippedSubviews={false}
+          style={styles.overviewCarousel}
+          contentContainerStyle={overviewWidth ? { width: overviewWidth * overviewSlideCount } : undefined}
+          scrollEnabled={overviewWidth > 0}
+          onMomentumScrollEnd={(event) => {
+            if (!overviewWidth) return;
+            const nextIndex = Math.round(event.nativeEvent.contentOffset.x / overviewWidth);
+            if (nextIndex !== overviewIndexRef.current) {
+              overviewIndexRef.current = nextIndex;
+              setOverviewIndex(nextIndex);
+            }
+          }}
+        >
+          <View style={[styles.overviewSlide, slideWidthStyle]}>
+            {renderDailySummary({
+              wrapperStyle: styles.carouselCardWrapper,
+              onBlurLayout: handleSummaryLayout,
+            })}
+          </View>
+          <View style={[styles.overviewSlide, slideWidthStyle]}>
+            {renderRecommendationCard()}
+          </View>
+        </ScrollView>
+
+        <View style={styles.carouselDots}>
+          {Array.from({ length: overviewSlideCount }, (_, index) => (
+            <View
+              key={`overview-dot-${index}`}
+              style={[
+                styles.carouselDot,
+                overviewIndex === index && styles.carouselDotActive,
+              ]}
+            />
+          ))}
+        </View>
       </View>
     );
   };
@@ -693,7 +1003,7 @@ export default function HomeScreen() {
             }
           >
             {renderGreetingSection()}
-            {renderDailySummary()}
+            {renderOverviewCarousel()}
             {renderQuickAccessCards()}
           </ScrollView>
         )}
@@ -855,6 +1165,123 @@ const styles = StyleSheet.create({
   },
   liquidGlassTipText: {
     color: 'rgba(255, 255, 255, 0.95)',
+  },
+
+  // Overview Carousel
+  overviewCarouselWrapper: {
+    marginBottom: 16,
+  },
+  overviewCarousel: {
+    width: '100%',
+  },
+  overviewSlide: {
+    width: '100%',
+  },
+  carouselCardWrapper: {
+    marginBottom: 0,
+  },
+  carouselDots: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 10,
+  },
+  carouselDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(107, 76, 59, 0.25)',
+    marginHorizontal: 4,
+  },
+  carouselDotActive: {
+    backgroundColor: '#6B4C3B',
+  },
+
+  // Recommendation Card
+  recommendationContainer: {
+    flex: 1,
+    padding: 0,
+  },
+  recommendationCard: {
+    flex: 1,
+    flexDirection: 'row',
+    width: '100%',
+    height: '100%',
+    borderRadius: 22,
+    overflow: 'hidden',
+  },
+  recommendationImagePane: {
+    flex: 0.6,
+    height: '100%',
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    borderRightWidth: 1,
+    borderRightColor: 'rgba(255, 255, 255, 0.6)',
+    overflow: 'hidden',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  recommendationImageFallback: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    height: '100%',
+  },
+  recommendationImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  recommendationContentPane: {
+    flex: 0.4,
+    padding: 16,
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(255, 255, 255, 0.28)',
+    height: '100%',
+  },
+  recommendationTextWrap: {
+    flex: 1,
+  },
+  recommendationTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#6B4C3B',
+    marginBottom: 4,
+    letterSpacing: 0.2,
+    flexWrap: 'wrap',
+  },
+  recommendationDescription: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: 'rgba(125, 90, 80, 0.88)',
+    lineHeight: 19,
+    flexWrap: 'wrap',
+  },
+  recommendationButton: {
+    alignSelf: 'flex-end',
+    marginTop: 12,
+    paddingVertical: 9,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    backgroundColor: '#5E3DB3',
+    borderWidth: 1,
+    borderColor: 'rgba(94, 61, 179, 0.7)',
+  },
+  recommendationButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  recommendationEmpty: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+  },
+  recommendationEmptyText: {
+    fontSize: 13,
+    color: '#7D5A50',
+    marginTop: 8,
+    textAlign: 'center',
   },
 
   // Tagesübersicht - Liquid Glass Design

@@ -26,7 +26,7 @@ import { ThemedBackground } from '@/components/ThemedBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import Header from '@/components/Header';
 import { LiquidGlassCard, GLASS_OVERLAY, LAYOUT_PAD } from '@/constants/DesignGuide';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -100,7 +100,9 @@ function WiggleView({
 export default function LottisEmpfehlungenScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
-  const router = useRouter();
+  const { focusId } = useLocalSearchParams<{ focusId?: string }>();
+  const listRef = useRef<any>(null);
+  const focusIdRef = useRef<string | null>(null);
 
   const [recommendations, setRecommendations] = useState<LottiRecommendation[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -125,6 +127,14 @@ export default function LottisEmpfehlungenScreen() {
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    if (!focusId) return;
+    const resolvedFocusId = Array.isArray(focusId) ? focusId[0] : focusId;
+    if (resolvedFocusId) {
+      focusIdRef.current = resolvedFocusId;
+    }
+  }, [focusId]);
 
   const loadData = async () => {
     try {
@@ -470,6 +480,26 @@ export default function LottisEmpfehlungenScreen() {
     [isLoading, recommendations]
   );
 
+  useEffect(() => {
+    const targetId = focusIdRef.current;
+    if (!targetId || listData.length === 0) return;
+    const targetIndex = listData.findIndex((item) => item.id === targetId);
+    if (targetIndex < 0) {
+      focusIdRef.current = null;
+      return;
+    }
+
+    requestAnimationFrame(() => {
+      listRef.current?.scrollToIndex({
+        index: targetIndex,
+        animated: true,
+        viewPosition: 0.1,
+      });
+    });
+
+    focusIdRef.current = null;
+  }, [listData, focusId]);
+
   const renderListHeader = () => (
     <>
       {isAdmin && (
@@ -527,6 +557,7 @@ export default function LottisEmpfehlungenScreen() {
         />
 
         <DraggableFlatList
+          ref={listRef}
           data={listData}
           keyExtractor={(item) => item.id}
           showsVerticalScrollIndicator={false}
@@ -535,6 +566,10 @@ export default function LottisEmpfehlungenScreen() {
           ListEmptyComponent={renderEmptyState}
           onDragBegin={() => setIsReordering(true)}
           onDragEnd={({ data }) => handleDragEnd(data)}
+          onScrollToIndexFailed={(info) => {
+            const offset = info.averageItemLength * info.index;
+            listRef.current?.scrollToOffset({ offset, animated: true });
+          }}
           renderItem={({ item, index, drag, isActive }: RenderItemParams<LottiRecommendation>) => (
             <ScaleDecorator>
               <WiggleView enabled={isAdmin && isReordering && !isActive}>
