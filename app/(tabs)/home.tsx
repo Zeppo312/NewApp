@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { StyleSheet, ScrollView, View, TouchableOpacity, Text, SafeAreaView, StatusBar, Image, ActivityIndicator, RefreshControl, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedBackground } from '@/components/ThemedBackground';
@@ -75,6 +76,15 @@ export default function HomeScreen() {
   const rotationCandidates = recommendations;
 
   const featuredRecommendation = rotationCandidates[productIndex] ?? null;
+
+  const triggerHaptic = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+  };
+
+  const handleNavigate = (destination: any) => {
+    triggerHaptic();
+    router.push(destination);
+  };
 
   const buildImageUri = (imageUrl?: string | null, retryKey = recommendationImageRetryKey) => {
     if (!imageUrl) return '';
@@ -334,6 +344,7 @@ export default function HomeScreen() {
 
   // Handle stat item press
   const handleStatPress = (type: 'feeding' | 'diaper' | 'sleep') => {
+    triggerHaptic();
     if (type === 'sleep') {
       setSleepModalStart(new Date());
       setShowSleepModal(true);
@@ -503,6 +514,7 @@ export default function HomeScreen() {
   };
 
   const handleFocusRecommendation = (recommendationId?: string | null) => {
+    triggerHaptic();
     if (!recommendationId) {
       router.push('/lottis-empfehlungen');
       return;
@@ -600,7 +612,7 @@ export default function HomeScreen() {
               </ThemedText>
               <TouchableOpacity
                 style={styles.liquidGlassChevron}
-                onPress={() => router.push('/(tabs)/daily_old')}
+                onPress={() => handleNavigate('/(tabs)/daily_old')}
                 activeOpacity={0.8}
               >
                 <IconSymbol name="chevron.right" size={20} color="#6B4C3B" />
@@ -713,8 +725,7 @@ export default function HomeScreen() {
 
   const renderRecommendationCard = () => {
     const cardHeightStyle = { height: overviewCardHeight };
-    const rawButtonLabel = featuredRecommendation?.button_text?.trim() || 'Zum Produkt';
-    const buttonLabel = rawButtonLabel.includes('→') ? rawButtonLabel : `${rawButtonLabel} →`;
+    const buttonLabel = 'Mehr..';
     const showRecommendationImage = Boolean(featuredRecommendation?.image_url) && !recommendationImageFailed;
     const isRecommendationActive = overviewIndex === 1;
     const imageUri = buildImageUri(featuredRecommendation?.image_url);
@@ -741,44 +752,62 @@ export default function HomeScreen() {
                 onPress={() => handleFocusRecommendation(featuredRecommendation.id)}
                 activeOpacity={0.9}
               >
-                <View style={styles.recommendationImagePane}>
-                  {isRecommendationActive && showRecommendationImage ? (
-                    <Image
-                      key={`${featuredRecommendation.id}-${recommendationImageRetryKey}-${overviewWidth}-${overviewCardHeight}`}
-                      source={{ uri: imageUri }}
-                      style={styles.recommendationImage}
-                      onLoadStart={handleRecommendationImageLoadStart}
-                      onError={handleRecommendationImageError}
-                      onLoad={handleRecommendationImageLoad}
-                    />
-                  ) : (
-                    <View style={styles.recommendationImageFallback}>
-                      <IconSymbol name="bag.fill" size={22} color="#6B4C3B" />
-                    </View>
-                  )}
+                <View style={styles.sectionTitleContainer}>
+                  <ThemedText style={[styles.sectionTitle, styles.liquidGlassText, { color: '#6B4C3B', fontSize: 22 }]}>
+                    Lottis Empfehlungen
+                  </ThemedText>
+                  <View style={[styles.liquidGlassChevron, styles.recommendationHeaderSpacer]} />
                 </View>
-                <View style={styles.recommendationContentPane}>
-                  <View style={styles.recommendationTextWrap}>
-                    <ThemedText style={styles.recommendationTitle}>
-                      {featuredRecommendation.title}
-                    </ThemedText>
-                    <ThemedText style={styles.recommendationDescription} numberOfLines={2} ellipsizeMode="tail">
-                      {featuredRecommendation.description}
-                    </ThemedText>
-                  </View>
-                  <View style={styles.recommendationButton}>
-                    <ThemedText style={styles.recommendationButtonText} numberOfLines={1}>
-                      {buttonLabel}
-                    </ThemedText>
+                <View style={styles.recommendationInnerCard}>
+                  <View style={styles.recommendationRow}>
+                    <View style={styles.recommendationImagePane}>
+                      {isRecommendationActive && showRecommendationImage ? (
+                        <Image
+                          key={`${featuredRecommendation.id}-${recommendationImageRetryKey}-${overviewWidth}-${overviewCardHeight}`}
+                          source={{ uri: imageUri }}
+                          style={styles.recommendationImage}
+                          onLoadStart={handleRecommendationImageLoadStart}
+                          onError={handleRecommendationImageError}
+                          onLoad={handleRecommendationImageLoad}
+                        />
+                      ) : (
+                        <View style={styles.recommendationImageFallback}>
+                          <IconSymbol name="bag.fill" size={22} color="#6B4C3B" />
+                        </View>
+                      )}
+                    </View>
+                    <View style={styles.recommendationContentPane}>
+                      <View style={styles.recommendationTextWrap}>
+                        <ThemedText style={styles.recommendationTitle}>
+                          {featuredRecommendation.title}
+                        </ThemedText>
+                        <ThemedText style={styles.recommendationDescription} numberOfLines={2} ellipsizeMode="tail">
+                          {featuredRecommendation.description}
+                        </ThemedText>
+                      </View>
+                      <View style={styles.recommendationButton}>
+                        <ThemedText style={styles.recommendationButtonText} numberOfLines={1}>
+                          {buttonLabel}
+                        </ThemedText>
+                      </View>
+                    </View>
                   </View>
                 </View>
               </TouchableOpacity>
             ) : (
-              <View style={styles.recommendationEmpty}>
-                <IconSymbol name="bag.fill" size={20} color="#7D5A50" />
-                <ThemedText style={styles.recommendationEmptyText}>
-                  Noch keine Empfehlungen verfügbar.
-                </ThemedText>
+              <View style={styles.recommendationEmptyWrapper}>
+                <View style={styles.sectionTitleContainer}>
+                  <ThemedText style={[styles.sectionTitle, styles.liquidGlassText, { color: '#6B4C3B', fontSize: 22 }]}>
+                    Lottis Empfehlungen
+                  </ThemedText>
+                  <View style={[styles.liquidGlassChevron, styles.recommendationHeaderSpacer]} />
+                </View>
+                <View style={styles.recommendationEmpty}>
+                  <IconSymbol name="bag.fill" size={20} color="#7D5A50" />
+                  <ThemedText style={styles.recommendationEmptyText}>
+                    Noch keine Empfehlungen verfügbar.
+                  </ThemedText>
+                </View>
               </View>
             )}
           </ThemedView>
@@ -856,7 +885,7 @@ export default function HomeScreen() {
         <View style={styles.cardsGrid}>
           <TouchableOpacity
             style={styles.liquidGlassCardWrapper}
-            onPress={() => router.push('/recipe-generator' as any)}
+            onPress={() => handleNavigate('/recipe-generator' as any)}
             activeOpacity={0.9}
           >
             <BlurView 
@@ -876,7 +905,7 @@ export default function HomeScreen() {
 
           <TouchableOpacity
             style={styles.liquidGlassCardWrapper}
-            onPress={() => router.push('/(tabs)/baby')}
+            onPress={() => handleNavigate('/(tabs)/baby')}
             activeOpacity={0.9}
           >
             <BlurView 
@@ -896,7 +925,7 @@ export default function HomeScreen() {
 
           <TouchableOpacity
             style={styles.liquidGlassCardWrapper}
-            onPress={() => router.push('/planner')}
+            onPress={() => handleNavigate('/planner')}
             activeOpacity={0.9}
           >
             <BlurView 
@@ -916,7 +945,7 @@ export default function HomeScreen() {
 
           <TouchableOpacity
             style={styles.liquidGlassCardWrapper}
-            onPress={() => router.push('/(tabs)/daily_old')}
+            onPress={() => handleNavigate('/(tabs)/daily_old')}
             activeOpacity={0.9}
           >
             <BlurView 
@@ -936,7 +965,7 @@ export default function HomeScreen() {
 
           <TouchableOpacity
             style={styles.liquidGlassCardWrapper}
-            onPress={() => router.push('/(tabs)/selfcare')}
+            onPress={() => handleNavigate('/(tabs)/selfcare')}
             activeOpacity={0.9}
           >
             <BlurView 
@@ -956,7 +985,7 @@ export default function HomeScreen() {
 
           <TouchableOpacity
             style={styles.liquidGlassCardWrapper}
-            onPress={() => router.push('/(tabs)/babyweather')}
+            onPress={() => handleNavigate('/(tabs)/babyweather')}
             activeOpacity={0.9}
           >
             <BlurView 
@@ -1199,25 +1228,37 @@ const styles = StyleSheet.create({
   // Recommendation Card
   recommendationContainer: {
     flex: 1,
-    padding: 0,
+    padding: 20,
   },
   recommendationCard: {
     flex: 1,
-    flexDirection: 'row',
     width: '100%',
-    height: '100%',
-    borderRadius: 22,
-    overflow: 'hidden',
+    borderRadius: 20,
+  },
+  recommendationInnerCard: {
+    flex: 1,
+    borderRadius: 18,
+    padding: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.55)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.55)',
+  },
+  recommendationRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   recommendationImagePane: {
-    flex: 0.6,
-    height: '100%',
-    backgroundColor: 'rgba(255, 255, 255, 0.7)',
-    borderRightWidth: 1,
-    borderRightColor: 'rgba(255, 255, 255, 0.6)',
+    width: '48%',
+    aspectRatio: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.75)',
+    borderRadius: 10,
     overflow: 'hidden',
     justifyContent: 'center',
     alignItems: 'center',
+    marginRight: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.6)',
   },
   recommendationImageFallback: {
     flex: 1,
@@ -1232,11 +1273,10 @@ const styles = StyleSheet.create({
     resizeMode: 'cover',
   },
   recommendationContentPane: {
-    flex: 0.4,
-    padding: 16,
+    flex: 1,
+    paddingVertical: 4,
     justifyContent: 'space-between',
-    backgroundColor: 'rgba(255, 255, 255, 0.28)',
-    height: '100%',
+    backgroundColor: 'transparent',
   },
   recommendationTextWrap: {
     flex: 1,
@@ -1270,6 +1310,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+  recommendationEmptyWrapper: {
+    flex: 1,
+  },
+  recommendationHeaderSpacer: {
+    opacity: 0,
   },
   recommendationEmpty: {
     flex: 1,
