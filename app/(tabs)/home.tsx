@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, Text, SafeAreaView, StatusBar, Image, ActivityIndicator, RefreshControl, Alert } from 'react-native';
+import { StyleSheet, ScrollView, View, TouchableOpacity, Text, SafeAreaView, StatusBar, Image, ActivityIndicator, RefreshControl, Alert, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { ThemedText } from '@/components/ThemedText';
@@ -9,6 +9,7 @@ import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/contexts/AuthContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { LinearGradient } from 'expo-linear-gradient';
 import { getBabyInfo, getDiaryEntries, getCurrentPhase, getPhaseProgress, getMilestonesByPhase } from '@/lib/baby';
 import { supabase, addBabyCareEntry } from '@/lib/supabase';
 import { getRecommendations, LottiRecommendation } from '@/lib/supabase/recommendations';
@@ -72,13 +73,17 @@ export default function HomeScreen() {
   const productRotationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const productRotationCycleRef = useRef(0);
   const imageRetryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const androidBlurProps =
+    Platform.OS === 'android'
+      ? { experimentalBlurMethod: 'dimezisBlurView' as const, blurReductionFactor: 1 }
+      : {};
 
   const rotationCandidates = recommendations;
 
   const featuredRecommendation = rotationCandidates[productIndex] ?? null;
 
   const triggerHaptic = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
   };
 
   const handleNavigate = (destination: any) => {
@@ -533,15 +538,27 @@ export default function HomeScreen() {
     const displayPhoto = profileAvatarUrl || null;
 
     return (
-      <View style={styles.liquidGlassWrapper}>
-        <BlurView 
-          intensity={22} 
-          tint={colorScheme === 'dark' ? 'dark' : 'light'} 
-          style={styles.liquidGlassBackground}
+      <View style={[styles.liquidGlassWrapper, styles.greetingCardWrapper]}>
+        <BlurView
+          {...androidBlurProps}
+          intensity={22}
+          tint={colorScheme === 'dark' ? 'dark' : 'light'}
+          style={[styles.liquidGlassBackground, styles.greetingGlassBackground]}
         >
-          <ThemedView style={[styles.greetingContainer, styles.liquidGlassContainer]} 
-                     lightColor="rgba(255, 255, 255, 0.04)" 
-                     darkColor="rgba(255, 255, 255, 0.02)">
+          <ThemedView
+            style={[styles.greetingContainer, styles.liquidGlassContainer, styles.greetingGlassContainer]}
+            lightColor="rgba(255, 255, 255, 0.04)"
+            darkColor="rgba(255, 255, 255, 0.02)"
+          >
+            <LinearGradient
+              pointerEvents="none"
+              colors={['rgba(255, 255, 255, 0.95)', 'rgba(255, 255, 255, 0.15)', 'rgba(255, 255, 255, 0)']}
+              locations={[0, 0.45, 1]}
+              start={{ x: 0.15, y: 0.0 }}
+              end={{ x: 0.85, y: 1.0 }}
+              style={styles.greetingGloss}
+            />
+
             <View style={styles.greetingHeader}>
               <View>
                 <ThemedText style={[styles.greeting, styles.liquidGlassText, { color: '#6B4C3B' }]}>
@@ -552,37 +569,38 @@ export default function HomeScreen() {
                 </ThemedText>
               </View>
 
-              {displayPhoto && (
-                <View style={styles.profileImageWrapper}>
-                                     <Image
-                     source={{ uri: displayPhoto }}
-                     style={styles.profileImage}
-                   />
-                </View>
-              )}
-
-              {!displayPhoto && (
-                <View style={[styles.profileImage, styles.profilePlaceholder, styles.liquidGlassProfilePlaceholder]}>
-                  <IconSymbol name="person.fill" size={30} color="#FFFFFF" />
-                </View>
-              )}
+              <View style={styles.profileBadge}>
+                {displayPhoto ? (
+                  <View style={styles.profileImageWrapper}>
+                    <Image source={{ uri: displayPhoto }} style={styles.profileImage} />
+                  </View>
+                ) : (
+                  <View style={styles.profilePlaceholder}>
+                    <IconSymbol name="person.fill" size={30} color="#FFFFFF" />
+                  </View>
+                )}
+                <View style={styles.profileStatusDot} />
+              </View>
             </View>
 
-            <View style={styles.tipContainerWrapper}>
-              <BlurView 
-                intensity={14} 
-                tint={colorScheme === 'dark' ? 'dark' : 'light'} 
-                style={styles.tipContainerBlur}
-              >
-                <ThemedView style={[styles.tipContainer, styles.liquidGlassTipContainer]} 
-                           lightColor="rgba(168, 196, 193, 0.45)" 
-                           darkColor="rgba(168, 196, 193, 0.45)">
-                  <IconSymbol name="lightbulb.fill" size={20} color={Colors.light.success} />
-                  <ThemedText style={[styles.tipText, styles.liquidGlassTipText, { color: '#6B4C3B' }]}>
-                    {dailyTip}
-                  </ThemedText>
-                </ThemedView>
-              </BlurView>
+            <View style={styles.tipCard}>
+              <LinearGradient
+                pointerEvents="none"
+                colors={['rgba(255, 255, 255, 0.9)', 'rgba(255, 255, 255, 0.1)']}
+                locations={[0, 1]}
+                start={{ x: 0.2, y: 0 }}
+                end={{ x: 0.8, y: 1 }}
+                style={styles.tipGloss}
+              />
+              <View style={styles.tipCardRow}>
+                <View style={styles.tipIconWrap}>
+                  <IconSymbol name="lightbulb.fill" size={18} color="#D6B28C" />
+                </View>
+                <View style={styles.tipContent}>
+                  <ThemedText style={styles.tipLabel}>Tipp des Tages</ThemedText>
+                  <ThemedText style={styles.tipText}>{dailyTip}</ThemedText>
+                </View>
+              </View>
             </View>
           </ThemedView>
         </BlurView>
@@ -598,6 +616,7 @@ export default function HomeScreen() {
     return (
       <View style={[styles.liquidGlassWrapper, options?.wrapperStyle]}>
         <BlurView 
+          {...androidBlurProps}
           intensity={22} 
           tint={colorScheme === 'dark' ? 'dark' : 'light'} 
           style={styles.liquidGlassBackground}
@@ -733,6 +752,7 @@ export default function HomeScreen() {
     return (
       <View style={[styles.liquidGlassWrapper, styles.carouselCardWrapper]}>
         <BlurView
+          {...androidBlurProps}
           intensity={22}
           tint={colorScheme === 'dark' ? 'dark' : 'light'}
           style={[styles.liquidGlassBackground, cardHeightStyle]}
@@ -747,18 +767,18 @@ export default function HomeScreen() {
             darkColor="rgba(255, 255, 255, 0.02)"
           >
             {featuredRecommendation ? (
-              <TouchableOpacity
-                style={styles.recommendationCard}
-                onPress={() => handleFocusRecommendation(featuredRecommendation.id)}
-                activeOpacity={0.9}
-              >
+              <View style={styles.recommendationCard}>
                 <View style={styles.sectionTitleContainer}>
                   <ThemedText style={[styles.sectionTitle, styles.liquidGlassText, { color: '#6B4C3B', fontSize: 22 }]}>
                     Lottis Empfehlungen
                   </ThemedText>
                   <View style={[styles.liquidGlassChevron, styles.recommendationHeaderSpacer]} />
                 </View>
-                <View style={styles.recommendationInnerCard}>
+                <TouchableOpacity
+                  style={styles.recommendationInnerCard}
+                  onPress={() => handleFocusRecommendation(featuredRecommendation.id)}
+                  activeOpacity={0.9}
+                >
                   <View style={styles.recommendationRow}>
                     <View style={styles.recommendationImagePane}>
                       {isRecommendationActive && showRecommendationImage ? (
@@ -792,8 +812,8 @@ export default function HomeScreen() {
                       </View>
                     </View>
                   </View>
-                </View>
-              </TouchableOpacity>
+                </TouchableOpacity>
+              </View>
             ) : (
               <View style={styles.recommendationEmptyWrapper}>
                 <View style={styles.sectionTitleContainer}>
@@ -889,6 +909,7 @@ export default function HomeScreen() {
             activeOpacity={0.9}
           >
             <BlurView 
+              {...androidBlurProps}
               intensity={24} 
               tint={colorScheme === 'dark' ? 'dark' : 'light'} 
               style={styles.liquidGlassCardBackground}
@@ -909,6 +930,7 @@ export default function HomeScreen() {
             activeOpacity={0.9}
           >
             <BlurView 
+              {...androidBlurProps}
               intensity={24} 
               tint={colorScheme === 'dark' ? 'dark' : 'light'} 
               style={styles.liquidGlassCardBackground}
@@ -929,6 +951,7 @@ export default function HomeScreen() {
             activeOpacity={0.9}
           >
             <BlurView 
+              {...androidBlurProps}
               intensity={24} 
               tint={colorScheme === 'dark' ? 'dark' : 'light'} 
               style={styles.liquidGlassCardBackground}
@@ -949,6 +972,7 @@ export default function HomeScreen() {
             activeOpacity={0.9}
           >
             <BlurView 
+              {...androidBlurProps}
               intensity={24} 
               tint={colorScheme === 'dark' ? 'dark' : 'light'} 
               style={styles.liquidGlassCardBackground}
@@ -969,6 +993,7 @@ export default function HomeScreen() {
             activeOpacity={0.9}
           >
             <BlurView 
+              {...androidBlurProps}
               intensity={24} 
               tint={colorScheme === 'dark' ? 'dark' : 'light'} 
               style={styles.liquidGlassCardBackground}
@@ -989,6 +1014,7 @@ export default function HomeScreen() {
             activeOpacity={0.9}
           >
             <BlurView 
+              {...androidBlurProps}
               intensity={16} 
               tint={colorScheme === 'dark' ? 'dark' : 'light'} 
               style={styles.liquidGlassCardBackground}
@@ -1093,6 +1119,16 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     overflow: 'hidden',
   },
+  greetingCardWrapper: {
+    borderRadius: 30,
+    overflow: 'hidden',
+  },
+  greetingGlassBackground: {
+    borderRadius: 30,
+  },
+  greetingGlassContainer: {
+    borderRadius: 30,
+  },
   liquidGlassBackground: {
     borderRadius: 22,
     overflow: 'hidden',
@@ -1112,88 +1148,131 @@ const styles = StyleSheet.create({
 
   // Begrüßungsbereich - Liquid Glass Design
   greetingContainer: {
-    paddingTop: 32,
+    paddingTop: 26,
     paddingHorizontal: 24,
-    paddingBottom: 28,
+    paddingBottom: 22,
     backgroundColor: 'transparent',
+    position: 'relative',
   },
   greetingHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 16,
   },
   greeting: {
-    fontSize: 28,
+    fontSize: 30,
     fontWeight: '700',
-    marginBottom: 6,
+    marginBottom: 4,
     letterSpacing: -0.5,
-    lineHeight: 34,
+    lineHeight: 36,
   },
   dateText: {
-    fontSize: 16,
+    fontSize: 14,
     opacity: 0.8,
     fontWeight: '500',
+    letterSpacing: 0.2,
   },
-  profileImage: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+  profileBadge: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
   },
   profileImageWrapper: {
-    borderRadius: 32,
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    backgroundColor: 'rgba(255, 255, 255, 0.6)',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.75)',
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 34,
   },
   profilePlaceholder: {
-    backgroundColor: 'rgba(125, 90, 80, 0.8)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    backgroundColor: 'rgba(125, 90, 80, 0.65)',
     borderWidth: 2,
-    borderColor: 'rgba(125, 90, 80, 0.6)',
+    borderColor: 'rgba(255, 255, 255, 0.75)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  liquidGlassProfilePlaceholder: {
-    backgroundColor: 'rgba(125, 90, 80, 0.8)',
-    borderColor: 'rgba(125, 90, 80, 0.6)',
+  profileStatusDot: {
+    position: 'absolute',
+    right: -2,
+    bottom: -2,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#5E3DB3',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.9)',
+    shadowColor: '#5E3DB3',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35,
+    shadowRadius: 3,
+    elevation: 6,
+  },
+  greetingGloss: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 30,
   },
 
-  // Tip Container - Enhanced Liquid Glass
-  tipContainerWrapper: {
-    marginTop: 12,
-    borderRadius: 18,
-    overflow: 'hidden',
-    backgroundColor: 'rgba(168, 196, 193, 0.45)',
-  },
-  tipContainerBlur: {
-    borderRadius: 18,
-    overflow: 'hidden',
-  },
-  tipContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  // Tip Container
+  tipCard: {
+    marginTop: 14,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.55)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.7)',
     padding: 14,
-    backgroundColor: 'transparent',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+    overflow: 'hidden',
   },
-  liquidGlassTipContainer: {
-    borderRadius: 18,
+  tipGloss: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 20,
+  },
+  tipCardRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  tipIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#D6B28C',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  tipContent: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  tipLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#5E3DB3',
+    marginBottom: 4,
   },
   tipText: {
     fontSize: 14,
-    marginLeft: 12,
-    flex: 1,
-    lineHeight: 20,
+    lineHeight: 19,
     fontWeight: '500',
-  },
-  liquidGlassTipText: {
-    color: 'rgba(255, 255, 255, 0.95)',
+    color: '#6B4C3B',
   },
 
   // Overview Carousel
