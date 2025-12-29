@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, Text, SafeAreaView, StatusBar, Image, ActivityIndicator, RefreshControl, Alert, Platform } from 'react-native';
+import { StyleSheet, ScrollView, View, TouchableOpacity, Text, SafeAreaView, StatusBar, Image, ActivityIndicator, RefreshControl, Alert, Platform, StyleProp, ViewStyle } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { ThemedText } from '@/components/ThemedText';
@@ -50,9 +50,6 @@ export default function HomeScreen() {
   const [dailyTip, setDailyTip] = useState("");
   const [userName, setUserName] = useState("");
   const [recommendations, setRecommendations] = useState<LottiRecommendation[]>([]);
-  const [overviewIndex, setOverviewIndex] = useState(0);
-  const [overviewWidth, setOverviewWidth] = useState(0);
-  const [overviewCardHeight, setOverviewCardHeight] = useState<number>(DEFAULT_OVERVIEW_HEIGHT);
   const [refreshing, setRefreshing] = useState(false);
   const [showInputModal, setShowInputModal] = useState(false);
   const [selectedActivityType, setSelectedActivityType] = useState<'feeding' | 'diaper' | 'other'>('feeding');
@@ -61,14 +58,13 @@ export default function HomeScreen() {
   const [profileAvatarUrl, setProfileAvatarUrl] = useState<string | null>(null);
   const [showSleepModal, setShowSleepModal] = useState(false);
   const [sleepModalStart, setSleepModalStart] = useState(new Date());
-  const overviewScrollRef = useRef<ScrollView | null>(null);
-  const overviewIndexRef = useRef(0);
-  const overviewSlideCount = 2;
   const [recommendationImageRetryKey, setRecommendationImageRetryKey] = useState(0);
   const [recommendationImageErrorCount, setRecommendationImageErrorCount] = useState(0);
   const [recommendationImageFailed, setRecommendationImageFailed] = useState(false);
   const MAX_IMAGE_RETRIES = 1;
   const [productIndex, setProductIndex] = useState(0);
+  const [overviewCarouselWidth, setOverviewCarouselWidth] = useState(0);
+  const [overviewIndex, setOverviewIndex] = useState(0);
   const productIndexRef = useRef(0);
   const productRotationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const productRotationCycleRef = useRef(0);
@@ -124,7 +120,7 @@ export default function HomeScreen() {
   }, [rotationCandidates]);
 
   useEffect(() => {
-    if (overviewIndex !== 1 || rotationCandidates.length <= 1) {
+    if (rotationCandidates.length <= 1) {
       if (productRotationTimeoutRef.current) {
         clearTimeout(productRotationTimeoutRef.current);
         productRotationTimeoutRef.current = null;
@@ -156,7 +152,7 @@ export default function HomeScreen() {
         productRotationTimeoutRef.current = null;
       }
     };
-  }, [overviewIndex, rotationCandidates, PRODUCT_ROTATION_INITIAL_DELAY_MS, PRODUCT_ROTATION_INTERVAL_MS]);
+  }, [rotationCandidates, PRODUCT_ROTATION_INITIAL_DELAY_MS, PRODUCT_ROTATION_INTERVAL_MS]);
 
   useEffect(() => {
     if (user) {
@@ -168,31 +164,6 @@ export default function HomeScreen() {
       setIsLoading(false);
     }
   }, [user]);
-
-  useEffect(() => {
-    overviewIndexRef.current = overviewIndex;
-  }, [overviewIndex]);
-
-  useEffect(() => {
-    if (!overviewWidth) return;
-    const interval = setInterval(() => {
-      const nextIndex = (overviewIndexRef.current + 1) % overviewSlideCount;
-      overviewScrollRef.current?.scrollTo({ x: nextIndex * overviewWidth, animated: true });
-      overviewIndexRef.current = nextIndex;
-      setOverviewIndex(nextIndex);
-    }, 20000);
-
-    return () => clearInterval(interval);
-  }, [overviewWidth, overviewSlideCount]);
-
-  useEffect(() => {
-    if (overviewWidth > 0) {
-      overviewScrollRef.current?.scrollTo({
-        x: overviewIndexRef.current * overviewWidth,
-        animated: false,
-      });
-    }
-  }, [overviewWidth]);
 
   // Funktion für Pull-to-Refresh
   const onRefresh = async () => {
@@ -511,13 +482,6 @@ export default function HomeScreen() {
     }
   };
 
-  const handleSummaryLayout = (event: any) => {
-    const { height } = event.nativeEvent.layout;
-    if (height && height !== overviewCardHeight) {
-      setOverviewCardHeight(height);
-    }
-  };
-
   const handleFocusRecommendation = (recommendationId?: string | null) => {
     triggerHaptic();
     if (!recommendationId) {
@@ -609,43 +573,39 @@ export default function HomeScreen() {
   };
 
   // Rendere die Tagesübersicht
-  const renderDailySummary = (options?: { wrapperStyle?: any; onBlurLayout?: (event: any) => void }) => {
+  const renderDailySummary = (wrapperStyle?: StyleProp<ViewStyle>) => {
     const todayFeedings = getTodayFeedings();
     const todayDiaperChanges = getTodayDiaperChanges();
 
     return (
-      <View style={[styles.liquidGlassWrapper, options?.wrapperStyle]}>
-        <BlurView 
-          {...androidBlurProps}
-          intensity={22} 
-          tint={colorScheme === 'dark' ? 'dark' : 'light'} 
+      <TouchableOpacity
+        onPress={() => handleNavigate('/(tabs)/daily_old')}
+        activeOpacity={0.9}
+        style={[styles.liquidGlassWrapper, wrapperStyle]}
+      >
+        <BlurView
+          intensity={22}
+          tint={colorScheme === 'dark' ? 'dark' : 'light'}
           style={styles.liquidGlassBackground}
-          onLayout={options?.onBlurLayout}
         >
           <ThemedView style={[styles.summaryContainer, styles.liquidGlassContainer]} 
                       lightColor="rgba(255, 255, 255, 0.04)" 
                       darkColor="rgba(255, 255, 255, 0.02)">
             <View style={styles.sectionTitleContainer}>
-              <ThemedText style={[styles.sectionTitle, styles.liquidGlassText, { color: '#6B4C3B', fontSize: 22 }]}> 
+              <ThemedText style={[styles.sectionTitle, { color: '#7D5A50', fontSize: 22 }]}>
                 Dein Tag im Überblick
               </ThemedText>
-              <TouchableOpacity
-                style={styles.liquidGlassChevron}
-                onPress={() => handleNavigate('/(tabs)/daily_old')}
-                activeOpacity={0.8}
-              >
-                <IconSymbol name="chevron.right" size={20} color="#6B4C3B" />
-              </TouchableOpacity>
+              <View style={styles.liquidGlassChevron}>
+                <IconSymbol name="chevron.right" size={20} color="#7D5A50" />
+              </View>
             </View>
 
             <View style={styles.statsContainer}>
-              <TouchableOpacity
+              <View
                 style={[styles.statItem, styles.liquidGlassStatItem, {
                   backgroundColor: 'rgba(94, 61, 179, 0.13)',
                   borderColor: 'rgba(94, 61, 179, 0.35)'
                 }]}
-                onPress={() => handleStatPress('feeding')}
-                activeOpacity={0.8}
               >
                 <View style={styles.liquidGlassStatIcon}>
                   <Text style={styles.statEmoji}>🍼</Text>
@@ -657,15 +617,13 @@ export default function HomeScreen() {
                   textShadowRadius: 2,
                 }]}>{todayFeedings}</ThemedText>
                 <ThemedText style={[styles.statLabel, styles.liquidGlassStatLabel, { color: '#7D5A50' }]}>Essen</ThemedText>
-              </TouchableOpacity>
+              </View>
 
-              <TouchableOpacity
+              <View
                 style={[styles.statItem, styles.liquidGlassStatItem, {
                   backgroundColor: 'rgba(94, 61, 179, 0.08)',
                   borderColor: 'rgba(94, 61, 179, 0.22)'
                 }]}
-                onPress={() => handleStatPress('diaper')}
-                activeOpacity={0.8}
               >
                 <View style={styles.liquidGlassStatIcon}>
                   <Text style={styles.statEmoji}>💩</Text>
@@ -677,15 +635,13 @@ export default function HomeScreen() {
                   textShadowRadius: 2,
                 }]}>{todayDiaperChanges}</ThemedText>
                 <ThemedText style={[styles.statLabel, styles.liquidGlassStatLabel, { color: '#7D5A50' }]}>Windeln</ThemedText>
-              </TouchableOpacity>
+              </View>
 
-              <TouchableOpacity
+              <View
                 style={[styles.statItem, styles.liquidGlassStatItem, { 
                   backgroundColor: 'rgba(94, 61, 179, 0.05)', 
                   borderColor: 'rgba(94, 61, 179, 0.15)' 
                 }]}
-                onPress={() => handleStatPress('sleep')}
-                activeOpacity={0.8}
               >
                 <View style={styles.liquidGlassStatIcon}>
                   <Text style={styles.statEmoji}>💤</Text>
@@ -697,11 +653,11 @@ export default function HomeScreen() {
                   textShadowRadius: 2,
                 }]}>{formatMinutes(todaySleepMinutes)}</ThemedText>
                 <ThemedText style={[styles.statLabel, styles.liquidGlassStatLabel, { color: '#7D5A50' }]}>Schlaf</ThemedText>
-              </TouchableOpacity>
+              </View>
             </View>
           </ThemedView>
         </BlurView>
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -742,15 +698,14 @@ export default function HomeScreen() {
     setRecommendationImageFailed(false);
   };
 
-  const renderRecommendationCard = () => {
-    const cardHeightStyle = { height: overviewCardHeight };
+  const renderRecommendationCard = (wrapperStyle?: StyleProp<ViewStyle>) => {
+    const cardHeightStyle = { height: DEFAULT_OVERVIEW_HEIGHT };
     const buttonLabel = 'Mehr..';
     const showRecommendationImage = Boolean(featuredRecommendation?.image_url) && !recommendationImageFailed;
-    const isRecommendationActive = overviewIndex === 1;
     const imageUri = buildImageUri(featuredRecommendation?.image_url);
 
     return (
-      <View style={[styles.liquidGlassWrapper, styles.carouselCardWrapper]}>
+      <View style={[styles.liquidGlassWrapper, wrapperStyle]}>
         <BlurView
           {...androidBlurProps}
           intensity={22}
@@ -781,9 +736,9 @@ export default function HomeScreen() {
                 >
                   <View style={styles.recommendationRow}>
                     <View style={styles.recommendationImagePane}>
-                      {isRecommendationActive && showRecommendationImage ? (
+                      {showRecommendationImage ? (
                         <Image
-                          key={`${featuredRecommendation.id}-${recommendationImageRetryKey}-${overviewWidth}-${overviewCardHeight}`}
+                          key={`${featuredRecommendation.id}-${recommendationImageRetryKey}`}
                           source={{ uri: imageUri }}
                           style={styles.recommendationImage}
                           onLoadStart={handleRecommendationImageLoadStart}
@@ -836,63 +791,56 @@ export default function HomeScreen() {
     );
   };
 
-  const renderOverviewCarousel = () => {
-    const slideWidthStyle = { width: overviewWidth };
-
-    return (
-      <View
-        style={styles.overviewCarouselWrapper}
-        onLayout={(event) => {
-          const { width } = event.nativeEvent.layout;
-          if (width && width !== overviewWidth) {
-            setOverviewWidth(width);
-          }
+  const renderOverviewSection = () => (
+    <View
+      style={styles.overviewCarouselWrapper}
+      onLayout={(event) => {
+        const nextWidth = event.nativeEvent.layout.width;
+        if (nextWidth && nextWidth !== overviewCarouselWidth) {
+          setOverviewCarouselWidth(nextWidth);
+        }
+      }}
+    >
+      <ScrollView
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        style={styles.overviewCarousel}
+        decelerationRate="fast"
+        onMomentumScrollEnd={(event) => {
+          if (!overviewCarouselWidth) return;
+          const nextIndex = Math.round(event.nativeEvent.contentOffset.x / overviewCarouselWidth);
+          setOverviewIndex(nextIndex);
         }}
+        scrollEventThrottle={16}
       >
-        <ScrollView
-          ref={overviewScrollRef}
-          horizontal
-          pagingEnabled
-          showsHorizontalScrollIndicator={false}
-          decelerationRate="fast"
-          removeClippedSubviews={false}
-          style={styles.overviewCarousel}
-          contentContainerStyle={overviewWidth ? { width: overviewWidth * overviewSlideCount } : undefined}
-          scrollEnabled={overviewWidth > 0}
-          onMomentumScrollEnd={(event) => {
-            if (!overviewWidth) return;
-            const nextIndex = Math.round(event.nativeEvent.contentOffset.x / overviewWidth);
-            if (nextIndex !== overviewIndexRef.current) {
-              overviewIndexRef.current = nextIndex;
-              setOverviewIndex(nextIndex);
-            }
-          }}
-        >
-          <View style={[styles.overviewSlide, slideWidthStyle]}>
-            {renderDailySummary({
-              wrapperStyle: styles.carouselCardWrapper,
-              onBlurLayout: handleSummaryLayout,
-            })}
-          </View>
-          <View style={[styles.overviewSlide, slideWidthStyle]}>
-            {renderRecommendationCard()}
-          </View>
-        </ScrollView>
-
-        <View style={styles.carouselDots}>
-          {Array.from({ length: overviewSlideCount }, (_, index) => (
+        {[renderDailySummary(styles.carouselCardWrapper), renderRecommendationCard(styles.carouselCardWrapper)].map(
+          (slide, index) => (
             <View
-              key={`overview-dot-${index}`}
+              key={`overview-slide-${index}`}
               style={[
-                styles.carouselDot,
-                overviewIndex === index && styles.carouselDotActive,
+                styles.overviewSlide,
+                overviewCarouselWidth ? { width: overviewCarouselWidth } : null,
               ]}
-            />
-          ))}
-        </View>
+            >
+              {slide}
+            </View>
+          )
+        )}
+      </ScrollView>
+      <View style={styles.carouselDots}>
+        {[0, 1].map((index) => (
+          <View
+            key={`overview-dot-${index}`}
+            style={[
+              styles.carouselDot,
+              overviewIndex === index && styles.carouselDotActive,
+            ]}
+          />
+        ))}
       </View>
-    );
-  };
+    </View>
+  );
 
   // Rendere die Schnellzugriff-Karten
   const renderQuickAccessCards = () => {
@@ -1058,7 +1006,7 @@ export default function HomeScreen() {
             }
           >
             {renderGreetingSection()}
-            {renderOverviewCarousel()}
+            {renderOverviewSection()}
             {renderQuickAccessCards()}
           </ScrollView>
         )}

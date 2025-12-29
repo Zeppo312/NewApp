@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, View, SafeAreaView, StatusBar, TouchableOpacity, ScrollView, ActivityIndicator, Alert, RefreshControl, Platform, ToastAndroid, Animated, Text, Image } from 'react-native';
+import { StyleSheet, View, SafeAreaView, StatusBar, TouchableOpacity, ScrollView, ActivityIndicator, Alert, RefreshControl, Platform, ToastAndroid, Animated, Text, Image, StyleProp, ViewStyle } from 'react-native';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { ThemedText } from '@/components/ThemedText';
@@ -17,6 +17,7 @@ import { pregnancySymptoms } from '@/constants/PregnancySymptoms';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 
 // Tägliche Tipps für Schwangere
 const dailyTips = [
@@ -69,18 +70,28 @@ export default function PregnancyHomeScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [userName, setUserName] = useState('');
   const [profileAvatarUrl, setProfileAvatarUrl] = useState<string | null>(null);
+  const [dailyTip, setDailyTip] = useState('');
   const [currentWeek, setCurrentWeek] = useState<number | null>(null);
   const [currentDay, setCurrentDay] = useState<number | null>(null);
   const [debugCounter, setDebugCounter] = useState<number>(0);
   const [refreshing, setRefreshing] = useState(false);
+  const [overviewCarouselWidth, setOverviewCarouselWidth] = useState(0);
+  const [overviewIndex, setOverviewIndex] = useState(0);
 
   // Animation für Erfolgsmeldung
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const [updateSuccess, setUpdateSuccess] = useState(false);
 
+  const androidBlurProps =
+    Platform.OS === 'android'
+      ? { experimentalBlurMethod: 'dimezisBlurView' as const, blurReductionFactor: 1 }
+      : {};
+
   useEffect(() => {
     if (user) {
       loadUserData();
+      const randomTip = dailyTips[Math.floor(Math.random() * dailyTips.length)];
+      setDailyTip(randomTip);
     }
   }, [user]);
 
@@ -361,6 +372,8 @@ export default function PregnancyHomeScreen() {
     
     try {
       await loadUserData();
+      const randomTip = dailyTips[Math.floor(Math.random() * dailyTips.length)];
+      setDailyTip(randomTip);
       
       // Plattformspezifisches Feedback
       if (Platform.OS === 'android') {
@@ -375,6 +388,220 @@ export default function PregnancyHomeScreen() {
       setRefreshing(false);
     }
   };
+
+  const formatDate = () => {
+    const options: Intl.DateTimeFormatOptions = {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    };
+    return new Date().toLocaleDateString('de-DE', options);
+  };
+
+  const renderPregnancyOverviewCard = (wrapperStyle?: StyleProp<ViewStyle>) => (
+    <TouchableOpacity
+      onPress={() => router.push('/(tabs)/countdown')}
+      activeOpacity={0.9}
+      style={[styles.liquidGlassWrapper, wrapperStyle]}
+    >
+      <BlurView
+        intensity={22}
+        tint={colorScheme === 'dark' ? 'dark' : 'light'}
+        style={styles.liquidGlassBackground}
+      >
+        <ThemedView
+          style={[styles.summaryContainer, styles.liquidGlassContainer]}
+          lightColor="rgba(255, 255, 255, 0.04)"
+          darkColor="rgba(255, 255, 255, 0.02)"
+        >
+          <View style={styles.sectionTitleContainer}>
+            <ThemedText style={[styles.sectionTitle, { color: '#7D5A50', fontSize: 22 }]}>
+              Dein Tag im Überblick
+            </ThemedText>
+            <View style={styles.liquidGlassChevron}>
+              <IconSymbol name="chevron.right" size={20} color="#7D5A50" />
+            </View>
+          </View>
+
+          <View style={styles.statsContainer}>
+            <View style={[styles.statItem, styles.liquidGlassStatItem, {
+              backgroundColor: 'rgba(94, 61, 179, 0.13)',
+              borderColor: 'rgba(94, 61, 179, 0.35)'
+            }]}>
+              <View style={styles.liquidGlassStatIcon}>
+                <Text style={styles.statEmoji}>📅</Text>
+              </View>
+              <ThemedText style={[styles.statValue, styles.liquidGlassStatValue, {
+                color: '#5E3DB3',
+                textShadowColor: 'rgba(255, 255, 255, 0.8)',
+                textShadowOffset: { width: 0, height: 1 },
+                textShadowRadius: 2,
+              }]}>{currentWeek || 0}</ThemedText>
+              <ThemedText style={[styles.statLabel, styles.liquidGlassStatLabel, { color: '#7D5A50' }]}>SSW</ThemedText>
+            </View>
+
+            <View style={[styles.statItem, styles.liquidGlassStatItem, {
+              backgroundColor: 'rgba(94, 61, 179, 0.08)',
+              borderColor: 'rgba(94, 61, 179, 0.22)'
+            }]}>
+              <View style={styles.liquidGlassStatIcon}>
+                <Text style={styles.statEmoji}>🔢</Text>
+              </View>
+              <ThemedText style={[styles.statValue, styles.liquidGlassStatValue, {
+                color: '#5E3DB3',
+                textShadowColor: 'rgba(255, 255, 255, 0.8)',
+                textShadowOffset: { width: 0, height: 1 },
+                textShadowRadius: 2,
+              }]}>
+                {currentWeek && currentWeek <= 13
+                  ? "1"
+                  : currentWeek && currentWeek <= 26
+                    ? "2"
+                    : "3"}
+              </ThemedText>
+              <ThemedText style={[styles.statLabel, styles.liquidGlassStatLabel, { color: '#7D5A50' }]}>Trimester</ThemedText>
+            </View>
+
+            <View style={[styles.statItem, styles.liquidGlassStatItem, {
+              backgroundColor: 'rgba(94, 61, 179, 0.05)',
+              borderColor: 'rgba(94, 61, 179, 0.15)'
+            }]}>
+              <View style={styles.liquidGlassStatIcon}>
+                <Text style={styles.statEmoji}>📊</Text>
+              </View>
+              <ThemedText style={[styles.statValue, styles.liquidGlassStatValue, {
+                color: '#5E3DB3',
+                textShadowColor: 'rgba(255, 255, 255, 0.8)',
+                textShadowOffset: { width: 0, height: 1 },
+                textShadowRadius: 2,
+              }]}>
+                {currentWeek
+                  ? Math.min(100, Math.round((currentWeek / 40) * 100))
+                  : 0}%
+              </ThemedText>
+              <ThemedText style={[styles.statLabel, styles.liquidGlassStatLabel, { color: '#7D5A50' }]}>Fortschritt</ThemedText>
+            </View>
+          </View>
+        </ThemedView>
+      </BlurView>
+    </TouchableOpacity>
+  );
+
+  const renderPostPregnancyCard = (wrapperStyle?: StyleProp<ViewStyle>) => (
+    <View style={[styles.liquidGlassWrapper, wrapperStyle]}>
+      <BlurView
+        intensity={22}
+        tint={colorScheme === 'dark' ? 'dark' : 'light'}
+        style={styles.liquidGlassBackground}
+      >
+        <ThemedView
+          style={[styles.postPregnancyContainer, styles.liquidGlassContainer]}
+          lightColor="rgba(255, 255, 255, 0.04)"
+          darkColor="rgba(255, 255, 255, 0.02)"
+        >
+          <ThemedText style={[styles.sectionTitle, { color: '#7D5A50', fontSize: 22, fontWeight: '700', letterSpacing: -0.3 }]}>
+            Nach der Geburt
+          </ThemedText>
+
+          <View style={styles.postPregnancyContent}>
+            <View style={styles.postPregnancyImageContainer}>
+              <IconSymbol name="figure.and.child.holdinghands" size={60} color="#9DBEBB" />
+            </View>
+
+            <ThemedText style={[styles.postPregnancyDescription, { color: '#7D5A50', fontWeight: '500' }]}>
+              Lotti Baby begleitet dich auch nach der Geburt mit umfangreichen Tracking-Features für dein Baby.
+            </ThemedText>
+
+            <View style={styles.postPregnancyFeatures}>
+              <View style={[styles.postPregnancyFeatureItem, styles.liquidGlassFeatureItem, {
+                backgroundColor: 'rgba(94, 61, 179, 0.13)',
+                borderColor: 'rgba(94, 61, 179, 0.35)'
+              }]}>
+                <IconSymbol name="chart.line.uptrend.xyaxis" size={22} color="#5E3DB3" />
+                <ThemedText style={[styles.featureText, { color: '#7D5A50', fontWeight: '500' }]}>Wachstumstracker</ThemedText>
+              </View>
+
+              <View style={[styles.postPregnancyFeatureItem, styles.liquidGlassFeatureItem, {
+                backgroundColor: 'rgba(94, 61, 179, 0.08)',
+                borderColor: 'rgba(94, 61, 179, 0.22)'
+              }]}>
+                <IconSymbol name="calendar.badge.clock" size={22} color="#5E3DB3" />
+                <ThemedText style={[styles.featureText, { color: '#7D5A50', fontWeight: '500' }]}>Schlafprotokolle</ThemedText>
+              </View>
+
+              <View style={[styles.postPregnancyFeatureItem, styles.liquidGlassFeatureItem, {
+                backgroundColor: 'rgba(94, 61, 179, 0.05)',
+                borderColor: 'rgba(94, 61, 179, 0.15)'
+              }]}>
+                <IconSymbol name="fork.knife" size={22} color="#5E3DB3" />
+                <ThemedText style={[styles.featureText, { color: '#7D5A50', fontWeight: '500' }]}>Food Diary</ThemedText>
+              </View>
+
+              <View style={[styles.postPregnancyFeatureItem, styles.liquidGlassFeatureItem, {
+                backgroundColor: 'rgba(94, 61, 179, 0.10)',
+                borderColor: 'rgba(94, 61, 179, 0.25)'
+              }]}>
+                <IconSymbol name="photo.on.rectangle.angled" size={22} color="#5E3DB3" />
+                <ThemedText style={[styles.featureText, { color: '#7D5A50', fontWeight: '500' }]}>Meilenstein-Fotos</ThemedText>
+              </View>
+            </View>
+          </View>
+        </ThemedView>
+      </BlurView>
+    </View>
+  );
+
+  const renderOverviewSection = () => (
+    <View
+      style={styles.overviewCarouselWrapper}
+      onLayout={(event) => {
+        const nextWidth = event.nativeEvent.layout.width;
+        if (nextWidth && nextWidth !== overviewCarouselWidth) {
+          setOverviewCarouselWidth(nextWidth);
+        }
+      }}
+    >
+      <ScrollView
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        style={styles.overviewCarousel}
+        decelerationRate="fast"
+        onMomentumScrollEnd={(event) => {
+          if (!overviewCarouselWidth) return;
+          const nextIndex = Math.round(event.nativeEvent.contentOffset.x / overviewCarouselWidth);
+          setOverviewIndex(nextIndex);
+        }}
+        scrollEventThrottle={16}
+      >
+        {[renderPregnancyOverviewCard(styles.carouselCardWrapper), renderPostPregnancyCard(styles.carouselCardWrapper)].map(
+          (slide, index) => (
+            <View
+              key={`overview-slide-${index}`}
+              style={[
+                styles.overviewSlide,
+                overviewCarouselWidth ? { width: overviewCarouselWidth } : null,
+              ]}
+            >
+              {slide}
+            </View>
+          )
+        )}
+      </ScrollView>
+      <View style={styles.carouselDots}>
+        {[0, 1].map((index) => (
+          <View
+            key={`overview-dot-${index}`}
+            style={[
+              styles.carouselDot,
+              overviewIndex === index && styles.carouselDotActive,
+            ]}
+          />
+        ))}
+      </View>
+    </View>
+  );
 
   return (
     <ThemedBackground style={styles.backgroundImage}>
@@ -408,53 +635,69 @@ export default function PregnancyHomeScreen() {
           }
         >
           {/* Begrüßung - Liquid Glass Design */}
-          <View style={styles.liquidGlassWrapper}>
-            <BlurView 
-              intensity={22} 
-              tint={colorScheme === 'dark' ? 'dark' : 'light'} 
-              style={styles.liquidGlassBackground}
+          <View style={[styles.liquidGlassWrapper, styles.greetingCardWrapper]}>
+            <BlurView
+              {...androidBlurProps}
+              intensity={22}
+              tint={colorScheme === 'dark' ? 'dark' : 'light'}
+              style={[styles.liquidGlassBackground, styles.greetingGlassBackground]}
             >
-              <ThemedView style={[styles.greetingContainer, styles.liquidGlassContainer]} 
-                         lightColor="rgba(255, 255, 255, 0.04)" 
-                         darkColor="rgba(255, 255, 255, 0.02)">
+              <ThemedView
+                style={[styles.greetingContainer, styles.liquidGlassContainer, styles.greetingGlassContainer]}
+                lightColor="rgba(255, 255, 255, 0.04)"
+                darkColor="rgba(255, 255, 255, 0.02)"
+              >
+                <LinearGradient
+                  pointerEvents="none"
+                  colors={['rgba(255, 255, 255, 0.95)', 'rgba(255, 255, 255, 0.15)', 'rgba(255, 255, 255, 0)']}
+                  locations={[0, 0.45, 1]}
+                  start={{ x: 0.15, y: 0.0 }}
+                  end={{ x: 0.85, y: 1.0 }}
+                  style={styles.greetingGloss}
+                />
+
                 <View style={styles.greetingHeader}>
                   <View>
-                    <ThemedText style={[styles.greeting, { color: '#7D5A50' }]}>
-                      Hallo {userName ? userName : 'Mama'}!
+                    <ThemedText style={[styles.greeting, styles.liquidGlassText, { color: '#6B4C3B' }]}>
+                      Hallo {userName || 'Mama'}!
                     </ThemedText>
-                    <ThemedText style={[styles.dateText, { color: '#7D5A50' }]}>
-                      {new Date().toLocaleDateString('de-DE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                    <ThemedText style={[styles.dateText, styles.liquidGlassSecondaryText, { color: '#6B4C3B' }]}>
+                      {formatDate()}
                     </ThemedText>
                   </View>
 
-                  {user && (
-                    profileAvatarUrl ? (
-                      <View style={styles.profileImage}>
-                        <Image source={{ uri: profileAvatarUrl }} style={styles.profileAvatarImage} />
+                  <View style={styles.profileBadge}>
+                    {profileAvatarUrl ? (
+                      <View style={styles.profileImageWrapper}>
+                        <Image source={{ uri: profileAvatarUrl }} style={styles.profileImage} />
                       </View>
                     ) : (
-                      <View style={[styles.profileImage, styles.liquidGlassProfilePlaceholder]}>
+                      <View style={styles.profilePlaceholder}>
                         <IconSymbol name="person.fill" size={30} color="#FFFFFF" />
                       </View>
-                    )
-                  )}
+                    )}
+                    <View style={styles.profileStatusDot} />
+                  </View>
                 </View>
 
-                <View style={styles.tipContainerWrapper}>
-                  <BlurView 
-                    intensity={14} 
-                    tint={colorScheme === 'dark' ? 'dark' : 'light'} 
-                    style={styles.tipContainerBlur}
-                  >
-                    <ThemedView style={[styles.tipContainer, styles.liquidGlassTipContainer]} 
-                               lightColor="rgba(168, 196, 193, 0.45)" 
-                               darkColor="rgba(168, 196, 193, 0.45)">
-                      <IconSymbol name="lightbulb.fill" size={20} color={Colors.light.success} />
-                      <ThemedText style={[styles.tipText, { color: '#7D5A50' }]}>
-                        {dailyTips[Math.floor(Math.random() * dailyTips.length)]}
-                      </ThemedText>
-                    </ThemedView>
-                  </BlurView>
+                <View style={styles.tipCard}>
+                  <LinearGradient
+                    pointerEvents="none"
+                    colors={['rgba(255, 255, 255, 0.9)', 'rgba(255, 255, 255, 0.1)']}
+                    locations={[0, 1]}
+                    start={{ x: 0.2, y: 0 }}
+                    end={{ x: 0.8, y: 1 }}
+                    style={styles.tipGloss}
+                  />
+                  <View style={styles.tipCardRow}>
+                    <View style={styles.tipIconWrap}>
+                      <IconSymbol name="lightbulb.fill" size={18} color="#D6B28C" />
+                    </View>
+                    <View style={styles.tipContent}>
+                      <ThemedText style={styles.tipLabel}>Tipp des Tages</ThemedText>
+                      <ThemedText style={styles.tipText}>{dailyTip}</ThemedText>
+                    </View>
+                  </View>
                 </View>
               </ThemedView>
             </BlurView>
@@ -492,150 +735,7 @@ export default function PregnancyHomeScreen() {
             </ThemedView>
           )}
 
-          {/* Schwangerschaftsübersicht - Liquid Glass Design */}
-          <TouchableOpacity
-            onPress={() => router.push('/(tabs)/countdown')}
-            activeOpacity={0.9}
-            style={styles.liquidGlassWrapper}
-          >
-            <BlurView 
-              intensity={22} 
-              tint={colorScheme === 'dark' ? 'dark' : 'light'} 
-              style={styles.liquidGlassBackground}
-            >
-              <ThemedView style={[styles.summaryContainer, styles.liquidGlassContainer]} 
-                         lightColor="rgba(255, 255, 255, 0.04)" 
-                         darkColor="rgba(255, 255, 255, 0.02)">
-                <View style={styles.sectionTitleContainer}>
-                  <ThemedText style={[styles.sectionTitle, { color: '#7D5A50', fontSize: 22 }]}>
-                    Dein Tag im Überblick
-                  </ThemedText>
-                  <View style={styles.liquidGlassChevron}>
-                    <IconSymbol name="chevron.right" size={20} color="#7D5A50" />
-                  </View>
-                </View>
-
-                <View style={styles.statsContainer}>
-                  <View style={[styles.statItem, styles.liquidGlassStatItem, { 
-                    backgroundColor: 'rgba(94, 61, 179, 0.13)', 
-                    borderColor: 'rgba(94, 61, 179, 0.35)' 
-                  }]}>
-                    <View style={styles.liquidGlassStatIcon}>
-                      <Text style={styles.statEmoji}>📅</Text>
-                    </View>
-                    <ThemedText style={[styles.statValue, styles.liquidGlassStatValue, { 
-                      color: '#5E3DB3',
-                      textShadowColor: 'rgba(255, 255, 255, 0.8)',
-                      textShadowOffset: { width: 0, height: 1 },
-                      textShadowRadius: 2,
-                    }]}>{currentWeek || 0}</ThemedText>
-                    <ThemedText style={[styles.statLabel, styles.liquidGlassStatLabel, { color: '#7D5A50' }]}>SSW</ThemedText>
-                  </View>
-
-                  <View style={[styles.statItem, styles.liquidGlassStatItem, { 
-                    backgroundColor: 'rgba(94, 61, 179, 0.08)', 
-                    borderColor: 'rgba(94, 61, 179, 0.22)' 
-                  }]}>
-                    <View style={styles.liquidGlassStatIcon}>
-                      <Text style={styles.statEmoji}>🔢</Text>
-                    </View>
-                    <ThemedText style={[styles.statValue, styles.liquidGlassStatValue, { 
-                      color: '#5E3DB3',
-                      textShadowColor: 'rgba(255, 255, 255, 0.8)',
-                      textShadowOffset: { width: 0, height: 1 },
-                      textShadowRadius: 2,
-                    }]}>
-                      {currentWeek && currentWeek <= 13 
-                        ? "1" 
-                        : currentWeek && currentWeek <= 26 
-                          ? "2" 
-                          : "3"}
-                    </ThemedText>
-                    <ThemedText style={[styles.statLabel, styles.liquidGlassStatLabel, { color: '#7D5A50' }]}>Trimester</ThemedText>
-                  </View>
-
-                  <View style={[styles.statItem, styles.liquidGlassStatItem, { 
-                    backgroundColor: 'rgba(94, 61, 179, 0.05)', 
-                    borderColor: 'rgba(94, 61, 179, 0.15)' 
-                  }]}>
-                    <View style={styles.liquidGlassStatIcon}>
-                      <Text style={styles.statEmoji}>📊</Text>
-                    </View>
-                    <ThemedText style={[styles.statValue, styles.liquidGlassStatValue, { 
-                      color: '#5E3DB3',
-                      textShadowColor: 'rgba(255, 255, 255, 0.8)',
-                      textShadowOffset: { width: 0, height: 1 },
-                      textShadowRadius: 2,
-                    }]}>
-                      {currentWeek 
-                        ? Math.min(100, Math.round((currentWeek / 40) * 100)) 
-                        : 0}%
-                    </ThemedText>
-                    <ThemedText style={[styles.statLabel, styles.liquidGlassStatLabel, { color: '#7D5A50' }]}>Fortschritt</ThemedText>
-                  </View>
-                </View>
-              </ThemedView>
-            </BlurView>
-          </TouchableOpacity>
-
-          {/* Post-Pregnancy Preview Section - Liquid Glass Design */}
-          <View style={styles.liquidGlassWrapper}>
-            <BlurView 
-              intensity={22} 
-              tint={colorScheme === 'dark' ? 'dark' : 'light'} 
-              style={styles.liquidGlassBackground}
-            >
-              <ThemedView style={[styles.postPregnancyContainer, styles.liquidGlassContainer]} 
-                         lightColor="rgba(255, 255, 255, 0.04)" 
-                         darkColor="rgba(255, 255, 255, 0.02)">
-                <ThemedText style={[styles.sectionTitle, { color: '#7D5A50', fontSize: 22, fontWeight: '700', letterSpacing: -0.3 }]}>Nach der Geburt</ThemedText>
-                
-                <View style={styles.postPregnancyContent}>
-                  <View style={styles.postPregnancyImageContainer}>
-                    <IconSymbol name="figure.and.child.holdinghands" size={60} color="#9DBEBB" />
-                  </View>
-                  
-                  <ThemedText style={[styles.postPregnancyDescription, { color: '#7D5A50', fontWeight: '500' }]}>
-                    Lotti Baby begleitet dich auch nach der Geburt mit umfangreichen Tracking-Features für dein Baby.
-                  </ThemedText>
-                  
-                  <View style={styles.postPregnancyFeatures}>
-                    <View style={[styles.postPregnancyFeatureItem, styles.liquidGlassFeatureItem, { 
-                      backgroundColor: 'rgba(94, 61, 179, 0.13)', 
-                      borderColor: 'rgba(94, 61, 179, 0.35)' 
-                    }]}>
-                      <IconSymbol name="chart.line.uptrend.xyaxis" size={22} color="#5E3DB3" />
-                      <ThemedText style={[styles.featureText, { color: '#7D5A50', fontWeight: '500' }]}>Wachstumstracker</ThemedText>
-                    </View>
-                    
-                    <View style={[styles.postPregnancyFeatureItem, styles.liquidGlassFeatureItem, { 
-                      backgroundColor: 'rgba(94, 61, 179, 0.08)', 
-                      borderColor: 'rgba(94, 61, 179, 0.22)' 
-                    }]}>
-                      <IconSymbol name="calendar.badge.clock" size={22} color="#5E3DB3" />
-                      <ThemedText style={[styles.featureText, { color: '#7D5A50', fontWeight: '500' }]}>Schlafprotokolle</ThemedText>
-                    </View>
-                    
-                    <View style={[styles.postPregnancyFeatureItem, styles.liquidGlassFeatureItem, { 
-                      backgroundColor: 'rgba(94, 61, 179, 0.05)', 
-                      borderColor: 'rgba(94, 61, 179, 0.15)' 
-                    }]}>
-                      <IconSymbol name="fork.knife" size={22} color="#5E3DB3" />
-                      <ThemedText style={[styles.featureText, { color: '#7D5A50', fontWeight: '500' }]}>Food Diary</ThemedText>
-                    </View>
-                    
-                    <View style={[styles.postPregnancyFeatureItem, styles.liquidGlassFeatureItem, { 
-                      backgroundColor: 'rgba(94, 61, 179, 0.10)', 
-                      borderColor: 'rgba(94, 61, 179, 0.25)' 
-                    }]}>
-                      <IconSymbol name="photo.on.rectangle.angled" size={22} color="#5E3DB3" />
-                      <ThemedText style={[styles.featureText, { color: '#7D5A50', fontWeight: '500' }]}>Meilenstein-Fotos</ThemedText>
-                    </View>
-                  </View>
-                </View>
-              </ThemedView>
-            </BlurView>
-          </View>
+          {renderOverviewSection()}
 
           {/* Schnellzugriff-Cards - Liquid Glass Design */}
           <View style={styles.cardsSection}>
@@ -788,6 +888,35 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
 
+  // Overview Carousel
+  overviewCarouselWrapper: {
+    marginBottom: 16,
+  },
+  overviewCarousel: {
+    width: '100%',
+  },
+  overviewSlide: {
+    width: '100%',
+  },
+  carouselCardWrapper: {
+    marginBottom: 0,
+  },
+  carouselDots: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 10,
+  },
+  carouselDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(107, 76, 59, 0.25)',
+    marginHorizontal: 4,
+  },
+  carouselDotActive: {
+    backgroundColor: '#6B4C3B',
+  },
+
   // Liquid Glass styles - Core Components
   liquidGlassWrapper: {
     position: 'relative',
@@ -811,78 +940,149 @@ const styles = StyleSheet.create({
     shadowRadius: 14,
     elevation: 8,
   },
+  greetingCardWrapper: {
+    borderRadius: 30,
+    overflow: 'hidden',
+  },
+  greetingGlassBackground: {
+    borderRadius: 30,
+  },
+  greetingGlassContainer: {
+    borderRadius: 30,
+  },
   greetingContainer: {
-    paddingTop: 24,
-    paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingTop: 26,
+    paddingHorizontal: 24,
+    paddingBottom: 22,
     backgroundColor: 'transparent',
+    position: 'relative',
   },
   greetingHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 16,
   },
   greeting: {
-    fontSize: 28,
+    fontSize: 30,
     fontWeight: '700',
-    marginBottom: 6,
+    marginBottom: 4,
     letterSpacing: -0.5,
-    lineHeight: 34,
+    lineHeight: 36,
   },
   dateText: {
-    fontSize: 16,
+    fontSize: 14,
     opacity: 0.8,
     fontWeight: '500',
+    letterSpacing: 0.2,
+  },
+  profileBadge: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  profileImageWrapper: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    backgroundColor: 'rgba(255, 255, 255, 0.6)',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.75)',
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   profileImage: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    overflow: 'hidden',
-  },
-  liquidGlassProfilePlaceholder: {
-    backgroundColor: 'rgba(125, 90, 80, 0.8)',
-    borderColor: 'rgba(125, 90, 80, 0.6)',
-  },
-  profileAvatarImage: {
     width: '100%',
     height: '100%',
-    resizeMode: 'cover',
-    borderRadius: 32,
+    borderRadius: 34,
+  },
+  profilePlaceholder: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    backgroundColor: 'rgba(125, 90, 80, 0.65)',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.75)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileStatusDot: {
+    position: 'absolute',
+    right: -2,
+    bottom: -2,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#5E3DB3',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.9)',
+    shadowColor: '#5E3DB3',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35,
+    shadowRadius: 3,
+    elevation: 6,
+  },
+  greetingGloss: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 30,
   },
 
-  // Tip Container - Enhanced Liquid Glass
-  tipContainerWrapper: {
-    marginTop: 12,
-    borderRadius: 18,
-    overflow: 'hidden',
-    backgroundColor: 'rgba(168, 196, 193, 0.45)',
-  },
-  tipContainerBlur: {
-    borderRadius: 18,
-    overflow: 'hidden',
-  },
-  tipContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  // Tip Container
+  tipCard: {
+    marginTop: 14,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.55)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.7)',
     padding: 14,
-    backgroundColor: 'transparent',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+    overflow: 'hidden',
   },
-  liquidGlassTipContainer: {
-    borderRadius: 18,
+  tipGloss: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 20,
+  },
+  tipCardRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  tipIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#D6B28C',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  tipContent: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  tipLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#5E3DB3',
+    marginBottom: 4,
   },
   tipText: {
     fontSize: 14,
-    marginLeft: 12,
-    flex: 1,
-    lineHeight: 20,
+    lineHeight: 19,
+    fontWeight: '500',
+    color: '#6B4C3B',
+  },
+  liquidGlassText: {
+    color: 'rgba(85, 60, 55, 0.95)',
+    fontWeight: '700',
+  },
+  liquidGlassSecondaryText: {
+    color: 'rgba(255, 255, 255, 0.8)',
     fontWeight: '500',
   },
   countdownContainer: {
