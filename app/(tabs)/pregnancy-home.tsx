@@ -10,6 +10,7 @@ import CountdownTimer from '@/components/CountdownTimer';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase, getDueDateWithLinkedUsers } from '@/lib/supabase';
+import { getRecommendations, LottiRecommendation } from '@/lib/supabase/recommendations';
 import { pregnancyWeekInfo } from '@/constants/PregnancyWeekInfo';
 import { pregnancyMotherInfo } from '@/constants/PregnancyMotherInfo';
 import { pregnancyPartnerInfo } from '@/constants/PregnancyPartnerInfo';
@@ -65,6 +66,7 @@ export default function PregnancyHomeScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { isBabyBorn, setIsBabyBorn } = useBabyStatus();
+  const DEFAULT_OVERVIEW_HEIGHT = 230;
 
   const [dueDate, setDueDate] = useState<Date | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -77,6 +79,9 @@ export default function PregnancyHomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [overviewCarouselWidth, setOverviewCarouselWidth] = useState(0);
   const [overviewIndex, setOverviewIndex] = useState(0);
+  const [overviewSummaryHeight, setOverviewSummaryHeight] = useState<number | null>(null);
+  const [recommendations, setRecommendations] = useState<LottiRecommendation[]>([]);
+  const [recommendationImageFailed, setRecommendationImageFailed] = useState(false);
 
   // Animation für Erfolgsmeldung
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -86,6 +91,25 @@ export default function PregnancyHomeScreen() {
     Platform.OS === 'android'
       ? { experimentalBlurMethod: 'dimezisBlurView' as const, blurReductionFactor: 1 }
       : {};
+
+  const featuredRecommendation = recommendations[0] ?? null;
+
+  const getPreviewText = (value?: string | null, limit = 10) => {
+    if (!value) return '';
+    const words = value.trim().split(/\s+/).filter(Boolean);
+    if (words.length <= limit) return value.trim();
+    return `${words.slice(0, limit).join(' ')}...`;
+  };
+
+  useEffect(() => {
+    if (featuredRecommendation?.image_url) {
+      Image.prefetch(featuredRecommendation.image_url).catch(() => {});
+    }
+  }, [featuredRecommendation?.image_url]);
+
+  useEffect(() => {
+    setRecommendationImageFailed(false);
+  }, [featuredRecommendation?.id, featuredRecommendation?.image_url]);
 
   useEffect(() => {
     if (user) {
@@ -334,6 +358,13 @@ export default function PregnancyHomeScreen() {
         setCurrentDay(null);
       }
 
+      try {
+        const recommendationData = await getRecommendations();
+        setRecommendations(recommendationData);
+      } catch (error) {
+        console.error('Error loading recommendations:', error);
+      }
+
     } catch (error) {
       console.error('Fehler beim Laden der Benutzerdaten:', error);
     } finally {
@@ -399,11 +430,32 @@ export default function PregnancyHomeScreen() {
     return new Date().toLocaleDateString('de-DE', options);
   };
 
+  const handleFocusRecommendation = (recommendationId?: string | null) => {
+    if (!recommendationId) {
+      router.push('/lottis-empfehlungen');
+      return;
+    }
+    router.push({
+      pathname: '/lottis-empfehlungen',
+      params: { focusId: recommendationId },
+    });
+  };
+
+  const handleRecommendationImageError = () => {
+    setRecommendationImageFailed(true);
+  };
+
   const renderPregnancyOverviewCard = (wrapperStyle?: StyleProp<ViewStyle>) => (
     <TouchableOpacity
       onPress={() => router.push('/(tabs)/countdown')}
       activeOpacity={0.9}
       style={[styles.liquidGlassWrapper, wrapperStyle]}
+      onLayout={(event) => {
+        const nextHeight = Math.round(event.nativeEvent.layout.height);
+        if (nextHeight && nextHeight !== overviewSummaryHeight) {
+          setOverviewSummaryHeight(nextHeight);
+        }
+      }}
     >
       <BlurView
         intensity={22}
@@ -488,69 +540,89 @@ export default function PregnancyHomeScreen() {
     </TouchableOpacity>
   );
 
-  const renderPostPregnancyCard = (wrapperStyle?: StyleProp<ViewStyle>) => (
-    <View style={[styles.liquidGlassWrapper, wrapperStyle]}>
-      <BlurView
-        intensity={22}
-        tint={colorScheme === 'dark' ? 'dark' : 'light'}
-        style={styles.liquidGlassBackground}
-      >
-        <ThemedView
-          style={[styles.postPregnancyContainer, styles.liquidGlassContainer]}
-          lightColor="rgba(255, 255, 255, 0.04)"
-          darkColor="rgba(255, 255, 255, 0.02)"
+  const renderRecommendationCard = (wrapperStyle?: StyleProp<ViewStyle>) => {
+    const cardHeightStyle = { height: overviewSummaryHeight ?? DEFAULT_OVERVIEW_HEIGHT };
+    const showRecommendationImage = Boolean(featuredRecommendation?.image_url) && !recommendationImageFailed;
+    const buttonLabel = 'Mehr';
+
+    return (
+      <View style={[styles.liquidGlassWrapper, wrapperStyle, cardHeightStyle]}>
+        <BlurView
+          intensity={22}
+          tint={colorScheme === 'dark' ? 'dark' : 'light'}
+          style={[styles.liquidGlassBackground, cardHeightStyle]}
         >
-          <ThemedText style={[styles.sectionTitle, { color: '#7D5A50', fontSize: 22, fontWeight: '700', letterSpacing: -0.3 }]}>
-            Nach der Geburt
-          </ThemedText>
-
-          <View style={styles.postPregnancyContent}>
-            <View style={styles.postPregnancyImageContainer}>
-              <IconSymbol name="figure.and.child.holdinghands" size={60} color="#9DBEBB" />
-            </View>
-
-            <ThemedText style={[styles.postPregnancyDescription, { color: '#7D5A50', fontWeight: '500' }]}>
-              Lotti Baby begleitet dich auch nach der Geburt mit umfangreichen Tracking-Features für dein Baby.
-            </ThemedText>
-
-            <View style={styles.postPregnancyFeatures}>
-              <View style={[styles.postPregnancyFeatureItem, styles.liquidGlassFeatureItem, {
-                backgroundColor: 'rgba(94, 61, 179, 0.13)',
-                borderColor: 'rgba(94, 61, 179, 0.35)'
-              }]}>
-                <IconSymbol name="chart.line.uptrend.xyaxis" size={22} color="#5E3DB3" />
-                <ThemedText style={[styles.featureText, { color: '#7D5A50', fontWeight: '500' }]}>Wachstumstracker</ThemedText>
+          <ThemedView
+            style={[styles.liquidGlassContainer, styles.recommendationContainer, cardHeightStyle]}
+            lightColor="rgba(255, 255, 255, 0.04)"
+            darkColor="rgba(255, 255, 255, 0.02)"
+          >
+            {featuredRecommendation ? (
+              <View style={styles.recommendationCard}>
+                <View style={styles.sectionTitleContainer}>
+                  <ThemedText style={[styles.sectionTitle, styles.liquidGlassText, { color: '#6B4C3B', fontSize: 22 }]}>
+                    Lottis Empfehlungen
+                  </ThemedText>
+                  <View style={[styles.liquidGlassChevron, styles.recommendationHeaderSpacer]} />
+                </View>
+                <TouchableOpacity
+                  style={styles.recommendationInnerCard}
+                  onPress={() => handleFocusRecommendation(featuredRecommendation.id)}
+                  activeOpacity={0.9}
+                >
+                  <View style={styles.recommendationRow}>
+                    <View style={styles.recommendationImagePane}>
+                      {showRecommendationImage ? (
+                        <Image
+                          source={{ uri: featuredRecommendation.image_url ?? '' }}
+                          style={styles.recommendationImage}
+                          onError={handleRecommendationImageError}
+                        />
+                      ) : (
+                        <View style={styles.recommendationImageFallback}>
+                          <IconSymbol name="bag.fill" size={22} color="#6B4C3B" />
+                        </View>
+                      )}
+                    </View>
+                    <View style={styles.recommendationContentPane}>
+                      <View style={styles.recommendationTextWrap}>
+                        <ThemedText style={styles.recommendationTitle}>
+                          {featuredRecommendation.title}
+                        </ThemedText>
+                        <ThemedText style={styles.recommendationDescription}>
+                          {getPreviewText(featuredRecommendation.description, 10)}
+                        </ThemedText>
+                      </View>
+                      <View style={styles.recommendationButton}>
+                        <ThemedText style={styles.recommendationButtonText} numberOfLines={1}>
+                          {buttonLabel}
+                        </ThemedText>
+                      </View>
+                    </View>
+                  </View>
+                </TouchableOpacity>
               </View>
-
-              <View style={[styles.postPregnancyFeatureItem, styles.liquidGlassFeatureItem, {
-                backgroundColor: 'rgba(94, 61, 179, 0.08)',
-                borderColor: 'rgba(94, 61, 179, 0.22)'
-              }]}>
-                <IconSymbol name="calendar.badge.clock" size={22} color="#5E3DB3" />
-                <ThemedText style={[styles.featureText, { color: '#7D5A50', fontWeight: '500' }]}>Schlafprotokolle</ThemedText>
+            ) : (
+              <View style={styles.recommendationEmptyWrapper}>
+                <View style={styles.sectionTitleContainer}>
+                  <ThemedText style={[styles.sectionTitle, styles.liquidGlassText, { color: '#6B4C3B', fontSize: 22 }]}>
+                    Lottis Empfehlungen
+                  </ThemedText>
+                  <View style={[styles.liquidGlassChevron, styles.recommendationHeaderSpacer]} />
+                </View>
+                <View style={styles.recommendationEmpty}>
+                  <IconSymbol name="bag.fill" size={20} color="#7D5A50" />
+                  <ThemedText style={styles.recommendationEmptyText}>
+                    Noch keine Empfehlungen verfügbar.
+                  </ThemedText>
+                </View>
               </View>
-
-              <View style={[styles.postPregnancyFeatureItem, styles.liquidGlassFeatureItem, {
-                backgroundColor: 'rgba(94, 61, 179, 0.05)',
-                borderColor: 'rgba(94, 61, 179, 0.15)'
-              }]}>
-                <IconSymbol name="fork.knife" size={22} color="#5E3DB3" />
-                <ThemedText style={[styles.featureText, { color: '#7D5A50', fontWeight: '500' }]}>Food Diary</ThemedText>
-              </View>
-
-              <View style={[styles.postPregnancyFeatureItem, styles.liquidGlassFeatureItem, {
-                backgroundColor: 'rgba(94, 61, 179, 0.10)',
-                borderColor: 'rgba(94, 61, 179, 0.25)'
-              }]}>
-                <IconSymbol name="photo.on.rectangle.angled" size={22} color="#5E3DB3" />
-                <ThemedText style={[styles.featureText, { color: '#7D5A50', fontWeight: '500' }]}>Meilenstein-Fotos</ThemedText>
-              </View>
-            </View>
-          </View>
-        </ThemedView>
-      </BlurView>
-    </View>
-  );
+            )}
+          </ThemedView>
+        </BlurView>
+      </View>
+    );
+  };
 
   const renderOverviewSection = () => (
     <View
@@ -575,7 +647,7 @@ export default function PregnancyHomeScreen() {
         }}
         scrollEventThrottle={16}
       >
-        {[renderPregnancyOverviewCard(styles.carouselCardWrapper), renderPostPregnancyCard(styles.carouselCardWrapper)].map(
+        {[renderPregnancyOverviewCard(styles.carouselCardWrapper), renderRecommendationCard(styles.carouselCardWrapper)].map(
           (slide, index) => (
             <View
               key={`overview-slide-${index}`}
@@ -900,6 +972,7 @@ const styles = StyleSheet.create({
   },
   carouselCardWrapper: {
     marginBottom: 0,
+    width: '100%',
   },
   carouselDots: {
     flexDirection: 'row',
@@ -915,6 +988,116 @@ const styles = StyleSheet.create({
   },
   carouselDotActive: {
     backgroundColor: '#6B4C3B',
+  },
+
+  // Recommendation Card
+  recommendationContainer: {
+    flex: 1,
+    padding: 18,
+  },
+  recommendationCard: {
+    flex: 1,
+    width: '100%',
+    borderRadius: 20,
+  },
+  recommendationInnerCard: {
+    flex: 1,
+    borderRadius: 18,
+    padding: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.55)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.55)',
+  },
+  recommendationRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  recommendationImagePane: {
+    width: '40%',
+    maxWidth: 120,
+    maxHeight: 120,
+    aspectRatio: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.75)',
+    borderRadius: 10,
+    overflow: 'hidden',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.6)',
+  },
+  recommendationImageFallback: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    height: '100%',
+  },
+  recommendationImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  recommendationContentPane: {
+    flex: 1,
+    minWidth: 0,
+    flexShrink: 1,
+    paddingVertical: 4,
+    justifyContent: 'space-between',
+    backgroundColor: 'transparent',
+  },
+  recommendationTextWrap: {
+    flex: 1,
+    flexShrink: 1,
+  },
+  recommendationTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#6B4C3B',
+    marginBottom: 4,
+    letterSpacing: 0.2,
+    flexWrap: 'wrap',
+  },
+  recommendationDescription: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: 'rgba(125, 90, 80, 0.88)',
+    lineHeight: 18,
+    flexWrap: 'wrap',
+  },
+  recommendationButton: {
+    alignSelf: 'flex-end',
+    marginTop: 8,
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    backgroundColor: '#5E3DB3',
+    borderWidth: 1,
+    borderColor: 'rgba(94, 61, 179, 0.7)',
+  },
+  recommendationButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  recommendationEmptyWrapper: {
+    flex: 1,
+  },
+  recommendationHeaderSpacer: {
+    opacity: 0,
+  },
+  recommendationEmpty: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+  },
+  recommendationEmptyText: {
+    fontSize: 13,
+    color: '#7D5A50',
+    marginTop: 8,
+    textAlign: 'center',
   },
 
   // Liquid Glass styles - Core Components

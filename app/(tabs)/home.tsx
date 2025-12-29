@@ -65,6 +65,7 @@ export default function HomeScreen() {
   const [productIndex, setProductIndex] = useState(0);
   const [overviewCarouselWidth, setOverviewCarouselWidth] = useState(0);
   const [overviewIndex, setOverviewIndex] = useState(0);
+  const [overviewSummaryHeight, setOverviewSummaryHeight] = useState<number | null>(null);
   const productIndexRef = useRef(0);
   const productRotationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const productRotationCycleRef = useRef(0);
@@ -91,6 +92,13 @@ export default function HomeScreen() {
     if (!imageUrl) return '';
     if (retryKey <= 0) return imageUrl;
     return `${imageUrl}${imageUrl.includes('?') ? '&' : '?'}r=${retryKey}`;
+  };
+
+  const getPreviewText = (value?: string | null, limit = 10) => {
+    if (!value) return '';
+    const words = value.trim().split(/\s+/).filter(Boolean);
+    if (words.length <= limit) return value.trim();
+    return `${words.slice(0, limit).join(' ')}...`;
   };
 
   useEffect(() => {
@@ -582,15 +590,23 @@ export default function HomeScreen() {
         onPress={() => handleNavigate('/(tabs)/daily_old')}
         activeOpacity={0.9}
         style={[styles.liquidGlassWrapper, wrapperStyle]}
+        onLayout={(event) => {
+          const nextHeight = Math.round(event.nativeEvent.layout.height);
+          if (nextHeight && nextHeight !== overviewSummaryHeight) {
+            setOverviewSummaryHeight(nextHeight);
+          }
+        }}
       >
         <BlurView
           intensity={22}
           tint={colorScheme === 'dark' ? 'dark' : 'light'}
           style={styles.liquidGlassBackground}
         >
-          <ThemedView style={[styles.summaryContainer, styles.liquidGlassContainer]} 
-                      lightColor="rgba(255, 255, 255, 0.04)" 
-                      darkColor="rgba(255, 255, 255, 0.02)">
+          <ThemedView
+            style={[styles.summaryContainer, styles.liquidGlassContainer]}
+            lightColor="rgba(255, 255, 255, 0.04)"
+            darkColor="rgba(255, 255, 255, 0.02)"
+          >
             <View style={styles.sectionTitleContainer}>
               <ThemedText style={[styles.sectionTitle, { color: '#7D5A50', fontSize: 22 }]}>
                 Dein Tag im Überblick
@@ -699,13 +715,15 @@ export default function HomeScreen() {
   };
 
   const renderRecommendationCard = (wrapperStyle?: StyleProp<ViewStyle>) => {
-    const cardHeightStyle = { height: DEFAULT_OVERVIEW_HEIGHT };
-    const buttonLabel = 'Mehr..';
+    const cardHeightStyle = {
+      height: overviewSummaryHeight ?? DEFAULT_OVERVIEW_HEIGHT,
+    };
+    const buttonLabel = 'Mehr';
     const showRecommendationImage = Boolean(featuredRecommendation?.image_url) && !recommendationImageFailed;
     const imageUri = buildImageUri(featuredRecommendation?.image_url);
 
     return (
-      <View style={[styles.liquidGlassWrapper, wrapperStyle]}>
+      <View style={[styles.liquidGlassWrapper, wrapperStyle, cardHeightStyle]}>
         <BlurView
           {...androidBlurProps}
           intensity={22}
@@ -756,8 +774,8 @@ export default function HomeScreen() {
                         <ThemedText style={styles.recommendationTitle}>
                           {featuredRecommendation.title}
                         </ThemedText>
-                        <ThemedText style={styles.recommendationDescription} numberOfLines={2} ellipsizeMode="tail">
-                          {featuredRecommendation.description}
+                        <ThemedText style={styles.recommendationDescription}>
+                          {getPreviewText(featuredRecommendation.description, 10)}
                         </ThemedText>
                       </View>
                       <View style={styles.recommendationButton}>
@@ -1235,6 +1253,7 @@ const styles = StyleSheet.create({
   },
   carouselCardWrapper: {
     marginBottom: 0,
+    width: '100%',
   },
   carouselDots: {
     flexDirection: 'row',
@@ -1255,7 +1274,7 @@ const styles = StyleSheet.create({
   // Recommendation Card
   recommendationContainer: {
     flex: 1,
-    padding: 20,
+    padding: 18,
   },
   recommendationCard: {
     flex: 1,
@@ -1273,10 +1292,12 @@ const styles = StyleSheet.create({
   recommendationRow: {
     flex: 1,
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
   },
   recommendationImagePane: {
-    width: '48%',
+    width: '40%',
+    maxWidth: 120,
+    maxHeight: 120,
     aspectRatio: 1,
     backgroundColor: 'rgba(255, 255, 255, 0.75)',
     borderRadius: 10,
@@ -1301,12 +1322,15 @@ const styles = StyleSheet.create({
   },
   recommendationContentPane: {
     flex: 1,
+    minWidth: 0,
+    flexShrink: 1,
     paddingVertical: 4,
     justifyContent: 'space-between',
     backgroundColor: 'transparent',
   },
   recommendationTextWrap: {
     flex: 1,
+    flexShrink: 1,
   },
   recommendationTitle: {
     fontSize: 14,
@@ -1317,17 +1341,17 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   recommendationDescription: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '500',
     color: 'rgba(125, 90, 80, 0.88)',
-    lineHeight: 19,
+    lineHeight: 18,
     flexWrap: 'wrap',
   },
   recommendationButton: {
     alignSelf: 'flex-end',
-    marginTop: 12,
-    paddingVertical: 9,
-    paddingHorizontal: 16,
+    marginTop: 8,
+    paddingVertical: 7,
+    paddingHorizontal: 14,
     borderRadius: 14,
     backgroundColor: '#5E3DB3',
     borderWidth: 1,
