@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, Text, SafeAreaView, StatusBar, Image, ActivityIndicator, RefreshControl, Alert, Platform, StyleProp, ViewStyle } from 'react-native';
+import { Animated, Easing, StyleSheet, ScrollView, View, TouchableOpacity, Text, SafeAreaView, StatusBar, Image, ActivityIndicator, RefreshControl, Alert, Platform, StyleProp, ViewStyle } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { ThemedText } from '@/components/ThemedText';
@@ -10,6 +10,7 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/contexts/AuthContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Canvas, RoundedRect, LinearGradient as SkiaLinearGradient, RadialGradient, Circle, vec } from '@shopify/react-native-skia';
 import { getBabyInfo, getDiaryEntries, getCurrentPhase, getPhaseProgress, getMilestonesByPhase } from '@/lib/baby';
 import { supabase, addBabyCareEntry } from '@/lib/supabase';
 import { getRecommendations, LottiRecommendation } from '@/lib/supabase/recommendations';
@@ -30,6 +31,156 @@ const dailyTips = [
   "Vertraue deinem Instinkt – du kennst dein Baby am besten.",
   "Vergiss nicht zu essen – deine Energie ist wichtig für dich und dein Baby."
 ];
+
+function GlassBorderGlint({ radius = 30 }: { radius?: number }) {
+  const anim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(anim, {
+          toValue: 1,
+          duration: 4200,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(anim, {
+          toValue: 0,
+          duration: 4200,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    animation.start();
+    return () => animation.stop();
+  }, [anim]);
+
+  const translateX = anim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-120, 120],
+  });
+
+  const translateY = anim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [6, -6],
+  });
+
+  return (
+    <View
+      pointerEvents="none"
+      style={[
+        StyleSheet.absoluteFill,
+        { borderRadius: radius, overflow: 'hidden' },
+      ]}
+    >
+      <Animated.View
+        style={{
+          position: 'absolute',
+          top: 2,
+          left: -140,
+          width: 220,
+          height: 8,
+          opacity: 0.65,
+          transform: [{ translateX }, { translateY }, { rotate: '-10deg' }],
+        }}
+      >
+        <LinearGradient
+          colors={[
+            'rgba(255,255,255,0)',
+            'rgba(255,255,255,0.6)',
+            'rgba(255,255,255,0)',
+          ]}
+          start={{ x: 0, y: 0.5 }}
+          end={{ x: 1, y: 0.5 }}
+          style={{
+            width: '100%',
+            height: '100%',
+          }}
+        />
+      </Animated.View>
+    </View>
+  );
+}
+
+function GlassLensOverlay({ radius = 20 }: { radius?: number }) {
+  const [layout, setLayout] = useState({ width: 0, height: 0 });
+  const width = layout.width;
+  const height = layout.height;
+  const minDim = Math.min(width, height);
+  const maxDim = Math.max(width, height);
+  const lensRadius = Math.min(radius, minDim / 2);
+  const strokeRadius = Math.max(0, lensRadius - 1);
+
+  return (
+    <View
+      pointerEvents="none"
+      style={[StyleSheet.absoluteFillObject, { borderRadius: radius, overflow: 'hidden' }]}
+      onLayout={(event) => {
+        const { width, height } = event.nativeEvent.layout;
+        if (width !== layout.width || height !== layout.height) {
+          setLayout({ width, height });
+        }
+      }}
+    >
+      {width > 0 && height > 0 ? (
+        <Canvas style={{ width, height }}>
+          <RoundedRect x={0} y={0} width={width} height={height} r={lensRadius}>
+            <SkiaLinearGradient
+              start={vec(0, 0)}
+              end={vec(width, height)}
+              colors={[
+                'rgba(255, 255, 255, 0.45)',
+                'rgba(94, 61, 179, 0.08)',
+                'rgba(255, 255, 255, 0.18)',
+              ]}
+              positions={[0, 0.6, 1]}
+            />
+          </RoundedRect>
+          <RoundedRect x={0} y={0} width={width} height={height} r={lensRadius}>
+            <RadialGradient
+              c={vec(width * 0.2, height * 0.15)}
+              r={maxDim * 0.9}
+              colors={['rgba(255, 255, 255, 0.55)', 'rgba(255, 255, 255, 0)']}
+            />
+          </RoundedRect>
+          <RoundedRect x={0} y={0} width={width} height={height} r={lensRadius}>
+            <RadialGradient
+              c={vec(width * 0.85, height * 0.85)}
+              r={maxDim * 0.8}
+              colors={['rgba(94, 61, 179, 0)', 'rgba(94, 61, 179, 0.18)']}
+            />
+          </RoundedRect>
+          <RoundedRect
+            x={0.5}
+            y={0.5}
+            width={width - 1}
+            height={height - 1}
+            r={strokeRadius}
+            style="stroke"
+            strokeWidth={1}
+            color="rgba(255, 255, 255, 0.6)"
+          />
+          <Circle cx={width * 0.22} cy={height * 0.28} r={minDim * 0.18}>
+            <RadialGradient
+              c={vec(width * 0.22, height * 0.28)}
+              r={minDim * 0.18}
+              colors={['rgba(255, 255, 255, 0.7)', 'rgba(255, 255, 255, 0)']}
+            />
+          </Circle>
+          <Circle cx={width * 0.72} cy={height * 0.18} r={minDim * 0.1}>
+            <RadialGradient
+              c={vec(width * 0.72, height * 0.18)}
+              r={minDim * 0.1}
+              colors={['rgba(255, 255, 255, 0.6)', 'rgba(255, 255, 255, 0)']}
+            />
+          </Circle>
+        </Canvas>
+      ) : null}
+    </View>
+  );
+}
 
 export default function HomeScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -524,7 +675,7 @@ export default function HomeScreen() {
           >
             <LinearGradient
               pointerEvents="none"
-              colors={['rgba(255, 255, 255, 0.95)', 'rgba(255, 255, 255, 0.15)', 'rgba(255, 255, 255, 0)']}
+              colors={['rgba(255, 255, 255, 0)', 'rgba(255, 255, 255, 0)', 'rgba(255, 255, 255, 0)']}
               locations={[0, 0.45, 1]}
               start={{ x: 0.15, y: 0.0 }}
               end={{ x: 0.85, y: 1.0 }}
@@ -556,14 +707,7 @@ export default function HomeScreen() {
             </View>
 
             <View style={styles.tipCard}>
-              <LinearGradient
-                pointerEvents="none"
-                colors={['rgba(255, 255, 255, 0.9)', 'rgba(255, 255, 255, 0.1)']}
-                locations={[0, 1]}
-                start={{ x: 0.2, y: 0 }}
-                end={{ x: 0.8, y: 1 }}
-                style={styles.tipGloss}
-              />
+              <GlassLensOverlay radius={20} />
               <View style={styles.tipCardRow}>
                 <View style={styles.tipIconWrap}>
                   <IconSymbol name="lightbulb.fill" size={18} color="#D6B28C" />
@@ -576,6 +720,7 @@ export default function HomeScreen() {
             </View>
           </ThemedView>
         </BlurView>
+        <GlassBorderGlint radius={30} />
       </View>
     );
   };
@@ -1134,9 +1279,9 @@ const styles = StyleSheet.create({
     lineHeight: 36,
   },
   dateText: {
-    fontSize: 14,
+    fontSize: 19,
     opacity: 0.8,
-    fontWeight: '500',
+    fontWeight: '700',
     letterSpacing: 0.2,
   },
   profileBadge: {
@@ -1195,15 +1340,16 @@ const styles = StyleSheet.create({
   tipCard: {
     marginTop: 14,
     borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.55)',
+    backgroundColor: 'rgba(255, 255, 255, 0.22)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.7)',
+    borderColor: 'rgba(255, 255, 255, 0.55)',
     padding: 14,
     overflow: 'hidden',
-  },
-  tipGloss: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: 20,
+    shadowColor: '#5E3DB3',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 4,
   },
   tipCardRow: {
     flexDirection: 'row',
@@ -1213,16 +1359,15 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: 'rgba(255, 255, 255, 0.7)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.6)',
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#D6B28C',
+    shadowColor: 'transparent',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 4,
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    elevation: 0,
   },
   tipContent: {
     flex: 1,
