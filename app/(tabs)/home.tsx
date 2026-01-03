@@ -190,6 +190,8 @@ export default function HomeScreen() {
   const DEFAULT_OVERVIEW_HEIGHT = 230;
   const PRODUCT_ROTATION_INITIAL_DELAY_MS = 10000;
   const PRODUCT_ROTATION_INTERVAL_MS = 20000;
+  const OVERVIEW_ROTATION_INTERVAL_MS = 5000;
+  const OVERVIEW_SLIDE_COUNT = 2;
 
   const [babyInfo, setBabyInfo] = useState<any>(null);
   const [diaryEntries, setDiaryEntries] = useState<any[]>([]);
@@ -217,6 +219,7 @@ export default function HomeScreen() {
   const [overviewCarouselWidth, setOverviewCarouselWidth] = useState(0);
   const [overviewIndex, setOverviewIndex] = useState(0);
   const [overviewSummaryHeight, setOverviewSummaryHeight] = useState<number | null>(null);
+  const overviewScrollRef = useRef<ScrollView | null>(null);
   const productIndexRef = useRef(0);
   const productRotationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const productRotationCycleRef = useRef(0);
@@ -312,6 +315,23 @@ export default function HomeScreen() {
       }
     };
   }, [rotationCandidates, PRODUCT_ROTATION_INITIAL_DELAY_MS, PRODUCT_ROTATION_INTERVAL_MS]);
+
+  useEffect(() => {
+    if (!overviewCarouselWidth) return;
+
+    const interval = setInterval(() => {
+      setOverviewIndex((current) => {
+        const nextIndex = (current + 1) % OVERVIEW_SLIDE_COUNT;
+        overviewScrollRef.current?.scrollTo({
+          x: overviewCarouselWidth * nextIndex,
+          animated: true,
+        });
+        return nextIndex;
+      });
+    }, OVERVIEW_ROTATION_INTERVAL_MS);
+
+    return () => clearInterval(interval);
+  }, [overviewCarouselWidth, OVERVIEW_ROTATION_INTERVAL_MS, OVERVIEW_SLIDE_COUNT]);
 
   useEffect(() => {
     if (user) {
@@ -481,8 +501,7 @@ export default function HomeScreen() {
   const handleStatPress = (type: 'feeding' | 'diaper' | 'sleep') => {
     triggerHaptic();
     if (type === 'sleep') {
-      setSleepModalStart(new Date());
-      setShowSleepModal(true);
+      router.push('/(tabs)/sleep-tracker');
       return;
     }
     setSelectedActivityType(type);
@@ -731,9 +750,7 @@ export default function HomeScreen() {
     const todayDiaperChanges = getTodayDiaperChanges();
 
     return (
-      <TouchableOpacity
-        onPress={() => handleNavigate('/(tabs)/daily_old')}
-        activeOpacity={0.9}
+      <View
         style={[styles.liquidGlassWrapper, wrapperStyle]}
         onLayout={(event) => {
           const nextHeight = Math.round(event.nativeEvent.layout.height);
@@ -752,21 +769,27 @@ export default function HomeScreen() {
             lightColor="rgba(255, 255, 255, 0.04)"
             darkColor="rgba(255, 255, 255, 0.02)"
           >
-            <View style={styles.sectionTitleContainer}>
+            <TouchableOpacity
+              style={styles.sectionTitleContainer}
+              activeOpacity={0.85}
+              onPress={() => handleNavigate('/(tabs)/daily_old')}
+            >
               <ThemedText style={[styles.sectionTitle, { color: '#7D5A50', fontSize: 22 }]}>
                 Dein Tag im Überblick
               </ThemedText>
               <View style={styles.liquidGlassChevron}>
                 <IconSymbol name="chevron.right" size={20} color="#7D5A50" />
               </View>
-            </View>
+            </TouchableOpacity>
 
             <View style={styles.statsContainer}>
-              <View
+              <TouchableOpacity
                 style={[styles.statItem, styles.liquidGlassStatItem, {
                   backgroundColor: 'rgba(94, 61, 179, 0.13)',
                   borderColor: 'rgba(94, 61, 179, 0.35)'
                 }]}
+                activeOpacity={0.85}
+                onPress={() => handleStatPress('feeding')}
               >
                 <View style={styles.liquidGlassStatIcon}>
                   <Text style={styles.statEmoji}>🍼</Text>
@@ -778,13 +801,15 @@ export default function HomeScreen() {
                   textShadowRadius: 2,
                 }]}>{todayFeedings}</ThemedText>
                 <ThemedText style={[styles.statLabel, styles.liquidGlassStatLabel, { color: '#7D5A50' }]}>Essen</ThemedText>
-              </View>
+              </TouchableOpacity>
 
-              <View
+              <TouchableOpacity
                 style={[styles.statItem, styles.liquidGlassStatItem, {
                   backgroundColor: 'rgba(94, 61, 179, 0.08)',
                   borderColor: 'rgba(94, 61, 179, 0.22)'
                 }]}
+                activeOpacity={0.85}
+                onPress={() => handleStatPress('diaper')}
               >
                 <View style={styles.liquidGlassStatIcon}>
                   <Text style={styles.statEmoji}>💩</Text>
@@ -796,13 +821,15 @@ export default function HomeScreen() {
                   textShadowRadius: 2,
                 }]}>{todayDiaperChanges}</ThemedText>
                 <ThemedText style={[styles.statLabel, styles.liquidGlassStatLabel, { color: '#7D5A50' }]}>Windeln</ThemedText>
-              </View>
+              </TouchableOpacity>
 
-              <View
+              <TouchableOpacity
                 style={[styles.statItem, styles.liquidGlassStatItem, { 
                   backgroundColor: 'rgba(94, 61, 179, 0.05)', 
                   borderColor: 'rgba(94, 61, 179, 0.15)' 
                 }]}
+                activeOpacity={0.85}
+                onPress={() => handleStatPress('sleep')}
               >
                 <View style={styles.liquidGlassStatIcon}>
                   <Text style={styles.statEmoji}>💤</Text>
@@ -814,11 +841,11 @@ export default function HomeScreen() {
                   textShadowRadius: 2,
                 }]}>{formatMinutes(todaySleepMinutes)}</ThemedText>
                 <ThemedText style={[styles.statLabel, styles.liquidGlassStatLabel, { color: '#7D5A50' }]}>Schlaf</ThemedText>
-              </View>
+              </TouchableOpacity>
             </View>
           </ThemedView>
         </BlurView>
-      </TouchableOpacity>
+      </View>
     );
   };
 
@@ -968,6 +995,7 @@ export default function HomeScreen() {
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
+        ref={overviewScrollRef}
         style={styles.overviewCarousel}
         decelerationRate="fast"
         onMomentumScrollEnd={(event) => {
