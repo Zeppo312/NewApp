@@ -23,7 +23,7 @@ import { ThemedBackground } from '@/components/ThemedBackground';
 import Header from '@/components/Header';
 import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { GLASS_BORDER, LiquidGlassCard, PRIMARY, GRID_GAP } from '@/constants/DesignGuide';
+import { GLASS_BORDER, GLASS_OVERLAY, LiquidGlassCard, PRIMARY, GRID_GAP } from '@/constants/DesignGuide';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { createRecipe, fetchRecipes, RecipeRecord } from '@/lib/recipes';
 import { getSampleRecipeImage, RECIPE_SAMPLES, RecipeSample } from '@/lib/recipes-samples';
@@ -121,6 +121,8 @@ const RecipeGeneratorScreen = () => {
   const [selectedAllergies, setSelectedAllergies] = useState<AllergenId[]>([]);
   const [selectedRecipe, setSelectedRecipe] = useState<RecipeRecord | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showAgeModal, setShowAgeModal] = useState(false);
+  const [showAllergyModal, setShowAllergyModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSeeding, setIsSeeding] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -455,130 +457,73 @@ const RecipeGeneratorScreen = () => {
               </View>
             </LiquidGlassCard>
 
-            {/* Action Card - Eigenes Rezept */}
-            <LiquidGlassCard
-              style={[styles.card, styles.topCard, styles.actionCard]}
-              intensity={28}
-              overlayColor='rgba(94,61,179,0.16)'
-              borderColor='rgba(94,61,179,0.42)'
-              onPress={() => {
-                resetCreateForm();
-                setShowCreateModal(true);
-              }}
-              activeOpacity={0.86}
-            >
-              <View style={styles.actionContent}>
-                <View style={styles.actionIcon}>
-                  <IconSymbol name='plus.circle.fill' size={26} color={PRIMARY} />
-                </View>
-                <View style={styles.actionTextWrap}>
-                  <ThemedText style={styles.actionTitle}>Eigenes Rezept erstellen</ThemedText>
-                </View>
-                <View style={styles.actionChevron}>
-                  <IconSymbol name='chevron.right' size={20} color={PRIMARY} />
-                </View>
-              </View>
-            </LiquidGlassCard>
-
-            {/* Baby-Alter Card */}
-            <LiquidGlassCard
-              style={[styles.card, styles.topCard]}
-              intensity={26}
-              overlayColor='rgba(255,255,255,0.20)'
-              borderColor={GLASS_BORDER}
-            >
-              <View style={styles.sectionHeader}>
-                <IconSymbol name='calendar' size={22} color={PRIMARY} />
-                <ThemedText style={styles.sectionTitle}>Baby-Alter</ThemedText>
-              </View>
-              <ThemedText style={styles.sectionHint}>
-                Wir filtern alle Rezepte passend zu {ageMonths} Monaten.
-              </ThemedText>
-              <View style={styles.ageControlRow}>
-                <TouchableOpacity
-                  style={styles.ageButton}
-                  onPress={() => handleAgeChange(-1)}
-                  activeOpacity={0.8}
-                >
-                  <ThemedText style={styles.ageButtonText}>-</ThemedText>
-                </TouchableOpacity>
-                <View style={styles.ageBadge}>
-                  <ThemedText style={styles.ageValue}>{ageMonths}</ThemedText>
-                  <ThemedText style={styles.ageLabel}>Monate</ThemedText>
-                </View>
-                <TouchableOpacity
-                  style={styles.ageButton}
-                  onPress={() => handleAgeChange(1)}
-                  activeOpacity={0.8}
-                >
-                  <ThemedText style={styles.ageButtonText}>+</ThemedText>
-                </TouchableOpacity>
-              </View>
-            </LiquidGlassCard>
-
-            {/* Allergien Card */}
-            <LiquidGlassCard
-              style={[styles.card, styles.topCard]}
-              intensity={26}
-              overlayColor='rgba(255,255,255,0.20)'
-              borderColor={GLASS_BORDER}
-            >
-              <View style={styles.sectionHeader}>
-                <IconSymbol name='info.circle.fill' size={22} color={PRIMARY} />
-                <ThemedText style={styles.sectionTitle}>Allergien berücksichtigen</ThemedText>
-              </View>
-              <ThemedText style={styles.sectionHint}>
-                Markiere, was ihr aktuell meidet.
-              </ThemedText>
-              <View style={styles.chipGrid}>
-                {allergenRows.map((row, rowIndex, rows) => (
-                  <View
-                    key={`allergen-row-${rowIndex}`}
-                    style={[
-                      styles.gridRow,
-                      rowIndex === rows.length - 1 && styles.gridRowLast,
-                    ]}
-                  >
-                    {row.map((option, colIndex) => {
-                      if (!option) {
-                        return (
-                          <View
-                            key={`allergen-placeholder-${rowIndex}-${colIndex}`}
-                            style={[
-                              styles.gridItem,
-                              colIndex === 0 && styles.gridItemLeft,
-                            ]}
-                          />
-                        );
-                      }
-                      const isSelected = selectedAllergies.includes(option.id);
-                      return (
-                        <View
-                          key={option.id}
-                          style={[
-                            styles.gridItem,
-                            colIndex === 0 && styles.gridItemLeft,
-                          ]}
-                        >
-                          <TouchableOpacity
-                            style={[styles.chip, isSelected && styles.chipSelected]}
-                            onPress={() => toggleAllergy(option.id)}
-                            activeOpacity={0.85}
-                          >
-                            <ThemedText
-                              style={[styles.chipLabel, isSelected && styles.chipLabelSelected]}
-                            >
-                              {option.label}
-                            </ThemedText>
-                            <ThemedText style={styles.chipHint}>{option.hint}</ThemedText>
-                          </TouchableOpacity>
-                        </View>
-                      );
-                    })}
+            <View style={styles.quickActionRow}>
+              <TouchableOpacity
+                style={styles.quickActionButton}
+                onPress={() => {
+                  resetCreateForm();
+                  setShowCreateModal(true);
+                }}
+                activeOpacity={0.85}
+              >
+                <BlurView intensity={24} tint='light' style={StyleSheet.absoluteFillObject} />
+                <View style={styles.quickActionOverlay} />
+                <View style={styles.quickActionContent}>
+                  <View style={styles.quickActionIcon}>
+                    <IconSymbol name='plus' size={20} color={PRIMARY} />
                   </View>
-                ))}
-              </View>
-            </LiquidGlassCard>
+                  <ThemedText style={styles.quickActionLabel}>Rezept</ThemedText>
+                  <ThemedText style={styles.quickActionMeta}>Erstellen</ThemedText>
+                </View>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.quickActionButton}
+                onPress={() => setShowAgeModal(true)}
+                activeOpacity={0.85}
+              >
+                <BlurView intensity={24} tint='light' style={StyleSheet.absoluteFillObject} />
+                <View style={styles.quickActionOverlay} />
+                <View style={styles.quickActionContent}>
+                  <View style={styles.quickActionIcon}>
+                    <IconSymbol name='calendar' size={20} color={PRIMARY} />
+                  </View>
+                  <ThemedText style={styles.quickActionLabel}>Baby-Alter</ThemedText>
+                  <ThemedText style={styles.quickActionMeta}>{ageMonths} Monate</ThemedText>
+                </View>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.quickActionButton,
+                  selectedAllergies.length > 0 && styles.quickActionButtonActive,
+                ]}
+                onPress={() => setShowAllergyModal(true)}
+                activeOpacity={0.85}
+              >
+                <BlurView intensity={24} tint='light' style={StyleSheet.absoluteFillObject} />
+                <View
+                  style={[
+                    styles.quickActionOverlay,
+                    selectedAllergies.length > 0 && styles.quickActionOverlayActive,
+                  ]}
+                />
+                <View style={styles.quickActionContent}>
+                  <View style={styles.quickActionIcon}>
+                    <IconSymbol name='exclamationmark.triangle.fill' size={18} color={PRIMARY} />
+                    {selectedAllergies.length > 0 && (
+                      <View style={styles.quickActionBadge}>
+                        <ThemedText style={styles.quickActionBadgeText}>
+                          {selectedAllergies.length}
+                        </ThemedText>
+                      </View>
+                    )}
+                  </View>
+                  <ThemedText style={styles.quickActionLabel}>Allergien</ThemedText>
+                  <ThemedText style={styles.quickActionMeta}>
+                    {selectedAllergies.length > 0 ? 'Aktiv' : 'Keine'}
+                  </ThemedText>
+                </View>
+              </TouchableOpacity>
+            </View>
 
             {/* Loading State */}
             {isLoading ? (
@@ -928,11 +873,186 @@ const RecipeGeneratorScreen = () => {
                     <ThemedText style={styles.recipeTipText}>{selectedRecipe.tip}</ThemedText>
                   </View>
                 ) : null}
+
+                <ThemedText style={styles.recipeDisclaimer}>
+                  Hinweis: Die Rezepte sind allgemeine Empfehlungen und ersetzen keine medizinische
+                  Beratung. Achte auf altersgerechte Konsistenz, Erstickungsgefahr und individuelle
+                  Allergien. Bei Unsicherheiten sprich mit Kinderarzt oder Hebamme.
+                </ThemedText>
               </ScrollView>
             </BlurView>
           </View>
         </Modal>
       )}
+
+      {/* Baby Age Modal */}
+      <Modal
+        visible={showAgeModal}
+        transparent
+        animationType='slide'
+        onRequestClose={() => setShowAgeModal(false)}
+      >
+        <View style={styles.recipeModalOverlay}>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            onPress={() => setShowAgeModal(false)}
+            activeOpacity={1}
+          />
+          <BlurView
+            style={[styles.recipeModalCard, styles.filterModalCard]}
+            intensity={90}
+            tint={colorScheme === 'dark' ? 'dark' : 'extraLight'}
+          >
+            <View style={styles.recipeModalHandle} />
+            <View style={styles.recipeModalHeaderRow}>
+              <TouchableOpacity
+                style={styles.recipeModalHeaderButton}
+                onPress={() => setShowAgeModal(false)}
+                activeOpacity={0.85}
+              >
+                <IconSymbol name='xmark' size={18} color='#7D5A50' />
+              </TouchableOpacity>
+              <View style={styles.recipeModalHeaderCenter}>
+                <ThemedText style={styles.recipeModalHeaderTitle}>Baby-Alter</ThemedText>
+                <ThemedText style={styles.recipeModalHeaderSubtitle}>
+                  Filter auf {ageMonths} Monate
+                </ThemedText>
+              </View>
+              <View style={styles.recipeModalHeaderSpacer} />
+            </View>
+            <View style={styles.filterModalContent}>
+              <View style={styles.sectionHeader}>
+                <IconSymbol name='calendar' size={22} color={PRIMARY} />
+                <ThemedText style={styles.sectionTitle}>Baby-Alter</ThemedText>
+              </View>
+              <ThemedText style={styles.sectionHint}>
+                Wir filtern alle Rezepte passend zu {ageMonths} Monaten.
+              </ThemedText>
+              <View style={styles.ageControlRow}>
+                <TouchableOpacity
+                  style={styles.ageButton}
+                  onPress={() => handleAgeChange(-1)}
+                  activeOpacity={0.8}
+                >
+                  <ThemedText style={styles.ageButtonText}>-</ThemedText>
+                </TouchableOpacity>
+                <View style={styles.ageBadge}>
+                  <ThemedText style={styles.ageValue}>{ageMonths}</ThemedText>
+                  <ThemedText style={styles.ageLabel}>Monate</ThemedText>
+                </View>
+                <TouchableOpacity
+                  style={styles.ageButton}
+                  onPress={() => handleAgeChange(1)}
+                  activeOpacity={0.8}
+                >
+                  <ThemedText style={styles.ageButtonText}>+</ThemedText>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </BlurView>
+        </View>
+      </Modal>
+
+      {/* Allergy Filter Modal */}
+      <Modal
+        visible={showAllergyModal}
+        transparent
+        animationType='slide'
+        onRequestClose={() => setShowAllergyModal(false)}
+      >
+        <View style={styles.recipeModalOverlay}>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            onPress={() => setShowAllergyModal(false)}
+            activeOpacity={1}
+          />
+          <BlurView
+            style={[styles.recipeModalCard, styles.filterModalCard]}
+            intensity={90}
+            tint={colorScheme === 'dark' ? 'dark' : 'extraLight'}
+          >
+            <View style={styles.recipeModalHandle} />
+            <View style={styles.recipeModalHeaderRow}>
+              <TouchableOpacity
+                style={styles.recipeModalHeaderButton}
+                onPress={() => setShowAllergyModal(false)}
+                activeOpacity={0.85}
+              >
+                <IconSymbol name='xmark' size={18} color='#7D5A50' />
+              </TouchableOpacity>
+              <View style={styles.recipeModalHeaderCenter}>
+                <ThemedText style={styles.recipeModalHeaderTitle}>
+                  Allergien berücksichtigen
+                </ThemedText>
+                <ThemedText style={styles.recipeModalHeaderSubtitle}>
+                  Markiere, was ihr aktuell meidet
+                </ThemedText>
+              </View>
+              <View style={styles.recipeModalHeaderSpacer} />
+            </View>
+            <ScrollView
+              contentContainerStyle={styles.filterModalScroll}
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.sectionHeader}>
+                <IconSymbol name='info.circle.fill' size={22} color={PRIMARY} />
+                <ThemedText style={styles.sectionTitle}>Allergien berücksichtigen</ThemedText>
+              </View>
+              <ThemedText style={styles.sectionHint}>
+                Markiere, was ihr aktuell meidet.
+              </ThemedText>
+              <View style={styles.chipGrid}>
+                {allergenRows.map((row, rowIndex, rows) => (
+                  <View
+                    key={`allergen-row-${rowIndex}`}
+                    style={[
+                      styles.gridRow,
+                      rowIndex === rows.length - 1 && styles.gridRowLast,
+                    ]}
+                  >
+                    {row.map((option, colIndex) => {
+                      if (!option) {
+                        return (
+                          <View
+                            key={`allergen-placeholder-${rowIndex}-${colIndex}`}
+                            style={[
+                              styles.gridItem,
+                              colIndex === 0 && styles.gridItemLeft,
+                            ]}
+                          />
+                        );
+                      }
+                      const isSelected = selectedAllergies.includes(option.id);
+                      return (
+                        <View
+                          key={option.id}
+                          style={[
+                            styles.gridItem,
+                            colIndex === 0 && styles.gridItemLeft,
+                          ]}
+                        >
+                          <TouchableOpacity
+                            style={[styles.chip, isSelected && styles.chipSelected]}
+                            onPress={() => toggleAllergy(option.id)}
+                            activeOpacity={0.85}
+                          >
+                            <ThemedText
+                              style={[styles.chipLabel, isSelected && styles.chipLabelSelected]}
+                            >
+                              {option.label}
+                            </ThemedText>
+                            <ThemedText style={styles.chipHint}>{option.hint}</ThemedText>
+                          </TouchableOpacity>
+                        </View>
+                      );
+                    })}
+                  </View>
+                ))}
+              </View>
+            </ScrollView>
+          </BlurView>
+        </View>
+      </Modal>
 
       {/* Create Recipe Modal */}
       <Modal
@@ -1340,6 +1460,74 @@ const styles = StyleSheet.create({
     marginRight: 6,
     marginVertical: 4,
   },
+  quickActionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 12,
+  },
+  quickActionButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: GLASS_BORDER,
+    backgroundColor: 'rgba(255,255,255,0.35)',
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  quickActionButtonActive: {
+    borderColor: 'rgba(142,78,198,0.5)',
+  },
+  quickActionOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: GLASS_OVERLAY,
+  },
+  quickActionOverlayActive: {
+    backgroundColor: 'rgba(142,78,198,0.16)',
+  },
+  quickActionContent: {
+    alignItems: 'center',
+  },
+  quickActionIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.6)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.65)',
+    marginBottom: 8,
+  },
+  quickActionLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#7D5A50',
+  },
+  quickActionMeta: {
+    fontSize: 12,
+    color: '#7D5A50',
+    marginTop: 2,
+    fontWeight: '500',
+  },
+  quickActionBadge: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: PRIMARY,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  quickActionBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+  },
   sectionHeader: {
     flexDirection: 'column',
     alignItems: 'center',
@@ -1367,15 +1555,15 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   ageButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: 'rgba(142,78,198,0.16)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   ageButtonText: {
-    fontSize: 28,
+    fontSize: 22,
     fontWeight: '600',
     color: PRIMARY,
   },
@@ -1440,6 +1628,17 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontWeight: '500',
     lineHeight: 18,
+  },
+  filterModalCard: {
+    maxHeight: '80%',
+  },
+  filterModalContent: {
+    paddingHorizontal: 4,
+    paddingBottom: 32,
+  },
+  filterModalScroll: {
+    paddingHorizontal: 4,
+    paddingBottom: 32,
   },
   ingredientLabel: {
     fontSize: 15, // Größere Schrift für bessere Lesbarkeit
@@ -1843,6 +2042,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#7D5A50',
     lineHeight: 20,
+  },
+  recipeDisclaimer: {
+    fontSize: 11,
+    color: '#9C8B82',
+    lineHeight: 16,
+    textAlign: 'center',
+    marginTop: 8,
+    marginBottom: 8,
+    paddingHorizontal: 8,
   },
   createModalCard: {
     maxHeight: '96%',
