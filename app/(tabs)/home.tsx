@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Animated, Easing, StyleSheet, ScrollView, View, TouchableOpacity, Text, SafeAreaView, StatusBar, Image, ActivityIndicator, RefreshControl, Alert, Platform, StyleProp, ViewStyle } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -31,6 +32,29 @@ const dailyTips = [
   "Vertraue deinem Instinkt – du kennst dein Baby am besten.",
   "Vergiss nicht zu essen – deine Energie ist wichtig für dich und dein Baby."
 ];
+
+const HOME_CACHE_KEY_PREFIX = 'home-cache-v1';
+
+type HomeCachePayload = {
+  cachedAt: string;
+  profile?: {
+    userName: string;
+    avatarUrl: string | null;
+  };
+  babyInfo?: any;
+  diaryEntries?: any[];
+  dailyEntries?: any[];
+  dailyEntriesDate?: string;
+  currentPhase?: any;
+  phaseProgress?: any;
+  milestones?: any[];
+  recommendations?: LottiRecommendation[];
+  todaySleepMinutes?: number;
+};
+
+const getCacheDayKey = (date: Date = new Date()) => date.toISOString().split('T')[0];
+
+const buildHomeCacheKey = (userId: string) => `${HOME_CACHE_KEY_PREFIX}:${userId}`;
 
 function GlassBorderGlint({ radius = 30 }: { radius?: number }) {
   const anim = useRef(new Animated.Value(0)).current;
@@ -276,6 +300,7 @@ export default function HomeScreen() {
   const [overviewIndex, setOverviewIndex] = useState(0);
   const [overviewSummaryHeight, setOverviewSummaryHeight] = useState<number | null>(null);
   const overviewScrollRef = useRef<ScrollView | null>(null);
+  const homeCacheRef = useRef<HomeCachePayload | null>(null);
   const productIndexRef = useRef(0);
   const productRotationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const productRotationCycleRef = useRef(0);
@@ -309,6 +334,102 @@ export default function HomeScreen() {
     const words = value.trim().split(/\s+/).filter(Boolean);
     if (words.length <= limit) return value.trim();
     return `${words.slice(0, limit).join(' ')}...`;
+  };
+
+  const resetHomeState = () => {
+    setBabyInfo(null);
+    setDiaryEntries([]);
+    setDailyEntries([]);
+    setCurrentPhase(null);
+    setPhaseProgress(null);
+    setMilestones([]);
+    setUserName('');
+    setProfileAvatarUrl(null);
+    setRecommendations([]);
+    setTodaySleepMinutes(0);
+  };
+
+  const loadCachedData = async () => {
+    if (!user?.id) return false;
+    try {
+      const cachedStr = await AsyncStorage.getItem(buildHomeCacheKey(user.id));
+      if (!cachedStr) return false;
+
+      const cached: HomeCachePayload = JSON.parse(cachedStr);
+      if (!cached || typeof cached !== 'object') return false;
+
+      homeCacheRef.current = cached;
+
+      if (cached.profile) {
+        setUserName(cached.profile.userName ?? '');
+        setProfileAvatarUrl(cached.profile.avatarUrl ?? null);
+      }
+
+      if (cached.babyInfo !== undefined) {
+        setBabyInfo(cached.babyInfo);
+      }
+
+      if (Array.isArray(cached.diaryEntries)) {
+        setDiaryEntries(cached.diaryEntries);
+      }
+
+      const todayKey = getCacheDayKey();
+      if (cached.dailyEntriesDate === todayKey && Array.isArray(cached.dailyEntries)) {
+        setDailyEntries(cached.dailyEntries);
+        if (typeof cached.todaySleepMinutes === 'number') {
+          setTodaySleepMinutes(cached.todaySleepMinutes);
+        }
+      } else {
+        setDailyEntries([]);
+        setTodaySleepMinutes(0);
+      }
+
+      if (cached.currentPhase !== undefined) {
+        setCurrentPhase(cached.currentPhase);
+      }
+      if (cached.phaseProgress !== undefined) {
+        setPhaseProgress(cached.phaseProgress);
+      }
+      if (Array.isArray(cached.milestones)) {
+        setMilestones(cached.milestones);
+      }
+      if (Array.isArray(cached.recommendations)) {
+        setRecommendations(cached.recommendations);
+      }
+
+      setIsLoading(false);
+      return true;
+    } catch (error) {
+      console.error('Error loading home cache:', error);
+      return false;
+    }
+  };
+
+  const saveHomeCache = async (updates: Partial<HomeCachePayload>) => {
+    if (!user?.id) return;
+    try {
+      const existing = homeCacheRef.current ?? {};
+      const next: HomeCachePayload = {
+        cachedAt: new Date().toISOString(),
+        profile: {
+          userName: updates.profile?.userName ?? existing.profile?.userName ?? userName,
+          avatarUrl: updates.profile?.avatarUrl ?? existing.profile?.avatarUrl ?? profileAvatarUrl ?? null,
+        },
+        babyInfo: updates.babyInfo ?? existing.babyInfo ?? babyInfo,
+        diaryEntries: updates.diaryEntries ?? existing.diaryEntries ?? diaryEntries,
+        dailyEntries: updates.dailyEntries ?? existing.dailyEntries ?? dailyEntries,
+        dailyEntriesDate: updates.dailyEntriesDate ?? existing.dailyEntriesDate ?? getCacheDayKey(),
+        currentPhase: updates.currentPhase ?? existing.currentPhase ?? currentPhase,
+        phaseProgress: updates.phaseProgress ?? existing.phaseProgress ?? phaseProgress,
+        milestones: updates.milestones ?? existing.milestones ?? milestones,
+        recommendations: updates.recommendations ?? existing.recommendations ?? recommendations,
+        todaySleepMinutes: updates.todaySleepMinutes ?? existing.todaySleepMinutes ?? todaySleepMinutes,
+      };
+      homeCacheRef.current = next;
+      await AsyncStorage.setItem(buildHomeCacheKey(user.id), JSON.stringify(next));
+    } catch (error) {
+      console.error('Error saving home cache:', error);
+    }
   };
 
   useEffect(() => {
@@ -390,14 +511,33 @@ export default function HomeScreen() {
   }, [overviewCarouselWidth, OVERVIEW_ROTATION_INTERVAL_MS, OVERVIEW_SLIDE_COUNT]);
 
   useEffect(() => {
-    if (user) {
-      loadData();
+    let isActive = true;
+
+    const init = async () => {
+      if (!user) {
+        resetHomeState();
+        homeCacheRef.current = null;
+        setIsLoading(false);
+        return;
+      }
+
+      resetHomeState();
+      homeCacheRef.current = null;
+      const cacheLoaded = await loadCachedData();
+      if (!isActive) return;
+
       // Wähle einen zufälligen Tipp für den Tag
       const randomTip = dailyTips[Math.floor(Math.random() * dailyTips.length)];
       setDailyTip(randomTip);
-    } else {
-      setIsLoading(false);
-    }
+
+      await loadData({ skipLoading: cacheLoaded });
+    };
+
+    init();
+
+    return () => {
+      isActive = false;
+    };
   }, [user]);
 
   // Funktion für Pull-to-Refresh
@@ -416,11 +556,29 @@ export default function HomeScreen() {
     }
   };
 
-  const loadData = async () => {
+  const loadData = async (options?: { skipLoading?: boolean }) => {
     try {
-      if (!refreshing) {
+      if (!refreshing && !options?.skipLoading) {
         setIsLoading(true);
       }
+
+      const today = new Date();
+      const startOfDay = new Date(today);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(today);
+      endOfDay.setHours(23, 59, 59, 999);
+      const todayKey = getCacheDayKey(today);
+
+      let nextProfileName = userName;
+      let nextProfileAvatar = profileAvatarUrl ?? null;
+      let nextBabyInfo = babyInfo;
+      let nextDiaryEntries = diaryEntries;
+      let nextDailyEntries = dailyEntries;
+      let nextCurrentPhase = currentPhase;
+      let nextPhaseProgress = phaseProgress;
+      let nextMilestones = milestones;
+      let nextRecommendations = recommendations;
+      let nextSleepMinutes = todaySleepMinutes;
 
       // Benutzernamen laden
       const { data: profileData, error: profileError } = await supabase
@@ -433,28 +591,27 @@ export default function HomeScreen() {
         console.error('Error loading user profile:', profileError);
       } else if (profileData) {
         if (profileData.first_name) {
+          nextProfileName = profileData.first_name;
           setUserName(profileData.first_name);
         }
-        setProfileAvatarUrl(profileData.avatar_url || null);
+        nextProfileAvatar = profileData.avatar_url || null;
+        setProfileAvatarUrl(nextProfileAvatar);
       }
 
       // Baby-Informationen laden
       const { data: babyData } = await getBabyInfo();
+      nextBabyInfo = babyData;
       setBabyInfo(babyData);
 
       // Tagebucheinträge laden (nur die neuesten 5)
       const { data: diaryData } = await getDiaryEntries();
       if (diaryData) {
-        setDiaryEntries(diaryData.slice(0, 5));
+        const diaryPreview = diaryData.slice(0, 5);
+        nextDiaryEntries = diaryPreview;
+        setDiaryEntries(diaryPreview);
       }
 
       // Alltags-Einträge für heute laden
-      const today = new Date();
-      const startOfDay = new Date(today);
-      startOfDay.setHours(0, 0, 0, 0);
-      const endOfDay = new Date(today);
-      endOfDay.setHours(23, 59, 59, 999);
-
       const { data: dailyData, error: dailyError } = await supabase
         .from('baby_care_entries')
         .select('*')
@@ -462,34 +619,55 @@ export default function HomeScreen() {
         .lte('start_time', endOfDay.toISOString())
         .order('start_time', { ascending: false });
 
-      if (!dailyError && dailyData) {
+      if (!dailyError && Array.isArray(dailyData)) {
+        nextDailyEntries = dailyData;
         setDailyEntries(dailyData);
       }
 
-      await fetchTodaySleepMinutes(startOfDay, endOfDay);
+      const sleepMinutes = await fetchTodaySleepMinutes(startOfDay, endOfDay);
+      if (sleepMinutes !== null) {
+        nextSleepMinutes = sleepMinutes;
+      }
 
       // Aktuelle Entwicklungsphase laden
       const { data: phaseData } = await getCurrentPhase();
       if (phaseData) {
+        nextCurrentPhase = phaseData;
         setCurrentPhase(phaseData);
 
         // Fortschritt für die aktuelle Phase berechnen
         const { progress, completedCount, totalCount } = await getPhaseProgress(phaseData.phase_id);
-        setPhaseProgress({ progress, completedCount, totalCount });
+        nextPhaseProgress = { progress, completedCount, totalCount };
+        setPhaseProgress(nextPhaseProgress);
 
         // Meilensteine für die aktuelle Phase laden
         const { data: milestonesData } = await getMilestonesByPhase(phaseData.phase_id);
         if (milestonesData) {
+          nextMilestones = milestonesData;
           setMilestones(milestonesData);
         }
       }
 
       try {
         const recommendationData = await getRecommendations();
+        nextRecommendations = recommendationData;
         setRecommendations(recommendationData);
       } catch (error) {
         console.error('Error loading recommendations:', error);
       }
+
+      await saveHomeCache({
+        profile: { userName: nextProfileName, avatarUrl: nextProfileAvatar },
+        babyInfo: nextBabyInfo,
+        diaryEntries: nextDiaryEntries,
+        dailyEntries: nextDailyEntries,
+        dailyEntriesDate: todayKey,
+        currentPhase: nextCurrentPhase,
+        phaseProgress: nextPhaseProgress,
+        milestones: nextMilestones,
+        recommendations: nextRecommendations,
+        todaySleepMinutes: nextSleepMinutes,
+      });
     } catch (err) {
       console.error('Failed to load home data:', err);
     } finally {
@@ -589,12 +767,21 @@ export default function HomeScreen() {
         return;
       }
 
+      let nextDailyEntries = dailyEntries;
       if (dailyData) {
         console.log('Loaded daily entries:', dailyData.length, 'entries');
+        nextDailyEntries = dailyData;
         setDailyEntries(dailyData);
       }
 
-      await fetchTodaySleepMinutes(startOfDay, endOfDay);
+      const sleepMinutes = await fetchTodaySleepMinutes(startOfDay, endOfDay);
+      if (dailyData || sleepMinutes !== null) {
+        await saveHomeCache({
+          dailyEntries: nextDailyEntries,
+          dailyEntriesDate: getCacheDayKey(today),
+          todaySleepMinutes: sleepMinutes ?? todaySleepMinutes,
+        });
+      }
     } catch (err) {
       console.error('Failed to load daily entries:', err);
     }
@@ -604,7 +791,7 @@ export default function HomeScreen() {
     try {
       if (!user?.id) {
         setTodaySleepMinutes(0);
-        return;
+        return 0;
       }
 
       const startIso = startOfDay.toISOString();
@@ -623,7 +810,7 @@ export default function HomeScreen() {
       if (error || !data) {
         console.error('Error loading sleep entries for today:', error);
         setTodaySleepMinutes(0);
-        return;
+        return null;
       }
 
       const totalMinutes = data.reduce((sum, entry) => {
@@ -636,9 +823,11 @@ export default function HomeScreen() {
       }, 0);
 
       setTodaySleepMinutes(totalMinutes);
+      return totalMinutes;
     } catch (error) {
       console.error('Failed to calculate today sleep minutes:', error);
       setTodaySleepMinutes(0);
+      return null;
     }
   };
 
@@ -709,7 +898,13 @@ export default function HomeScreen() {
       startOfDay.setHours(0, 0, 0, 0);
       const endOfDay = new Date(today);
       endOfDay.setHours(23, 59, 59, 999);
-      await fetchTodaySleepMinutes(startOfDay, endOfDay);
+      const sleepMinutes = await fetchTodaySleepMinutes(startOfDay, endOfDay);
+      if (sleepMinutes !== null) {
+        await saveHomeCache({
+          todaySleepMinutes: sleepMinutes,
+          dailyEntriesDate: getCacheDayKey(today),
+        });
+      }
     } catch (err) {
       console.error('Failed to save sleep entry:', err);
       Alert.alert('Fehler', 'Schlafeintrag konnte nicht gespeichert werden.');

@@ -52,6 +52,14 @@ const stripBase64Prefix = (value: string) => {
   return value.split('base64,')[1];
 };
 
+const getStoragePathFromPublicUrl = (publicUrl: string): string | null => {
+  const marker = `/storage/v1/object/public/${RECIPE_BUCKET}/`;
+  const index = publicUrl.indexOf(marker);
+  if (index === -1) return null;
+  const path = publicUrl.slice(index + marker.length).split('?')[0];
+  return path.length > 0 ? path : null;
+};
+
 const base64ToUint8Array = (base64Data: string): Uint8Array => {
   const data = stripBase64Prefix(base64Data);
 
@@ -460,6 +468,47 @@ export const deleteRecipe = async (recipeId: string): Promise<RecipeDeleteResult
     return { error };
   } catch (error) {
     console.error('Failed to delete recipe:', error);
+    return { error: error as Error };
+  }
+};
+
+export const deleteRecipeAdmin = async (recipeId: string): Promise<RecipeDeleteResult> => {
+  try {
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    if (authError) {
+      return { error: authError };
+    }
+    const userId = authData.user?.id;
+    if (!userId) {
+      return { error: new Error('Benutzer ist nicht angemeldet.') };
+    }
+
+    const { data: existingRecipe, error: fetchError } = await supabase
+      .from('baby_recipes')
+      .select('image_url')
+      .eq('id', recipeId)
+      .single();
+
+    if (fetchError || !existingRecipe) {
+      return { error: new Error('Rezept nicht gefunden.') };
+    }
+
+    if (existingRecipe.image_url) {
+      try {
+        const storagePath = getStoragePathFromPublicUrl(existingRecipe.image_url);
+        if (storagePath) {
+          await supabase.storage.from(RECIPE_BUCKET).remove([storagePath]);
+        }
+      } catch (storageError) {
+        console.warn('Failed to delete recipe image from storage:', storageError);
+      }
+    }
+
+    const { error } = await supabase.from('baby_recipes').delete().eq('id', recipeId);
+
+    return { error };
+  } catch (error) {
+    console.error('Failed to delete recipe as admin:', error);
     return { error: error as Error };
   }
 };

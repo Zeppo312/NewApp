@@ -27,6 +27,7 @@ import { LiquidGlassCard, PRIMARY } from '@/constants/DesignGuide';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import {
   fetchRecipes,
+  deleteRecipeAdmin,
   updateRecipeAdmin,
   RecipeRecord,
   RecipeUpdate,
@@ -62,6 +63,7 @@ const RecipeAdminScreen = () => {
   const [selectedRecipe, setSelectedRecipe] = useState<RecipeRecord | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const [editTitle, setEditTitle] = useState('');
   const [editDescription, setEditDescription] = useState('');
@@ -271,6 +273,40 @@ const RecipeAdminScreen = () => {
     }
   };
 
+  const handleDeleteRecipe = (recipe: RecipeRecord) => {
+    Alert.alert(
+      'Rezept löschen',
+      `Möchtest du "${recipe.title}" wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.`,
+      [
+        { text: 'Abbrechen', style: 'cancel' },
+        {
+          text: 'Löschen',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setIsDeleting(true);
+              const { error } = await deleteRecipeAdmin(recipe.id);
+              if (error) {
+                throw error;
+              }
+              setRecipes((prev) => prev.filter((item) => item.id !== recipe.id));
+              Alert.alert('Erfolg', 'Das Rezept wurde gelöscht.');
+            } catch (error) {
+              console.error('Error deleting recipe:', error);
+              const message =
+                error instanceof Error
+                  ? error.message
+                  : 'Beim Löschen ist ein Fehler aufgetreten.';
+              Alert.alert('Fehler', message);
+            } finally {
+              setIsDeleting(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
@@ -405,6 +441,15 @@ const RecipeAdminScreen = () => {
                         >
                           <IconSymbol name='pencil' size={18} color='#FFFFFF' />
                           <ThemedText style={styles.editButtonText}>Bearbeiten</ThemedText>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.deleteButton}
+                          onPress={() => handleDeleteRecipe(recipe)}
+                          activeOpacity={0.85}
+                          disabled={isDeleting}
+                        >
+                          <IconSymbol name='trash' size={18} color='#FFFFFF' />
+                          <ThemedText style={styles.deleteButtonText}>Löschen</ThemedText>
                         </TouchableOpacity>
                       </View>
                     </LiquidGlassCard>
@@ -814,6 +859,22 @@ const styles = StyleSheet.create({
     backgroundColor: PRIMARY,
   },
   editButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  deleteButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    backgroundColor: 'rgba(231,76,60,0.9)',
+  },
+  deleteButtonText: {
     fontSize: 15,
     fontWeight: '600',
     color: '#FFFFFF',
