@@ -182,6 +182,62 @@ function GlassLensOverlay({ radius = 20 }: { radius?: number }) {
   );
 }
 
+function TipHighlightDots() {
+  const dotOne = useRef(new Animated.Value(0)).current;
+  const dotTwo = useRef(new Animated.Value(0)).current;
+  const dotThree = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const createPulse = (value: Animated.Value, delayMs: number) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(delayMs),
+          Animated.timing(value, {
+            toValue: 1,
+            duration: 900,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: true,
+          }),
+          Animated.timing(value, {
+            toValue: 0,
+            duration: 900,
+            easing: Easing.in(Easing.quad),
+            useNativeDriver: true,
+          }),
+        ])
+      );
+
+    const pulseOne = createPulse(dotOne, 0);
+    const pulseTwo = createPulse(dotTwo, 500);
+    const pulseThree = createPulse(dotThree, 1000);
+
+    pulseOne.start();
+    pulseTwo.start();
+    pulseThree.start();
+
+    return () => {
+      pulseOne.stop();
+      pulseTwo.stop();
+      pulseThree.stop();
+    };
+  }, [dotOne, dotTwo, dotThree]);
+
+  const makeDotStyle = (value: Animated.Value) => ({
+    opacity: value.interpolate({ inputRange: [0, 1], outputRange: [0.2, 0.95] }),
+    transform: [
+      { scale: value.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1.25] }) },
+    ],
+  });
+
+  return (
+    <View pointerEvents="none" style={styles.tipHighlightContainer}>
+      <Animated.View style={[styles.tipHighlightDot, styles.tipHighlightDotOne, makeDotStyle(dotOne)]} />
+      <Animated.View style={[styles.tipHighlightDot, styles.tipHighlightDotTwo, makeDotStyle(dotTwo)]} />
+      <Animated.View style={[styles.tipHighlightDot, styles.tipHighlightDotThree, makeDotStyle(dotThree)]} />
+    </View>
+  );
+}
+
 export default function HomeScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
@@ -190,7 +246,7 @@ export default function HomeScreen() {
   const DEFAULT_OVERVIEW_HEIGHT = 230;
   const PRODUCT_ROTATION_INITIAL_DELAY_MS = 10000;
   const PRODUCT_ROTATION_INTERVAL_MS = 20000;
-  const OVERVIEW_ROTATION_INTERVAL_MS = 5000;
+  const OVERVIEW_ROTATION_INTERVAL_MS = 20000;
   const OVERVIEW_SLIDE_COUNT = 2;
 
   const [babyInfo, setBabyInfo] = useState<any>(null);
@@ -727,6 +783,7 @@ export default function HomeScreen() {
 
             <View style={styles.tipCard}>
               <GlassLensOverlay radius={20} />
+              <TipHighlightDots />
               <View style={styles.tipCardRow}>
                 <View style={styles.tipIconWrap}>
                   <IconSymbol name="lightbulb.fill" size={18} color="#D6B28C" />
@@ -1005,22 +1062,23 @@ export default function HomeScreen() {
         }}
         scrollEventThrottle={16}
       >
-        {[renderDailySummary(styles.carouselCardWrapper), renderRecommendationCard(styles.carouselCardWrapper)].map(
-          (slide, index) => (
-            <View
-              key={`overview-slide-${index}`}
-              style={[
-                styles.overviewSlide,
-                overviewCarouselWidth ? { width: overviewCarouselWidth } : null,
-              ]}
-            >
-              {slide}
-            </View>
-          )
-        )}
+        {[
+          renderDailySummary(styles.carouselCardWrapper),
+          renderRecommendationCard(styles.carouselCardWrapper),
+        ].map((slide, index) => (
+          <View
+            key={`overview-slide-${index}`}
+            style={[
+              styles.overviewSlide,
+              overviewCarouselWidth ? { width: overviewCarouselWidth } : null,
+            ]}
+          >
+            {slide}
+          </View>
+        ))}
       </ScrollView>
       <View style={styles.carouselDots}>
-        {[0, 1].map((index) => (
+        {Array.from({ length: OVERVIEW_SLIDE_COUNT }, (_, index) => (
           <View
             key={`overview-dot-${index}`}
             style={[
@@ -1379,6 +1437,39 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 4,
   },
+  tipHighlightContainer: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  tipHighlightDot: {
+    position: 'absolute',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    shadowColor: '#FFFFFF',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.6,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  tipHighlightDotOne: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    top: 10,
+    right: 16,
+  },
+  tipHighlightDotTwo: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    top: 28,
+    right: 44,
+  },
+  tipHighlightDotThree: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    bottom: 10,
+    right: 28,
+  },
   tipCardRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -1553,6 +1644,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
     textAlign: 'center',
   },
+
 
   // Tagesübersicht - Liquid Glass Design
   summaryContainer: {

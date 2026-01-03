@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, View, SafeAreaView, StatusBar, TouchableOpacity, ScrollView, ActivityIndicator, Alert, RefreshControl, Platform, ToastAndroid, Animated, Text, Image, StyleProp, ViewStyle } from 'react-native';
+import { StyleSheet, View, SafeAreaView, StatusBar, TouchableOpacity, ScrollView, ActivityIndicator, Alert, RefreshControl, Platform, ToastAndroid, Animated, Easing, Text, Image, StyleProp, ViewStyle } from 'react-native';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { ThemedText } from '@/components/ThemedText';
@@ -19,6 +19,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Canvas, RoundedRect, LinearGradient as SkiaLinearGradient, RadialGradient, Circle, vec } from '@shopify/react-native-skia';
 
 // Tägliche Tipps für Schwangere
 const dailyTips = [
@@ -33,6 +34,212 @@ const dailyTips = [
   "Vertraue deinem Instinkt – du weißt, was gut für dich und dein Baby ist.",
   "Verbinde dich mit deinem Baby – sprich mit ihm oder höre gemeinsam Musik."
 ];
+
+function GlassBorderGlint({ radius = 30 }: { radius?: number }) {
+  const anim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(anim, {
+          toValue: 1,
+          duration: 4200,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(anim, {
+          toValue: 0,
+          duration: 4200,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    animation.start();
+    return () => animation.stop();
+  }, [anim]);
+
+  const translateX = anim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-120, 120],
+  });
+
+  const translateY = anim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [6, -6],
+  });
+
+  return (
+    <View
+      pointerEvents="none"
+      style={[
+        StyleSheet.absoluteFill,
+        { borderRadius: radius, overflow: 'hidden' },
+      ]}
+    >
+      <Animated.View
+        style={{
+          position: 'absolute',
+          top: 2,
+          left: -140,
+          width: 220,
+          height: 8,
+          opacity: 0.65,
+          transform: [{ translateX }, { translateY }, { rotate: '-10deg' }],
+        }}
+      >
+        <LinearGradient
+          colors={[
+            'rgba(255,255,255,0)',
+            'rgba(255,255,255,0.6)',
+            'rgba(255,255,255,0)',
+          ]}
+          start={{ x: 0, y: 0.5 }}
+          end={{ x: 1, y: 0.5 }}
+          style={{
+            width: '100%',
+            height: '100%',
+          }}
+        />
+      </Animated.View>
+    </View>
+  );
+}
+
+function GlassLensOverlay({ radius = 20 }: { radius?: number }) {
+  const [layout, setLayout] = useState({ width: 0, height: 0 });
+  const width = layout.width;
+  const height = layout.height;
+  const minDim = Math.min(width, height);
+  const maxDim = Math.max(width, height);
+  const lensRadius = Math.min(radius, minDim / 2);
+  const strokeRadius = Math.max(0, lensRadius - 1);
+
+  return (
+    <View
+      pointerEvents="none"
+      style={[StyleSheet.absoluteFillObject, { borderRadius: radius, overflow: 'hidden' }]}
+      onLayout={(event) => {
+        const { width, height } = event.nativeEvent.layout;
+        if (width !== layout.width || height !== layout.height) {
+          setLayout({ width, height });
+        }
+      }}
+    >
+      {width > 0 && height > 0 ? (
+        <Canvas style={{ width, height }}>
+          <RoundedRect x={0} y={0} width={width} height={height} r={lensRadius}>
+            <SkiaLinearGradient
+              start={vec(0, 0)}
+              end={vec(width, height)}
+              colors={[
+                'rgba(255, 255, 255, 0.45)',
+                'rgba(94, 61, 179, 0.08)',
+                'rgba(255, 255, 255, 0.18)',
+              ]}
+              positions={[0, 0.6, 1]}
+            />
+          </RoundedRect>
+          <RoundedRect x={0} y={0} width={width} height={height} r={lensRadius}>
+            <RadialGradient
+              c={vec(width * 0.2, height * 0.15)}
+              r={maxDim * 0.9}
+              colors={['rgba(255, 255, 255, 0.55)', 'rgba(255, 255, 255, 0)']}
+            />
+          </RoundedRect>
+          <RoundedRect x={0} y={0} width={width} height={height} r={lensRadius}>
+            <RadialGradient
+              c={vec(width * 0.85, height * 0.85)}
+              r={maxDim * 0.8}
+              colors={['rgba(94, 61, 179, 0)', 'rgba(94, 61, 179, 0.18)']}
+            />
+          </RoundedRect>
+          <RoundedRect
+            x={0.5}
+            y={0.5}
+            width={width - 1}
+            height={height - 1}
+            r={strokeRadius}
+            style="stroke"
+            strokeWidth={1}
+            color="rgba(255, 255, 255, 0.6)"
+          />
+          <Circle cx={width * 0.22} cy={height * 0.28} r={minDim * 0.18}>
+            <RadialGradient
+              c={vec(width * 0.22, height * 0.28)}
+              r={minDim * 0.18}
+              colors={['rgba(255, 255, 255, 0.7)', 'rgba(255, 255, 255, 0)']}
+            />
+          </Circle>
+          <Circle cx={width * 0.72} cy={height * 0.18} r={minDim * 0.1}>
+            <RadialGradient
+              c={vec(width * 0.72, height * 0.18)}
+              r={minDim * 0.1}
+              colors={['rgba(255, 255, 255, 0.6)', 'rgba(255, 255, 255, 0)']}
+            />
+          </Circle>
+        </Canvas>
+      ) : null}
+    </View>
+  );
+}
+
+function TipHighlightDots() {
+  const dotOne = useRef(new Animated.Value(0)).current;
+  const dotTwo = useRef(new Animated.Value(0)).current;
+  const dotThree = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const createPulse = (value: Animated.Value, delayMs: number) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(delayMs),
+          Animated.timing(value, {
+            toValue: 1,
+            duration: 900,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: true,
+          }),
+          Animated.timing(value, {
+            toValue: 0,
+            duration: 900,
+            easing: Easing.in(Easing.quad),
+            useNativeDriver: true,
+          }),
+        ])
+      );
+
+    const pulseOne = createPulse(dotOne, 0);
+    const pulseTwo = createPulse(dotTwo, 500);
+    const pulseThree = createPulse(dotThree, 1000);
+
+    pulseOne.start();
+    pulseTwo.start();
+    pulseThree.start();
+
+    return () => {
+      pulseOne.stop();
+      pulseTwo.stop();
+      pulseThree.stop();
+    };
+  }, [dotOne, dotTwo, dotThree]);
+
+  const makeDotStyle = (value: Animated.Value) => ({
+    opacity: value.interpolate({ inputRange: [0, 1], outputRange: [0.2, 0.95] }),
+    transform: [
+      { scale: value.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1.25] }) },
+    ],
+  });
+
+  return (
+    <View pointerEvents="none" style={styles.tipHighlightContainer}>
+      <Animated.View style={[styles.tipHighlightDot, styles.tipHighlightDotOne, makeDotStyle(dotOne)]} />
+      <Animated.View style={[styles.tipHighlightDot, styles.tipHighlightDotTwo, makeDotStyle(dotTwo)]} />
+      <Animated.View style={[styles.tipHighlightDot, styles.tipHighlightDotThree, makeDotStyle(dotThree)]} />
+    </View>
+  );
+}
 
 // AsyncStorage-Schlüssel
 const LAST_POPUP_DATE_KEY = 'lastDueDatePopup';
@@ -67,6 +274,8 @@ export default function PregnancyHomeScreen() {
   const { user } = useAuth();
   const { isBabyBorn, setIsBabyBorn } = useBabyStatus();
   const DEFAULT_OVERVIEW_HEIGHT = 230;
+  const OVERVIEW_ROTATION_INTERVAL_MS = 20000;
+  const OVERVIEW_SLIDE_COUNT = 2;
 
   const [dueDate, setDueDate] = useState<Date | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -80,6 +289,7 @@ export default function PregnancyHomeScreen() {
   const [overviewCarouselWidth, setOverviewCarouselWidth] = useState(0);
   const [overviewIndex, setOverviewIndex] = useState(0);
   const [overviewSummaryHeight, setOverviewSummaryHeight] = useState<number | null>(null);
+  const overviewScrollRef = useRef<ScrollView | null>(null);
   const [recommendations, setRecommendations] = useState<LottiRecommendation[]>([]);
   const [recommendationImageFailed, setRecommendationImageFailed] = useState(false);
 
@@ -110,6 +320,23 @@ export default function PregnancyHomeScreen() {
   useEffect(() => {
     setRecommendationImageFailed(false);
   }, [featuredRecommendation?.id, featuredRecommendation?.image_url]);
+
+  useEffect(() => {
+    if (!overviewCarouselWidth) return;
+
+    const interval = setInterval(() => {
+      setOverviewIndex((current) => {
+        const nextIndex = (current + 1) % OVERVIEW_SLIDE_COUNT;
+        overviewScrollRef.current?.scrollTo({
+          x: overviewCarouselWidth * nextIndex,
+          animated: true,
+        });
+        return nextIndex;
+      });
+    }, OVERVIEW_ROTATION_INTERVAL_MS);
+
+    return () => clearInterval(interval);
+  }, [overviewCarouselWidth, OVERVIEW_ROTATION_INTERVAL_MS, OVERVIEW_SLIDE_COUNT]);
 
   useEffect(() => {
     if (user) {
@@ -458,6 +685,7 @@ export default function PregnancyHomeScreen() {
       }}
     >
       <BlurView
+        {...androidBlurProps}
         intensity={22}
         tint={colorScheme === 'dark' ? 'dark' : 'light'}
         style={styles.liquidGlassBackground}
@@ -548,6 +776,7 @@ export default function PregnancyHomeScreen() {
     return (
       <View style={[styles.liquidGlassWrapper, wrapperStyle, cardHeightStyle]}>
         <BlurView
+          {...androidBlurProps}
           intensity={22}
           tint={colorScheme === 'dark' ? 'dark' : 'light'}
           style={[styles.liquidGlassBackground, cardHeightStyle]}
@@ -638,6 +867,7 @@ export default function PregnancyHomeScreen() {
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
+        ref={overviewScrollRef}
         style={styles.overviewCarousel}
         decelerationRate="fast"
         onMomentumScrollEnd={(event) => {
@@ -662,7 +892,7 @@ export default function PregnancyHomeScreen() {
         )}
       </ScrollView>
       <View style={styles.carouselDots}>
-        {[0, 1].map((index) => (
+        {Array.from({ length: OVERVIEW_SLIDE_COUNT }, (_, index) => (
           <View
             key={`overview-dot-${index}`}
             style={[
@@ -721,7 +951,7 @@ export default function PregnancyHomeScreen() {
               >
                 <LinearGradient
                   pointerEvents="none"
-                  colors={['rgba(255, 255, 255, 0.95)', 'rgba(255, 255, 255, 0.15)', 'rgba(255, 255, 255, 0)']}
+                  colors={['rgba(255, 255, 255, 0)', 'rgba(255, 255, 255, 0)', 'rgba(255, 255, 255, 0)']}
                   locations={[0, 0.45, 1]}
                   start={{ x: 0.15, y: 0.0 }}
                   end={{ x: 0.85, y: 1.0 }}
@@ -753,14 +983,8 @@ export default function PregnancyHomeScreen() {
                 </View>
 
                 <View style={styles.tipCard}>
-                  <LinearGradient
-                    pointerEvents="none"
-                    colors={['rgba(255, 255, 255, 0.9)', 'rgba(255, 255, 255, 0.1)']}
-                    locations={[0, 1]}
-                    start={{ x: 0.2, y: 0 }}
-                    end={{ x: 0.8, y: 1 }}
-                    style={styles.tipGloss}
-                  />
+                  <GlassLensOverlay radius={20} />
+                  <TipHighlightDots />
                   <View style={styles.tipCardRow}>
                     <View style={styles.tipIconWrap}>
                       <IconSymbol name="lightbulb.fill" size={18} color="#D6B28C" />
@@ -773,6 +997,7 @@ export default function PregnancyHomeScreen() {
                 </View>
               </ThemedView>
             </BlurView>
+            <GlassBorderGlint radius={30} />
           </View>
 
           {/* Debug-Panel (nur im Entwicklungsmodus sichtbar) */}
@@ -1154,9 +1379,9 @@ const styles = StyleSheet.create({
     lineHeight: 36,
   },
   dateText: {
-    fontSize: 14,
+    fontSize: 18,
     opacity: 0.8,
-    fontWeight: '500',
+    fontWeight: '700',
     letterSpacing: 0.2,
   },
   profileBadge: {
@@ -1215,15 +1440,49 @@ const styles = StyleSheet.create({
   tipCard: {
     marginTop: 14,
     borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.55)',
+    backgroundColor: 'rgba(255, 255, 255, 0.22)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.7)',
+    borderColor: 'rgba(255, 255, 255, 0.55)',
     padding: 14,
     overflow: 'hidden',
+    shadowColor: '#5E3DB3',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 4,
   },
-  tipGloss: {
+  tipHighlightContainer: {
     ...StyleSheet.absoluteFillObject,
-    borderRadius: 20,
+  },
+  tipHighlightDot: {
+    position: 'absolute',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    shadowColor: '#FFFFFF',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.6,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  tipHighlightDotOne: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    top: 10,
+    right: 16,
+  },
+  tipHighlightDotTwo: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    top: 28,
+    right: 44,
+  },
+  tipHighlightDotThree: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    bottom: 10,
+    right: 28,
   },
   tipCardRow: {
     flexDirection: 'row',
@@ -1233,16 +1492,15 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: 'rgba(255, 255, 255, 0.7)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.6)',
+    backgroundColor: 'transparent',
+    borderWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#D6B28C',
+    shadowColor: 'transparent',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 4,
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    elevation: 0,
   },
   tipContent: {
     flex: 1,

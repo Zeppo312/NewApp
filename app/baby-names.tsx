@@ -49,6 +49,8 @@ const CATEGORIES = [
   { id: 'favorites', name: 'Favoriten', icon: 'heart.fill' },
 ];
 
+const LETTER_FILTERS = ['all', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'Ä', 'Ö', 'Ü'];
+
 interface Name {
   id?: string;
   name: string;
@@ -84,6 +86,7 @@ export default function BabyNamesScreen() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const [letterFilter, setLetterFilter] = useState('all');
   const [names, setNames] = useState<Name[]>([]);
   const [favorites, setFavorites] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -123,7 +126,7 @@ export default function BabyNamesScreen() {
 
   useEffect(() => {
     resetAndLoadNames();
-  }, [selectedCategory, searchQuery]);
+  }, [selectedCategory, searchQuery, letterFilter]);
 
   useEffect(() => {
     if (selectedCategory === 'favorites') {
@@ -199,6 +202,11 @@ export default function BabyNamesScreen() {
       );
     }
 
+    if (letterFilter !== 'all') {
+      const prefix = letterFilter.toLowerCase();
+      fallback = fallback.filter(name => name.name.toLowerCase().startsWith(prefix));
+    }
+
     return fallback.map(name => ({
       ...name,
       isFavorite: favorites.includes(name.name),
@@ -222,6 +230,10 @@ export default function BabyNamesScreen() {
     if (searchQuery.trim()) {
       const like = `%${searchQuery.trim()}%`;
       query = query.or(`name.ilike.${like},meaning.ilike.${like},origin.ilike.${like}`);
+    }
+
+    if (letterFilter !== 'all') {
+      query = query.ilike('name', `${letterFilter}%`);
     }
 
     return query.order('name', { ascending: true });
@@ -1020,6 +1032,29 @@ export default function BabyNamesScreen() {
     </TouchableOpacity>
   );
 
+  const renderLetterItem = ({ item }: { item: string }) => {
+    const isActive = letterFilter === item;
+    return (
+      <TouchableOpacity
+        style={[
+          styles.letterItem,
+          isActive && { backgroundColor: theme.accent + '30' },
+        ]}
+        onPress={() => setLetterFilter(item)}
+      >
+        <ThemedView
+          style={styles.letterItemInner}
+          lightColor="rgba(255, 255, 255, 0.8)"
+          darkColor="rgba(50, 50, 50, 0.8)"
+        >
+          <ThemedText style={[styles.letterText, isActive && { color: theme.accent }]}>
+            {item === 'all' ? 'Alle' : item}
+          </ThemedText>
+        </ThemedView>
+      </TouchableOpacity>
+    );
+  };
+
   const genderOverlay = (gender?: string) => {
     if (gender === 'male') return 'rgba(135,206,235,0.32)'; // Baby blue
     if (gender === 'female') return 'rgba(142,78,198,0.32)'; // Lila
@@ -1127,6 +1162,19 @@ export default function BabyNamesScreen() {
                       data={CATEGORIES}
                       renderItem={renderCategoryItem}
                       keyExtractor={(item) => item.id}
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                    />
+                  </View>
+                </LiquidGlassCard>
+
+                {/* Buchstabenfilter */}
+                <LiquidGlassCard style={[styles.fullWidthCard, styles.glassCard]} intensity={26} overlayColor={GLASS_OVERLAY}>
+                  <View style={styles.lettersContainer}>
+                    <FlatList
+                      data={LETTER_FILTERS}
+                      renderItem={renderLetterItem}
+                      keyExtractor={(item) => item}
                       horizontal
                       showsHorizontalScrollIndicator={false}
                     />
@@ -1478,6 +1526,23 @@ const styles = StyleSheet.create({
   categoryText: {
     fontSize: 14,
     marginLeft: 8,
+  },
+  lettersContainer: { paddingVertical: 6 },
+  letterItem: {
+    borderRadius: 16,
+    marginRight: 8,
+    overflow: 'hidden',
+  },
+  letterItemInner: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  letterText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#7D5A50',
   },
   namesContainer: { marginBottom: 16 },
   nameItem: {
