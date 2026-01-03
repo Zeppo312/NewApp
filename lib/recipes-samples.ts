@@ -168,3 +168,14 @@ export const RECIPE_SAMPLES: RecipeSample[] = [
     emoji: '🧁',
   },
 ];
+
+const normalizeRecipeTitle = (title: string) => title.trim().toLowerCase();
+
+const SAMPLE_IMAGE_BY_TITLE = new Map(
+  RECIPE_SAMPLES.map((sample) => [normalizeRecipeTitle(sample.title), sample.image ?? null])
+);
+
+export const getSampleRecipeImage = (title: string): string | null => {
+  if (!title) return null;
+  return SAMPLE_IMAGE_BY_TITLE.get(normalizeRecipeTitle(title)) ?? null;
+};

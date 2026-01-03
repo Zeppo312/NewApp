@@ -26,7 +26,8 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { GLASS_BORDER, LiquidGlassCard, PRIMARY, GRID_GAP } from '@/constants/DesignGuide';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { createRecipe, fetchRecipes, RecipeRecord } from '@/lib/recipes';
-import { RECIPE_SAMPLES, RecipeSample } from '@/lib/recipes-samples';
+import { getSampleRecipeImage, RECIPE_SAMPLES, RecipeSample } from '@/lib/recipes-samples';
+import { isUserAdmin } from '@/lib/supabase/recommendations';
 
 type AllergenId = 'milk' | 'gluten' | 'egg' | 'nuts' | 'fish';
 
@@ -81,6 +82,35 @@ const SAMPLE_RECIPES: RecipeSample[] = RECIPE_SAMPLES;
 const formatAllergens = (allergens: string[] = []) =>
   allergens.map((id) => ALLERGEN_LABELS[id as AllergenId] ?? id).join(', ');
 
+type InstructionStep = {
+  number: string;
+  text: string;
+};
+
+const parseInstructionSteps = (value: string) => {
+  if (!value) return null;
+  const stepRegex = /(?:^|\n)\s*(\d+)\.\s*/g;
+  const matches = Array.from(value.matchAll(stepRegex));
+  if (matches.length < 2 || matches[0]?.[1] !== '1') {
+    return null;
+  }
+  const steps: InstructionStep[] = [];
+  for (let i = 0; i < matches.length; i += 1) {
+    const match = matches[i];
+    if (!match) continue;
+    const startIndex = (match.index ?? 0) + match[0].length;
+    const endIndex =
+      i + 1 < matches.length ? matches[i + 1]?.index ?? value.length : value.length;
+    const rawStep = value.slice(startIndex, endIndex).trim();
+    if (!rawStep) continue;
+    const cleanedStep = rawStep.replace(/\n[ \t]+/g, '\n').trim();
+    steps.push({ number: match[1] ?? `${i + 1}`, text: cleanedStep });
+  }
+  if (steps.length === 0) return null;
+  const intro = value.slice(0, matches[0]?.index ?? 0).trim();
+  return { intro, steps };
+};
+
 const RecipeGeneratorScreen = () => {
   const router = useRouter();
   const colorScheme = useColorScheme() ?? 'light';
@@ -93,6 +123,7 @@ const RecipeGeneratorScreen = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSeeding, setIsSeeding] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const [newTitle, setNewTitle] = useState('');
   const [newDescription, setNewDescription] = useState('');
@@ -124,6 +155,13 @@ const RecipeGeneratorScreen = () => {
     }, 0);
   }, [selectedAllergies, recipes]);
 
+  const selectedRecipeImageUrl = selectedRecipe
+    ? selectedRecipe.image_url ?? getSampleRecipeImage(selectedRecipe.title)
+    : null;
+  const instructionParts = selectedRecipe?.instructions
+    ? parseInstructionSteps(selectedRecipe.instructions)
+    : null;
+
   const loadRecipes = useCallback(async () => {
     try {
       setIsLoading(true);
@@ -144,6 +182,20 @@ const RecipeGeneratorScreen = () => {
   useEffect(() => {
     loadRecipes();
   }, [loadRecipes]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const checkAdminStatus = async () => {
+      const adminStatus = await isUserAdmin();
+      if (isMounted) {
+        setIsAdmin(adminStatus);
+      }
+    };
+    checkAdminStatus();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const resetCreateForm = () => {
     setNewTitle('');
@@ -360,17 +412,22 @@ const RecipeGeneratorScreen = () => {
               showBackButton
               onBackPress={() => router.back()}
             />
-            
-            <TouchableOpacity 
-              style={styles.myRecipesButton}
-              onPress={() => router.push('/my-recipes')}
-            >
-              <IconSymbol 
-                name='book.fill' 
-                size={24} 
-                color={PRIMARY} 
-              />
-            </TouchableOpacity>
+            <View style={styles.headerActions}>
+              {isAdmin && (
+                <TouchableOpacity
+                  style={styles.headerActionButton}
+                  onPress={() => router.push('/recipe-admin')}
+                >
+                  <IconSymbol name='shield.lefthalf.fill' size={22} color={PRIMARY} />
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={styles.headerActionButton}
+                onPress={() => router.push('/my-recipes')}
+              >
+                <IconSymbol name='book.fill' size={22} color={PRIMARY} />
+              </TouchableOpacity>
+            </View>
           </View>
           
           <ScrollView 
@@ -584,6 +641,7 @@ const RecipeGeneratorScreen = () => {
                       recipe.allergens.includes(allergen)
                     );
                     const meetsAge = ageMonths >= recipe.min_months;
+                    const imageUrl = recipe.image_url ?? getSampleRecipeImage(recipe.title);
 
                     if (!meetsAge || isFilteredOut) {
                       return (
@@ -623,9 +681,9 @@ const RecipeGeneratorScreen = () => {
                         activeOpacity={0.88}
                       >
                         <View style={styles.imageHeader}>
-                          {recipe.image_url ? (
+                          {imageUrl ? (
                             <Image
-                              source={{ uri: recipe.image_url }}
+                              source={{ uri: imageUrl }}
                               style={styles.imageHeaderImg}
                               resizeMode='cover'
                             />
@@ -740,10 +798,10 @@ const RecipeGeneratorScreen = () => {
                 showsVerticalScrollIndicator={false}
               >
                 <View style={styles.recipeHeroCard}>
-                  {selectedRecipe.image_url ? (
+                  {selectedRecipeImageUrl ? (
                     <>
                       <Image
-                        source={{ uri: selectedRecipe.image_url }}
+                        source={{ uri: selectedRecipeImageUrl }}
                         style={StyleSheet.absoluteFill}
                         resizeMode='cover'
                       />
@@ -829,9 +887,38 @@ const RecipeGeneratorScreen = () => {
                 {selectedRecipe.instructions ? (
                   <View style={styles.recipeSectionCard}>
                     <ThemedText style={styles.recipeSectionTitle}>Anleitung</ThemedText>
-                    <ThemedText style={styles.recipeInstructions}>
-                      {selectedRecipe.instructions}
-                    </ThemedText>
+                    {instructionParts ? (
+                      <>
+                        {instructionParts.intro ? (
+                          <ThemedText
+                            style={[styles.recipeInstructions, styles.recipeInstructionsIntro]}
+                          >
+                            {instructionParts.intro}
+                          </ThemedText>
+                        ) : null}
+                        <View style={styles.recipeSteps}>
+                          {instructionParts.steps.map((step, index) => (
+                            <View
+                              key={`step-${step.number}-${index}`}
+                              style={styles.recipeStepRow}
+                            >
+                              <View style={styles.recipeStepBadge}>
+                                <ThemedText style={styles.recipeStepBadgeText}>
+                                  {step.number}
+                                </ThemedText>
+                              </View>
+                              <ThemedText style={styles.recipeStepText}>
+                                {step.text}
+                              </ThemedText>
+                            </View>
+                          ))}
+                        </View>
+                      </>
+                    ) : (
+                      <ThemedText style={styles.recipeInstructions}>
+                        {selectedRecipe.instructions}
+                      </ThemedText>
+                    )}
                   </View>
                 ) : null}
 
@@ -1092,6 +1179,19 @@ const styles = StyleSheet.create({
   overlayContainer: {
     width: '100%',
     position: 'relative',
+  },
+  headerActions: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    flexDirection: 'row',
+    gap: 10,
+    zIndex: 10,
+  },
+  headerActionButton: {
+    padding: 8,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.75)',
   },
   scrollContent: {
     paddingBottom: 100,
@@ -1701,6 +1801,37 @@ const styles = StyleSheet.create({
     color: '#7D5A50',
     lineHeight: 22,
   },
+  recipeInstructionsIntro: {
+    marginBottom: 12,
+  },
+  recipeSteps: {
+    gap: 12,
+  },
+  recipeStepRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  recipeStepBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: PRIMARY,
+    marginTop: 2,
+  },
+  recipeStepBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  recipeStepText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#7D5A50',
+    lineHeight: 22,
+  },
   recipeTipCard: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -1882,12 +2013,5 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#FFFFFF',
-  },
-  myRecipesButton: {
-    position: 'absolute',
-    top: 16,
-    right: 16,
-    padding: 8,
-    zIndex: 10,
   },
 });

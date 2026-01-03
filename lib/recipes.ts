@@ -328,6 +328,86 @@ export const updateRecipe = async (
   }
 };
 
+export const updateRecipeAdmin = async (
+  recipeId: string,
+  payload: RecipeUpdate,
+  imageBase64?: string
+): Promise<RecipeUpdateResult> => {
+  try {
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    if (authError) {
+      return { data: null, error: authError };
+    }
+    const userId = authData.user?.id;
+    if (!userId) {
+      return { data: null, error: new Error('Benutzer ist nicht angemeldet.') };
+    }
+
+    const updatePayload: any = {};
+
+    if (payload.title !== undefined) {
+      updatePayload.title = payload.title.trim();
+    }
+    if (payload.description !== undefined) {
+      updatePayload.description = payload.description?.trim() ?? null;
+    }
+    if (payload.min_months !== undefined) {
+      updatePayload.min_months = payload.min_months;
+    }
+    if (payload.ingredients !== undefined) {
+      const normalizedIngredients = sanitizeIngredients(payload.ingredients);
+      if (normalizedIngredients.length === 0) {
+        return {
+          data: null,
+          error: new Error('Bitte mindestens eine Zutat hinzufügen.'),
+        };
+      }
+      updatePayload.ingredients = normalizedIngredients;
+    }
+    if (payload.allergens !== undefined) {
+      updatePayload.allergens = sanitizeAllergens(payload.allergens);
+    }
+    if (payload.instructions !== undefined) {
+      updatePayload.instructions = payload.instructions.trim();
+    }
+    if (payload.tip !== undefined) {
+      updatePayload.tip = payload.tip?.trim() ?? null;
+    }
+
+    let imageUrl: string | null | undefined = undefined;
+    if (imageBase64 !== undefined) {
+      if (imageBase64 && imageBase64.length > 0) {
+        const { publicUrl, error: uploadError } = await uploadRecipeImage(
+          imageBase64,
+          userId
+        );
+        if (uploadError) {
+          return {
+            data: null,
+            error: uploadError,
+          };
+        }
+        imageUrl = publicUrl;
+      } else {
+        imageUrl = null;
+      }
+      updatePayload.image_url = imageUrl;
+    }
+
+    const { data, error } = await supabase
+      .from('baby_recipes')
+      .update(updatePayload)
+      .eq('id', recipeId)
+      .select()
+      .single();
+
+    return { data, error };
+  } catch (error) {
+    console.error('Failed to update recipe as admin:', error);
+    return { data: null, error: error as Error };
+  }
+};
+
 type RecipeDeleteResult = {
   error: PostgrestError | Error | null;
 };

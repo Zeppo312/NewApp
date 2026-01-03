@@ -16,7 +16,7 @@ import {
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { RECIPE_SAMPLES } from '@/lib/recipes-samples';
+import { getSampleRecipeImage, RECIPE_SAMPLES } from '@/lib/recipes-samples';
 import { fetchRecipes, RecipeRecord } from '@/lib/recipes';
 import TextInputOverlay from '@/components/modals/TextInputOverlay';
 
@@ -147,7 +147,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
             id: r.id,
             title: r.title,
             minMonths: r.min_months,
-            image: r.image_url,
+            image: r.image_url ?? getSampleRecipeImage(r.title),
             emoji: '🥄',
             source: 'live' as const,
           }));
