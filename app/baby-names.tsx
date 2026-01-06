@@ -45,7 +45,6 @@ const CATEGORIES = [
   { id: 'all', name: 'Alle Namen', icon: 'list.bullet' },
   { id: 'male', name: 'Jungennamen', icon: 'figure.boy' },
   { id: 'female', name: 'Mädchennamen', icon: 'figure.girl' },
-  { id: 'unisex', name: 'Unisex Namen', icon: 'person.2' },
   { id: 'favorites', name: 'Favoriten', icon: 'heart.fill' },
 ];
 
