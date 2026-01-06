@@ -157,20 +157,29 @@ export default function HomeScreen() {
   );
 
   const stats = useMemo(() => {
-    const durations = filteredContractions
+    const sortedContractions = [...filteredContractions].sort(
+      (a, b) => b.startTime.getTime() - a.startTime.getTime()
+    );
+    const durations = sortedContractions
       .map((c) => c.duration)
       .filter((v): v is number => typeof v === 'number' && v > 0);
-    const intervals = filteredContractions
-      .map((c) => c.interval)
+    const intervals = sortedContractions
+      .slice(0, -1)
+      .map((contraction, index) => {
+        const nextContraction = sortedContractions[index + 1];
+        return Math.floor(
+          (contraction.startTime.getTime() - nextContraction.startTime.getTime()) / 1000
+        );
+      })
       .filter((v): v is number => typeof v === 'number' && v > 0);
 
     const average = (values: number[]) =>
       values.length ? values.reduce((sum, v) => sum + v, 0) / values.length : 0;
 
-    const last = filteredContractions[0];
+    const last = sortedContractions[0];
 
     return {
-      count: filteredContractions.length,
+      count: sortedContractions.length,
       avgDuration: average(durations),
       longestDuration: durations.length ? Math.max(...durations) : 0,
       avgInterval: average(intervals),
