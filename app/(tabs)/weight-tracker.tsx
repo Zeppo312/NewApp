@@ -11,6 +11,7 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { LineChart } from 'react-native-chart-kit';
 import { Dimensions } from 'react-native';
 import { getWeightEntries, deleteWeightEntry, WeightEntry, WeightSubject, saveWeightEntry } from '@/lib/weight';
+import { supabase } from '@/lib/supabase';
 import { Stack } from 'expo-router';
 import Header from '@/components/Header';
 import { LiquidGlassCard, GLASS_OVERLAY, LAYOUT_PAD, SECTION_GAP_TOP, SECTION_GAP_BOTTOM } from '@/constants/DesignGuide';
@@ -40,6 +41,7 @@ const isBabySubject = (subject: WeightSubject) => subject === 'baby';
 const getWeightUnit = (subject: WeightSubject) => (isBabySubject(subject) ? 'g' : 'kg');
 const getDisplayWeightValue = (weightKg: number, subject: WeightSubject) =>
   isBabySubject(subject) ? Math.round(weightKg * BABY_WEIGHT_FACTOR) : weightKg;
+const getParentEmoji = (role?: string | null) => (role === 'papa' ? '👨' : '👩');
 const formatWeightDisplayValue = (weightKg: number, subject: WeightSubject) => {
   if (isBabySubject(subject)) {
     const grams = Math.round(weightKg * BABY_WEIGHT_FACTOR);
@@ -81,6 +83,7 @@ export default function WeightTrackerScreen() {
   const [weightInput, setWeightInput] = useState('');
   const [weightNotes, setWeightNotes] = useState('');
   const [editingEntry, setEditingEntry] = useState<WeightEntry | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
   const [weightDate, setWeightDate] = useState<Date>(() => {
     const d = new Date();
     d.setHours(0, 0, 0, 0);
@@ -93,6 +96,7 @@ export default function WeightTrackerScreen() {
   // Lade Gewichtsdaten beim ersten Rendern
   useEffect(() => {
     loadWeightEntries();
+    loadUserRole();
   }, []);
 
   // Lade Gewichtsdaten
@@ -111,6 +115,25 @@ export default function WeightTrackerScreen() {
       Alert.alert('Fehler', 'Beim Laden der Gewichtsdaten ist ein Fehler aufgetreten.');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const loadUserRole = async () => {
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user) return;
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('user_role')
+        .eq('id', userData.user.id)
+        .maybeSingle();
+      if (error) {
+        console.error('Error loading user role:', error);
+        return;
+      }
+      setUserRole(data?.user_role ?? null);
+    } catch (error) {
+      console.error('Failed to load user role:', error);
     }
   };
 
@@ -502,6 +525,7 @@ export default function WeightTrackerScreen() {
   const convertWeightToDailyEntry = (e: WeightEntry): any => {
     const subject = e.subject ?? 'mom';
     const displayWeight = formatWeightDisplayValue(e.weight, subject);
+    const parentEmoji = getParentEmoji(userRole);
     return {
       id: e.id,
       entry_date: e.date,
@@ -509,7 +533,7 @@ export default function WeightTrackerScreen() {
       // keine Zeiten -> keine Zeit-Pills
       notes: e.notes ?? undefined,
       // Custom Anzeige wie im Sleep-Tracker (über emoji/label)
-      emoji: subject === 'baby' ? '👶' : '🤰',
+      emoji: subject === 'baby' ? '👶' : parentEmoji,
       label: `${SUBJECT_LABELS[subject]}: ${displayWeight}`,
       weightValue: e.weight,
       weightSubject: subject,
