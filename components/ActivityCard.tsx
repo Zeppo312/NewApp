@@ -209,6 +209,8 @@ const ActivityCard: React.FC<ActivityCardProps> = ({ entry, onDelete, onEdit, ma
     return line.replace(/blw:/i, '').trim();
   })();
 
+  const weightDateLabel = (entry as any).weightDateLabel as string | undefined;
+
   // Notizen ohne evtl. BLW-Rezept-Zeile (wird separat als Badge gezeigt)
   const notesWithoutRecipe = (() => {
     if (!entry.notes) return null;
@@ -307,6 +309,11 @@ const ActivityCard: React.FC<ActivityCardProps> = ({ entry, onDelete, onEdit, ma
                 {recipeNote ? (
                   <View style={styles.badgeRow}>
                     <ThemedText style={styles.badgeText}>🥄 BLW: {recipeNote}</ThemedText>
+                  </View>
+                ) : null}
+                {weightDateLabel ? (
+                  <View style={styles.badgeRow}>
+                    <ThemedText style={styles.badgeText}>📅 {weightDateLabel}</ThemedText>
                   </View>
                 ) : null}
                 {showNotesBadge ? (

@@ -526,6 +526,7 @@ export default function WeightTrackerScreen() {
     const subject = e.subject ?? 'mom';
     const displayWeight = formatWeightDisplayValue(e.weight, subject);
     const parentEmoji = getParentEmoji(userRole);
+    const displayDate = formatDisplayDate(parseDateOnly(e.date));
     return {
       id: e.id,
       entry_date: e.date,
@@ -539,6 +540,7 @@ export default function WeightTrackerScreen() {
       weightSubject: subject,
       weightNotes: e.notes ?? '',
       weightDate: e.date,
+      weightDateLabel: displayDate,
       rawWeightEntry: e,
     };
   };
@@ -560,12 +562,16 @@ export default function WeightTrackerScreen() {
       );
     }
 
+    const sortedEntries = [...filteredEntries].sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+    );
+
     return (
       <View style={styles.timelineSection}>
         <Text style={[styles.sectionTitleSleepLike]}>Gewichtseinträge für {subjectLabel}</Text>
         <View style={{ alignSelf: 'center', width: contentWidth }}>
           <View style={[styles.entriesContainer, { paddingHorizontal: TIMELINE_INSET }]}>
-            {filteredEntries.map((entry) => (
+            {sortedEntries.map((entry) => (
               <ActivityCard
                 key={entry.id}
                 entry={convertWeightToDailyEntry(entry)}
