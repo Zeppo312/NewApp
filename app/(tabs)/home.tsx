@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Animated, Easing, StyleSheet, ScrollView, View, TouchableOpacity, Text, SafeAreaView, StatusBar, Image, ActivityIndicator, RefreshControl, Alert, Platform, StyleProp, ViewStyle } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -10,6 +10,7 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/contexts/AuthContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Canvas, RoundedRect, LinearGradient as SkiaLinearGradient, RadialGradient, Circle, vec } from '@shopify/react-native-skia';
 import { getBabyInfo, getDiaryEntries, getCurrentPhase, getPhaseProgress, getMilestonesByPhase } from '@/lib/baby';
 import { supabase, addBabyCareEntry } from '@/lib/supabase';
 import { getRecommendations, LottiRecommendation } from '@/lib/supabase/recommendations';
@@ -103,6 +104,140 @@ function GlassBorderGlint({ radius = 30 }: { radius?: number }) {
   );
 }
 
+function GlassLensOverlay({ radius = 20 }: { radius?: number }) {
+  const [layout, setLayout] = useState({ width: 0, height: 0 });
+  const width = layout.width;
+  const height = layout.height;
+  const minDim = Math.min(width, height);
+  const maxDim = Math.max(width, height);
+  const lensRadius = Math.min(radius, minDim / 2);
+  const strokeRadius = Math.max(0, lensRadius - 1);
+
+  return (
+    <View
+      pointerEvents="none"
+      style={[StyleSheet.absoluteFillObject, { borderRadius: radius, overflow: 'hidden' }]}
+      onLayout={(event) => {
+        const { width, height } = event.nativeEvent.layout;
+        if (width !== layout.width || height !== layout.height) {
+          setLayout({ width, height });
+        }
+      }}
+    >
+      {width > 0 && height > 0 ? (
+        <Canvas style={{ width, height }}>
+          <RoundedRect x={0} y={0} width={width} height={height} r={lensRadius}>
+            <SkiaLinearGradient
+              start={vec(0, 0)}
+              end={vec(width, height)}
+              colors={[
+                'rgba(255, 255, 255, 0.45)',
+                'rgba(94, 61, 179, 0.08)',
+                'rgba(255, 255, 255, 0.18)',
+              ]}
+              positions={[0, 0.6, 1]}
+            />
+          </RoundedRect>
+          <RoundedRect x={0} y={0} width={width} height={height} r={lensRadius}>
+            <RadialGradient
+              c={vec(width * 0.2, height * 0.15)}
+              r={maxDim * 0.9}
+              colors={['rgba(255, 255, 255, 0.55)', 'rgba(255, 255, 255, 0)']}
+            />
+          </RoundedRect>
+          <RoundedRect x={0} y={0} width={width} height={height} r={lensRadius}>
+            <RadialGradient
+              c={vec(width * 0.85, height * 0.85)}
+              r={maxDim * 0.8}
+              colors={['rgba(94, 61, 179, 0)', 'rgba(94, 61, 179, 0.18)']}
+            />
+          </RoundedRect>
+          <RoundedRect
+            x={0.5}
+            y={0.5}
+            width={width - 1}
+            height={height - 1}
+            r={strokeRadius}
+            style="stroke"
+            strokeWidth={1}
+            color="rgba(255, 255, 255, 0.6)"
+          />
+          <Circle cx={width * 0.22} cy={height * 0.28} r={minDim * 0.18}>
+            <RadialGradient
+              c={vec(width * 0.22, height * 0.28)}
+              r={minDim * 0.18}
+              colors={['rgba(255, 255, 255, 0.7)', 'rgba(255, 255, 255, 0)']}
+            />
+          </Circle>
+          <Circle cx={width * 0.72} cy={height * 0.18} r={minDim * 0.1}>
+            <RadialGradient
+              c={vec(width * 0.72, height * 0.18)}
+              r={minDim * 0.1}
+              colors={['rgba(255, 255, 255, 0.6)', 'rgba(255, 255, 255, 0)']}
+            />
+          </Circle>
+        </Canvas>
+      ) : null}
+    </View>
+  );
+}
+
+function TipHighlightDots() {
+  const dotOne = useRef(new Animated.Value(0)).current;
+  const dotTwo = useRef(new Animated.Value(0)).current;
+  const dotThree = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const createPulse = (value: Animated.Value, delayMs: number) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(delayMs),
+          Animated.timing(value, {
+            toValue: 1,
+            duration: 900,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: true,
+          }),
+          Animated.timing(value, {
+            toValue: 0,
+            duration: 900,
+            easing: Easing.in(Easing.quad),
+            useNativeDriver: true,
+          }),
+        ])
+      );
+
+    const pulseOne = createPulse(dotOne, 0);
+    const pulseTwo = createPulse(dotTwo, 500);
+    const pulseThree = createPulse(dotThree, 1000);
+
+    pulseOne.start();
+    pulseTwo.start();
+    pulseThree.start();
+
+    return () => {
+      pulseOne.stop();
+      pulseTwo.stop();
+      pulseThree.stop();
+    };
+  }, [dotOne, dotTwo, dotThree]);
+
+  const makeDotStyle = (value: Animated.Value) => ({
+    opacity: value.interpolate({ inputRange: [0, 1], outputRange: [0.2, 0.95] }),
+    transform: [
+      { scale: value.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1.25] }) },
+    ],
+  });
+
+  return (
+    <View pointerEvents="none" style={styles.tipHighlightContainer}>
+      <Animated.View style={[styles.tipHighlightDot, styles.tipHighlightDotOne, makeDotStyle(dotOne)]} />
+      <Animated.View style={[styles.tipHighlightDot, styles.tipHighlightDotTwo, makeDotStyle(dotTwo)]} />
+      <Animated.View style={[styles.tipHighlightDot, styles.tipHighlightDotThree, makeDotStyle(dotThree)]} />
+    </View>
+  );
+}
+
 export default function HomeScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
@@ -111,6 +246,8 @@ export default function HomeScreen() {
   const DEFAULT_OVERVIEW_HEIGHT = 230;
   const PRODUCT_ROTATION_INITIAL_DELAY_MS = 10000;
   const PRODUCT_ROTATION_INTERVAL_MS = 20000;
+  const OVERVIEW_ROTATION_INTERVAL_MS = 20000;
+  const OVERVIEW_ROTATION_PAUSE_MS = 12000;
 
   const [babyInfo, setBabyInfo] = useState<any>(null);
   const [diaryEntries, setDiaryEntries] = useState<any[]>([]);
@@ -138,6 +275,11 @@ export default function HomeScreen() {
   const [overviewCarouselWidth, setOverviewCarouselWidth] = useState(0);
   const [overviewIndex, setOverviewIndex] = useState(0);
   const [overviewSummaryHeight, setOverviewSummaryHeight] = useState<number | null>(null);
+  const overviewScrollRef = useRef<ScrollView>(null);
+  const overviewIndexRef = useRef(0);
+  const overviewRotationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const overviewRotationPauseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isAutoScrollingRef = useRef(false);
   const productIndexRef = useRef(0);
   const productRotationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const productRotationCycleRef = useRef(0);
@@ -194,6 +336,10 @@ export default function HomeScreen() {
   }, [productIndex]);
 
   useEffect(() => {
+    overviewIndexRef.current = overviewIndex;
+  }, [overviewIndex]);
+
+  useEffect(() => {
     productIndexRef.current = 0;
     setProductIndex(0);
     productRotationCycleRef.current = 0;
@@ -233,6 +379,65 @@ export default function HomeScreen() {
       }
     };
   }, [rotationCandidates, PRODUCT_ROTATION_INITIAL_DELAY_MS, PRODUCT_ROTATION_INTERVAL_MS]);
+
+  const stopOverviewRotation = useCallback(() => {
+    if (overviewRotationIntervalRef.current) {
+      clearInterval(overviewRotationIntervalRef.current);
+      overviewRotationIntervalRef.current = null;
+    }
+  }, []);
+
+  const startOverviewRotation = useCallback(() => {
+    if (!overviewCarouselWidth) return;
+    stopOverviewRotation();
+
+    const slideCount = 2;
+    if (slideCount <= 1) return;
+
+    overviewRotationIntervalRef.current = setInterval(() => {
+      const nextIndex = (overviewIndexRef.current + 1) % slideCount;
+      overviewIndexRef.current = nextIndex;
+      setOverviewIndex(nextIndex);
+      isAutoScrollingRef.current = true;
+      overviewScrollRef.current?.scrollTo({
+        x: nextIndex * overviewCarouselWidth,
+        animated: true,
+      });
+    }, OVERVIEW_ROTATION_INTERVAL_MS);
+  }, [overviewCarouselWidth, OVERVIEW_ROTATION_INTERVAL_MS, stopOverviewRotation]);
+
+  const scheduleOverviewRotationResume = useCallback(() => {
+    if (overviewRotationPauseTimeoutRef.current) {
+      clearTimeout(overviewRotationPauseTimeoutRef.current);
+    }
+    overviewRotationPauseTimeoutRef.current = setTimeout(() => {
+      startOverviewRotation();
+    }, OVERVIEW_ROTATION_PAUSE_MS);
+  }, [OVERVIEW_ROTATION_PAUSE_MS, startOverviewRotation]);
+
+  useEffect(() => {
+    startOverviewRotation();
+    return () => {
+      stopOverviewRotation();
+      if (overviewRotationPauseTimeoutRef.current) {
+        clearTimeout(overviewRotationPauseTimeoutRef.current);
+        overviewRotationPauseTimeoutRef.current = null;
+      }
+    };
+  }, [startOverviewRotation, stopOverviewRotation]);
+
+  const handleOverviewScrollBeginDrag = () => {
+    isAutoScrollingRef.current = false;
+    stopOverviewRotation();
+    if (overviewRotationPauseTimeoutRef.current) {
+      clearTimeout(overviewRotationPauseTimeoutRef.current);
+      overviewRotationPauseTimeoutRef.current = null;
+    }
+  };
+
+  const handleOverviewScrollEndDrag = () => {
+    scheduleOverviewRotationResume();
+  };
 
   useEffect(() => {
     if (user) {
@@ -400,15 +605,14 @@ export default function HomeScreen() {
 
   // Handle stat item press
   const handleStatPress = (type: 'feeding' | 'diaper' | 'sleep') => {
-    triggerHaptic();
     if (type === 'sleep') {
-      setSleepModalStart(new Date());
-      setShowSleepModal(true);
+      handleNavigate('/(tabs)/sleep-tracker');
       return;
     }
-    setSelectedActivityType(type);
-    setSelectedSubType(null);
-    setShowInputModal(true);
+    handleNavigate({
+      pathname: '/(tabs)/daily_old',
+      params: { quickAction: type },
+    });
   };
 
   // Load only daily entries (for quick refresh after adding entries)
@@ -627,14 +831,8 @@ export default function HomeScreen() {
             </View>
 
             <View style={styles.tipCard}>
-              <LinearGradient
-                pointerEvents="none"
-                colors={['rgba(94, 61, 179, 0.18)', 'rgba(94, 61, 179, 0.02)']}
-                locations={[0, 1]}
-                start={{ x: 0.2, y: 0 }}
-                end={{ x: 0.8, y: 1 }}
-                style={styles.tipGloss}
-              />
+              <GlassLensOverlay radius={20} />
+              <TipHighlightDots />
               <View style={styles.tipCardRow}>
                 <View style={styles.tipIconWrap}>
                   <IconSymbol name="lightbulb.fill" size={18} color="#D6B28C" />
@@ -689,11 +887,16 @@ export default function HomeScreen() {
             </View>
 
             <View style={styles.statsContainer}>
-              <View
+              <TouchableOpacity
                 style={[styles.statItem, styles.liquidGlassStatItem, {
                   backgroundColor: 'rgba(94, 61, 179, 0.13)',
                   borderColor: 'rgba(94, 61, 179, 0.35)'
                 }]}
+                activeOpacity={0.85}
+                onPress={(event) => {
+                  event.stopPropagation();
+                  handleStatPress('feeding');
+                }}
               >
                 <View style={styles.liquidGlassStatIcon}>
                   <Text style={styles.statEmoji}>🍼</Text>
@@ -705,13 +908,18 @@ export default function HomeScreen() {
                   textShadowRadius: 2,
                 }]}>{todayFeedings}</ThemedText>
                 <ThemedText style={[styles.statLabel, styles.liquidGlassStatLabel, { color: '#7D5A50' }]}>Essen</ThemedText>
-              </View>
+              </TouchableOpacity>
 
-              <View
+              <TouchableOpacity
                 style={[styles.statItem, styles.liquidGlassStatItem, {
                   backgroundColor: 'rgba(94, 61, 179, 0.08)',
                   borderColor: 'rgba(94, 61, 179, 0.22)'
                 }]}
+                activeOpacity={0.85}
+                onPress={(event) => {
+                  event.stopPropagation();
+                  handleStatPress('diaper');
+                }}
               >
                 <View style={styles.liquidGlassStatIcon}>
                   <Text style={styles.statEmoji}>💩</Text>
@@ -723,13 +931,18 @@ export default function HomeScreen() {
                   textShadowRadius: 2,
                 }]}>{todayDiaperChanges}</ThemedText>
                 <ThemedText style={[styles.statLabel, styles.liquidGlassStatLabel, { color: '#7D5A50' }]}>Windeln</ThemedText>
-              </View>
+              </TouchableOpacity>
 
-              <View
+              <TouchableOpacity
                 style={[styles.statItem, styles.liquidGlassStatItem, { 
                   backgroundColor: 'rgba(94, 61, 179, 0.05)', 
                   borderColor: 'rgba(94, 61, 179, 0.15)' 
                 }]}
+                activeOpacity={0.85}
+                onPress={(event) => {
+                  event.stopPropagation();
+                  handleStatPress('sleep');
+                }}
               >
                 <View style={styles.liquidGlassStatIcon}>
                   <Text style={styles.statEmoji}>💤</Text>
@@ -741,7 +954,7 @@ export default function HomeScreen() {
                   textShadowRadius: 2,
                 }]}>{formatMinutes(todaySleepMinutes)}</ThemedText>
                 <ThemedText style={[styles.statLabel, styles.liquidGlassStatLabel, { color: '#7D5A50' }]}>Schlaf</ThemedText>
-              </View>
+              </TouchableOpacity>
             </View>
           </ThemedView>
         </BlurView>
@@ -892,15 +1105,24 @@ export default function HomeScreen() {
       }}
     >
       <ScrollView
+        ref={overviewScrollRef}
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
         style={styles.overviewCarousel}
         decelerationRate="fast"
+        onScrollBeginDrag={handleOverviewScrollBeginDrag}
+        onScrollEndDrag={handleOverviewScrollEndDrag}
         onMomentumScrollEnd={(event) => {
           if (!overviewCarouselWidth) return;
           const nextIndex = Math.round(event.nativeEvent.contentOffset.x / overviewCarouselWidth);
+          overviewIndexRef.current = nextIndex;
           setOverviewIndex(nextIndex);
+          if (isAutoScrollingRef.current) {
+            isAutoScrollingRef.current = false;
+            return;
+          }
+          scheduleOverviewRotationResume();
         }}
         scrollEventThrottle={16}
       >
@@ -1267,15 +1489,49 @@ const styles = StyleSheet.create({
   tipCard: {
     marginTop: 14,
     borderRadius: 20,
-    backgroundColor: 'rgba(94, 61, 179, 0.13)',
+    backgroundColor: 'rgba(255, 255, 255, 0.22)',
     borderWidth: 1,
-    borderColor: 'rgba(94, 61, 179, 0.35)',
+    borderColor: 'rgba(255, 255, 255, 0.55)',
     padding: 14,
     overflow: 'hidden',
+    shadowColor: '#5E3DB3',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 4,
   },
-  tipGloss: {
+  tipHighlightContainer: {
     ...StyleSheet.absoluteFillObject,
-    borderRadius: 20,
+  },
+  tipHighlightDot: {
+    position: 'absolute',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    shadowColor: '#FFFFFF',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.6,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  tipHighlightDotOne: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    top: 10,
+    right: 16,
+  },
+  tipHighlightDotTwo: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    top: 28,
+    right: 44,
+  },
+  tipHighlightDotThree: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    bottom: 10,
+    right: 28,
   },
   tipCardRow: {
     flexDirection: 'row',

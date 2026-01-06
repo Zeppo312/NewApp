@@ -13,7 +13,7 @@ import {
   Animated,
   Dimensions,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { ThemedBackground } from '@/components/ThemedBackground';
@@ -140,6 +140,7 @@ export default function DailyScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const router = useRouter();
+  const { quickAction } = useLocalSearchParams<{ quickAction?: string | string[] }>();
 
   const [entries, setEntries] = useState<DailyEntry[]>([]);
   const [weekEntries, setWeekEntries] = useState<DailyEntry[]>([]);
@@ -156,6 +157,7 @@ export default function DailyScreen() {
   const [showDateNav, setShowDateNav] = useState(true);
   const fadeNavAnim = useRef(new Animated.Value(1)).current;
   const hideNavTimeout = useRef<NodeJS.Timeout | null>(null);
+  const quickActionHandledRef = useRef<string | null>(null);
 
   const [activeTimer, setActiveTimer] = useState<{
     id: string;
@@ -429,6 +431,34 @@ export default function DailyScreen() {
     if (action === 'diaper_wet' || action === 'diaper_dirty' || action === 'diaper_both') setEditingEntry({} as any);
     setShowInputModal(true);
   };
+
+  useEffect(() => {
+    const rawAction = Array.isArray(quickAction) ? quickAction[0] : quickAction;
+    if (!rawAction) {
+      quickActionHandledRef.current = null;
+      return;
+    }
+    if (quickActionHandledRef.current === rawAction) return;
+
+    const resolved =
+      rawAction === 'feeding'
+        ? { activityType: 'feeding' as const, subType: null }
+        : rawAction === 'diaper'
+          ? { activityType: 'diaper' as const, subType: null }
+          : rawAction === 'feeding_breast' || rawAction === 'feeding_bottle' || rawAction === 'feeding_solids'
+            ? { activityType: 'feeding' as const, subType: rawAction as QuickActionType }
+            : rawAction === 'diaper_wet' || rawAction === 'diaper_dirty' || rawAction === 'diaper_both'
+              ? { activityType: 'diaper' as const, subType: rawAction as QuickActionType }
+              : null;
+
+    if (!resolved) return;
+    quickActionHandledRef.current = rawAction;
+    setSelectedActivityType(resolved.activityType);
+    setSelectedSubType(resolved.subType);
+    setEditingEntry(null);
+    setShowInputModal(true);
+    router.setParams({ quickAction: undefined });
+  }, [quickAction, router]);
 
   const handleSaveEntry = async (payload: any, options?: { startTimer?: boolean }) => {
     console.log('handleSaveEntry - Received payload:', JSON.stringify(payload, null, 2));
