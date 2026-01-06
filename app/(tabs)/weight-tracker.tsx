@@ -35,6 +35,26 @@ const SUBJECT_COLORS: Record<WeightSubject, string> = {
 };
 
 const SUBJECT_OPTIONS: WeightSubject[] = ['mom', 'baby'];
+const BABY_WEIGHT_FACTOR = 1000;
+const isBabySubject = (subject: WeightSubject) => subject === 'baby';
+const getWeightUnit = (subject: WeightSubject) => (isBabySubject(subject) ? 'g' : 'kg');
+const getDisplayWeightValue = (weightKg: number, subject: WeightSubject) =>
+  isBabySubject(subject) ? Math.round(weightKg * BABY_WEIGHT_FACTOR) : weightKg;
+const formatWeightDisplayValue = (weightKg: number, subject: WeightSubject) => {
+  if (isBabySubject(subject)) {
+    const grams = Math.round(weightKg * BABY_WEIGHT_FACTOR);
+    return `${grams.toLocaleString('de-DE')} g`;
+  }
+  const formattedKg = weightKg.toLocaleString('de-DE', { maximumFractionDigits: 2 });
+  return `${formattedKg} kg`;
+};
+const normalizeWeightInput = (value: string, subject: WeightSubject) => {
+  const trimmed = value.trim();
+  if (isBabySubject(subject)) {
+    return trimmed.replace(/[^0-9.,]/g, '').replace(/\./g, '').replace(',', '.');
+  }
+  return trimmed.replace(',', '.');
+};
 const HEADER_TEXT_COLOR = '#7D5A50';
 const toRgba = (hex: string, opacity = 1) => {
   const cleanHex = hex.replace('#', '');
@@ -174,17 +194,22 @@ export default function WeightTrackerScreen() {
   };
 
   const handleSaveWeightEntry = async () => {
-    const normalizedWeight = parseFloat(weightInput.replace(',', '.'));
-    if (!weightInput.trim() || Number.isNaN(normalizedWeight) || normalizedWeight <= 0) {
-      Alert.alert('Hinweis', 'Bitte gib ein gültiges Gewicht in Kilogramm ein.');
+    const normalizedInput = normalizeWeightInput(weightInput, weightModalSubject);
+    const parsedWeight = parseFloat(normalizedInput);
+    const unitLabel = isBabySubject(weightModalSubject) ? 'Gramm' : 'Kilogramm';
+    if (!normalizedInput || Number.isNaN(parsedWeight) || parsedWeight <= 0) {
+      Alert.alert('Hinweis', `Bitte gib ein gültiges Gewicht in ${unitLabel} ein.`);
       return;
     }
 
     try {
       setIsSaving(true);
+      const storedWeight = isBabySubject(weightModalSubject)
+        ? parsedWeight / BABY_WEIGHT_FACTOR
+        : parsedWeight;
       const { error } = await saveWeightEntry({
         date: toDateString(weightDate),
-        weight: normalizedWeight,
+        weight: storedWeight,
         subject: weightModalSubject,
         notes: weightNotes.trim() ? weightNotes.trim() : undefined,
       });
@@ -228,8 +253,12 @@ export default function WeightTrackerScreen() {
     const source = weightEntries.find((e) => e.id === entry.id);
     if (!source) return;
     const parsedDate = parseDateOnly(source.date);
-    setWeightModalSubject(source.subject ?? 'mom');
-    setWeightInput(String(source.weight).replace('.', ','));
+    const subject = source.subject ?? 'mom';
+    const displayValue = getDisplayWeightValue(source.weight, subject);
+    setWeightModalSubject(subject);
+    setWeightInput(
+      isBabySubject(subject) ? String(displayValue) : String(source.weight).replace('.', ',')
+    );
     setWeightNotes(source.notes ?? '');
     setWeightDate(parsedDate);
     setEditingEntry(source);
@@ -338,15 +367,25 @@ export default function WeightTrackerScreen() {
     [weightEntries, selectedSubject]
   );
 
+  const chartEntries = useMemo(
+    () =>
+      filteredEntries.map((entry) => ({
+        ...entry,
+        weight: getDisplayWeightValue(entry.weight, selectedSubject),
+      })),
+    [filteredEntries, selectedSubject]
+  );
+
   const { data: chartData, meta: chartMeta } = useMemo(
-    () => prepareChartData(filteredEntries, selectedRange, SUBJECT_LABELS[selectedSubject], SUBJECT_COLORS[selectedSubject]),
-    [filteredEntries, selectedRange, selectedSubject]
+    () => prepareChartData(chartEntries, selectedRange, SUBJECT_LABELS[selectedSubject], SUBJECT_COLORS[selectedSubject]),
+    [chartEntries, selectedRange, selectedSubject]
   );
 
   // Rendere die Gewichtskurve
   const renderWeightChart = () => {
     const subjectColor = SUBJECT_COLORS[selectedSubject];
     const subjectCopyLabel = SUBJECT_COPY_LABELS[selectedSubject];
+    const unitLabel = getWeightUnit(selectedSubject);
     const hasSeries =
       !!chartData &&
       !!chartData.datasets &&
@@ -402,7 +441,7 @@ export default function WeightTrackerScreen() {
                     fill: subjectColor,
                   },
                   // Formatierung der Y-Achsen-Labels (kg-Anzeige)
-                  formatYLabel: (value) => `${value} kg`, // Mit kg-Suffix bei jedem Wert
+                  formatYLabel: (value) => `${value} ${unitLabel}`, // Einheit je nach Subjekt
                   // Mehr Platz zwischen den Datenpunkten
                   propsForBackgroundLines: {
                     strokeWidth: 1,
@@ -462,6 +501,7 @@ export default function WeightTrackerScreen() {
   // Mappe Gewichtseintrag auf ActivityCard-kompatibles Format
   const convertWeightToDailyEntry = (e: WeightEntry): any => {
     const subject = e.subject ?? 'mom';
+    const displayWeight = formatWeightDisplayValue(e.weight, subject);
     return {
       id: e.id,
       entry_date: e.date,
@@ -470,7 +510,7 @@ export default function WeightTrackerScreen() {
       notes: e.notes ?? undefined,
       // Custom Anzeige wie im Sleep-Tracker (über emoji/label)
       emoji: subject === 'baby' ? '👶' : '🤰',
-      label: `${SUBJECT_LABELS[subject]}: ${e.weight} kg`,
+      label: `${SUBJECT_LABELS[subject]}: ${displayWeight}`,
       weightValue: e.weight,
       weightSubject: subject,
       weightNotes: e.notes ?? '',
@@ -607,7 +647,7 @@ export default function WeightTrackerScreen() {
             </View>
 
             <View style={styles.section}>
-              <Text style={styles.sectionLabel}>Gewicht (kg)</Text>
+              <Text style={styles.sectionLabel}>Gewicht ({getWeightUnit(weightModalSubject)})</Text>
               <View style={styles.pickerBlock}>
                 <TouchableOpacity
                   style={styles.inlineField}
@@ -615,16 +655,18 @@ export default function WeightTrackerScreen() {
                     onPress={() =>
                       openFocusEditor({
                         field: 'weight',
-                        label: 'Gewicht (kg)',
-                        placeholder: 'z. B. 65,4',
-                        keyboardType: 'decimal-pad',
-                        inputMode: 'decimal',
+                        label: `Gewicht (${getWeightUnit(weightModalSubject)})`,
+                        placeholder: isBabySubject(weightModalSubject) ? 'z. B. 3500' : 'z. B. 65,4',
+                        keyboardType: isBabySubject(weightModalSubject) ? 'number-pad' : 'decimal-pad',
+                        inputMode: isBabySubject(weightModalSubject) ? 'numeric' : 'decimal',
                       })
                     }
                 >
                   <Text style={styles.inlineFieldLabel}>Gewicht</Text>
                   <Text style={weightInput.trim() ? styles.inlineFieldValue : styles.inlineFieldPlaceholder}>
-                    {weightInput.trim() ? `${weightInput.trim()} kg` : 'Tippe zum Eingeben'}
+                    {weightInput.trim()
+                      ? `${weightInput.trim()} ${getWeightUnit(weightModalSubject)}`
+                      : 'Tippe zum Eingeben'}
                   </Text>
                 </TouchableOpacity>
               </View>
