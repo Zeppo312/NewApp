@@ -626,6 +626,7 @@ const styles = StyleSheet.create({
   },
   statValue: {
     fontSize: 26,
+    lineHeight: 32,
     fontWeight: '800',
     color: TEXT_PRIMARY,
   },
