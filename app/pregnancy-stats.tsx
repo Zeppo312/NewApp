@@ -58,6 +58,7 @@ const pastelPalette = {
 
 const PURPLE_GLASS = 'rgba(142, 78, 198, 0.22)';
 const PURPLE_GLASS_LIGHT = 'rgba(142, 78, 198, 0.12)';
+const SOFT_HYPHEN = '\u00AD';
 
 const GlassLayer = ({
   tint = 'rgba(255,255,255,0.22)',
@@ -306,7 +307,7 @@ export default function PregnancyStatsScreen() {
     },
     {
       key: 'calendar-month',
-      label: 'Kalendermonat',
+      label: `Kalender${SOFT_HYPHEN}monat`,
       value: `${stats.calendarMonth}. Monat`,
       icon: 'chart.bar.xaxis' as const,
       accent: pastelPalette.sage,
@@ -314,7 +315,7 @@ export default function PregnancyStatsScreen() {
     },
     {
       key: 'pregnancy-month',
-      label: 'Schwangerschaftsmonat',
+      label: `Schwangerschafts${SOFT_HYPHEN}monat`,
       value: `${stats.pregnancyMonth}. Monat`,
       icon: 'moon.stars.fill' as const,
       accent: pastelPalette.sky,
@@ -496,7 +497,13 @@ export default function PregnancyStatsScreen() {
                             <IconSymbol name={tile.icon} size={16} color={tile.iconColor} />
                           </View>
                           <ThemedText style={styles.statValue}>{tile.value}</ThemedText>
-                          <ThemedText style={styles.statLabel}>{tile.label}</ThemedText>
+                          <ThemedText
+                            style={styles.statLabel}
+                            android_hyphenationFrequency="full"
+                            textBreakStrategy="balanced"
+                          >
+                            {tile.label}
+                          </ThemedText>
                         </View>
                       ))}
                     </View>
@@ -781,6 +788,8 @@ const styles = StyleSheet.create({
     opacity: 0.75,
     textAlign: 'center',
     marginTop: 4,
+    width: '100%',
+    flexShrink: 1,
   },
   factGrid: {
     flexDirection: 'row',

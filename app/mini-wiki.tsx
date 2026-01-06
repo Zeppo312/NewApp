@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, TextInput, SafeAreaView, StatusBar, FlatList, ActivityIndicator, Alert, Dimensions } from 'react-native';
+import { StyleSheet, ScrollView, View, TouchableOpacity, TextInput, SafeAreaView, StatusBar, FlatList, ActivityIndicator, Alert, Dimensions, Text, Image } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { Colors } from '@/constants/Colors';
@@ -43,6 +43,18 @@ const getArticleAccent = (seed: string) => {
   }
   const index = Math.abs(hash) % ARTICLE_ACCENTS.length;
   return ARTICLE_ACCENTS[index];
+};
+
+const renderInlineBold = (text: string) => {
+  if (!text || !text.includes('**')) return text;
+  return text.split(/\*\*/).map((segment, index) => {
+    if (!segment) return null;
+    return (
+      <Text key={`${index}-${segment}`} style={index % 2 === 1 ? styles.inlineBold : undefined}>
+        {segment}
+      </Text>
+    );
+  });
 };
 
 export default function MiniWikiScreen() {
@@ -161,7 +173,9 @@ export default function MiniWikiScreen() {
     >
       <View style={styles.categoryItemInnerGlass}>
         <IconSymbol name={item.icon as any} size={18} color={theme.accent} />
-        <ThemedText style={styles.categoryText}>{item.name}</ThemedText>
+        <ThemedText style={styles.categoryText} numberOfLines={1} ellipsizeMode="tail">
+          {item.name}
+        </ThemedText>
       </View>
     </LiquidGlassCard>
   );
@@ -192,9 +206,22 @@ export default function MiniWikiScreen() {
           </TouchableOpacity>
         </View>
         <ThemedText style={styles.articleCategory}>{item.category}</ThemedText>
+        {item.cover_image_url ? (
+          <View style={styles.articleCoverWrapper}>
+            <Image
+              source={{ uri: item.cover_image_url }}
+              style={styles.articleCoverImage}
+              resizeMode="cover"
+            />
+          </View>
+        ) : null}
+        <View style={[styles.articleDivider, { backgroundColor: theme.border }]} />
         <View style={styles.articleBodyInset}>
-          <ThemedText style={styles.articleTeaser}>{item.teaser}</ThemedText>
+          <ThemedText style={styles.articleTeaser}>
+            {renderInlineBold(item.teaser)}
+          </ThemedText>
         </View>
+        <View style={[styles.articleDivider, { backgroundColor: theme.border }]} />
         <View style={styles.articleFooter}>
           <ThemedText style={styles.readingTime}>
             <IconSymbol name="clock" size={14} color={theme.tabIconDefault} /> {item.readingTime}
@@ -391,6 +418,10 @@ const styles = StyleSheet.create({
   categoryItemGlass: {
     borderRadius: 20,
     marginRight: 8,
+    width: 'auto',
+    alignSelf: 'flex-start',
+    maxWidth: 160,
+    minWidth: 72,
   },
   categoryItemActive: {
     borderColor: 'rgba(94,61,179,0.65)'
@@ -398,7 +429,7 @@ const styles = StyleSheet.create({
   categoryItemInnerGlass: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     paddingVertical: 8,
     gap: 6,
   },
@@ -417,9 +448,24 @@ const styles = StyleSheet.create({
   articleItemInnerGlass: {
     padding: 16,
   },
+  articleCoverWrapper: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    marginTop: 6,
+    marginBottom: 4,
+  },
+  articleCoverImage: {
+    width: '100%',
+    height: 140,
+  },
   articleBodyInset: {
     paddingHorizontal: 8,
-    paddingTop: 8,
+    paddingVertical: 8,
+  },
+  articleDivider: {
+    height: StyleSheet.hairlineWidth,
+    marginVertical: 8,
+    opacity: 0.35,
   },
   articleHeader: {
     flexDirection: 'row',
@@ -444,6 +490,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginTop: 8,
     marginBottom: 12,
+  },
+  inlineBold: {
+    fontWeight: '700',
   },
   articleFooter: {
     flexDirection: 'row',

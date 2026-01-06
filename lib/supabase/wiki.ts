@@ -1,5 +1,7 @@
 import { supabase } from '@/lib/supabase';
 
+const WIKI_BUCKET = 'community-images';
+
 // Typdefinitionen
 export interface WikiCategory {
   id: string;
@@ -13,6 +15,7 @@ export interface WikiArticle {
   category_id: string;
   teaser: string;
   reading_time: string;
+  cover_image_url?: string | null;
   content?: {
     coreStatements: string[];
     sections: {
@@ -28,6 +31,7 @@ export interface WikiArticleInput {
   category_id: string;
   teaser: string;
   reading_time: string;
+  cover_image_url?: string | null;
   content?: WikiArticle['content'];
 }
 
@@ -47,6 +51,21 @@ export const getWikiCategories = async () => {
   }
 };
 
+export const getWikiArticleIndex = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('wiki_articles')
+      .select('id, title')
+      .order('title');
+
+    if (error) throw error;
+    return { data, error: null };
+  } catch (error) {
+    console.error('Error fetching wiki article index:', error);
+    return { data: null, error };
+  }
+};
+
 // Funktion zum Abrufen aller Artikel
 export const getWikiArticles = async () => {
   try {
@@ -62,6 +81,7 @@ export const getWikiArticles = async () => {
         category_id,
         teaser,
         reading_time,
+        cover_image_url,
         content,
         wiki_categories(name)
       `)
@@ -110,6 +130,7 @@ export const getWikiArticle = async (articleId: string) => {
         category_id,
         teaser,
         reading_time,
+        cover_image_url,
         content,
         wiki_categories(name)
       `)
@@ -156,6 +177,7 @@ export const createWikiArticle = async (input: WikiArticleInput) => {
         category_id: input.category_id,
         teaser: input.teaser,
         reading_time: input.reading_time,
+        cover_image_url: input.cover_image_url ?? null,
         content: input.content ?? null,
       })
       .select(`
@@ -164,6 +186,7 @@ export const createWikiArticle = async (input: WikiArticleInput) => {
         category_id,
         teaser,
         reading_time,
+        cover_image_url,
         content,
         wiki_categories(name)
       `)
@@ -190,6 +213,7 @@ export const updateWikiArticle = async (
         category_id: updates.category_id,
         teaser: updates.teaser,
         reading_time: updates.reading_time,
+        cover_image_url: updates.cover_image_url ?? null,
         content: updates.content ?? null,
       })
       .eq('id', articleId)
@@ -199,6 +223,7 @@ export const updateWikiArticle = async (
         category_id,
         teaser,
         reading_time,
+        cover_image_url,
         content,
         wiki_categories(name)
       `)
@@ -245,6 +270,7 @@ export const getWikiArticlesByCategory = async (categoryId: string) => {
         category_id,
         teaser,
         reading_time,
+        cover_image_url,
         content,
         wiki_categories(name)
       `)
@@ -300,6 +326,7 @@ export const getFavoriteWikiArticles = async () => {
           category_id,
           teaser,
           reading_time,
+          cover_image_url,
           content,
           wiki_categories(name)
         )
@@ -389,6 +416,7 @@ export const searchWikiArticles = async (searchTerm: string) => {
         category_id,
         teaser,
         reading_time,
+        cover_image_url,
         content,
         wiki_categories(name)
       `)
@@ -420,5 +448,39 @@ export const searchWikiArticles = async (searchTerm: string) => {
   } catch (error) {
     console.error('Error searching wiki articles:', error);
     return { data: null, error };
+  }
+};
+
+export const uploadWikiCover = async (uri: string) => {
+  try {
+    const extMatch = uri.split('.').pop();
+    const ext = extMatch?.split('?')[0]?.toLowerCase() || 'jpg';
+    const mimeType = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+    const response = await fetch(uri);
+
+    if (!response.ok) {
+      return { data: null, error: new Error(`Bild konnte nicht geladen werden (${response.status})`) };
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    const fileBuffer = new Uint8Array(arrayBuffer);
+    const { data: userData } = await supabase.auth.getUser();
+    const userId = userData.user?.id ?? 'anonymous';
+    const fileName = `wiki_${userId}_${Date.now()}.${ext}`;
+    const filePath = `wiki-covers/${fileName}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from(WIKI_BUCKET)
+      .upload(filePath, fileBuffer, { contentType: mimeType, upsert: false });
+
+    if (uploadError) {
+      return { data: null, error: uploadError };
+    }
+
+    const { data: publicUrlData } = supabase.storage.from(WIKI_BUCKET).getPublicUrl(filePath);
+    return { data: publicUrlData.publicUrl, error: null };
+  } catch (error) {
+    console.error('uploadWikiCover failed:', error);
+    return { data: null, error: error as Error };
   }
 };

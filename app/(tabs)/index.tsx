@@ -60,6 +60,12 @@ const shiftDateForTab = (date: Date, tab: 'day' | 'week' | 'month', step: number
   }
   return next;
 };
+const ensureValidManualDate = (value: Date | null, fallback: Date) => {
+  if (!value || Number.isNaN(value.getTime()) || value.getTime() <= 0) {
+    return fallback;
+  }
+  return value;
+};
 const formatSecondsCompact = (seconds?: number | null) => {
   if (!seconds || Number.isNaN(seconds)) return '—';
   const safeSeconds = Math.max(0, Math.round(seconds));
@@ -126,6 +132,11 @@ export default function HomeScreen() {
   const appState = useRef(AppState.currentState);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  const safeManualStartTime = ensureValidManualDate(manualStartTime, new Date());
+  const safeManualEndTime = ensureValidManualDate(
+    manualEndTime,
+    new Date(safeManualStartTime.getTime() + 60 * 1000)
+  );
 
   const selectedRange = useMemo(() => {
     if (selectedTab === 'week') {
@@ -818,26 +829,21 @@ export default function HomeScreen() {
   };
 
   const handleManualSave = async () => {
-    if (!manualEndTime) {
-      Alert.alert('Fehler', 'Bitte wähle eine Endzeit für die Wehe.');
-      return;
-    }
-
-    if (manualEndTime <= manualStartTime) {
+    if (safeManualEndTime <= safeManualStartTime) {
       Alert.alert('Fehler', 'Die Endzeit muss nach der Startzeit liegen.');
       return;
     }
 
     const durationSeconds = Math.max(
       1,
-      Math.round((manualEndTime.getTime() - manualStartTime.getTime()) / 1000)
+      Math.round((safeManualEndTime.getTime() - safeManualStartTime.getTime()) / 1000)
     );
-    const interval = computeIntervalBefore(manualStartTime);
+    const interval = computeIntervalBefore(safeManualStartTime);
 
     const manualContraction: Contraction = {
       id: generateUniqueId(),
-      startTime: manualStartTime,
-      endTime: manualEndTime,
+      startTime: safeManualStartTime,
+      endTime: safeManualEndTime,
       duration: durationSeconds,
       interval,
       intensity: null,
@@ -1248,7 +1254,7 @@ export default function HomeScreen() {
                         >
                           <Text style={styles.manualTimeLabel}>Start</Text>
                           <Text style={styles.manualTimeValue}>
-                            {manualStartTime.toLocaleString('de-DE', {
+                            {safeManualStartTime.toLocaleString('de-DE', {
                               hour: '2-digit',
                               minute: '2-digit',
                               day: '2-digit',
@@ -1262,7 +1268,7 @@ export default function HomeScreen() {
                         >
                           <Text style={styles.manualTimeLabel}>Ende</Text>
                           <Text style={styles.manualTimeValue}>
-                            {manualEndTime.toLocaleString('de-DE', {
+                            {safeManualEndTime.toLocaleString('de-DE', {
                               hour: '2-digit',
                               minute: '2-digit',
                               day: '2-digit',
@@ -1275,13 +1281,13 @@ export default function HomeScreen() {
                       {showManualStartPicker && (
                         <View style={styles.manualPickerContainer}>
                           <DateTimePicker
-                            value={manualStartTime}
+                            value={safeManualStartTime}
                             mode="datetime"
                             display={Platform.OS === 'ios' ? 'compact' : 'default'}
                             onChange={(_, date) => {
                               if (date) {
                                 setManualStartTime(date);
-                                if (manualEndTime <= date) {
+                                if (safeManualEndTime <= date) {
                                   setManualEndTime(new Date(date.getTime() + 60 * 1000));
                                 }
                               }
@@ -1300,12 +1306,12 @@ export default function HomeScreen() {
                       {showManualEndPicker && (
                         <View style={styles.manualPickerContainer}>
                           <DateTimePicker
-                            value={manualEndTime}
+                            value={safeManualEndTime}
                             mode="datetime"
                             display={Platform.OS === 'ios' ? 'compact' : 'default'}
                             onChange={(_, date) => {
                               if (date) {
-                                if (date <= manualStartTime) {
+                                if (date <= safeManualStartTime) {
                                   Alert.alert('Hinweis', 'Die Endzeit muss nach der Startzeit liegen.');
                                 } else {
                                   setManualEndTime(date);

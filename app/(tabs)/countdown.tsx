@@ -572,16 +572,18 @@ export default function CountdownScreen() {
           {/* Hinweis Überfälligkeit */}
           {isOverdue && (
             <LiquidGlassCard style={[styles.sectionCard, styles.overdueBorder]} intensity={26} overlayColor={GLASS_OVERLAY}>
-              <View style={[styles.infoHeader, { marginBottom: 8 }]}>
-                <IconSymbol name="info.circle.fill" size={20} color={WARN} />
-                <ThemedText style={[styles.infoTitle, { color: WARN }]}>Wichtige Information</ThemedText>
+              <View style={styles.infoInset}>
+                <View style={[styles.infoHeader, { marginBottom: 8 }]}>
+                  <IconSymbol name="info.circle.fill" size={20} color={WARN} />
+                  <ThemedText style={[styles.infoTitle, { color: WARN }]}>Wichtige Information</ThemedText>
+                </View>
+                <ThemedText style={styles.bodyText}>
+                  Ab dem errechneten Geburtstermin wird die Schwangerschaft als „überfällig" bezeichnet. Etwa 5–10% aller Schwangerschaften dauern länger als 42 Wochen. Die meisten Geburten finden jedoch bis zu zwei Wochen vor oder nach dem ET statt.
+                </ThemedText>
+                <ThemedText style={styles.bodyText}>
+                  Halte regelmäßigen Kontakt zu deiner Hebamme oder deinem Frauenarzt. In dieser Phase werden häufigere Kontrollen durchgeführt, um das Wohlbefinden deines Babys sicherzustellen.
+                </ThemedText>
               </View>
-              <ThemedText style={styles.bodyText}>
-                Ab dem errechneten Geburtstermin wird die Schwangerschaft als „überfällig" bezeichnet. Etwa 5–10% aller Schwangerschaften dauern länger als 42 Wochen. Die meisten Geburten finden jedoch bis zu zwei Wochen vor oder nach dem ET statt.
-              </ThemedText>
-              <ThemedText style={styles.bodyText}>
-                Halte regelmäßigen Kontakt zu deiner Hebamme oder deinem Frauenarzt. In dieser Phase werden häufigere Kontrollen durchgeführt, um das Wohlbefinden deines Babys sicherzustellen.
-              </ThemedText>
             </LiquidGlassCard>
           )}
 
@@ -753,6 +755,8 @@ const styles = StyleSheet.create({
   symptomList: { paddingHorizontal: 16, paddingTop: 2 },
   symptomItem: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
   symptomText: { fontSize: 14, marginLeft: 8, color: PRIMARY_TEXT },
+
+  infoInset: { paddingHorizontal: 16 },
 
   // Badges (Linked Users)
   badgeWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingHorizontal: 8, paddingBottom: 8 },

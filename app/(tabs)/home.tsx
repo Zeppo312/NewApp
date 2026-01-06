@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Animated, Easing, StyleSheet, ScrollView, View, TouchableOpacity, Text, SafeAreaView, StatusBar, Image, ActivityIndicator, RefreshControl, Alert, Platform, StyleProp, ViewStyle } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -11,7 +10,6 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/contexts/AuthContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Canvas, RoundedRect, LinearGradient as SkiaLinearGradient, RadialGradient, Circle, vec } from '@shopify/react-native-skia';
 import { getBabyInfo, getDiaryEntries, getCurrentPhase, getPhaseProgress, getMilestonesByPhase } from '@/lib/baby';
 import { supabase, addBabyCareEntry } from '@/lib/supabase';
 import { getRecommendations, LottiRecommendation } from '@/lib/supabase/recommendations';
@@ -32,29 +30,6 @@ const dailyTips = [
   "Vertraue deinem Instinkt – du kennst dein Baby am besten.",
   "Vergiss nicht zu essen – deine Energie ist wichtig für dich und dein Baby."
 ];
-
-const HOME_CACHE_KEY_PREFIX = 'home-cache-v1';
-
-type HomeCachePayload = {
-  cachedAt: string;
-  profile?: {
-    userName: string;
-    avatarUrl: string | null;
-  };
-  babyInfo?: any;
-  diaryEntries?: any[];
-  dailyEntries?: any[];
-  dailyEntriesDate?: string;
-  currentPhase?: any;
-  phaseProgress?: any;
-  milestones?: any[];
-  recommendations?: LottiRecommendation[];
-  todaySleepMinutes?: number;
-};
-
-const getCacheDayKey = (date: Date = new Date()) => date.toISOString().split('T')[0];
-
-const buildHomeCacheKey = (userId: string) => `${HOME_CACHE_KEY_PREFIX}:${userId}`;
 
 function GlassBorderGlint({ radius = 30 }: { radius?: number }) {
   const anim = useRef(new Animated.Value(0)).current;
@@ -128,140 +103,6 @@ function GlassBorderGlint({ radius = 30 }: { radius?: number }) {
   );
 }
 
-function GlassLensOverlay({ radius = 20 }: { radius?: number }) {
-  const [layout, setLayout] = useState({ width: 0, height: 0 });
-  const width = layout.width;
-  const height = layout.height;
-  const minDim = Math.min(width, height);
-  const maxDim = Math.max(width, height);
-  const lensRadius = Math.min(radius, minDim / 2);
-  const strokeRadius = Math.max(0, lensRadius - 1);
-
-  return (
-    <View
-      pointerEvents="none"
-      style={[StyleSheet.absoluteFillObject, { borderRadius: radius, overflow: 'hidden' }]}
-      onLayout={(event) => {
-        const { width, height } = event.nativeEvent.layout;
-        if (width !== layout.width || height !== layout.height) {
-          setLayout({ width, height });
-        }
-      }}
-    >
-      {width > 0 && height > 0 ? (
-        <Canvas style={{ width, height }}>
-          <RoundedRect x={0} y={0} width={width} height={height} r={lensRadius}>
-            <SkiaLinearGradient
-              start={vec(0, 0)}
-              end={vec(width, height)}
-              colors={[
-                'rgba(255, 255, 255, 0.45)',
-                'rgba(94, 61, 179, 0.08)',
-                'rgba(255, 255, 255, 0.18)',
-              ]}
-              positions={[0, 0.6, 1]}
-            />
-          </RoundedRect>
-          <RoundedRect x={0} y={0} width={width} height={height} r={lensRadius}>
-            <RadialGradient
-              c={vec(width * 0.2, height * 0.15)}
-              r={maxDim * 0.9}
-              colors={['rgba(255, 255, 255, 0.55)', 'rgba(255, 255, 255, 0)']}
-            />
-          </RoundedRect>
-          <RoundedRect x={0} y={0} width={width} height={height} r={lensRadius}>
-            <RadialGradient
-              c={vec(width * 0.85, height * 0.85)}
-              r={maxDim * 0.8}
-              colors={['rgba(94, 61, 179, 0)', 'rgba(94, 61, 179, 0.18)']}
-            />
-          </RoundedRect>
-          <RoundedRect
-            x={0.5}
-            y={0.5}
-            width={width - 1}
-            height={height - 1}
-            r={strokeRadius}
-            style="stroke"
-            strokeWidth={1}
-            color="rgba(255, 255, 255, 0.6)"
-          />
-          <Circle cx={width * 0.22} cy={height * 0.28} r={minDim * 0.18}>
-            <RadialGradient
-              c={vec(width * 0.22, height * 0.28)}
-              r={minDim * 0.18}
-              colors={['rgba(255, 255, 255, 0.7)', 'rgba(255, 255, 255, 0)']}
-            />
-          </Circle>
-          <Circle cx={width * 0.72} cy={height * 0.18} r={minDim * 0.1}>
-            <RadialGradient
-              c={vec(width * 0.72, height * 0.18)}
-              r={minDim * 0.1}
-              colors={['rgba(255, 255, 255, 0.6)', 'rgba(255, 255, 255, 0)']}
-            />
-          </Circle>
-        </Canvas>
-      ) : null}
-    </View>
-  );
-}
-
-function TipHighlightDots() {
-  const dotOne = useRef(new Animated.Value(0)).current;
-  const dotTwo = useRef(new Animated.Value(0)).current;
-  const dotThree = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    const createPulse = (value: Animated.Value, delayMs: number) =>
-      Animated.loop(
-        Animated.sequence([
-          Animated.delay(delayMs),
-          Animated.timing(value, {
-            toValue: 1,
-            duration: 900,
-            easing: Easing.out(Easing.quad),
-            useNativeDriver: true,
-          }),
-          Animated.timing(value, {
-            toValue: 0,
-            duration: 900,
-            easing: Easing.in(Easing.quad),
-            useNativeDriver: true,
-          }),
-        ])
-      );
-
-    const pulseOne = createPulse(dotOne, 0);
-    const pulseTwo = createPulse(dotTwo, 500);
-    const pulseThree = createPulse(dotThree, 1000);
-
-    pulseOne.start();
-    pulseTwo.start();
-    pulseThree.start();
-
-    return () => {
-      pulseOne.stop();
-      pulseTwo.stop();
-      pulseThree.stop();
-    };
-  }, [dotOne, dotTwo, dotThree]);
-
-  const makeDotStyle = (value: Animated.Value) => ({
-    opacity: value.interpolate({ inputRange: [0, 1], outputRange: [0.2, 0.95] }),
-    transform: [
-      { scale: value.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1.25] }) },
-    ],
-  });
-
-  return (
-    <View pointerEvents="none" style={styles.tipHighlightContainer}>
-      <Animated.View style={[styles.tipHighlightDot, styles.tipHighlightDotOne, makeDotStyle(dotOne)]} />
-      <Animated.View style={[styles.tipHighlightDot, styles.tipHighlightDotTwo, makeDotStyle(dotTwo)]} />
-      <Animated.View style={[styles.tipHighlightDot, styles.tipHighlightDotThree, makeDotStyle(dotThree)]} />
-    </View>
-  );
-}
-
 export default function HomeScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
@@ -270,8 +111,6 @@ export default function HomeScreen() {
   const DEFAULT_OVERVIEW_HEIGHT = 230;
   const PRODUCT_ROTATION_INITIAL_DELAY_MS = 10000;
   const PRODUCT_ROTATION_INTERVAL_MS = 20000;
-  const OVERVIEW_ROTATION_INTERVAL_MS = 20000;
-  const OVERVIEW_SLIDE_COUNT = 2;
 
   const [babyInfo, setBabyInfo] = useState<any>(null);
   const [diaryEntries, setDiaryEntries] = useState<any[]>([]);
@@ -299,8 +138,6 @@ export default function HomeScreen() {
   const [overviewCarouselWidth, setOverviewCarouselWidth] = useState(0);
   const [overviewIndex, setOverviewIndex] = useState(0);
   const [overviewSummaryHeight, setOverviewSummaryHeight] = useState<number | null>(null);
-  const overviewScrollRef = useRef<ScrollView | null>(null);
-  const homeCacheRef = useRef<HomeCachePayload | null>(null);
   const productIndexRef = useRef(0);
   const productRotationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const productRotationCycleRef = useRef(0);
@@ -334,102 +171,6 @@ export default function HomeScreen() {
     const words = value.trim().split(/\s+/).filter(Boolean);
     if (words.length <= limit) return value.trim();
     return `${words.slice(0, limit).join(' ')}...`;
-  };
-
-  const resetHomeState = () => {
-    setBabyInfo(null);
-    setDiaryEntries([]);
-    setDailyEntries([]);
-    setCurrentPhase(null);
-    setPhaseProgress(null);
-    setMilestones([]);
-    setUserName('');
-    setProfileAvatarUrl(null);
-    setRecommendations([]);
-    setTodaySleepMinutes(0);
-  };
-
-  const loadCachedData = async () => {
-    if (!user?.id) return false;
-    try {
-      const cachedStr = await AsyncStorage.getItem(buildHomeCacheKey(user.id));
-      if (!cachedStr) return false;
-
-      const cached: HomeCachePayload = JSON.parse(cachedStr);
-      if (!cached || typeof cached !== 'object') return false;
-
-      homeCacheRef.current = cached;
-
-      if (cached.profile) {
-        setUserName(cached.profile.userName ?? '');
-        setProfileAvatarUrl(cached.profile.avatarUrl ?? null);
-      }
-
-      if (cached.babyInfo !== undefined) {
-        setBabyInfo(cached.babyInfo);
-      }
-
-      if (Array.isArray(cached.diaryEntries)) {
-        setDiaryEntries(cached.diaryEntries);
-      }
-
-      const todayKey = getCacheDayKey();
-      if (cached.dailyEntriesDate === todayKey && Array.isArray(cached.dailyEntries)) {
-        setDailyEntries(cached.dailyEntries);
-        if (typeof cached.todaySleepMinutes === 'number') {
-          setTodaySleepMinutes(cached.todaySleepMinutes);
-        }
-      } else {
-        setDailyEntries([]);
-        setTodaySleepMinutes(0);
-      }
-
-      if (cached.currentPhase !== undefined) {
-        setCurrentPhase(cached.currentPhase);
-      }
-      if (cached.phaseProgress !== undefined) {
-        setPhaseProgress(cached.phaseProgress);
-      }
-      if (Array.isArray(cached.milestones)) {
-        setMilestones(cached.milestones);
-      }
-      if (Array.isArray(cached.recommendations)) {
-        setRecommendations(cached.recommendations);
-      }
-
-      setIsLoading(false);
-      return true;
-    } catch (error) {
-      console.error('Error loading home cache:', error);
-      return false;
-    }
-  };
-
-  const saveHomeCache = async (updates: Partial<HomeCachePayload>) => {
-    if (!user?.id) return;
-    try {
-      const existing = homeCacheRef.current ?? {};
-      const next: HomeCachePayload = {
-        cachedAt: new Date().toISOString(),
-        profile: {
-          userName: updates.profile?.userName ?? existing.profile?.userName ?? userName,
-          avatarUrl: updates.profile?.avatarUrl ?? existing.profile?.avatarUrl ?? profileAvatarUrl ?? null,
-        },
-        babyInfo: updates.babyInfo ?? existing.babyInfo ?? babyInfo,
-        diaryEntries: updates.diaryEntries ?? existing.diaryEntries ?? diaryEntries,
-        dailyEntries: updates.dailyEntries ?? existing.dailyEntries ?? dailyEntries,
-        dailyEntriesDate: updates.dailyEntriesDate ?? existing.dailyEntriesDate ?? getCacheDayKey(),
-        currentPhase: updates.currentPhase ?? existing.currentPhase ?? currentPhase,
-        phaseProgress: updates.phaseProgress ?? existing.phaseProgress ?? phaseProgress,
-        milestones: updates.milestones ?? existing.milestones ?? milestones,
-        recommendations: updates.recommendations ?? existing.recommendations ?? recommendations,
-        todaySleepMinutes: updates.todaySleepMinutes ?? existing.todaySleepMinutes ?? todaySleepMinutes,
-      };
-      homeCacheRef.current = next;
-      await AsyncStorage.setItem(buildHomeCacheKey(user.id), JSON.stringify(next));
-    } catch (error) {
-      console.error('Error saving home cache:', error);
-    }
   };
 
   useEffect(() => {
@@ -494,50 +235,14 @@ export default function HomeScreen() {
   }, [rotationCandidates, PRODUCT_ROTATION_INITIAL_DELAY_MS, PRODUCT_ROTATION_INTERVAL_MS]);
 
   useEffect(() => {
-    if (!overviewCarouselWidth) return;
-
-    const interval = setInterval(() => {
-      setOverviewIndex((current) => {
-        const nextIndex = (current + 1) % OVERVIEW_SLIDE_COUNT;
-        overviewScrollRef.current?.scrollTo({
-          x: overviewCarouselWidth * nextIndex,
-          animated: true,
-        });
-        return nextIndex;
-      });
-    }, OVERVIEW_ROTATION_INTERVAL_MS);
-
-    return () => clearInterval(interval);
-  }, [overviewCarouselWidth, OVERVIEW_ROTATION_INTERVAL_MS, OVERVIEW_SLIDE_COUNT]);
-
-  useEffect(() => {
-    let isActive = true;
-
-    const init = async () => {
-      if (!user) {
-        resetHomeState();
-        homeCacheRef.current = null;
-        setIsLoading(false);
-        return;
-      }
-
-      resetHomeState();
-      homeCacheRef.current = null;
-      const cacheLoaded = await loadCachedData();
-      if (!isActive) return;
-
+    if (user) {
+      loadData();
       // Wähle einen zufälligen Tipp für den Tag
       const randomTip = dailyTips[Math.floor(Math.random() * dailyTips.length)];
       setDailyTip(randomTip);
-
-      await loadData({ skipLoading: cacheLoaded });
-    };
-
-    init();
-
-    return () => {
-      isActive = false;
-    };
+    } else {
+      setIsLoading(false);
+    }
   }, [user]);
 
   // Funktion für Pull-to-Refresh
@@ -556,29 +261,11 @@ export default function HomeScreen() {
     }
   };
 
-  const loadData = async (options?: { skipLoading?: boolean }) => {
+  const loadData = async () => {
     try {
-      if (!refreshing && !options?.skipLoading) {
+      if (!refreshing) {
         setIsLoading(true);
       }
-
-      const today = new Date();
-      const startOfDay = new Date(today);
-      startOfDay.setHours(0, 0, 0, 0);
-      const endOfDay = new Date(today);
-      endOfDay.setHours(23, 59, 59, 999);
-      const todayKey = getCacheDayKey(today);
-
-      let nextProfileName = userName;
-      let nextProfileAvatar = profileAvatarUrl ?? null;
-      let nextBabyInfo = babyInfo;
-      let nextDiaryEntries = diaryEntries;
-      let nextDailyEntries = dailyEntries;
-      let nextCurrentPhase = currentPhase;
-      let nextPhaseProgress = phaseProgress;
-      let nextMilestones = milestones;
-      let nextRecommendations = recommendations;
-      let nextSleepMinutes = todaySleepMinutes;
 
       // Benutzernamen laden
       const { data: profileData, error: profileError } = await supabase
@@ -591,27 +278,28 @@ export default function HomeScreen() {
         console.error('Error loading user profile:', profileError);
       } else if (profileData) {
         if (profileData.first_name) {
-          nextProfileName = profileData.first_name;
           setUserName(profileData.first_name);
         }
-        nextProfileAvatar = profileData.avatar_url || null;
-        setProfileAvatarUrl(nextProfileAvatar);
+        setProfileAvatarUrl(profileData.avatar_url || null);
       }
 
       // Baby-Informationen laden
       const { data: babyData } = await getBabyInfo();
-      nextBabyInfo = babyData;
       setBabyInfo(babyData);
 
       // Tagebucheinträge laden (nur die neuesten 5)
       const { data: diaryData } = await getDiaryEntries();
       if (diaryData) {
-        const diaryPreview = diaryData.slice(0, 5);
-        nextDiaryEntries = diaryPreview;
-        setDiaryEntries(diaryPreview);
+        setDiaryEntries(diaryData.slice(0, 5));
       }
 
       // Alltags-Einträge für heute laden
+      const today = new Date();
+      const startOfDay = new Date(today);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(today);
+      endOfDay.setHours(23, 59, 59, 999);
+
       const { data: dailyData, error: dailyError } = await supabase
         .from('baby_care_entries')
         .select('*')
@@ -619,55 +307,34 @@ export default function HomeScreen() {
         .lte('start_time', endOfDay.toISOString())
         .order('start_time', { ascending: false });
 
-      if (!dailyError && Array.isArray(dailyData)) {
-        nextDailyEntries = dailyData;
+      if (!dailyError && dailyData) {
         setDailyEntries(dailyData);
       }
 
-      const sleepMinutes = await fetchTodaySleepMinutes(startOfDay, endOfDay);
-      if (sleepMinutes !== null) {
-        nextSleepMinutes = sleepMinutes;
-      }
+      await fetchTodaySleepMinutes(startOfDay, endOfDay);
 
       // Aktuelle Entwicklungsphase laden
       const { data: phaseData } = await getCurrentPhase();
       if (phaseData) {
-        nextCurrentPhase = phaseData;
         setCurrentPhase(phaseData);
 
         // Fortschritt für die aktuelle Phase berechnen
         const { progress, completedCount, totalCount } = await getPhaseProgress(phaseData.phase_id);
-        nextPhaseProgress = { progress, completedCount, totalCount };
-        setPhaseProgress(nextPhaseProgress);
+        setPhaseProgress({ progress, completedCount, totalCount });
 
         // Meilensteine für die aktuelle Phase laden
         const { data: milestonesData } = await getMilestonesByPhase(phaseData.phase_id);
         if (milestonesData) {
-          nextMilestones = milestonesData;
           setMilestones(milestonesData);
         }
       }
 
       try {
         const recommendationData = await getRecommendations();
-        nextRecommendations = recommendationData;
         setRecommendations(recommendationData);
       } catch (error) {
         console.error('Error loading recommendations:', error);
       }
-
-      await saveHomeCache({
-        profile: { userName: nextProfileName, avatarUrl: nextProfileAvatar },
-        babyInfo: nextBabyInfo,
-        diaryEntries: nextDiaryEntries,
-        dailyEntries: nextDailyEntries,
-        dailyEntriesDate: todayKey,
-        currentPhase: nextCurrentPhase,
-        phaseProgress: nextPhaseProgress,
-        milestones: nextMilestones,
-        recommendations: nextRecommendations,
-        todaySleepMinutes: nextSleepMinutes,
-      });
     } catch (err) {
       console.error('Failed to load home data:', err);
     } finally {
@@ -735,7 +402,8 @@ export default function HomeScreen() {
   const handleStatPress = (type: 'feeding' | 'diaper' | 'sleep') => {
     triggerHaptic();
     if (type === 'sleep') {
-      router.push('/(tabs)/sleep-tracker');
+      setSleepModalStart(new Date());
+      setShowSleepModal(true);
       return;
     }
     setSelectedActivityType(type);
@@ -767,21 +435,12 @@ export default function HomeScreen() {
         return;
       }
 
-      let nextDailyEntries = dailyEntries;
       if (dailyData) {
         console.log('Loaded daily entries:', dailyData.length, 'entries');
-        nextDailyEntries = dailyData;
         setDailyEntries(dailyData);
       }
 
-      const sleepMinutes = await fetchTodaySleepMinutes(startOfDay, endOfDay);
-      if (dailyData || sleepMinutes !== null) {
-        await saveHomeCache({
-          dailyEntries: nextDailyEntries,
-          dailyEntriesDate: getCacheDayKey(today),
-          todaySleepMinutes: sleepMinutes ?? todaySleepMinutes,
-        });
-      }
+      await fetchTodaySleepMinutes(startOfDay, endOfDay);
     } catch (err) {
       console.error('Failed to load daily entries:', err);
     }
@@ -791,7 +450,7 @@ export default function HomeScreen() {
     try {
       if (!user?.id) {
         setTodaySleepMinutes(0);
-        return 0;
+        return;
       }
 
       const startIso = startOfDay.toISOString();
@@ -810,7 +469,7 @@ export default function HomeScreen() {
       if (error || !data) {
         console.error('Error loading sleep entries for today:', error);
         setTodaySleepMinutes(0);
-        return null;
+        return;
       }
 
       const totalMinutes = data.reduce((sum, entry) => {
@@ -823,11 +482,9 @@ export default function HomeScreen() {
       }, 0);
 
       setTodaySleepMinutes(totalMinutes);
-      return totalMinutes;
     } catch (error) {
       console.error('Failed to calculate today sleep minutes:', error);
       setTodaySleepMinutes(0);
-      return null;
     }
   };
 
@@ -898,13 +555,7 @@ export default function HomeScreen() {
       startOfDay.setHours(0, 0, 0, 0);
       const endOfDay = new Date(today);
       endOfDay.setHours(23, 59, 59, 999);
-      const sleepMinutes = await fetchTodaySleepMinutes(startOfDay, endOfDay);
-      if (sleepMinutes !== null) {
-        await saveHomeCache({
-          todaySleepMinutes: sleepMinutes,
-          dailyEntriesDate: getCacheDayKey(today),
-        });
-      }
+      await fetchTodaySleepMinutes(startOfDay, endOfDay);
     } catch (err) {
       console.error('Failed to save sleep entry:', err);
       Alert.alert('Fehler', 'Schlafeintrag konnte nicht gespeichert werden.');
@@ -922,7 +573,6 @@ export default function HomeScreen() {
       params: { focusId: recommendationId },
     });
   };
-
   // Rendere den Begrüßungsbereich
   const renderGreetingSection = () => {
     // Verwende den Benutzernamen aus der profiles-Tabelle
@@ -977,8 +627,14 @@ export default function HomeScreen() {
             </View>
 
             <View style={styles.tipCard}>
-              <GlassLensOverlay radius={20} />
-              <TipHighlightDots />
+              <LinearGradient
+                pointerEvents="none"
+                colors={['rgba(94, 61, 179, 0.18)', 'rgba(94, 61, 179, 0.02)']}
+                locations={[0, 1]}
+                start={{ x: 0.2, y: 0 }}
+                end={{ x: 0.8, y: 1 }}
+                style={styles.tipGloss}
+              />
               <View style={styles.tipCardRow}>
                 <View style={styles.tipIconWrap}>
                   <IconSymbol name="lightbulb.fill" size={18} color="#D6B28C" />
@@ -1002,7 +658,9 @@ export default function HomeScreen() {
     const todayDiaperChanges = getTodayDiaperChanges();
 
     return (
-      <View
+      <TouchableOpacity
+        onPress={() => handleNavigate('/(tabs)/daily_old')}
+        activeOpacity={0.9}
         style={[styles.liquidGlassWrapper, wrapperStyle]}
         onLayout={(event) => {
           const nextHeight = Math.round(event.nativeEvent.layout.height);
@@ -1021,27 +679,21 @@ export default function HomeScreen() {
             lightColor="rgba(255, 255, 255, 0.04)"
             darkColor="rgba(255, 255, 255, 0.02)"
           >
-            <TouchableOpacity
-              style={styles.sectionTitleContainer}
-              activeOpacity={0.85}
-              onPress={() => handleNavigate('/(tabs)/daily_old')}
-            >
+            <View style={styles.sectionTitleContainer}>
               <ThemedText style={[styles.sectionTitle, { color: '#7D5A50', fontSize: 22 }]}>
                 Dein Tag im Überblick
               </ThemedText>
               <View style={styles.liquidGlassChevron}>
                 <IconSymbol name="chevron.right" size={20} color="#7D5A50" />
               </View>
-            </TouchableOpacity>
+            </View>
 
             <View style={styles.statsContainer}>
-              <TouchableOpacity
+              <View
                 style={[styles.statItem, styles.liquidGlassStatItem, {
                   backgroundColor: 'rgba(94, 61, 179, 0.13)',
                   borderColor: 'rgba(94, 61, 179, 0.35)'
                 }]}
-                activeOpacity={0.85}
-                onPress={() => handleStatPress('feeding')}
               >
                 <View style={styles.liquidGlassStatIcon}>
                   <Text style={styles.statEmoji}>🍼</Text>
@@ -1053,15 +705,13 @@ export default function HomeScreen() {
                   textShadowRadius: 2,
                 }]}>{todayFeedings}</ThemedText>
                 <ThemedText style={[styles.statLabel, styles.liquidGlassStatLabel, { color: '#7D5A50' }]}>Essen</ThemedText>
-              </TouchableOpacity>
+              </View>
 
-              <TouchableOpacity
+              <View
                 style={[styles.statItem, styles.liquidGlassStatItem, {
                   backgroundColor: 'rgba(94, 61, 179, 0.08)',
                   borderColor: 'rgba(94, 61, 179, 0.22)'
                 }]}
-                activeOpacity={0.85}
-                onPress={() => handleStatPress('diaper')}
               >
                 <View style={styles.liquidGlassStatIcon}>
                   <Text style={styles.statEmoji}>💩</Text>
@@ -1073,15 +723,13 @@ export default function HomeScreen() {
                   textShadowRadius: 2,
                 }]}>{todayDiaperChanges}</ThemedText>
                 <ThemedText style={[styles.statLabel, styles.liquidGlassStatLabel, { color: '#7D5A50' }]}>Windeln</ThemedText>
-              </TouchableOpacity>
+              </View>
 
-              <TouchableOpacity
+              <View
                 style={[styles.statItem, styles.liquidGlassStatItem, { 
                   backgroundColor: 'rgba(94, 61, 179, 0.05)', 
                   borderColor: 'rgba(94, 61, 179, 0.15)' 
                 }]}
-                activeOpacity={0.85}
-                onPress={() => handleStatPress('sleep')}
               >
                 <View style={styles.liquidGlassStatIcon}>
                   <Text style={styles.statEmoji}>💤</Text>
@@ -1093,11 +741,11 @@ export default function HomeScreen() {
                   textShadowRadius: 2,
                 }]}>{formatMinutes(todaySleepMinutes)}</ThemedText>
                 <ThemedText style={[styles.statLabel, styles.liquidGlassStatLabel, { color: '#7D5A50' }]}>Schlaf</ThemedText>
-              </TouchableOpacity>
+              </View>
             </View>
           </ThemedView>
         </BlurView>
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -1247,7 +895,6 @@ export default function HomeScreen() {
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
-        ref={overviewScrollRef}
         style={styles.overviewCarousel}
         decelerationRate="fast"
         onMomentumScrollEnd={(event) => {
@@ -1257,23 +904,22 @@ export default function HomeScreen() {
         }}
         scrollEventThrottle={16}
       >
-        {[
-          renderDailySummary(styles.carouselCardWrapper),
-          renderRecommendationCard(styles.carouselCardWrapper),
-        ].map((slide, index) => (
-          <View
-            key={`overview-slide-${index}`}
-            style={[
-              styles.overviewSlide,
-              overviewCarouselWidth ? { width: overviewCarouselWidth } : null,
-            ]}
-          >
-            {slide}
-          </View>
-        ))}
+        {[renderDailySummary(styles.carouselCardWrapper), renderRecommendationCard(styles.carouselCardWrapper)].map(
+          (slide, index) => (
+            <View
+              key={`overview-slide-${index}`}
+              style={[
+                styles.overviewSlide,
+                overviewCarouselWidth ? { width: overviewCarouselWidth } : null,
+              ]}
+            >
+              {slide}
+            </View>
+          )
+        )}
       </ScrollView>
       <View style={styles.carouselDots}>
-        {Array.from({ length: OVERVIEW_SLIDE_COUNT }, (_, index) => (
+        {[0, 1].map((index) => (
           <View
             key={`overview-dot-${index}`}
             style={[
@@ -1560,7 +1206,7 @@ const styles = StyleSheet.create({
     lineHeight: 36,
   },
   dateText: {
-    fontSize: 19,
+    fontSize: 18,
     opacity: 0.8,
     fontWeight: '700',
     letterSpacing: 0.2,
@@ -1621,49 +1267,15 @@ const styles = StyleSheet.create({
   tipCard: {
     marginTop: 14,
     borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.22)',
+    backgroundColor: 'rgba(94, 61, 179, 0.13)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.55)',
+    borderColor: 'rgba(94, 61, 179, 0.35)',
     padding: 14,
     overflow: 'hidden',
-    shadowColor: '#5E3DB3',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    elevation: 4,
   },
-  tipHighlightContainer: {
+  tipGloss: {
     ...StyleSheet.absoluteFillObject,
-  },
-  tipHighlightDot: {
-    position: 'absolute',
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    shadowColor: '#FFFFFF',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.6,
-    shadowRadius: 6,
-    elevation: 3,
-  },
-  tipHighlightDotOne: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    top: 10,
-    right: 16,
-  },
-  tipHighlightDotTwo: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    top: 28,
-    right: 44,
-  },
-  tipHighlightDotThree: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    bottom: 10,
-    right: 28,
+    borderRadius: 20,
   },
   tipCardRow: {
     flexDirection: 'row',
@@ -1673,7 +1285,7 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    backgroundColor: 'transparent',
     borderWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1839,7 +1451,6 @@ const styles = StyleSheet.create({
     marginTop: 8,
     textAlign: 'center',
   },
-
 
   // Tagesübersicht - Liquid Glass Design
   summaryContainer: {
