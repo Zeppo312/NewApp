@@ -23,6 +23,14 @@ export interface WikiArticle {
   isFavorite?: boolean; // Wird clientseitig hinzugefügt
 }
 
+export interface WikiArticleInput {
+  title: string;
+  category_id: string;
+  teaser: string;
+  reading_time: string;
+  content?: WikiArticle['content'];
+}
+
 // Funktion zum Abrufen aller Kategorien
 export const getWikiCategories = async () => {
   try {
@@ -134,6 +142,90 @@ export const getWikiArticle = async (articleId: string) => {
     return { data: { ...article, isFavorite: false }, error: null };
   } catch (error) {
     console.error('Error fetching wiki article:', error);
+    return { data: null, error };
+  }
+};
+
+// Funktion zum Erstellen eines Artikels (Admin)
+export const createWikiArticle = async (input: WikiArticleInput) => {
+  try {
+    const { data, error } = await supabase
+      .from('wiki_articles')
+      .insert({
+        title: input.title,
+        category_id: input.category_id,
+        teaser: input.teaser,
+        reading_time: input.reading_time,
+        content: input.content ?? null,
+      })
+      .select(`
+        id,
+        title,
+        category_id,
+        teaser,
+        reading_time,
+        content,
+        wiki_categories(name)
+      `)
+      .single();
+
+    if (error) throw error;
+    return { data, error: null };
+  } catch (error) {
+    console.error('Error creating wiki article:', error);
+    return { data: null, error };
+  }
+};
+
+// Funktion zum Aktualisieren eines Artikels (Admin)
+export const updateWikiArticle = async (
+  articleId: string,
+  updates: Partial<WikiArticleInput>
+) => {
+  try {
+    const { data, error } = await supabase
+      .from('wiki_articles')
+      .update({
+        title: updates.title,
+        category_id: updates.category_id,
+        teaser: updates.teaser,
+        reading_time: updates.reading_time,
+        content: updates.content ?? null,
+      })
+      .eq('id', articleId)
+      .select(`
+        id,
+        title,
+        category_id,
+        teaser,
+        reading_time,
+        content,
+        wiki_categories(name)
+      `)
+      .single();
+
+    if (error) throw error;
+    return { data, error: null };
+  } catch (error) {
+    console.error('Error updating wiki article:', error);
+    return { data: null, error };
+  }
+};
+
+// Funktion zum Löschen eines Artikels (Admin)
+export const deleteWikiArticle = async (articleId: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('wiki_articles')
+      .delete()
+      .eq('id', articleId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return { data, error: null };
+  } catch (error) {
+    console.error('Error deleting wiki article:', error);
     return { data: null, error };
   }
 };

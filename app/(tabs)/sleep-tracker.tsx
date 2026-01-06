@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { ThemedBackground } from '@/components/ThemedBackground';
@@ -223,6 +224,11 @@ export default function SleepTrackerScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const paywallCheckInFlight = useRef(false);
+  const triggerHaptic = useCallback(() => {
+    try {
+      Haptics.selectionAsync();
+    } catch {}
+  }, []);
 
   // State management
   const [sleepEntries, setSleepEntries] = useState<ClassifiedSleepEntry[]>([]);
@@ -732,11 +738,12 @@ export default function SleepTrackerScreen() {
       'Eintrag löschen',
       'Möchtest du diesen Schlaf-Eintrag wirklich löschen?',
       [
-        { text: 'Abbrechen', style: 'cancel' },
+        { text: 'Abbrechen', style: 'cancel', onPress: () => { triggerHaptic(); } },
         {
           text: 'Löschen',
           style: 'destructive',
           onPress: async () => {
+            triggerHaptic();
             try {
               const { error } = await supabase
                 .from('sleep_entries')
@@ -999,7 +1006,10 @@ export default function SleepTrackerScreen() {
         <GlassCard key={tab} style={[styles.topTab, selectedTab === tab && styles.activeTopTab]} intensity={22}>
           <TouchableOpacity
             style={styles.topTabInner}
-            onPress={() => setSelectedTab(tab)} // Erstmal nur visuell - ohne Funktion
+            onPress={() => {
+              triggerHaptic();
+              setSelectedTab(tab);
+            }} // Erstmal nur visuell - ohne Funktion
             activeOpacity={0.85}
           >
             <Text style={[styles.topTabText, selectedTab === tab && styles.activeTopTabText]}>
@@ -1169,7 +1179,10 @@ export default function SleepTrackerScreen() {
           // Vollbreite Schlaf-beenden Button
         <TouchableOpacity
             style={[styles.fullWidthStopButton]}
-          onPress={() => handleStopSleep()}
+          onPress={() => {
+            triggerHaptic();
+            handleStopSleep();
+          }}
           activeOpacity={0.9}
         >
           <BlurView intensity={24} tint="light" style={styles.liquidGlassCardBackground}>
@@ -1186,7 +1199,10 @@ export default function SleepTrackerScreen() {
         <>
           <TouchableOpacity
             style={[styles.liquidGlassCardWrapper, { width: GRID_COL_W, marginRight: GRID_GUTTER }]}
-              onPress={() => handleStartSleep(currentTime.getHours() >= 20 || currentTime.getHours() < 10 ? 'night' : 'day')}
+              onPress={() => {
+                triggerHaptic();
+                handleStartSleep(currentTime.getHours() >= 20 || currentTime.getHours() < 10 ? 'night' : 'day');
+              }}
             activeOpacity={0.9}
           >
             <BlurView intensity={24} tint="light" style={styles.liquidGlassCardBackground}>
@@ -1203,6 +1219,7 @@ export default function SleepTrackerScreen() {
           <TouchableOpacity
             style={[styles.liquidGlassCardWrapper, { width: GRID_COL_W }]}
               onPress={() => {
+                triggerHaptic();
                 setEditingEntry(null);
                 setShowInputModal(true);
               }}
@@ -1334,7 +1351,13 @@ export default function SleepTrackerScreen() {
       <View style={styles.weekViewContainer}>
         {/* Week Navigation - Design Guide konform */}
         <View style={styles.weekNavigationContainer}>
-          <TouchableOpacity style={styles.weekNavButton} onPress={() => setWeekOffset(o => o - 1)}>
+          <TouchableOpacity
+            style={styles.weekNavButton}
+            onPress={() => {
+              triggerHaptic();
+              setWeekOffset(o => o - 1);
+            }}
+          >
             <Text style={styles.weekNavButtonText}>‹</Text>
           </TouchableOpacity>
 
@@ -1348,7 +1371,10 @@ export default function SleepTrackerScreen() {
           <TouchableOpacity
             style={[styles.weekNavButton, weekOffset >= 0 && { opacity: 0.4 }]}
             disabled={weekOffset >= 0}
-            onPress={() => setWeekOffset(o => o + 1)}
+            onPress={() => {
+              triggerHaptic();
+              setWeekOffset(o => o + 1);
+            }}
           >
             <Text style={styles.weekNavButtonText}>›</Text>
           </TouchableOpacity>
@@ -1378,7 +1404,11 @@ export default function SleepTrackerScreen() {
                     marginRight: i < (COLS - 1) ? GUTTER : 0,
                     alignItems: 'center',
                   }}
-                  onPress={() => { setSelectedDate(day); setSelectedTab('day'); }}
+                  onPress={() => {
+                    triggerHaptic();
+                    setSelectedDate(day);
+                    setSelectedTab('day');
+                  }}
                 >
                   <View style={[styles.chartBarContainer, { width: WEEK_COL_WIDTH + extra }]}>
                     {totalH > 0 && <View
@@ -1586,7 +1616,13 @@ export default function SleepTrackerScreen() {
       <View style={styles.monthViewContainer}>
         {/* Monats-Navigation - Design Guide konform */}
         <View style={styles.monthNavigationContainer}>
-          <TouchableOpacity style={styles.monthNavButton} onPress={() => setMonthOffset(o => o - 1)}>
+          <TouchableOpacity
+            style={styles.monthNavButton}
+            onPress={() => {
+              triggerHaptic();
+              setMonthOffset(o => o - 1);
+            }}
+          >
             <Text style={styles.monthNavButtonText}>‹</Text>
           </TouchableOpacity>
 
@@ -1599,7 +1635,10 @@ export default function SleepTrackerScreen() {
           <TouchableOpacity
             style={[styles.monthNavButton, monthOffset >= 0 && { opacity: 0.4 }]}
             disabled={monthOffset >= 0}
-            onPress={() => setMonthOffset(o => o + 1)}
+            onPress={() => {
+              triggerHaptic();
+              setMonthOffset(o => o + 1);
+            }}
           >
             <Text style={styles.monthNavButtonText}>›</Text>
           </TouchableOpacity>
@@ -1654,7 +1693,11 @@ export default function SleepTrackerScreen() {
                               styles.calendarDayButton,
                               { backgroundColor: c.bg, borderColor: c.border }
                             ]}
-                            onPress={() => { setSelectedDate(date); setSelectedTab('day'); }}
+                            onPress={() => {
+                              triggerHaptic();
+                              setSelectedDate(date);
+                              setSelectedTab('day');
+                            }}
                           >
                             <Text style={[styles.calendarDayNumber, { color: c.text }]}>{date.getDate()}</Text>
                             {totalMins > 0 && (
@@ -1742,7 +1785,13 @@ export default function SleepTrackerScreen() {
             <>
               {/* Day Navigation - gleiche Position/Höhe wie Woche/Monat */}
               <View style={styles.weekNavigationContainer}>
-                <TouchableOpacity style={styles.weekNavButton} onPress={goPrevDay}>
+                <TouchableOpacity
+                  style={styles.weekNavButton}
+                  onPress={() => {
+                    triggerHaptic();
+                    goPrevDay();
+                  }}
+                >
                   <Text style={styles.weekNavButtonText}>‹</Text>
                 </TouchableOpacity>
                 <View style={styles.weekHeaderCenter}>
@@ -1753,7 +1802,14 @@ export default function SleepTrackerScreen() {
                       : selectedDate.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long' })}
                   </Text>
                 </View>
-                <TouchableOpacity style={[styles.weekNavButton, nextDisabled && { opacity: 0.4 }]} disabled={nextDisabled} onPress={goNextDay}>
+                <TouchableOpacity
+                  style={[styles.weekNavButton, nextDisabled && { opacity: 0.4 }]}
+                  disabled={nextDisabled}
+                  onPress={() => {
+                    triggerHaptic();
+                    goNextDay();
+                  }}
+                >
                   <Text style={styles.weekNavButtonText}>›</Text>
                 </TouchableOpacity>
               </View>
@@ -1781,8 +1837,12 @@ export default function SleepTrackerScreen() {
                 <ActivityCard
                   key={entry.id || index}
                   entry={convertSleepToDailyEntry(entry)}
-                  onDelete={handleDeleteEntry}
+                  onDelete={(entryId) => {
+                    triggerHaptic();
+                    handleDeleteEntry(entryId);
+                  }}
                   onEdit={(entry) => {
+                    triggerHaptic();
                     setEditingEntry(entry as any);
                     setShowInputModal(true);
                   }}
@@ -1801,15 +1861,22 @@ export default function SleepTrackerScreen() {
               {sleepEntries.length > 0 && (
                 <TouchableOpacity
                   style={[styles.actionButton, styles.manualButton, { marginTop: 12 }]}
-                  onPress={jumpToLatestEntry}
+                  onPress={() => {
+                    triggerHaptic();
+                    jumpToLatestEntry();
+                  }}
                 >
                   <Text style={styles.actionButtonText}>Zum letzten Eintrag</Text>
                 </TouchableOpacity>
               )}
-                <TouchableOpacity style={[styles.actionButton, styles.manualButton, { marginTop: 16 }]} onPress={() => {
-                  setEditingEntry(null);
-                  setShowInputModal(true);
-                }}>
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.manualButton, { marginTop: 16 }]}
+                  onPress={() => {
+                    triggerHaptic();
+                    setEditingEntry(null);
+                    setShowInputModal(true);
+                  }}
+                >
                 <Text style={styles.actionButtonText}>Manuell hinzufügen</Text>
               </TouchableOpacity>
             </LiquidGlassCard>
@@ -1831,7 +1898,10 @@ export default function SleepTrackerScreen() {
             {/* Background tap to close */}
             <TouchableOpacity 
               style={StyleSheet.absoluteFill} 
-              onPress={() => setShowInputModal(false)}
+              onPress={() => {
+                triggerHaptic();
+                setShowInputModal(false);
+              }}
               activeOpacity={1}
             />
 
@@ -1844,7 +1914,10 @@ export default function SleepTrackerScreen() {
               <View style={styles.header}>
                 <TouchableOpacity 
                   style={styles.headerButton}
-                  onPress={() => setShowInputModal(false)}
+                  onPress={() => {
+                    triggerHaptic();
+                    setShowInputModal(false);
+                  }}
                 >
                   <Text style={styles.closeHeaderButtonText}>✕</Text>
                 </TouchableOpacity>
@@ -1860,12 +1933,15 @@ export default function SleepTrackerScreen() {
 
                 <TouchableOpacity
                   style={[styles.headerButton, styles.saveHeaderButton, { backgroundColor: '#8E4EC6' }]}
-                  onPress={() => handleSaveEntry({
-                    start_time: sleepModalData.start_time.toISOString(),
-                    end_time: sleepModalData.end_time?.toISOString() || null,
-                    quality: sleepModalData.quality,
-                    notes: sleepModalData.notes
-                  })}
+                  onPress={() => {
+                    triggerHaptic();
+                    handleSaveEntry({
+                      start_time: sleepModalData.start_time.toISOString(),
+                      end_time: sleepModalData.end_time?.toISOString() || null,
+                      quality: sleepModalData.quality,
+                      notes: sleepModalData.notes
+                    });
+                  }}
                 >
                   <Text style={styles.saveHeaderButtonText}>✓</Text>
                 </TouchableOpacity>
@@ -1882,7 +1958,10 @@ export default function SleepTrackerScreen() {
                       <View style={styles.timeRow}>
                         <TouchableOpacity 
                           style={styles.timeButton}
-                          onPress={() => setShowStartPicker(true)}
+                          onPress={() => {
+                            triggerHaptic();
+                            setShowStartPicker(true);
+                          }}
                         >
                           <Text style={styles.timeLabel}>Start</Text>
                           <Text style={styles.timeValue}>
@@ -1897,7 +1976,10 @@ export default function SleepTrackerScreen() {
 
                         <TouchableOpacity 
                           style={styles.timeButton}
-                          onPress={() => setShowEndPicker(true)}
+                          onPress={() => {
+                            triggerHaptic();
+                            setShowEndPicker(true);
+                          }}
                         >
                           <Text style={styles.timeLabel}>Ende</Text>
                           <Text style={styles.timeValue}>
@@ -1929,7 +2011,10 @@ export default function SleepTrackerScreen() {
                           <View style={styles.datePickerActions}>
                             <TouchableOpacity
                               style={styles.datePickerCancel}
-                              onPress={() => setShowStartPicker(false)}
+                              onPress={() => {
+                                triggerHaptic();
+                                setShowStartPicker(false);
+                              }}
                             >
                               <Text style={styles.datePickerCancelText}>Fertig</Text>
                             </TouchableOpacity>
@@ -1951,7 +2036,10 @@ export default function SleepTrackerScreen() {
                           <View style={styles.datePickerActions}>
                             <TouchableOpacity
                               style={styles.datePickerCancel}
-                              onPress={() => setShowEndPicker(false)}
+                              onPress={() => {
+                                triggerHaptic();
+                                setShowEndPicker(false);
+                              }}
                             >
                               <Text style={styles.datePickerCancelText}>Fertig</Text>
                             </TouchableOpacity>
@@ -1978,7 +2066,10 @@ export default function SleepTrackerScreen() {
                                 marginHorizontal: 3
                               }
                             ]}
-                            onPress={() => setSleepModalData(prev => ({ ...prev, quality: q }))}
+                            onPress={() => {
+                              triggerHaptic();
+                              setSleepModalData(prev => ({ ...prev, quality: q }));
+                            }}
                           >
                             <Text style={styles.optionIcon}>
                               {q === 'good' ? '😴' : q === 'medium' ? '😐' : '😵'}
@@ -2002,7 +2093,10 @@ export default function SleepTrackerScreen() {
                       <TouchableOpacity
                         style={styles.notesInput}
                         activeOpacity={0.9}
-                        onPress={openNotesEditor}
+                        onPress={() => {
+                          triggerHaptic();
+                          openNotesEditor();
+                        }}
                       >
                         <Text
                           style={sleepModalData.notes.trim() ? styles.notesText : styles.notesPlaceholder}
@@ -2019,6 +2113,7 @@ export default function SleepTrackerScreen() {
                         <TouchableOpacity
                           style={[styles.deleteButton]}
                           onPress={() => {
+                            triggerHaptic();
                             if (editingEntry.id) {
                               handleDeleteEntry(editingEntry.id);
                               setShowInputModal(false);

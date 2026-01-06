@@ -60,7 +60,9 @@ const Header: React.FC<HeaderProps> = ({
       
       {/* Mittlerer Bereich - immer bildschirmmittig */}
       <View style={styles.titleContainer} pointerEvents="none">
-        <ThemedText style={styles.title}>{title}</ThemedText>
+        <ThemedText style={styles.title} numberOfLines={2} ellipsizeMode="tail">
+          {title}
+        </ThemedText>
         {subtitle && (
           <ThemedText style={styles.subtitle}>{subtitle}</ThemedText>
         )}
@@ -117,12 +119,16 @@ const styles = StyleSheet.create({
   titleContainer: {
     alignItems: 'center',
     justifyContent: 'center',
+    flex: 1,
+    paddingHorizontal: 64,
   },
   title: {
     fontSize: 22,
     fontWeight: '700',
     color: '#7D5A50',
     textAlign: 'center',
+    flexShrink: 1,
+    lineHeight: 28,
   },
   subtitle: {
     fontSize: 13,

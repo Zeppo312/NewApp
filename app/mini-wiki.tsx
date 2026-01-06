@@ -27,6 +27,23 @@ const { width: screenWidth } = Dimensions.get('window');
 const TIMELINE_INSET = 8; // match ActivityCard inset
 const contentWidth = screenWidth - 2 * LAYOUT_PAD;
 const timelineWidth = contentWidth - TIMELINE_INSET * 2; // EXACT Timeline card width
+const ARTICLE_ACCENTS = [
+  { overlay: 'rgba(255, 214, 170, 0.22)', border: 'rgba(255, 214, 170, 0.55)' },
+  { overlay: 'rgba(190, 232, 200, 0.22)', border: 'rgba(190, 232, 200, 0.55)' },
+  { overlay: 'rgba(180, 210, 250, 0.22)', border: 'rgba(180, 210, 250, 0.55)' },
+  { overlay: 'rgba(230, 200, 255, 0.22)', border: 'rgba(230, 200, 255, 0.55)' },
+  { overlay: 'rgba(255, 205, 220, 0.22)', border: 'rgba(255, 205, 220, 0.55)' },
+  { overlay: 'rgba(255, 235, 170, 0.22)', border: 'rgba(255, 235, 170, 0.55)' },
+];
+
+const getArticleAccent = (seed: string) => {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i += 1) {
+    hash = (hash * 31 + seed.charCodeAt(i)) | 0;
+  }
+  const index = Math.abs(hash) % ARTICLE_ACCENTS.length;
+  return ARTICLE_ACCENTS[index];
+};
 
 export default function MiniWikiScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -150,8 +167,16 @@ export default function MiniWikiScreen() {
   );
 
   // Render article item
-  const renderArticleItem = ({ item }: { item: Article }) => (
-    <LiquidGlassCard style={[styles.articleItemGlass, { width: '100%' }]} onPress={() => router.push(`/mini-wiki/${item.id}`)} intensity={24}>
+  const renderArticleItem = ({ item }: { item: Article }) => {
+    const accent = getArticleAccent(item.id || item.title);
+    return (
+      <LiquidGlassCard
+        style={[styles.articleItemGlass, { width: '100%' }]}
+        onPress={() => router.push(`/mini-wiki/${item.id}`)}
+        intensity={24}
+        overlayColor={accent.overlay}
+        borderColor={accent.border}
+      >
       <View style={styles.articleItemInnerGlass}>
         <View style={styles.articleHeader}>
           <ThemedText style={styles.articleTitle}>{item.title}</ThemedText>
@@ -167,7 +192,9 @@ export default function MiniWikiScreen() {
           </TouchableOpacity>
         </View>
         <ThemedText style={styles.articleCategory}>{item.category}</ThemedText>
-        <ThemedText style={styles.articleTeaser}>{item.teaser}</ThemedText>
+        <View style={styles.articleBodyInset}>
+          <ThemedText style={styles.articleTeaser}>{item.teaser}</ThemedText>
+        </View>
         <View style={styles.articleFooter}>
           <ThemedText style={styles.readingTime}>
             <IconSymbol name="clock" size={14} color={theme.tabIconDefault} /> {item.readingTime}
@@ -176,7 +203,8 @@ export default function MiniWikiScreen() {
         </View>
       </View>
     </LiquidGlassCard>
-  );
+    );
+  };
 
   return (
     <>
@@ -388,6 +416,10 @@ const styles = StyleSheet.create({
   },
   articleItemInnerGlass: {
     padding: 16,
+  },
+  articleBodyInset: {
+    paddingHorizontal: 8,
+    paddingTop: 8,
   },
   articleHeader: {
     flexDirection: 'row',
