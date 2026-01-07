@@ -179,6 +179,8 @@ export default function DailyScreen() {
   const [splashSubtitle, setSplashSubtitle] = useState<string>('');
   const [splashStatus, setSplashStatus] = useState<string>('');
   const [splashHint, setSplashHint] = useState<string>('');
+  const [splashHintEmoji, setSplashHintEmoji] = useState<string>('');
+  const splashEmojiParts = useMemo(() => Array.from(splashEmoji), [splashEmoji]);
 
   // Scroll animation for quick actions
   const quickActionsScrollRef = useRef<FlatList>(null);
@@ -572,25 +574,29 @@ export default function DailyScreen() {
       setSplashTitle(timerStarted ? 'Stillen läuft' : 'Stillen gespeichert');
       setSplashSubtitle(timerStarted ? 'Nimm dir Zeit. Genieße diese besonderen Momente.' : 'Eintrag ohne Timer gesichert.');
       setSplashStatus(timerStarted ? 'Timer gestartet...' : '');
-      setSplashHint(timerStarted ? 'Stoppe, wenn ihr fertig seid 💕' : 'Du gibst deinem Baby alles, was es braucht 💕');
+      setSplashHint(timerStarted ? 'Stoppe, wenn ihr fertig seid' : 'Du gibst deinem Baby alles, was es braucht');
+      setSplashHintEmoji('💕');
       setSplashText('');
     } else if (kind === 'feeding_bottle') {
       setSplashTitle(timerStarted ? 'Fläschchen läuft' : 'Fläschchen gespeichert');
       setSplashSubtitle(timerStarted ? 'Ganz in Ruhe – du machst das super.' : 'Eintrag ohne Timer gesichert.');
       setSplashStatus(timerStarted ? 'Timer gestartet...' : '');
-      setSplashHint(timerStarted ? 'Stoppe, wenn ihr fertig seid 🤍' : 'Nähe und Ernährung – perfekt kombiniert 🤍');
+      setSplashHint(timerStarted ? 'Stoppe, wenn ihr fertig seid' : 'Nähe und Ernährung – perfekt kombiniert');
+      setSplashHintEmoji('🤍');
       setSplashText('');
     } else if (kind === 'feeding_solids') {
       setSplashTitle(timerStarted ? 'Beikost läuft' : 'Beikost gespeichert');
       setSplashSubtitle(timerStarted ? 'Timer läuft mit, bis du stoppst.' : 'Jeder Löffel ein kleiner Fortschritt.');
       setSplashStatus(timerStarted ? 'Timer gestartet...' : '');
       setSplashHint(timerStarted ? 'Stoppe, sobald ihr fertig seid.' : 'Weiter so – ihr wachst gemeinsam!');
+      setSplashHintEmoji('');
       setSplashText('');
     } else {
       setSplashTitle(timerStarted ? 'Wickeln läuft' : 'Wickeln gespeichert');
       setSplashSubtitle(timerStarted ? 'Timer läuft mit, bis du stoppst.' : 'Alles frisch – wohlfühlen ist wichtig.');
       setSplashStatus(timerStarted ? 'Timer gestartet...' : '');
-      setSplashHint(timerStarted ? 'Stoppe, wenn du fertig bist ✨' : 'Danke für deine liebevolle Fürsorge ✨');
+      setSplashHint(timerStarted ? 'Stoppe, wenn du fertig bist' : 'Danke für deine liebevolle Fürsorge');
+      setSplashHintEmoji('✨');
       setSplashText('');
     }
     setSplashVisible(true);
@@ -1331,14 +1337,31 @@ export default function DailyScreen() {
           />
           <View style={s.splashCenterCard}>
             <Animated.View style={[s.splashEmojiRing, { transform: [{ scale: splashEmojiAnim }] }]}>
-              <Text style={s.splashEmoji}>{splashEmoji}</Text>
+              {splashEmojiParts.length <= 1 ? (
+                <Text style={s.splashEmoji} allowFontScaling={false}>{splashEmoji}</Text>
+              ) : (
+                <View style={s.splashEmojiRow}>
+                  {splashEmojiParts.map((emoji, index) => (
+                    <Text key={`${emoji}-${index}`} style={s.splashEmojiMulti} allowFontScaling={false}>
+                      {emoji}
+                    </Text>
+                  ))}
+                </View>
+              )}
             </Animated.View>
             {splashTitle ? <Text style={s.splashTitle}>{splashTitle}</Text> : null}
             {splashSubtitle ? <Text style={s.splashSubtitle}>{splashSubtitle}</Text> : null}
             {splashStatus ? <Text style={s.splashStatus}>{splashStatus}</Text> : null}
             {splashHint ? (
               <View style={s.splashHintCard}>
-                <Text style={s.splashHintText}>♡  {splashHint}</Text>
+                <Text style={s.splashHintText}>
+                  <Text style={s.splashHintEmoji} allowFontScaling={false}>♡</Text>
+                  {'  '}
+                  {splashHint}
+                  {splashHintEmoji ? (
+                    <Text style={s.splashHintEmoji} allowFontScaling={false}> {splashHintEmoji}</Text>
+                  ) : null}
+                </Text>
               </View>
             ) : null}
           </View>
@@ -1932,8 +1955,21 @@ kpiValueCentered: { textAlign: 'center', width: '100%' },
   splashEmoji: {
     fontSize: 72,
     textAlign: 'center',
-    marginBottom: 10,
     color: '#fff',
+    lineHeight: 72,
+    includeFontPadding: false,
+  },
+  splashEmojiRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  splashEmojiMulti: {
+    fontSize: 56,
+    color: '#fff',
+    lineHeight: 56,
+    includeFontPadding: false,
+    marginHorizontal: 2,
   },
   splashText: {
     fontSize: 20,
@@ -1982,6 +2018,11 @@ kpiValueCentered: { textAlign: 'center', width: '100%' },
     color: '#fff',
     fontSize: 16,
     textAlign: 'center',
+    fontWeight: '700',
+  },
+  splashHintEmoji: {
+    color: '#fff',
+    fontSize: 16,
     fontWeight: '700',
   },
   splashEmojiRing: {

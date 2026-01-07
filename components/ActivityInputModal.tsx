@@ -46,6 +46,12 @@ interface ActivityInputModalProps {
   }>;
 }
 
+const FixedEmojiText: React.FC<React.ComponentProps<typeof Text>> = ({ style, children, ...rest }) => (
+  <Text {...rest} allowFontScaling={false} style={style}>
+    {children}
+  </Text>
+);
+
 const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   visible,
   activityType,
@@ -222,7 +228,10 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
 
   const renderTimeSection = () => (
     <View style={styles.section}>
-      <Text style={[styles.sectionTitle, { color: theme.text }]}>⏰ Zeitraum</Text>
+      <Text style={[styles.sectionTitle, { color: theme.text }]}>
+        <FixedEmojiText style={styles.sectionTitleEmoji}>⏰</FixedEmojiText>{' '}
+        Zeitraum
+      </Text>
 
       <View style={styles.timeRow}> 
         <TouchableOpacity style={styles.timeButton} onPress={() => setShowStartPicker(true)}>
@@ -381,7 +390,10 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
     const quickVolumes = [60, 90, 120, 150, 180, 210];
     return (
       <View style={{width: '100%', alignItems: 'center'}}>
-        <Text style={[styles.sectionTitle, { color: theme.text }]}>🥛 Menge (ml)</Text>
+        <Text style={[styles.sectionTitle, { color: theme.text }]}>
+          <FixedEmojiText style={styles.sectionTitleEmoji}>🥛</FixedEmojiText>{' '}
+          Menge (ml)
+        </Text>
         <View style={styles.volumeStepperContainer}>
           <TouchableOpacity style={styles.stepperButton} onPress={() => setVolumeMl(v => Math.max(0, v - 10))}>
             <Text style={styles.stepperButtonText}>-</Text>
@@ -414,7 +426,10 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
 
   const renderFeedingSection = () => (
     <View style={styles.section}>
-      <Text style={[styles.sectionTitle, { color: theme.text }]}>🍼 Art der Fütterung</Text>
+      <Text style={[styles.sectionTitle, { color: theme.text }]}>
+        <FixedEmojiText style={styles.sectionTitleEmoji}>🍼</FixedEmojiText>{' '}
+        Art der Fütterung
+      </Text>
       <View style={styles.optionsGrid}>
         {[
           { type: 'breast', label: 'Brust', icon: '🤱' },
@@ -430,7 +445,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
             ]}
             onPress={() => setFeedingType(option.type as FeedingType)}
           >
-            <Text style={styles.optionIcon}>{option.icon}</Text>
+            <FixedEmojiText style={styles.optionIcon}>{option.icon}</FixedEmojiText>
             <Text style={[styles.optionLabel, { color: feedingType === option.type ? '#FFFFFF' : theme.text }]}>
               {option.label}
             </Text>
@@ -441,14 +456,20 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
         {feedingType === 'bottle' && renderVolumeControl()}
         {feedingType === 'breast' && (
           <View style={{width: '100%', alignItems: 'center'}}>
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>🤱 Seite</Text>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>
+              <FixedEmojiText style={styles.sectionTitleEmoji}>🤱</FixedEmojiText>{' '}
+              Seite
+            </Text>
             {renderBreastSideSelector()}
             <Text style={[styles.infoText, {marginTop: 20}]}>Wähle die Seite, auf der gestillt wurde.</Text>
           </View>
         )}
         {feedingType === 'solids' && (
           <View style={{width: '100%', alignItems: 'center', paddingTop: 20}}>
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>🥦 BLW-Rezepte</Text>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>
+              <FixedEmojiText style={styles.sectionTitleEmoji}>🥦</FixedEmojiText>{' '}
+              BLW-Rezepte
+            </Text>
             <TouchableOpacity
               style={styles.recipeDropdown}
               onPress={() => setRecipeDropdownOpen((v) => !v)}
@@ -492,7 +513,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
                           <Image source={{ uri: recipe.image }} style={styles.recipeThumb} resizeMode="cover" />
                         ) : (
                           <View style={[styles.recipeThumb, styles.recipeThumbFallback]}>
-                          <Text style={styles.recipeThumbEmoji}>{recipe.emoji ?? '🥄'}</Text>
+                          <FixedEmojiText style={styles.recipeThumbEmoji}>{recipe.emoji ?? '🥄'}</FixedEmojiText>
                           </View>
                         )}
                         <View style={styles.recipeRowText}>
@@ -521,7 +542,10 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
 
   const renderDiaperSection = () => (
     <View style={styles.section}>
-      <Text style={[styles.sectionTitle, { color: theme.text }]}>💧 Art der Windel</Text>
+      <Text style={[styles.sectionTitle, { color: theme.text }]}>
+        <FixedEmojiText style={styles.sectionTitleEmoji}>💧</FixedEmojiText>{' '}
+        Art der Windel
+      </Text>
       <View style={styles.optionsGrid}>
         {[
           { type: 'wet', label: 'Nass', icon: '💧' },
@@ -540,7 +564,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
             ]}
             onPress={() => setDiaperType(option.type as DiaperType)}
           >
-            <Text style={styles.optionIcon}>{option.icon}</Text>
+            <FixedEmojiText style={styles.optionIcon}>{option.icon}</FixedEmojiText>
             <Text style={[styles.optionLabel, { color: diaperType === option.type ? '#FFFFFF' : theme.text }]}>
               {option.label}
             </Text>
@@ -579,7 +603,10 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   const renderNotes = () => (
       <View style={styles.section}>
          <TouchableOpacity style={styles.notesHeader} onPress={toggleNotes}>
-           <Text style={[styles.sectionTitle, { color: theme.text, marginBottom: 0 }]}>📝 Notizen</Text>
+           <Text style={[styles.sectionTitle, { color: theme.text, marginBottom: 0 }]}>
+             <FixedEmojiText style={styles.sectionTitleEmoji}>📝</FixedEmojiText>{' '}
+             Notizen
+           </Text>
            <Text style={{ fontSize: 20, transform: [{ rotate: isNotesVisible ? '90deg' : '0deg' }] }}>›</Text>
          </TouchableOpacity>
          {isNotesVisible && (
@@ -713,6 +740,10 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     width: '90%',
     textAlign: 'left',
+  },
+  sectionTitleEmoji: {
+    fontSize: 16,
+    fontWeight: '600',
   },
   optionsGrid: {
     flexDirection: 'row',
