@@ -1,4 +1,5 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
+import { differenceInMonths } from 'date-fns';
 import { getBabyBornStatus, setBabyBornStatus } from '@/lib/supabase';
 import { useAuth } from './AuthContext';
 import { getBabyInfo } from '@/lib/baby';
@@ -9,6 +10,7 @@ interface BabyStatusContextType {
   isLoading: boolean;
   babyAgeMonths: number;
   babyWeightPercentile: number;
+  refreshBabyDetails: () => Promise<void>;
 }
 
 const BabyStatusContext = createContext<BabyStatusContextType | undefined>(undefined);
@@ -16,7 +18,7 @@ const BabyStatusContext = createContext<BabyStatusContextType | undefined>(undef
 export const BabyStatusProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isBabyBorn, setIsBabyBornState] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [babyAgeMonths, setBabyAgeMonths] = useState(4); // Standardwert: 4 Monate
+  const [babyAgeMonths, setBabyAgeMonths] = useState(0); // Standardwert: 0 Monate
   const [babyWeightPercentile, setBabyWeightPercentile] = useState(50); // Standardwert: 50. Perzentile
   const { user } = useAuth();
 
@@ -49,9 +51,10 @@ export const BabyStatusProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       if (data && data.birth_date) {
         const birthDate = new Date(data.birth_date);
         const today = new Date();
-        const ageInMonths = (today.getFullYear() - birthDate.getFullYear()) * 12 + 
-                           today.getMonth() - birthDate.getMonth();
+        const ageInMonths = differenceInMonths(today, birthDate);
         setBabyAgeMonths(Math.max(0, ageInMonths));
+      } else {
+        setBabyAgeMonths(0);
       }
       
       // Für die Gewichtsperzentile verwenden wir momentan einen Standardwert
@@ -79,7 +82,8 @@ export const BabyStatusProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         setIsBabyBorn, 
         isLoading, 
         babyAgeMonths,
-        babyWeightPercentile
+        babyWeightPercentile,
+        refreshBabyDetails: loadBabyDetails
       }}
     >
       {children}

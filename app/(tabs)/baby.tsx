@@ -5,6 +5,7 @@ import { ThemedBackground } from '@/components/ThemedBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/contexts/AuthContext';
+import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { getBabyInfo, saveBabyInfo, BabyInfo } from '@/lib/baby';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -22,6 +23,7 @@ export default function BabyScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const { user } = useAuth();
+  const { refreshBabyDetails } = useBabyStatus();
   const router = useRouter();
   
   // Set fallback route for smart back navigation
@@ -188,6 +190,7 @@ export default function BabyScreen() {
       } else {
         Alert.alert('Erfolg', 'Die Informationen wurden erfolgreich gespeichert.');
         setIsEditing(false);
+        await refreshBabyDetails();
         
         // Speichere relevante Baby-Infos für den Hintergrund-Task
         if (babyInfo.birth_date) {

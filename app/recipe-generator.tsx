@@ -28,10 +28,16 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { createRecipe, fetchRecipes, RecipeRecord } from '@/lib/recipes';
 import { getSampleRecipeImage, RECIPE_SAMPLES, RecipeSample } from '@/lib/recipes-samples';
 import { isUserAdmin } from '@/lib/supabase/recommendations';
+import { useBabyStatus } from '@/contexts/BabyStatusContext';
 
 type AllergenId = 'milk' | 'gluten' | 'egg' | 'nuts' | 'fish';
 
-const AGE_LIMITS = { min: 4, max: 24 };
+const RECIPE_AGE_LIMITS = { min: 4, max: 24 };
+const FILTER_AGE_LIMITS = { min: 0, max: 24 };
+const clampFilterAgeMonths = (value: number) =>
+  Math.max(FILTER_AGE_LIMITS.min, Math.min(FILTER_AGE_LIMITS.max, value));
+const clampRecipeAgeMonths = (value: number) =>
+  Math.max(RECIPE_AGE_LIMITS.min, Math.min(RECIPE_AGE_LIMITS.max, value));
 
 const ALLERGEN_OPTIONS: { id: AllergenId; label: string; hint: string }[] = [
   { id: 'milk', label: 'Milchprodukte', hint: 'Joghurt, Käse, Butter' },
@@ -114,10 +120,11 @@ const parseInstructionSteps = (value: string) => {
 const RecipeGeneratorScreen = () => {
   const router = useRouter();
   const colorScheme = useColorScheme() ?? 'light';
+  const { babyAgeMonths } = useBabyStatus();
 
   const [recipes, setRecipes] = useState<RecipeRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [ageMonths, setAgeMonths] = useState<number>(8);
+  const [ageMonths, setAgeMonths] = useState<number>(FILTER_AGE_LIMITS.min);
   const [selectedAllergies, setSelectedAllergies] = useState<AllergenId[]>([]);
   const [selectedRecipe, setSelectedRecipe] = useState<RecipeRecord | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -186,6 +193,10 @@ const RecipeGeneratorScreen = () => {
   }, [loadRecipes]);
 
   useEffect(() => {
+    setAgeMonths(clampFilterAgeMonths(babyAgeMonths));
+  }, [babyAgeMonths]);
+
+  useEffect(() => {
     let isMounted = true;
     const checkAdminStatus = async () => {
       const adminStatus = await isUserAdmin();
@@ -225,9 +236,7 @@ const RecipeGeneratorScreen = () => {
   const handleAgeChange = (delta: number) => {
     setAgeMonths((prev) => {
       const next = prev + delta;
-      if (next < AGE_LIMITS.min) return AGE_LIMITS.min;
-      if (next > AGE_LIMITS.max) return AGE_LIMITS.max;
-      return next;
+      return clampFilterAgeMonths(next);
     });
   };
 
@@ -310,9 +319,8 @@ const RecipeGeneratorScreen = () => {
       return;
     }
 
-    const months = Math.max(
-      AGE_LIMITS.min,
-      Math.min(AGE_LIMITS.max, Number.parseInt(newMinMonths, 10) || AGE_LIMITS.min)
+    const months = clampRecipeAgeMonths(
+      Number.parseInt(newMinMonths, 10) || RECIPE_AGE_LIMITS.min
     );
 
     try {
@@ -1129,7 +1137,7 @@ const RecipeGeneratorScreen = () => {
                   <ThemedText style={styles.formLabel}>Alter (Monate)</ThemedText>
                   <TextInput
                     style={styles.formInput}
-                    placeholder={`${AGE_LIMITS.min}-${AGE_LIMITS.max}`}
+                    placeholder={`${RECIPE_AGE_LIMITS.min}-${RECIPE_AGE_LIMITS.max}`}
                     value={newMinMonths}
                     onChangeText={(text) => setNewMinMonths(text.replace(/[^0-9]/g, ''))}
                     keyboardType='number-pad'

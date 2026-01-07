@@ -5,6 +5,7 @@ import { ThemedView } from '@/components/ThemedView';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/contexts/AuthContext';
+import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { supabase } from '@/lib/supabase';
 import { saveBabyInfo } from '@/lib/baby';
@@ -16,6 +17,7 @@ export default function GetUserInfoScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const { user } = useAuth();
+  const { refreshBabyDetails } = useBabyStatus();
 
   // Benutzerinformationen
   const [firstName, setFirstName] = useState('');
@@ -159,6 +161,7 @@ export default function GetUserInfoScreen() {
         console.error('Error saving baby info:', babyError);
         throw new Error('Baby-Informationen konnten nicht gespeichert werden.');
       }
+      await refreshBabyDetails();
 
       // Nach dem Speichern zur entsprechenden Seite navigieren oder Paywall zeigen
       const nextRoute = babyBorn ? '/(tabs)/home' : '/(tabs)/countdown';

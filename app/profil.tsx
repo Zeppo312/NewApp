@@ -46,7 +46,7 @@ export default function ProfilScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const { user, signOut } = useAuth();
-  const { isBabyBorn, setIsBabyBorn } = useBabyStatus();
+  const { isBabyBorn, setIsBabyBorn, refreshBabyDetails } = useBabyStatus();
 
   // Benutzerinformationen
   const [firstName, setFirstName] = useState('');
@@ -525,6 +525,7 @@ export default function ProfilScreen() {
         photo_url: finalBabyPhoto,
       });
       if (babyError) throw babyError;
+      await refreshBabyDetails();
 
       Alert.alert('Erfolg', 'Deine Daten wurden erfolgreich gespeichert.', [
         { text: 'OK', onPress: () => router.push('/more') },
