@@ -105,6 +105,7 @@ export default function PlannerScreen() {
     addEvent,
     updateTodo,
     updateEvent,
+    convertPlannerItem,
   } = usePlannerDay(selectedDate);
 
   const [captureVisible, setCaptureVisible] = useState(false);
@@ -452,9 +453,36 @@ export default function PlannerScreen() {
     openCapture('event', { type: 'event', item: { ...event } });
   };
 
+  const selectedDayTimeline = useMemo(() => {
+    const allItems = blocks.flatMap((block) => block.items.map((item) => ({ ...item })));
+    const todos = allItems.filter((it: any): it is PlannerTodo => 'completed' in it);
+    const events = allItems.filter((it: any): it is PlannerEvent => 'start' in it && 'end' in it);
+    return { todos, events };
+  }, [blocks]);
+
   const handleCaptureSave = (payload: PlannerCapturePayload) => {
     try {
-      if (payload.type === 'event' && payload.start) {
+      if (payload.id && editingItem && editingItem.type !== payload.type) {
+        if (payload.type === 'event' && payload.start) {
+          const startIso = payload.start.toISOString();
+          const endIso = (payload.end ?? new Date(payload.start.getTime() + 30 * 60000)).toISOString();
+          convertPlannerItem(payload.id, 'event', {
+            title: payload.title,
+            start: startIso,
+            end: endIso,
+            location: payload.location,
+            notes: payload.notes,
+          });
+        } else if (payload.type === 'todo' || payload.type === 'note') {
+          const dueIso = payload.dueAt === null ? null : payload.dueAt ? payload.dueAt.toISOString() : undefined;
+          convertPlannerItem(payload.id, payload.type, {
+            title: payload.title,
+            dueAt: dueIso,
+            notes: payload.notes,
+            assignee: payload.assignee,
+          });
+        }
+      } else if (payload.type === 'event' && payload.start) {
         const startIso = payload.start.toISOString();
         const endIso = (payload.end ?? new Date(payload.start.getTime() + 30 * 60000)).toISOString();
         if (payload.id) {
@@ -561,23 +589,16 @@ export default function PlannerScreen() {
                 <ThemedText style={[styles.sectionTitle, { paddingHorizontal: 4 }]}>Heute</ThemedText>
               </View>
 
-              {(() => {
-                const allItems = blocks.flatMap((b) => b.items.map((item) => ({ ...item })));
-                const todos: PlannerTodo[] = allItems.filter((it: any): it is PlannerTodo => 'completed' in it);
-                const events: PlannerEvent[] = allItems.filter((it: any): it is PlannerEvent => 'start' in it && 'end' in it);
-                return (
-                  <StructuredTimeline
-                    date={selectedDate}
-                    events={events}
-                    todos={todos}
-                    getOwnerLabel={getOwnerLabel}
-                    onToggleTodo={(id) => toggleTodo(id)}
-                    onMoveTomorrow={(id) => moveToTomorrow(id)}
-                    onEditTodo={handleEditTodo}
-                    onEditEvent={handleEditEvent}
-                  />
-                );
-              })()}
+              <StructuredTimeline
+                date={selectedDate}
+                events={selectedDayTimeline.events}
+                todos={selectedDayTimeline.todos}
+                getOwnerLabel={getOwnerLabel}
+                onToggleTodo={(id) => toggleTodo(id)}
+                onMoveTomorrow={(id) => moveToTomorrow(id)}
+                onEditTodo={handleEditTodo}
+                onEditEvent={handleEditEvent}
+              />
 
               <View style={{ paddingHorizontal: LAYOUT_PAD, marginTop: 10 }}>
                 <LiquidGlassCard style={styles.floatingCard} intensity={20} overlayColor="rgba(255,255,255,0.12)">
@@ -799,62 +820,80 @@ export default function PlannerScreen() {
               </LiquidGlassCard>
             </View>
           ) : (
-            <View style={{ paddingHorizontal: LAYOUT_PAD }}>
-              <LiquidGlassCard style={styles.calendarCard} intensity={24}>
-                <ThemedText style={styles.calendarTitle}>Monatskalender</ThemedText>
-                <View style={styles.monthHeaderRow}>
-                  {['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map((d) => (
-                    <ThemedText key={d} style={styles.monthHeaderLabel}>
-                      {d}
-                    </ThemedText>
-                  ))}
-                </View>
-                <View style={styles.monthGrid}>
-                  {monthDays.map((date) => {
-                    const isSelected = toDateKey(date) === toDateKey(selectedDate);
-                    const isCurrentMonth = date.getMonth() === selectedDate.getMonth();
-                    const isToday = toDateKey(date) === toDateKey(new Date());
-                    const stats = monthSummary[toDateKey(date)] ?? { tasks: 0, events: 0 };
-                    const hasData = stats.tasks > 0 || stats.events > 0;
-                    return (
-                      <TouchableOpacity
-                        key={date.toISOString()}
-                        style={[styles.monthCell, isSelected && styles.monthCellActive]}
-                        onPress={() => {
-                          handleSelectDate(date);
-                          setSelectedTab('day');
-                        }}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected: isSelected }}
-                      >
-                        <View style={[styles.monthCircle, isSelected && styles.monthCircleActive, !isCurrentMonth && styles.monthCircleFaded]}>
-                          <ThemedText
-                            style={[
-                              styles.monthNumber,
-                              !isCurrentMonth && styles.monthNumberFaded,
-                              isSelected && styles.monthNumberActive,
-                            ]}
-                          >
-                            {date.getDate()}
-                          </ThemedText>
-                        </View>
-                        <View style={styles.monthDotRow}>
-                          {isToday && <View style={[styles.todayDotSmall, { marginRight: 3 }]} />}
-                          {isCurrentMonth && (
-                            <View
+            <>
+              <View style={{ paddingHorizontal: LAYOUT_PAD }}>
+                <LiquidGlassCard style={styles.calendarCard} intensity={24}>
+                  <ThemedText style={styles.calendarTitle}>Monatskalender</ThemedText>
+                  <View style={styles.monthHeaderRow}>
+                    {['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map((d) => (
+                      <ThemedText key={d} style={styles.monthHeaderLabel}>
+                        {d}
+                      </ThemedText>
+                    ))}
+                  </View>
+                  <View style={styles.monthGrid}>
+                    {monthDays.map((date) => {
+                      const isSelected = toDateKey(date) === toDateKey(selectedDate);
+                      const isCurrentMonth = date.getMonth() === selectedDate.getMonth();
+                      const isToday = toDateKey(date) === toDateKey(new Date());
+                      const stats = monthSummary[toDateKey(date)] ?? { tasks: 0, events: 0 };
+                      const hasData = stats.tasks > 0 || stats.events > 0;
+                      return (
+                        <TouchableOpacity
+                          key={date.toISOString()}
+                          style={[styles.monthCell, isSelected && styles.monthCellActive]}
+                          onPress={() => {
+                            handleSelectDate(date);
+                          }}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected: isSelected }}
+                        >
+                          <View style={[styles.monthCircle, isSelected && styles.monthCircleActive, !isCurrentMonth && styles.monthCircleFaded]}>
+                            <ThemedText
                               style={[
-                                styles.dataDot,
-                                hasData && styles.dataDotActive,
+                                styles.monthNumber,
+                                !isCurrentMonth && styles.monthNumberFaded,
+                                isSelected && styles.monthNumberActive,
                               ]}
-                            />
-                          )}
-                        </View>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </LiquidGlassCard>
-            </View>
+                            >
+                              {date.getDate()}
+                            </ThemedText>
+                          </View>
+                          <View style={styles.monthDotRow}>
+                            {isToday && <View style={[styles.todayDotSmall, { marginRight: 3 }]} />}
+                            {isCurrentMonth && (
+                              <View
+                                style={[
+                                  styles.dataDot,
+                                  hasData && styles.dataDotActive,
+                                ]}
+                              />
+                            )}
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </LiquidGlassCard>
+              </View>
+
+              <View style={{ paddingHorizontal: LAYOUT_PAD, marginTop: 12 }}>
+                <ThemedText style={[styles.sectionTitle, { paddingHorizontal: 4 }]}>
+                  {formatDateHeader(selectedDate)}
+                </ThemedText>
+              </View>
+
+              <StructuredTimeline
+                date={selectedDate}
+                events={selectedDayTimeline.events}
+                todos={selectedDayTimeline.todos}
+                getOwnerLabel={getOwnerLabel}
+                onToggleTodo={(id) => toggleTodo(id)}
+                onMoveTomorrow={(id) => moveToTomorrow(id)}
+                onEditTodo={handleEditTodo}
+                onEditEvent={handleEditEvent}
+              />
+            </>
           )}
         </ScrollView>
 

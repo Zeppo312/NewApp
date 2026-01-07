@@ -83,6 +83,16 @@ type PlannerItemRow = {
   updated_at: string;
 };
 
+type PlannerItemConversion = {
+  title: string;
+  notes?: string;
+  dueAt?: string | null;
+  assignee?: PlannerAssignee;
+  start?: string;
+  end?: string | null;
+  location?: string;
+};
+
 type LoadedPlannerData = {
   blocks: PlannerBlock[];
   summary: PlannerDaySummary;
@@ -798,6 +808,92 @@ export function usePlannerDay(date: Date) {
     [reloadSilently, ensureDayFor, user?.id],
   );
 
+  const convertPlannerItem = useCallback(
+    async (id: string, nextType: 'todo' | 'event' | 'note', updates: PlannerItemConversion) => {
+      const row = itemsMapRef.current[id];
+      if (!row || !user?.id) return;
+      const viewerId = user.id;
+      const ownerId = row.user_id ?? viewerId;
+
+      const payload: Record<string, any> = {
+        entry_type: nextType,
+        title: updates.title,
+      };
+
+      if (updates.notes !== undefined) {
+        payload.notes = updates.notes ?? null;
+      }
+
+      let newDayId: string | undefined;
+      const currentIso =
+        (row.day_id && dayDateByIdRef.current[row.day_id]) ||
+        (row.start_at ? toDateOnlyISO(new Date(row.start_at)) : undefined) ||
+        (row.due_at ? toDateOnlyISO(new Date(row.due_at)) : undefined);
+
+      if (nextType === 'event') {
+        if (!updates.start) return;
+        payload.start_at = updates.start;
+        payload.end_at = updates.end ?? null;
+        payload.location = updates.location ?? null;
+        payload.due_at = null;
+        payload.completed = false;
+        payload.assignee = null;
+
+        const startDate = parseISO(updates.start);
+        if (startDate) {
+          const nextIso = toDateOnlyISO(startDate);
+          if (!currentIso || currentIso !== nextIso) {
+            const ensured = await ensureDayFor(ownerId, startDate);
+            if (ensured !== row.day_id) {
+              newDayId = ensured;
+              payload.block_id = null;
+            }
+          }
+        }
+      } else {
+        payload.due_at = updates.dueAt ?? null;
+        payload.start_at = null;
+        payload.end_at = null;
+        payload.location = null;
+        payload.completed = false;
+
+        if (nextType === 'todo') {
+          const nextAssignee = updates.assignee ?? 'me';
+          payload.assignee = convertAssigneePerspective(nextAssignee, viewerId, ownerId);
+        } else {
+          payload.assignee = null;
+        }
+
+        if (updates.dueAt) {
+          const dueDate = parseISO(updates.dueAt);
+          if (dueDate) {
+            const nextIso = toDateOnlyISO(dueDate);
+            if (!currentIso || currentIso !== nextIso) {
+              const ensured = await ensureDayFor(ownerId, dueDate);
+              if (ensured !== row.day_id) {
+                newDayId = ensured;
+                payload.block_id = null;
+              }
+            }
+          }
+        }
+      }
+
+      if (newDayId) {
+        payload.day_id = newDayId;
+      }
+
+      const { error: updateError } = await supabase.from('planner_items').update(payload).eq('id', id);
+      if (updateError) {
+        setError(extractErrorMessage(updateError));
+        console.error('Planner: convertPlannerItem failed', updateError);
+        return;
+      }
+      await reloadSilently();
+    },
+    [reloadSilently, ensureDayFor, user?.id],
+  );
+
   const toggleTodo = useCallback(
     async (id: string) => {
       const row = itemsMapRef.current[id];
@@ -905,6 +1001,7 @@ export function usePlannerDay(date: Date) {
     addEvent,
     updateTodo,
     updateEvent,
+    convertPlannerItem,
     toggleTodo,
     moveToTomorrow,
     updateMood,
