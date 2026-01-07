@@ -15,6 +15,8 @@ import * as Notifications from 'expo-notifications';
 import { defineMilestoneCheckerTask, saveBabyInfoForBackgroundTask, isTaskRegistered } from '@/tasks/milestoneCheckerTask';
 import { LAYOUT_PAD, TIMELINE_INSET, LiquidGlassCard } from '@/constants/DesignGuide';
 import { useFocusEffect } from '@react-navigation/native';
+import * as ImagePicker from 'expo-image-picker';
+import * as Haptics from 'expo-haptics';
 
 export default function BabyScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -111,6 +113,72 @@ export default function BabyScreen() {
 
   const displayPhoto = babyInfo.photo_url || null;
 
+  const triggerHaptic = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
+  };
+
+  const pickBabyPhoto = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Berechtigung erforderlich', 'Bitte erlaube den Zugriff auf deine Fotos.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.7,
+        base64: true,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        let base64Data: string | null = null;
+
+        if (asset.base64) {
+          base64Data = `data:image/jpeg;base64,${asset.base64}`;
+        } else if (asset.uri) {
+          try {
+            const response = await fetch(asset.uri);
+            const blob = await response.blob();
+            const reader = new FileReader();
+            base64Data = await new Promise((resolve, reject) => {
+              reader.onload = () => resolve(reader.result as string);
+              reader.onerror = reject;
+              reader.readAsDataURL(blob);
+            });
+          } catch (error) {
+            console.error('Fehler bei der Bildkonvertierung:', error);
+            Alert.alert('Fehler', 'Das Bild konnte nicht verarbeitet werden.');
+            return;
+          }
+        }
+
+        if (!base64Data) {
+          Alert.alert('Fehler', 'Das Bild konnte nicht verarbeitet werden.');
+          return;
+        }
+
+        setBabyInfo((current) => ({
+          ...current,
+          photo_url: base64Data,
+        }));
+      }
+    } catch (error) {
+      console.error('Error picking baby photo:', error);
+      Alert.alert('Fehler', 'Das Babyfoto konnte nicht ausgewählt werden.');
+    }
+  };
+
+  const removeBabyPhoto = () => {
+    setBabyInfo((current) => ({
+      ...current,
+      photo_url: null,
+    }));
+  };
+
   const handleSave = async () => {
     try {
       const { error } = await saveBabyInfo(babyInfo);
@@ -155,7 +223,10 @@ export default function BabyScreen() {
           title="Mein Baby"
           subtitle="Alle Infos & Einstellungen"
           showBackButton
-          onBackPress={() => router.push('/(tabs)/home')}
+          onBackPress={() => {
+            triggerHaptic();
+            router.push('/(tabs)/home');
+          }}
         />
         
         <ScrollView 
@@ -175,17 +246,55 @@ export default function BabyScreen() {
               )}
 
               <View style={styles.photoHintContainer}>
-                <ThemedText style={styles.photoHintText}>
-                  Das Babyfoto kannst du im Profil bearbeiten.
-                </ThemedText>
-                <TouchableOpacity
-                  style={styles.photoHintButton}
-                  onPress={() => router.push('/profil')}
-                >
-                  <ThemedText style={styles.photoHintButtonText}>
-                    Zum Profil
-                  </ThemedText>
-                </TouchableOpacity>
+                {isEditing ? (
+                  <>
+                    <ThemedText style={styles.photoHintText}>
+                      {displayPhoto ? 'Babyfoto anpassen' : 'Füge ein Babyfoto hinzu'}
+                    </ThemedText>
+                    <TouchableOpacity
+                      style={styles.photoHintButton}
+                      onPress={() => {
+                        triggerHaptic();
+                        pickBabyPhoto();
+                      }}
+                    >
+                      <ThemedText style={styles.photoHintButtonText}>
+                        Foto wählen
+                      </ThemedText>
+                    </TouchableOpacity>
+                    {!!displayPhoto && (
+                      <TouchableOpacity
+                        style={[styles.photoHintButton, styles.photoRemoveButton]}
+                        onPress={() => {
+                          triggerHaptic();
+                          removeBabyPhoto();
+                        }}
+                      >
+                        <ThemedText style={styles.photoHintButtonText}>
+                          Foto entfernen
+                        </ThemedText>
+                      </TouchableOpacity>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <ThemedText style={styles.photoHintText}>
+                      Ändere das Babyfoto direkt hier.
+                    </ThemedText>
+                    <TouchableOpacity
+                      style={styles.photoHintButton}
+                      onPress={() => {
+                        triggerHaptic();
+                        setIsEditing(true);
+                        pickBabyPhoto();
+                      }}
+                    >
+                      <ThemedText style={styles.photoHintButtonText}>
+                        Foto ändern
+                      </ThemedText>
+                    </TouchableOpacity>
+                  </>
+                )}
               </View>
             </View>
 
@@ -205,7 +314,13 @@ export default function BabyScreen() {
 
                   <View style={styles.inputRow}>
                     <ThemedText style={styles.label}>Geburtsdatum:</ThemedText>
-                    <TouchableOpacity style={styles.glassDateButton} onPress={() => setShowDatePicker(true)}>
+                    <TouchableOpacity
+                      style={styles.glassDateButton}
+                      onPress={() => {
+                        triggerHaptic();
+                        setShowDatePicker(true);
+                      }}
+                    >
                       <ThemedText style={styles.dateText}>
                         {babyInfo.birth_date
                           ? new Date(babyInfo.birth_date).toLocaleDateString('de-DE')
@@ -252,6 +367,7 @@ export default function BabyScreen() {
                     <TouchableOpacity
                       style={[styles.button, styles.cancelButton]}
                       onPress={() => {
+                        triggerHaptic();
                         setIsEditing(false);
                         loadBabyInfo(); // Zurücksetzen auf gespeicherte Daten
                       }}
@@ -263,7 +379,10 @@ export default function BabyScreen() {
 
                     <TouchableOpacity
                       style={[styles.button, styles.saveButton]}
-                      onPress={handleSave}
+                      onPress={() => {
+                        triggerHaptic();
+                        handleSave();
+                      }}
                     >
                       <ThemedText style={[styles.buttonText, { color: '#7D5A50' }]} lightColor="#7D5A50" darkColor="#7D5A50">
                         Speichern
@@ -303,7 +422,13 @@ export default function BabyScreen() {
                     </ThemedText>
                   </View>
 
-                  <TouchableOpacity style={[styles.button, styles.editButton]} onPress={() => setIsEditing(true)}>
+                  <TouchableOpacity
+                    style={[styles.button, styles.editButton]}
+                    onPress={() => {
+                      triggerHaptic();
+                      setIsEditing(true);
+                    }}
+                  >
                     <ThemedText style={[styles.buttonText, { color: '#7D5A50' }]} lightColor="#7D5A50" darkColor="#7D5A50">
                       Bearbeiten
                     </ThemedText>
@@ -319,7 +444,10 @@ export default function BabyScreen() {
             intensity={24}
             overlayColor={'rgba(142, 78, 198, 0.16)'}
             borderColor={'rgba(142, 78, 198, 0.35)'}
-            onPress={() => router.push({ pathname: '/baby-stats' } as any)}
+            onPress={() => {
+              triggerHaptic();
+              router.push({ pathname: '/baby-stats' } as any);
+            }}
           >
             <View style={styles.infoGlassInner}>
               <View style={styles.statsButtonContent}>
@@ -458,6 +586,9 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 20,
     backgroundColor: 'rgba(125, 90, 80, 0.15)',
+  },
+  photoRemoveButton: {
+    marginTop: 8,
   },
   photoHintButtonText: {
     fontSize: 14,

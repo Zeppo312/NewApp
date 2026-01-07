@@ -11,6 +11,8 @@ import { Stack } from 'expo-router';
 import Header from '@/components/Header';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { LiquidGlassCard, LAYOUT_PAD, TIMELINE_INSET, TEXT_PRIMARY, GLASS_BORDER } from '@/constants/DesignGuide';
+import { useNavigation } from '@/contexts/NavigationContext';
+import * as Haptics from 'expo-haptics';
 import {
   differenceInYears,
   differenceInMonths,
@@ -64,8 +66,13 @@ export default function BabyStatsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const { user } = useAuth();
+  const navigation = useNavigation();
   const [babyInfo, setBabyInfo] = useState<BabyInfo>({});
   const [isLoading, setIsLoading] = useState(true);
+
+  const triggerHaptic = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
+  };
   
   // Altersabhängige Formeln für interessante Fakten
   const getAvgHeartRate = (ageMonths: number) =>
@@ -336,6 +343,11 @@ export default function BabyStatsScreen() {
     },
   ];
 
+  const handleBackPress = () => {
+    triggerHaptic();
+    navigation.goBack();
+  };
+
   return (
     <ThemedBackground style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
@@ -345,7 +357,12 @@ export default function BabyStatsScreen() {
           }}
         />
         
-        <Header title="Baby-Statistiken" subtitle="Alter, Entwicklung & Fakten" showBackButton />
+        <Header
+          title="Baby-Statistiken"
+          subtitle="Alter, Entwicklung & Fakten"
+          showBackButton
+          onBackPress={handleBackPress}
+        />
         
         {isLoading ? (
           <View style={styles.loadingContainer}>
@@ -400,7 +417,7 @@ export default function BabyStatsScreen() {
                 
                 <LiquidGlassCard style={styles.glassCard}>
                   <View style={styles.glassInner}>
-                    <ThemedText style={styles.sectionTitle}>Körperliche Entwicklung</ThemedText>
+                    <ThemedText style={styles.sectionTitle}>Geburtsdaten</ThemedText>
                     <View style={styles.bodyGrid}>
                       {bodyMetrics.map((metric) => (
                         <View key={metric.key} style={[styles.bodyBadge, styles.glassSurface]}>

@@ -1,8 +1,9 @@
 import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, Animated, Easing } from 'react-native';
+import { View, StyleSheet, Animated, Easing, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ThemedText } from '@/components/ThemedText';
 import { LiquidGlassCard } from '@/constants/DesignGuide';
+import { IconSymbol } from '@/components/ui/IconSymbol';
 import {
   GLASS_BORDER,
   GLASS_OVERLAY,
@@ -14,17 +15,17 @@ import {
 type Props = {
   title: string;
   subline?: string;
-  emoji?: string;
+  avatarUrl?: string | null;
 };
 
 export const GreetingCard: React.FC<Props> = ({
   title,
   subline = 'Schön, dass du da bist.',
-  emoji = '☀️',
+  avatarUrl = null,
 }) => {
   // Animationen
   const introAnim = useRef(new Animated.Value(0)).current;
-  const emojiScale = useRef(new Animated.Value(1)).current;
+  const avatarScale = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     // Card fährt weich rein
@@ -35,16 +36,16 @@ export const GreetingCard: React.FC<Props> = ({
       useNativeDriver: true,
     }).start();
 
-    // Emoji "atmet"
+    // Avatar "atmet"
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(emojiScale, {
+        Animated.timing(avatarScale, {
           toValue: 1.06,
           duration: 900,
           easing: Easing.inOut(Easing.quad),
           useNativeDriver: true,
         }),
-        Animated.timing(emojiScale, {
+        Animated.timing(avatarScale, {
           toValue: 1,
           duration: 900,
           easing: Easing.inOut(Easing.quad),
@@ -57,7 +58,7 @@ export const GreetingCard: React.FC<Props> = ({
     return () => {
       loop.stop();
     };
-  }, [introAnim, emojiScale]);
+  }, [introAnim, avatarScale]);
 
   const introStyle = {
     opacity: introAnim,
@@ -120,15 +121,19 @@ export const GreetingCard: React.FC<Props> = ({
             ) : null}
           </View>
 
-          {/* Emoji-Bubble */}
+          {/* Avatar-Bubble */}
           <Animated.View
-            style={[styles.emojiWrapper, { transform: [{ scale: emojiScale }] }]}
+            style={[styles.avatarWrapper, { transform: [{ scale: avatarScale }] }]}
             accessible
-            accessibilityLabel="Stimmungs-Emoji"
+            accessibilityLabel={avatarUrl ? 'Profilbild' : 'Profilbild Platzhalter'}
           >
-            <View style={styles.emojiGlow} />
-            <View style={styles.emojiBubble}>
-              <ThemedText style={styles.emoji}>{emoji}</ThemedText>
+            <View style={styles.avatarGlow} />
+            <View style={styles.avatarBubble}>
+              {avatarUrl ? (
+                <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
+              ) : (
+                <IconSymbol name="person.fill" size={30} color={PRIMARY} />
+              )}
             </View>
           </Animated.View>
         </View>
@@ -202,12 +207,12 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     textAlign: 'left',
   },
-  emojiWrapper: {
+  avatarWrapper: {
     width: 96,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  emojiGlow: {
+  avatarGlow: {
     position: 'absolute',
     width: 90,
     height: 90,
@@ -215,7 +220,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(94,61,179,0.35)',
     opacity: 0.55,
   },
-  emojiBubble: {
+  avatarBubble: {
     width: 78,
     height: 78,
     borderRadius: 39,
@@ -229,9 +234,10 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 4 },
   },
-  emoji: {
-    fontSize: 30,
-    lineHeight: 34,
+  avatarImage: {
+    width: 78,
+    height: 78,
+    borderRadius: 39,
   },
 });
 

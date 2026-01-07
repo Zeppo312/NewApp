@@ -111,6 +111,7 @@ export default function PlannerScreen() {
   const [captureType, setCaptureType] = useState<PlannerCaptureType>('todo');
   const [editingItem, setEditingItem] = useState<{ type: 'todo' | 'event'; item: PlannerTodo | PlannerEvent } | null>(null);
   const [profileName, setProfileName] = useState<string>('Lotti');
+  const [profileAvatarUrl, setProfileAvatarUrl] = useState<string | null>(null);
   const contentTopPadding = Math.max(SECTION_GAP_TOP - 24, 0);
   const [weekAgenda, setWeekAgenda] = useState<Record<string, any>>({});
   const [monthSummary, setMonthSummary] = useState<Record<string, { tasks: number; events: number }>>({});
@@ -218,11 +219,12 @@ export default function PlannerScreen() {
     const loadProfileName = async () => {
       if (!user?.id) {
         if (active) setProfileName('Lotti');
+        if (active) setProfileAvatarUrl(null);
         return;
       }
       const { data, error } = await supabase
         .from('profiles')
-        .select('first_name')
+        .select('first_name, avatar_url')
         .eq('id', user.id)
         .maybeSingle();
       if (!active) return;
@@ -232,6 +234,7 @@ export default function PlannerScreen() {
       const raw = data?.first_name?.trim();
       const fallback = user.email ? user.email.split('@')[0] : '';
       setProfileName(raw && raw.length > 0 ? raw : (fallback || 'Lotti'));
+      setProfileAvatarUrl(data?.avatar_url ?? null);
     };
     loadProfileName();
     return () => {
@@ -243,24 +246,19 @@ export default function PlannerScreen() {
     const now = new Date();
     const hour = now.getHours();
     let base = 'Hallo';
-    let emoji = '☀️';
     let sub = 'Schön, dass du da bist.';
 
     if (hour >= 5 && hour < 11) {
       base = 'Guten Morgen';
-      emoji = '☀️';
       sub = 'Bereit für einen neuen Tag?';
     } else if (hour >= 11 && hour < 17) {
       base = 'Guten Tag';
-      emoji = '🌤️';
       sub = 'Was steht heute noch an?';
     } else if (hour >= 17 && hour < 22) {
       base = 'Guten Abend';
-      emoji = '🌆';
       sub = 'Lass den Tag entspannt ausklingen.';
     } else {
       base = 'Gute Nacht';
-      emoji = '🌙';
       sub = 'Zeit zum Abschalten und Ausruhen.';
     }
 
@@ -269,7 +267,6 @@ export default function PlannerScreen() {
 
     return {
       title: `${base}, ${nameCapitalized}`,
-      emoji,
       subline: sub,
     };
   }, [profileName]);
@@ -556,7 +553,7 @@ export default function PlannerScreen() {
             <>
               <View style={{ paddingHorizontal: LAYOUT_PAD }}>
                 <View style={{ marginHorizontal: -LAYOUT_PAD }}>
-                  <GreetingCard title={greeting.title} emoji={greeting.emoji} subline={greeting.subline} />
+                  <GreetingCard title={greeting.title} subline={greeting.subline} avatarUrl={profileAvatarUrl} />
                 </View>
                 <View style={{ height: 2 }} />
                 <TodayOverviewCard summary={summary} />
