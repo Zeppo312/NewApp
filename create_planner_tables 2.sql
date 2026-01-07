@@ -239,7 +239,7 @@ CREATE TABLE IF NOT EXISTS public.planner_items (
   entry_type TEXT NOT NULL CHECK (entry_type IN ('todo', 'event', 'note')),
   title TEXT NOT NULL,
   completed BOOLEAN NOT NULL DEFAULT FALSE,
-  assignee TEXT CHECK (assignee IN ('me', 'partner')),
+  assignee TEXT CHECK (assignee IN ('me', 'partner', 'family', 'child')),
   notes TEXT,
   location TEXT,
   due_at TIMESTAMPTZ,

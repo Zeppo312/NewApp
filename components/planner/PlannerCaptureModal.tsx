@@ -101,9 +101,21 @@ export const PlannerCaptureModal: React.FC<Props> = ({
   const [showDuePicker, setShowDuePicker] = useState(false);
   const [notesExpanded, setNotesExpanded] = useState(false);
   const [currentType, setCurrentType] = useState<PlannerCaptureType>(type);
-  const [ownerId, setOwnerId] = useState<string | null>(defaultOwnerId ?? null);
+  const [assignee, setAssignee] = useState<PlannerAssignee>('me');
   const [focusConfig, setFocusConfig] = useState<FocusConfig | null>(null);
   const [focusValue, setFocusValue] = useState('');
+
+  const assigneeOptions: { value: PlannerAssignee; label: string }[] = [
+    { value: 'me', label: 'Ich' },
+    { value: 'partner', label: 'Partner' },
+    { value: 'family', label: 'Familie' },
+    { value: 'child', label: 'Kind' },
+  ];
+
+  const deriveAssigneeForOwner = (targetOwnerId?: string | null) => {
+    if (!defaultOwnerId || !targetOwnerId) return 'me' as PlannerAssignee;
+    return targetOwnerId === defaultOwnerId ? 'me' : 'partner';
+  };
 
   useEffect(() => {
     if (!visible) return;
@@ -139,6 +151,11 @@ export const PlannerCaptureModal: React.FC<Props> = ({
         setHasDueTime(!!due);
         setLocation('');
       }
+      if ('assignee' in item && item.assignee) {
+        setAssignee(item.assignee);
+      } else {
+        setAssignee(deriveAssigneeForOwner(item.userId ?? defaultOwnerId ?? null));
+      }
     } else {
       const reset = new Date(baseDate);
       reset.setHours(new Date().getHours(), new Date().getMinutes(), 0, 0);
@@ -152,26 +169,9 @@ export const PlannerCaptureModal: React.FC<Props> = ({
       setHasDueTime(false);
       setLocation('');
       setNotesExpanded(type === 'note');
+      setAssignee('me');
     }
-  }, [visible, type, baseDate, editingItem]);
-
-  useEffect(() => {
-    if (!visible) return;
-
-    const options = Array.isArray(ownerOptions) ? ownerOptions : [];
-    const availableOwnerIds = options.map((opt) => opt.id);
-    const fallbackOwnerId = defaultOwnerId ?? availableOwnerIds[0] ?? null;
-
-    if (editingItem?.item?.userId) {
-      setOwnerId(editingItem.item.userId);
-      return;
-    }
-
-    setOwnerId((prev) => {
-      if (prev && availableOwnerIds.includes(prev)) return prev;
-      return fallbackOwnerId;
-    });
-  }, [visible, ownerOptions, defaultOwnerId, editingItem]);
+  }, [visible, type, baseDate, editingItem, defaultOwnerId]);
 
   useEffect(() => {
     if (!visible) return;
@@ -246,15 +246,12 @@ export const PlannerCaptureModal: React.FC<Props> = ({
       type: currentType,
       title: currentType === 'note' ? (trimmedTitle || trimmedNotes || 'Notiz') : trimmedTitle,
       notes: trimmedNotes || undefined,
-      ownerId: ownerId ?? undefined,
+      ownerId: defaultOwnerId ?? undefined,
     };
 
     if (currentType === 'todo') {
       payload.dueAt = hasDueTime ? dueTime || startTime : null;
-      const viewerId = defaultOwnerId;
-      const derivedAssignee: PlannerAssignee =
-        ownerId && viewerId ? (ownerId === viewerId ? 'me' : 'partner') : 'me';
-      payload.assignee = derivedAssignee;
+      payload.assignee = assignee ?? deriveAssigneeForOwner(ownerId);
     }
 
     if (currentType === 'event') {
@@ -393,34 +390,23 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                   styles.titleInput,
                 )}
 
-                {Array.isArray(ownerOptions) && ownerOptions.length > 1 && (
+                {currentType === 'todo' && (
                   <View style={styles.section}>
                     <Text style={styles.sectionLabel}>👤 Für</Text>
-                    <View style={styles.assignRow}>
-                      {ownerOptions.map((opt) => {
-                        const selected = ownerId === opt.id;
-                        const disabled = !!editingItem;
+                    <View style={styles.assignRowWrap}>
+                      {assigneeOptions.map((opt) => {
+                        const selected = assignee === opt.value;
                         return (
                           <TouchableOpacity
-                            key={opt.id}
+                            key={opt.value}
                             style={[
                               styles.assignButton,
+                              styles.assignButtonHalf,
                               selected && styles.assignButtonActive,
-                              disabled && styles.ownerButtonDisabled,
                             ]}
-                            onPress={() => {
-                              if (disabled) return;
-                              setOwnerId(opt.id);
-                            }}
-                            disabled={disabled}
+                            onPress={() => setAssignee(opt.value)}
                           >
-                            <Text
-                              style={[
-                                styles.assignLabel,
-                                selected && styles.assignLabelActive,
-                                disabled && styles.ownerLabelDisabled,
-                              ]}
-                            >
+                            <Text style={[styles.assignLabel, selected && styles.assignLabelActive]}>
                               {opt.label}
                             </Text>
                           </TouchableOpacity>
@@ -742,8 +728,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: PRIMARY,
   },
-  assignRow: {
+  assignRowWrap: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 12,
   },
   assignButton: {
@@ -754,6 +741,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.05)',
+  },
+  assignButtonHalf: {
+    flexBasis: '48%',
+    flexGrow: 1,
   },
   assignButtonActive: {
     backgroundColor: PRIMARY,
@@ -770,12 +761,6 @@ const styles = StyleSheet.create({
   },
   assignLabelActive: {
     color: '#fff',
-  },
-  ownerButtonDisabled: {
-    opacity: 0.7,
-  },
-  ownerLabelDisabled: {
-    opacity: 0.85,
   },
   locationField: {
     borderRadius: 16,

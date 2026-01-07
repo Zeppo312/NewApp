@@ -232,6 +232,10 @@ export const StructuredTimeline: React.FC<Props> = ({
             ? 'checklist'
             : item.assignee === 'partner'
             ? 'person.2.fill'
+            : item.assignee === 'family'
+            ? 'house.fill'
+            : item.assignee === 'child'
+            ? 'heart.fill'
             : 'person.fill';
           const iconColor = item.completed || item.assignee === 'partner' ? '#fff' : PRIMARY;
           const iconWrapperStyle = item.completed

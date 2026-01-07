@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 
 export type PlannerView = 'day' | 'week' | 'month';
 
-export type PlannerAssignee = 'me' | 'partner';
+export type PlannerAssignee = 'me' | 'partner' | 'family' | 'child';
 
 export type PlannerTodo = {
   id: string;
@@ -127,7 +127,9 @@ function convertAssigneePerspective(
 ) {
   if (!assignee) return undefined;
   if (fromUserId === toUserId) return assignee;
-  return assignee === 'me' ? 'partner' : 'me';
+  if (assignee === 'me') return 'partner';
+  if (assignee === 'partner') return 'me';
+  return assignee;
 }
 
 function minutesSinceMidnight(date: Date) {
