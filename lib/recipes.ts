@@ -233,6 +233,7 @@ export type RecipeUpdate = {
   allergens?: string[];
   instructions?: string;
   tip?: string | null;
+  is_global?: boolean;
 };
 
 type RecipeUpdateResult = {
@@ -299,6 +300,9 @@ export const updateRecipe = async (
     }
     if (payload.tip !== undefined) {
       updatePayload.tip = payload.tip?.trim() ?? null;
+    }
+    if (payload.is_global !== undefined) {
+      updatePayload.is_global = payload.is_global;
     }
 
     let imageUrl: string | null | undefined = undefined;
@@ -380,6 +384,9 @@ export const updateRecipeAdmin = async (
     }
     if (payload.tip !== undefined) {
       updatePayload.tip = payload.tip?.trim() ?? null;
+    }
+    if (payload.is_global !== undefined) {
+      updatePayload.is_global = payload.is_global;
     }
 
     let imageUrl: string | null | undefined = undefined;

@@ -19,6 +19,7 @@ create table if not exists public.baby_recipes (
   instructions text not null,
   tip text,
   image_url text,
+  is_global boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -53,7 +54,9 @@ end $$;
 
 alter table public.baby_recipes enable row level security;
 
--- Allow everyone (including anon users) to read recipes.
+-- Allow only visible recipes (global, own, or partner-linked).
+drop policy if exists "Allow anyone to read recipes" on public.baby_recipes;
+drop policy if exists "Allow visible recipes" on public.baby_recipes;
 do $$
 begin
   if not exists (
@@ -61,16 +64,30 @@ begin
     from pg_policies
     where schemaname = 'public'
       and tablename = 'baby_recipes'
-      and policyname = 'Allow anyone to read recipes'
+      and policyname = 'Allow visible recipes'
   ) then
-    create policy "Allow anyone to read recipes"
+    create policy "Allow visible recipes"
       on public.baby_recipes
       for select
-      using (true);
+      using (
+        is_global = true
+        or auth.uid() = user_id
+        or exists (
+          select 1
+          from public.account_links links
+          where links.status = 'accepted'
+            and links.relationship_type = 'partner'
+            and (
+              (links.creator_id = auth.uid() and links.invited_id = baby_recipes.user_id)
+              or (links.invited_id = auth.uid() and links.creator_id = baby_recipes.user_id)
+            )
+        )
+      );
   end if;
 end $$;
 
--- Authenticated users can create their own recipes.
+-- Authenticated users can create their own recipes (admins may mark global).
+drop policy if exists "Allow authenticated users to insert recipes" on public.baby_recipes;
 do $$
 begin
   if not exists (
@@ -83,11 +100,23 @@ begin
     create policy "Allow authenticated users to insert recipes"
       on public.baby_recipes
       for insert
-      with check (auth.uid() = user_id);
+      with check (
+        auth.uid() = user_id
+        and (
+          is_global = false
+          or exists (
+            select 1
+            from public.profiles
+            where id = auth.uid()
+              and is_admin = true
+          )
+        )
+      );
   end if;
 end $$;
 
--- Users may update/delete recipes they created (for future management).
+-- Users may update/delete recipes they created (admins may keep global).
+drop policy if exists "Allow owners to update recipes" on public.baby_recipes;
 do $$
 begin
   if not exists (
@@ -101,7 +130,18 @@ begin
       on public.baby_recipes
       for update
       using (auth.uid() = user_id)
-      with check (auth.uid() = user_id);
+      with check (
+        auth.uid() = user_id
+        and (
+          is_global = false
+          or exists (
+            select 1
+            from public.profiles
+            where id = auth.uid()
+              and is_admin = true
+          )
+        )
+      );
   end if;
 end $$;
 

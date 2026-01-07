@@ -423,14 +423,6 @@ const RecipeGeneratorScreen = () => {
               onBackPress={() => router.back()}
             />
             <View style={styles.headerActions}>
-              {isAdmin && (
-                <TouchableOpacity
-                  style={styles.headerActionButton}
-                  onPress={() => router.push('/recipe-admin')}
-                >
-                  <IconSymbol name='shield.lefthalf.fill' size={22} color={PRIMARY} />
-                </TouchableOpacity>
-              )}
               <TouchableOpacity
                 style={styles.headerActionButton}
                 onPress={() => router.push('/my-recipes')}
