@@ -19,16 +19,7 @@ import ActivityCard from '@/components/ActivityCard';
 import { PRIMARY as PLANNER_PRIMARY } from '@/constants/PlannerDesign';
 import FloatingAddButton from '@/components/planner/FloatingAddButton';
 import TextInputOverlay from '@/components/modals/TextInputOverlay';
-
-const SUBJECT_LABELS: Record<WeightSubject, string> = {
-  mom: 'Ich',
-  baby: 'Mini',
-};
-
-const SUBJECT_COPY_LABELS: Record<WeightSubject, string> = {
-  mom: 'dich',
-  baby: 'Mini',
-};
+import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 
 const SUBJECT_COLORS: Record<WeightSubject, string> = {
   mom: '#5E3DB3',
@@ -72,6 +63,7 @@ export default function WeightTrackerScreen() {
   const theme = Colors[colorScheme];
   // router wird durch die BackButton-Komponente verwaltet
   const insets = useSafeAreaInsets();
+  const { activeBaby, activeBabyId, isReady } = useActiveBaby();
 
   const [weightEntries, setWeightEntries] = useState<WeightEntry[]>([]);
   const [selectedSubject, setSelectedSubject] = useState<WeightSubject>('mom');
@@ -93,17 +85,31 @@ export default function WeightTrackerScreen() {
   const [focusConfig, setFocusConfig] = useState<{ field: 'weight' | 'notes'; label: string; placeholder?: string; multiline?: boolean; keyboardType?: TextInputProps['keyboardType']; inputMode?: TextInputProps['inputMode']; } | null>(null);
   const [focusValue, setFocusValue] = useState('');
 
+  const babyLabel = useMemo(() => activeBaby?.name?.trim() || 'Mini', [activeBaby?.name]);
+  const subjectLabels = useMemo(
+    () => ({ mom: 'Ich', baby: babyLabel }),
+    [babyLabel]
+  );
+  const subjectCopyLabels = useMemo(
+    () => ({ mom: 'dich', baby: babyLabel }),
+    [babyLabel]
+  );
+
   // Lade Gewichtsdaten beim ersten Rendern
   useEffect(() => {
-    loadWeightEntries();
     loadUserRole();
   }, []);
+
+  useEffect(() => {
+    if (!isReady) return;
+    loadWeightEntries();
+  }, [isReady, activeBabyId]);
 
   // Lade Gewichtsdaten
   const loadWeightEntries = async () => {
     try {
       setIsLoading(true);
-      const { data, error } = await getWeightEntries();
+      const { data, error } = await getWeightEntries(undefined, activeBabyId);
       if (error) throw error;
       const normalized = (data || []).map((entry) => ({
         ...entry,
@@ -171,10 +177,15 @@ export default function WeightTrackerScreen() {
   };
 
   const openWeightModal = (subject?: WeightSubject) => {
+    const nextSubject = subject ?? selectedSubject;
+    if (nextSubject === 'baby' && !activeBabyId) {
+      Alert.alert('Hinweis', 'Bitte wähle zuerst ein Kind aus.');
+      return;
+    }
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     setWeightDate(today);
-    setWeightModalSubject(subject ?? selectedSubject);
+    setWeightModalSubject(nextSubject);
     setWeightInput('');
     setWeightNotes('');
     setEditingEntry(null);
@@ -224,6 +235,10 @@ export default function WeightTrackerScreen() {
       Alert.alert('Hinweis', `Bitte gib ein gültiges Gewicht in ${unitLabel} ein.`);
       return;
     }
+    if (weightModalSubject === 'baby' && !activeBabyId) {
+      Alert.alert('Hinweis', 'Bitte wähle zuerst ein Kind aus.');
+      return;
+    }
 
     try {
       setIsSaving(true);
@@ -234,6 +249,7 @@ export default function WeightTrackerScreen() {
         date: toDateString(weightDate),
         weight: storedWeight,
         subject: weightModalSubject,
+        baby_id: weightModalSubject === 'baby' ? activeBabyId : null,
         notes: weightNotes.trim() ? weightNotes.trim() : undefined,
       });
       if (error) throw error;
@@ -400,14 +416,14 @@ export default function WeightTrackerScreen() {
   );
 
   const { data: chartData, meta: chartMeta } = useMemo(
-    () => prepareChartData(chartEntries, selectedRange, SUBJECT_LABELS[selectedSubject], SUBJECT_COLORS[selectedSubject]),
-    [chartEntries, selectedRange, selectedSubject]
+    () => prepareChartData(chartEntries, selectedRange, subjectLabels[selectedSubject], SUBJECT_COLORS[selectedSubject]),
+    [chartEntries, selectedRange, selectedSubject, subjectLabels]
   );
 
   // Rendere die Gewichtskurve
   const renderWeightChart = () => {
     const subjectColor = SUBJECT_COLORS[selectedSubject];
-    const subjectCopyLabel = SUBJECT_COPY_LABELS[selectedSubject];
+    const subjectCopyLabel = subjectCopyLabels[selectedSubject];
     const unitLabel = getWeightUnit(selectedSubject);
     const hasSeries =
       !!chartData &&
@@ -535,7 +551,7 @@ export default function WeightTrackerScreen() {
       notes: e.notes ?? undefined,
       // Custom Anzeige wie im Sleep-Tracker (über emoji/label)
       emoji: subject === 'baby' ? '👶' : parentEmoji,
-      label: `${SUBJECT_LABELS[subject]}: ${displayWeight}`,
+      label: `${subjectLabels[subject]}: ${displayWeight}`,
       weightValue: e.weight,
       weightSubject: subject,
       weightNotes: e.notes ?? '',
@@ -547,7 +563,7 @@ export default function WeightTrackerScreen() {
 
   // Rendere die Gewichtseinträge
   const renderWeightEntries = () => {
-    const subjectLabel = SUBJECT_COPY_LABELS[selectedSubject];
+    const subjectLabel = subjectCopyLabels[selectedSubject];
     if (filteredEntries.length === 0) {
       return (
         <LiquidGlassCard style={styles.emptyState} intensity={26} overlayColor={GLASS_OVERLAY}>
@@ -592,7 +608,7 @@ export default function WeightTrackerScreen() {
         Für wen möchtest du tracken?
       </ThemedText>
       <ThemedText style={styles.subjectSwitcherSubtitle} lightColor="#7D5A50" darkColor="#E9D8C2">
-        Wechsle zwischen Mini und dir, um die passenden Einträge zu sehen.
+        Wechsle zwischen {babyLabel} und dir, um die passenden Einträge zu sehen.
       </ThemedText>
       <View style={styles.subjectPillRow}>
         {SUBJECT_OPTIONS.map((subjectKey) => {
@@ -605,7 +621,7 @@ export default function WeightTrackerScreen() {
               activeOpacity={0.85}
             >
               <Text style={[styles.subjectPillText, isActive && styles.subjectPillTextActive]}>
-                {SUBJECT_LABELS[subjectKey]}
+                {subjectLabels[subjectKey]}
               </Text>
             </TouchableOpacity>
           );
@@ -640,7 +656,7 @@ export default function WeightTrackerScreen() {
             </TouchableOpacity>
             <View style={styles.headerCenter}>
               <Text style={styles.modalTitle}>{editingEntry ? 'Gewicht bearbeiten' : 'Gewicht hinzufügen'}</Text>
-              <Text style={styles.modalSubtitle}>Für dich oder Mini</Text>
+              <Text style={styles.modalSubtitle}>Für dich oder {babyLabel}</Text>
             </View>
             <TouchableOpacity
               style={[styles.headerButton, styles.saveHeaderButton, { backgroundColor: PLANNER_PRIMARY }]}
@@ -668,7 +684,7 @@ export default function WeightTrackerScreen() {
                       activeOpacity={0.88}
                     >
                       <Text style={[styles.typeSwitchLabel, isActive && styles.typeSwitchLabelActive]}>
-                        {SUBJECT_LABELS[subjectKey]}
+                        {subjectLabels[subjectKey]}
                       </Text>
                     </TouchableOpacity>
                   );

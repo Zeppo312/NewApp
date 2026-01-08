@@ -18,6 +18,7 @@ import { getRecommendations, LottiRecommendation } from '@/lib/supabase/recommen
 import { BlurView } from 'expo-blur';
 import ActivityInputModal from '@/components/ActivityInputModal';
 import SleepQuickAddModal, { SleepQuickEntry } from '@/components/SleepQuickAddModal';
+import BabySwitcherButton from '@/components/BabySwitcherButton';
 
 // Tägliche Tipps für Mamas
 const dailyTips = [
@@ -835,17 +836,20 @@ export default function HomeScreen() {
                 </ThemedText>
               </View>
 
-              <View style={styles.profileBadge}>
-                {displayPhoto ? (
-                  <View style={styles.profileImageWrapper}>
-                    <Image source={{ uri: displayPhoto }} style={styles.profileImage} />
-                  </View>
-                ) : (
-                  <View style={styles.profilePlaceholder}>
-                    <IconSymbol name="person.fill" size={30} color="#FFFFFF" />
-                  </View>
-                )}
-                <View style={styles.profileStatusDot} />
+              <View style={styles.greetingActions}>
+                <BabySwitcherButton />
+                <View style={styles.profileBadge}>
+                  {displayPhoto ? (
+                    <View style={styles.profileImageWrapper}>
+                      <Image source={{ uri: displayPhoto }} style={styles.profileImage} />
+                    </View>
+                  ) : (
+                    <View style={styles.profilePlaceholder}>
+                      <IconSymbol name="person.fill" size={30} color="#FFFFFF" />
+                    </View>
+                  )}
+                  <View style={styles.profileStatusDot} />
+                </View>
               </View>
             </View>
 
@@ -1438,6 +1442,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 16,
+  },
+  greetingActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
   greeting: {
     fontSize: 30,

@@ -337,6 +337,19 @@ export default function SleepTrackerScreen() {
   const [splashStatus, setSplashStatus] = useState<string>('');
   const [splashHint, setSplashHint] = useState<string>('');
 
+  const normalizePickerDate = useCallback((value?: Date | null) => {
+    if (!value || Number.isNaN(value.getTime())) {
+      return new Date();
+    }
+    if (value.getFullYear() < 2000) {
+      const now = new Date();
+      const patched = new Date(value);
+      patched.setFullYear(now.getFullYear(), now.getMonth(), now.getDate());
+      return patched;
+    }
+    return value;
+  }, []);
+
   // Animation refs
   const timerAnim = useRef(new Animated.Value(1)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -1004,23 +1017,45 @@ export default function SleepTrackerScreen() {
       if (showInputModal) {
         if (editingEntry) {
           // Bearbeitungsmodus - lade vorhandene Daten
+          const startCandidate = new Date(editingEntry.start_time);
+          const endCandidate = editingEntry.end_time ? new Date(editingEntry.end_time) : null;
           setSleepModalData({
-            start_time: new Date(editingEntry.start_time),
-            end_time: editingEntry.end_time ? new Date(editingEntry.end_time) : null,
+            start_time: normalizePickerDate(startCandidate),
+            end_time: endCandidate ? normalizePickerDate(endCandidate) : null,
             quality: editingEntry.quality || null,
-          notes: editingEntry.notes || ''
+            notes: editingEntry.notes || ''
           });
         } else {
           // Neuer Eintrag - setze Standardwerte
           setSleepModalData({
-            start_time: new Date(),
+            start_time: normalizePickerDate(new Date()),
             end_time: null,
             quality: null,
-          notes: ''
+            notes: ''
           });
         }
       }
-    }, [showInputModal, editingEntry]);
+    }, [showInputModal, editingEntry, normalizePickerDate]);
+
+  const openStartPicker = () => {
+    triggerHaptic();
+    setShowEndPicker(false);
+    setSleepModalData((prev) => ({
+      ...prev,
+      start_time: normalizePickerDate(prev.start_time),
+    }));
+    setShowStartPicker(true);
+  };
+
+  const openEndPicker = () => {
+    triggerHaptic();
+    setShowStartPicker(false);
+    setSleepModalData((prev) => ({
+      ...prev,
+      end_time: normalizePickerDate(prev.end_time ?? prev.start_time ?? new Date()),
+    }));
+    setShowEndPicker(true);
+  };
 
 
   // Top Tabs Component (exakt wie daily_old.tsx)
@@ -1972,8 +2007,7 @@ export default function SleepTrackerScreen() {
               </View>
 
               <ScrollView showsVerticalScrollIndicator={false}>
-                <TouchableOpacity activeOpacity={1} onPress={() => {}}>
-                  <View style={{width: '100%', alignItems: 'center'}}>
+                <View style={{width: '100%', alignItems: 'center'}}>
                     
                     {/* Zeit Sektion */}
                     <View style={styles.section}>
@@ -1982,10 +2016,7 @@ export default function SleepTrackerScreen() {
                       <View style={styles.timeRow}>
                         <TouchableOpacity 
                           style={styles.timeButton}
-                          onPress={() => {
-                            triggerHaptic();
-                            setShowStartPicker(true);
-                          }}
+                          onPress={openStartPicker}
                         >
                           <Text style={styles.timeLabel}>Start</Text>
                           <Text style={styles.timeValue}>
@@ -2000,10 +2031,7 @@ export default function SleepTrackerScreen() {
 
                         <TouchableOpacity 
                           style={styles.timeButton}
-                          onPress={() => {
-                            triggerHaptic();
-                            setShowEndPicker(true);
-                          }}
+                          onPress={openEndPicker}
                         >
                           <Text style={styles.timeLabel}>Ende</Text>
                           <Text style={styles.timeValue}>
@@ -2024,11 +2052,13 @@ export default function SleepTrackerScreen() {
                       {showStartPicker && (
                         <View style={styles.datePickerContainer}>
                           <DateTimePicker
-                            value={sleepModalData.start_time}
+                            value={normalizePickerDate(sleepModalData.start_time)}
                             mode="datetime"
                             display={Platform.OS === 'ios' ? 'compact' : 'default'}
                             onChange={(_, date) => {
-                              if (date) setSleepModalData(prev => ({ ...prev, start_time: date }));
+                              if (date && !Number.isNaN(date.getTime())) {
+                                setSleepModalData(prev => ({ ...prev, start_time: date }));
+                              }
                             }}
                             style={styles.dateTimePicker}
                           />
@@ -2049,11 +2079,13 @@ export default function SleepTrackerScreen() {
                       {showEndPicker && (
                         <View style={styles.datePickerContainer}>
                           <DateTimePicker
-                            value={sleepModalData.end_time || new Date()}
+                            value={normalizePickerDate(sleepModalData.end_time ?? sleepModalData.start_time)}
                             mode="datetime"
                             display={Platform.OS === 'ios' ? 'compact' : 'default'}
                             onChange={(_, date) => {
-                              if (date) setSleepModalData(prev => ({ ...prev, end_time: date }));
+                              if (date && !Number.isNaN(date.getTime())) {
+                                setSleepModalData(prev => ({ ...prev, end_time: date }));
+                              }
                             }}
                             style={styles.dateTimePicker}
                           />
@@ -2150,9 +2182,8 @@ export default function SleepTrackerScreen() {
                       </View>
                     )}
 
-                  </View>
-                </TouchableOpacity>
-	              </ScrollView>
+                </View>
+              </ScrollView>
 	            </BlurView>
 	          </View>
 

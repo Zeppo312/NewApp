@@ -1,5 +1,4 @@
 import { supabase } from './supabase';
-import { getPartnerId } from './accountLinks';
 
 export type WeightSubject = 'mom' | 'baby';
 
@@ -9,28 +8,41 @@ export type WeightEntry = {
   date: string;
   weight: number;
   subject: WeightSubject;
+  baby_id?: string | null;
   notes?: string;
   created_at: string;
   updated_at: string;
 };
 
 // Gewichtsdaten speichern
-export const saveWeightEntry = async (entry: Omit<WeightEntry, 'id' | 'user_id' | 'created_at' | 'updated_at'>) => {
+export const saveWeightEntry = async (
+  entry: Omit<WeightEntry, 'id' | 'user_id' | 'created_at' | 'updated_at'>
+) => {
   try {
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     const now = new Date().toISOString();
     const subject = entry.subject ?? 'mom';
+    const babyId = entry.baby_id ?? null;
+
+    if (subject === 'baby' && !babyId) {
+      return { data: null, error: new Error('Kein Baby ausgewählt') };
+    }
 
     // Prüfen, ob bereits ein Eintrag für dieses Datum existiert
-    const { data: existingData, error: fetchError } = await supabase
+    let existingQuery = supabase
       .from('weight_entries')
       .select('id')
       .eq('user_id', userData.user.id)
       .eq('subject', subject)
-      .eq('date', entry.date)
-      .maybeSingle();
+      .eq('date', entry.date);
+
+    if (subject === 'baby') {
+      existingQuery = existingQuery.eq('baby_id', babyId);
+    }
+
+    const { data: existingData, error: fetchError } = await existingQuery.maybeSingle();
 
     if (fetchError && fetchError.code !== 'PGRST116') {
       console.error('Error checking existing weight entry:', fetchError);
@@ -46,6 +58,7 @@ export const saveWeightEntry = async (entry: Omit<WeightEntry, 'id' | 'user_id' 
         .update({
           weight: entry.weight,
           subject,
+          baby_id: babyId,
           notes: entry.notes && entry.notes.trim().length > 0 ? entry.notes.trim() : null,
           updated_at: now
         })
@@ -61,6 +74,7 @@ export const saveWeightEntry = async (entry: Omit<WeightEntry, 'id' | 'user_id' 
           date: entry.date,
           weight: entry.weight,
           subject,
+          baby_id: babyId,
           notes: entry.notes,
           created_at: now,
           updated_at: now
@@ -77,14 +91,13 @@ export const saveWeightEntry = async (entry: Omit<WeightEntry, 'id' | 'user_id' 
 };
 
 // Alle Gewichtsdaten abrufen
-export const getWeightEntries = async (subject?: WeightSubject) => {
+export const getWeightEntries = async (subject?: WeightSubject, babyId?: string | null) => {
   try {
     const { data: userData, error: userErr } = await supabase.auth.getUser();
     if (userErr) return { data: null, error: userErr };
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     const myId = userData.user.id;
-    const partnerId = await getPartnerId();
 
     let query = supabase
       .from('weight_entries')
@@ -92,19 +105,16 @@ export const getWeightEntries = async (subject?: WeightSubject) => {
       .order('date', { ascending: true });
 
     if (subject === 'baby') {
-      if (partnerId) {
-        query = query.or(
-          `and(user_id.eq.${myId},subject.eq.baby),and(user_id.eq.${partnerId},subject.eq.baby)`
-        );
-      } else {
-        query = query.eq('user_id', myId).eq('subject', 'baby');
+      if (!babyId) {
+        return { data: [], error: null };
       }
+      query = query.eq('subject', 'baby').eq('baby_id', babyId);
     } else if (subject === 'mom') {
       query = query.eq('user_id', myId).eq('subject', 'mom');
     } else {
-      if (partnerId) {
+      if (babyId) {
         query = query.or(
-          `user_id.eq.${myId},and(user_id.eq.${partnerId},subject.eq.baby)`
+          `and(user_id.eq.${myId},subject.eq.mom),and(subject.eq.baby,baby_id.eq.${babyId})`
         );
       } else {
         query = query.eq('user_id', myId);
