@@ -17,7 +17,11 @@ import { createBaby } from '@/lib/baby';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { useAuth } from '@/contexts/AuthContext';
 
-const BabySwitcherButton: React.FC = () => {
+type BabySwitcherButtonProps = {
+  size?: number;
+};
+
+const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({ size = 36 }) => {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const { user } = useAuth();
@@ -79,7 +83,14 @@ const BabySwitcherButton: React.FC = () => {
   return (
     <>
       <TouchableOpacity
-        style={styles.avatarButton}
+        style={[
+          styles.avatarButton,
+          {
+            width: size,
+            height: size,
+            borderRadius: size / 2,
+          },
+        ]}
         onPress={() => setIsOpen(true)}
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         disabled={isLoading}
@@ -87,7 +98,15 @@ const BabySwitcherButton: React.FC = () => {
         {activeBaby?.photo_url ? (
           <Image source={{ uri: activeBaby.photo_url }} style={styles.avatarImage} />
         ) : (
-          <View style={[styles.avatarFallback, { borderColor: theme.text }]}>
+          <View
+            style={[
+              styles.avatarFallback,
+              {
+                borderRadius: size / 2,
+                borderColor: theme.text,
+              },
+            ]}
+          >
             <ThemedText style={[styles.avatarInitial, { color: theme.text }]}>
               {displayInitial}
             </ThemedText>

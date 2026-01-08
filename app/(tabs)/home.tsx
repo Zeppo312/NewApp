@@ -267,7 +267,6 @@ export default function HomeScreen() {
   const [selectedActivityType, setSelectedActivityType] = useState<'feeding' | 'diaper' | 'other'>('feeding');
   const [selectedSubType, setSelectedSubType] = useState<string | null>(null);
   const [todaySleepMinutes, setTodaySleepMinutes] = useState(0);
-  const [profileAvatarUrl, setProfileAvatarUrl] = useState<string | null>(null);
   const [showSleepModal, setShowSleepModal] = useState(false);
   const [sleepModalStart, setSleepModalStart] = useState(new Date());
   const [recommendationImageRetryKey, setRecommendationImageRetryKey] = useState(0);
@@ -478,7 +477,7 @@ export default function HomeScreen() {
       // Benutzernamen laden
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select('first_name, avatar_url')
+        .select('first_name')
         .eq('id', user?.id)
         .single();
 
@@ -488,7 +487,6 @@ export default function HomeScreen() {
         if (profileData.first_name) {
           setUserName(profileData.first_name);
         }
-        setProfileAvatarUrl(profileData.avatar_url || null);
       }
 
       // Baby-Informationen laden
@@ -802,8 +800,6 @@ export default function HomeScreen() {
     // Verwende den Benutzernamen aus der profiles-Tabelle
     const displayName = userName || 'Mama';
 
-    const displayPhoto = profileAvatarUrl || null;
-
     return (
       <View style={[styles.liquidGlassWrapper, styles.greetingCardWrapper]}>
         <BlurView
@@ -836,20 +832,9 @@ export default function HomeScreen() {
                 </ThemedText>
               </View>
 
-              <View style={styles.greetingActions}>
-                <BabySwitcherButton />
-                <View style={styles.profileBadge}>
-                  {displayPhoto ? (
-                    <View style={styles.profileImageWrapper}>
-                      <Image source={{ uri: displayPhoto }} style={styles.profileImage} />
-                    </View>
-                  ) : (
-                    <View style={styles.profilePlaceholder}>
-                      <IconSymbol name="person.fill" size={30} color="#FFFFFF" />
-                    </View>
-                  )}
-                  <View style={styles.profileStatusDot} />
-                </View>
+              <View style={styles.profileBadge}>
+                <BabySwitcherButton size={68} />
+                <View style={styles.profileStatusDot} />
               </View>
             </View>
 
@@ -1443,11 +1428,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
   },
-  greetingActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
   greeting: {
     fontSize: 30,
     fontWeight: '700',
@@ -1462,35 +1442,11 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   profileBadge: {
+    width: 68,
+    height: 68,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
-  },
-  profileImageWrapper: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
-    backgroundColor: 'rgba(255, 255, 255, 0.6)',
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.75)',
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  profileImage: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 34,
-  },
-  profilePlaceholder: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
-    backgroundColor: 'rgba(125, 90, 80, 0.65)',
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.75)',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   profileStatusDot: {
     position: 'absolute',
