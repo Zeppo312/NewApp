@@ -18,6 +18,7 @@ import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 
 import { DailyEntry } from '@/lib/baby';
 import {
@@ -141,6 +142,8 @@ export default function DailyScreen() {
   const theme = Colors[colorScheme];
   const router = useRouter();
   const { quickAction } = useLocalSearchParams<{ quickAction?: string | string[] }>();
+  
+  const { activeBabyId, isReady } = useActiveBaby();
 
   const [entries, setEntries] = useState<DailyEntry[]>([]);
   const [weekEntries, setWeekEntries] = useState<DailyEntry[]>([]);
@@ -187,6 +190,8 @@ export default function DailyScreen() {
   const scrollAnimation = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    if (!isReady || !activeBabyId) return;
+  
     if (selectedTab === 'week') {
       loadWeekEntries();
     } else if (selectedTab === 'month') {
@@ -194,20 +199,24 @@ export default function DailyScreen() {
     } else {
       loadEntries();
     }
-  }, [selectedDate, selectedTab]);
+  }, [selectedDate, selectedTab, activeBabyId, isReady]);
 
   // Separate effects for week/month data loading
   useEffect(() => {
+    if (!isReady || !activeBabyId) return;
+  
     if (selectedTab === 'week') {
       loadWeekEntries();
     }
-  }, [selectedWeekDate, selectedTab]);
+  }, [selectedWeekDate, selectedTab, activeBabyId, isReady]);
 
   useEffect(() => {
+    if (!isReady || !activeBabyId) return;
+  
     if (selectedTab === 'month') {
       loadMonthEntries();
     }
-  }, [selectedMonthDate, selectedTab]);
+  }, [selectedMonthDate, selectedTab, activeBabyId, isReady]);
 
   // Keep selectedWeekDate in sync with weekOffset (for data loading)
   useEffect(() => {
@@ -342,10 +351,11 @@ export default function DailyScreen() {
     } as unknown as DailyEntry));
 
   const loadEntries = async () => {
+    if (!activeBabyId) return;
     setIsLoading(true);
     const result = await SupabaseErrorHandler.executeWithHandling(
       async () => {
-        const { data, error } = await getBabyCareEntriesForDate(selectedDate);
+        const { data, error } = await getBabyCareEntriesForDate(selectedDate, activeBabyId ?? undefined);
         if (error) throw error;
         return mapCareToDaily(data ?? []);
       },
@@ -359,13 +369,14 @@ export default function DailyScreen() {
   };
 
   const loadWeekEntries = async () => {
+    if (!activeBabyId) return;
     setIsLoading(true);
     const weekStart = getWeekStart(selectedWeekDate);
     const weekEnd = getWeekEnd(selectedWeekDate);
     
     const result = await SupabaseErrorHandler.executeWithHandling(
       async () => {
-        const { data, error } = await getBabyCareEntriesForDateRange(weekStart, weekEnd);
+        const { data, error } = await getBabyCareEntriesForDateRange(weekStart, weekEnd, activeBabyId ?? undefined);
         if (error) throw error;
         return mapCareToDaily(data ?? []);
       },
@@ -378,10 +389,11 @@ export default function DailyScreen() {
   };
 
   const loadMonthEntries = async () => {
+    if (!activeBabyId) return;
     setIsLoading(true);
     const result = await SupabaseErrorHandler.executeWithHandling(
       async () => {
-        const { data, error } = await getBabyCareEntriesForMonth(selectedMonthDate);
+        const { data, error } = await getBabyCareEntriesForMonth(selectedMonthDate, activeBabyId ?? undefined);
         if (error) throw error;
         return mapCareToDaily(data ?? []);
       },
@@ -463,6 +475,13 @@ export default function DailyScreen() {
   }, [quickAction, router]);
 
   const handleSaveEntry = async (payload: any, options?: { startTimer?: boolean }) => {
+    if (!activeBabyId) {
+      Alert.alert(
+        'Kein Kind ausgewählt',
+        'Bitte wähle zuerst ein Kind aus.'
+      );
+      return;
+    }
     console.log('handleSaveEntry - Received payload:', JSON.stringify(payload, null, 2));
     console.log('handleSaveEntry - selectedActivityType:', selectedActivityType);
     console.log('handleSaveEntry - selectedSubType:', selectedSubType);
@@ -479,7 +498,7 @@ export default function DailyScreen() {
           feeding_type: feedingType,
           feeding_volume_ml: payload.feeding_volume_ml ?? null,
           feeding_side: payload.feeding_side ?? null,
-        });
+        }, activeBabyId ?? undefined);
         data = res.data; error = res.error;
       } else {
         const res = await addBabyCareEntry({
@@ -490,7 +509,7 @@ export default function DailyScreen() {
           feeding_type: feedingType,
           feeding_volume_ml: payload.feeding_volume_ml ?? null,
           feeding_side: payload.feeding_side ?? null,
-        });
+        }, activeBabyId ?? undefined);
         data = res.data; error = res.error;
       }
       if (error) {
@@ -521,7 +540,7 @@ export default function DailyScreen() {
           end_time: payload.end_time ?? null,
           notes: payload.notes ?? null,
           diaper_type: diaperType,
-        });
+        }, activeBabyId ?? undefined);
         data = res.data; error = res.error;
       } else {
         const res = await addBabyCareEntry({
@@ -530,7 +549,7 @@ export default function DailyScreen() {
           end_time: payload.end_time ?? null,
           notes: payload.notes ?? null,
           diaper_type: diaperType,
-        });
+        }, activeBabyId ?? undefined);
         data = res.data; error = res.error;
       }
       if (error) {
@@ -619,7 +638,8 @@ export default function DailyScreen() {
 
   const handleTimerStop = async () => {
     if (!activeTimer) return;
-    const { error } = await stopBabyCareEntryTimer(activeTimer.id);
+    if (!activeBabyId) return;
+    const { error } = await stopBabyCareEntryTimer(activeTimer.id, activeBabyId);
     if (error) {
       Alert.alert('Fehler', String((error as any)?.message ?? error ?? 'Unbekannter Fehler'));
       return;
@@ -636,7 +656,8 @@ export default function DailyScreen() {
         text: 'Löschen',
         style: 'destructive',
         onPress: async () => {
-          const { error } = await deleteBabyCareEntry(id);
+          if (!activeBabyId) return;
+          const { error } = await deleteBabyCareEntry(id, activeBabyId);
           if (error) return;
           loadEntries();
           Alert.alert('Erfolg', 'Eintrag gelöscht! 🗑️');
@@ -1232,7 +1253,7 @@ export default function DailyScreen() {
                 text: 'Ja, verwerfen',
                 style: 'destructive',
                 onPress: async () => {
-                  const { error } = await deleteBabyCareEntry(activeTimer.id);
+                  const { error } = await deleteBabyCareEntry(activeTimer.id, activeBabyId ?? undefined);
                   if (!error) {
                     setActiveTimer(null);
                     loadEntries();

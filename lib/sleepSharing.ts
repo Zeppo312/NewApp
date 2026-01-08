@@ -13,7 +13,7 @@ export interface SleepEntryShare {
 /**
  * Lädt alle sichtbaren Schlafeinträge (eigene und geteilte)
  */
-export async function loadAllVisibleSleepEntries(): Promise<{
+export async function loadAllVisibleSleepEntries(babyId?: string): Promise<{
   success: boolean;
   entries?: SleepEntry[];
   error?: string;
@@ -34,15 +34,23 @@ export async function loadAllVisibleSleepEntries(): Promise<{
     if (rpcError) {
       console.error('loadAllVisibleSleepEntries: Fehler beim Laden per RPC:', rpcError);
     } else if (rpcEntries) {
-      allEntries.push(...rpcEntries);
+      const scopedEntries = babyId
+        ? rpcEntries.filter((entry: SleepEntry) => entry.baby_id === babyId)
+        : rpcEntries;
+      allEntries.push(...scopedEntries);
     }
 
     // 2) Direkter Abruf, der auch partner_id und legacy shared_with_user_id berücksichtigt
-    const { data: partnerVisible, error: partnerError } = await supabase
+    let partnerQuery = supabase
       .from('sleep_entries')
       .select('*')
-      .or(`user_id.eq.${user.user.id},partner_id.eq.${user.user.id},shared_with_user_id.eq.${user.user.id}`)
-      .order('start_time', { ascending: false });
+      .or(`user_id.eq.${user.user.id},partner_id.eq.${user.user.id},shared_with_user_id.eq.${user.user.id}`);
+
+    if (babyId) {
+      partnerQuery = partnerQuery.eq('baby_id', babyId);
+    }
+
+    const { data: partnerVisible, error: partnerError } = await partnerQuery.order('start_time', { ascending: false });
 
     if (partnerError && !partnerError.message?.includes('does not exist')) {
       console.error('loadAllVisibleSleepEntries: Fehler beim Laden von Partner-Einträgen:', partnerError);
@@ -51,11 +59,16 @@ export async function loadAllVisibleSleepEntries(): Promise<{
     }
 
     // 3) Einträge, die über die neue Share-Tabelle geteilt wurden
-    const { data: tableShared, error: tableSharedError } = await supabase
+    let tableQuery = supabase
       .from('sleep_entries')
       .select('*, sleep_entry_shares!inner(shared_with_id)')
-      .eq('sleep_entry_shares.shared_with_id', user.user.id)
-      .order('start_time', { ascending: false });
+      .eq('sleep_entry_shares.shared_with_id', user.user.id);
+
+    if (babyId) {
+      tableQuery = tableQuery.eq('baby_id', babyId);
+    }
+
+    const { data: tableShared, error: tableSharedError } = await tableQuery.order('start_time', { ascending: false });
 
     if (tableSharedError && !tableSharedError.message?.includes('does not exist')) {
       console.error('loadAllVisibleSleepEntries: Fehler beim Laden der über Tabelle geteilten Einträge:', tableSharedError);

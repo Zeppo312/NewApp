@@ -39,6 +39,7 @@ import { ProgressCircle } from '@/components/ProgressCircle';
 import type { ViewStyle } from 'react-native';
 import { GlassCard, LiquidGlassCard, LAYOUT_PAD, SECTION_GAP_TOP, SECTION_GAP_BOTTOM, RADIUS, PRIMARY, GLASS_BORDER, GLASS_OVERLAY, FONT_SM, FONT_MD, FONT_LG } from '@/constants/DesignGuide';
 import { getBabyInfo } from '@/lib/baby';
+import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { predictNextSleepWindow, updatePersonalizationAfterNap, type SleepWindowPrediction } from '@/lib/sleep-window';
 import { markPaywallShown, shouldShowPaywall } from '@/lib/paywall';
 
@@ -223,6 +224,7 @@ export default function SleepTrackerScreen() {
   const theme = Colors[colorScheme];
   const router = useRouter();
   const { user } = useAuth();
+  const { activeBabyId } = useActiveBaby();
   const paywallCheckInFlight = useRef(false);
   const triggerHaptic = useCallback(() => {
     try {
@@ -343,7 +345,7 @@ export default function SleepTrackerScreen() {
 
   useEffect(() => {
     loadSleepData();
-  }, []);
+  }, [activeBabyId]);
 
   // Lade die aktuelle Partner-ID (aus account_links) für neue Einträge
   const refreshPartnerId = useCallback(async () => {
@@ -362,7 +364,7 @@ export default function SleepTrackerScreen() {
     }
     setPartnerId(null);
     return null;
-  }, [user?.id]);
+  }, [user?.id, activeBabyId]);
 
   const getEffectivePartnerId = useCallback(async () => {
     if (partnerId) return partnerId;
@@ -383,7 +385,7 @@ export default function SleepTrackerScreen() {
 
     const fetchBabyProfile = async () => {
       try {
-        const { data } = await getBabyInfo();
+        const { data } = await getBabyInfo(activeBabyId ?? undefined);
         if (!isMounted) return;
 
         if (data?.birth_date) {
@@ -508,7 +510,7 @@ export default function SleepTrackerScreen() {
   const loadSleepData = async () => {
     try {
       setIsLoading(true);
-      const { success, entries, error } = await loadAllVisibleSleepEntries();
+      const { success, entries, error } = await loadAllVisibleSleepEntries(activeBabyId ?? undefined);
       
       if (success && entries) {
         const classifiedEntries = entries.map(classifySleepEntry);
@@ -566,7 +568,11 @@ export default function SleepTrackerScreen() {
   const handleStartSleep = async (_period: SleepPeriod) => {
     try {
       const effectivePartnerId = await getEffectivePartnerId();
-      const { success, entry, error } = await startSleepTracking(undefined, effectivePartnerId || undefined);
+      const { success, entry, error } = await startSleepTracking(
+        undefined,
+        effectivePartnerId || undefined,
+        activeBabyId ?? undefined
+      );
       
       if (success && entry) {
         const classifiedEntry = classifySleepEntry(entry);
@@ -614,7 +620,13 @@ export default function SleepTrackerScreen() {
     if (!activeSleepEntry?.id) return;
 
     try {
-      const { success, error } = await stopSleepTracking(activeSleepEntry.id, quality || 'medium', notes);
+      const { success, error } = await stopSleepTracking(
+        activeSleepEntry.id,
+        quality || 'medium',
+        notes,
+        undefined,
+        activeBabyId ?? undefined
+      );
       
       if (success) {
         setActiveSleepEntry(null);
@@ -658,8 +670,8 @@ export default function SleepTrackerScreen() {
       if (editingEntry?.id) {
         console.log('🔄 Updating existing entry:', editingEntry.id);
         // Update existing entry
-        const { data, error } = await supabase
-        .from('sleep_entries')
+        let updateQuery = supabase
+          .from('sleep_entries')
           .update({
             start_time: sleepData.start_time,
             end_time: sleepData.end_time ?? null,
@@ -670,8 +682,13 @@ export default function SleepTrackerScreen() {
             : null,
             partner_id: editingEntry.partner_id ?? effectivePartnerId ?? null
         })
-          .eq('id', editingEntry.id)
-          .select();
+          .eq('id', editingEntry.id);
+
+        if (activeBabyId) {
+          updateQuery = updateQuery.eq('baby_id', activeBabyId);
+        }
+
+        const { data, error } = await updateQuery.select();
 
         if (error) {
           console.error('❌ Update error:', error);
@@ -686,9 +703,10 @@ export default function SleepTrackerScreen() {
         console.log('➕ Creating new entry');
         // Create new entry
         const { data, error } = await supabase
-        .from('sleep_entries')
+          .from('sleep_entries')
           .insert({
             user_id: user.id,
+            baby_id: activeBabyId ?? null,
             start_time: sleepData.start_time,
             end_time: sleepData.end_time ?? null,
             quality: sleepData.quality || null,
@@ -745,10 +763,16 @@ export default function SleepTrackerScreen() {
           onPress: async () => {
             triggerHaptic();
             try {
-              const { error } = await supabase
+              let deleteQuery = supabase
                 .from('sleep_entries')
                 .delete()
                 .eq('id', entryId);
+
+              if (activeBabyId) {
+                deleteQuery = deleteQuery.eq('baby_id', activeBabyId);
+              }
+
+              const { error } = await deleteQuery;
 
               if (error) throw error;
               

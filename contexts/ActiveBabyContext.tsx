@@ -1,0 +1,205 @@
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { BabyInfo, createBaby, listBabies } from '@/lib/baby';
+import { useAuth } from './AuthContext';
+
+type ActiveBabyContextType = {
+  babies: BabyInfo[];
+  activeBabyId: string | null;
+  activeBaby: BabyInfo | null;
+  isLoading: boolean;
+  isReady: boolean;
+  loadError: string | null;
+  setActiveBabyId: (babyId: string) => Promise<void>;
+  refreshBabies: () => Promise<void>;
+};
+
+const ACTIVE_BABY_STORAGE_KEY = 'active_baby_id';
+
+const ActiveBabyContext = createContext<ActiveBabyContextType | undefined>(
+  undefined,
+);
+
+export const ActiveBabyProvider: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
+  const { user } = useAuth();
+
+  const [babies, setBabies] = useState<BabyInfo[]>([]);
+  const [activeBabyId, setActiveBabyIdState] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isReady, setIsReady] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const formatLoadError = useCallback((error: unknown) => {
+    if (!error) return null;
+    if (error instanceof Error) return error.message;
+    if (typeof error === 'string') return error;
+    if (typeof error === 'object') {
+      const err = error as {
+        message?: string;
+        details?: string;
+        hint?: string;
+        code?: string;
+      };
+      const parts = [
+        err.message,
+        err.details,
+        err.hint,
+        err.code ? `code: ${err.code}` : null,
+      ].filter(Boolean);
+      if (parts.length > 0) return parts.join(' | ');
+      try {
+        return JSON.stringify(error);
+      } catch {
+        return '[unlesbarer Fehler]';
+      }
+    }
+    return String(error);
+  }, []);
+
+  /**
+   * Resolves which baby should be active:
+   * 1) Stored baby id (AsyncStorage)
+   * 2) First baby in list
+   * 3) null
+   *
+   * IMPORTANT:
+   * - Returns resolvedId so caller can decide when state is stable
+   */
+  const resolveActiveBabyId = useCallback(
+    async (nextBabies: BabyInfo[]): Promise<string | null> => {
+      const storedId = await AsyncStorage.getItem(ACTIVE_BABY_STORAGE_KEY);
+
+      const resolvedId =
+        nextBabies.find((b) => b.id === storedId)?.id ??
+        nextBabies[0]?.id ??
+        null;
+
+      setActiveBabyIdState(resolvedId);
+
+      if (resolvedId) {
+        await AsyncStorage.setItem(ACTIVE_BABY_STORAGE_KEY, resolvedId);
+      } else {
+        await AsyncStorage.removeItem(ACTIVE_BABY_STORAGE_KEY);
+      }
+
+      return resolvedId;
+    },
+    [],
+  );
+
+  /**
+   * Loads babies from DB and guarantees:
+   * - at least one baby exists
+   * - activeBabyId is resolved BEFORE isReady = true
+   */
+  const loadBabies = useCallback(async () => {
+    if (!user) {
+      setBabies([]);
+      setActiveBabyIdState(null);
+      setIsLoading(false);
+      setIsReady(true);
+      setLoadError(null);
+      return;
+    }
+
+    setIsLoading(true);
+    setIsReady(false);
+
+    const { data, error } = await listBabies();
+    if (error) {
+      console.error('Error loading babies:', error);
+      setBabies([]);
+      setActiveBabyIdState(null);
+      setIsLoading(false);
+      setIsReady(true);
+      setLoadError(formatLoadError(error));
+      return;
+    }
+
+    let nextBabies = data ?? [];
+    setLoadError(null);
+
+    // Ensure at least one baby exists
+    if (nextBabies.length === 0) {
+      const { error: createError } = await createBaby({});
+      if (createError) {
+        console.error('Error creating default baby:', createError);
+        setLoadError(formatLoadError(createError));
+      } else {
+        const { data: reloaded } = await listBabies();
+        nextBabies = reloaded ?? [];
+      }
+    }
+
+    setBabies(nextBabies);
+
+    const resolvedId = await resolveActiveBabyId(nextBabies);
+
+    if (!resolvedId) {
+      console.warn('[ActiveBaby] No active baby could be resolved');
+    }
+
+    setIsLoading(false);
+    setIsReady(true);
+  }, [user, resolveActiveBabyId]);
+
+  /**
+   * Initial load + reload on login change
+   */
+  useEffect(() => {
+    loadBabies();
+  }, [loadBabies]);
+
+  /**
+   * Explicit baby switch (BabySwitcher)
+   * IMPORTANT:
+   * - temporarily sets isReady=false to avoid race conditions
+   */
+  const setActiveBabyId = useCallback(async (babyId: string) => {
+    setIsReady(false);
+
+    setActiveBabyIdState(babyId);
+    await AsyncStorage.setItem(ACTIVE_BABY_STORAGE_KEY, babyId);
+
+    setIsReady(true);
+  }, []);
+
+  const activeBaby = useMemo(
+    () => babies.find((b) => b.id === activeBabyId) ?? null,
+    [babies, activeBabyId],
+  );
+
+  return (
+    <ActiveBabyContext.Provider
+      value={{
+        babies,
+        activeBabyId,
+        activeBaby,
+        isLoading,
+        isReady,
+        loadError,
+        setActiveBabyId,
+        refreshBabies: loadBabies,
+      }}
+    >
+      {children}
+    </ActiveBabyContext.Provider>
+  );
+};
+
+export const useActiveBaby = () => {
+  const context = useContext(ActiveBabyContext);
+  if (!context) {
+    throw new Error('useActiveBaby must be used within an ActiveBabyProvider');
+  }
+  return context;
+};

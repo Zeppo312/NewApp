@@ -4,6 +4,7 @@ import { ThemedBackground } from '@/components/ThemedBackground';
 import Header from '@/components/Header';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { IconSymbol } from '@/components/ui/IconSymbol';
@@ -34,6 +35,7 @@ function GlassCard({ children, style, intensity = 28, overlayColor = 'rgba(255,2
 export default function FeedingStatsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
+  const { activeBabyId } = useActiveBaby();
   
   // Set fallback route for smart back navigation
   useSmartBack('/(tabs)/home');
@@ -48,7 +50,7 @@ export default function FeedingStatsScreen() {
       setIsLoading(true);
       try {
         if (selectedTab === 'day') {
-          const { data } = await getBabyCareEntriesForDate(selectedDate);
+          const { data } = await getBabyCareEntriesForDate(selectedDate, activeBabyId ?? undefined);
           setEntries(data ?? []);
         } else if (selectedTab === 'week') {
           const d = new Date(selectedDate);
@@ -57,10 +59,10 @@ export default function FeedingStatsScreen() {
           const weekStart = new Date(d.setDate(diff));
           const weekEnd = new Date(weekStart);
           weekEnd.setDate(weekStart.getDate() + 6);
-          const { data } = await getBabyCareEntriesForDateRange(weekStart, weekEnd);
+          const { data } = await getBabyCareEntriesForDateRange(weekStart, weekEnd, activeBabyId ?? undefined);
           setEntries(data ?? []);
         } else {
-          const { data } = await getBabyCareEntriesForMonth(selectedDate);
+          const { data } = await getBabyCareEntriesForMonth(selectedDate, activeBabyId ?? undefined);
           setEntries(data ?? []);
         }
       } finally {
@@ -68,7 +70,7 @@ export default function FeedingStatsScreen() {
       }
     };
     load();
-  }, [selectedTab, selectedDate]);
+  }, [selectedTab, selectedDate, activeBabyId]);
 
     const stats = useMemo(() => {
     // Für die Monatsansicht werden die Test-Daten in der MonthCalendarView generiert
@@ -1293,5 +1295,4 @@ const s = StyleSheet.create<{
     opacity: 0.7,
   },
 });
-
 

@@ -119,6 +119,7 @@ export type Geburtsplan = {
 export type BabyCareEntry = {
   id?: string;
   user_id?: string;
+  baby_id?: string | null;
   entry_type: 'feeding' | 'diaper';
   start_time: string; // ISO
   end_time?: string | null; // ISO
@@ -306,13 +307,14 @@ export const signInAnonymously = async () => {
 };
 
 // Einfügen in die einheitliche Tabelle baby_care_entries
-export const addBabyCareEntry = async (entry: BabyCareEntry) => {
+export const addBabyCareEntry = async (entry: BabyCareEntry, babyId?: string) => {
   try {
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     const payload = {
       user_id: userData.user.id,
+      baby_id: babyId ?? entry.baby_id ?? null,
       entry_type: entry.entry_type,
       start_time: entry.start_time,
       end_time: entry.end_time ?? null,
@@ -335,7 +337,7 @@ export const addBabyCareEntry = async (entry: BabyCareEntry) => {
   }
 };
 
-export const getBabyCareEntriesForDate = async (date: Date) => {
+export const getBabyCareEntriesForDate = async (date: Date, babyId?: string) => {
   try {
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
@@ -345,12 +347,17 @@ export const getBabyCareEntriesForDate = async (date: Date) => {
     const endOfDay = new Date(date);
     endOfDay.setHours(23, 59, 59, 999);
 
-    const { data, error } = await supabase
+    let query = supabase
       .from('baby_care_entries')
       .select('*')
       .gte('start_time', startOfDay.toISOString())
-      .lte('start_time', endOfDay.toISOString())
-      .order('start_time', { ascending: false });
+      .lte('start_time', endOfDay.toISOString());
+
+    if (babyId) {
+      query = query.eq('baby_id', babyId);
+    }
+
+    const { data, error } = await query.order('start_time', { ascending: false });
 
     return { data, error };
   } catch (err) {
@@ -358,17 +365,22 @@ export const getBabyCareEntriesForDate = async (date: Date) => {
   }
 };
 
-export const getBabyCareEntriesForDateRange = async (startDate: Date, endDate: Date) => {
+export const getBabyCareEntriesForDateRange = async (startDate: Date, endDate: Date, babyId?: string) => {
   try {
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
-    const { data, error } = await supabase
+    let query = supabase
       .from('baby_care_entries')
       .select('*')
       .gte('start_time', startDate.toISOString())
-      .lte('start_time', endDate.toISOString())
-      .order('start_time', { ascending: true });
+      .lte('start_time', endDate.toISOString());
+
+    if (babyId) {
+      query = query.eq('baby_id', babyId);
+    }
+
+    const { data, error } = await query.order('start_time', { ascending: true });
 
     return { data, error };
   } catch (err) {
@@ -376,47 +388,54 @@ export const getBabyCareEntriesForDateRange = async (startDate: Date, endDate: D
   }
 };
 
-export const deleteBabyCareEntry = async (id: string) => {
+export const deleteBabyCareEntry = async (id: string, babyId?: string) => {
   try {
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) return { error: new Error('Nicht angemeldet') };
 
-    const { error } = await supabase
-      .from('baby_care_entries')
-      .delete()
-      .eq('id', id);
+    let query = supabase.from('baby_care_entries').delete().eq('id', id);
+    if (babyId) {
+      query = query.eq('baby_id', babyId);
+    }
+
+    const { error } = await query;
     return { error };
   } catch (err) {
     return { error: err };
   }
 };
 
-export const stopBabyCareEntryTimer = async (id: string) => {
+export const stopBabyCareEntryTimer = async (id: string, babyId?: string) => {
   try {
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) return { error: new Error('Nicht angemeldet') };
 
-    const { data, error } = await supabase
+    let query = supabase
       .from('baby_care_entries')
       .update({ end_time: new Date().toISOString(), updated_at: new Date().toISOString() })
-      .eq('id', id)
-      .select()
-      .single();
+      .eq('id', id);
+
+    if (babyId) {
+      query = query.eq('baby_id', babyId);
+    }
+
+    const { data, error } = await query.select().single();
     return { data, error };
   } catch (err) {
     return { data: null, error: err };
   }
 };
 
-export const getBabyCareEntriesForMonth = async (date: Date) => {
+export const getBabyCareEntriesForMonth = async (date: Date, babyId?: string) => {
   const first = new Date(date.getFullYear(), date.getMonth(), 1, 0, 0, 0, 0);
   const last = new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
-  return getBabyCareEntriesForDateRange(first, last);
+  return getBabyCareEntriesForDateRange(first, last, babyId);
 };
 
 export const updateBabyCareEntry = async (
   id: string,
-  updates: Partial<BabyCareEntry>
+  updates: Partial<BabyCareEntry>,
+  babyId?: string
 ) => {
   try {
     const { data: userData } = await supabase.auth.getUser();
@@ -434,12 +453,12 @@ export const updateBabyCareEntry = async (
       updated_at: new Date().toISOString(),
     };
 
-    const { data, error } = await supabase
-      .from('baby_care_entries')
-      .update(payload)
-      .eq('id', id)
-      .select()
-      .single();
+    let query = supabase.from('baby_care_entries').update(payload).eq('id', id);
+    if (babyId) {
+      query = query.eq('baby_id', babyId);
+    }
+
+    const { data, error } = await query.select().single();
 
     return { data, error };
   } catch (err) {

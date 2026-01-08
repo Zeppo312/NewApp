@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { getBabyInfo, saveBabyInfo, BabyInfo } from '@/lib/baby';
+import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useRouter, Stack } from 'expo-router';
 import Header from '@/components/Header';
@@ -23,6 +24,7 @@ export default function BabyScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const { user } = useAuth();
+  const { activeBabyId, refreshBabies, isReady } = useActiveBaby();
   const { refreshBabyDetails } = useBabyStatus();
   const router = useRouter();
   
@@ -72,7 +74,7 @@ export default function BabyScreen() {
   const loadBabyInfo = async () => {
     try {
       setIsLoading(true);
-      const { data, error } = await getBabyInfo();
+      const { data, error } = await getBabyInfo(activeBabyId ?? undefined);
       if (error) {
         console.error('Error loading baby info:', error);
       } else if (data) {
@@ -97,20 +99,22 @@ export default function BabyScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      if (!user) {
-        return;
-      }
-
+      if (!user || !isReady || !activeBabyId) return;
+  
       loadBabyInfo();
-
+  
       const handleHardwareBack = () => {
         router.push('/(tabs)/home');
         return true;
       };
-
-      const subscription = BackHandler.addEventListener('hardwareBackPress', handleHardwareBack);
+  
+      const subscription = BackHandler.addEventListener(
+        'hardwareBackPress',
+        handleHardwareBack
+      );
+  
       return () => subscription.remove();
-    }, [user, router])
+    }, [user, isReady, activeBabyId, router])
   );
 
   const displayPhoto = babyInfo.photo_url || null;
@@ -183,7 +187,7 @@ export default function BabyScreen() {
 
   const handleSave = async () => {
     try {
-      const { error } = await saveBabyInfo(babyInfo);
+      const { error } = await saveBabyInfo(babyInfo, activeBabyId ?? undefined);
       if (error) {
         console.error('Error saving baby info:', error);
         Alert.alert('Fehler', 'Die Informationen konnten nicht gespeichert werden.');
@@ -191,6 +195,7 @@ export default function BabyScreen() {
         Alert.alert('Erfolg', 'Die Informationen wurden erfolgreich gespeichert.');
         setIsEditing(false);
         await refreshBabyDetails();
+        await refreshBabies();
         
         // Speichere relevante Baby-Infos für den Hintergrund-Task
         if (babyInfo.birth_date) {

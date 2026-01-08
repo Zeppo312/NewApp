@@ -8,6 +8,7 @@ import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { ThemedText } from '@/components/ThemedText';
 import { useNavigation } from '@/contexts/NavigationContext';
+import BabySwitcherButton from '@/components/BabySwitcherButton';
 
 export interface HeaderProps {
   title: string;
@@ -16,6 +17,7 @@ export interface HeaderProps {
   onBackPress?: () => void;
   leftContent?: React.ReactNode;
   rightContent?: React.ReactNode;
+  showBabySwitcher?: boolean;
 }
 
 const Header: React.FC<HeaderProps> = ({ 
@@ -24,7 +26,8 @@ const Header: React.FC<HeaderProps> = ({
   showBackButton = false, 
   onBackPress,
   leftContent,
-  rightContent
+  rightContent,
+  showBabySwitcher = true
 }) => {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
@@ -70,7 +73,10 @@ const Header: React.FC<HeaderProps> = ({
       
       {/* Rechter Bereich - absolut positioniert */}
       <View style={[styles.sideContainer, styles.right]}>
-        {rightContent}
+        <View style={styles.rightContentRow}>
+          {rightContent}
+          {showBabySwitcher && <BabySwitcherButton />}
+        </View>
       </View>
     </View>
   );
@@ -108,6 +114,13 @@ const styles = StyleSheet.create({
     right: 16,
     minWidth: 44,
     height: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  rightContentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   backButton: {
     width: 44,

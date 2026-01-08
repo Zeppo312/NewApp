@@ -31,6 +31,7 @@ import { LiquidGlassCard, GLASS_OVERLAY, LAYOUT_PAD } from '@/constants/DesignGu
 
 import { useAuth } from '@/contexts/AuthContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
+import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { supabase } from '@/lib/supabase';
 import { getBabyInfo, saveBabyInfo } from '@/lib/baby';
 import * as ImagePicker from 'expo-image-picker';
@@ -47,6 +48,7 @@ export default function ProfilScreen() {
   const theme = Colors[colorScheme];
   const { user, signOut } = useAuth();
   const { isBabyBorn, setIsBabyBorn, refreshBabyDetails } = useBabyStatus();
+  const { activeBabyId, refreshBabies } = useActiveBaby();
 
   // Benutzerinformationen
   const [firstName, setFirstName] = useState('');
@@ -85,7 +87,7 @@ export default function ProfilScreen() {
   useEffect(() => {
     if (user) loadUserData();
     else setIsLoading(false);
-  }, [user]);
+  }, [user, activeBabyId]);
 
   const loadUserData = async () => {
     try {
@@ -124,7 +126,7 @@ export default function ProfilScreen() {
       }
 
       // Baby info
-      const { data: babyData } = await getBabyInfo();
+      const { data: babyData } = await getBabyInfo(activeBabyId ?? undefined);
       if (babyData) {
         setBabyName(babyData.name || '');
         setBabyGender(babyData.baby_gender || '');
@@ -516,16 +518,20 @@ export default function ProfilScreen() {
       if (settingsResult.error) throw settingsResult.error;
 
       // baby info
-      const { error: babyError } = await saveBabyInfo({
-        name: babyName,
-        baby_gender: babyGender,
-        birth_date: birthDate ? birthDate.toISOString() : null,
-        weight: babyWeight,
-        height: babyHeight,
-        photo_url: finalBabyPhoto,
-      });
+      const { error: babyError } = await saveBabyInfo(
+        {
+          name: babyName,
+          baby_gender: babyGender,
+          birth_date: birthDate ? birthDate.toISOString() : null,
+          weight: babyWeight,
+          height: babyHeight,
+          photo_url: finalBabyPhoto,
+        },
+        activeBabyId ?? undefined
+      );
       if (babyError) throw babyError;
       await refreshBabyDetails();
+      await refreshBabies();
 
       Alert.alert('Erfolg', 'Deine Daten wurden erfolgreich gespeichert.', [
         { text: 'OK', onPress: () => router.push('/more') },

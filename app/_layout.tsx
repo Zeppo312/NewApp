@@ -13,6 +13,7 @@ import * as TaskManager from 'expo-task-manager';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { BabyStatusProvider } from '@/contexts/BabyStatusContext';
+import { ActiveBabyProvider } from '@/contexts/ActiveBabyContext';
 import { ThemeProvider as AppThemeProvider } from '@/contexts/ThemeContext';
 import { NavigationProvider } from '@/contexts/NavigationContext';
 import { checkForNewNotifications, registerBackgroundNotificationTask, BACKGROUND_NOTIFICATION_TASK } from '@/lib/notificationService';
@@ -208,9 +209,11 @@ export default Sentry.wrap(function RootLayout() {
     <AuthProvider>
       <AppThemeProvider>
         <NavigationProvider>
-          <BabyStatusProvider>
-            <RootLayoutNav />
-          </BabyStatusProvider>
+          <ActiveBabyProvider>
+            <BabyStatusProvider>
+              <RootLayoutNav />
+            </BabyStatusProvider>
+          </ActiveBabyProvider>
         </NavigationProvider>
       </AppThemeProvider>
     </AuthProvider>

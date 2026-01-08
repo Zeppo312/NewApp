@@ -3,6 +3,7 @@ import { differenceInMonths } from 'date-fns';
 import { getBabyBornStatus, setBabyBornStatus } from '@/lib/supabase';
 import { useAuth } from './AuthContext';
 import { getBabyInfo } from '@/lib/baby';
+import { useActiveBaby } from './ActiveBabyContext';
 
 interface BabyStatusContextType {
   isBabyBorn: boolean;
@@ -21,6 +22,7 @@ export const BabyStatusProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [babyAgeMonths, setBabyAgeMonths] = useState(0); // Standardwert: 0 Monate
   const [babyWeightPercentile, setBabyWeightPercentile] = useState(50); // Standardwert: 50. Perzentile
   const { user } = useAuth();
+  const { activeBabyId } = useActiveBaby();
 
   useEffect(() => {
     if (user) {
@@ -29,7 +31,7 @@ export const BabyStatusProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     } else {
       setIsLoading(false);
     }
-  }, [user]);
+  }, [user, activeBabyId]);
 
   const loadBabyBornStatus = async () => {
     try {
@@ -45,7 +47,7 @@ export const BabyStatusProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const loadBabyDetails = async () => {
     try {
-      const { data } = await getBabyInfo();
+      const { data } = await getBabyInfo(activeBabyId ?? undefined);
       
       // Wenn das Geburtsdatum verfügbar ist, berechne das Alter in Monaten
       if (data && data.birth_date) {

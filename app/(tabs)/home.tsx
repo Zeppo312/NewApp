@@ -12,6 +12,7 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Canvas, RoundedRect, LinearGradient as SkiaLinearGradient, RadialGradient, Circle, vec } from '@shopify/react-native-skia';
 import { getBabyInfo, getDiaryEntries, getCurrentPhase, getPhaseProgress, getMilestonesByPhase } from '@/lib/baby';
+import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { supabase, addBabyCareEntry } from '@/lib/supabase';
 import { getRecommendations, LottiRecommendation } from '@/lib/supabase/recommendations';
 import { BlurView } from 'expo-blur';
@@ -242,6 +243,7 @@ export default function HomeScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const { user } = useAuth();
+  const { activeBabyId } = useActiveBaby();
   const router = useRouter();
   const DEFAULT_OVERVIEW_HEIGHT = 230;
   const PRODUCT_ROTATION_INITIAL_DELAY_MS = 10000;
@@ -448,7 +450,7 @@ export default function HomeScreen() {
     } else {
       setIsLoading(false);
     }
-  }, [user]);
+  }, [user, activeBabyId]);
 
   // Funktion für Pull-to-Refresh
   const onRefresh = async () => {
@@ -489,11 +491,11 @@ export default function HomeScreen() {
       }
 
       // Baby-Informationen laden
-      const { data: babyData } = await getBabyInfo();
+      const { data: babyData } = await getBabyInfo(activeBabyId ?? undefined);
       setBabyInfo(babyData);
 
       // Tagebucheinträge laden (nur die neuesten 5)
-      const { data: diaryData } = await getDiaryEntries();
+      const { data: diaryData } = await getDiaryEntries(activeBabyId ?? undefined);
       if (diaryData) {
         setDiaryEntries(diaryData.slice(0, 5));
       }
@@ -505,12 +507,17 @@ export default function HomeScreen() {
       const endOfDay = new Date(today);
       endOfDay.setHours(23, 59, 59, 999);
 
-      const { data: dailyData, error: dailyError } = await supabase
+      let dailyQuery = supabase
         .from('baby_care_entries')
         .select('*')
         .gte('start_time', startOfDay.toISOString())
-        .lte('start_time', endOfDay.toISOString())
-        .order('start_time', { ascending: false });
+        .lte('start_time', endOfDay.toISOString());
+
+      if (activeBabyId) {
+        dailyQuery = dailyQuery.eq('baby_id', activeBabyId);
+      }
+
+      const { data: dailyData, error: dailyError } = await dailyQuery.order('start_time', { ascending: false });
 
       if (!dailyError && dailyData) {
         setDailyEntries(dailyData);
@@ -627,12 +634,17 @@ export default function HomeScreen() {
       console.log('Loading daily entries for date:', today.toISOString());
 
       // Direct query to baby_care_entries table to ensure fresh data
-      const { data: dailyData, error } = await supabase
+      let dailyQuery = supabase
         .from('baby_care_entries')
         .select('*')
         .gte('start_time', startOfDay.toISOString())
-        .lte('start_time', endOfDay.toISOString())
-        .order('start_time', { ascending: false });
+        .lte('start_time', endOfDay.toISOString());
+
+      if (activeBabyId) {
+        dailyQuery = dailyQuery.eq('baby_id', activeBabyId);
+      }
+
+      const { data: dailyData, error } = await dailyQuery.order('start_time', { ascending: false });
 
       if (error) {
         console.error('Error loading daily entries:', error);
@@ -664,11 +676,17 @@ export default function HomeScreen() {
         `and(start_time.lte.${endIso},end_time.gte.${startIso})`
       ].join(',');
 
-      const { data, error } = await supabase
+      let sleepQuery = supabase
         .from('sleep_entries')
         .select('start_time,end_time')
         .eq('user_id', user.id)
         .or(overlapFilter);
+
+      if (activeBabyId) {
+        sleepQuery = sleepQuery.eq('baby_id', activeBabyId);
+      }
+
+      const { data, error } = await sleepQuery;
 
       if (error || !data) {
         console.error('Error loading sleep entries for today:', error);
@@ -714,7 +732,7 @@ export default function HomeScreen() {
       feeding_volume_ml: payload.feeding_volume_ml ?? null,
       feeding_side: payload.feeding_side ?? null,
       diaper_type: payload.diaper_type ?? null,
-    });
+    }, activeBabyId ?? undefined);
 
     if (error) {
       console.error('Error saving baby care entry:', error);
@@ -738,6 +756,7 @@ export default function HomeScreen() {
     try {
       const payload = {
         user_id: user.id,
+        baby_id: activeBabyId ?? null,
         start_time: entry.start.toISOString(),
         end_time: entry.end ? entry.end.toISOString() : null,
         quality: entry.quality,

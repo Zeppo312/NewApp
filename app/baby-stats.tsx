@@ -6,6 +6,7 @@ import { ThemedBackground } from '@/components/ThemedBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/contexts/AuthContext';
+import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { getBabyInfo, BabyInfo } from '@/lib/baby';
 import { Stack } from 'expo-router';
 import Header from '@/components/Header';
@@ -66,6 +67,7 @@ export default function BabyStatsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const { user } = useAuth();
+  const { activeBabyId } = useActiveBaby();
   const navigation = useNavigation();
   const [babyInfo, setBabyInfo] = useState<BabyInfo>({});
   const [isLoading, setIsLoading] = useState(true);
@@ -152,12 +154,12 @@ export default function BabyStatsScreen() {
     } else {
       setIsLoading(false);
     }
-  }, [user]);
+  }, [user, activeBabyId]);
 
   const loadBabyInfo = async () => {
     try {
       setIsLoading(true);
-      const { data, error } = await getBabyInfo();
+      const { data, error } = await getBabyInfo(activeBabyId ?? undefined);
       if (error) {
         console.error('Error loading baby info:', error);
       } else if (data) {
