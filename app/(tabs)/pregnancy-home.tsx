@@ -1146,9 +1146,9 @@ export default function PregnancyHomeScreen() {
                 onPress={() => router.push('/baby-names' as any)}
                 activeOpacity={0.9}
               >
-                <BlurView 
-                  intensity={24} 
-                  tint={colorScheme === 'dark' ? 'dark' : 'light'} 
+                <BlurView
+                  intensity={24}
+                  tint={colorScheme === 'dark' ? 'dark' : 'light'}
                   style={styles.liquidGlassCardBackground}
                 >
                   <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(200, 225, 255, 0.6)', borderColor: 'rgba(255, 255, 255, 0.35)' }]}>
@@ -1157,6 +1157,46 @@ export default function PregnancyHomeScreen() {
                     </View>
                     <ThemedText style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: '#7D5A50', fontWeight: '700' }]}>Babynamen</ThemedText>
                     <ThemedText style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: '#7D5A50', fontWeight: '500' }]}>Finde den perfekten Namen</ThemedText>
+                  </View>
+                </BlurView>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.liquidGlassCardWrapper}
+                onPress={() => router.push('/mini-wiki' as any)}
+                activeOpacity={0.9}
+              >
+                <BlurView
+                  intensity={24}
+                  tint={colorScheme === 'dark' ? 'dark' : 'light'}
+                  style={styles.liquidGlassCardBackground}
+                >
+                  <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(255, 235, 200, 0.6)', borderColor: 'rgba(255, 255, 255, 0.35)' }]}>
+                    <View style={[styles.iconContainer, { backgroundColor: 'rgba(255, 200, 120, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
+                      <IconSymbol name="book.fill" size={28} color="#FFFFFF" />
+                    </View>
+                    <ThemedText style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: '#7D5A50', fontWeight: '700' }]}>Mini-Wiki</ThemedText>
+                    <ThemedText style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: '#7D5A50', fontWeight: '500' }]}>Wissen & Tipps</ThemedText>
+                  </View>
+                </BlurView>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.liquidGlassCardWrapper}
+                onPress={() => router.push('/(tabs)/weight-tracker')}
+                activeOpacity={0.9}
+              >
+                <BlurView
+                  intensity={24}
+                  tint={colorScheme === 'dark' ? 'dark' : 'light'}
+                  style={styles.liquidGlassCardBackground}
+                >
+                  <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(200, 240, 200, 0.6)', borderColor: 'rgba(255, 255, 255, 0.35)' }]}>
+                    <View style={[styles.iconContainer, { backgroundColor: 'rgba(130, 210, 130, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
+                      <IconSymbol name="chart.line.uptrend.xyaxis" size={28} color="#FFFFFF" />
+                    </View>
+                    <ThemedText style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: '#7D5A50', fontWeight: '700' }]}>Gewichtskurve</ThemedText>
+                    <ThemedText style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: '#7D5A50', fontWeight: '500' }]}>Gewicht tracken</ThemedText>
                   </View>
                 </BlurView>
               </TouchableOpacity>

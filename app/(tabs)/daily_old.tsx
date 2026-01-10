@@ -45,6 +45,8 @@ import { DebugPanel } from '@/components/DebugPanel';
 
 import { BlurView } from 'expo-blur';
 import { GlassCard, LiquidGlassCard, LAYOUT_PAD, SECTION_GAP_TOP, SECTION_GAP_BOTTOM, PRIMARY, GLASS_OVERLAY, GLASS_BORDER } from '@/constants/DesignGuide';
+import { useNotifications } from '@/hooks/useNotifications';
+import { usePartnerNotifications } from '@/hooks/usePartnerNotifications';
 
 // Design Tokens now imported from DesignGuide
 
@@ -188,6 +190,15 @@ export default function DailyScreen() {
   // Scroll animation for quick actions
   const quickActionsScrollRef = useRef<FlatList>(null);
   const scrollAnimation = useRef(new Animated.Value(0)).current;
+
+  // Notification hooks
+  const { requestPermissions } = useNotifications();
+  const { isPartnerLinked } = usePartnerNotifications();
+
+  // Request notification permissions on mount
+  useEffect(() => {
+    requestPermissions();
+  }, [requestPermissions]);
 
   useEffect(() => {
     if (!isReady || !activeBabyId) return;

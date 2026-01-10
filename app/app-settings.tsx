@@ -13,6 +13,12 @@ import { deleteUserAccount, deleteUserData } from '@/lib/profile';
 import Header from '@/components/Header';
 import { LiquidGlassCard, GLASS_OVERLAY, LAYOUT_PAD } from '@/constants/DesignGuide';
 
+// Admin emails - nur diese User sehen Debug Tools
+const ADMIN_EMAILS = [
+  'jan.zepp1999@gmail.com',
+  'anyhelptoolate@gmail.com',
+];
+
 export default function AppSettingsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
@@ -24,6 +30,9 @@ export default function AppSettingsScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isDeletingData, setIsDeletingData] = useState(false);
+
+  // Check if current user is admin
+  const isAdmin = user?.email ? ADMIN_EMAILS.includes(user.email) : false;
 
   // no extra width logic; match "Mehr" padding rhythm via ScrollView
 
@@ -319,6 +328,29 @@ export default function AppSettingsScreen() {
                       </View>
                     </TouchableOpacity>
                   </LiquidGlassCard>
+
+                  {/* Debug Tools - nur für Admins */}
+                  {isAdmin && (
+                    <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
+                      <ThemedText style={styles.sectionTitle}>🐛 Debug Tools (Admin)</ThemedText>
+
+                      <TouchableOpacity
+                        style={styles.rowItem}
+                        onPress={() => router.push('/debug-notifications')}
+                      >
+                        <View style={styles.rowIcon}>
+                          <ThemedText style={{ fontSize: 24 }}>🔔</ThemedText>
+                        </View>
+                        <View style={styles.rowContent}>
+                          <ThemedText style={styles.rowTitle}>Debug Notifications</ThemedText>
+                          <ThemedText style={styles.rowDescription}>Benachrichtigungen testen und debuggen</ThemedText>
+                        </View>
+                        <View style={styles.trailing}>
+                          <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
+                        </View>
+                      </TouchableOpacity>
+                    </LiquidGlassCard>
+                  )}
                 </>
               ) : (
                 <LiquidGlassCard style={[styles.sectionCard, styles.errorContainerGlass]} intensity={26} overlayColor={GLASS_OVERLAY}>

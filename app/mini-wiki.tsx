@@ -88,14 +88,14 @@ export default function MiniWikiScreen() {
         // Kategorien mit "Alle Artikel" und "Favoriten" erweitern
         const allCategories: Category[] = [
           { id: 'all', name: 'Alle Artikel', icon: 'doc.text.fill', isAll: true },
-          ...categoriesData,
+          ...(categoriesData || []),
           { id: 'favorites', name: 'Favoriten', icon: 'star.fill', isFavorites: true }
         ];
 
         // Artikel mit Kategorienamen anreichern
-        const articlesWithCategories = articlesData.map(article => ({
+        const articlesWithCategories = (articlesData || []).map(article => ({
           ...article,
-          category: categoriesData.find(cat => cat.id === article.category_id)?.name || '',
+          category: (categoriesData || []).find(cat => cat.id === article.category_id)?.name || '',
           readingTime: article.reading_time
         }));
 

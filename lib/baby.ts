@@ -138,7 +138,7 @@ export const listBabies = async () => {
   }
 };
 
-export const getBabyInfo = async (babyId: string) => {
+export const getBabyInfo = async (babyId?: string) => {
   try {
     if (!babyId) {
       return { data: null, error: new Error('No babyId provided') };

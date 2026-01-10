@@ -1067,7 +1067,7 @@ export default function BabyNamesScreen() {
       <LiquidGlassCard
         style={[styles.fullWidthCard, styles.glassCard]}
         intensity={26}
-        overlayColor={genderOverlay(item.gender)}
+        overlayColor={genderOverlay(item.gender ?? undefined)}
         borderColor={'rgba(255,255,255,0.7)'}
       >
         <View style={styles.nameItemInner}>

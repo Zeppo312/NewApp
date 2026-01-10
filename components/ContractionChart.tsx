@@ -244,7 +244,7 @@ const ContractionChart: React.FC<ContractionChartProps> = ({
                     onPress={() => {
                       setTooltipData({
                         time: formatTime(contraction.startTime),
-                        duration: formatDuration(contraction.duration),
+                        duration: formatDuration(contraction.duration ?? 0),
                         x: barLeft + barWidth / 2,
                         y: 30, // Position über dem Balken
                       });
@@ -330,7 +330,7 @@ const ContractionChart: React.FC<ContractionChartProps> = ({
                         isNewDay && styles.newDayMarkerLabel
                       ]}
                     >
-                      {formatTime(markerTime, isNewDay)}
+                      {formatTime(markerTime, isNewDay ?? false)}
                     </Text>
                   )}
                 </View>

@@ -498,7 +498,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
                 ) : recipeOptions.map((recipe) => {
                   const isSelected = selectedRecipeId === recipe.id;
                   const displayTitle = recipe.title?.trim() || 'Rezept';
-                  const subtitle = recipe.min_months ? `${recipe.min_months}+ Monate` : recipe.source === 'sample' ? 'Sample' : '';
+                  const subtitle = recipe.minMonths ? `${recipe.minMonths}+ Monate` : recipe.source === 'sample' ? 'Sample' : '';
                   return (
                     <TouchableOpacity
                       key={recipe.id}

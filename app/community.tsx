@@ -153,7 +153,7 @@ export default function CommunityScreen() {
       return;
     }
 
-    setCurrentUserName(displayNameForProfile(profile));
+    setCurrentUserName(displayNameForProfile(profile ?? undefined));
     setIsAdmin(profile?.is_admin === true);
   }, [user?.id]);
 

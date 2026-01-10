@@ -120,14 +120,38 @@ export async function savePushToken(token: string) {
 // Navigiere zur entsprechenden Ansicht basierend auf dem Benachrichtigungstyp
 export function navigateToNotificationTarget(type: string, referenceId: string) {
   console.log(`Navigiere zu: Typ=${type}, ID=${referenceId}`);
-  
+
   try {
     switch (type) {
+      // Partner notification types
+      case 'sleep_window_reminder':
+        // Navigate to sleep tracker when sleep window is starting
+        router.push('/(tabs)/sleep-tracker' as any);
+        break;
+
+      case 'partner_sleep':
+        // Navigate to sleep tracker with optional entry ID
+        router.push({
+          pathname: '/(tabs)/sleep-tracker',
+          params: referenceId ? { entryId: referenceId } : {}
+        } as any);
+        break;
+
+      case 'partner_feeding':
+      case 'partner_diaper':
+        // Navigate to daily screen with optional entry ID
+        router.push({
+          pathname: '/(tabs)/daily_old',
+          params: referenceId ? { entryId: referenceId } : {}
+        } as any);
+        break;
+
+      // Community notification types
       case 'message':
         // Öffne den Chat mit dieser Nachricht
         router.push(`/chat/${referenceId}` as any);
         break;
-        
+
       case 'like_post':
       case 'comment':
         // Navigiere zum Beitrag
@@ -136,21 +160,22 @@ export function navigateToNotificationTarget(type: string, referenceId: string) 
           params: { post: referenceId }
         } as any);
         break;
-        
+
       case 'follow':
         // Bei Follow-Benachrichtigungen zum Profil des Followers navigieren
         router.push(`/profile/${referenceId}` as any);
         break;
-        
+
       case 'like_comment':
       case 'reply':
       case 'like_nested_comment':
         // Bei Kommentar-Aktionen, erst den Eltern-Post finden
         findParentPostAndNavigate(referenceId);
         break;
-        
+
       default:
         // Standardmäßig zur Community-Ansicht
+        console.log('Unknown notification type:', type);
         router.push('/community' as any);
     }
   } catch (error) {

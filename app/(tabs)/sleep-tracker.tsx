@@ -42,6 +42,9 @@ import { getBabyInfo } from '@/lib/baby';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { predictNextSleepWindow, updatePersonalizationAfterNap, type SleepWindowPrediction } from '@/lib/sleep-window';
 import { markPaywallShown, shouldShowPaywall } from '@/lib/paywall';
+import { useNotifications } from '@/hooks/useNotifications';
+import { usePartnerNotifications } from '@/hooks/usePartnerNotifications';
+import { useSleepWindowNotifications } from '@/hooks/useSleepWindowNotifications';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -254,6 +257,11 @@ export default function SleepTrackerScreen() {
   const [predictionError, setPredictionError] = useState<string | null>(null);
   const predictionRef = useRef<SleepWindowPrediction | null>(null);
 
+  // Notification hooks
+  const { requestPermissions } = useNotifications();
+  const { isPartnerLinked } = usePartnerNotifications();
+  useSleepWindowNotifications(sleepPrediction);
+
   // Bei Tabwechsel Offsets zurücksetzen
   useEffect(() => {
     setWeekOffset(0);
@@ -359,6 +367,11 @@ export default function SleepTrackerScreen() {
   useEffect(() => {
     loadSleepData();
   }, [activeBabyId]);
+
+  // Request notification permissions on mount
+  useEffect(() => {
+    requestPermissions();
+  }, [requestPermissions]);
 
   // Lade die aktuelle Partner-ID (aus account_links) für neue Einträge
   const refreshPartnerId = useCallback(async () => {

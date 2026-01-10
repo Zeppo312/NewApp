@@ -570,7 +570,7 @@ export default function LottisEmpfehlungenScreen() {
             const offset = info.averageItemLength * info.index;
             listRef.current?.scrollToOffset({ offset, animated: true });
           }}
-          renderItem={({ item, index, drag, isActive }: RenderItemParams<LottiRecommendation>) => (
+          renderItem={({ item, drag, isActive, getIndex }: RenderItemParams<LottiRecommendation>) => (
             <ScaleDecorator>
               <WiggleView enabled={isAdmin && isReordering && !isActive}>
                 <TouchableOpacity
@@ -583,7 +583,7 @@ export default function LottisEmpfehlungenScreen() {
                   }}
                   style={isActive ? styles.draggingCard : undefined}
                 >
-                  {renderRecommendationCard(item, index)}
+                  {renderRecommendationCard(item, getIndex() ?? 0)}
                 </TouchableOpacity>
               </WiggleView>
             </ScaleDecorator>

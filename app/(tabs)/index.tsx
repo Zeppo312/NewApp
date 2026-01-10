@@ -670,7 +670,7 @@ export default function HomeScreen() {
 
       if (data) {
         // Konvertieren der Supabase-Daten in das lokale Format
-        const formattedContractions: Contraction[] = data.map(c => ({
+        const formattedContractions: Contraction[] = data.map((c: any) => ({
           id: c.id,
           startTime: new Date(c.start_time),
           endTime: c.end_time ? new Date(c.end_time) : null,
@@ -1188,7 +1188,7 @@ export default function HomeScreen() {
               </View>
 
               {linkedUsers.length > 0 && (
-                <LiquidGlassCard style={[styles.infoGlass, styles.fullWidthCard]} intensity={26} overlayColor={GLASS_OVERLAY}>
+                <LiquidGlassCard style={styles.fullWidthCard} intensity={26} overlayColor={GLASS_OVERLAY}>
                   <View style={{ padding: 12 }}>
                     <ThemedText style={styles.syncInfoText} lightColor="#5C4033" darkColor="#F2E6DD">
                       Deine Wehen werden automatisch mit {linkedUsers.map(user => user.firstName).join(', ')} synchronisiert.

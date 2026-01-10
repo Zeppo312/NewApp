@@ -51,7 +51,7 @@ export default function FaqScreen() {
         // Kategorien mit "Alle Fragen" erweitern
         const allCategories: Category[] = [
           { id: 'all', name: 'Alle Fragen', icon: 'doc.text.fill', isAll: true },
-          ...categoriesData
+          ...(categoriesData || [])
         ];
 
         setCategories(allCategories);
