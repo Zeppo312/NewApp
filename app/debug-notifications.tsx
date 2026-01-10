@@ -34,19 +34,37 @@ export default function DebugNotificationsScreen() {
     addLog('Checking database notifications...');
     const { data: userData } = await supabase.auth.getUser();
 
-    const { data, error } = await supabase
+    // Check notifications FOR me (from partner)
+    const { data: forMe, error: error1 } = await supabase
       .from('partner_activity_notifications')
       .select('*')
       .eq('user_id', userData?.user?.id || '')
       .order('created_at', { ascending: false })
       .limit(5);
 
-    if (error) {
-      addLog(`ERROR: ${error.message}`);
+    if (error1) {
+      addLog(`ERROR getting notifications FOR me: ${error1.message}`);
     } else {
-      addLog(`Found ${data?.length || 0} notifications in DB`);
-      data?.forEach(n => {
-        addLog(`- ${n.activity_type} (read: ${n.is_read})`);
+      addLog(`📥 FOR ME (from partner): ${forMe?.length || 0} notifications`);
+      forMe?.forEach(n => {
+        addLog(`  - ${n.activity_type} (read: ${n.is_read}, id: ${n.id.substring(0, 8)})`);
+      });
+    }
+
+    // Check notifications FOR partner (created by me)
+    const { data: byMe, error: error2 } = await supabase
+      .from('partner_activity_notifications')
+      .select('*')
+      .eq('partner_id', userData?.user?.id || '')
+      .order('created_at', { ascending: false })
+      .limit(5);
+
+    if (error2) {
+      addLog(`ERROR getting notifications BY me: ${error2.message}`);
+    } else {
+      addLog(`📤 BY ME (for partner): ${byMe?.length || 0} notifications`);
+      byMe?.forEach(n => {
+        addLog(`  - ${n.activity_type} (read: ${n.is_read}, id: ${n.id.substring(0, 8)})`);
       });
     }
   };
@@ -84,6 +102,190 @@ export default function DebugNotificationsScreen() {
     }
   };
 
+  const testPushTokens = async () => {
+    addLog('Checking push token registration...');
+    const { data: userData } = await supabase.auth.getUser();
+
+    if (!userData?.user) {
+      addLog('❌ ERROR: Not logged in');
+      return;
+    }
+
+    const currentUserId = userData.user.id;
+    addLog(`Current User: ${currentUserId.substring(0, 8)}...`);
+
+    // Check current user's tokens
+    const { data: myTokens, error: myError } = await supabase
+      .from('user_push_tokens')
+      .select('*')
+      .eq('user_id', currentUserId);
+
+    if (myError) {
+      addLog(`❌ ERROR: ${myError.message}`);
+      return;
+    }
+
+    if (!myTokens || myTokens.length === 0) {
+      addLog('⚠️ No push tokens registered for you');
+      addLog('The app should register a token on startup');
+      addLog('Try restarting the app');
+    } else {
+      addLog(`✅ Found ${myTokens.length} push token(s):`);
+      myTokens.forEach((token, i) => {
+        addLog(`  ${i + 1}. Device: ${token.device_type || 'unknown'}`);
+        addLog(`     Token: ${token.token.substring(0, 40)}...`);
+        addLog(`     Created: ${new Date(token.created_at).toLocaleString()}`);
+      });
+    }
+
+    // Check partner's tokens
+    const partnerId = await getPartnerId();
+    if (partnerId) {
+      addLog('');
+      addLog(`Partner: ${partnerId.substring(0, 8)}...`);
+
+      const { data: partnerTokens, error: partnerError } = await supabase
+        .from('user_push_tokens')
+        .select('*')
+        .eq('user_id', partnerId);
+
+      if (partnerError) {
+        addLog(`❌ ERROR: ${partnerError.message}`);
+      } else if (!partnerTokens || partnerTokens.length === 0) {
+        addLog('⚠️ Partner has no push tokens registered');
+      } else {
+        addLog(`✅ Partner has ${partnerTokens.length} push token(s)`);
+      }
+    }
+  };
+
+  const testPushNotificationChain = async () => {
+    addLog('🧪 STARTING FULL PUSH NOTIFICATION CHAIN TEST');
+    addLog('================================================');
+
+    const { data: userData } = await supabase.auth.getUser();
+    const currentUserId = userData?.user?.id;
+
+    if (!currentUserId) {
+      addLog('❌ ERROR: Not logged in');
+      return;
+    }
+
+    addLog(`✓ Current User ID: ${currentUserId.substring(0, 8)}...`);
+
+    // Step 1: Check if user has a partner
+    addLog('');
+    addLog('STEP 1: Checking partner link...');
+    const partnerId = await getPartnerId();
+
+    if (!partnerId) {
+      addLog('❌ ERROR: No partner linked!');
+      addLog('You need to link with a partner first');
+      return;
+    }
+
+    addLog(`✓ Partner ID: ${partnerId.substring(0, 8)}...`);
+
+    // Step 2: Check if user has push tokens registered
+    addLog('');
+    addLog('STEP 2: Checking push tokens...');
+    const { data: myTokens } = await supabase
+      .from('user_push_tokens')
+      .select('token, device_type')
+      .eq('user_id', currentUserId);
+
+    if (!myTokens || myTokens.length === 0) {
+      addLog('⚠️ WARNING: No push tokens found for current user');
+      addLog('Open the app on your device to register a token');
+    } else {
+      addLog(`✓ Found ${myTokens.length} push token(s) for current user`);
+      myTokens.forEach((t, i) => {
+        addLog(`  Token ${i + 1}: ${t.token.substring(0, 30)}... (${t.device_type})`);
+      });
+    }
+
+    // Step 3: Check partner's push tokens
+    addLog('');
+    addLog('STEP 3: Checking partner push tokens...');
+    const { data: partnerTokens } = await supabase
+      .from('user_push_tokens')
+      .select('token, device_type')
+      .eq('user_id', partnerId);
+
+    if (!partnerTokens || partnerTokens.length === 0) {
+      addLog('⚠️ WARNING: Partner has no push tokens');
+      addLog('Partner needs to open the app to register');
+    } else {
+      addLog(`✓ Partner has ${partnerTokens.length} push token(s)`);
+    }
+
+    // Step 4: Create a test sleep entry (triggers notification for partner)
+    addLog('');
+    addLog('STEP 4: Creating test sleep entry...');
+    const { data: sleepEntry, error: sleepError } = await supabase
+      .from('sleep_entries')
+      .insert({
+        user_id: currentUserId,
+        start_time: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    if (sleepError) {
+      addLog(`❌ ERROR creating sleep entry: ${sleepError.message}`);
+      return;
+    }
+
+    addLog(`✓ Created sleep entry: ${sleepEntry.id.substring(0, 8)}...`);
+
+    // Step 5: Wait and check if notification was created
+    addLog('');
+    addLog('STEP 5: Waiting for trigger to create notification...');
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    const { data: notifications, error: notifError } = await supabase
+      .from('partner_activity_notifications')
+      .select('*')
+      .eq('entry_id', sleepEntry.id)
+      .eq('user_id', partnerId);
+
+    if (notifError) {
+      addLog(`❌ ERROR checking notifications: ${notifError.message}`);
+      return;
+    }
+
+    if (!notifications || notifications.length === 0) {
+      addLog('❌ ERROR: No notification created by trigger!');
+      addLog('Check database trigger logs');
+      return;
+    }
+
+    addLog(`✓ Notification created: ${notifications[0].id.substring(0, 8)}...`);
+    addLog(`  Activity: ${notifications[0].activity_type}`);
+    addLog(`  For user: ${notifications[0].user_id.substring(0, 8)}...`);
+
+    // Step 6: Check Edge Function logs (if accessible)
+    addLog('');
+    addLog('STEP 6: Checking Edge Function execution...');
+    addLog('⚠️ Check Supabase Dashboard > Edge Functions > Logs');
+    addLog('   to see if webhook was triggered');
+
+    // Step 7: Summary
+    addLog('');
+    addLog('================================================');
+    addLog('✅ TEST COMPLETE');
+    addLog('');
+    addLog('What should happen:');
+    addLog('1. Partner should receive push notification');
+    addLog('2. Notification should appear even if app is closed');
+    addLog('3. Check partner device for notification');
+    addLog('');
+    addLog('If partner did NOT receive notification:');
+    addLog('- Check Supabase Edge Function logs');
+    addLog('- Verify partner has push tokens registered');
+    addLog('- Check app notification permissions');
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView style={styles.content}>
@@ -99,6 +301,17 @@ export default function DebugNotificationsScreen() {
         </View>
 
         <View style={styles.buttons}>
+          <TouchableOpacity
+            style={[styles.button, styles.primaryButton]}
+            onPress={testPushNotificationChain}
+          >
+            <Text style={styles.buttonText}>🧪 TEST PUSH NOTIFICATION CHAIN</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.button} onPress={testPushTokens}>
+            <Text style={styles.buttonText}>📱 Check Push Tokens</Text>
+          </TouchableOpacity>
+
           <TouchableOpacity style={styles.button} onPress={testPartnerLink}>
             <Text style={styles.buttonText}>1. Test Partner Link</Text>
           </TouchableOpacity>
@@ -170,6 +383,10 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 8,
     marginBottom: 8,
+  },
+  primaryButton: {
+    backgroundColor: '#E94560',
+    marginBottom: 16,
   },
   clearButton: {
     backgroundColor: '#666',

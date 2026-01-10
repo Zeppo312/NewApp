@@ -17,6 +17,7 @@ import { ActiveBabyProvider } from '@/contexts/ActiveBabyContext';
 import { ThemeProvider as AppThemeProvider } from '@/contexts/ThemeContext';
 import { NavigationProvider } from '@/contexts/NavigationContext';
 import { checkForNewNotifications, registerBackgroundNotificationTask, BACKGROUND_NOTIFICATION_TASK } from '@/lib/notificationService';
+import { useNotifications } from '@/hooks/useNotifications';
 
 // Importieren der Meilenstein-Task-Definition
 import { defineMilestoneCheckerTask } from '@/tasks/milestoneCheckerTask';
@@ -73,15 +74,22 @@ function RootLayoutNav() {
   const colorScheme = useColorScheme();
   const { loading, user } = useAuth();
   const [initialRoute, setInitialRoute] = useState<string | null>(null);
+  const { requestPermissions } = useNotifications();
 
-  // Registriere den Benachrichtigungs-Hintergrundtask, wenn der Benutzer angemeldet ist
+  // Registriere Push-Notifications und Hintergrundtask, wenn der Benutzer angemeldet ist
   useEffect(() => {
     if (user) {
+      // Push-Token registrieren für Remote-Notifications
+      requestPermissions().catch(error => {
+        console.error('Fehler beim Registrieren von Push-Notifications:', error);
+      });
+
+      // Hintergrundtask registrieren (für Polling, falls nötig)
       registerBackgroundNotificationTask().catch(error => {
         console.error('Fehler beim Registrieren des Benachrichtigungs-Hintergrundtasks:', error);
       });
     }
-  }, [user]);
+  }, [user, requestPermissions]);
 
   // Wir verwenden jetzt die index.tsx Datei als Einstiegspunkt, die die Weiterleitung basierend auf dem Auth-Status übernimmt
   useEffect(() => {
