@@ -28,7 +28,7 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { createRecipe, fetchRecipes, RecipeRecord } from '@/lib/recipes';
 import { getSampleRecipeImage, RECIPE_SAMPLES, RecipeSample } from '@/lib/recipes-samples';
 import { isUserAdmin } from '@/lib/supabase/recommendations';
-import { useBabyStatus } from '@/contexts/BabyStatusContext';
+import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 
 type AllergenId = 'milk' | 'gluten' | 'egg' | 'nuts' | 'fish';
 
@@ -120,7 +120,7 @@ const parseInstructionSteps = (value: string) => {
 const RecipeGeneratorScreen = () => {
   const router = useRouter();
   const colorScheme = useColorScheme() ?? 'light';
-  const { babyAgeMonths } = useBabyStatus();
+  const { activeBaby, activeBabyId } = useActiveBaby();
 
   const [recipes, setRecipes] = useState<RecipeRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -192,9 +192,23 @@ const RecipeGeneratorScreen = () => {
     loadRecipes();
   }, [loadRecipes]);
 
+  // Berechne das Alter des aktiven Babys in Monaten
   useEffect(() => {
-    setAgeMonths(clampFilterAgeMonths(babyAgeMonths));
-  }, [babyAgeMonths]);
+    if (activeBaby?.birth_date) {
+      const birthDate = new Date(activeBaby.birth_date);
+      if (!Number.isNaN(birthDate.getTime())) {
+        const today = new Date();
+        const months = Math.floor(
+          (today.getTime() - birthDate.getTime()) / (1000 * 60 * 60 * 24 * 30.44)
+        );
+        const calculatedAge = Math.max(0, months);
+        setAgeMonths(clampFilterAgeMonths(calculatedAge));
+        return;
+      }
+    }
+    // Fallback auf 0 wenn kein Geburtsdatum vorhanden
+    setAgeMonths(FILTER_AGE_LIMITS.min);
+  }, [activeBabyId, activeBaby?.birth_date]);
 
   useEffect(() => {
     let isMounted = true;
