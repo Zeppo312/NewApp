@@ -34,6 +34,7 @@ interface ActivityInputModalProps {
   date?: Date;
   onClose: () => void;
   onSave: (data: any, options?: { startTimer?: boolean }) => void; // data ist DB-ready für baby_care_entries
+  onDelete?: (id: string) => void; // Optional: Nur wenn ein Eintrag bearbeitet wird
   initialData?: Partial<{
     id: string;
     feeding_type: 'BREAST' | 'BOTTLE' | 'SOLIDS';
@@ -59,6 +60,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   date,
   onClose,
   onSave,
+  onDelete,
   initialData,
 }) => {
   // Theme und Farben
@@ -226,6 +228,13 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
 
     console.log('ActivityInputModal - Sending payload:', JSON.stringify(payload, null, 2));
     onSave(payload, { startTimer });
+    onClose();
+  };
+
+  // Löschen: Nur bei Bearbeitung verfügbar
+  const handleDelete = () => {
+    if (!initialData?.id || !onDelete) return;
+    onDelete(initialData.id);
     onClose();
   };
 
@@ -657,6 +666,17 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
                         {activityType === 'diaper' && renderDiaperSection()}
                         {renderTimeSection()}
                         {renderNotes()}
+
+                        {/* Löschen-Button nur beim Bearbeiten anzeigen */}
+                        {initialData?.id && onDelete && (
+                          <TouchableOpacity
+                            style={styles.deleteButton}
+                            onPress={handleDelete}
+                            activeOpacity={0.85}
+                          >
+                            <Text style={styles.deleteButtonText}>🗑️  Eintrag löschen</Text>
+                          </TouchableOpacity>
+                        )}
                     </View>
                 </TouchableWithoutFeedback>
             </ScrollView>
@@ -1107,6 +1127,29 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(240, 240, 240, 0.9)',
     width: '100%',
     marginTop: 10,
+  },
+  deleteButton: {
+    width: '90%',
+    marginTop: 30,
+    marginBottom: 20,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 107, 107, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 107, 107, 0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#FF6B6B',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  deleteButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#D63031',
   },
 });
 

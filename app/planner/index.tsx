@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { SafeAreaView, ScrollView, StyleSheet, TouchableOpacity, View, Text, Dimensions } from 'react-native';
+import { SafeAreaView, ScrollView, StyleSheet, TouchableOpacity, View, Text, Dimensions, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import Header from '@/components/Header';
@@ -17,6 +17,7 @@ import * as Haptics from 'expo-haptics';
 import { useAuth } from '@/contexts/AuthContext';
 import { getLinkedUsers, supabase } from '@/lib/supabase';
 import { GlassCard, LiquidGlassCard } from '@/constants/DesignGuide';
+import { BabyInfo, listBabies } from '@/lib/baby';
 
 function formatDateHeader(d: Date) {
   return new Intl.DateTimeFormat('de-DE', { weekday: 'long', day: '2-digit', month: 'short' }).format(d);
@@ -93,6 +94,7 @@ export default function PlannerScreen() {
   });
   const [selectedTab, setSelectedTab] = useState<'day' | 'week' | 'month'>('day');
   const [linkedUsers, setLinkedUsers] = useState<LinkedUser[]>([]);
+  const [babies, setBabies] = useState<BabyInfo[]>([]);
 
   const {
     blocks,
@@ -143,12 +145,64 @@ export default function PlannerScreen() {
     return map;
   }, [ownerOptions]);
 
+  const babyOptions = useMemo(() => {
+    return babies.map((baby) => ({
+      id: baby.id ?? '',
+      label: baby.name ?? 'Baby',
+    })).filter((opt) => opt.id.length > 0);
+  }, [babies]);
+
   const getOwnerLabel = useCallback(
     (ownerId?: string) => {
       if (!ownerId) return undefined;
       return ownerLabelById[ownerId] ?? 'Partner';
     },
     [ownerLabelById],
+  );
+
+  const getAssigneeLabel = useCallback(
+    (assignee?: string, babyId?: string, ownerId?: string) => {
+      if (!assignee) return undefined;
+
+      if (assignee === 'me') {
+        return 'Ich';
+      }
+
+      if (assignee === 'partner') {
+        const partnerUser = linkedUsers.find((u) => u.userId !== user?.id);
+        if (partnerUser) {
+          return displayNameForLinkedUser(partnerUser, 0);
+        }
+        return 'Partner';
+      }
+
+      if (assignee === 'child' && babyId) {
+        const baby = babies.find((b) => b.id === babyId);
+        return baby?.name ?? 'Kind';
+      }
+
+      if (assignee === 'child') {
+        return 'Kind';
+      }
+
+      if (assignee === 'family') {
+        return 'Familie';
+      }
+
+      return undefined;
+    },
+    [linkedUsers, babies, user?.id],
+  );
+
+  const getDisplayAssigneeLabel = useCallback(
+    (assignee?: string, babyId?: string, ownerId?: string) => {
+      const assigneeLabel = getAssigneeLabel(assignee, babyId, ownerId);
+      if (assigneeLabel && assigneeLabel !== 'Ich') return assigneeLabel;
+      const ownerLabel = getOwnerLabel(ownerId);
+      if (ownerLabel && ownerLabel !== 'Ich') return ownerLabel;
+      return undefined;
+    },
+    [getAssigneeLabel, getOwnerLabel],
   );
 
   useEffect(() => {
@@ -183,6 +237,31 @@ export default function PlannerScreen() {
       } catch (err) {
         console.error('Planner: failed to load linked users', err);
         if (active) setLinkedUsers([]);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [user?.id]);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      if (!user?.id) {
+        if (active) setBabies([]);
+        return;
+      }
+      try {
+        const result = await listBabies();
+        if (!active) return;
+        if (result?.data && Array.isArray(result.data)) {
+          setBabies(result.data);
+        } else {
+          setBabies([]);
+        }
+      } catch (err) {
+        console.error('Planner: failed to load babies', err);
+        if (active) setBabies([]);
       }
     })();
     return () => {
@@ -299,7 +378,7 @@ export default function PlannerScreen() {
         const { data: itemRows, error: itemError } = await supabase
           .from('planner_items')
           .select(
-            'id,user_id,day_id,entry_type,title,completed,assignee,notes,location,due_at,start_at,end_at,created_at,updated_at,planner_days!inner(day)',
+            'id,user_id,day_id,entry_type,title,completed,assignee,baby_id,notes,location,due_at,start_at,end_at,created_at,updated_at,planner_days!inner(day)',
           )
           .in('user_id', ownerIds)
           .gte('planner_days.day', startIso)
@@ -415,6 +494,28 @@ export default function PlannerScreen() {
     setEditingItem(null);
   };
 
+  const handleDeleteItem = async (id: string) => {
+    if (!user?.id) return;
+
+    try {
+      const { error } = await supabase
+        .from('planner_items')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', user.id);
+
+      if (error) {
+        console.error('Planner: failed to delete item', error);
+        Alert.alert('Fehler', 'Der Eintrag konnte nicht gelöscht werden.');
+      } else {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    } catch (err) {
+      console.error('Planner: delete error', err);
+      Alert.alert('Fehler', 'Ein Fehler ist aufgetreten.');
+    }
+  };
+
   const findTodoById = (id: string) => {
     for (const block of blocks) {
       for (const item of block.items) {
@@ -472,6 +573,7 @@ export default function PlannerScreen() {
             end: endIso,
             location: payload.location,
             notes: payload.notes,
+            assignee: payload.assignee,
           });
         } else if (payload.type === 'todo' || payload.type === 'note') {
           const dueIso = payload.dueAt === null ? null : payload.dueAt ? payload.dueAt.toISOString() : undefined;
@@ -491,9 +593,11 @@ export default function PlannerScreen() {
             start: startIso,
             end: endIso,
             location: payload.location,
+            assignee: payload.assignee,
+            babyId: payload.babyId,
           });
         } else {
-          addEvent(payload.title, startIso, endIso, payload.location, undefined, payload.ownerId);
+          addEvent(payload.title, startIso, endIso, payload.location, payload.assignee ?? 'me', payload.babyId, undefined, payload.ownerId);
         }
       } else if (payload.type === 'todo') {
         const dueIso = payload.dueAt === null ? null : payload.dueAt ? payload.dueAt.toISOString() : undefined;
@@ -503,9 +607,10 @@ export default function PlannerScreen() {
             dueAt: dueIso,
             notes: payload.notes,
             assignee: payload.assignee,
+            babyId: payload.babyId,
           });
         } else {
-          addTodo(payload.title, undefined, dueIso, payload.notes, payload.assignee, payload.ownerId);
+          addTodo(payload.title, undefined, dueIso, payload.notes, payload.assignee, payload.babyId, payload.ownerId);
         }
       } else if (payload.type === 'note') {
         const dueIso = payload.dueAt === null ? null : payload.dueAt ? payload.dueAt.toISOString() : undefined;
@@ -594,8 +699,10 @@ export default function PlannerScreen() {
                 events={selectedDayTimeline.events}
                 todos={selectedDayTimeline.todos}
                 getOwnerLabel={getOwnerLabel}
+                getAssigneeLabel={getAssigneeLabel}
                 onToggleTodo={(id) => toggleTodo(id)}
                 onMoveTomorrow={(id) => moveToTomorrow(id)}
+                onDelete={handleDeleteItem}
                 onEditTodo={handleEditTodo}
                 onEditEvent={handleEditEvent}
               />
@@ -609,9 +716,9 @@ export default function PlannerScreen() {
                     </View>
 	                  </View>
 	                  <View style={styles.floatingList}>
-	                    {floatingTodos.map((todo, idx) => {
-	                      const ownerLabel = getOwnerLabel(todo.userId);
-	                      const subtitle = ownerLabel && ownerLabel !== 'Ich' ? `Flexibel · ${ownerLabel}` : 'Flexibel';
+                    {floatingTodos.map((todo, idx) => {
+                      const displayLabel = getDisplayAssigneeLabel(todo.assignee, todo.babyId, todo.userId);
+                      const subtitle = displayLabel ? `Flexibel · ${displayLabel}` : 'Flexibel';
 
                       return (
                         <View key={todo.id}>
@@ -625,6 +732,7 @@ export default function PlannerScreen() {
 	                              toggleTodo(todo.id);
 	                            }}
 	                            onMoveTomorrow={() => moveToTomorrow(todo.id)}
+	                            onDelete={handleDeleteItem}
 	                            onPress={() => handleEditTodo(todo.id)}
 	                            showLeadingCheckbox={false}
 	                            trailingCheckbox
@@ -661,9 +769,9 @@ export default function PlannerScreen() {
 	                      </TouchableOpacity>
 	                      {showCompletedFloatingTodos && (
 	                        <View style={styles.completedList}>
-	                          {completedFloatingTodos.map((todo, idx) => {
-	                            const ownerLabel = getOwnerLabel(todo.userId);
-	                            const subtitle = ownerLabel && ownerLabel !== 'Ich' ? `Flexibel · ${ownerLabel}` : 'Flexibel';
+                          {completedFloatingTodos.map((todo, idx) => {
+                            const displayLabel = getDisplayAssigneeLabel(todo.assignee, todo.babyId, todo.userId);
+                            const subtitle = displayLabel ? `Flexibel · ${displayLabel}` : 'Flexibel';
 
 	                            return (
 	                              <View key={todo.id}>
@@ -674,6 +782,7 @@ export default function PlannerScreen() {
 	                                  completed={todo.completed}
 	                                  onComplete={() => toggleTodo(todo.id)}
 	                                  onMoveTomorrow={() => moveToTomorrow(todo.id)}
+	                                  onDelete={handleDeleteItem}
 	                                  onPress={() => handleEditTodo(todo.id)}
 	                                  showLeadingCheckbox={false}
 	                                  trailingCheckbox
@@ -718,6 +827,8 @@ export default function PlannerScreen() {
                         title: ev.title,
                         time: ev.start_at ?? ev.due_at ?? null,
                         ownerId: ev.user_id,
+                        assignee: ev.assignee,
+                        babyId: ev.baby_id,
                         type: 'event' as const,
                       })),
                       ...todos.map((todo: any) => ({
@@ -725,6 +836,8 @@ export default function PlannerScreen() {
                         title: todo.title,
                         time: todo.due_at ?? null,
                         ownerId: todo.user_id,
+                        assignee: todo.assignee,
+                        babyId: todo.baby_id,
                         type: 'todo' as const,
                       })),
                     ].sort((a, b) => {
@@ -785,8 +898,8 @@ export default function PlannerScreen() {
                                   minute: '2-digit',
                                 }).format(new Date(item.time))
                               : '—';
-                            const ownerLabel = getOwnerLabel(item.ownerId);
-                            const showOwnerLabel = ownerLabel && ownerLabel !== 'Ich';
+                            const displayLabel = getDisplayAssigneeLabel(item.assignee, item.babyId, item.ownerId);
+                            const showDisplayLabel = !!displayLabel;
                             return (
                               <View key={item.id} style={styles.timelineRow}>
                                 <View
@@ -798,9 +911,9 @@ export default function PlannerScreen() {
                                 <View style={styles.timelineContent}>
                                   <View style={styles.timelineMetaRow}>
                                     <Text style={styles.timelineTime}>{timeLabel}</Text>
-                                    {showOwnerLabel && (
+                                    {showDisplayLabel && (
                                       <View style={styles.ownerPill}>
-                                        <Text style={styles.ownerPillText}>{ownerLabel}</Text>
+                                        <Text style={styles.ownerPillText}>{displayLabel}</Text>
                                       </View>
                                     )}
                                   </View>
@@ -888,8 +1001,10 @@ export default function PlannerScreen() {
                 events={selectedDayTimeline.events}
                 todos={selectedDayTimeline.todos}
                 getOwnerLabel={getOwnerLabel}
+                getAssigneeLabel={getAssigneeLabel}
                 onToggleTodo={(id) => toggleTodo(id)}
                 onMoveTomorrow={(id) => moveToTomorrow(id)}
+                onDelete={handleDeleteItem}
                 onEditTodo={handleEditTodo}
                 onEditEvent={handleEditEvent}
               />
@@ -908,9 +1023,11 @@ export default function PlannerScreen() {
         baseDate={selectedDate}
         editingItem={editingItem}
         ownerOptions={ownerOptions}
+        babyOptions={babyOptions}
         defaultOwnerId={user?.id}
         onClose={handleCaptureClose}
         onSave={handleCaptureSave}
+        onDelete={handleDeleteItem}
       />
     </ThemedBackground>
   );

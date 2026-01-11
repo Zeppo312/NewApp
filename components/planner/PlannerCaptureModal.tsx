@@ -13,6 +13,7 @@ import {
   UIManager,
   StyleProp,
   ViewStyle,
+  Alert,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { BlurView } from 'expo-blur';
@@ -40,10 +41,16 @@ export type PlannerCapturePayload = {
   location?: string;
   notes?: string;
   assignee?: PlannerAssignee;
+  babyId?: string;
   ownerId?: string;
 };
 
 type OwnerOption = {
+  id: string;
+  label: string;
+};
+
+type BabyOption = {
   id: string;
   label: string;
 };
@@ -54,9 +61,11 @@ type Props = {
   baseDate: Date;
   editingItem?: { type: 'todo' | 'event'; item: PlannerTodo | PlannerEvent } | null;
   ownerOptions?: OwnerOption[];
+  babyOptions?: BabyOption[];
   defaultOwnerId?: string;
   onClose: () => void;
   onSave: (payload: PlannerCapturePayload) => void;
+  onDelete?: (id: string) => void;
 };
 
 const THEME = {
@@ -78,9 +87,11 @@ export const PlannerCaptureModal: React.FC<Props> = ({
   baseDate,
   editingItem,
   ownerOptions,
+  babyOptions,
   defaultOwnerId,
   onClose,
   onSave,
+  onDelete,
 }) => {
   const initialStart = useMemo(() => {
     const d = new Date(baseDate);
@@ -102,15 +113,26 @@ export const PlannerCaptureModal: React.FC<Props> = ({
   const [notesExpanded, setNotesExpanded] = useState(false);
   const [currentType, setCurrentType] = useState<PlannerCaptureType>(type);
   const [assignee, setAssignee] = useState<PlannerAssignee>('me');
+  const [selectedBabyId, setSelectedBabyId] = useState<string | null>(null);
+  const [showBabyPicker, setShowBabyPicker] = useState(false);
   const [focusConfig, setFocusConfig] = useState<FocusConfig | null>(null);
   const [focusValue, setFocusValue] = useState('');
 
-  const assigneeOptions: { value: PlannerAssignee; label: string }[] = [
-    { value: 'me', label: 'Ich' },
-    { value: 'partner', label: 'Partner' },
-    { value: 'family', label: 'Familie' },
-    { value: 'child', label: 'Kind' },
-  ];
+  const partnerLabel = useMemo(() => {
+    if (!ownerOptions || ownerOptions.length === 0) return 'Partner';
+    const partnerOption = ownerOptions.find((opt) => opt.id && opt.id !== defaultOwnerId);
+    return partnerOption?.label ?? 'Partner';
+  }, [ownerOptions, defaultOwnerId]);
+
+  const assigneeOptions: { value: PlannerAssignee; label: string }[] = useMemo(
+    () => [
+      { value: 'me', label: 'Ich' },
+      { value: 'partner', label: partnerLabel },
+      { value: 'family', label: 'Familie' },
+      { value: 'child', label: 'Kind' },
+    ],
+    [partnerLabel],
+  );
 
   const deriveAssigneeForOwner = (targetOwnerId?: string | null) => {
     if (!defaultOwnerId || !targetOwnerId) return 'me' as PlannerAssignee;
@@ -156,6 +178,11 @@ export const PlannerCaptureModal: React.FC<Props> = ({
       } else {
         setAssignee(deriveAssigneeForOwner(item.userId ?? defaultOwnerId ?? null));
       }
+      if ('babyId' in item && item.babyId) {
+        setSelectedBabyId(item.babyId);
+      } else {
+        setSelectedBabyId(null);
+      }
     } else {
       const reset = new Date(baseDate);
       reset.setHours(new Date().getHours(), new Date().getMinutes(), 0, 0);
@@ -170,6 +197,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
       setLocation('');
       setNotesExpanded(type === 'note');
       setAssignee('me');
+      setSelectedBabyId(null);
     }
   }, [visible, type, baseDate, editingItem, defaultOwnerId]);
 
@@ -252,12 +280,15 @@ export const PlannerCaptureModal: React.FC<Props> = ({
     if (currentType === 'todo') {
       payload.dueAt = hasDueTime ? dueTime || startTime : null;
       payload.assignee = assignee ?? deriveAssigneeForOwner(ownerId);
+      payload.babyId = assignee === 'child' ? selectedBabyId ?? undefined : undefined;
     }
 
     if (currentType === 'event') {
       payload.start = startTime;
       payload.end = showEnd ? endTime : null;
       payload.location = location.trim() || undefined;
+      payload.assignee = assignee ?? deriveAssigneeForOwner(ownerId);
+      payload.babyId = assignee === 'child' ? selectedBabyId ?? undefined : undefined;
     }
 
     if (currentType === 'note') {
@@ -270,6 +301,26 @@ export const PlannerCaptureModal: React.FC<Props> = ({
 
     onSave(payload);
     onClose();
+  };
+
+  const handleDelete = () => {
+    if (!editingItem?.item.id || !onDelete) return;
+
+    Alert.alert(
+      'Eintrag löschen',
+      'Möchtest du diesen Eintrag wirklich löschen?',
+      [
+        { text: 'Abbrechen', style: 'cancel' },
+        {
+          text: 'Löschen',
+          style: 'destructive',
+          onPress: () => {
+            onDelete(editingItem.item.id);
+            onClose();
+          },
+        },
+      ]
+    );
   };
 
   const formatDateTime = (date: Date | null) => {
@@ -390,12 +441,15 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                   styles.titleInput,
                 )}
 
-                {currentType === 'todo' && (
+                {(currentType === 'todo' || currentType === 'event') && (
                   <View style={styles.section}>
                     <Text style={styles.sectionLabel}>👤 Für</Text>
                     <View style={styles.assignRowWrap}>
                       {assigneeOptions.map((opt) => {
                         const selected = assignee === opt.value;
+                        const displayLabel = opt.value === 'child' && selectedBabyId
+                          ? (babyOptions?.find(b => b.id === selectedBabyId)?.label ?? opt.label)
+                          : opt.label;
                         return (
                           <TouchableOpacity
                             key={opt.value}
@@ -404,10 +458,19 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                               styles.assignButtonHalf,
                               selected && styles.assignButtonActive,
                             ]}
-                            onPress={() => setAssignee(opt.value)}
+                            onPress={() => {
+                              if (opt.value === 'child') {
+                                setShowBabyPicker(true);
+                              } else {
+                                setAssignee(opt.value);
+                                if (opt.value !== 'child') {
+                                  setSelectedBabyId(null);
+                                }
+                              }
+                            }}
                           >
                             <Text style={[styles.assignLabel, selected && styles.assignLabelActive]}>
-                              {opt.label}
+                              {displayLabel}
                             </Text>
                           </TouchableOpacity>
                         );
@@ -521,10 +584,68 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                     )
                   )}
                 </View>
+
+                {/* Löschen-Button nur beim Bearbeiten anzeigen */}
+                {editingItem?.item.id && onDelete && (
+                  <TouchableOpacity
+                    style={styles.deleteButton}
+                    onPress={handleDelete}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.deleteButtonText}>🗑️  Eintrag löschen</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             </TouchableWithoutFeedback>
           </ScrollView>
         </BlurView>
+
+        {showBabyPicker && (
+          <Modal visible={showBabyPicker} animationType="fade" transparent onRequestClose={() => setShowBabyPicker(false)}>
+            <View style={styles.pickerOverlay}>
+              <TouchableWithoutFeedback onPress={() => setShowBabyPicker(false)}>
+                <View style={StyleSheet.absoluteFill} />
+              </TouchableWithoutFeedback>
+              <BlurView intensity={80} tint="extraLight" style={styles.pickerSheet}>
+                <View style={styles.pickerHeader}>
+                  <Text style={styles.pickerTitle}>Wähle ein Kind</Text>
+                  <TouchableOpacity onPress={() => setShowBabyPicker(false)}>
+                    <Text style={styles.pickerCloseButton}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+                <ScrollView>
+                  {babyOptions && babyOptions.length > 0 ? (
+                    babyOptions.map((baby) => (
+                      <TouchableOpacity
+                        key={baby.id}
+                        style={[
+                          styles.pickerOption,
+                          selectedBabyId === baby.id && styles.pickerOptionActive,
+                        ]}
+                        onPress={() => {
+                          setSelectedBabyId(baby.id);
+                          setAssignee('child');
+                          setShowBabyPicker(false);
+                        }}
+                      >
+                        <Text style={[
+                          styles.pickerOptionText,
+                          selectedBabyId === baby.id && styles.pickerOptionTextActive,
+                        ]}>
+                          {baby.label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))
+                  ) : (
+                    <View style={styles.pickerEmpty}>
+                      <Text style={styles.pickerEmptyText}>Keine Kinder gefunden</Text>
+                    </View>
+                  )}
+                </ScrollView>
+              </BlurView>
+            </View>
+          </Modal>
+        )}
 
         <TextInputOverlay
           visible={!!focusConfig}
@@ -793,6 +914,83 @@ const styles = StyleSheet.create({
     color: THEME.text,
     borderWidth: 1,
     borderColor: GLASS_OVERLAY,
+  },
+  deleteButton: {
+    width: '100%',
+    marginTop: 30,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 107, 107, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 107, 107, 0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#FF6B6B',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  deleteButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#D63031',
+  },
+  pickerOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  pickerSheet: {
+    width: '80%',
+    maxHeight: '60%',
+    borderRadius: 20,
+    overflow: 'hidden',
+    paddingVertical: 20,
+  },
+  pickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingBottom: 15,
+  },
+  pickerTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: THEME.text,
+  },
+  pickerCloseButton: {
+    fontSize: 24,
+    color: THEME.text,
+    fontWeight: '600',
+  },
+  pickerOption: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: THEME.divider,
+  },
+  pickerOptionActive: {
+    backgroundColor: 'rgba(94,61,179,0.1)',
+  },
+  pickerOptionText: {
+    fontSize: 16,
+    color: THEME.text,
+  },
+  pickerOptionTextActive: {
+    color: PRIMARY,
+    fontWeight: '600',
+  },
+  pickerEmpty: {
+    paddingVertical: 40,
+    alignItems: 'center',
+  },
+  pickerEmptyText: {
+    fontSize: 14,
+    color: THEME.textSecondary,
   },
 });
 

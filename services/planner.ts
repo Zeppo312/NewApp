@@ -15,6 +15,7 @@ export type PlannerTodo = {
   blockId?: string;
   notes?: string;
   assignee?: PlannerAssignee;
+  babyId?: string;
   userId?: string;
   entryType?: 'todo' | 'note';
 };
@@ -25,6 +26,8 @@ export type PlannerEvent = {
   start: string;
   end: string;
   location?: string;
+  assignee?: PlannerAssignee;
+  babyId?: string;
   blockId?: string;
   userId?: string;
 };
@@ -74,6 +77,7 @@ type PlannerItemRow = {
   title: string;
   completed: boolean;
   assignee: PlannerAssignee | null;
+  baby_id: string | null;
   notes: string | null;
   location: string | null;
   due_at: string | null;
@@ -266,6 +270,8 @@ function buildAggregatedData(date: Date, dayRows: PlannerDayRow[], itemRows: Pla
         start: (startDate ?? workingDate).toISOString(),
         end: endDate.toISOString(),
         location: row.location ?? undefined,
+        assignee: convertAssigneePerspective(row.assignee, row.user_id, baseUserId),
+        babyId: row.baby_id ?? undefined,
         blockId: row.block_id ?? undefined,
         userId: row.user_id,
       };
@@ -292,6 +298,7 @@ function buildAggregatedData(date: Date, dayRows: PlannerDayRow[], itemRows: Pla
       blockId: row.block_id ?? undefined,
       notes: row.notes ?? undefined,
       assignee: convertAssigneePerspective(row.assignee, row.user_id, baseUserId),
+      babyId: row.baby_id ?? undefined,
       userId: row.user_id,
       entryType: row.entry_type,
     };
@@ -445,7 +452,7 @@ export function usePlannerDay(date: Date) {
       ? await supabase
           .from('planner_items')
           .select(
-            'id,user_id,day_id,block_id,entry_type,title,completed,assignee,notes,location,due_at,start_at,end_at,created_at,updated_at',
+            'id,user_id,day_id,block_id,entry_type,title,completed,assignee,baby_id,notes,location,due_at,start_at,end_at,created_at,updated_at',
           )
           .in('day_id', dayIds)
       : { data: [], error: null };
@@ -455,7 +462,7 @@ export function usePlannerDay(date: Date) {
     const { data: floatingOpenRows, error: floatingOpenError } = await supabase
       .from('planner_items')
       .select(
-        'id,user_id,day_id,block_id,entry_type,title,completed,assignee,notes,location,due_at,start_at,end_at,created_at,updated_at',
+        'id,user_id,day_id,block_id,entry_type,title,completed,assignee,baby_id,notes,location,due_at,start_at,end_at,created_at,updated_at',
       )
       .in('user_id', ownerIds)
       .is('due_at', null)
@@ -468,7 +475,7 @@ export function usePlannerDay(date: Date) {
     const { data: floatingDoneRows, error: floatingDoneError } = await supabase
       .from('planner_items')
       .select(
-        'id,user_id,day_id,block_id,entry_type,title,completed,assignee,notes,location,due_at,start_at,end_at,created_at,updated_at',
+        'id,user_id,day_id,block_id,entry_type,title,completed,assignee,baby_id,notes,location,due_at,start_at,end_at,created_at,updated_at',
       )
       .in('user_id', ownerIds)
       .is('due_at', null)
@@ -497,6 +504,7 @@ export function usePlannerDay(date: Date) {
         blockId: row.block_id ?? undefined,
         notes: row.notes ?? undefined,
         assignee: convertAssigneePerspective(row.assignee, row.user_id, user.id),
+        babyId: row.baby_id ?? undefined,
         userId: row.user_id,
         entryType: row.entry_type,
       })),
@@ -508,6 +516,7 @@ export function usePlannerDay(date: Date) {
         blockId: row.block_id ?? undefined,
         notes: row.notes ?? undefined,
         assignee: convertAssigneePerspective(row.assignee, row.user_id, user.id),
+        babyId: row.baby_id ?? undefined,
         userId: row.user_id,
         entryType: row.entry_type,
       })),
@@ -610,6 +619,7 @@ export function usePlannerDay(date: Date) {
       dueAt?: string | null,
       notes?: string,
       assignee: PlannerAssignee = 'me',
+      babyId?: string,
       ownerIdOverride?: string,
     ) => {
       if (!user?.id) return;
@@ -645,6 +655,7 @@ export function usePlannerDay(date: Date) {
         title,
         completed: false,
         assignee: convertAssigneePerspective(assignee, viewerId, ownerId),
+        baby_id: babyId ?? null,
         notes: notes ?? null,
         due_at: dueAt ?? null,
       };
@@ -665,6 +676,8 @@ export function usePlannerDay(date: Date) {
       start: string,
       end: string,
       location?: string,
+      assignee: PlannerAssignee = 'me',
+      babyId?: string,
       blockId?: string,
       ownerIdOverride?: string,
     ) => {
@@ -700,6 +713,8 @@ export function usePlannerDay(date: Date) {
         start_at: start,
         end_at: end,
         location: location ?? null,
+        assignee: convertAssigneePerspective(assignee, viewerId, ownerId),
+        baby_id: babyId ?? null,
       };
       const { error: insertError } = await supabase.from('planner_items').insert(payload);
       if (insertError) {
@@ -713,7 +728,7 @@ export function usePlannerDay(date: Date) {
   );
 
   const updateTodo = useCallback(
-    async (id: string, updates: { title?: string; notes?: string; dueAt?: string | null; assignee?: PlannerAssignee }) => {
+    async (id: string, updates: { title?: string; notes?: string; dueAt?: string | null; assignee?: PlannerAssignee; babyId?: string | null }) => {
       const row = itemsMapRef.current[id];
       if (!row || (row.entry_type !== 'todo' && row.entry_type !== 'note')) return;
       if (!user?.id) return;
@@ -723,6 +738,9 @@ export function usePlannerDay(date: Date) {
       if (updates.notes !== undefined) payload.notes = updates.notes ?? null;
       if (updates.assignee !== undefined) {
         payload.assignee = convertAssigneePerspective(updates.assignee, viewerId, row.user_id);
+      }
+      if (updates.babyId !== undefined) {
+        payload.baby_id = updates.babyId ?? null;
       }
 
       let newDayId: string | undefined;
@@ -764,14 +782,22 @@ export function usePlannerDay(date: Date) {
   );
 
   const updateEvent = useCallback(
-    async (id: string, updates: { title?: string; start?: string; end?: string; location?: string }) => {
+    async (id: string, updates: { title?: string; start?: string; end?: string; location?: string; assignee?: PlannerAssignee; babyId?: string | null }) => {
       const row = itemsMapRef.current[id];
       if (!row || row.entry_type !== 'event') return;
+      if (!user?.id) return;
+      const viewerId = user.id;
       const payload: Record<string, any> = {};
       if (updates.title !== undefined) payload.title = updates.title;
       if (updates.start !== undefined) payload.start_at = updates.start;
       if (updates.end !== undefined) payload.end_at = updates.end ?? null;
       if (updates.location !== undefined) payload.location = updates.location ?? null;
+      if (updates.assignee !== undefined) {
+        payload.assignee = convertAssigneePerspective(updates.assignee, viewerId, row.user_id);
+      }
+      if (updates.babyId !== undefined) {
+        payload.baby_id = updates.babyId ?? null;
+      }
 
       let newDayId: string | undefined;
       if (updates.start !== undefined && updates.start) {
@@ -837,7 +863,8 @@ export function usePlannerDay(date: Date) {
         payload.location = updates.location ?? null;
         payload.due_at = null;
         payload.completed = false;
-        payload.assignee = null;
+        const nextAssignee = updates.assignee ?? 'me';
+        payload.assignee = convertAssigneePerspective(nextAssignee, viewerId, ownerId);
 
         const startDate = parseISO(updates.start);
         if (startDate) {

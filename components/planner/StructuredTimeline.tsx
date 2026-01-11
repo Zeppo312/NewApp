@@ -13,9 +13,11 @@ type Props = {
   events: PlannerEvent[];
   todos: PlannerTodo[];
   getOwnerLabel?: (ownerId?: string) => string | undefined;
+  getAssigneeLabel?: (assignee?: PlannerAssignee, babyId?: string, ownerId?: string) => string | undefined;
   readOnly?: boolean;
   onToggleTodo: (id: string) => void;
   onMoveTomorrow: (id: string) => void;
+  onDelete?: (id: string) => void;
   onEditTodo?: (id: string) => void;
   onEditEvent?: (id: string) => void;
 };
@@ -62,9 +64,11 @@ export const StructuredTimeline: React.FC<Props> = ({
   events,
   todos,
   getOwnerLabel,
+  getAssigneeLabel,
   readOnly = false,
   onToggleTodo,
   onMoveTomorrow,
+  onDelete,
   onEditTodo,
   onEditEvent,
 }) => {
@@ -80,12 +84,20 @@ export const StructuredTimeline: React.FC<Props> = ({
       const startMinute = minutesFromMidnight(start);
       const endMinute = Math.max(startMinute + 30, minutesFromMidnight(end));
       const ownerLabel = getOwnerLabel?.(event.userId);
-      const ownerSuffix = ownerLabel && ownerLabel !== 'Ich' ? ` · ${ownerLabel}` : '';
+      const assigneeLabel = getAssigneeLabel?.(event.assignee, event.babyId, event.userId);
+      const metaLabel =
+        assigneeLabel && assigneeLabel !== 'Ich'
+          ? assigneeLabel
+          : ownerLabel && ownerLabel !== 'Ich'
+          ? ownerLabel
+          : '';
+      const metaSuffix = metaLabel ? ` · ${metaLabel}` : '';
+      const locationSuffix = event.location ? ` · ${event.location}` : '';
       entries.push({
         kind: 'event',
         id: event.id,
         title: event.title,
-        subtitle: `${start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – ${end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}${event.location ? ` · ${event.location}` : ''}${ownerSuffix}`,
+        subtitle: `${start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – ${end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}${locationSuffix}${metaSuffix}`,
         minute: startMinute,
       });
       minutesSet.add(startMinute);
@@ -97,8 +109,15 @@ export const StructuredTimeline: React.FC<Props> = ({
       const dueMinute = dueDate ? minutesFromMidnight(dueDate) : fallbackBase + floatingIndex * 25;
       if (!dueDate) floatingIndex += 1;
       const ownerLabel = getOwnerLabel?.(todo.userId);
-      const ownerSuffix = ownerLabel && ownerLabel !== 'Ich' ? ` · ${ownerLabel}` : '';
-      const timeLabel = `${dueDate ? dueDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Flexibel'}${ownerSuffix}`;
+      const assigneeLabel = getAssigneeLabel?.(todo.assignee, todo.babyId, todo.userId);
+      const metaLabel =
+        assigneeLabel && assigneeLabel !== 'Ich'
+          ? assigneeLabel
+          : ownerLabel && ownerLabel !== 'Ich'
+          ? ownerLabel
+          : '';
+      const metaSuffix = metaLabel ? ` · ${metaLabel}` : '';
+      const timeLabel = `${dueDate ? dueDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Flexibel'}${metaSuffix}`;
       entries.push({
         kind: 'todo',
         id: todo.id,
@@ -179,7 +198,7 @@ export const StructuredTimeline: React.FC<Props> = ({
       showNowLine,
       nowTop,
     };
-  }, [date, events, todos, getOwnerLabel]);
+  }, [date, events, todos, getOwnerLabel, getAssigneeLabel]);
 
   const { items, positionFor, contentHeight, hourLabels, showNowLine, nowTop } = timeline;
 
@@ -264,6 +283,7 @@ export const StructuredTimeline: React.FC<Props> = ({
                       completed={item.completed}
                       onComplete={readOnly ? undefined : () => onToggleTodo(item.id)}
                       onMoveTomorrow={readOnly ? undefined : () => onMoveTomorrow(item.id)}
+                      onDelete={readOnly ? undefined : onDelete}
                       onPress={readOnly ? undefined : () => onEditTodo?.(item.id)}
                       onLongPress={readOnly ? () => {} : undefined}
                       showLeadingCheckbox={false}

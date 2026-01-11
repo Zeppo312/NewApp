@@ -1332,6 +1332,7 @@ export default function DailyScreen() {
           date={selectedDate}
           onClose={() => { setShowInputModal(false); setEditingEntry(null); }}
           onSave={handleSaveEntry}
+          onDelete={handleDeleteEntry}
           initialData={editingEntry && editingEntry.id ? {
             id: editingEntry.id!,
             feeding_type: (editingEntry as any).feeding_type as any,
