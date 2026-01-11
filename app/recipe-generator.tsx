@@ -1303,7 +1303,7 @@ const styles = StyleSheet.create({
   headerActions: {
     position: 'absolute',
     top: 12,
-    right: 12,
+    right: 60, // Verschoben nach links, um Platz für den BabySwitcherButton zu lassen
     flexDirection: 'row',
     gap: 10,
     zIndex: 10,

@@ -1636,6 +1636,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     textAlign: 'center',
     color: '#7D5A50',
+    lineHeight: 28,
   },
   cardsSection: {
     marginBottom: 16,

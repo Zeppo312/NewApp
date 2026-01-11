@@ -139,6 +139,53 @@ const TimerBanner: React.FC<{
   );
 };
 
+const quickBtns: { icon: string; label: string; action: QuickActionType }[] = [
+  { action: 'feeding_breast', label: 'Stillen', icon: '🤱' },
+  { action: 'feeding_bottle', label: 'Fläschchen', icon: '🍼' },
+  { action: 'feeding_solids', label: 'Beikost', icon: '🥄' },
+  { action: 'diaper_wet', label: 'Nass', icon: '💧' },
+  { action: 'diaper_dirty', label: 'Voll', icon: '💩' },
+  { action: 'diaper_both', label: 'Beides', icon: '💧💩' },
+];
+
+const QuickActionRow: React.FC<{ onPressAction: (action: QuickActionType) => void }> = ({ onPressAction }) => {
+  const itemWidth = 96 + 16; // Button width + separator
+
+  const renderQuickButton = ({ item }: { item: (typeof quickBtns)[number] }) => (
+    <GlassCard
+      style={s.circleButton}
+      intensity={30}
+      overlayColor="rgba(255,255,255,0.32)"
+      borderColor="rgba(255,255,255,0.70)"
+    >
+      <TouchableOpacity style={s.circleInner} onPress={() => onPressAction(item.action)} activeOpacity={0.9}>
+        <Text style={s.circleEmoji}>{item.icon}</Text>
+        <Text style={s.circleLabel}>{item.label}</Text>
+      </TouchableOpacity>
+    </GlassCard>
+  );
+
+  return (
+    <View style={s.quickActionSection}>
+      <FlatList
+        data={quickBtns}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        renderItem={renderQuickButton}
+        keyExtractor={(item) => item.action}
+        contentContainerStyle={s.quickScrollContainer}
+        ItemSeparatorComponent={() => <View style={{ width: 16 }} />}
+        decelerationRate="normal"
+        getItemLayout={(_, index) => ({
+          length: itemWidth,
+          offset: itemWidth * index,
+          index,
+        })}
+      />
+    </View>
+  );
+};
+
 export default function DailyScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
@@ -186,10 +233,6 @@ export default function DailyScreen() {
   const [splashHint, setSplashHint] = useState<string>('');
   const [splashHintEmoji, setSplashHintEmoji] = useState<string>('');
   const splashEmojiParts = useMemo(() => Array.from(splashEmoji), [splashEmoji]);
-
-  // Scroll animation for quick actions
-  const quickActionsScrollRef = useRef<FlatList>(null);
-  const scrollAnimation = useRef(new Animated.Value(0)).current;
 
   // Notification hooks
   const { requestPermissions } = useNotifications();
@@ -241,40 +284,6 @@ export default function DailyScreen() {
     if (selectedTab === 'week') setWeekOffset(0);
     if (selectedTab === 'month') setMonthOffset(0);
   }, [selectedTab]);
-
-  // Quick actions scroll hint animation - runs only once
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      if (quickActionsScrollRef.current) {
-        // Smooth scroll right to show hint
-        quickActionsScrollRef.current.scrollToOffset({
-          offset: 80,
-          animated: true,
-        });
-
-        // Then smoothly scroll back to start after a brief pause
-        setTimeout(() => {
-          if (quickActionsScrollRef.current) {
-            quickActionsScrollRef.current.scrollToOffset({
-              offset: 0,
-              animated: true,
-            });
-          }
-        }, 1000); // Brief pause for smooth flow
-      }
-    }, 2500); // Slightly longer initial delay
-
-    // Cleanup
-    return () => {
-      clearTimeout(timeoutId);
-      if (quickActionsScrollRef.current) {
-        quickActionsScrollRef.current.scrollToOffset({
-          offset: 0,
-          animated: false,
-        });
-      }
-    };
-  }, []);
 
   // Helper functions for week view
   const getWeekStart = (date: Date) => {
@@ -360,6 +369,26 @@ export default function DailyScreen() {
             : 'diaper_both'
           : undefined,
     } as unknown as DailyEntry));
+
+  const lastBottleVolumeMl = useMemo(() => {
+    const allEntries = [...entries, ...weekEntries, ...monthEntries];
+    let latestTime = -Infinity;
+    let latestVolume: number | null = null;
+
+    for (const entry of allEntries) {
+      if (entry.entry_type !== 'feeding' || entry.feeding_type !== 'BOTTLE') continue;
+      const volume = entry.feeding_volume_ml;
+      if (volume == null) continue;
+      const timeStr = entry.start_time ?? entry.entry_date;
+      const time = timeStr ? new Date(timeStr).getTime() : 0;
+      if (time >= latestTime) {
+        latestTime = time;
+        latestVolume = volume;
+      }
+    }
+
+    return latestVolume ?? 120;
+  }, [entries, weekEntries, monthEntries]);
 
   const loadEntries = async () => {
     if (!activeBabyId) return;
@@ -685,7 +714,10 @@ export default function DailyScreen() {
             style={s.topTabInner}
             onPress={() => {
               setSelectedTab(tab);
-              if (tab === 'day') triggerShowDateNav();
+              if (tab === 'day') {
+                setSelectedDate(new Date());
+                triggerShowDateNav();
+              }
             }}
             activeOpacity={0.85}
           >
@@ -697,54 +729,6 @@ export default function DailyScreen() {
       ))}
     </View>
   );
-
-  const quickBtns: { icon: string; label: string; action: QuickActionType }[] = [
-    { action: 'feeding_breast', label: 'Stillen', icon: '🤱' },
-    { action: 'feeding_bottle', label: 'Fläschchen', icon: '🍼' },
-    { action: 'feeding_solids', label: 'Beikost', icon: '🥄' },
-    { action: 'diaper_wet', label: 'Nass', icon: '💧' },
-    { action: 'diaper_dirty', label: 'Voll', icon: '💩' },
-    { action: 'diaper_both', label: 'Beides', icon: '💧💩' },
-  ];
-
-  const QuickActionRow = () => {
-    const renderQuickButton = ({ item }: { item: typeof quickBtns[0] }) => (
-      <GlassCard
-        style={s.circleButton}
-        intensity={30}
-        overlayColor="rgba(255,255,255,0.32)"
-        borderColor="rgba(255,255,255,0.70)"
-      >
-        <TouchableOpacity style={s.circleInner} onPress={() => handleQuickActionPress(item.action)} activeOpacity={0.9}>
-          <Text style={s.circleEmoji}>{item.icon}</Text>
-          <Text style={s.circleLabel}>{item.label}</Text>
-        </TouchableOpacity>
-      </GlassCard>
-    );
-
-
-
-    return (
-      <View style={s.quickActionSection}>
-        <FlatList
-          ref={quickActionsScrollRef}
-          data={quickBtns}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          renderItem={renderQuickButton}
-          keyExtractor={(_, i) => String(i)}
-          contentContainerStyle={s.quickScrollContainer}
-          ItemSeparatorComponent={() => <View style={{ width: 16 }} />}
-          decelerationRate="fast"
-          scrollEventThrottle={16}
-          snapToInterval={112} // 96 Breite + 16 Separator
-          // Wenn du 104px runde Buttons willst:
-          // - stelle circleButton width/height auf 104, borderRadius 52
-          // - setze snapToInterval auf 120
-        />
-      </View>
-    );
-  };
 
   // Week navigation functions
   const goToPreviousWeek = () => setWeekOffset((o) => o - 1);
@@ -949,22 +933,6 @@ export default function DailyScreen() {
           </View>
         </LiquidGlassCard>
 
-        {/* Trend-Analyse - Design Guide konform (EXAKT wie Sleep-Tracker) */}
-        <LiquidGlassCard style={s.trendCard}>
-          <View style={s.trendInner}>
-            <Text style={s.trendTitle}>Trend-Analyse</Text>
-            <View style={s.trendContent}>
-              <View style={s.trendItem}>
-                <Text style={s.trendEmoji}>📈</Text>
-                <Text style={s.trendText}>Konstante Aktivität</Text>
-              </View>
-              <View style={s.trendItem}>
-                <Text style={s.trendEmoji}>🕒</Text>
-                <Text style={s.trendText}>Regelmäßige Intervalle</Text>
-              </View>
-            </View>
-          </View>
-        </LiquidGlassCard>
       </View>
     );
   };
@@ -1290,7 +1258,30 @@ export default function DailyScreen() {
             <MonthView />
           ) : (
             <View style={s.content}>
-              <QuickActionRow />
+              {/* Day Navigation - gleich wie Sleep-Tracker */}
+              <View style={s.weekNavigationContainer}>
+                <TouchableOpacity
+                  style={s.weekNavButton}
+                  onPress={() => changeRelativeDate(-1)}
+                >
+                  <Text style={s.weekNavButtonText}>‹</Text>
+                </TouchableOpacity>
+                <View style={s.weekHeaderCenter}>
+                  <Text style={s.weekHeaderTitle}>Tagesansicht</Text>
+                  <Text style={s.weekHeaderSubtitle}>
+                    {selectedDate.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long' })}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={[s.weekNavButton, new Date(selectedDate).setHours(0,0,0,0) >= new Date().setHours(0,0,0,0) && s.disabledNavButton]}
+                  disabled={new Date(selectedDate).setHours(0,0,0,0) >= new Date().setHours(0,0,0,0)}
+                  onPress={() => changeRelativeDate(1)}
+                >
+                  <Text style={s.weekNavButtonText}>›</Text>
+                </TouchableOpacity>
+              </View>
+
+              <QuickActionRow onPressAction={handleQuickActionPress} />
 
               <Text style={s.sectionTitle}>Kennzahlen</Text>
               <KPISection />
@@ -1325,7 +1316,7 @@ export default function DailyScreen() {
                       marginHorizontal={8}
                     />
                   ))}
-                  {entries.length === 0 && <EmptyState type="day" message="Noch keine Aktivitäten heute 🤍" />}
+                  {entries.length === 0 && <EmptyState type="day" message="Tippe auf ein Symbol um einen Eintrag zu erstellen" />}
                 </View>
               </View>
             </View>
@@ -1353,6 +1344,7 @@ export default function DailyScreen() {
           } : (selectedSubType ? {
             // Preselect fields from quick actions
             feeding_type: selectedSubType === 'feeding_breast' ? 'BREAST' : selectedSubType === 'feeding_bottle' ? 'BOTTLE' : selectedSubType === 'feeding_solids' ? 'SOLIDS' : undefined,
+            feeding_volume_ml: selectedSubType === 'feeding_bottle' ? lastBottleVolumeMl : null,
             diaper_type: selectedSubType === 'diaper_wet' ? 'WET' : selectedSubType === 'diaper_dirty' ? 'DIRTY' : selectedSubType === 'diaper_both' ? 'BOTH' : undefined,
             start_time: new Date().toISOString(),
           } : undefined)}
@@ -1849,48 +1841,6 @@ kpiValueCentered: { textAlign: 'center', width: '100%' },
     color: '#7D5A50',
     textAlign: 'center',
     fontWeight: '500',
-  },
-  // Trend Card (Design Guide konform - EXAKT wie Sleep-Tracker)
-  trendCard: {
-    padding: 0,
-    marginHorizontal: TIMELINE_INSET,
-    marginBottom: 8,
-  },
-  trendInner: {
-    width: WEEK_CONTENT_WIDTH,
-    alignSelf: 'center',
-    padding: 24,
-  },
-  trendTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#7D5A50',
-    marginBottom: SECTION_GAP_BOTTOM,
-    textAlign: 'center',
-  },
-  trendContent: {
-    flexDirection: 'column',
-    gap: 12,
-    paddingHorizontal: 8,
-  },
-  trendItem: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'flex-start',
-    paddingVertical: 4,
-  },
-  trendEmoji: {
-    fontSize: 24,
-    marginRight: 12,
-    width: 32,
-    textAlign: 'center',
-  },
-  trendText: {
-    fontSize: 14,
-    color: '#7D5A50',
-    fontWeight: '600',
-    flex: 1,
-    flexWrap: 'wrap',
   },
   // Month View Styles (EXAKT wie Sleep-Tracker)
   monthViewContainer: {

@@ -1081,7 +1081,11 @@ export default function SleepTrackerScreen() {
             onPress={() => {
               triggerHaptic();
               setSelectedTab(tab);
-            }} // Erstmal nur visuell - ohne Funktion
+              // Wenn Tag-Tab gewählt wird, springe zu heute
+              if (tab === 'day') {
+                setSelectedDate(new Date());
+              }
+            }}
             activeOpacity={0.85}
           >
             <Text style={[styles.topTabText, selectedTab === tab && styles.activeTopTabText]}>
@@ -1528,23 +1532,6 @@ export default function SleepTrackerScreen() {
           </View>
         </LiquidGlassCard>
 
-        {/* Trend-Analyse - Design Guide konform */}
-        <LiquidGlassCard style={styles.trendCard}>
-          <View style={styles.trendInner}>
-            <Text style={styles.trendTitle}>Trend-Analyse</Text>
-            <View style={styles.trendContent}>
-              <View style={styles.trendItem}>
-                <Text style={styles.trendEmoji}>📈</Text>
-                <Text style={styles.trendText}>Gute Schlafqualität</Text>
-              </View>
-              <View style={styles.trendItem}>
-                <Text style={styles.trendEmoji}>😴</Text>
-                <Text style={styles.trendText}>Stabile Einschlafzeiten</Text>
-              </View>
-            </View>
-          </View>
-        </LiquidGlassCard>
-
       </View>
     );
   };
@@ -1954,6 +1941,29 @@ export default function SleepTrackerScreen() {
             </LiquidGlassCard>
           )}
           </View>
+
+          {/* Manuell Button - erscheint nur bei aktivem Schlaf */}
+          {activeSleepEntry && (
+            <TouchableOpacity
+              style={[styles.liquidGlassCardWrapper, { width: '100%', marginTop: 16, marginHorizontal: 8 }]}
+              onPress={() => {
+                triggerHaptic();
+                setEditingEntry(null);
+                setShowInputModal(true);
+              }}
+              activeOpacity={0.9}
+            >
+              <BlurView intensity={24} tint="light" style={styles.liquidGlassCardBackground}>
+                <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(168, 196, 193, 0.6)', borderColor: 'rgba(255, 255, 255, 0.6)' }]}>
+                  <View style={[styles.iconContainer, { backgroundColor: 'rgba(168, 196, 193, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.6)', shadowColor: 'rgba(255, 255, 255, 0.3)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.12, shadowRadius: 2, elevation: 4 }]}>
+                    <IconSymbol name="plus.circle.fill" size={28} color="#FFFFFF" />
+                  </View>
+                  <Text style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: '#7D5A50', fontWeight: '700' }]}>Manuell</Text>
+                  <Text style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: '#7D5A50', fontWeight: '500' }]}>Eintrag hinzufügen</Text>
+                </View>
+              </BlurView>
+            </TouchableOpacity>
+          )}
               </View>
             </>
           )}

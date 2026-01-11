@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Modal,
@@ -93,6 +93,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
     { id: string; title: string; minMonths?: number; image?: string | null; emoji?: string; source: 'live' | 'sample' }[]
   >(RECIPE_SAMPLES.map((r) => ({ id: r.id, title: r.title, minMonths: r.min_months, image: r.image, emoji: r.emoji, source: 'sample' })));
   const [isLoadingRecipes, setIsLoadingRecipes] = useState(false);
+  const initKeyRef = useRef<string | null>(null);
 
   // Feeding States
   const [feedingType, setFeedingType] = useState<FeedingType>('bottle');
@@ -108,37 +109,45 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   }
 
   // Effekt zum Zurücksetzen der Werte bei Sichtbarkeit
+  // Only initialize on open or target change to avoid resetting user edits.
   useEffect(() => {
-    if (visible) {
-      const now = date || new Date();
-      setStartTime(initialData?.start_time ? new Date(initialData.start_time) : now);
-      setEndTime(initialData?.end_time ? new Date(initialData.end_time) : null);
-      setEndTimeVisible(!!initialData?.end_time);
-      setNotes(initialData?.notes ?? '');
-      setNotesVisible(false);
-      setFocusConfig(null);
-      setFocusValue('');
-      setStartTimer(false);
-      setSelectedRecipeId(null);
-      setRecipeDropdownOpen(false);
-      
-      // Standardwerte setzen
-      if (activityType === 'feeding') {
-        if (initialData?.feeding_type === 'BREAST') setFeedingType('breast');
-        else if (initialData?.feeding_type === 'SOLIDS') setFeedingType('solids');
-        else setFeedingType('bottle');
-        setVolumeMl(initialData?.feeding_volume_ml ?? 120);
-        setBreastSide(
-          initialData?.feeding_side === 'RIGHT' ? 'right' : initialData?.feeding_side === 'BOTH' ? 'both' : 'left'
-        );
-      } else if (activityType === 'diaper') {
-        setDiaperType(
-          initialData?.diaper_type === 'DIRTY' ? 'dirty' : initialData?.diaper_type === 'BOTH' ? 'both' : 'wet'
-        );
-      }
-      
-      // Hier könnten initialSubType ausgewertet werden
+    if (!visible) {
+      initKeyRef.current = null;
+      return;
     }
+
+    const initKey = `${activityType}:${initialData?.id ?? 'new'}:${initialSubType ?? ''}`;
+    if (initKeyRef.current === initKey) return;
+    initKeyRef.current = initKey;
+
+    const now = date || new Date();
+    setStartTime(initialData?.start_time ? new Date(initialData.start_time) : now);
+    setEndTime(initialData?.end_time ? new Date(initialData.end_time) : null);
+    setEndTimeVisible(!!initialData?.end_time);
+    setNotes(initialData?.notes ?? '');
+    setNotesVisible(false);
+    setFocusConfig(null);
+    setFocusValue('');
+    setStartTimer(false);
+    setSelectedRecipeId(null);
+    setRecipeDropdownOpen(false);
+
+    // Standardwerte setzen
+    if (activityType === 'feeding') {
+      if (initialData?.feeding_type === 'BREAST') setFeedingType('breast');
+      else if (initialData?.feeding_type === 'SOLIDS') setFeedingType('solids');
+      else setFeedingType('bottle');
+      setVolumeMl(initialData?.feeding_volume_ml ?? 120);
+      setBreastSide(
+        initialData?.feeding_side === 'RIGHT' ? 'right' : initialData?.feeding_side === 'BOTH' ? 'both' : 'left'
+      );
+    } else if (activityType === 'diaper') {
+      setDiaperType(
+        initialData?.diaper_type === 'DIRTY' ? 'dirty' : initialData?.diaper_type === 'BOTH' ? 'both' : 'wet'
+      );
+    }
+
+    // Hier könnten initialSubType ausgewertet werden
   }, [visible, initialSubType, date, initialData, activityType]);
 
   // Rezepte laden (Supabase), fallback auf Samples
