@@ -60,7 +60,7 @@ const getNotificationContent = (
     case 'event_reminder': {
       const reminderText = reminderMinutes ? ` in ${reminderMinutes} Minuten` : '';
       return {
-        title: `📅 Termin${reminderText}`,
+        title: `Termin${reminderText}`,
         body: `${title}${babyStr} um ${timeStr}${locationStr}`,
         emoji: '📅',
       };
@@ -68,7 +68,7 @@ const getNotificationContent = (
 
     case 'todo_due': {
       return {
-        title: '✓ Aufgabe fällig',
+        title: 'Aufgabe fällig',
         body: `${title}${babyStr} um ${timeStr}`,
         emoji: '✓',
       };
@@ -76,7 +76,7 @@ const getNotificationContent = (
 
     case 'todo_overdue': {
       return {
-        title: '⚠️ Aufgabe überfällig',
+        title: 'Aufgabe überfällig',
         body: `${title}${babyStr} war fällig um ${timeStr}`,
         emoji: '⚠️',
       };
@@ -84,7 +84,7 @@ const getNotificationContent = (
 
     default: {
       return {
-        title: '📋 Planner Erinnerung',
+        title: 'Planner Erinnerung',
         body: title,
         emoji: '📋',
       };
