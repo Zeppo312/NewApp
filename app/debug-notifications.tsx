@@ -159,6 +159,199 @@ export default function DebugNotificationsScreen() {
     }
   };
 
+  const testPlannerNotifications = async () => {
+    addLog('📋 CHECKING PLANNER NOTIFICATIONS...');
+    const { data: userData } = await supabase.auth.getUser();
+
+    if (!userData?.user) {
+      addLog('❌ ERROR: Not logged in');
+      return;
+    }
+
+    // Check planner notifications
+    const { data: plannerNotifs, error } = await supabase
+      .from('planner_notifications')
+      .select('*')
+      .eq('user_id', userData.user.id)
+      .order('scheduled_for', { ascending: false })
+      .limit(10);
+
+    if (error) {
+      addLog(`❌ ERROR: ${error.message}`);
+      return;
+    }
+
+    addLog(`Found ${plannerNotifs?.length || 0} planner notifications:`);
+    plannerNotifs?.forEach(n => {
+      const scheduled = new Date(n.scheduled_for);
+      const isPast = scheduled <= new Date();
+      addLog(`  - ${n.notification_type} (${isPast ? '🔴 DUE' : '🟢 FUTURE'})`);
+      addLog(`    Scheduled: ${scheduled.toLocaleString()}`);
+      addLog(`    Sent: ${n.sent ? '✓ Yes' : '✗ No'}`);
+      addLog(`    ID: ${n.id.substring(0, 8)}...`);
+    });
+  };
+
+  const testCreatePlannerEvent = async () => {
+    addLog('📅 CREATING TEST PLANNER EVENT...');
+    const { data: userData } = await supabase.auth.getUser();
+
+    if (!userData?.user) {
+      addLog('❌ ERROR: Not logged in');
+      return;
+    }
+
+    // Create event for 20 minutes from now
+    const startTime = new Date();
+    startTime.setMinutes(startTime.getMinutes() + 20);
+    const endTime = new Date(startTime);
+    endTime.setMinutes(endTime.getMinutes() + 30);
+
+    addLog(`Event will start at: ${startTime.toLocaleTimeString()}`);
+    addLog('Notification should arrive in ~5 minutes (15 min before event)');
+
+    // Get or create today's planner_day
+    const today = new Date().toISOString().split('T')[0];
+
+    let { data: day, error: dayError } = await supabase
+      .from('planner_days')
+      .select('id')
+      .eq('user_id', userData.user.id)
+      .eq('day', today)
+      .maybeSingle();
+
+    if (!day) {
+      const { data: newDay, error: createError } = await supabase
+        .from('planner_days')
+        .insert({ user_id: userData.user.id, day: today })
+        .select()
+        .single();
+
+      if (createError) {
+        addLog(`❌ ERROR creating day: ${createError.message}`);
+        return;
+      }
+      day = newDay;
+    }
+
+    // Create the event
+    const { data: event, error: eventError } = await supabase
+      .from('planner_items')
+      .insert({
+        user_id: userData.user.id,
+        day_id: day.id,
+        entry_type: 'event',
+        title: 'Test Notification Event',
+        start_at: startTime.toISOString(),
+        end_at: endTime.toISOString(),
+        location: 'Debug Screen',
+      })
+      .select()
+      .single();
+
+    if (eventError) {
+      addLog(`❌ ERROR: ${eventError.message}`);
+      return;
+    }
+
+    addLog(`✓ Event created: ${event.id.substring(0, 8)}...`);
+
+    // Wait and check if notification was created
+    addLog('Waiting for trigger to create notification...');
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    const { data: notif, error: notifError } = await supabase
+      .from('planner_notifications')
+      .select('*')
+      .eq('planner_item_id', event.id)
+      .maybeSingle();
+
+    if (notifError) {
+      addLog(`❌ ERROR: ${notifError.message}`);
+      return;
+    }
+
+    if (!notif) {
+      addLog('❌ ERROR: No notification created by trigger!');
+      return;
+    }
+
+    const notifTime = new Date(notif.scheduled_for);
+    addLog(`✓ Notification scheduled for: ${notifTime.toLocaleTimeString()}`);
+    addLog(`  Type: ${notif.notification_type}`);
+    addLog(`  Reminder: ${notif.reminder_minutes} minutes before`);
+
+    const minutesUntilNotif = Math.round((notifTime.getTime() - new Date().getTime()) / 60000);
+    addLog(`⏰ Notification will arrive in ~${minutesUntilNotif} minutes`);
+  };
+
+  const testManualTriggerCheck = async () => {
+    addLog('⚙️ MANUALLY TRIGGERING NOTIFICATION CHECK...');
+
+    const { error } = await supabase.rpc('check_due_planner_notifications');
+
+    if (error) {
+      addLog(`❌ ERROR: ${error.message}`);
+      return;
+    }
+
+    addLog('✓ Check function executed');
+    addLog('Check planner notifications to see if any were marked as sent');
+
+    // Check for sent notifications
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    await testPlannerNotifications();
+  };
+
+  const testPlannerNotificationChain = async () => {
+    addLog('🧪 STARTING PLANNER NOTIFICATION CHAIN TEST');
+    addLog('================================================');
+
+    const { data: userData } = await supabase.auth.getUser();
+
+    if (!userData?.user) {
+      addLog('❌ ERROR: Not logged in');
+      return;
+    }
+
+    addLog(`✓ Current User ID: ${userData.user.id.substring(0, 8)}...`);
+
+    // Step 1: Check push tokens
+    addLog('');
+    addLog('STEP 1: Checking push tokens...');
+    const { data: tokens } = await supabase
+      .from('user_push_tokens')
+      .select('token, device_type')
+      .eq('user_id', userData.user.id);
+
+    if (!tokens || tokens.length === 0) {
+      addLog('⚠️ WARNING: No push tokens found');
+      addLog('Open the app on your device to register a token');
+    } else {
+      addLog(`✓ Found ${tokens.length} push token(s)`);
+    }
+
+    // Step 2: Create test event
+    addLog('');
+    addLog('STEP 2: Creating test event...');
+    await testCreatePlannerEvent();
+
+    // Step 3: Instructions
+    addLog('');
+    addLog('================================================');
+    addLog('✅ TEST SETUP COMPLETE');
+    addLog('');
+    addLog('What should happen:');
+    addLog('1. Wait ~5 minutes for notification time');
+    addLog('2. pg_cron checks every minute for due notifications');
+    addLog('3. When due, webhook triggers Edge Function');
+    addLog('4. Push notification arrives on your device');
+    addLog('');
+    addLog('To test immediately:');
+    addLog('- Use "⚙️ Manual Trigger Check" button');
+    addLog('- Or check Supabase Edge Function logs');
+  };
+
   const testPushNotificationChain = async () => {
     addLog('🧪 STARTING FULL PUSH NOTIFICATION CHAIN TEST');
     addLog('================================================');

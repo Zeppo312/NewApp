@@ -173,6 +173,12 @@ export function navigateToNotificationTarget(type: string, referenceId: string) 
         findParentPostAndNavigate(referenceId);
         break;
 
+      // Planner notification types
+      case 'planner_item':
+        // Navigate to planner with the specific date and item
+        navigateToPlannerItem(referenceId);
+        break;
+
       default:
         // Standardmäßig zur Community-Ansicht
         console.log('Unknown notification type:', type);
@@ -194,13 +200,13 @@ async function findParentPostAndNavigate(commentId: string) {
       .select('post_id')
       .eq('id', commentId)
       .single();
-    
+
     if (error || !comment) {
       console.error('Fehler beim Abrufen des Kommentars:', error);
       router.push('/community' as any);
       return;
     }
-    
+
     // Navigiere zum Beitrag mit dem Fokus auf diesem Kommentar
     router.push({
       pathname: '/community',
@@ -209,6 +215,38 @@ async function findParentPostAndNavigate(commentId: string) {
   } catch (error) {
     console.error('Fehler beim Finden des übergeordneten Beitrags:', error);
     router.push('/community' as any);
+  }
+}
+
+// Navigiert zum Planner mit dem spezifischen Item
+async function navigateToPlannerItem(plannerItemId: string) {
+  try {
+    // Planner-Item abrufen, um das Datum zu bekommen
+    const { data: plannerItem, error } = await supabase
+      .from('planner_items')
+      .select('day_id, planner_days!inner(day)')
+      .eq('id', plannerItemId)
+      .single();
+
+    if (error || !plannerItem) {
+      console.error('Fehler beim Abrufen des Planner-Items:', error);
+      router.push('/planner' as any);
+      return;
+    }
+
+    // Extract day from the nested planner_days object
+    const day = Array.isArray(plannerItem.planner_days)
+      ? plannerItem.planner_days[0]?.day
+      : plannerItem.planner_days?.day;
+
+    // Navigiere zum Planner mit dem spezifischen Datum und Item
+    router.push({
+      pathname: '/planner',
+      params: { date: day, itemId: plannerItemId }
+    } as any);
+  } catch (error) {
+    console.error('Fehler beim Navigieren zum Planner-Item:', error);
+    router.push('/planner' as any);
   }
 }
 
