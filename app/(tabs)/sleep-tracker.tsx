@@ -693,6 +693,39 @@ export default function SleepTrackerScreen() {
         return;
       }
 
+      // Robuste Berechnung der duration_minutes
+      const calculateDurationMinutes = (startTime: string | Date, endTime: string | Date | null): number | null => {
+        if (!endTime) return null;
+
+        try {
+          const startDate = new Date(startTime);
+          const endDate = new Date(endTime);
+
+          // Validiere dass beide Daten gültig sind
+          if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+            console.warn('Invalid date in duration calculation');
+            return null;
+          }
+
+          // Berechne die Differenz in Millisekunden und konvertiere zu Minuten
+          const durationMs = endDate.getTime() - startDate.getTime();
+
+          // Stelle sicher, dass die Dauer nicht negativ ist
+          if (durationMs < 0) {
+            console.warn('End time is before start time');
+            return null;
+          }
+
+          return Math.round(durationMs / 60000);
+        } catch (error) {
+          console.error('Error calculating duration:', error);
+          return null;
+        }
+      };
+
+      const calculatedDuration = calculateDurationMinutes(sleepData.start_time, sleepData.end_time);
+      console.log('🔍 Calculated duration:', calculatedDuration, 'minutes');
+
       if (editingEntry?.id) {
         console.log('🔄 Updating existing entry:', editingEntry.id);
         // Update existing entry
@@ -703,9 +736,7 @@ export default function SleepTrackerScreen() {
             end_time: sleepData.end_time ?? null,
             quality: sleepData.quality || null,
             notes: sleepData.notes ?? null,
-            duration_minutes: sleepData.end_time
-              ? Math.round((new Date(sleepData.end_time).getTime() - new Date(sleepData.start_time).getTime()) / 60000)
-            : null,
+            duration_minutes: calculatedDuration,
             partner_id: editingEntry.partner_id ?? effectivePartnerId ?? null
         })
           .eq('id', editingEntry.id);
@@ -737,9 +768,7 @@ export default function SleepTrackerScreen() {
             end_time: sleepData.end_time ?? null,
             quality: sleepData.quality || null,
             notes: sleepData.notes ?? null,
-            duration_minutes: sleepData.end_time
-              ? Math.round((new Date(sleepData.end_time).getTime() - new Date(sleepData.start_time).getTime()) / 60000)
-            : null,
+            duration_minutes: calculatedDuration,
             partner_id: effectivePartnerId ?? null
           })
           .select();
@@ -769,7 +798,7 @@ export default function SleepTrackerScreen() {
     } catch (error) {
       console.error('❌ Sleep entry save error:', error);
       Alert.alert(
-        'Unerwarteter Fehler', 
+        'Unerwarteter Fehler',
         `${error instanceof Error ? error.message : 'Unbekannter Fehler'}\n\nBitte versuche es erneut oder kontaktiere den Support.`
       );
     }
