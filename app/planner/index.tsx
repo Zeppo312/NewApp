@@ -1407,5 +1407,5 @@ const styles = StyleSheet.create({
 function toDateKey(d: Date) {
   const copy = new Date(d);
   copy.setHours(0, 0, 0, 0);
-  return copy.toISOString().split('T')[0];
+  return `${copy.getFullYear()}-${String(copy.getMonth() + 1).padStart(2, '0')}-${String(copy.getDate()).padStart(2, '0')}`;
 }
