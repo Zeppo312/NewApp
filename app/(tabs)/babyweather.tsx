@@ -107,6 +107,22 @@ type ContextMode = 'stroller' | 'carrier' | 'indoor' | 'sleeping' | 'carSeat';
 
 type TemperatureBand = 'hot' | 'warm' | 'mild' | 'cool' | 'fresh' | 'cold';
 
+// Neues LayerSlot-System (exklusive Auswahl pro Layer)
+type LayerSlot = {
+  base: string | null;
+  bottom: string | null;
+  mid: string | null;
+  outer: string | null;
+  accessories: string[];
+};
+
+// Alternativen für User-Switch (optional)
+type LayerAlternatives = {
+  bottom?: string[];
+  mid?: string[];
+  outer?: string[];
+};
+
 // Erweiterte Kleidungskatalog mit spezifischeren Kategorien
 const clothingCatalogue: Record<ClothingCategory, ClothingItem[]> = {
   underwear: [
@@ -548,6 +564,14 @@ export default function BabyWeatherScreen() {
   const [showBabyInfo, setShowBabyInfo] = useState(false);
   const [metaCards, setMetaCards] = useState<{title: string, content: string, icon: any}[]>([]);
 
+  // Alternativen-System
+  const [layerAlternatives, setLayerAlternatives] = useState<LayerAlternatives>({});
+  const [currentAlternativeIndex, setCurrentAlternativeIndex] = useState<{
+    bottom?: number;
+    mid?: number;
+    outer?: number;
+  }>({});
+
   // Wetterdaten abrufen
   useEffect(() => {
     if (searchType === 'location') {
@@ -717,15 +741,62 @@ export default function BabyWeatherScreen() {
     }
   };
 
+  // Wechsle zur nächsten Alternative für einen Layer
+  const swapLayerAlternative = (layer: 'bottom' | 'mid' | 'outer') => {
+    const alternatives = layerAlternatives[layer];
+    if (!alternatives || alternatives.length <= 1) return;
+
+    const currentIndex = currentAlternativeIndex[layer] ?? 0;
+    const nextIndex = (currentIndex + 1) % alternatives.length;
+
+    // Speichere neuen Index
+    const newIndices = {
+      ...currentAlternativeIndex,
+      [layer]: nextIndex,
+    };
+
+    setCurrentAlternativeIndex(newIndices);
+
+    // Empfehlungen neu berechnen mit dem NEUEN Index (direkt übergeben)
+    if (weatherData) {
+      updateClothingRecommendations(weatherData.temperature, selectedMode, newIndices);
+    }
+  };
+
   // Kleidungsempfehlungen aktualisieren, wenn sich der Kontext ändert
   useEffect(() => {
     if (weatherData) {
+      // Alternativen-Index zurücksetzen bei Moduswechsel
+      setCurrentAlternativeIndex({});
       updateClothingRecommendations(weatherData.temperature, selectedMode);
     }
   }, [selectedMode, weatherData, babyAgeMonths, babyWeightPercentile]);
 
+  // Helper: Wähle genau EINES aus einer Liste basierend auf Priorität
+  const selectOne = (candidates: string[], priorities: string[]): string | null => {
+    for (const priority of priorities) {
+      if (candidates.includes(priority)) {
+        return priority;
+      }
+    }
+    return candidates[0] || null;
+  };
+
+  // Prioritäten für jede Layer-Kategorie (von höchster zu niedrigster Priorität)
+  const layerPriorities = {
+    bottom: ['Shorts', 'Strumpfhose', 'Hose'],
+    mid: ['Fleecejacke', 'Pullover', 'Dünner Pullover'],
+    outer: ['Overall', 'Softshellanzug', 'Regenjacke', 'Jacke'],
+  };
+
   // Berechne die Kleidungsempfehlungen basierend auf Temperatur und Kontext
-  const updateClothingRecommendations = (temperature: number, mode: ContextMode) => {
+  const updateClothingRecommendations = (
+    temperature: number,
+    mode: ContextMode,
+    overrideIndices?: { bottom?: number; mid?: number; outer?: number }
+  ) => {
+    // Verwende override indices falls übergeben, sonst state
+    const activeIndices = overrideIndices || currentAlternativeIndex;
     console.log(`Ursprüngliche Temperatur: ${temperature}°C`);
 
     const humidity = weatherData?.humidity ?? 50;
@@ -776,61 +847,98 @@ export default function BabyWeatherScreen() {
     const indicatesSnow = description.includes('schnee') || iconName.includes('snow');
     const indicatesWind = description.includes('wind') || windSpeed >= 20;
 
-    const addUnique = (target: string[], value: string) => {
-      if (!value) return;
-      if (!target.includes(value)) {
-        target.push(value);
-      }
+    // ✨ EXKLUSIVE LayerSlot-Logik: Maximal 1 Teil pro Layer
+    const layers: LayerSlot = {
+      base: null,
+      bottom: null,
+      mid: null,
+      outer: null,
+      accessories: [],
     };
 
-    const baseLayer = ['Windel'];
-    addUnique(baseLayer, ['hot', 'warm'].includes(layeringBand) ? 'Kurzarmbody' : 'Langarmbody');
+    // Base Layer (Windel + Body)
+    layers.base = ['hot', 'warm'].includes(layeringBand) ? 'Kurzarmbody' : 'Langarmbody';
 
-    const bottomLayer: string[] = [];
+    // Bottom Layer: Sammle Kandidaten, wähle dann EINEN
+    const bottomCandidates: string[] = [];
     if (layeringBand === 'hot' || (layeringBand === 'warm' && referenceTemp >= 25)) {
-      addUnique(bottomLayer, 'Shorts');
+      bottomCandidates.push('Shorts');
     } else {
       if (['fresh', 'cold'].includes(layeringBand)) {
-        addUnique(bottomLayer, 'Strumpfhose');
+        bottomCandidates.push('Strumpfhose');
       }
-      addUnique(bottomLayer, 'Hose');
+      bottomCandidates.push('Hose');
     }
 
-    const midLayer: string[] = [];
+    // Alternativen speichern, wenn mehrere Optionen vorhanden
+    const alternatives: LayerAlternatives = {};
+    if (bottomCandidates.length > 1) {
+      alternatives.bottom = bottomCandidates;
+    }
+
+    // Wähle die aktuell gewählte Alternative oder die erste
+    const bottomIndex = activeIndices.bottom ?? 0;
+    layers.bottom = bottomCandidates[bottomIndex] || selectOne(bottomCandidates, layerPriorities.bottom);
+
+    // Mid Layer: Sammle Kandidaten, wähle dann EINEN
+    const midCandidates: string[] = [];
     if (layeringBand === 'cool') {
-      addUnique(midLayer, 'Dünner Pullover');
+      midCandidates.push('Dünner Pullover');
     } else if (layeringBand === 'fresh') {
-      addUnique(midLayer, 'Pullover');
+      midCandidates.push('Pullover');
     } else if (layeringBand === 'cold') {
-      addUnique(midLayer, 'Pullover');
-      addUnique(midLayer, 'Fleecejacke');
+      midCandidates.push('Pullover');
+      midCandidates.push('Fleecejacke');
     }
 
     if (indicatesWind && ['fresh', 'cold'].includes(layeringBand)) {
-      addUnique(midLayer, 'Fleecejacke');
+      midCandidates.push('Fleecejacke');
     }
 
-    const outerLayer: string[] = [];
+    // Duplikate entfernen
+    const uniqueMidCandidates = Array.from(new Set(midCandidates));
+    if (uniqueMidCandidates.length > 1) {
+      alternatives.mid = uniqueMidCandidates;
+    }
+
+    const midIndex = activeIndices.mid ?? 0;
+    layers.mid = uniqueMidCandidates[midIndex] || selectOne(uniqueMidCandidates, layerPriorities.mid);
+
+    // Outer Layer: Sammle Kandidaten, wähle dann EINEN
+    const outerCandidates: string[] = [];
     if (layeringBand === 'fresh') {
-      addUnique(outerLayer, 'Jacke');
+      outerCandidates.push('Jacke');
     } else if (layeringBand === 'cold' && mode !== 'carSeat') {
-      addUnique(outerLayer, 'Overall');
+      outerCandidates.push('Overall');
     }
 
     if ((requiresRainProtection || indicatesSnow) && layeringBand !== 'hot') {
-      addUnique(outerLayer, 'Regenjacke');
+      outerCandidates.push('Regenjacke');
     }
 
     if (indicatesWind && ['cool', 'fresh', 'cold'].includes(layeringBand)) {
-      addUnique(outerLayer, 'Softshellanzug');
+      outerCandidates.push('Softshellanzug');
     } else if (layeringBand === 'fresh' && mode === 'stroller') {
-      addUnique(outerLayer, 'Softshellanzug');
+      outerCandidates.push('Softshellanzug');
     }
 
-    const accessories = new Set<string>();
+    // Duplikate entfernen
+    const uniqueOuterCandidates = Array.from(new Set(outerCandidates));
+    if (uniqueOuterCandidates.length > 1) {
+      alternatives.outer = uniqueOuterCandidates;
+    }
+
+    const outerIndex = activeIndices.outer ?? 0;
+    layers.outer = uniqueOuterCandidates[outerIndex] || selectOne(uniqueOuterCandidates, layerPriorities.outer);
+
+    // Speichere Alternativen für die UI
+    setLayerAlternatives(alternatives);
+
+    // Accessories (können mehrere sein, aber sinnvoll begrenzt)
+    const accessoriesSet = new Set<string>();
     const addAccessory = (item: string) => {
       if (item) {
-        accessories.add(item);
+        accessoriesSet.add(item);
       }
     };
 
@@ -870,69 +978,76 @@ export default function BabyWeatherScreen() {
       addAccessory('Kinderwagen-Decke');
     }
 
-    // 4. Kontext-Sonderregeln
-    let finalRecommendations: string[] = [];
+    layers.accessories = Array.from(accessoriesSet);
+
+    // 4. Kontext-Sonderregeln (jetzt mit LayerSlot)
     const metaWarnings = new Set<string>();
 
     if (mode === 'carrier' && layeringBand !== 'hot') {
-      if (outerLayer.length > 0) {
-        outerLayer.pop();
-      } else if (midLayer.length > 0) {
-        midLayer.pop();
+      // In der Trage: Entferne outer oder mid Layer
+      if (layers.outer) {
+        layers.outer = null;
+      } else if (layers.mid) {
+        layers.mid = null;
       }
       metaWarnings.add("In der Trage wird es wärmer - eine Schicht weniger als normal empfohlen.");
     }
 
     if (mode === 'carSeat') {
-      ['Overall', 'Softshellanzug'].forEach(item => {
-        const index = outerLayer.indexOf(item);
-        if (index !== -1) {
-          outerLayer.splice(index, 1);
-        }
-      });
+      // Im Autositz: Keine dicken Anzüge, nur dünne Jacken
+      if (layers.outer === 'Overall' || layers.outer === 'Softshellanzug') {
+        layers.outer = null;
+      }
 
-      if (layeringBand !== 'hot' && !outerLayer.includes('Jacke')) {
-        addUnique(outerLayer, 'Jacke');
+      if (layeringBand !== 'hot' && !layers.outer) {
+        layers.outer = 'Jacke';
       }
 
       if (['cool', 'fresh', 'cold'].includes(layeringBand)) {
         metaWarnings.add("Im Autositz nur dünne Jacken tragen und warme Schichten erst nach dem Anschnallen ergänzen.");
-        accessories.delete('Handschuhe');
-        accessories.delete('Schal');
-        addAccessory('Kinderwagen-Decke');
+        layers.accessories = layers.accessories.filter(item => item !== 'Handschuhe' && item !== 'Schal');
+        if (!layers.accessories.includes('Kinderwagen-Decke')) {
+          layers.accessories.push('Kinderwagen-Decke');
+        }
       }
     }
 
-    const accessoriesList = Array.from(accessories);
-    const combineUnique = (...groups: string[][]) => {
-      const ordered: string[] = [];
-      groups.forEach(group => {
-        group.forEach(item => {
-          if (item && !ordered.includes(item)) {
-            ordered.push(item);
-          }
-        });
-      });
-      return ordered;
-    };
+    // Baue finalRecommendations aus LayerSlot
+    let finalRecommendations: string[] = [];
 
     if (mode === 'sleeping') {
-      const sleepLayers = [...baseLayer];
+      // Schlafen: Base + Schlafsack + ggf. Socken
+      if (layers.base) finalRecommendations.push(layers.base);
+      finalRecommendations.push('Windel');
+
       if (['hot', 'warm'].includes(layeringBand)) {
-        addUnique(sleepLayers, 'Schlafsack 0.5 TOG');
+        finalRecommendations.push('Schlafsack 0.5 TOG');
       } else if (['mild', 'cool'].includes(layeringBand)) {
-        addUnique(sleepLayers, referenceTemp >= 20 ? 'Schlafsack 1.0 TOG' : 'Schlafsack 2.5 TOG');
+        finalRecommendations.push(referenceTemp >= 20 ? 'Schlafsack 1.0 TOG' : 'Schlafsack 2.5 TOG');
       } else {
-        addUnique(sleepLayers, 'Schlafsack 2.5 TOG');
+        finalRecommendations.push('Schlafsack 2.5 TOG');
       }
-      const sleepAccessories = accessoriesList.filter(item => item === 'Socken');
-      finalRecommendations = combineUnique(sleepLayers, sleepAccessories);
+
+      const sleepAccessories = layers.accessories.filter(item => item === 'Socken');
+      finalRecommendations.push(...sleepAccessories);
     } else if (mode === 'indoor') {
-      const indoorMid = ['cool', 'fresh', 'cold'].includes(layeringBand) ? midLayer.slice(0, 1) : [];
-      const indoorAccessories = accessoriesList.includes('Socken') ? ['Socken'] : [];
-      finalRecommendations = combineUnique(baseLayer, bottomLayer, indoorMid, indoorAccessories);
+      // Indoor: Base + Bottom + ggf. Mid + Socken
+      finalRecommendations.push('Windel');
+      if (layers.base) finalRecommendations.push(layers.base);
+      if (layers.bottom) finalRecommendations.push(layers.bottom);
+      if (['cool', 'fresh', 'cold'].includes(layeringBand) && layers.mid) {
+        finalRecommendations.push(layers.mid);
+      }
+      const indoorAccessories = layers.accessories.filter(item => item === 'Socken');
+      finalRecommendations.push(...indoorAccessories);
     } else {
-      finalRecommendations = combineUnique(baseLayer, bottomLayer, midLayer, outerLayer, accessoriesList);
+      // Outdoor: Alle Layers
+      finalRecommendations.push('Windel');
+      if (layers.base) finalRecommendations.push(layers.base);
+      if (layers.bottom) finalRecommendations.push(layers.bottom);
+      if (layers.mid) finalRecommendations.push(layers.mid);
+      if (layers.outer) finalRecommendations.push(layers.outer);
+      finalRecommendations.push(...layers.accessories);
     }
 
     console.log("Empfohlene Teile:", finalRecommendations.join(", "));
@@ -1020,27 +1135,58 @@ export default function BabyWeatherScreen() {
     </ThemedText>
   );
 
-  const renderClothingItem = ({ item }: { item: ClothingItem }) => (
-    <View style={styles.clothingItem}>
-      <View style={styles.clothesPin} />
-      <View style={[
-        styles.clothingItemContent,
-        { backgroundColor: 'rgba(255, 255, 255, 0.85)' }
-      ]}>
-        {item.image ? (
-          <Image source={getClothingImage(item.image)} style={styles.clothingImage} />
-        ) : (
-          <View style={[
-            styles.iconBackground, 
-            { backgroundColor: getClothingColor(item.name) }
-          ]}>
-            <IconSymbol name={getClothingIcon(item.name)} size={36} color="#FFFFFF" />
-          </View>
+  // Helper: Bestimme welchem Layer ein Item gehört
+  const getItemLayer = (itemName: string): 'bottom' | 'mid' | 'outer' | null => {
+    if (layerAlternatives.bottom?.includes(itemName)) return 'bottom';
+    if (layerAlternatives.mid?.includes(itemName)) return 'mid';
+    if (layerAlternatives.outer?.includes(itemName)) return 'outer';
+    return null;
+  };
+
+  const renderClothingItem = ({ item }: { item: ClothingItem }) => {
+    const itemLayer = getItemLayer(item.name);
+    const hasAlternatives = itemLayer && layerAlternatives[itemLayer] && layerAlternatives[itemLayer]!.length > 1;
+    const alternatives = itemLayer ? layerAlternatives[itemLayer] : null;
+    const currentIndex = itemLayer ? (currentAlternativeIndex[itemLayer] ?? 0) : 0;
+    const nextAlternative = hasAlternatives && alternatives ? alternatives[(currentIndex + 1) % alternatives.length] : null;
+
+    return (
+      <View style={styles.clothingItem}>
+        <View style={styles.clothesPin} />
+        <View style={[
+          styles.clothingItemContent,
+          { backgroundColor: 'rgba(255, 255, 255, 0.85)' }
+        ]}>
+          {item.image ? (
+            <Image source={getClothingImage(item.image)} style={styles.clothingImage} />
+          ) : (
+            <View style={[
+              styles.iconBackground,
+              { backgroundColor: getClothingColor(item.name) }
+            ]}>
+              <IconSymbol name={getClothingIcon(item.name)} size={36} color="#FFFFFF" />
+            </View>
+          )}
+
+          {/* Alternativen-Button */}
+          {hasAlternatives && nextAlternative && (
+            <TouchableOpacity
+              style={styles.swapButton}
+              onPress={() => itemLayer && swapLayerAlternative(itemLayer)}
+            >
+              <IconSymbol name="arrow.triangle.2.circlepath" size={16} color="#FFFFFF" />
+            </TouchableOpacity>
+          )}
+        </View>
+        <ThemedText style={styles.clothingName}>{item.name}</ThemedText>
+        {hasAlternatives && nextAlternative && (
+          <ThemedText style={styles.alternativeHint}>
+            Alternative: {nextAlternative}
+          </ThemedText>
         )}
       </View>
-      <ThemedText style={styles.clothingName}>{item.name}</ThemedText>
-    </View>
-  );
+    );
+  };
 
   // Zusätzliches Rendering für Meta-Cards
   const renderMetaCard = ({ item }: { item: {title: string, content: string, icon: any} }) => (
@@ -1508,6 +1654,29 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 4,
     color: '#7D5A50',
+  },
+  swapButton: {
+    position: 'absolute',
+    top: 5,
+    right: 5,
+    backgroundColor: 'rgba(125, 90, 80, 0.85)',
+    borderRadius: 15,
+    width: 30,
+    height: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  alternativeHint: {
+    fontSize: 10,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    marginTop: 2,
+    color: '#A67C52',
   },
   disclaimer: {
     fontSize: 12,
