@@ -100,6 +100,366 @@ interface ClassifiedSleepEntry extends SleepEntry {
   isActive: boolean;
 }
 
+type SleepStats = {
+  totalMinutes: number;
+  napsCount: number;
+  longestStretch: number;
+  score: number;
+};
+
+type StatusMetricsBarProps = {
+  stats: SleepStats;
+  selectedDate: Date;
+  sleepPrediction: SleepWindowPrediction | null;
+  activeSleepEntry: ClassifiedSleepEntry | null;
+  statsPage: number;
+  onPageChange: (page: number) => void;
+};
+
+const isSameDay = (a: Date, b: Date) =>
+  a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+
+const minutesToHMM = (mins: number) => {
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (h <= 0) return `${m}m`;
+  return `${h}h ${m}m`;
+};
+
+const StatusMetricsBar = ({
+  stats,
+  selectedDate,
+  sleepPrediction,
+  activeSleepEntry,
+  statsPage,
+  onPageChange,
+}: StatusMetricsBarProps) => {
+  const statsPageCount = 3;
+  const statsScrollRef = useRef<ScrollView>(null);
+  const [autoScrollEnabled, setAutoScrollEnabled] = useState(true);
+
+  const getTirednessLevel = (): { emoji: string; label: string; color: string } => {
+    if (!sleepPrediction || !sleepPrediction.debug.lastNapEnd || activeSleepEntry) {
+      return { emoji: '😌', label: 'entspannt', color: '#A8C4A2' };
+    }
+
+    const windowMinutes = sleepPrediction.windowMinutes as number;
+    const minutesUntilWindow = sleepPrediction.debug.awakeSinceLastNap !== null
+      ? (windowMinutes - (sleepPrediction.debug.awakeSinceLastNap as number))
+      : windowMinutes;
+
+    if (minutesUntilWindow > 20) {
+      return { emoji: '😌', label: 'entspannt', color: '#A8C4A2' };
+    }
+
+    if (minutesUntilWindow > 10) {
+      return { emoji: '🙂', label: 'wird müde', color: '#FF8C42' };
+    }
+
+    if (minutesUntilWindow >= -5 && minutesUntilWindow <= 10) {
+      return { emoji: '😴', label: 'optimal', color: '#8E4EC6' };
+    }
+
+    return { emoji: '😵', label: 'übermüdet', color: '#E53E3E' };
+  };
+
+  const getReasoningText = (): string => {
+    if (!sleepPrediction || !sleepPrediction.debug) return 'Keine Vorhersage verfügbar';
+
+    const { lastNapDuration, targetNapDuration, sleepDebt, circadianHour, napDurationAdjustment, sleepDebtAdjustment } = sleepPrediction.debug;
+
+    const reasons: string[] = [];
+
+    if (lastNapDuration && targetNapDuration && Math.abs(napDurationAdjustment as number) > 5) {
+      if ((napDurationAdjustment as number) < -5) {
+        reasons.push('Letzter Nap war kurz');
+      } else if ((napDurationAdjustment as number) > 5) {
+        reasons.push('Letzter Nap war lang');
+      }
+    }
+
+    if (Math.abs(sleepDebt as number) > 30) {
+      if ((sleepDebtAdjustment as number) < -5) {
+        reasons.push('Heute schon viel wach gewesen');
+      } else if ((sleepDebtAdjustment as number) > 5) {
+        reasons.push('Heute schon viel geschlafen');
+      }
+    }
+
+    if (circadianHour !== null && (circadianHour as number) >= 16) {
+      reasons.push('Nachmittags werden Babys schneller müde');
+    }
+
+    if (reasons.length === 0) {
+      return 'Normale Schlafzeit für dieses Alter';
+    }
+
+    return reasons[0];
+  };
+
+  const getCountdownText = (): string => {
+    if (!sleepPrediction || activeSleepEntry) {
+      return activeSleepEntry ? 'Schläft gerade' : 'Keine Vorhersage';
+    }
+
+    const now = new Date();
+    const minutesUntil = Math.round((sleepPrediction.recommendedStart.getTime() - now.getTime()) / 60000);
+
+    if (minutesUntil <= 0 && minutesUntil >= -10) {
+      return 'Schlafenszeit jetzt optimal';
+    }
+
+    if (minutesUntil < -10) {
+      return 'Fenster bereits verpasst';
+    }
+
+    if (minutesUntil <= 5) {
+      return 'Bereit zum Schlafen';
+    }
+
+    const hours = Math.floor(minutesUntil / 60);
+    const mins = minutesUntil % 60;
+
+    if (hours > 0) {
+      return `In ca. ${hours}h ${mins}m müde`;
+    }
+
+    return `In ca. ${mins} Min müde`;
+  };
+
+  const getBedtimeWarning = (): string | null => {
+    if (!sleepPrediction || !sleepPrediction.debug.anchorConstraintApplied) {
+      return null;
+    }
+
+    const { dynamicBedtimeGap } = sleepPrediction.debug;
+    if (!dynamicBedtimeGap || (dynamicBedtimeGap as number) < 90) {
+      return null;
+    }
+
+    return 'Ein später Nap könnte den Nachtschlaf erschweren';
+  };
+
+  const getHistoricalText = (): string | null => {
+    if (!sleepPrediction || !sleepPrediction.debug.historicalSampleCount) {
+      return null;
+    }
+
+    const { historicalSampleCount } = sleepPrediction.debug;
+    if ((historicalSampleCount as number) < 5) {
+      return null;
+    }
+
+    // windowMinutes aus der Prediction selbst nehmen (nicht aus debug)
+    const windowMinutes = sleepPrediction.windowMinutes as number;
+    const hours = Math.floor(windowMinutes / 60);
+    const mins = windowMinutes % 60;
+    const timeStr = hours > 0 ? `${hours}h ${mins}min` : `${mins} Min`;
+
+    return `In den letzten Tagen klappt Schlaf meist nach ~${timeStr} Wachzeit`;
+  };
+
+  useEffect(() => {
+    if (!autoScrollEnabled) return;
+    const timer = setInterval(() => {
+      const nextPage = (statsPage + 1) % statsPageCount;
+      statsScrollRef.current?.scrollTo({ x: nextPage * screenWidth, animated: true });
+      onPageChange(nextPage);
+    }, 8000);
+    return () => clearInterval(timer);
+  }, [autoScrollEnabled, onPageChange, statsPage, statsPageCount]);
+
+  const tirednessLevel = getTirednessLevel();
+  const reasoningText = getReasoningText();
+  const countdownText = getCountdownText();
+  const bedtimeWarning = getBedtimeWarning();
+  const historicalText = getHistoricalText();
+  const hintText = bedtimeWarning ?? 'Kein besonderer Hinweis';
+  const historyText = historicalText ?? 'Noch zu wenig Daten für einen Trend';
+  const dayLabel = isSameDay(selectedDate, new Date())
+    ? 'Heute'
+    : selectedDate.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' });
+
+  return (
+    <View style={styles.statsContainer}>
+      <ScrollView
+        ref={statsScrollRef}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        onScrollBeginDrag={() => setAutoScrollEnabled(false)}
+        onScroll={(e) => {
+          const page = Math.round(e.nativeEvent.contentOffset.x / screenWidth);
+          onPageChange(page);
+        }}
+        scrollEventThrottle={16}
+        style={styles.statsScroll}
+      >
+        <View style={[styles.statsPage, { width: screenWidth }]}>
+          <View style={styles.kpiRow}>
+            <GlassCard
+              style={styles.kpiCard}
+              intensity={20}
+              overlayColor="rgba(142, 78, 198, 0.1)"
+              borderColor="rgba(142, 78, 198, 0.25)"
+            >
+              <View style={styles.kpiHeaderRow}>
+                <IconSymbol name="moon.fill" size={12} color="#8E4EC6" />
+                <Text style={styles.kpiTitle}>{dayLabel}</Text>
+              </View>
+              <Text style={[styles.kpiValue, styles.kpiValueCentered]}>{minutesToHMM(stats.totalMinutes)}</Text>
+            </GlassCard>
+
+            <GlassCard
+              style={styles.kpiCard}
+              intensity={20}
+              overlayColor="rgba(255, 140, 66, 0.1)"
+              borderColor="rgba(255, 140, 66, 0.25)"
+            >
+              <View style={styles.kpiHeaderRow}>
+                <IconSymbol name="zzz" size={12} color="#FF8C42" />
+                <Text style={styles.kpiTitle}>Naps</Text>
+              </View>
+              <Text style={[styles.kpiValue, styles.kpiValueCentered]}>{stats.napsCount}</Text>
+            </GlassCard>
+          </View>
+
+          <View style={styles.kpiRow}>
+            <GlassCard
+              style={styles.kpiCard}
+              intensity={20}
+              overlayColor="rgba(168, 196, 162, 0.1)"
+              borderColor="rgba(168, 196, 162, 0.25)"
+            >
+              <View style={styles.kpiHeaderRow}>
+                <IconSymbol name="clock.fill" size={12} color="#A8C4A2" />
+                <Text style={styles.kpiTitle}>Längster</Text>
+              </View>
+              <Text style={[styles.kpiValue, styles.kpiValueCentered]}>{minutesToHMM(stats.longestStretch)}</Text>
+            </GlassCard>
+
+            <GlassCard
+              style={styles.kpiCard}
+              intensity={20}
+              overlayColor="rgba(255, 155, 155, 0.1)"
+              borderColor="rgba(255, 155, 155, 0.25)"
+            >
+              <View style={styles.kpiHeaderRow}>
+                <IconSymbol name="chart.line.uptrend.xyaxis" size={12} color="#FF9B9B" />
+                <Text style={styles.kpiTitle}>Score</Text>
+              </View>
+              <Text style={[styles.kpiValue, styles.kpiValueCentered]}>{stats.score}%</Text>
+            </GlassCard>
+          </View>
+        </View>
+
+        <View style={[styles.statsPage, { width: screenWidth }]}>
+          <View style={styles.kpiRow}>
+            <GlassCard
+              style={[styles.kpiCard, styles.kpiCardWide]}
+              intensity={20}
+              overlayColor="rgba(142, 78, 198, 0.1)"
+              borderColor="rgba(142, 78, 198, 0.25)"
+            >
+              <View style={styles.kpiHeaderRow}>
+                <IconSymbol name="clock.badge" size={12} color="#8E4EC6" />
+                <Text style={styles.kpiTitle}>Nächstes Fenster</Text>
+              </View>
+              {sleepPrediction && !activeSleepEntry ? (
+                <>
+                  <Text style={[styles.kpiValue, styles.kpiValueCentered, { fontSize: 16 }]}>
+                    {sleepPrediction.earliest.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
+                    {' – '}
+                    {sleepPrediction.latest.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
+                  </Text>
+                  <Text style={styles.kpiSub}>{countdownText}</Text>
+                </>
+              ) : (
+                <Text style={[styles.kpiValue, styles.kpiValueCentered]}>
+                  {activeSleepEntry ? '💤' : '—'}
+                </Text>
+              )}
+            </GlassCard>
+          </View>
+
+          <View style={styles.kpiRow}>
+            <GlassCard
+              style={styles.kpiCard}
+              intensity={20}
+              overlayColor={`${tirednessLevel.color}20`}
+              borderColor={`${tirednessLevel.color}40`}
+            >
+              <View style={styles.kpiHeaderRow}>
+                <Text style={{ fontSize: 14 }}>{tirednessLevel.emoji}</Text>
+                <Text style={styles.kpiTitle}>Müdigkeit</Text>
+              </View>
+              <Text style={[styles.kpiValue, styles.kpiValueCentered, { fontSize: 14 }]}>
+                {tirednessLevel.label}
+              </Text>
+            </GlassCard>
+
+            <GlassCard
+              style={styles.kpiCard}
+              intensity={20}
+              overlayColor="rgba(168, 196, 162, 0.1)"
+              borderColor="rgba(168, 196, 162, 0.25)"
+            >
+              <View style={styles.kpiHeaderRow}>
+                <IconSymbol name="lightbulb.fill" size={12} color="#A8C4A2" />
+                <Text style={styles.kpiTitle}>Grund</Text>
+              </View>
+              <Text style={[styles.kpiValue, styles.kpiValueCentered, { fontSize: 11, lineHeight: 14 }]} numberOfLines={2}>
+                {reasoningText}
+              </Text>
+              </GlassCard>
+          </View>
+
+        </View>
+
+        <View style={[styles.statsPage, { width: screenWidth }]}>
+          <View style={styles.kpiRow}>
+            <GlassCard
+              style={styles.kpiCard}
+              intensity={20}
+              overlayColor="rgba(255, 140, 66, 0.1)"
+              borderColor="rgba(255, 140, 66, 0.25)"
+            >
+              <View style={styles.kpiHeaderRow}>
+                <IconSymbol name="chart.xyaxis.line" size={12} color="#FF8C42" />
+                <Text style={styles.kpiTitle}>Verlauf</Text>
+              </View>
+              <Text style={[styles.kpiValue, styles.kpiValueCentered, { fontSize: 10, lineHeight: 13 }]} numberOfLines={3}>
+                {historyText}
+              </Text>
+            </GlassCard>
+
+            <GlassCard
+              style={styles.kpiCard}
+              intensity={20}
+              overlayColor="rgba(255, 155, 155, 0.1)"
+              borderColor="rgba(255, 155, 155, 0.25)"
+            >
+              <View style={styles.kpiHeaderRow}>
+                <IconSymbol name="exclamationmark.triangle.fill" size={12} color="#FF9B9B" />
+                <Text style={styles.kpiTitle}>Hinweis</Text>
+              </View>
+              <Text style={[styles.kpiValue, styles.kpiValueCentered, { fontSize: 11, lineHeight: 14 }]} numberOfLines={2}>
+                {hintText}
+              </Text>
+            </GlassCard>
+          </View>
+        </View>
+      </ScrollView>
+
+      <View style={styles.pagingDots}>
+        <View style={[styles.pagingDot, statsPage === 0 && styles.pagingDotActive]} />
+        <View style={[styles.pagingDot, statsPage === 1 && styles.pagingDotActive]} />
+        <View style={[styles.pagingDot, statsPage === 2 && styles.pagingDotActive]} />
+      </View>
+    </View>
+  );
+};
+
 // Convert SleepEntry to DailyEntry format for ActivityCard
 const convertSleepToDailyEntry = (sleepEntry: ClassifiedSleepEntry): any => {
   const formatTime = (dateString: string) => {
@@ -256,6 +616,7 @@ export default function SleepTrackerScreen() {
   const [predictionLoading, setPredictionLoading] = useState(false);
   const [predictionError, setPredictionError] = useState<string | null>(null);
   const predictionRef = useRef<SleepWindowPrediction | null>(null);
+  const [statsPage, setStatsPage] = useState(0);
 
   // Notification hooks
   const { requestPermissions } = useNotifications();
@@ -1005,17 +1366,10 @@ export default function SleepTrackerScreen() {
 
   const stats = computeStats();
 
-  const minutesToHMM = (mins: number) => {
-    const h = Math.floor(mins / 60);
-    const m = mins % 60;
-    if (h <= 0) return `${m}m`;
-    return `${h}h ${m}m`;
-  };
   const formatClockTime = (date: Date) =>
     date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
 
   // Daily navigation helpers
-  const isSameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
   const goPrevDay = () => setSelectedDate(d => { const nd = new Date(d); nd.setDate(nd.getDate() - 1); return nd; });
   const goNextDay = () => setSelectedDate(d => { const nd = new Date(d); nd.setDate(nd.getDate() + 1); return nd; });
   const today = new Date();
@@ -1099,7 +1453,6 @@ export default function SleepTrackerScreen() {
     setShowEndPicker(true);
   };
 
-
   // Top Tabs Component (exakt wie daily_old.tsx)
   const TopTabs = () => (
     <View style={styles.topTabsContainer}>
@@ -1124,67 +1477,6 @@ export default function SleepTrackerScreen() {
         </GlassCard>
       ))}
     </View>
-  );
-
-  // Status Metrics Bar Component (Standard App-Layout)
-  const StatusMetricsBar = () => (
-    <>
-      <View style={styles.kpiRow}>
-        <GlassCard
-          style={styles.kpiCard}
-          intensity={20}
-          overlayColor="rgba(142, 78, 198, 0.1)"
-          borderColor="rgba(142, 78, 198, 0.25)"
-        >
-          <View style={styles.kpiHeaderRow}>
-            <IconSymbol name="moon.fill" size={12} color="#8E4EC6" />
-            <Text style={styles.kpiTitle}>{isSameDay(selectedDate, today) ? 'Heute' : selectedDate.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' })}</Text>
-        </View>
-          <Text style={[styles.kpiValue, styles.kpiValueCentered]}>{minutesToHMM(stats.totalMinutes)}</Text>
-        </GlassCard>
-
-        <GlassCard
-          style={styles.kpiCard}
-          intensity={20}
-          overlayColor="rgba(255, 140, 66, 0.1)"
-          borderColor="rgba(255, 140, 66, 0.25)"
-        >
-          <View style={styles.kpiHeaderRow}>
-            <IconSymbol name="zzz" size={12} color="#FF8C42" />
-            <Text style={styles.kpiTitle}>Naps</Text>
-        </View>
-          <Text style={[styles.kpiValue, styles.kpiValueCentered]}>{stats.napsCount}</Text>
-        </GlassCard>
-        </View>
-
-      <View style={styles.kpiRow}>
-        <GlassCard
-          style={styles.kpiCard}
-          intensity={20}
-          overlayColor="rgba(168, 196, 162, 0.1)"
-          borderColor="rgba(168, 196, 162, 0.25)"
-        >
-          <View style={styles.kpiHeaderRow}>
-            <IconSymbol name="clock.fill" size={12} color="#A8C4A2" />
-            <Text style={styles.kpiTitle}>Längster</Text>
-        </View>
-          <Text style={[styles.kpiValue, styles.kpiValueCentered]}>{minutesToHMM(stats.longestStretch)}</Text>
-        </GlassCard>
-
-        <GlassCard
-          style={styles.kpiCard}
-          intensity={20}
-          overlayColor="rgba(255, 155, 155, 0.1)"
-          borderColor="rgba(255, 155, 155, 0.25)"
-        >
-          <View style={styles.kpiHeaderRow}>
-            <IconSymbol name="chart.line.uptrend.xyaxis" size={12} color="#FF9B9B" />
-            <Text style={styles.kpiTitle}>Score</Text>
-      </View>
-          <Text style={[styles.kpiValue, styles.kpiValueCentered]}>{stats.score}%</Text>
-        </GlassCard>
-      </View>
-    </>
   );
 
   // Central Timer Component (Baby Blue Circle Only)
@@ -1851,7 +2143,14 @@ export default function SleepTrackerScreen() {
         <TopTabs />
 
         {/* Status Bar */}
-        <StatusMetricsBar />
+        <StatusMetricsBar
+          stats={stats}
+          selectedDate={selectedDate}
+          sleepPrediction={sleepPrediction}
+          activeSleepEntry={activeSleepEntry}
+          statsPage={statsPage}
+          onPageChange={setStatsPage}
+        />
 
         <ScrollView
           style={styles.scrollContainer}
@@ -2288,6 +2587,36 @@ const styles = StyleSheet.create({
   scrollContainer: { flex: 1 },
   scrollContent: { paddingBottom: 140, paddingHorizontal: LAYOUT_PAD },
 
+  // Stats Container (Swipeable)
+  statsContainer: {
+    width: '100%',
+    marginBottom: 8,
+  },
+  statsScroll: {
+    width: '100%',
+  },
+  statsPage: {
+    paddingHorizontal: LAYOUT_PAD,
+  },
+  pagingDots: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 12,
+    marginBottom: 4,
+    gap: 8,
+  },
+  pagingDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(125, 90, 80, 0.3)',
+  },
+  pagingDotActive: {
+    backgroundColor: '#8E4EC6',
+    width: 24,
+  },
+
   // KPI glass cards (Kompakt)
   kpiRow: {
     flexDirection: 'row',
@@ -2305,6 +2634,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     overflow: 'hidden',
     minHeight: 64,
+  },
+  kpiCardWide: {
+    width: '100%', // Vollbreite für spezielle Karten
   },
   kpiHeaderRow: { 
     flexDirection: 'row', 
@@ -2329,9 +2661,9 @@ const styles = StyleSheet.create({
     textAlign: 'center', 
     width: '100%' 
   },
-  kpiSub: { 
+  kpiSub: {
     marginTop: 2,
-    fontSize: 9, 
+    fontSize: 9,
     color: '#7D5A50',
     textAlign: 'center',
     opacity: 0.8,
@@ -2694,6 +3026,47 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#A8978E',
     textAlign: 'center',
+  },
+
+  // 🆕 Insights Rondell Styles (wie KPI-Cards)
+  insightsRondellScroll: {
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  insightsRondellContainer: {
+    paddingHorizontal: LAYOUT_PAD,
+    gap: 10,
+  },
+  insightCard: {
+    width: 110,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    overflow: 'hidden',
+    minHeight: 64,
+  },
+  insightHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 6,
+  },
+  insightIconText: {
+    fontSize: 14,
+  },
+  insightTitle: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#7D5A50',
+    flex: 1,
+  },
+  insightValue: {
+    fontSize: 16,
+    fontWeight: '800',
+    textAlign: 'center',
+    letterSpacing: -0.5,
+    fontVariant: ['tabular-nums'],
   },
 
   // Sleep Modal Styles - wie ActivityInputModal

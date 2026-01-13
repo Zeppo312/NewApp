@@ -64,9 +64,11 @@ const EARLY_FLEX_MINUTES = 15;
 const LATE_FLEX_MINUTES = 20;
 const PERSONALIZATION_ALPHA = 0.3;
 const PERSONALIZATION_CLAMP = 60;
-const BEDTIME_BUFFER_MINUTES = 120;
 const AWAKE_OVERRUN_GRACE_MINUTES = 15;
 const JUNIOR_AWAKE_IMMEDIATE_MINUTES = 5;
+
+// 🆕 Dynamischer Bedtime-Gap (statt fixem BEDTIME_BUFFER_MINUTES)
+const MIN_HISTORICAL_SAMPLES = 5;
 
 const AGE_PROFILES: AgeProfile[] = [
   {
@@ -110,6 +112,127 @@ const AGE_PROFILES: AgeProfile[] = [
 const personalizationStore = new Map<string, PersonalizationData>();
 
 /**
+ * 1️⃣ Dynamischer Bedtime-Gap basierend auf Alter
+ *
+ * Je älter das Baby, desto größer der Abstand zwischen letztem Nap und Nachtschlaf.
+ * Dies ist eine harte Grenze, keine Empfehlung.
+ */
+function bedtimeGapByAge(ageMonths: number | null): number {
+  if (ageMonths === null) return 90; // Fallback
+
+  if (ageMonths < 4) return 75;   // 1h 15min
+  if (ageMonths < 6) return 90;   // 1h 30min
+  if (ageMonths < 9) return 120;  // 2h
+  if (ageMonths < 12) return 150; // 2h 30min
+  return 180; // 3h
+}
+
+/**
+ * 2️⃣ Circadian Light Bias
+ *
+ * Gleiches Wake-Window fühlt sich zu unterschiedlichen Tageszeiten anders an.
+ * Vormittag → toleriert länger wach
+ * Später Nachmittag → schneller müde
+ *
+ * @param hour - Stunde des Tages (0-23)
+ * @returns Faktor zwischen 0.85 und 1.05
+ */
+function circadianFactor(hour: number): number {
+  if (hour < 9)  return 1.05;  // Morgen: länger wach
+  if (hour < 13) return 1.00;  // Mittag: neutral
+  if (hour < 16) return 0.95;  // Nachmittag: etwas müder
+  if (hour < 18) return 0.90;  // Spätnachmittag: deutlich müder
+  return 0.85;                  // Abend: sehr müde
+}
+
+/**
+ * 3️⃣ Historische Pattern - Trimmed Mean
+ *
+ * Berechnet den Durchschnitt ohne Ausreißer (15% an beiden Enden trimmen).
+ * Robuste Aggregation für historische Wake-Windows.
+ */
+function trimmedMean(values: number[]): number {
+  if (values.length === 0) return 0;
+  if (values.length === 1) return values[0];
+
+  const sorted = [...values].sort((a, b) => a - b);
+  const trimCount = Math.floor(values.length * 0.15);
+
+  if (trimCount === 0) {
+    // Bei sehr wenigen Werten einfach den Durchschnitt nehmen
+    return sorted.reduce((sum, val) => sum + val, 0) / sorted.length;
+  }
+
+  const trimmed = sorted.slice(trimCount, sorted.length - trimCount);
+  return trimmed.reduce((sum, val) => sum + val, 0) / trimmed.length;
+}
+
+/**
+ * 3️⃣ Historische Pattern - Wake-Windows sammeln
+ *
+ * Sammelt Wake-Windows der letzten 7-14 Tage für die gleiche Nap-Position.
+ * Filtert nach: gleichem napIndex, Zeitfenster (7-14 Tage zurück) und optional timeOfDayBucket.
+ */
+function collectHistoricalWakeWindows(
+  entries: NormalizedEntry[],
+  napIndex: number,
+  reference: Date,
+  targetTimeOfDayBucket?: TimeOfDayBucket,
+): number[] {
+  const now = reference;
+  const minDate = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000); // 14 Tage zurück
+  const maxDate = new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000);  // Mindestens 1 Tag alt
+
+  const wakeWindows: number[] = [];
+
+  // Gruppiere Einträge nach Tag
+  const dayGroups = new Map<string, NormalizedEntry[]>();
+
+  for (const entry of entries) {
+    if (!entry.end || entry.duration === null) continue;
+    if (entry.end < minDate || entry.end > maxDate) continue;
+
+    const dayKey = `${entry.end.getFullYear()}-${entry.end.getMonth()}-${entry.end.getDate()}`;
+    if (!dayGroups.has(dayKey)) {
+      dayGroups.set(dayKey, []);
+    }
+    dayGroups.get(dayKey)!.push(entry);
+  }
+
+  // Für jeden Tag: finde den Nap an Position napIndex
+  for (const [_dayKey, dayEntries] of dayGroups.entries()) {
+    const sortedDay = dayEntries
+      .filter((e) => e.end !== null)
+      .sort((a, b) => a.end!.getTime() - b.end!.getTime());
+
+    if (sortedDay.length < napIndex) continue;
+
+    const targetNapIndex = napIndex - 1; // 0-basiert
+    const previousNap = sortedDay[targetNapIndex - 1];
+    const currentNap = sortedDay[targetNapIndex];
+
+    if (!previousNap || !currentNap || !previousNap.end || !currentNap.start) continue;
+
+    // 🆕 Optional: Filtere nach timeOfDayBucket für noch präzisere Patterns
+    if (targetTimeOfDayBucket && previousNap.end) {
+      const previousNapBucket = getTimeOfDayBucket(previousNap.end);
+      if (previousNapBucket !== targetTimeOfDayBucket) {
+        continue; // Skip: anderer Tageszeit-Bucket
+      }
+    }
+
+    const wakeWindow = minutesBetween(currentNap.start, previousNap.end);
+
+    // Validierung: Wake-Window sollte zwischen 30 und 360 Minuten sein
+    if (wakeWindow >= 30 && wakeWindow <= 360) {
+      wakeWindows.push(wakeWindow);
+    }
+  }
+
+  return wakeWindows;
+}
+
+/**
  * Predict the next sleep window for a baby / toddler based on recent sleep history.
  */
 export async function predictNextSleepWindow({
@@ -148,22 +271,66 @@ export async function predictNextSleepWindow({
 
   let adjustedWindow = baseline.baselineWindow;
 
+  // 📐 Adjustment-Kette in korrekter Reihenfolge (wichtig!)
+  // 1. baseWakeWindow ✅ (bereits gesetzt)
+
+  // 2. Nap-Dauer-Adjustment ✅
+  let napDurationAdjustment = 0;
   if (lastNapDuration !== null && baseline.targetNapDuration > 0) {
     const varianceRatio = clamp(
       (baseline.targetNapDuration - lastNapDuration) / baseline.targetNapDuration,
       -1,
       1,
     );
-    const durationAdjustment = clamp(varianceRatio * 20, -20, 20);
-    adjustedWindow -= durationAdjustment;
+    napDurationAdjustment = clamp(varianceRatio * 20, -20, 20);
+    adjustedWindow -= napDurationAdjustment;
   }
 
+  // 3. Sleep-Debt-Adjustment ✅
+  let sleepDebtAdjustment = 0;
   if (Math.abs(sleepDebt) > 30) {
-    const debtAdjustment = clamp(sleepDebt / 15, -20, 20);
-    adjustedWindow -= debtAdjustment;
+    sleepDebtAdjustment = clamp(sleepDebt / 15, -20, 20);
+    adjustedWindow -= sleepDebtAdjustment;
   }
 
+  // 4. 🆕 Circadian-Faktor (Tageszeit-Bias)
+  // Nur auf Naps anwenden, nicht auf Nachtschlaf
+  let circadianAdjustment = 1.0;
+  if (lastNapEnd) {
+    const lastNapEndHour = lastNapEnd.getHours();
+    circadianAdjustment = circadianFactor(lastNapEndHour);
+    adjustedWindow *= circadianAdjustment;
+  }
+
+  // 5. 🆕 Historischer Faktor (7-14 Tage Pattern)
+  // Optional: Filtere auch nach timeOfDayBucket für noch präzisere Vorhersagen
+  let historicalFactor = 1.0;
+  let historicalSampleCount = 0;
+  const historicalWindows = collectHistoricalWakeWindows(
+    completedEntries,
+    napIndexToday,
+    now,
+    baseline.timeOfDayBucket // 🆕 Filtere auch nach Tageszeit-Bucket
+  );
+
+  if (historicalWindows.length >= MIN_HISTORICAL_SAMPLES) {
+    const historicalWindow = trimmedMean(historicalWindows);
+    // Sanity check: historicalWindow sollte nicht 0 sein
+    if (historicalWindow > 0 && baseline.baselineWindow > 0) {
+      historicalFactor = clamp(
+        historicalWindow / baseline.baselineWindow,
+        0.9,  // Max 10% kürzer
+        1.1,  // Max 10% länger
+      );
+      adjustedWindow *= historicalFactor;
+      historicalSampleCount = historicalWindows.length;
+    }
+  }
+
+  // 6. EMA-Personalisierung ✅
   adjustedWindow += personalizationOffset;
+
+  // 7. Clamp ✅
   adjustedWindow = clamp(Math.round(adjustedWindow), MIN_WINDOW_MINUTES, MAX_WINDOW_MINUTES);
 
   const flexEarly = Math.max(EARLY_FLEX_MINUTES, Math.min(30, Math.round(adjustedWindow * 0.25)));
@@ -192,11 +359,22 @@ export async function predictNextSleepWindow({
 
   earliest = new Date(Math.max(earliest.getTime(), now.getTime()));
 
+  // 🆕 Dynamischer Bedtime-Gap basierend auf Alter
   let anchorConstraintApplied = false;
+  let dynamicBedtimeGap = 0;
   if (anchorBedtime) {
     const anchorDate = resolveAnchorDate(anchorBedtime, now);
     if (anchorDate) {
-      const latestAllowed = addMinutes(anchorDate, -BEDTIME_BUFFER_MINUTES);
+      dynamicBedtimeGap = bedtimeGapByAge(ageInMonths);
+
+      // Optional: Letzter Nap braucht mehr Abstand (Nap-Drop-Phase)
+      const profile = getAgeProfile(ageInMonths);
+      const maxNapsForAge = profile.baseWindows.length;
+      if (napIndexToday >= maxNapsForAge) {
+        dynamicBedtimeGap += 15; // +15 Min für letzten Nap
+      }
+
+      const latestAllowed = addMinutes(anchorDate, -dynamicBedtimeGap);
       if (latest.getTime() > latestAllowed.getTime()) {
         latest = latestAllowed;
         anchorConstraintApplied = true;
@@ -265,6 +443,14 @@ export async function predictNextSleepWindow({
       predictedStart,
       anchorBedtime,
       napCountToday,
+      // 🆕 Neue Debug-Felder
+      napDurationAdjustment,
+      sleepDebtAdjustment,
+      circadianAdjustment,
+      circadianHour: lastNapEnd?.getHours() ?? null,
+      historicalFactor,
+      historicalSampleCount,
+      dynamicBedtimeGap,
     },
   };
 }
