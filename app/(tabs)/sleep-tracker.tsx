@@ -44,7 +44,6 @@ import { predictNextSleepWindow, updatePersonalizationAfterNap, type SleepWindow
 import { markPaywallShown, shouldShowPaywall } from '@/lib/paywall';
 import { useNotifications } from '@/hooks/useNotifications';
 import { usePartnerNotifications } from '@/hooks/usePartnerNotifications';
-import { useSleepWindowNotifications } from '@/hooks/useSleepWindowNotifications';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -656,7 +655,6 @@ export default function SleepTrackerScreen() {
   // Notification hooks
   const { requestPermissions } = useNotifications();
   const { isPartnerLinked } = usePartnerNotifications();
-  useSleepWindowNotifications(sleepPrediction);
 
   // Bei Tabwechsel Offsets zurücksetzen
   useEffect(() => {

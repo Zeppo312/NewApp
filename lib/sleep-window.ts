@@ -24,6 +24,7 @@ export interface SleepWindowPrediction {
   windowMinutes: number;
   napIndexToday: number;
   timeOfDayBucket: TimeOfDayBucket;
+  confidence: number;
   debug: Record<string, unknown>;
 }
 
@@ -415,6 +416,21 @@ export async function predictNextSleepWindow({
     (recommendedStart.getTime() - baselineAnchor.getTime()) / 60000,
   );
 
+  // Berechne Confidence basierend auf historischen und Personalisierungs-Samples
+  // 0-5 Samples: 0.0-0.5, 5-10: 0.5-0.8, 10+: 0.8-1.0
+  const personalizationSampleCount = personalizationData?.sampleCount ?? 0;
+  const totalSamples = historicalSampleCount + personalizationSampleCount;
+  let confidence = 0.0;
+  if (totalSamples >= 12 || historicalSampleCount >= 10) {
+    confidence = 0.9;
+  } else if (totalSamples >= 6 || historicalSampleCount >= 5) {
+    confidence = 0.7;
+  } else if (totalSamples >= 3) {
+    confidence = 0.5;
+  } else {
+    confidence = Math.min(0.4, totalSamples * 0.1);
+  }
+
   return {
     recommendedStart,
     earliest,
@@ -422,6 +438,7 @@ export async function predictNextSleepWindow({
     windowMinutes,
     napIndexToday,
     timeOfDayBucket,
+    confidence,
     debug: {
       now,
       ageInMonths,
@@ -431,7 +448,7 @@ export async function predictNextSleepWindow({
       flexEarly,
       flexLate,
       personalizationOffset,
-      personalizationSampleCount: personalizationData?.sampleCount ?? 0,
+      personalizationSampleCount,
       sleepDebt,
       last24hMinutes,
       todayMinutes,
