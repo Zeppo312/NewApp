@@ -933,12 +933,12 @@ export default function SleepTrackerScreen() {
     try {
       setIsLoading(true);
       const { success, entries, error } = await loadAllVisibleSleepEntries(activeBabyId ?? undefined);
-      
+
       if (success && entries) {
         const classifiedEntries = entries.map(classifySleepEntry);
         setSleepEntries(classifiedEntries);
-        
-        // Find active entry
+
+        // Find active entry (critical - must be fresh!)
         const active = classifiedEntries.find(entry => entry.isActive);
         setActiveSleepEntry(active || null);
 
@@ -1554,7 +1554,12 @@ export default function SleepTrackerScreen() {
           
           {/* Absolute centered time - always in perfect center */}
             <View pointerEvents="none" style={styles.centerOverlay}>
-              <Text style={[styles.centralTime, { color: '#6B4C3B', fontWeight: '800' }]}>
+              <Text
+                style={[
+                  styles.centralTime,
+                  { color: '#6B4C3B', fontWeight: '800' },
+                ]}
+              >
                 {activeSleepEntry
                   ? formatDuration(elapsedTime)
                   : currentTime.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
@@ -1583,14 +1588,10 @@ export default function SleepTrackerScreen() {
                   Schlaffenster wird berechnet...
                 </Text>
               ) : sleepPrediction ? (
-                <>
-                  <Text style={[styles.centralHintPrimary, { color: '#6B4C3B' }]}>
-                    Nächste Schlafphase um
-                  </Text>
-                  <Text style={[styles.centralHintSecondary, { color: '#7D5A50' }]}>
-                    {formatClockTime(sleepPrediction.recommendedStart)}
-                  </Text>
-                </>
+                <Text style={[styles.centralHintPrimary, { color: '#6B4C3B' }]}>
+                  Nächstes Schlaffenster{'\n'}
+                  {formatClockTime(sleepPrediction.earliest)} – {formatClockTime(sleepPrediction.latest)}
+                </Text>
               ) : (
                 <Text style={[styles.centralHint, { color: '#7D5A50', fontWeight: '500' }]}>
                   {predictionError || 'Bereit für den nächsten Schlaf'}
@@ -2206,7 +2207,7 @@ export default function SleepTrackerScreen() {
           ) : (
             <>
               {/* Day Navigation - gleiche Position/Höhe wie Woche/Monat */}
-              <View style={styles.weekNavigationContainer}>
+              <View style={[styles.weekNavigationContainer, styles.dayNavigationContainer]}>
                 <TouchableOpacity
                   style={styles.weekNavButton}
                   onPress={() => {
@@ -2637,8 +2638,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 2,
-    marginBottom: -2,
+    marginTop: 1,
+    marginBottom: -6,
     gap: 8,
   },
   pagingDot: {
@@ -3422,16 +3423,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 0,     // direkt unter den Dots
-    marginBottom: 2, // kompakter zum Content
+    marginTop: -4,     // noch näher an die Dots
+    marginBottom: 0, // kompakter zum Content
     paddingHorizontal: LAYOUT_PAD, // Navigation braucht eigenen Abstand
+  },
+  dayNavigationContainer: {
+    marginTop: 2, // minimal mehr Abstand zu den Dots in der Tagesansicht
   },
   monthNavigationContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 0,     // direkt unter den Dots
-    marginBottom: 2, // kompakter zum Content
+    marginTop: -4,     // noch näher an die Dots
+    marginBottom: 0, // kompakter zum Content
     paddingHorizontal: LAYOUT_PAD, // Navigation braucht eigenen Abstand
   },
   weekNavButton: {

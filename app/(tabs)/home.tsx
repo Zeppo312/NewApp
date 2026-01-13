@@ -19,6 +19,7 @@ import { BlurView } from 'expo-blur';
 import ActivityInputModal from '@/components/ActivityInputModal';
 import SleepQuickAddModal, { SleepQuickEntry } from '@/components/SleepQuickAddModal';
 import BabySwitcherButton from '@/components/BabySwitcherButton';
+import { loadCachedHomeData, cacheHomeData, isCacheFresh } from '@/lib/homeCache';
 
 // Tägliche Tipps für Mamas
 const dailyTips = [
@@ -470,7 +471,29 @@ export default function HomeScreen() {
 
   const loadData = async () => {
     try {
-      if (!refreshing) {
+      // 🆕 Cache-First Strategy: Lade gecachte Daten zuerst
+      const cachedData = await loadCachedHomeData();
+      if (cachedData) {
+        console.log('Loading cached home data (age:', new Date().toISOString(), '-', cachedData.lastUpdate, ')');
+        // Zeige sofort gecachte Daten für instant load
+        if (cachedData.babyInfo) setBabyInfo(cachedData.babyInfo);
+        if (cachedData.diaryEntries) setDiaryEntries(cachedData.diaryEntries);
+        if (cachedData.dailyEntries) setDailyEntries(cachedData.dailyEntries);
+        if (cachedData.todaySleepMinutes !== undefined) setTodaySleepMinutes(cachedData.todaySleepMinutes);
+        if (cachedData.currentPhase) setCurrentPhase(cachedData.currentPhase);
+        if (cachedData.phaseProgress) setPhaseProgress(cachedData.phaseProgress);
+        if (cachedData.milestones) setMilestones(cachedData.milestones);
+        if (cachedData.recommendations) setRecommendations(cachedData.recommendations);
+        if (cachedData.userName) setUserName(cachedData.userName);
+
+        // Wenn Cache frisch ist (< 5 Min), beende Loading sofort
+        if (isCacheFresh(cachedData.lastUpdate) && !refreshing) {
+          setIsLoading(false);
+        }
+      }
+
+      // Lade trotzdem immer frische Daten von Supabase (parallel)
+      if (!refreshing && !cachedData) {
         setIsLoading(true);
       }
 
@@ -481,11 +504,13 @@ export default function HomeScreen() {
         .eq('id', user?.id)
         .single();
 
+      let freshUserName = userName;
       if (profileError) {
         console.error('Error loading user profile:', profileError);
       } else if (profileData) {
         if (profileData.first_name) {
-          setUserName(profileData.first_name);
+          freshUserName = profileData.first_name;
+          setUserName(freshUserName);
         }
       }
 
@@ -495,8 +520,10 @@ export default function HomeScreen() {
 
       // Tagebucheinträge laden (nur die neuesten 5)
       const { data: diaryData } = await getDiaryEntries(activeBabyId ?? undefined);
+      let freshDiaryEntries: any[] = [];
       if (diaryData) {
-        setDiaryEntries(diaryData.slice(0, 5));
+        freshDiaryEntries = diaryData.slice(0, 5);
+        setDiaryEntries(freshDiaryEntries);
       }
 
       // Alltags-Einträge für heute laden
@@ -518,7 +545,9 @@ export default function HomeScreen() {
 
       const { data: dailyData, error: dailyError } = await dailyQuery.order('start_time', { ascending: false });
 
+      let freshDailyEntries: any[] = [];
       if (!dailyError && dailyData) {
+        freshDailyEntries = dailyData;
         setDailyEntries(dailyData);
       }
 
@@ -526,26 +555,48 @@ export default function HomeScreen() {
 
       // Aktuelle Entwicklungsphase laden
       const { data: phaseData } = await getCurrentPhase();
+      let freshCurrentPhase = null;
+      let freshPhaseProgress = null;
+      let freshMilestones: any[] = [];
+
       if (phaseData) {
+        freshCurrentPhase = phaseData;
         setCurrentPhase(phaseData);
 
         // Fortschritt für die aktuelle Phase berechnen
         const { progress, completedCount, totalCount } = await getPhaseProgress(phaseData.phase_id);
-        setPhaseProgress({ progress, completedCount, totalCount });
+        freshPhaseProgress = { progress, completedCount, totalCount };
+        setPhaseProgress(freshPhaseProgress);
 
         // Meilensteine für die aktuelle Phase laden
         const { data: milestonesData } = await getMilestonesByPhase(phaseData.phase_id);
         if (milestonesData) {
+          freshMilestones = milestonesData;
           setMilestones(milestonesData);
         }
       }
 
+      let freshRecommendations: any[] = [];
       try {
         const recommendationData = await getRecommendations();
+        freshRecommendations = recommendationData;
         setRecommendations(recommendationData);
       } catch (error) {
         console.error('Error loading recommendations:', error);
       }
+
+      // 🆕 Speichere frische Daten im Cache für nächstes Mal
+      await cacheHomeData({
+        babyInfo: babyData,
+        diaryEntries: freshDiaryEntries,
+        dailyEntries: freshDailyEntries,
+        todaySleepMinutes: todaySleepMinutes,
+        currentPhase: freshCurrentPhase,
+        phaseProgress: freshPhaseProgress,
+        milestones: freshMilestones,
+        recommendations: freshRecommendations,
+        userName: freshUserName,
+      });
     } catch (err) {
       console.error('Failed to load home data:', err);
     } finally {
