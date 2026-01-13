@@ -138,6 +138,16 @@ const StatusMetricsBar = ({
   const statsScrollRef = useRef<ScrollView>(null);
   const [autoScrollEnabled, setAutoScrollEnabled] = useState(true);
 
+  const getConfidenceLevel = (): 'high' | 'medium' | 'low' => {
+    if (!sleepPrediction || !sleepPrediction.debug) return 'low';
+    const historicalSamples = sleepPrediction.debug.historicalSampleCount ?? 0;
+    const personalizationSamples = sleepPrediction.debug.personalizationSampleCount ?? 0;
+    const totalSamples = historicalSamples + personalizationSamples;
+    if (historicalSamples >= 10 || totalSamples >= 12) return 'high';
+    if (historicalSamples >= 5 || totalSamples >= 6) return 'medium';
+    return 'low';
+  };
+
   const getTirednessLevel = (): { emoji: string; label: string; color: string } => {
     if (!sleepPrediction || !sleepPrediction.debug.lastNapEnd || activeSleepEntry) {
       return { emoji: '😌', label: 'entspannt', color: '#A8C4A2' };
@@ -276,6 +286,17 @@ const StatusMetricsBar = ({
   const historicalText = getHistoricalText();
   const hintText = bedtimeWarning ?? 'Kein besonderer Hinweis';
   const historyText = historicalText ?? 'Noch zu wenig Daten für einen Trend';
+  const personalizationSamples = sleepPrediction?.debug?.personalizationSampleCount ?? 0;
+  const hasPersonalization = personalizationSamples > 0;
+  const confidenceLevel = sleepPrediction ? getConfidenceLevel() : null;
+  const confidenceLabel =
+    confidenceLevel === 'high'
+      ? 'zuverlässig'
+      : confidenceLevel === 'medium'
+        ? 'wird besser'
+        : 'lernt noch';
+  const confidenceDot =
+    confidenceLevel === 'high' ? '🟢' : confidenceLevel === 'medium' ? '🟡' : '⚪';
   const dayLabel = isSameDay(selectedDate, new Date())
     ? 'Heute'
     : selectedDate.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' });
@@ -364,6 +385,20 @@ const StatusMetricsBar = ({
               <View style={styles.kpiHeaderRow}>
                 <IconSymbol name="clock.badge" size={12} color="#8E4EC6" />
                 <Text style={styles.kpiTitle}>Nächstes Fenster</Text>
+                {(hasPersonalization || confidenceLevel) && (
+                  <View style={styles.predictionMetaInline}>
+                    {hasPersonalization && (
+                      <View style={styles.predictionBadge}>
+                        <Text style={styles.predictionBadgeText}>✨ abgestimmt</Text>
+                      </View>
+                    )}
+                    {confidenceLevel && (
+                      <View style={styles.predictionBadge}>
+                        <Text style={styles.predictionBadgeText}>{confidenceDot} {confidenceLabel}</Text>
+                      </View>
+                    )}
+                  </View>
+                )}
               </View>
               {sleepPrediction && !activeSleepEntry ? (
                 <>
@@ -417,9 +452,9 @@ const StatusMetricsBar = ({
         </View>
 
         <View style={[styles.statsPage, { width: screenWidth }]}>
-          <View style={styles.kpiRow}>
+          <View style={styles.kpiColumn}>
             <GlassCard
-              style={styles.kpiCard}
+              style={[styles.kpiCard, styles.kpiCardWide, styles.kpiCardStack]}
               intensity={20}
               overlayColor="rgba(255, 140, 66, 0.1)"
               borderColor="rgba(255, 140, 66, 0.25)"
@@ -434,7 +469,7 @@ const StatusMetricsBar = ({
             </GlassCard>
 
             <GlassCard
-              style={styles.kpiCard}
+              style={[styles.kpiCard, styles.kpiCardWide]}
               intensity={20}
               overlayColor="rgba(255, 155, 155, 0.1)"
               borderColor="rgba(255, 155, 155, 0.25)"
@@ -2590,7 +2625,7 @@ const styles = StyleSheet.create({
   // Stats Container (Swipeable)
   statsContainer: {
     width: '100%',
-    marginBottom: 8,
+    marginBottom: 0,
   },
   statsScroll: {
     width: '100%',
@@ -2602,8 +2637,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 12,
-    marginBottom: 4,
+    marginTop: 2,
+    marginBottom: -2,
     gap: 8,
   },
   pagingDot: {
@@ -2638,6 +2673,15 @@ const styles = StyleSheet.create({
   kpiCardWide: {
     width: '100%', // Vollbreite für spezielle Karten
   },
+  kpiColumn: {
+    alignSelf: 'center',
+    width: contentWidth,
+    marginTop: 6,
+    marginBottom: 4,
+  },
+  kpiCardStack: {
+    marginBottom: 8,
+  },
   kpiHeaderRow: { 
     flexDirection: 'row', 
     alignItems: 'center', 
@@ -2666,6 +2710,26 @@ const styles = StyleSheet.create({
     fontSize: 9,
     color: '#7D5A50',
     textAlign: 'center',
+    opacity: 0.8,
+  },
+  predictionMetaInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 'auto',
+    gap: 6,
+  },
+  predictionBadge: {
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    backgroundColor: 'rgba(255, 255, 255, 0.35)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.65)',
+  },
+  predictionBadgeText: {
+    fontSize: 9,
+    fontWeight: '600',
+    color: '#7D5A50',
     opacity: 0.8,
   },
 
@@ -3358,16 +3422,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: SECTION_GAP_TOP,     // wie sectionTitle oben
-    marginBottom: SECTION_GAP_BOTTOM, // wie sectionTitle unten
+    marginTop: 0,     // direkt unter den Dots
+    marginBottom: 2, // kompakter zum Content
     paddingHorizontal: LAYOUT_PAD, // Navigation braucht eigenen Abstand
   },
   monthNavigationContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: SECTION_GAP_TOP,     // wie sectionTitle oben
-    marginBottom: SECTION_GAP_BOTTOM, // wie sectionTitle unten
+    marginTop: 0,     // direkt unter den Dots
+    marginBottom: 2, // kompakter zum Content
     paddingHorizontal: LAYOUT_PAD, // Navigation braucht eigenen Abstand
   },
   weekNavButton: {
