@@ -556,7 +556,7 @@ export default function PlannerScreen() {
 
   const selectedDayTimeline = useMemo(() => {
     const allItems = blocks.flatMap((block) => block.items.map((item) => ({ ...item })));
-    const todos = allItems.filter((it: any): it is PlannerTodo => 'completed' in it);
+    const todos = allItems.filter((it: any): it is PlannerTodo => 'completed' in it && it.dueAt != null);
     const events = allItems.filter((it: any): it is PlannerEvent => 'start' in it && 'end' in it);
     return { todos, events };
   }, [blocks]);

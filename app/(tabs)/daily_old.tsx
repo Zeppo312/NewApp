@@ -768,7 +768,6 @@ export default function DailyScreen() {
     // Weekly summary totals
     const totalFeedings = weekEntries.filter((e) => e.entry_type === 'feeding').length;
     const totalDiapers = weekEntries.filter((e) => e.entry_type === 'diaper').length;
-    const avgPerDay = Math.round((weekEntries.length / 7) * 10) / 10;
 
     const weekStart = getWeekStart(refDate);
     const weekEnd = getWeekEnd(refDate);
@@ -923,11 +922,6 @@ export default function DailyScreen() {
                   <Text style={s.statEmoji}>💧</Text>
                   <Text style={s.statValue}>{totalDiapers}</Text>
                   <Text style={s.statLabel}>Windeln</Text>
-                </View>
-                <View style={s.statItem}>
-                  <Text style={s.statEmoji}>⭐</Text>
-                  <Text style={s.statValue}>{avgPerDay}</Text>
-                  <Text style={s.statLabel}>Ø pro Tag</Text>
                 </View>
             </View>
           </View>
@@ -1150,11 +1144,6 @@ export default function DailyScreen() {
                 <Text style={s.statEmoji}>💧</Text>
                 <Text style={s.statValue}>{monthEntries.filter(e => e.entry_type === 'diaper').length}</Text>
                 <Text style={s.statLabel}>Windeln</Text>
-              </View>
-              <View style={s.statItem}>
-                <Text style={s.statEmoji}>📊</Text>
-                <Text style={s.statValue}>{monthEntries.length > 0 ? Math.round(monthEntries.length / daysInMonth) : 0}</Text>
-                <Text style={s.statLabel}>Ø pro Tag</Text>
               </View>
             </View>
           </View>
