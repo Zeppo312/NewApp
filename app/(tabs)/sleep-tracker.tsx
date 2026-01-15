@@ -738,6 +738,8 @@ export default function SleepTrackerScreen() {
   const [splashSubtitle, setSplashSubtitle] = useState<string>('');
   const [splashStatus, setSplashStatus] = useState<string>('');
   const [splashHint, setSplashHint] = useState<string>('');
+  const [isStartingSleep, setIsStartingSleep] = useState(false);
+  const [isStoppingSleep, setIsStoppingSleep] = useState(false);
 
   const normalizePickerDate = useCallback((value?: Date | null) => {
     if (!value || Number.isNaN(value.getTime())) {
@@ -986,6 +988,8 @@ export default function SleepTrackerScreen() {
 
   // Start sleep tracking
   const handleStartSleep = async (_period: SleepPeriod) => {
+    if (isStartingSleep) return;
+    setIsStartingSleep(true);
     try {
       const effectivePartnerId = await getEffectivePartnerId();
       const { success, entry, error } = await startSleepTracking(
@@ -997,6 +1001,7 @@ export default function SleepTrackerScreen() {
       if (success && entry) {
         const classifiedEntry = classifySleepEntry(entry);
         setActiveSleepEntry(classifiedEntry);
+        setIsStartingSleep(false);
 
         if (user?.id && predictionRef.current) {
           try {
@@ -1032,17 +1037,26 @@ export default function SleepTrackerScreen() {
       }
     } catch (error) {
       Alert.alert('Fehler', 'Unerwarteter Fehler beim Starten des Schlaftrackers');
+    } finally {
+      setIsStartingSleep(false);
     }
   };
 
   // Stop sleep tracking
   const handleStopSleep = async (quality?: SleepQuality, notes?: string) => {
-    if (!activeSleepEntry?.id) return;
+    if (!activeSleepEntry?.id || isStoppingSleep) return;
+    const resolvedQuality = quality || 'medium';
+    setIsStoppingSleep(true);
 
     try {
+      const splashKind = resolvedQuality === 'good' ? 'sleep_stop_good' : resolvedQuality === 'bad' ? 'sleep_stop_bad' : 'sleep_stop_medium';
+      const splashColor = resolvedQuality === 'good' ? '#38A169' : resolvedQuality === 'bad' ? '#E53E3E' : '#F5A623';
+      const splashEmoji = resolvedQuality === 'good' ? '😴' : resolvedQuality === 'bad' ? '😵' : '😐';
+      showSuccessSplash(splashColor, splashEmoji, splashKind);
+
       const { success, error } = await stopSleepTracking(
         activeSleepEntry.id,
-        quality || 'medium',
+        resolvedQuality,
         notes,
         undefined,
         activeBabyId ?? undefined
@@ -1051,17 +1065,13 @@ export default function SleepTrackerScreen() {
       if (success) {
         setActiveSleepEntry(null);
         await loadSleepData();
-
-        // Splash anzeigen je nach Qualität
-        const splashKind = quality === 'good' ? 'sleep_stop_good' : quality === 'bad' ? 'sleep_stop_bad' : 'sleep_stop_medium';
-        const splashColor = quality === 'good' ? '#38A169' : quality === 'bad' ? '#E53E3E' : '#F5A623';
-        const splashEmoji = quality === 'good' ? '😴' : quality === 'bad' ? '😵' : '😐';
-        showSuccessSplash(splashColor, splashEmoji, splashKind);
       } else {
         Alert.alert('Fehler', error || 'Schlaftracking konnte nicht gestoppt werden');
       }
     } catch (error) {
       Alert.alert('Fehler', 'Unerwarteter Fehler beim Stoppen des Schlaftrackers');
+    } finally {
+      setIsStoppingSleep(false);
     }
   };
 
@@ -1520,7 +1530,7 @@ export default function SleepTrackerScreen() {
     
     return (
       <View style={styles.centralTimerContainer}>
-        <Animated.View style={[styles.centralContainer, { transform: [{ scale: pulseAnim }] }]}>
+        <Animated.View pointerEvents="none" style={[styles.centralContainer, { transform: [{ scale: pulseAnim }] }]}>
           <View
             style={[
               styles.circleArea,
@@ -1560,7 +1570,9 @@ export default function SleepTrackerScreen() {
               >
                 {activeSleepEntry
                   ? formatDuration(elapsedTime)
-                  : currentTime.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
+                  : isStartingSleep
+                    ? 'Starte...'
+                    : currentTime.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
               </Text>
           </View>
           
