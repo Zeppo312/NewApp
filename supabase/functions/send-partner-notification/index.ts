@@ -25,9 +25,14 @@ const getNotificationContent = (
   activityType: string,
   activitySubtype: string | null,
   partnerName: string,
-  babyName: string | null
+  babyName: string | null,
+  startTime: string
 ): { title: string; body: string; emoji: string } => {
-  const time = new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+  const time = new Date(startTime).toLocaleTimeString('de-DE', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'Europe/Berlin'
+  });
   const baby = babyName || 'das Baby';
 
   switch (activityType) {
@@ -138,46 +143,56 @@ serve(async (req) => {
 
     const partnerName = profile?.first_name || 'Dein Partner';
 
-    // Get baby name from the entry
+    // Get baby name and start_time from the entry
     let babyName: string | null = null;
+    let startTime: string | null = null;
 
     if (activity_type === 'sleep') {
-      // Get baby_id from sleep_entries
+      // Get baby_id and start_time from sleep_entries
       const { data: sleepEntry } = await supabase
         .from('sleep_entries')
-        .select('baby_id')
+        .select('baby_id, start_time')
         .eq('id', entry_id)
         .single();
 
-      if (sleepEntry?.baby_id) {
-        const { data: baby } = await supabase
-          .from('baby_info')
-          .select('name')
-          .eq('id', sleepEntry.baby_id)
-          .single();
+      if (sleepEntry) {
+        startTime = sleepEntry.start_time;
 
-        babyName = baby?.name || null;
+        if (sleepEntry.baby_id) {
+          const { data: baby } = await supabase
+            .from('baby_info')
+            .select('name')
+            .eq('id', sleepEntry.baby_id)
+            .single();
+
+          babyName = baby?.name || null;
+        }
       }
     } else if (activity_type === 'feeding' || activity_type === 'diaper') {
-      // Get baby_id from baby_care_entries
+      // Get baby_id and start_time from baby_care_entries
       const { data: careEntry } = await supabase
         .from('baby_care_entries')
-        .select('baby_id')
+        .select('baby_id, start_time')
         .eq('id', entry_id)
         .single();
 
-      if (careEntry?.baby_id) {
-        const { data: baby } = await supabase
-          .from('baby_info')
-          .select('name')
-          .eq('id', careEntry.baby_id)
-          .single();
+      if (careEntry) {
+        startTime = careEntry.start_time;
 
-        babyName = baby?.name || null;
+        if (careEntry.baby_id) {
+          const { data: baby } = await supabase
+            .from('baby_info')
+            .select('name')
+            .eq('id', careEntry.baby_id)
+            .single();
+
+          babyName = baby?.name || null;
+        }
       }
     }
 
     console.log(`👶 Baby name: ${babyName || 'not found'}`);
+    console.log(`🕐 Start time: ${startTime || 'not found'}`);
 
     // Get push tokens for the user who should receive the notification
     const { data: tokens, error: tokenError } = await supabase
@@ -203,12 +218,13 @@ serve(async (req) => {
 
     console.log(`📱 Found ${tokens.length} push token(s) for user ${user_id}`);
 
-    // Get notification content with baby name
+    // Get notification content with baby name and start time
     const { title, body, emoji } = getNotificationContent(
       activity_type,
       activity_subtype,
       partnerName,
-      babyName
+      babyName,
+      startTime || new Date().toISOString() // Fallback to current time if not found
     );
 
     console.log(`📬 Sending notification: ${emoji} ${title} - ${body}`);

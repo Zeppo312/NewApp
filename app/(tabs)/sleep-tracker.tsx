@@ -1049,11 +1049,6 @@ export default function SleepTrackerScreen() {
     setIsStoppingSleep(true);
 
     try {
-      const splashKind = resolvedQuality === 'good' ? 'sleep_stop_good' : resolvedQuality === 'bad' ? 'sleep_stop_bad' : 'sleep_stop_medium';
-      const splashColor = resolvedQuality === 'good' ? '#38A169' : resolvedQuality === 'bad' ? '#E53E3E' : '#F5A623';
-      const splashEmoji = resolvedQuality === 'good' ? '😴' : resolvedQuality === 'bad' ? '😵' : '😐';
-      showSuccessSplash(splashColor, splashEmoji, splashKind);
-
       const { success, error } = await stopSleepTracking(
         activeSleepEntry.id,
         resolvedQuality,
@@ -1064,6 +1059,10 @@ export default function SleepTrackerScreen() {
       
       if (success) {
         setActiveSleepEntry(null);
+        const splashKind = resolvedQuality === 'good' ? 'sleep_stop_good' : resolvedQuality === 'bad' ? 'sleep_stop_bad' : 'sleep_stop_medium';
+        const splashColor = resolvedQuality === 'good' ? '#38A169' : resolvedQuality === 'bad' ? '#E53E3E' : '#F5A623';
+        const splashEmoji = resolvedQuality === 'good' ? '😴' : resolvedQuality === 'bad' ? '😵' : '😐';
+        showSuccessSplash(splashColor, splashEmoji, splashKind);
         await loadSleepData();
       } else {
         Alert.alert('Fehler', error || 'Schlaftracking konnte nicht gestoppt werden');
@@ -1569,7 +1568,9 @@ export default function SleepTrackerScreen() {
                 ]}
               >
                 {activeSleepEntry
-                  ? formatDuration(elapsedTime)
+                  ? isStoppingSleep
+                    ? 'Stoppe...'
+                    : formatDuration(elapsedTime)
                   : isStartingSleep
                     ? 'Starte...'
                     : currentTime.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
