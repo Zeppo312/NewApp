@@ -1206,7 +1206,12 @@ export default function DailyScreen() {
       <SafeAreaView style={s.container}>
         <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
 
-        <Header title="Unser Tag" subtitle="Euer Tag – voller kleiner Meilensteine ✨" showBackButton />
+        <Header
+          title="Unser Tag"
+          subtitle="Euer Tag – voller kleiner Meilensteine ✨"
+          showBackButton
+          onBackPress={() => router.push('/(tabs)/home')}
+        />
 
         <ConnectionStatus showAlways={false} autoCheck={true} onRetry={loadEntries} />
 

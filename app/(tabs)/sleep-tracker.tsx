@@ -2171,6 +2171,8 @@ export default function SleepTrackerScreen() {
         <Header 
           title="Schlaf-Tracker"
           subtitle="Verfolge Levis Schlafmuster"
+          showBackButton
+          onBackPress={() => router.push('/(tabs)/home')}
         />
 
         {/* Top Tabs - über der Status Bar */}

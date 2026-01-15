@@ -112,6 +112,8 @@ export default function MoreScreen() {
         <Header 
           title="Mehr" 
           subtitle="Einstellungen und weitere Funktionen" 
+          showBackButton
+          onBackPress={() => router.push('/(tabs)/home')}
         />
         
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>

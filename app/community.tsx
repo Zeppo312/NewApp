@@ -27,6 +27,7 @@ import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/contexts/AuthContext';
 import { BlogPost, createBlogPost, getBlogPosts, updateBlogPost, uploadBlogCover, deleteBlogPost } from '@/lib/blog';
@@ -90,6 +91,7 @@ export default function CommunityScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const statusBarStyle = colorScheme === 'dark' ? 'light-content' : 'dark-content';
+  const router = useRouter();
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
   const headerTextColor = '#7D5A50';
@@ -420,6 +422,8 @@ export default function CommunityScreen() {
       <Header
         title="Lotti Baby Blog"
         subtitle="Begleiter durch Schwangerschaft und erstes Jahr"
+        showBackButton
+        onBackPress={() => router.push('/(tabs)/home')}
       />
       {hero}
       {adminPanel}

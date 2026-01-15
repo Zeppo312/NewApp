@@ -17,7 +17,7 @@ import { LiquidGlassCard, LAYOUT_PAD, TIMELINE_INSET } from '@/constants/DesignG
 
 const { width: screenWidth } = Dimensions.get('window');
 const contentWidth = screenWidth - 2 * LAYOUT_PAD;
-const TIMELINE_CONTENT_WIDTH = Math.max(screenWidth - LAYOUT_PAD, contentWidth);
+const TIMELINE_CONTENT_WIDTH = screenWidth - LAYOUT_PAD;
 
 // Funktion zum Laden der Bilder
 const getClothingImage = (imageName: string | null) => {
@@ -520,8 +520,8 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
           
           {/* Neue Überschrift für Kleidungsempfehlungen */}
           {!isLoading && !errorMessage && weatherData && (
-            <LiquidGlassCard style={styles.sectionCard} intensity={26}>
-              <ThemedText style={styles.sectionTitle}>
+            <LiquidGlassCard style={[styles.sectionCard, styles.recommendationCard]} intensity={26}>
+              <ThemedText style={[styles.sectionTitle, styles.recommendationTitle]}>
                 Empfohlene Kleidung für {contextDescriptions[selectedMode]}
               </ThemedText>
             </LiquidGlassCard>
@@ -1543,11 +1543,13 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '700',
     color: '#7D5A50',
     marginBottom: 12,
     textAlign: 'center',
+    paddingHorizontal: 2,
+    lineHeight: 22,
   },
   weatherTitle: {
     marginBottom: 16,
@@ -1682,11 +1684,10 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontStyle: 'italic',
     marginTop: 15,
+    marginBottom: 10,
     textAlign: 'center',
     opacity: 0.7,
     color: '#7D5A50',
-    alignSelf: 'center',
-    width: TIMELINE_CONTENT_WIDTH,
   },
   noRecommendations: {
     alignItems: 'center',
@@ -1831,14 +1832,14 @@ const styles = StyleSheet.create({
   infoCard: {
     width: '100%',
     borderRadius: 22,
-    padding: 18,
+    paddingVertical: 16,
+    paddingHorizontal: 14,
     marginBottom: 14,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
-    overflow: 'hidden',
   },
   infoTitle: {
     fontSize: 16,
@@ -1867,8 +1868,14 @@ const styles = StyleSheet.create({
     width: '100%',
     marginBottom: 14,
     borderRadius: 22,
-    padding: 18,
-    overflow: 'hidden',
+    paddingVertical: 18,
+    paddingHorizontal: 14,
+    alignItems: 'stretch',
+  },
+  recommendationCard: {
+    paddingVertical: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   stickyContextCard: {
     backgroundColor: 'rgba(255, 255, 255, 0.95)', // Für iOS
@@ -1887,25 +1894,28 @@ const styles = StyleSheet.create({
   metaCard: {
     width: '100%',
     borderRadius: 22,
-    padding: 18,
+    paddingVertical: 18,
+    paddingHorizontal: 14,
     marginBottom: 10,
-    overflow: 'hidden',
   },
   metaCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 8,
+    paddingHorizontal: 2,
   },
   metaCardTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
     color: '#7D5A50',
     marginLeft: 8,
+    flexShrink: 1,
   },
   metaCardContent: {
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 13,
+    lineHeight: 19,
     color: '#7D5A50',
+    paddingHorizontal: 2,
   },
   contextImage: {
     width: 40,
@@ -1915,7 +1925,7 @@ const styles = StyleSheet.create({
   },
   weatherCard: {
     paddingVertical: 16,
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
   },
   weatherDisplayContainer: {
     width: '100%',
@@ -2029,6 +2039,7 @@ const styles = StyleSheet.create({
   },
   contextButtonNew: {
     width: '48%',
+    minHeight: 120,
     borderRadius: 18,
     marginBottom: 10,
     borderWidth: 1.5,
@@ -2036,6 +2047,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.12)',
     padding: 12,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   selectedContextButtonNew: {
     borderColor: 'rgba(100,150,255,0.55)',
@@ -2066,5 +2078,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
     color: '#7D5A50',
+  },
+  recommendationTitle: {
+    fontSize: 24,
+    lineHeight: 26,
+    marginBottom: 0,
   },
 });
