@@ -1,9 +1,12 @@
 import { SleepEntry } from '@/lib/sleepData';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase } from '@/lib/supabase';
 
 export type TimeOfDayBucket = 'morning' | 'midday' | 'afternoon' | 'evening';
 
 export interface SleepWindowPredictionInput {
   userId: string;
+  babyId?: string | null; // Baby-ID für gemeinsame Personalization zwischen Partnern
   birthdate?: string | Date | null;
   entries: SleepEntry[];
   /**
@@ -41,6 +44,16 @@ interface PersonalizationData {
   sampleCount: number;
   lastUpdated: string;
 }
+
+interface PersonalizationStore {
+  [key: string]: PersonalizationData;
+}
+
+// Persistenz-Konfiguration
+const PERSONALIZATION_STORAGE_KEY = 'sleep_personalization_v1';
+const SYNC_DEBOUNCE_MS = 60000; // Nur alle 60 Sekunden syncen
+let lastSyncTime = 0;
+let syncScheduled = false;
 
 interface AgeProfile {
   maxMonths: number;
@@ -111,6 +124,158 @@ const AGE_PROFILES: AgeProfile[] = [
 ];
 
 const personalizationStore = new Map<string, PersonalizationData>();
+
+/**
+ * 📦 AsyncStorage Persistenz - Lokal speichern
+ */
+async function savePersonalizationToStorage(): Promise<void> {
+  try {
+    const data = Object.fromEntries(personalizationStore.entries());
+    await AsyncStorage.setItem(PERSONALIZATION_STORAGE_KEY, JSON.stringify(data));
+  } catch (error) {
+    console.error('Failed to save personalization to AsyncStorage:', error);
+  }
+}
+
+/**
+ * 📦 AsyncStorage Persistenz - Lokal laden
+ */
+async function loadPersonalizationFromStorage(): Promise<void> {
+  try {
+    const stored = await AsyncStorage.getItem(PERSONALIZATION_STORAGE_KEY);
+    if (stored) {
+      const data: PersonalizationStore = JSON.parse(stored);
+      personalizationStore.clear();
+      for (const [key, value] of Object.entries(data)) {
+        personalizationStore.set(key, value);
+      }
+    }
+  } catch (error) {
+    console.error('Failed to load personalization from AsyncStorage:', error);
+  }
+}
+
+/**
+ * 🔄 Supabase Sync - Nur wenn nötig (debounced)
+ * Speichert Personalization-Daten in Supabase für Partner-Synchronisation
+ * GRACEFUL DEGRADATION: Funktioniert auch ohne Tabelle (nur AsyncStorage)
+ */
+async function syncPersonalizationToSupabase(babyId: string): Promise<void> {
+  if (!babyId) return;
+
+  const now = Date.now();
+  if (now - lastSyncTime < SYNC_DEBOUNCE_MS) {
+    // Zu früh für nächsten Sync - schedule für später
+    if (!syncScheduled) {
+      syncScheduled = true;
+      setTimeout(() => {
+        syncScheduled = false;
+        syncPersonalizationToSupabase(babyId);
+      }, SYNC_DEBOUNCE_MS - (now - lastSyncTime));
+    }
+    return;
+  }
+
+  try {
+    const data = Object.fromEntries(personalizationStore.entries());
+
+    // Upsert in Supabase (baby-spezifisch)
+    const { error } = await supabase
+      .from('sleep_personalization')
+      .upsert({
+        baby_id: babyId,
+        personalization_data: data,
+        updated_at: new Date().toISOString(),
+      }, {
+        onConflict: 'baby_id'
+      });
+
+    if (error) {
+      // Tabelle existiert nicht - kein Problem, AsyncStorage funktioniert weiterhin
+      if (error.code === '42P01') {
+        console.log('Sleep personalization table not yet created - using AsyncStorage only');
+      } else {
+        console.error('Failed to sync personalization to Supabase:', error);
+      }
+    } else {
+      lastSyncTime = now;
+    }
+  } catch (error) {
+    console.error('Failed to sync personalization to Supabase:', error);
+  }
+}
+
+/**
+ * 🔄 Supabase Sync - Daten vom Partner holen
+ * Lädt neueste Personalization-Daten aus Supabase
+ * GRACEFUL DEGRADATION: Funktioniert auch ohne Tabelle (nur AsyncStorage)
+ */
+async function loadPersonalizationFromSupabase(babyId: string): Promise<void> {
+  if (!babyId) return;
+
+  try {
+    const { data, error } = await supabase
+      .from('sleep_personalization')
+      .select('personalization_data, updated_at')
+      .eq('baby_id', babyId)
+      .single();
+
+    if (error) {
+      // Tabelle existiert nicht oder keine Daten - kein Problem
+      if (error.code === '42P01') {
+        console.log('Sleep personalization table not yet created - using AsyncStorage only');
+      } else if (error.code !== 'PGRST116') {
+        // PGRST116 = no rows found (normal)
+        console.error('Failed to load personalization from Supabase:', error);
+      }
+      return;
+    }
+
+    if (data?.personalization_data) {
+      const remoteData: PersonalizationStore = data.personalization_data;
+      const remoteTimestamp = new Date(data.updated_at).getTime();
+
+      // Merge-Strategie: Neueste Daten gewinnen
+      for (const [key, remoteValue] of Object.entries(remoteData)) {
+        const localValue = personalizationStore.get(key);
+
+        if (!localValue) {
+          // Keine lokalen Daten - übernehme remote
+          personalizationStore.set(key, remoteValue);
+        } else {
+          const localTimestamp = new Date(localValue.lastUpdated).getTime();
+
+          // Übernehme neuere Daten
+          if (remoteTimestamp > localTimestamp) {
+            personalizationStore.set(key, remoteValue);
+          }
+        }
+      }
+
+      // Speichere gemergete Daten lokal
+      await savePersonalizationToStorage();
+    }
+  } catch (error) {
+    console.error('Failed to load personalization from Supabase:', error);
+  }
+}
+
+/**
+ * 🚀 Initialisierung beim App-Start
+ * Lädt AsyncStorage, dann Background-Sync mit Supabase
+ */
+export async function initializePersonalization(babyId?: string): Promise<void> {
+  // 1. Schnell: Lade aus AsyncStorage
+  await loadPersonalizationFromStorage();
+
+  // 2. Background: Sync mit Supabase wenn Baby-ID vorhanden
+  if (babyId) {
+    // Non-blocking Background-Sync
+    loadPersonalizationFromSupabase(babyId).catch(err =>
+      console.error('Background personalization sync failed:', err)
+    );
+  }
+}
 
 /**
  * 1️⃣ Dynamischer Bedtime-Gap basierend auf Alter
@@ -238,6 +403,7 @@ function collectHistoricalWakeWindows(
  */
 export async function predictNextSleepWindow({
   userId,
+  babyId,
   birthdate,
   entries,
   anchorBedtime,
@@ -266,7 +432,8 @@ export async function predictNextSleepWindow({
   const { last24hMinutes, todayMinutes } = computeDailySleepStats(completedEntries, now);
   const sleepDebt = baseline.profile.dailyTargetMinutes - last24hMinutes;
 
-  const personalizationKey = getPersonalizationKey(userId, napIndexToday, baseline.timeOfDayBucket);
+  // WICHTIG: Verwende babyId statt userId für gemeinsame Personalization zwischen Partnern
+  const personalizationKey = getPersonalizationKey(babyId || userId, napIndexToday, baseline.timeOfDayBucket);
   const personalizationData = personalizationStore.get(personalizationKey);
   const personalizationOffset = personalizationData?.offsetMinutes ?? 0;
 
@@ -476,9 +643,11 @@ export async function predictNextSleepWindow({
  * Update personalization after the actual nap start is known.
  * This function keeps an exponential moving average of the difference
  * between predicted and actual start times for each nap slot & day segment.
+ *
+ * Speichert automatisch in AsyncStorage und syncet mit Supabase (debounced).
  */
 export async function updatePersonalizationAfterNap(
-  userId: string,
+  userIdOrBabyId: string, // Kann userId oder babyId sein - babyId bevorzugt für Partner-Synchronität
   napIndex: number,
   bucket: TimeOfDayBucket,
   recommendedStart: Date,
@@ -490,7 +659,7 @@ export async function updatePersonalizationAfterNap(
     PERSONALIZATION_CLAMP,
   );
 
-  const key = getPersonalizationKey(userId, napIndex, bucket);
+  const key = getPersonalizationKey(userIdOrBabyId, napIndex, bucket);
   const existing = personalizationStore.get(key);
 
   if (!existing) {
@@ -499,18 +668,28 @@ export async function updatePersonalizationAfterNap(
       sampleCount: 1,
       lastUpdated: new Date().toISOString(),
     });
-    return;
+  } else {
+    const alpha = PERSONALIZATION_ALPHA;
+    const newOffset =
+      existing.offsetMinutes + alpha * (diffMinutes - existing.offsetMinutes);
+
+    personalizationStore.set(key, {
+      offsetMinutes: clamp(newOffset, -PERSONALIZATION_CLAMP, PERSONALIZATION_CLAMP),
+      sampleCount: Math.min(existing.sampleCount + 1, 50),
+      lastUpdated: new Date().toISOString(),
+    });
   }
 
-  const alpha = PERSONALIZATION_ALPHA;
-  const newOffset =
-    existing.offsetMinutes + alpha * (diffMinutes - existing.offsetMinutes);
+  // 📦 Speichere lokal in AsyncStorage (schnell)
+  await savePersonalizationToStorage();
 
-  personalizationStore.set(key, {
-    offsetMinutes: clamp(newOffset, -PERSONALIZATION_CLAMP, PERSONALIZATION_CLAMP),
-    sampleCount: Math.min(existing.sampleCount + 1, 50),
-    lastUpdated: new Date().toISOString(),
-  });
+  // 🔄 Sync mit Supabase (debounced, nur wenn babyId)
+  // Non-blocking - läuft im Hintergrund
+  if (userIdOrBabyId.length > 20) { // UUID-Format = babyId
+    syncPersonalizationToSupabase(userIdOrBabyId).catch(err =>
+      console.error('Background personalization sync failed:', err)
+    );
+  }
 }
 
 /**
@@ -696,6 +875,7 @@ function resolveAnchorDate(anchor: string, reference: Date): Date | null {
   return anchorDate;
 }
 
-function getPersonalizationKey(userId: string, napIndex: number, bucket: TimeOfDayBucket): string {
-  return `${userId}::${napIndex}::${bucket}`;
+function getPersonalizationKey(idKey: string, napIndex: number, bucket: TimeOfDayBucket): string {
+  // idKey kann babyId oder userId sein - babyId bevorzugt für Partner-Synchronität
+  return `${idKey}::${napIndex}::${bucket}`;
 }

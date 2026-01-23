@@ -45,7 +45,7 @@ import type { ViewStyle } from 'react-native';
 import { GlassCard, LiquidGlassCard, LAYOUT_PAD, SECTION_GAP_TOP, SECTION_GAP_BOTTOM, RADIUS, PRIMARY, GLASS_BORDER, GLASS_OVERLAY, FONT_SM, FONT_MD, FONT_LG } from '@/constants/DesignGuide';
 import { getBabyInfo } from '@/lib/baby';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
-import { predictNextSleepWindow, updatePersonalizationAfterNap, type SleepWindowPrediction } from '@/lib/sleep-window';
+import { predictNextSleepWindow, updatePersonalizationAfterNap, initializePersonalization, type SleepWindowPrediction } from '@/lib/sleep-window';
 import { markPaywallShown, shouldShowPaywall } from '@/lib/paywall';
 import { useNotifications } from '@/hooks/useNotifications';
 import { usePartnerNotifications } from '@/hooks/usePartnerNotifications';
@@ -769,6 +769,11 @@ export default function SleepTrackerScreen() {
     loadSleepData();
   }, [activeBabyId]);
 
+  // Initialize personalization on mount or when baby changes
+  useEffect(() => {
+    initializePersonalization(activeBabyId ?? undefined);
+  }, [activeBabyId]);
+
   // Request notification permissions on mount
   useEffect(() => {
     requestPermissions();
@@ -897,6 +902,7 @@ export default function SleepTrackerScreen() {
       try {
         const prediction = await predictNextSleepWindow({
           userId: user.id,
+          babyId: activeBabyId ?? undefined, // Gemeinsame Personalization für Partner
           birthdate: babyBirthdate ?? undefined,
           entries,
           anchorBedtime: '19:30',
@@ -949,7 +955,8 @@ export default function SleepTrackerScreen() {
 
   // Load sleep history (finished entries) - WITH cache!
   const loadSleepHistory = async () => {
-    const cacheKey = `screen_cache_sleep_history_${user?.id}_${activeBabyId || 'default'}`;
+    // WICHTIG: Cache-Key nur mit Baby-ID, damit Partner denselben Cache teilen!
+    const cacheKey = `screen_cache_sleep_history_${activeBabyId || 'default'}`;
 
     const result = await loadWithRevalidate(
       cacheKey,
@@ -961,7 +968,7 @@ export default function SleepTrackerScreen() {
         }
         return [];
       },
-      CacheStrategy.MEDIUM // 2 minutes cache
+      CacheStrategy.SHORT // 30 Sekunden cache für Predictions-Synchronität
     );
 
     return result;
@@ -979,19 +986,23 @@ export default function SleepTrackerScreen() {
       // HISTORY: With cache, refresh in background
       const { data: finishedEntries, isStale, refresh } = await loadSleepHistory();
 
+      // Handle null data gracefully
+      const safeFinishedEntries = finishedEntries || [];
+
       // Combine active + finished entries
       const allEntries = activeSleep
-        ? [activeSleep, ...finishedEntries.map(classifySleepEntry)]
-        : finishedEntries.map(classifySleepEntry);
+        ? [activeSleep, ...safeFinishedEntries.map(classifySleepEntry)]
+        : safeFinishedEntries.map(classifySleepEntry);
 
       setSleepEntries(allEntries);
 
       // Background refresh if cache was stale
       if (isStale) {
         refresh().then(freshEntries => {
+          const safeFreshEntries = freshEntries || [];
           const combinedFresh = activeSleep
-            ? [activeSleep, ...freshEntries.map(classifySleepEntry)]
-            : freshEntries.map(classifySleepEntry);
+            ? [activeSleep, ...safeFreshEntries.map(classifySleepEntry)]
+            : safeFreshEntries.map(classifySleepEntry);
           setSleepEntries(combinedFresh);
         });
       }
@@ -1055,8 +1066,9 @@ export default function SleepTrackerScreen() {
 
         if (user?.id && predictionRef.current) {
           try {
+            // Verwende babyId statt userId für gemeinsame Personalization zwischen Partnern
             await updatePersonalizationAfterNap(
-              user.id,
+              activeBabyId || user.id,
               predictionRef.current.napIndexToday,
               predictionRef.current.timeOfDayBucket,
               predictionRef.current.recommendedStart,
@@ -1115,7 +1127,8 @@ export default function SleepTrackerScreen() {
         showSuccessSplash(splashColor, splashEmoji, splashKind);
 
         // Invalidate cache because stopped sleep now appears in history
-        await invalidateCacheAfterAction(`sleep_history_${user?.id}_${activeBabyId || 'default'}`);
+        // WICHTIG: Korrekter Cache-Key wie in loadSleepHistory!
+        await invalidateCacheAfterAction(`sleep_history_${activeBabyId || 'default'}`);
         await loadSleepData();
       } else {
         Alert.alert('Fehler', error || 'Schlaftracking konnte nicht gestoppt werden');
@@ -1252,7 +1265,8 @@ export default function SleepTrackerScreen() {
       setShowEndPicker(false);
 
       // Invalidate cache because new/updated entry should appear immediately
-      await invalidateCacheAfterAction(`sleep_history_${user?.id}_${activeBabyId || 'default'}`);
+      // WICHTIG: Korrekter Cache-Key wie in loadSleepHistory!
+      await invalidateCacheAfterAction(`sleep_history_${activeBabyId || 'default'}`);
       await loadSleepData();
     } catch (error) {
       console.error('❌ Sleep entry save error:', error);
@@ -1291,7 +1305,8 @@ export default function SleepTrackerScreen() {
               if (error) throw error;
 
               // Invalidate cache because entry was deleted
-              await invalidateCacheAfterAction(`sleep_history_${user?.id}_${activeBabyId || 'default'}`);
+              // WICHTIG: Korrekter Cache-Key wie in loadSleepHistory!
+              await invalidateCacheAfterAction(`sleep_history_${activeBabyId || 'default'}`);
               await loadSleepData();
               Alert.alert('Erfolg', 'Eintrag wurde gelöscht! 🗑️');
             } catch (error) {

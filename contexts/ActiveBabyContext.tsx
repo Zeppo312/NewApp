@@ -100,8 +100,10 @@ export const ActiveBabyProvider: React.FC<{ children: React.ReactNode }> = ({
    * Loads babies from DB and guarantees:
    * - at least one baby exists
    * - activeBabyId is resolved BEFORE isReady = true
+   *
+   * OPTIMIZATION: Nutzt Cache für schnelles Laden (5 Min Cache)
    */
-  const loadBabies = useCallback(async () => {
+  const loadBabies = useCallback(async (forceRefresh = false) => {
     if (!user) {
       setBabies([]);
       setActiveBabyIdState(null);
@@ -114,7 +116,7 @@ export const ActiveBabyProvider: React.FC<{ children: React.ReactNode }> = ({
     setIsLoading(true);
     setIsReady(false);
 
-    const { data, error } = await listBabies();
+    const { data, error } = await listBabies(forceRefresh);
     if (error) {
       console.error('Error loading babies:', error);
       setBabies([]);
@@ -135,7 +137,8 @@ export const ActiveBabyProvider: React.FC<{ children: React.ReactNode }> = ({
         console.error('Error creating default baby:', createError);
         setLoadError(formatLoadError(createError));
       } else {
-        const { data: reloaded } = await listBabies();
+        // Force refresh after creating baby to skip cache
+        const { data: reloaded } = await listBabies(true);
         nextBabies = reloaded ?? [];
       }
     }
@@ -178,6 +181,10 @@ export const ActiveBabyProvider: React.FC<{ children: React.ReactNode }> = ({
     [babies, activeBabyId],
   );
 
+  const refreshBabiesForced = useCallback(async () => {
+    await loadBabies(true); // Force refresh = skip cache
+  }, [loadBabies]);
+
   return (
     <ActiveBabyContext.Provider
       value={{
@@ -188,7 +195,7 @@ export const ActiveBabyProvider: React.FC<{ children: React.ReactNode }> = ({
         isReady,
         loadError,
         setActiveBabyId,
-        refreshBabies: loadBabies,
+        refreshBabies: refreshBabiesForced,
       }}
     >
       {children}

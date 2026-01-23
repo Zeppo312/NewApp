@@ -1,4 +1,9 @@
 import { supabase } from './supabase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// Cache-Konfiguration für Baby-Liste
+const BABY_LIST_CACHE_KEY = 'baby_list_cache_v1';
+const BABY_LIST_CACHE_DURATION_MS = 5 * 60 * 1000; // 5 Minuten Cache
 
 // Typen für die Baby-Informationen
 export interface BabyInfo {
@@ -84,8 +89,19 @@ export interface CurrentPhase {
   updated_at?: string;
 }
 
-// Baby-Informationen
-export const listBabies = async () => {
+/**
+ * Invalidiere Baby-Liste Cache (z.B. nach Baby-Erstellung/-Update)
+ */
+export const invalidateBabyListCache = async () => {
+  try {
+    await AsyncStorage.removeItem(BABY_LIST_CACHE_KEY);
+  } catch (error) {
+    console.error('Failed to invalidate baby list cache:', error);
+  }
+};
+
+// Baby-Informationen mit Cache
+export const listBabies = async (forceRefresh = false) => {
   try {
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) {
@@ -93,6 +109,25 @@ export const listBabies = async () => {
     }
 
     const userId = userData.user.id;
+    const cacheKey = `${BABY_LIST_CACHE_KEY}_${userId}`;
+
+    // 1. Versuche Cache zu laden (nur wenn nicht forceRefresh)
+    if (!forceRefresh) {
+      try {
+        const cached = await AsyncStorage.getItem(cacheKey);
+        if (cached) {
+          const { data, timestamp } = JSON.parse(cached);
+          const age = Date.now() - timestamp;
+
+          // Cache ist noch gültig
+          if (age < BABY_LIST_CACHE_DURATION_MS) {
+            return { data, error: null, fromCache: true };
+          }
+        }
+      } catch (cacheError) {
+        console.warn('Cache read failed, fetching fresh data:', cacheError);
+      }
+    }
 
     const { data, error } = await supabase
       .from('baby_info')
@@ -131,7 +166,20 @@ export const listBabies = async () => {
       return { data: null, error: error ?? ownedError };
     }
 
-    return { data: deduped, error: null };
+    // 2. Speichere im Cache
+    try {
+      await AsyncStorage.setItem(
+        cacheKey,
+        JSON.stringify({
+          data: deduped,
+          timestamp: Date.now(),
+        })
+      );
+    } catch (cacheError) {
+      console.warn('Failed to cache baby list:', cacheError);
+    }
+
+    return { data: deduped, error: null, fromCache: false };
   } catch (err) {
     console.error('Failed to list babies:', err);
     return { data: null, error: err };
@@ -168,6 +216,9 @@ export const createBaby = async (info: BabyInfo = {}) => {
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     const userId = userData.user.id;
+
+    // Invalidiere Cache vor Erstellung
+    await invalidateBabyListCache();
 
     const { data: baby, error } = await supabase
       .from('baby_info')
@@ -245,6 +296,9 @@ export const saveBabyInfo = async (info: BabyInfo, babyId?: string) => {
   try {
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
+
+    // Invalidiere Cache vor Update
+    await invalidateBabyListCache();
 
     const targetId = babyId ?? info.id;
 
