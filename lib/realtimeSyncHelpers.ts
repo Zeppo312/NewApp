@@ -21,7 +21,7 @@ export async function setupSleepEntriesRealtime(callback: (payload: any) => void
     }
 
     // Aktuellen Benutzer abrufen
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData?.user) {
       return { success: false, error: 'Nicht angemeldet' };
     }

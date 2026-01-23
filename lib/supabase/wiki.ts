@@ -69,7 +69,7 @@ export const getWikiArticleIndex = async () => {
 // Funktion zum Abrufen aller Artikel
 export const getWikiArticles = async () => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     const userId = userData.user?.id;
 
     // Abrufen aller Artikel
@@ -118,7 +118,7 @@ export const getWikiArticles = async () => {
 // Funktion zum Abrufen eines einzelnen Artikels
 export const getWikiArticle = async (articleId: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     const userId = userData.user?.id;
 
     // Abrufen des Artikels
@@ -258,7 +258,7 @@ export const deleteWikiArticle = async (articleId: string) => {
 // Funktion zum Abrufen von Artikeln nach Kategorie
 export const getWikiArticlesByCategory = async (categoryId: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     const userId = userData.user?.id;
 
     // Abrufen der Artikel nach Kategorie
@@ -308,7 +308,7 @@ export const getWikiArticlesByCategory = async (categoryId: string) => {
 // Funktion zum Abrufen von Favoriten-Artikeln
 export const getFavoriteWikiArticles = async () => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     const userId = userData.user?.id;
 
     if (!userId) {
@@ -351,7 +351,7 @@ export const getFavoriteWikiArticles = async () => {
 // Funktion zum Hinzufügen eines Artikels zu den Favoriten
 export const addWikiArticleToFavorites = async (articleId: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     const userId = userData.user?.id;
 
     if (!userId) {
@@ -378,7 +378,7 @@ export const addWikiArticleToFavorites = async (articleId: string) => {
 // Funktion zum Entfernen eines Artikels aus den Favoriten
 export const removeWikiArticleFromFavorites = async (articleId: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     const userId = userData.user?.id;
 
     if (!userId) {
@@ -404,7 +404,7 @@ export const removeWikiArticleFromFavorites = async (articleId: string) => {
 // Funktion zum Suchen von Artikeln
 export const searchWikiArticles = async (searchTerm: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     const userId = userData.user?.id;
 
     // Suchen nach Artikeln, die den Suchbegriff im Titel oder Teaser enthalten
@@ -464,7 +464,7 @@ export const uploadWikiCover = async (uri: string) => {
 
     const arrayBuffer = await response.arrayBuffer();
     const fileBuffer = new Uint8Array(arrayBuffer);
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     const userId = userData.user?.id ?? 'anonymous';
     const fileName = `wiki_${userId}_${Date.now()}.${ext}`;
     const filePath = `wiki-covers/${fileName}`;

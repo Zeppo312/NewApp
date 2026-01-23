@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { getCachedUser } from './supabase';
 
 // Typdefinitionen
 export interface Post {
@@ -80,7 +81,7 @@ export const createNotification = async (
 ) => {
   try {
     // Prüfen, ob der aktuelle Benutzer angemeldet ist
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     // Nicht an sich selbst senden
@@ -117,7 +118,7 @@ export const createNotification = async (
 // Benachrichtigungen für einen Benutzer abrufen
 export const getNotifications = async () => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     console.log("Fetching notifications for user:", userData.user.id);
@@ -183,7 +184,7 @@ export const getNotifications = async () => {
 // Benachrichtigung als gelesen markieren
 export const markNotificationAsRead = async (notificationId: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     const { data, error } = await supabase
@@ -207,7 +208,7 @@ export const markNotificationAsRead = async (notificationId: string) => {
 // Alle Benachrichtigungen als gelesen markieren
 export const markAllNotificationsAsRead = async () => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     const { data, error } = await supabase
@@ -231,7 +232,7 @@ export const markAllNotificationsAsRead = async () => {
 // Beiträge abrufen
 export const getPosts = async (searchQuery: string = '', tagIds: string[] = [], userId?: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     // Beiträge abrufen
@@ -443,7 +444,7 @@ export const getPosts = async (searchQuery: string = '', tagIds: string[] = [], 
 // Kommentare für einen Beitrag abrufen
 export const getComments = async (postId: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     // Kommentare abrufen
@@ -593,7 +594,7 @@ export const getComments = async (postId: string) => {
 // Kommentare (Vorschau) für einen Beitrag mit Limit abrufen
 export const getCommentsPreview = async (postId: string, limit: number = 2) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     // Kommentare abrufen (nur die ersten "limit" nach ältestem zuerst)
@@ -670,7 +671,7 @@ export const getCommentsPreview = async (postId: string, limit: number = 2) => {
 // Neuen Beitrag erstellen
 export const createPost = async (content: string, isAnonymous: boolean = false, type: 'text' | 'poll' = 'text', pollData?: any, tagIds: string[] = [], imageBase64?: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     console.log('=== CREATE POST WITH IMAGE ===');
@@ -798,7 +799,7 @@ export const createPost = async (content: string, isAnonymous: boolean = false, 
 // Neuen Kommentar erstellen
 export const createComment = async (postId: string, content: string, isAnonymous: boolean = false) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     // Debug-Ausgabe
@@ -873,7 +874,7 @@ export const createComment = async (postId: string, content: string, isAnonymous
 // Beitrag liken oder Unlike
 export const togglePostLike = async (postId: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     // Prüfen, ob der Benutzer den Beitrag bereits geliked hat
@@ -947,7 +948,7 @@ export const togglePostLike = async (postId: string) => {
 // Kommentar liken oder Unlike
 export const toggleCommentLike = async (commentId: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     // Prüfen, ob der Benutzer den Kommentar bereits geliked hat
@@ -1021,7 +1022,7 @@ export const toggleCommentLike = async (commentId: string) => {
 // Beitrag löschen
 export const deletePost = async (postId: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     const { data, error } = await supabase
@@ -1045,7 +1046,7 @@ export const deletePost = async (postId: string) => {
 // Kommentar löschen
 export const deleteComment = async (commentId: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     const { data, error } = await supabase
@@ -1069,7 +1070,7 @@ export const deleteComment = async (commentId: string) => {
 // Verschachtelte Kommentare zu einem Kommentar abrufen
 export const getNestedComments = async (commentId: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     // Verschachtelte Kommentare abrufen
@@ -1140,7 +1141,7 @@ export const getNestedComments = async (commentId: string) => {
 // Erstelle eine Antwort auf einen Kommentar
 export const createReply = async (commentId: string, content: string, isAnonymous: boolean = false) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     // Kommentar erstellen
@@ -1187,7 +1188,7 @@ export const createReply = async (commentId: string, content: string, isAnonymou
 // Verschachtelte Kommentare liken oder Unlike
 export const toggleNestedCommentLike = async (nestedCommentId: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     // Prüfen, ob der Benutzer den Kommentar bereits geliked hat
@@ -1261,7 +1262,7 @@ export const toggleNestedCommentLike = async (nestedCommentId: string) => {
 // Verschachtelten Kommentar löschen
 export const deleteNestedComment = async (nestedCommentId: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     const { data, error } = await supabase

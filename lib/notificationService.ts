@@ -3,6 +3,7 @@ import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { supabase } from './supabase';
+import { getCachedUser } from './supabase';
 
 import * as TaskManager from 'expo-task-manager';
 import { router } from 'expo-router';
@@ -74,7 +75,7 @@ export async function registerForPushNotificationsAsync() {
 export async function savePushToken(token: string) {
   try {
     // Aktuellen Benutzer abrufen
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData?.user) {
       console.error('Kein angemeldeter Benutzer');
       return false;
@@ -307,7 +308,7 @@ async function markNotificationAsRead(notificationId: string) {
 // Benachrichtigungen manuell im Hintergrund überprüfen
 export async function checkForNewNotifications() {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData?.user) return;
 
     console.log('Prüfe auf neue Benachrichtigungen im Hintergrund...');

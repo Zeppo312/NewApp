@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { getCachedUser } from './supabase';
 import { hasRevenueCatEntitlement } from './revenuecat';
 
 export const PAYWALL_INTERVAL_MS = 2 * 60 * 60 * 1000; // 2 Stunden
@@ -14,7 +15,7 @@ const mapRowToState = (row: any, isPro: boolean): PaywallState => ({
 });
 
 export const fetchPaywallState = async (): Promise<PaywallState> => {
-  const { data: userData } = await supabase.auth.getUser();
+  const { data: userData } = await getCachedUser();
   if (!userData.user) {
     return { isPro: false, lastShownAt: null };
   }
@@ -62,7 +63,7 @@ export const shouldShowPaywall = async (
 };
 
 export const markPaywallShown = async (source?: string) => {
-  const { data: userData } = await supabase.auth.getUser();
+  const { data: userData } = await getCachedUser();
   if (!userData.user) {
     return { error: new Error('Nicht angemeldet') };
   }

@@ -1,10 +1,9 @@
-import { supabase } from './supabase';
-import { getLinkedUsersWithDetails } from './supabase';
+import { supabase, getCachedUser, getLinkedUsersWithDetails } from './supabase';
 
 // Funktion zum einmaligen Synchronisieren aller bestehenden Alltag-Einträge (bidirektional mit Flag)
 export const syncAllExistingDailyEntries = async () => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { success: false, error: 'Nicht angemeldet' };
 
     console.log('Attempting to sync all existing daily entries for user:', userData.user.id);
@@ -173,7 +172,7 @@ export const syncAllExistingDailyEntries = async () => {
 // Funktion zum Synchronisieren der Alltag-Einträge vom einladenden Benutzer zum eingeladenen Benutzer
 export const syncDailyEntriesFromInviterToInvitee = async () => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { success: false, error: 'Nicht angemeldet' };
 
     console.log('Attempting to sync daily entries from inviter to invitee for user:', userData.user.id);

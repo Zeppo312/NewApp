@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { getCachedUser } from './supabase';
 import { createNotification } from './community';
 
 // Interface für einen Follow
@@ -25,7 +26,7 @@ export interface UserWithFollow {
  */
 export const followUser = async (userId: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData?.user) return { success: false, error: 'Nicht angemeldet' };
 
     console.log(`User ${userData.user.id} is attempting to follow user ${userId}`);
@@ -96,7 +97,7 @@ export const followUser = async (userId: string) => {
  */
 export const unfollowUser = async (userId: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData?.user) return { success: false, error: 'Nicht angemeldet' };
 
     const { error } = await supabase
@@ -125,7 +126,7 @@ export const unfollowUser = async (userId: string) => {
  */
 export const isFollowingUser = async (userId: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData?.user) return { isFollowing: false, error: 'Nicht angemeldet' };
 
     const { data, error } = await supabase
@@ -151,7 +152,7 @@ export const isFollowingUser = async (userId: string) => {
  */
 export const getFollowedUsers = async () => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData?.user) return { data: null, error: 'Nicht angemeldet' };
 
     const { data, error } = await supabase
@@ -222,7 +223,7 @@ export const getFollowingCount = async (userId: string) => {
  */
 export const getFollowers = async () => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData?.user) return { data: null, error: 'Nicht angemeldet' };
 
     console.log(`Getting followers for user ${userData.user.id}`);
@@ -323,7 +324,7 @@ export const getFollowers = async () => {
  */
 export const createMissingFollowNotifications = async () => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData?.user) return { success: false, error: 'Nicht angemeldet' };
 
     console.log(`Looking for missing follow notifications for user ${userData.user.id}`);

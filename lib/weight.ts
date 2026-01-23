@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { getCachedUser } from './supabase';
 
 export type WeightSubject = 'mom' | 'baby';
 
@@ -19,7 +20,7 @@ export const saveWeightEntry = async (
   entry: Omit<WeightEntry, 'id' | 'user_id' | 'created_at' | 'updated_at'>
 ) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     const now = new Date().toISOString();
@@ -93,7 +94,7 @@ export const saveWeightEntry = async (
 // Alle Gewichtsdaten abrufen
 export const getWeightEntries = async (subject?: WeightSubject, babyId?: string | null) => {
   try {
-    const { data: userData, error: userErr } = await supabase.auth.getUser();
+    const { data: userData, error: userErr } = await getCachedUser();
     if (userErr) return { data: null, error: userErr };
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 

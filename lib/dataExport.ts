@@ -2,6 +2,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import * as Print from 'expo-print';
 import { supabase } from './supabase';
+import { getCachedUser } from './supabase';
 
 type TableExportConfig = {
   key: string;
@@ -75,7 +76,7 @@ const escapeHtml = (value: string) =>
 
 export const exportUserData = async (format: 'pdf' | 'json' = 'pdf'): Promise<UserDataExportResult> => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData?.user) {
       return { success: false, error: 'Nicht angemeldet' };
     }

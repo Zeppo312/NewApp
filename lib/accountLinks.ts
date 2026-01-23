@@ -1,7 +1,8 @@
 import { supabase } from './supabase';
+import { getCachedUser } from './supabase';
 
 export async function getPartnerId(): Promise<string | null> {
-  const { data: userData, error: userErr } = await supabase.auth.getUser();
+  const { data: userData, error: userErr } = await getCachedUser();
   if (userErr || !userData.user) return null;
 
   const myId = userData.user.id;

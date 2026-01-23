@@ -472,6 +472,11 @@ export function usePlannerDay(date: Date) {
 
     if (floatingOpenError) throw floatingOpenError;
 
+    const completedStart = new Date(normalizedDate);
+    completedStart.setHours(0, 0, 0, 0);
+    const completedEnd = new Date(completedStart);
+    completedEnd.setDate(completedEnd.getDate() + 1);
+
     const { data: floatingDoneRows, error: floatingDoneError } = await supabase
       .from('planner_items')
       .select(
@@ -481,6 +486,8 @@ export function usePlannerDay(date: Date) {
       .is('due_at', null)
       .eq('entry_type', 'todo')
       .eq('completed', true)
+      .gte('updated_at', completedStart.toISOString())
+      .lt('updated_at', completedEnd.toISOString())
       .order('updated_at', { ascending: false })
       .limit(50);
 

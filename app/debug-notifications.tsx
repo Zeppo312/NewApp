@@ -20,7 +20,7 @@ export default function DebugNotificationsScreen() {
     const id = await getPartnerId();
     addLog(`Partner ID: ${id || 'NONE'}`);
 
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     addLog(`Current User ID: ${userData?.user?.id || 'NONE'}`);
 
     const { data: links } = await supabase
@@ -32,7 +32,7 @@ export default function DebugNotificationsScreen() {
 
   const testDatabaseNotifications = async () => {
     addLog('Checking database notifications...');
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
 
     // Check notifications FOR me (from partner)
     const { data: forMe, error: error1 } = await supabase
@@ -83,7 +83,7 @@ export default function DebugNotificationsScreen() {
 
   const testCreateNotification = async () => {
     addLog('Creating test sleep entry...');
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
 
     const { data, error } = await supabase
       .from('sleep_entries')
@@ -104,7 +104,7 @@ export default function DebugNotificationsScreen() {
 
   const testPushTokens = async () => {
     addLog('Checking push token registration...');
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
 
     if (!userData?.user) {
       addLog('❌ ERROR: Not logged in');
@@ -161,7 +161,7 @@ export default function DebugNotificationsScreen() {
 
   const testPlannerNotifications = async () => {
     addLog('📋 CHECKING PLANNER NOTIFICATIONS...');
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
 
     if (!userData?.user) {
       addLog('❌ ERROR: Not logged in');
@@ -194,7 +194,7 @@ export default function DebugNotificationsScreen() {
 
   const testCreatePlannerEvent = async () => {
     addLog('📅 CREATING TEST PLANNER EVENT...');
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
 
     if (!userData?.user) {
       addLog('❌ ERROR: Not logged in');
@@ -307,7 +307,7 @@ export default function DebugNotificationsScreen() {
     addLog('🧪 STARTING PLANNER NOTIFICATION CHAIN TEST');
     addLog('================================================');
 
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
 
     if (!userData?.user) {
       addLog('❌ ERROR: Not logged in');
@@ -356,7 +356,7 @@ export default function DebugNotificationsScreen() {
     addLog('🧪 STARTING FULL PUSH NOTIFICATION CHAIN TEST');
     addLog('================================================');
 
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     const currentUserId = userData?.user?.id;
 
     if (!currentUserId) {

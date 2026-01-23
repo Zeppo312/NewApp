@@ -1,10 +1,11 @@
 import { supabase } from './supabase';
+import { getCachedUser } from './supabase';
 
 const AVATAR_BUCKET = 'community-images';
 
 export const uploadProfileAvatar = async (base64Data: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData?.user) {
       return { url: null, error: new Error('Nicht angemeldet') };
     }
@@ -53,7 +54,7 @@ const extractAvatarStoragePath = (avatarUrl: string) => {
 
 export const deleteProfileAvatar = async (avatarUrl: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData?.user) {
       return { error: new Error('Nicht angemeldet') };
     }
@@ -109,7 +110,7 @@ const parseDeleteUserResponse = (data: any) => {
 
 export const deleteUserData = async (options: DeleteUserDataOptions = {}) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData?.user) {
       return { error: new Error('Nicht angemeldet') };
     }

@@ -42,7 +42,7 @@ export async function getLinkedUsersWithDetails(): Promise<{
   error?: string;
 }> {
   try {
-    const { data: user } = await supabase.auth.getUser();
+    const { data: user } = await getCachedUser();
     if (!user || !user.user) {
       console.log('getLinkedUsersWithDetails: Kein Benutzer angemeldet');
       return { success: false, error: 'Kein Benutzer angemeldet' };
@@ -80,7 +80,7 @@ export async function getLinkedUsersAlternative(): Promise<{
   error?: string;
 }> {
   try {
-    const { data: user } = await supabase.auth.getUser();
+    const { data: user } = await getCachedUser();
     if (!user || !user.user) {
       console.log('getLinkedUsersAlternative: Kein Benutzer angemeldet');
       return { success: false, error: 'Kein Benutzer angemeldet' };
@@ -160,7 +160,7 @@ export async function setupSleepEntriesRealtime(callback: (payload: any) => void
     }
 
     // Aktuellen Benutzer abrufen
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData?.user) {
       return { success: false, error: 'Nicht angemeldet' };
     }
@@ -213,7 +213,7 @@ export async function syncAllExistingSleepEntries(): Promise<{
   linkedUsers?: ConnectedUser[];
 }> {
   try {
-    const { data: user } = await supabase.auth.getUser();
+    const { data: user } = await getCachedUser();
     if (!user || !user.user) {
       return { success: false, error: 'Kein Benutzer angemeldet' };
     }
@@ -294,7 +294,7 @@ export async function startSleepTracking(
 }> {
   try {
     // Get current user
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) {
       return { success: false, error: 'Nicht angemeldet' };
     }
@@ -420,7 +420,7 @@ export async function stopSleepTracking(
 }> {
   try {
     // Get current user
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) {
       return { success: false, error: 'Nicht angemeldet' };
     }
@@ -515,7 +515,7 @@ export async function updateSleepEntry(
 }> {
   try {
     // Get current user
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) {
       return { success: false, error: 'Nicht angemeldet' };
     }
@@ -618,7 +618,7 @@ export async function deleteSleepEntry(id: string): Promise<{
 }> {
   try {
     // Get current user
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) {
       return { success: false, error: 'Nicht angemeldet' };
     }
@@ -661,7 +661,7 @@ export async function checkForActiveSleepEntry(babyId?: string): Promise<{
 }> {
   try {
     // Get current user
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) {
       return { success: false, error: 'Nicht angemeldet' };
     }
@@ -775,7 +775,7 @@ export async function loadSleepEntries(): Promise<{
 }> {
   try {
     // Aktuellen Benutzer abrufen
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData?.user) {
       console.error('loadSleepEntries: Nicht angemeldet');
       return { success: false, error: 'Nicht angemeldet' };
@@ -842,7 +842,7 @@ export async function shareSleepEntry(
 }> {
   try {
     // Aktuellen Benutzer abrufen
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) {
       return { success: false, error: 'Nicht angemeldet' };
     }
@@ -899,7 +899,7 @@ export async function unshareSleepEntry(
 }> {
   try {
     // Aktuellen Benutzer abrufen
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) {
       return { success: false, error: 'Nicht angemeldet' };
     }
@@ -952,7 +952,7 @@ export async function debugCompareLinkedUserMethods(): Promise<{
 }> {
   try {
     // Aktuellen Benutzer prüfen
-    const { data: user } = await supabase.auth.getUser();
+    const { data: user } = await getCachedUser();
     if (!user || !user.user) {
       return { success: false };
     }
@@ -1083,7 +1083,7 @@ export async function checkDatabaseStructure(): Promise<{
 }> {
   try {
     // Aktuellen Benutzer abrufen
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) {
       return { success: false, error: 'Nicht angemeldet' };
     }

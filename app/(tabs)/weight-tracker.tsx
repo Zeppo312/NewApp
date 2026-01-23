@@ -126,7 +126,7 @@ export default function WeightTrackerScreen() {
 
   const loadUserRole = async () => {
     try {
-      const { data: userData } = await supabase.auth.getUser();
+      const { data: userData } = await getCachedUser();
       if (!userData.user) return;
       const { data, error } = await supabase
         .from('profiles')

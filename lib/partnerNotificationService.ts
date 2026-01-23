@@ -1,5 +1,6 @@
 import * as Notifications from 'expo-notifications';
 import { supabase } from './supabase';
+import { getCachedUser } from './supabase';
 
 interface PartnerActivityNotification {
   id: string;
@@ -26,7 +27,7 @@ interface PartnerActivityNotification {
 export async function pollPartnerActivities(): Promise<number> {
   try {
     // Get current user
-    const { data: userData, error: userError } = await supabase.auth.getUser();
+    const { data: userData, error: userError } = await getCachedUser();
     if (userError || !userData?.user) {
       console.log('No authenticated user for partner notification polling');
       return 0;
@@ -203,7 +204,7 @@ function formatNotificationContent(
  */
 export async function getUnreadPartnerNotificationCount(): Promise<number> {
   try {
-    const { data: userData, error: userError } = await supabase.auth.getUser();
+    const { data: userData, error: userError } = await getCachedUser();
     if (userError || !userData?.user) {
       return 0;
     }
@@ -253,7 +254,7 @@ export async function markPartnerNotificationAsRead(notificationId: string): Pro
  */
 export async function markAllPartnerNotificationsAsRead(): Promise<boolean> {
   try {
-    const { data: userData, error: userError } = await supabase.auth.getUser();
+    const { data: userData, error: userError } = await getCachedUser();
     if (userError || !userData?.user) {
       return false;
     }

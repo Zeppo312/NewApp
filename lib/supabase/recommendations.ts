@@ -31,7 +31,7 @@ export interface CreateRecommendationInput {
  */
 export async function isUserAdmin(): Promise<boolean> {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user } } = await getCachedUser();
     if (!user) return false;
 
     const { data: profile, error } = await supabase
@@ -78,7 +78,7 @@ export async function createRecommendation(
   input: CreateRecommendationInput
 ): Promise<LottiRecommendation> {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user } } = await getCachedUser();
     if (!user) throw new Error('Nicht authentifiziert');
 
     const { data, error } = await supabase
@@ -176,7 +176,7 @@ export async function uploadRecommendationImage(
   try {
     console.log('📤 Starting image upload...', { uri, fileName });
     
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user } } = await getCachedUser();
     if (!user) {
       console.error('❌ User not authenticated');
       throw new Error('Nicht authentifiziert');

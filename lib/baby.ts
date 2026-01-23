@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { getCachedUser } from './supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Cache-Konfiguration für Baby-Liste
@@ -103,7 +104,7 @@ export const invalidateBabyListCache = async () => {
 // Baby-Informationen mit Cache
 export const listBabies = async (forceRefresh = false) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) {
       return { data: null, error: new Error('Nicht angemeldet') };
     }
@@ -212,7 +213,7 @@ export const getBabyInfo = async (babyId?: string) => {
 
 export const createBaby = async (info: BabyInfo = {}) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     const userId = userData.user.id;
@@ -294,7 +295,7 @@ export const createBaby = async (info: BabyInfo = {}) => {
 
 export const saveBabyInfo = async (info: BabyInfo, babyId?: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     // Invalidiere Cache vor Update
@@ -347,7 +348,7 @@ export const saveBabyInfo = async (info: BabyInfo, babyId?: string) => {
 // Tagebucheinträge
 export const getDiaryEntries = async (babyId?: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     let query = supabase.from('baby_diary').select('*');
@@ -374,7 +375,7 @@ export const getDiaryEntries = async (babyId?: string) => {
 
 export const saveDiaryEntry = async (entry: DiaryEntry, babyId?: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     let result;
@@ -417,7 +418,7 @@ export const saveDiaryEntry = async (entry: DiaryEntry, babyId?: string) => {
 
 export const deleteDiaryEntry = async (id: string, babyId?: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     let query = supabase.from('baby_diary').delete().eq('id', id).eq('user_id', userData.user.id);
@@ -437,7 +438,7 @@ export const deleteDiaryEntry = async (id: string, babyId?: string) => {
 // Alltags-Einträge
 export const getDailyEntries = async (type?: string, date?: Date, babyId?: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     if (babyId) {
@@ -545,7 +546,7 @@ export const getDailyEntries = async (type?: string, date?: Date, babyId?: strin
 
 export const saveDailyEntry = async (entry: DailyEntry, babyId?: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     console.log('Saving daily entry:', entry);
@@ -671,7 +672,7 @@ export const saveDailyEntry = async (entry: DailyEntry, babyId?: string) => {
 
 export const deleteDailyEntry = async (id: string, babyId?: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     console.log('Deleting daily entry with ID:', id);
@@ -746,7 +747,7 @@ export const getDevelopmentPhases = async () => {
 // Meilensteine für eine bestimmte Phase abrufen
 export const getMilestonesByPhase = async (phaseId: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     // Meilensteine abrufen
@@ -793,7 +794,7 @@ export const getMilestonesByPhase = async (phaseId: string) => {
 // Aktuelle Phase des Babys abrufen
 export const getCurrentPhase = async () => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     // Aktuelle Phase abrufen
@@ -834,7 +835,7 @@ export const getCurrentPhase = async () => {
 // Aktuelle Phase des Babys setzen oder aktualisieren
 export const setCurrentPhase = async (phaseId: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     // Prüfen, ob bereits eine aktuelle Phase existiert
@@ -884,7 +885,7 @@ export const setCurrentPhase = async (phaseId: string) => {
 // Meilenstein als erreicht oder nicht erreicht markieren
 export const toggleMilestone = async (milestoneId: string, isCompleted: boolean) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     // Prüfen, ob bereits ein Fortschritt für diesen Meilenstein existiert
@@ -955,7 +956,7 @@ export const getPhaseProgress = async (phaseId: string) => {
 
 export const getDailyEntriesForDateRange = async (startDate: Date, endDate: Date, babyId?: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     console.log('Fetching entries from', startDate.toISOString(), 'to', endDate.toISOString());
@@ -1090,7 +1091,7 @@ export const saveFeedingEvent = async (
   babyId: string
 ) => {
   try {
-    const userData = await supabase.auth.getUser();
+    const userData = await getCachedUser();
     if (!userData.data.user) {
       return { data: null, error: new Error('User not authenticated') };
     }
@@ -1123,7 +1124,7 @@ export const saveFeedingEvent = async (
 
 export const updateFeedingEventEnd = async (id: string, endTime: Date) => {
   try {
-    const userData = await supabase.auth.getUser();
+    const userData = await getCachedUser();
     if (!userData.data.user) {
       return { data: null, error: new Error('User not authenticated') };
     }

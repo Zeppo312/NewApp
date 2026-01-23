@@ -1,4 +1,4 @@
-import { supabase } from "./supabase";
+import { supabase, getCachedUser } from "./supabase";
 import type { SleepEntry, ConnectedUser } from "./sleepData";
 
 // Interface für geteilte Einträge
@@ -19,7 +19,7 @@ export async function loadAllVisibleSleepEntries(babyId?: string): Promise<{
   error?: string;
 }> {
   try {
-    const { data: user } = await supabase.auth.getUser();
+    const { data: user } = await getCachedUser();
     if (!user || !user.user) {
       console.log('loadAllVisibleSleepEntries: Kein Benutzer angemeldet');
       return { success: false, error: 'Nicht angemeldet' };
@@ -110,7 +110,7 @@ export async function shareEntryWithPartner(
   error?: string;
 }> {
   try {
-    const { data: user } = await supabase.auth.getUser();
+    const { data: user } = await getCachedUser();
     if (!user || !user.user) {
       console.log('shareEntryWithPartner: Kein Benutzer angemeldet');
       return { success: false, error: 'Nicht angemeldet' };
@@ -175,7 +175,7 @@ export async function unshareEntry(
   error?: string;
 }> {
   try {
-    const { data: user } = await supabase.auth.getUser();
+    const { data: user } = await getCachedUser();
     if (!user || !user.user) {
       console.log('unshareEntry: Kein Benutzer angemeldet');
       return { success: false, error: 'Nicht angemeldet' };
@@ -232,7 +232,7 @@ export async function migrateSharedEntries(): Promise<{
   error?: string;
 }> {
   try {
-    const { data: user } = await supabase.auth.getUser();
+    const { data: user } = await getCachedUser();
     if (!user || !user.user) {
       console.log('migrateSharedEntries: Kein Benutzer angemeldet');
       return { success: false, error: 'Nicht angemeldet' };

@@ -1,5 +1,6 @@
 import { PostgrestError } from '@supabase/supabase-js';
 import { supabase } from './supabase';
+import { getCachedUser } from './supabase';
 
 const RECIPE_BUCKET = 'recipe-images';
 
@@ -133,7 +134,7 @@ export const createRecipe = async (
   imageBase64?: string
 ): Promise<RecipeCreateResult> => {
   try {
-    const { data: authData, error: authError } = await supabase.auth.getUser();
+    const { data: authData, error: authError } = await getCachedUser();
     if (authError) {
       return { data: null, error: authError };
     }
@@ -200,7 +201,7 @@ export const fetchMyRecipes = async (): Promise<{
   error: PostgrestError | null;
 }> => {
   try {
-    const { data: authData, error: authError } = await supabase.auth.getUser();
+    const { data: authData, error: authError } = await getCachedUser();
     if (authError) {
       return { data: [], error: authError };
     }
@@ -247,7 +248,7 @@ export const updateRecipe = async (
   imageBase64?: string
 ): Promise<RecipeUpdateResult> => {
   try {
-    const { data: authData, error: authError } = await supabase.auth.getUser();
+    const { data: authData, error: authError } = await getCachedUser();
     if (authError) {
       return { data: null, error: authError };
     }
@@ -346,7 +347,7 @@ export const updateRecipeAdmin = async (
   imageBase64?: string
 ): Promise<RecipeUpdateResult> => {
   try {
-    const { data: authData, error: authError } = await supabase.auth.getUser();
+    const { data: authData, error: authError } = await getCachedUser();
     if (authError) {
       return { data: null, error: authError };
     }
@@ -429,7 +430,7 @@ type RecipeDeleteResult = {
 
 export const deleteRecipe = async (recipeId: string): Promise<RecipeDeleteResult> => {
   try {
-    const { data: authData, error: authError } = await supabase.auth.getUser();
+    const { data: authData, error: authError } = await getCachedUser();
     if (authError) {
       return { error: authError };
     }
@@ -481,7 +482,7 @@ export const deleteRecipe = async (recipeId: string): Promise<RecipeDeleteResult
 
 export const deleteRecipeAdmin = async (recipeId: string): Promise<RecipeDeleteResult> => {
   try {
-    const { data: authData, error: authError } = await supabase.auth.getUser();
+    const { data: authData, error: authError } = await getCachedUser();
     if (authError) {
       return { error: authError };
     }

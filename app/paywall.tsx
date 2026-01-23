@@ -245,6 +245,10 @@ export default function PaywallScreen() {
     [billingLabel],
   );
 
+  const handleClose = () => {
+    router.back();
+  };
+
   return (
     <ThemedBackground style={styles.shell}>
       <Stack.Screen options={{ headerShown: false }} />
@@ -261,6 +265,9 @@ export default function PaywallScreen() {
             <Text style={styles.badgeText}>Premium</Text>
           </View>
           <Text style={styles.logo}>Lotti Baby</Text>
+          <Pressable onPress={handleClose} hitSlop={8} style={styles.closeButton}>
+            <Text style={styles.closeButtonText}>✕</Text>
+          </Pressable>
         </View>
 
         <Text style={styles.headline}>{slides[step].title}</Text>
@@ -291,6 +298,9 @@ export default function PaywallScreen() {
               />
               <Text style={styles.primaryText}>{CTA_LABEL}</Text>
             </Pressable>
+            <Pressable onPress={handleClose} hitSlop={8} style={styles.skipButton}>
+              <Text style={styles.skipButtonText}>Vielleicht später</Text>
+            </Pressable>
           </View>
         ) : (
           <View style={styles.planStack}>
@@ -317,6 +327,10 @@ export default function PaywallScreen() {
               <Text style={styles.secondaryAction}>
                 {pendingAction === 'restore' ? 'Aktualisiere…' : 'Käufe wiederherstellen / Status aktualisieren'}
               </Text>
+            </Pressable>
+
+            <Pressable onPress={handleClose} hitSlop={8} style={styles.cancelButton}>
+              <Text style={styles.cancelButtonText}>Vielleicht später</Text>
             </Pressable>
 
             <Text style={styles.legal}>
@@ -363,6 +377,24 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: '#FDFBF6',
+    position: 'absolute',
+    left: '50%',
+    transform: [{ translateX: -45 }],
+  },
+  closeButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.4)',
+  },
+  closeButtonText: {
+    fontSize: 18,
+    color: '#FDFBF6',
+    fontWeight: '600',
   },
   headline: {
     fontSize: 28,
@@ -542,6 +574,27 @@ const styles = StyleSheet.create({
     color: '#7A6E6A',
     fontSize: 13,
     marginTop: 10,
+  },
+  skipButton: {
+    marginTop: 12,
+    paddingVertical: 8,
+  },
+  skipButtonText: {
+    textAlign: 'center',
+    color: '#FDFBF6',
+    fontSize: 14,
+    fontWeight: '600',
+    opacity: 0.85,
+  },
+  cancelButton: {
+    marginTop: 12,
+    paddingVertical: 10,
+  },
+  cancelButtonText: {
+    textAlign: 'center',
+    color: '#7A6E6A',
+    fontSize: 14,
+    fontWeight: '600',
   },
   planStack: {
     marginTop: 6,
