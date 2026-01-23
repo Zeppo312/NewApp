@@ -210,6 +210,16 @@ export default function SyncTestScreen() {
     logResult("4. 'Test-Eintrag erstellen + stoppen' demonstriert das Partner-Modell");
   }, []);
 
+  // Cleanup: Realtime beim unmount beenden
+  useEffect(() => {
+    return () => {
+      if (isRealtimeActive) {
+        console.log('Sync-Test unmounting - cleaning up Realtime subscription');
+        deactivateRealtimeSync();
+      }
+    };
+  }, [isRealtimeActive]);
+
   return (
     <ThemedBackground>
       <Header title="Sync-Test" />

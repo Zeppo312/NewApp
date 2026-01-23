@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import {
   Alert,
-  Image,
   Modal,
   Pressable,
   StyleSheet,
@@ -9,6 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { ThemedText } from '@/components/ThemedText';
@@ -96,7 +96,12 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({ size = 36 }) =>
         disabled={isLoading}
       >
         {activeBaby?.photo_url ? (
-          <Image source={{ uri: activeBaby.photo_url }} style={styles.avatarImage} />
+          <Image
+            source={{ uri: activeBaby.photo_url }}
+            style={styles.avatarImage}
+            cachePolicy="disk"
+            transition={200}
+          />
         ) : (
           <View
             style={[
@@ -147,7 +152,12 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({ size = 36 }) =>
                     onPress={() => baby.id && handleSelectBaby(baby.id)}
                   >
                     {baby.photo_url ? (
-                      <Image source={{ uri: baby.photo_url }} style={styles.babyRowAvatar} />
+                      <Image
+                        source={{ uri: baby.photo_url }}
+                        style={styles.babyRowAvatar}
+                        cachePolicy="disk"
+                        transition={200}
+                      />
                     ) : (
                       <View style={[styles.babyRowAvatar, styles.babyRowFallback]}>
                         <ThemedText style={styles.babyRowInitial}>

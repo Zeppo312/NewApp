@@ -29,11 +29,6 @@ import TextInputOverlay from '@/components/modals/TextInputOverlay';
 import { SleepEntry, SleepQuality, startSleepTracking, stopSleepTracking, loadConnectedUsers } from '@/lib/sleepData';
 import { loadAllVisibleSleepEntries } from '@/lib/sleepSharing';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import {
-  CacheStrategy,
-  loadWithRevalidate,
-  invalidateCacheAfterAction
-} from '@/lib/screenCache';
 import Header from '@/components/Header';
 import ActivityCard from '@/components/ActivityCard';
 import ActivityInputModal from '@/components/ActivityInputModal';
@@ -933,93 +928,48 @@ export default function SleepTrackerScreen() {
     };
   };
 
-  // Load LIVE status (active sleep entry) - NEVER cache!
-  const loadLiveStatus = async () => {
-    try {
-      const { success, entries } = await loadAllVisibleSleepEntries(activeBabyId ?? undefined);
-      if (success && entries) {
-        const active = entries.find(entry => !entry.end_time);
-        return active ? classifySleepEntry(active) : null;
-      }
-    } catch (error) {
-      console.error('Failed to load live status:', error);
-    }
-    return null;
-  };
-
-  // Load sleep history (finished entries) - WITH cache!
-  const loadSleepHistory = async () => {
-    const cacheKey = `screen_cache_sleep_history_${user?.id}_${activeBabyId || 'default'}`;
-
-    const result = await loadWithRevalidate(
-      cacheKey,
-      async () => {
-        const { success, entries } = await loadAllVisibleSleepEntries(activeBabyId ?? undefined);
-        if (success && entries) {
-          // Only return finished entries for history
-          return entries.filter(entry => entry.end_time);
-        }
-        return [];
-      },
-      CacheStrategy.MEDIUM // 2 minutes cache
-    );
-
-    return result;
-  };
-
-  // Load sleep data (combines live + cached history)
+  // Load sleep data
   const loadSleepData = async () => {
     try {
       setIsLoading(true);
+      const { success, entries, error } = await loadAllVisibleSleepEntries(activeBabyId ?? undefined);
 
-      // LIVE: Always fresh, no cache
-      const activeSleep = await loadLiveStatus();
-      setActiveSleepEntry(activeSleep);
+      if (success && entries) {
+        const classifiedEntries = entries.map(classifySleepEntry);
+        setSleepEntries(classifiedEntries);
 
-      // HISTORY: With cache, refresh in background
-      const { data: finishedEntries, isStale, refresh } = await loadSleepHistory();
+        // Find active entry (critical - must be fresh!)
+        const active = classifiedEntries.find(entry => entry.isActive);
+        setActiveSleepEntry(active || null);
 
-      // Combine active + finished entries
-      const allEntries = activeSleep
-        ? [activeSleep, ...finishedEntries.map(classifySleepEntry)]
-        : finishedEntries.map(classifySleepEntry);
+        // Wenn kein Eintrag für das aktuell ausgewählte Datum vorhanden ist,
+        // springe beim ersten Laden automatisch zum jüngsten Eintrag.
+        if (
+          !hasAutoSelectedDateRef.current &&
+          classifiedEntries.length > 0 &&
+          !classifiedEntries.some(e => {
+            const s = new Date(e.start_time);
+            const ee = e.end_time ? new Date(e.end_time) : new Date();
+            const ds = startOfDay(selectedDate);
+            const de = endOfDay(selectedDate);
+            return overlapMinutes(s, ee, ds, de) > 0;
+          })
+        ) {
+          const latest = classifiedEntries.reduce((latestEntry, entry) => {
+            if (!latestEntry) return entry;
+            return new Date(entry.start_time).getTime() > new Date(latestEntry.start_time).getTime()
+              ? entry
+              : latestEntry;
+          }, null as ClassifiedSleepEntry | null);
 
-      setSleepEntries(allEntries);
-
-      // Background refresh if cache was stale
-      if (isStale) {
-        refresh().then(freshEntries => {
-          const combinedFresh = activeSleep
-            ? [activeSleep, ...freshEntries.map(classifySleepEntry)]
-            : freshEntries.map(classifySleepEntry);
-          setSleepEntries(combinedFresh);
-        });
-      }
-
-      // Auto-select latest entry logic
-      if (
-        !hasAutoSelectedDateRef.current &&
-        allEntries.length > 0 &&
-        !allEntries.some(e => {
-          const s = new Date(e.start_time);
-          const ee = e.end_time ? new Date(e.end_time) : new Date();
-          const ds = startOfDay(selectedDate);
-          const de = endOfDay(selectedDate);
-          return overlapMinutes(s, ee, ds, de) > 0;
-        })
-      ) {
-        const latest = allEntries.reduce((latestEntry, entry) => {
-          if (!latestEntry) return entry;
-          return new Date(entry.start_time).getTime() > new Date(latestEntry.start_time).getTime()
-            ? entry
-            : latestEntry;
-        }, null as ClassifiedSleepEntry | null);
-
-        if (latest) {
-          hasAutoSelectedDateRef.current = true;
-          setSelectedTab('day');
-          setSelectedDate(new Date(latest.start_time));
+          if (latest) {
+            hasAutoSelectedDateRef.current = true;
+            setSelectedTab('day');
+            setSelectedDate(new Date(latest.start_time));
+          }
         }
+      } else {
+        console.error('Error loading sleep data:', error);
       }
     } catch (error) {
       console.error('Failed to load sleep data:', error);
@@ -1113,9 +1063,6 @@ export default function SleepTrackerScreen() {
         const splashColor = resolvedQuality === 'good' ? '#38A169' : resolvedQuality === 'bad' ? '#E53E3E' : '#F5A623';
         const splashEmoji = resolvedQuality === 'good' ? '😴' : resolvedQuality === 'bad' ? '😵' : '😐';
         showSuccessSplash(splashColor, splashEmoji, splashKind);
-
-        // Invalidate cache because stopped sleep now appears in history
-        await invalidateCacheAfterAction(`sleep_history_${user?.id}_${activeBabyId || 'default'}`);
         await loadSleepData();
       } else {
         Alert.alert('Fehler', error || 'Schlaftracking konnte nicht gestoppt werden');
@@ -1250,9 +1197,6 @@ export default function SleepTrackerScreen() {
       });
       setShowStartPicker(false);
       setShowEndPicker(false);
-
-      // Invalidate cache because new/updated entry should appear immediately
-      await invalidateCacheAfterAction(`sleep_history_${user?.id}_${activeBabyId || 'default'}`);
       await loadSleepData();
     } catch (error) {
       console.error('❌ Sleep entry save error:', error);
@@ -1289,9 +1233,7 @@ export default function SleepTrackerScreen() {
               const { error } = await deleteQuery;
 
               if (error) throw error;
-
-              // Invalidate cache because entry was deleted
-              await invalidateCacheAfterAction(`sleep_history_${user?.id}_${activeBabyId || 'default'}`);
+              
               await loadSleepData();
               Alert.alert('Erfolg', 'Eintrag wurde gelöscht! 🗑️');
             } catch (error) {

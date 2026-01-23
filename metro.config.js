@@ -1,6 +1,16 @@
-const {
-  getSentryExpoConfig
-} = require("@sentry/react-native/metro");
+if (!Array.prototype.toReversed) {
+  // Polyfill for Node <20 used by metro-config's mergeConfig.
+  Object.defineProperty(Array.prototype, "toReversed", {
+    value: function toReversed() {
+      return Array.from(this).reverse();
+    },
+    writable: true,
+    configurable: true,
+    enumerable: false
+  });
+}
+
+const { getSentryExpoConfig } = require("@sentry/react-native/metro");
 
 const config = getSentryExpoConfig(__dirname);
 

@@ -9,6 +9,7 @@ import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { getBabyInfo, saveBabyInfo, BabyInfo } from '@/lib/baby';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
+import { loadBabyInfoWithCache, invalidateBabyCache } from '@/lib/babyCache';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useRouter, Stack } from 'expo-router';
 import Header from '@/components/Header';
@@ -72,27 +73,35 @@ export default function BabyScreen() {
   };
 
   const loadBabyInfo = async () => {
+    if (!activeBabyId) {
+      setIsLoading(false);
+      return;
+    }
+
     try {
       setIsLoading(true);
-      const { data, error } = await getBabyInfo(activeBabyId ?? undefined);
-      if (error) {
-        console.error('Error loading baby info:', error);
-      } else if (data) {
-        setBabyInfo({
-          id: data.id,
-          name: data.name || '',
-          birth_date: data.birth_date || null,
-          weight: data.weight || '',
-          height: data.height || '',
-          photo_url: data.photo_url || null,
-          baby_gender: data.baby_gender || 'unknown'
-        });
-        
-        // Wir planen keine Benachrichtigungen im Voraus mehr, stattdessen prüfen wir täglich
+
+      // Load with cache - instant if cached
+      const { data, isStale, refresh } = await loadBabyInfoWithCache(activeBabyId);
+
+      // Show cached data immediately
+      if (data) {
+        setBabyInfo(data);
+        setIsLoading(false);
+      }
+
+      // Refresh in background if stale
+      if (isStale) {
+        const freshData = await refresh();
+        setBabyInfo(freshData);
+      }
+
+      // If no cache, data is already fresh
+      if (!data) {
+        setIsLoading(false);
       }
     } catch (err) {
       console.error('Failed to load baby info:', err);
-    } finally {
       setIsLoading(false);
     }
   };
@@ -186,6 +195,8 @@ export default function BabyScreen() {
   };
 
   const handleSave = async () => {
+    if (!activeBabyId) return;
+
     try {
       const { error } = await saveBabyInfo(babyInfo, activeBabyId ?? undefined);
       if (error) {
@@ -196,14 +207,18 @@ export default function BabyScreen() {
         setIsEditing(false);
         await refreshBabyDetails();
         await refreshBabies();
-        
+
         // Speichere relevante Baby-Infos für den Hintergrund-Task
         if (babyInfo.birth_date) {
           await saveBabyInfoForBackgroundTask(babyInfo);
           console.log('Baby-Infos für Hintergrund-Task gespeichert.');
         }
-        
-        loadBabyInfo(); // Neu laden, um sicherzustellen, dass wir die aktuellsten Daten haben
+
+        // Invalidate cache after save
+        await invalidateBabyCache(activeBabyId);
+
+        // Reload fresh data from Supabase
+        loadBabyInfo();
       }
     } catch (err) {
       console.error('Failed to save baby info:', err);

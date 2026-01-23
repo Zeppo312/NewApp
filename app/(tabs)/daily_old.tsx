@@ -30,6 +30,13 @@ import {
   stopBabyCareEntryTimer,
   updateBabyCareEntry,
 } from '@/lib/supabase';
+import {
+  loadDayEntriesWithCache,
+  loadWeekEntriesWithCache,
+  loadMonthEntriesWithCache,
+  invalidateDailyCache,
+  mapCareToDaily,
+} from '@/lib/dailyCache';
 
 import Header from '@/components/Header';
 import ActivityCard from '@/components/ActivityCard';
@@ -340,35 +347,7 @@ export default function DailyScreen() {
   }, [selectedDate]);
 
   // Realtime subscription removed for simplicity; list refreshes on actions
-
-  const mapCareToDaily = (rows: any[]): DailyEntry[] =>
-    rows.map((r) => ({
-      id: r.id,
-      entry_date: r.start_time,
-      entry_type: r.entry_type,
-      start_time: r.start_time,
-      end_time: r.end_time ?? null,
-      notes: r.notes ?? null,
-      feeding_type: r.feeding_type ?? undefined,
-      feeding_volume_ml: r.feeding_volume_ml ?? undefined,
-      feeding_side: r.feeding_side ?? undefined,
-      diaper_type: r.diaper_type ?? undefined,
-      // helper for KPI (not part of type, accessed as any):
-      sub_type:
-        r.entry_type === 'feeding'
-          ? r.feeding_type === 'BREAST'
-            ? 'feeding_breast'
-            : r.feeding_type === 'BOTTLE'
-            ? 'feeding_bottle'
-            : 'feeding_solids'
-          : r.entry_type === 'diaper'
-          ? r.diaper_type === 'WET'
-            ? 'diaper_wet'
-            : r.diaper_type === 'DIRTY'
-            ? 'diaper_dirty'
-            : 'diaper_both'
-          : undefined,
-    } as unknown as DailyEntry));
+  // mapCareToDaily moved to dailyCache.ts
 
   const lastBottleVolumeMl = useMemo(() => {
     const allEntries = [...entries, ...weekEntries, ...monthEntries];
@@ -393,56 +372,106 @@ export default function DailyScreen() {
   const loadEntries = async () => {
     if (!activeBabyId) return;
     setIsLoading(true);
-    const result = await SupabaseErrorHandler.executeWithHandling(
-      async () => {
-        const { data, error } = await getBabyCareEntriesForDate(selectedDate, activeBabyId ?? undefined);
-        if (error) throw error;
-        return mapCareToDaily(data ?? []);
-      },
-      'LoadDailyEntries',
-      true,
-      2
-    );
-    if (result.success) setEntries(result.data!);
-    setIsLoading(false);
+
+    try {
+      // Load with cache - instant if cached
+      const { data, isStale, refresh } = await loadDayEntriesWithCache(
+        selectedDate,
+        activeBabyId
+      );
+
+      // Show cached data immediately
+      if (data) {
+        setEntries(data);
+        setIsLoading(false);
+      }
+
+      // Refresh in background if stale
+      if (isStale) {
+        const freshData = await refresh();
+        setEntries(freshData);
+      }
+
+      // If no cache, data is already fresh
+      if (!data) {
+        setIsLoading(false);
+      }
+    } catch (error) {
+      console.error('Error loading day entries:', error);
+      setIsLoading(false);
+    }
+
     setRefreshing(false);
   };
 
   const loadWeekEntries = async () => {
     if (!activeBabyId) return;
     setIsLoading(true);
+
     const weekStart = getWeekStart(selectedWeekDate);
     const weekEnd = getWeekEnd(selectedWeekDate);
-    
-    const result = await SupabaseErrorHandler.executeWithHandling(
-      async () => {
-        const { data, error } = await getBabyCareEntriesForDateRange(weekStart, weekEnd, activeBabyId ?? undefined);
-        if (error) throw error;
-        return mapCareToDaily(data ?? []);
-      },
-      'LoadWeekEntries',
-      true,
-      2
-    );
-    if (result.success) setWeekEntries(result.data!);
-    setIsLoading(false);
+
+    try {
+      // Load with cache - instant if cached
+      const { data, isStale, refresh } = await loadWeekEntriesWithCache(
+        weekStart,
+        weekEnd,
+        activeBabyId
+      );
+
+      // Show cached data immediately
+      if (data) {
+        setWeekEntries(data);
+        setIsLoading(false);
+      }
+
+      // Refresh in background if stale
+      if (isStale) {
+        const freshData = await refresh();
+        setWeekEntries(freshData);
+      }
+
+      // If no cache, data is already fresh
+      if (!data) {
+        setIsLoading(false);
+      }
+    } catch (error) {
+      console.error('Error loading week entries:', error);
+      setIsLoading(false);
+    }
   };
 
   const loadMonthEntries = async () => {
     if (!activeBabyId) return;
     setIsLoading(true);
-    const result = await SupabaseErrorHandler.executeWithHandling(
-      async () => {
-        const { data, error } = await getBabyCareEntriesForMonth(selectedMonthDate, activeBabyId ?? undefined);
-        if (error) throw error;
-        return mapCareToDaily(data ?? []);
-      },
-      'LoadMonthEntries',
-      true,
-      2
-    );
-    if (result.success) setMonthEntries(result.data!);
-    setIsLoading(false);
+
+    try {
+      // Load with cache - instant if cached
+      const { data, isStale, refresh } = await loadMonthEntriesWithCache(
+        selectedMonthDate,
+        activeBabyId
+      );
+
+      // Show cached data immediately
+      if (data) {
+        setMonthEntries(data);
+        setIsLoading(false);
+      }
+
+      // Refresh in background if stale
+      if (isStale) {
+        const freshData = await refresh();
+        setMonthEntries(freshData);
+      }
+
+      // If no cache, data is already fresh
+      if (!data) {
+        setIsLoading(false);
+      }
+    } catch (error) {
+      console.error('Error loading month entries:', error);
+      setIsLoading(false);
+    }
   };
 
   const syncDailyEntries = async () => {};
@@ -615,7 +644,20 @@ export default function DailyScreen() {
     }
     setShowInputModal(false);
     setEditingEntry(null);
-    loadEntries();
+
+    // Invalidate cache after save
+    if (activeBabyId) {
+      await invalidateDailyCache(activeBabyId);
+    }
+
+    // Reload current view
+    if (selectedTab === 'week') {
+      loadWeekEntries();
+    } else if (selectedTab === 'month') {
+      loadMonthEntries();
+    } else {
+      loadEntries();
+    }
   };
 
   const showSuccessSplash = (hex: string, emoji: string, kind: string, timerStarted = false) => {
@@ -685,7 +727,19 @@ export default function DailyScreen() {
       return;
     }
     setActiveTimer(null);
-    loadEntries();
+
+    // Invalidate cache after timer stop
+    await invalidateDailyCache(activeBabyId);
+
+    // Reload current view
+    if (selectedTab === 'week') {
+      loadWeekEntries();
+    } else if (selectedTab === 'month') {
+      loadMonthEntries();
+    } else {
+      loadEntries();
+    }
+
     Alert.alert('Erfolg', 'Timer gestoppt! ⏹️');
   };
 
@@ -699,7 +753,19 @@ export default function DailyScreen() {
           if (!activeBabyId) return;
           const { error } = await deleteBabyCareEntry(id, activeBabyId);
           if (error) return;
-          loadEntries();
+
+          // Invalidate cache after delete
+          await invalidateDailyCache(activeBabyId);
+
+          // Reload current view
+          if (selectedTab === 'week') {
+            loadWeekEntries();
+          } else if (selectedTab === 'month') {
+            loadMonthEntries();
+          } else {
+            loadEntries();
+          }
+
           Alert.alert('Erfolg', 'Eintrag gelöscht! 🗑️');
         },
       },

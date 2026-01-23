@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Alert,
   Dimensions,
-  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -15,6 +14,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { BlurView } from 'expo-blur';
 import { Stack, useRouter } from 'expo-router';
@@ -644,7 +644,9 @@ const RecipeGeneratorScreen = () => {
                             <Image
                               source={{ uri: imageUrl }}
                               style={styles.imageHeaderImg}
-                              resizeMode='cover'
+                              contentFit="cover"
+                              cachePolicy="disk"
+                              transition={300}
                             />
                           ) : (
                             <View style={[styles.imageHeaderImg, styles.imageHeaderPlaceholder]}>
@@ -762,7 +764,9 @@ const RecipeGeneratorScreen = () => {
                       <Image
                         source={{ uri: selectedRecipeImageUrl }}
                         style={StyleSheet.absoluteFill}
-                        resizeMode='cover'
+                        contentFit="cover"
+                        cachePolicy="disk"
+                        transition={300}
                       />
                       <View style={styles.recipeHeroTint} />
                     </>
@@ -1242,7 +1246,13 @@ const RecipeGeneratorScreen = () => {
                 <ThemedText style={styles.formLabel}>Bild (optional)</ThemedText>
                 {newImage ? (
                   <View style={styles.formImagePreviewWrapper}>
-                    <Image source={{ uri: newImage }} style={styles.formImagePreview} />
+                    <Image
+                      source={{ uri: newImage }}
+                      style={styles.formImagePreview}
+                      contentFit="cover"
+                      cachePolicy="memory"
+                      transition={200}
+                    />
                     <TouchableOpacity
                       style={styles.formImageRemove}
                       onPress={() => setNewImage(null)}

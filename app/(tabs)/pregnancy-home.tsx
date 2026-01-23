@@ -11,6 +11,7 @@ import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase, getDueDateWithLinkedUsers } from '@/lib/supabase';
 import { getRecommendations, LottiRecommendation } from '@/lib/supabase/recommendations';
+import { loadPregnancyHomeDataWithCache, invalidatePregnancyCache } from '@/lib/pregnancyCache';
 import { pregnancyWeekInfo } from '@/constants/PregnancyWeekInfo';
 import { pregnancyMotherInfo } from '@/constants/PregnancyMotherInfo';
 import { pregnancyPartnerInfo } from '@/constants/PregnancyPartnerInfo';
@@ -496,6 +497,11 @@ export default function PregnancyHomeScreen() {
       // Setzen des Baby-Status auf 'geboren'
       await setIsBabyBorn(true);
 
+      // Invalidate cache after status change
+      if (user?.id) {
+        await invalidatePregnancyCache(user.id);
+      }
+
       // Prüfen, ob der Benutzer mit anderen Benutzern verknüpft ist
       const linkedUsersResult = await getLinkedUsers(user?.id || '');
       let syncMessage = '';
@@ -530,71 +536,32 @@ export default function PregnancyHomeScreen() {
 
   // Lädt Benutzerinformationen und aktualisiert die Anzeige
   const loadUserData = async () => {
+    if (!user?.id) {
+      setIsLoading(false);
+      return;
+    }
+
     try {
       setIsLoading(true);
 
-      // Benutzername laden
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('first_name, avatar_url')
-        .eq('id', user?.id)
-        .single();
+      // Load with cache - all data in parallel, instant if cached
+      const { profile, dueDate: dueDateData, recommendations: recs, isStale } =
+        await loadPregnancyHomeDataWithCache(user.id);
 
-      if (profileError) throw profileError;
-      if (profileData) {
-        setUserName(profileData.first_name || '');
-      }
-      setProfileAvatarUrl(profileData?.avatar_url || null);
+      // Show cached data immediately
+      setUserName(profile.firstName);
+      setProfileAvatarUrl(profile.avatarUrl);
+      setDueDate(dueDateData.date);
+      setCurrentWeek(dueDateData.currentWeek);
+      setCurrentDay(dueDateData.currentDay);
+      setRecommendations(recs);
 
-      // Entbindungstermin laden
-      const result = await getDueDateWithLinkedUsers(user?.id || '');
+      setIsLoading(false);
 
-      if (result.success && result.dueDate) {
-        const due = new Date(result.dueDate);
-        setDueDate(due);
-
-        // Berechne die aktuelle SSW
-        const now = new Date();
-        now.setHours(0, 0, 0, 0);
-
-        // Kopie des Entbindungstermins ohne Uhrzeit
-        const dueDateCopy = new Date(due);
-        dueDateCopy.setHours(0, 0, 0, 0);
-
-        // Berechne die Differenz in Tagen
-        const difference = dueDateCopy.getTime() - now.getTime();
-        const daysLeft = Math.round(difference / (1000 * 60 * 60 * 24));
-
-        // Schwangerschaft dauert ca. 40 Wochen = 280 Tage
-        const totalDaysInPregnancy = 280;
-        const daysRemaining = Math.max(0, daysLeft);
-        const daysPregnant = totalDaysInPregnancy - daysRemaining;
-
-        // Berechne SSW und Tag
-        const weeksPregnant = Math.floor(daysPregnant / 7);
-        const daysInCurrentWeek = daysPregnant % 7;
-
-        // currentWeek ist die aktuelle Schwangerschaftswoche (1-basiert)
-        const currentWeek = weeksPregnant + 1;
-
-        setCurrentWeek(currentWeek);
-        setCurrentDay(daysInCurrentWeek);
-      } else {
-        setDueDate(null);
-        setCurrentWeek(null);
-        setCurrentDay(null);
-      }
-
-      try {
-        const recommendationData = await getRecommendations();
-        setRecommendations(recommendationData);
-      } catch (error) {
-        console.error('Error loading recommendations:', error);
-      }
-
+      // Background refresh happens automatically in the cache layer if isStale
+      // No need to manually refresh here!
     } catch (error) {
       console.error('Fehler beim Laden der Benutzerdaten:', error);
-    } finally {
       setIsLoading(false);
     }
   };
@@ -627,12 +594,17 @@ export default function PregnancyHomeScreen() {
   // Funktion zum Aktualisieren der Daten (Pull-to-Refresh)
   const onRefresh = async () => {
     setRefreshing(true);
-    
+
     try {
+      // Invalidate cache to force fresh data
+      if (user?.id) {
+        await invalidatePregnancyCache(user.id);
+      }
+
       await loadUserData();
       const randomTip = dailyTips[Math.floor(Math.random() * dailyTips.length)];
       setDailyTip(randomTip);
-      
+
       // Plattformspezifisches Feedback
       if (Platform.OS === 'android') {
         ToastAndroid.show('Daten aktualisiert', ToastAndroid.SHORT);
