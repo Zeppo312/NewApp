@@ -13,6 +13,7 @@ type Props = {
   completed?: boolean;
   onComplete?: (id: string) => void;
   onMoveTomorrow?: (id: string) => void;
+  onDelete?: (id: string) => void;
   onLongPress?: (id: string) => void;
   onPress?: (id: string) => void;
   showLeadingCheckbox?: boolean; // default true for todo
@@ -28,6 +29,7 @@ export const SwipeableListItem: React.FC<Props> = ({
   completed,
   onComplete,
   onMoveTomorrow,
+  onDelete,
   onLongPress,
   onPress,
   showLeadingCheckbox = true,
@@ -52,9 +54,9 @@ export const SwipeableListItem: React.FC<Props> = ({
     </View>
   );
   const rightActions = () => (
-    <View style={[styles.action, styles.right]}> 
-      <IconSymbol name="calendar" color="#fff" size={24} />
-      <Text style={styles.actionText}>Morgen</Text>
+    <View style={[styles.action, styles.right]}>
+      <IconSymbol name="trash" color="#fff" size={24} />
+      <Text style={styles.actionText}>Löschen</Text>
     </View>
   );
 
@@ -82,8 +84,21 @@ export const SwipeableListItem: React.FC<Props> = ({
       }}
       onSwipeableRightOpen={() => {
         Haptics.selectionAsync();
-        onMoveTomorrow?.(id);
         ref.current?.close();
+        if (onDelete) {
+          Alert.alert(
+            'Eintrag löschen',
+            'Möchtest du diesen Eintrag wirklich löschen?',
+            [
+              { text: 'Abbrechen', style: 'cancel' },
+              {
+                text: 'Löschen',
+                style: 'destructive',
+                onPress: () => onDelete(id),
+              },
+            ]
+          );
+        }
       }}
     >
       <Pressable
@@ -186,7 +201,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   left: { backgroundColor: '#2ecc71' },
-  right: { backgroundColor: '#9b59b6' },
+  right: { backgroundColor: '#FF6B6B' },
   actionText: { color: '#fff', fontWeight: '600', marginLeft: 8 },
 });
 

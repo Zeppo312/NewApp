@@ -47,13 +47,6 @@ const EmptyState: React.FC<EmptyStateProps> = ({
       <ThemedText style={styles.message}>
         {message}
       </ThemedText>
-      
-      <View style={styles.hintContainer}>
-        <IconSymbol name="arrow.down" size={20} color="#7D5A50" />
-        <ThemedText style={styles.hint}>
-          Tippe auf + um einen Eintrag zu erstellen
-        </ThemedText>
-      </View>
     </ThemedView>
   );
 };

@@ -13,11 +13,12 @@ import {
   Animated,
   Dimensions,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 
 import { DailyEntry } from '@/lib/baby';
 import {
@@ -29,6 +30,13 @@ import {
   stopBabyCareEntryTimer,
   updateBabyCareEntry,
 } from '@/lib/supabase';
+import {
+  loadDayEntriesWithCache,
+  loadWeekEntriesWithCache,
+  loadMonthEntriesWithCache,
+  invalidateDailyCache,
+  mapCareToDaily,
+} from '@/lib/dailyCache';
 
 import Header from '@/components/Header';
 import ActivityCard from '@/components/ActivityCard';
@@ -44,6 +52,8 @@ import { DebugPanel } from '@/components/DebugPanel';
 
 import { BlurView } from 'expo-blur';
 import { GlassCard, LiquidGlassCard, LAYOUT_PAD, SECTION_GAP_TOP, SECTION_GAP_BOTTOM, PRIMARY, GLASS_OVERLAY, GLASS_BORDER } from '@/constants/DesignGuide';
+import { useNotifications } from '@/hooks/useNotifications';
+import { usePartnerNotifications } from '@/hooks/usePartnerNotifications';
 
 // Design Tokens now imported from DesignGuide
 
@@ -107,11 +117,20 @@ const TimerBanner: React.FC<{
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const timerLabel =
+    timer.type === 'BREAST'
+      ? '🤱 Stillen'
+      : timer.type === 'BOTTLE'
+      ? '🍼 Fläschchen'
+      : timer.type === 'SOLIDS'
+      ? '🥄 Beikost'
+      : '🧷 Wickeln';
+
   return (
     <GlassCard style={[s.timerBanner, { paddingVertical: 12, paddingHorizontal: 16 }]} intensity={28}>
       <View style={{ flex: 1 }}>
         <Text style={[s.timerType, { color: PRIMARY }]}>
-          {timer.type === 'BREAST' ? '🤱 Stillen' : '🍼 Fläschchen'} • läuft seit {new Date(timer.start).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
+          {timerLabel} • läuft seit {new Date(timer.start).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
         </Text>
         <Text style={[s.timerTime, { color: '#7D5A50' }]}>{formatTime(elapsed)}</Text>
       </View>
@@ -127,10 +146,60 @@ const TimerBanner: React.FC<{
   );
 };
 
+const quickBtns: { icon: string; label: string; action: QuickActionType }[] = [
+  { action: 'feeding_breast', label: 'Stillen', icon: '🤱' },
+  { action: 'feeding_bottle', label: 'Fläschchen', icon: '🍼' },
+  { action: 'feeding_solids', label: 'Beikost', icon: '🥄' },
+  { action: 'diaper_wet', label: 'Nass', icon: '💧' },
+  { action: 'diaper_dirty', label: 'Voll', icon: '💩' },
+  { action: 'diaper_both', label: 'Beides', icon: '💧💩' },
+];
+
+const QuickActionRow: React.FC<{ onPressAction: (action: QuickActionType) => void }> = ({ onPressAction }) => {
+  const itemWidth = 96 + 16; // Button width + separator
+
+  const renderQuickButton = ({ item }: { item: (typeof quickBtns)[number] }) => (
+    <GlassCard
+      style={s.circleButton}
+      intensity={30}
+      overlayColor="rgba(255,255,255,0.32)"
+      borderColor="rgba(255,255,255,0.70)"
+    >
+      <TouchableOpacity style={s.circleInner} onPress={() => onPressAction(item.action)} activeOpacity={0.9}>
+        <Text style={s.circleEmoji}>{item.icon}</Text>
+        <Text style={s.circleLabel}>{item.label}</Text>
+      </TouchableOpacity>
+    </GlassCard>
+  );
+
+  return (
+    <View style={s.quickActionSection}>
+      <FlatList
+        data={quickBtns}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        renderItem={renderQuickButton}
+        keyExtractor={(item) => item.action}
+        contentContainerStyle={s.quickScrollContainer}
+        ItemSeparatorComponent={() => <View style={{ width: 16 }} />}
+        decelerationRate="normal"
+        getItemLayout={(_, index) => ({
+          length: itemWidth,
+          offset: itemWidth * index,
+          index,
+        })}
+      />
+    </View>
+  );
+};
+
 export default function DailyScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const router = useRouter();
+  const { quickAction } = useLocalSearchParams<{ quickAction?: string | string[] }>();
+  
+  const { activeBabyId, isReady } = useActiveBaby();
 
   const [entries, setEntries] = useState<DailyEntry[]>([]);
   const [weekEntries, setWeekEntries] = useState<DailyEntry[]>([]);
@@ -147,10 +216,11 @@ export default function DailyScreen() {
   const [showDateNav, setShowDateNav] = useState(true);
   const fadeNavAnim = useRef(new Animated.Value(1)).current;
   const hideNavTimeout = useRef<NodeJS.Timeout | null>(null);
+  const quickActionHandledRef = useRef<string | null>(null);
 
   const [activeTimer, setActiveTimer] = useState<{
     id: string;
-    type: 'BOTTLE' | 'BREAST';
+    type: 'BOTTLE' | 'BREAST' | 'SOLIDS' | 'DIAPER';
     start: number;
   } | null>(null);
 
@@ -168,12 +238,21 @@ export default function DailyScreen() {
   const [splashSubtitle, setSplashSubtitle] = useState<string>('');
   const [splashStatus, setSplashStatus] = useState<string>('');
   const [splashHint, setSplashHint] = useState<string>('');
+  const [splashHintEmoji, setSplashHintEmoji] = useState<string>('');
+  const splashEmojiParts = useMemo(() => Array.from(splashEmoji), [splashEmoji]);
 
-  // Scroll animation for quick actions
-  const quickActionsScrollRef = useRef<FlatList>(null);
-  const scrollAnimation = useRef(new Animated.Value(0)).current;
+  // Notification hooks
+  const { requestPermissions } = useNotifications();
+  const { isPartnerLinked } = usePartnerNotifications();
+
+  // Request notification permissions on mount
+  useEffect(() => {
+    requestPermissions();
+  }, [requestPermissions]);
 
   useEffect(() => {
+    if (!isReady || !activeBabyId) return;
+  
     if (selectedTab === 'week') {
       loadWeekEntries();
     } else if (selectedTab === 'month') {
@@ -181,20 +260,24 @@ export default function DailyScreen() {
     } else {
       loadEntries();
     }
-  }, [selectedDate, selectedTab]);
+  }, [selectedDate, selectedTab, activeBabyId, isReady]);
 
   // Separate effects for week/month data loading
   useEffect(() => {
+    if (!isReady || !activeBabyId) return;
+  
     if (selectedTab === 'week') {
       loadWeekEntries();
     }
-  }, [selectedWeekDate, selectedTab]);
+  }, [selectedWeekDate, selectedTab, activeBabyId, isReady]);
 
   useEffect(() => {
+    if (!isReady || !activeBabyId) return;
+  
     if (selectedTab === 'month') {
       loadMonthEntries();
     }
-  }, [selectedMonthDate, selectedTab]);
+  }, [selectedMonthDate, selectedTab, activeBabyId, isReady]);
 
   // Keep selectedWeekDate in sync with weekOffset (for data loading)
   useEffect(() => {
@@ -208,40 +291,6 @@ export default function DailyScreen() {
     if (selectedTab === 'week') setWeekOffset(0);
     if (selectedTab === 'month') setMonthOffset(0);
   }, [selectedTab]);
-
-  // Quick actions scroll hint animation - runs only once
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      if (quickActionsScrollRef.current) {
-        // Smooth scroll right to show hint
-        quickActionsScrollRef.current.scrollToOffset({
-          offset: 80,
-          animated: true,
-        });
-
-        // Then smoothly scroll back to start after a brief pause
-        setTimeout(() => {
-          if (quickActionsScrollRef.current) {
-            quickActionsScrollRef.current.scrollToOffset({
-              offset: 0,
-              animated: true,
-            });
-          }
-        }, 1000); // Brief pause for smooth flow
-      }
-    }, 2500); // Slightly longer initial delay
-
-    // Cleanup
-    return () => {
-      clearTimeout(timeoutId);
-      if (quickActionsScrollRef.current) {
-        quickActionsScrollRef.current.scrollToOffset({
-          offset: 0,
-          animated: false,
-        });
-      }
-    };
-  }, []);
 
   // Helper functions for week view
   const getWeekStart = (date: Date) => {
@@ -298,86 +347,131 @@ export default function DailyScreen() {
   }, [selectedDate]);
 
   // Realtime subscription removed for simplicity; list refreshes on actions
+  // mapCareToDaily moved to dailyCache.ts
 
-  const mapCareToDaily = (rows: any[]): DailyEntry[] =>
-    rows.map((r) => ({
-      id: r.id,
-      entry_date: r.start_time,
-      entry_type: r.entry_type,
-      start_time: r.start_time,
-      end_time: r.end_time ?? null,
-      notes: r.notes ?? null,
-      feeding_type: r.feeding_type ?? undefined,
-      feeding_volume_ml: r.feeding_volume_ml ?? undefined,
-      feeding_side: r.feeding_side ?? undefined,
-      diaper_type: r.diaper_type ?? undefined,
-      // helper for KPI (not part of type, accessed as any):
-      sub_type:
-        r.entry_type === 'feeding'
-          ? r.feeding_type === 'BREAST'
-            ? 'feeding_breast'
-            : r.feeding_type === 'BOTTLE'
-            ? 'feeding_bottle'
-            : 'feeding_solids'
-          : r.entry_type === 'diaper'
-          ? r.diaper_type === 'WET'
-            ? 'diaper_wet'
-            : r.diaper_type === 'DIRTY'
-            ? 'diaper_dirty'
-            : 'diaper_both'
-          : undefined,
-    } as unknown as DailyEntry));
+  const lastBottleVolumeMl = useMemo(() => {
+    const allEntries = [...entries, ...weekEntries, ...monthEntries];
+    let latestTime = -Infinity;
+    let latestVolume: number | null = null;
+
+    for (const entry of allEntries) {
+      if (entry.entry_type !== 'feeding' || entry.feeding_type !== 'BOTTLE') continue;
+      const volume = entry.feeding_volume_ml;
+      if (volume == null) continue;
+      const timeStr = entry.start_time ?? entry.entry_date;
+      const time = timeStr ? new Date(timeStr).getTime() : 0;
+      if (time >= latestTime) {
+        latestTime = time;
+        latestVolume = volume;
+      }
+    }
+
+    return latestVolume ?? 120;
+  }, [entries, weekEntries, monthEntries]);
 
   const loadEntries = async () => {
+    if (!activeBabyId) return;
     setIsLoading(true);
-    const result = await SupabaseErrorHandler.executeWithHandling(
-      async () => {
-        const { data, error } = await getBabyCareEntriesForDate(selectedDate);
-        if (error) throw error;
-        return mapCareToDaily(data ?? []);
-      },
-      'LoadDailyEntries',
-      true,
-      2
-    );
-    if (result.success) setEntries(result.data!);
-    setIsLoading(false);
+
+    try {
+      // Load with cache - instant if cached
+      const { data, isStale, refresh } = await loadDayEntriesWithCache(
+        selectedDate,
+        activeBabyId
+      );
+
+      // Show cached data immediately
+      if (data) {
+        setEntries(data);
+        setIsLoading(false);
+      }
+
+      // Refresh in background if stale
+      if (isStale) {
+        const freshData = await refresh();
+        setEntries(freshData);
+      }
+
+      // If no cache, data is already fresh
+      if (!data) {
+        setIsLoading(false);
+      }
+    } catch (error) {
+      console.error('Error loading day entries:', error);
+      setIsLoading(false);
+    }
+
     setRefreshing(false);
   };
 
   const loadWeekEntries = async () => {
+    if (!activeBabyId) return;
     setIsLoading(true);
+
     const weekStart = getWeekStart(selectedWeekDate);
     const weekEnd = getWeekEnd(selectedWeekDate);
-    
-    const result = await SupabaseErrorHandler.executeWithHandling(
-      async () => {
-        const { data, error } = await getBabyCareEntriesForDateRange(weekStart, weekEnd);
-        if (error) throw error;
-        return mapCareToDaily(data ?? []);
-      },
-      'LoadWeekEntries',
-      true,
-      2
-    );
-    if (result.success) setWeekEntries(result.data!);
-    setIsLoading(false);
+
+    try {
+      // Load with cache - instant if cached
+      const { data, isStale, refresh } = await loadWeekEntriesWithCache(
+        weekStart,
+        weekEnd,
+        activeBabyId
+      );
+
+      // Show cached data immediately
+      if (data) {
+        setWeekEntries(data);
+        setIsLoading(false);
+      }
+
+      // Refresh in background if stale
+      if (isStale) {
+        const freshData = await refresh();
+        setWeekEntries(freshData);
+      }
+
+      // If no cache, data is already fresh
+      if (!data) {
+        setIsLoading(false);
+      }
+    } catch (error) {
+      console.error('Error loading week entries:', error);
+      setIsLoading(false);
+    }
   };
 
   const loadMonthEntries = async () => {
+    if (!activeBabyId) return;
     setIsLoading(true);
-    const result = await SupabaseErrorHandler.executeWithHandling(
-      async () => {
-        const { data, error } = await getBabyCareEntriesForMonth(selectedMonthDate);
-        if (error) throw error;
-        return mapCareToDaily(data ?? []);
-      },
-      'LoadMonthEntries',
-      true,
-      2
-    );
-    if (result.success) setMonthEntries(result.data!);
-    setIsLoading(false);
+
+    try {
+      // Load with cache - instant if cached
+      const { data, isStale, refresh } = await loadMonthEntriesWithCache(
+        selectedMonthDate,
+        activeBabyId
+      );
+
+      // Show cached data immediately
+      if (data) {
+        setMonthEntries(data);
+        setIsLoading(false);
+      }
+
+      // Refresh in background if stale
+      if (isStale) {
+        const freshData = await refresh();
+        setMonthEntries(freshData);
+      }
+
+      // If no cache, data is already fresh
+      if (!data) {
+        setIsLoading(false);
+      }
+    } catch (error) {
+      console.error('Error loading month entries:', error);
+      setIsLoading(false);
+    }
   };
 
   const syncDailyEntries = async () => {};
@@ -421,10 +515,46 @@ export default function DailyScreen() {
     setShowInputModal(true);
   };
 
-  const handleSaveEntry = async (payload: any) => {
+  useEffect(() => {
+    const rawAction = Array.isArray(quickAction) ? quickAction[0] : quickAction;
+    if (!rawAction) {
+      quickActionHandledRef.current = null;
+      return;
+    }
+    if (quickActionHandledRef.current === rawAction) return;
+
+    const resolved =
+      rawAction === 'feeding'
+        ? { activityType: 'feeding' as const, subType: null }
+        : rawAction === 'diaper'
+          ? { activityType: 'diaper' as const, subType: null }
+          : rawAction === 'feeding_breast' || rawAction === 'feeding_bottle' || rawAction === 'feeding_solids'
+            ? { activityType: 'feeding' as const, subType: rawAction as QuickActionType }
+            : rawAction === 'diaper_wet' || rawAction === 'diaper_dirty' || rawAction === 'diaper_both'
+              ? { activityType: 'diaper' as const, subType: rawAction as QuickActionType }
+              : null;
+
+    if (!resolved) return;
+    quickActionHandledRef.current = rawAction;
+    setSelectedActivityType(resolved.activityType);
+    setSelectedSubType(resolved.subType);
+    setEditingEntry(null);
+    setShowInputModal(true);
+    router.setParams({ quickAction: undefined });
+  }, [quickAction, router]);
+
+  const handleSaveEntry = async (payload: any, options?: { startTimer?: boolean }) => {
+    if (!activeBabyId) {
+      Alert.alert(
+        'Kein Kind ausgewählt',
+        'Bitte wähle zuerst ein Kind aus.'
+      );
+      return;
+    }
     console.log('handleSaveEntry - Received payload:', JSON.stringify(payload, null, 2));
     console.log('handleSaveEntry - selectedActivityType:', selectedActivityType);
     console.log('handleSaveEntry - selectedSubType:', selectedSubType);
+    const timerRequested = !!options?.startTimer;
     
     if (selectedActivityType === 'feeding') {
       const feedingType = (payload.feeding_type as 'BREAST' | 'BOTTLE' | 'SOLIDS' | undefined) ?? undefined;
@@ -437,7 +567,7 @@ export default function DailyScreen() {
           feeding_type: feedingType,
           feeding_volume_ml: payload.feeding_volume_ml ?? null,
           feeding_side: payload.feeding_side ?? null,
-        });
+        }, activeBabyId ?? undefined);
         data = res.data; error = res.error;
       } else {
         const res = await addBabyCareEntry({
@@ -448,33 +578,39 @@ export default function DailyScreen() {
           feeding_type: feedingType,
           feeding_volume_ml: payload.feeding_volume_ml ?? null,
           feeding_side: payload.feeding_side ?? null,
-        });
+        }, activeBabyId ?? undefined);
         data = res.data; error = res.error;
       }
       if (error) {
         Alert.alert('Fehler', String((error as any)?.message ?? error ?? 'Fehler beim Speichern der Fütterung'));
         return;
       }
-      if (feedingType === 'BREAST' || feedingType === 'BOTTLE') {
-        const timerType = feedingType;
-        setActiveTimer({ id: data?.id || `temp_${Date.now()}`, type: timerType, start: Date.now() });
+      if (timerRequested && feedingType) {
+        const startMs = payload.start_time ? new Date(payload.start_time).getTime() : Date.now();
+        const timerType = feedingType as 'BREAST' | 'BOTTLE' | 'SOLIDS';
+        setActiveTimer({
+          id: data?.id || editingEntry?.id || `temp_${Date.now()}`,
+          type: timerType,
+          start: startMs,
+        });
       }
       showSuccessSplash(
         feedingType === 'BREAST' ? '#8E4EC6' : feedingType === 'BOTTLE' ? '#4A90E2' : '#F5A623',
         feedingType === 'BREAST' ? '🤱' : feedingType === 'BOTTLE' ? '🍼' : '🥄',
-        feedingType === 'BREAST' ? 'feeding_breast' : feedingType === 'BOTTLE' ? 'feeding_bottle' : 'feeding_solids'
+        feedingType === 'BREAST' ? 'feeding_breast' : feedingType === 'BOTTLE' ? 'feeding_bottle' : 'feeding_solids',
+        timerRequested
       );
     } else if (selectedActivityType === 'diaper') {
       const diaperType = (payload.diaper_type as 'WET' | 'DIRTY' | 'BOTH' | undefined) ?? undefined;
-      let error;
+      let data, error;
       if (editingEntry?.id) {
         const res = await updateBabyCareEntry(editingEntry.id, {
           start_time: payload.start_time,
           end_time: payload.end_time ?? null,
           notes: payload.notes ?? null,
           diaper_type: diaperType,
-        });
-        error = res.error;
+        }, activeBabyId ?? undefined);
+        data = res.data; error = res.error;
       } else {
         const res = await addBabyCareEntry({
           entry_type: 'diaper',
@@ -482,27 +618,49 @@ export default function DailyScreen() {
           end_time: payload.end_time ?? null,
           notes: payload.notes ?? null,
           diaper_type: diaperType,
-        });
-        error = res.error;
+        }, activeBabyId ?? undefined);
+        data = res.data; error = res.error;
       }
       if (error) {
         Alert.alert('Fehler', String((error as any)?.message ?? error ?? 'Fehler beim Speichern'));
         return;
       }
+      if (timerRequested) {
+        const startMs = payload.start_time ? new Date(payload.start_time).getTime() : Date.now();
+        setActiveTimer({
+          id: data?.id || editingEntry?.id || `temp_${Date.now()}`,
+          type: 'DIAPER',
+          start: startMs,
+        });
+      }
       showSuccessSplash(
         diaperType === 'WET' ? '#3498DB' : diaperType === 'DIRTY' ? '#8E5A2B' : '#38A169',
         diaperType === 'WET' ? '💧' : diaperType === 'DIRTY' ? '💩' : '💧💩',
-        diaperType === 'WET' ? 'diaper_wet' : diaperType === 'DIRTY' ? 'diaper_dirty' : 'diaper_both'
+        diaperType === 'WET' ? 'diaper_wet' : diaperType === 'DIRTY' ? 'diaper_dirty' : 'diaper_both',
+        timerRequested
       );
     } else {
       Alert.alert('Hinweis', 'Sonstige Einträge sind in der neuen Ansicht nicht verfügbar.');
     }
     setShowInputModal(false);
     setEditingEntry(null);
-    loadEntries();
+
+    // Invalidate cache after save
+    if (activeBabyId) {
+      await invalidateDailyCache(activeBabyId);
+    }
+
+    // Reload current view
+    if (selectedTab === 'week') {
+      loadWeekEntries();
+    } else if (selectedTab === 'month') {
+      loadMonthEntries();
+    } else {
+      loadEntries();
+    }
   };
 
-  const showSuccessSplash = (hex: string, emoji: string, kind: string) => {
+  const showSuccessSplash = (hex: string, emoji: string, kind: string, timerStarted = false) => {
     const rgba = (h: string, a: number) => {
       const c = h.replace('#','');
       const r = parseInt(c.substring(0,2),16);
@@ -514,28 +672,32 @@ export default function DailyScreen() {
     setSplashEmoji(emoji);
     // Texte je Kontext
     if (kind === 'feeding_breast') {
-      setSplashTitle('Stillen läuft');
-      setSplashSubtitle('Nimm dir Zeit. Genieße diese besonderen Momente.');
-      setSplashStatus('Wird gestartet...');
-      setSplashHint('Du gibst deinem Baby alles, was es braucht 💕');
+      setSplashTitle(timerStarted ? 'Stillen läuft' : 'Stillen gespeichert');
+      setSplashSubtitle(timerStarted ? 'Nimm dir Zeit. Genieße diese besonderen Momente.' : 'Eintrag ohne Timer gesichert.');
+      setSplashStatus(timerStarted ? 'Timer gestartet...' : '');
+      setSplashHint(timerStarted ? 'Stoppe, wenn ihr fertig seid' : 'Du gibst deinem Baby alles, was es braucht');
+      setSplashHintEmoji('💕');
       setSplashText('');
     } else if (kind === 'feeding_bottle') {
-      setSplashTitle('Fläschchen läuft');
-      setSplashSubtitle('Ganz in Ruhe – du machst das super.');
-      setSplashStatus('Wird gestartet...');
-      setSplashHint('Nähe und Ernährung – perfekt kombiniert 🤍');
+      setSplashTitle(timerStarted ? 'Fläschchen läuft' : 'Fläschchen gespeichert');
+      setSplashSubtitle(timerStarted ? 'Ganz in Ruhe – du machst das super.' : 'Eintrag ohne Timer gesichert.');
+      setSplashStatus(timerStarted ? 'Timer gestartet...' : '');
+      setSplashHint(timerStarted ? 'Stoppe, wenn ihr fertig seid' : 'Nähe und Ernährung – perfekt kombiniert');
+      setSplashHintEmoji('🤍');
       setSplashText('');
     } else if (kind === 'feeding_solids') {
-      setSplashTitle('Beikost gespeichert');
-      setSplashSubtitle('Jeder Löffel ein kleiner Fortschritt.');
-      setSplashStatus('');
-      setSplashHint('Weiter so – ihr wachst gemeinsam!');
+      setSplashTitle(timerStarted ? 'Beikost läuft' : 'Beikost gespeichert');
+      setSplashSubtitle(timerStarted ? 'Timer läuft mit, bis du stoppst.' : 'Jeder Löffel ein kleiner Fortschritt.');
+      setSplashStatus(timerStarted ? 'Timer gestartet...' : '');
+      setSplashHint(timerStarted ? 'Stoppe, sobald ihr fertig seid.' : 'Weiter so – ihr wachst gemeinsam!');
+      setSplashHintEmoji('');
       setSplashText('');
     } else {
-      setSplashTitle('Wickeln gespeichert');
-      setSplashSubtitle('Alles frisch – wohlfühlen ist wichtig.');
-      setSplashStatus('');
-      setSplashHint('Danke für deine liebevolle Fürsorge ✨');
+      setSplashTitle(timerStarted ? 'Wickeln läuft' : 'Wickeln gespeichert');
+      setSplashSubtitle(timerStarted ? 'Timer läuft mit, bis du stoppst.' : 'Alles frisch – wohlfühlen ist wichtig.');
+      setSplashStatus(timerStarted ? 'Timer gestartet...' : '');
+      setSplashHint(timerStarted ? 'Stoppe, wenn du fertig bist' : 'Danke für deine liebevolle Fürsorge');
+      setSplashHintEmoji('✨');
       setSplashText('');
     }
     setSplashVisible(true);
@@ -558,13 +720,26 @@ export default function DailyScreen() {
 
   const handleTimerStop = async () => {
     if (!activeTimer) return;
-    const { error } = await stopBabyCareEntryTimer(activeTimer.id);
+    if (!activeBabyId) return;
+    const { error } = await stopBabyCareEntryTimer(activeTimer.id, activeBabyId);
     if (error) {
       Alert.alert('Fehler', String((error as any)?.message ?? error ?? 'Unbekannter Fehler'));
       return;
     }
     setActiveTimer(null);
-    loadEntries();
+
+    // Invalidate cache after timer stop
+    await invalidateDailyCache(activeBabyId);
+
+    // Reload current view
+    if (selectedTab === 'week') {
+      loadWeekEntries();
+    } else if (selectedTab === 'month') {
+      loadMonthEntries();
+    } else {
+      loadEntries();
+    }
+
     Alert.alert('Erfolg', 'Timer gestoppt! ⏹️');
   };
 
@@ -575,9 +750,22 @@ export default function DailyScreen() {
         text: 'Löschen',
         style: 'destructive',
         onPress: async () => {
-          const { error } = await deleteBabyCareEntry(id);
+          if (!activeBabyId) return;
+          const { error } = await deleteBabyCareEntry(id, activeBabyId);
           if (error) return;
-          loadEntries();
+
+          // Invalidate cache after delete
+          await invalidateDailyCache(activeBabyId);
+
+          // Reload current view
+          if (selectedTab === 'week') {
+            loadWeekEntries();
+          } else if (selectedTab === 'month') {
+            loadMonthEntries();
+          } else {
+            loadEntries();
+          }
+
           Alert.alert('Erfolg', 'Eintrag gelöscht! 🗑️');
         },
       },
@@ -592,7 +780,10 @@ export default function DailyScreen() {
             style={s.topTabInner}
             onPress={() => {
               setSelectedTab(tab);
-              if (tab === 'day') triggerShowDateNav();
+              if (tab === 'day') {
+                setSelectedDate(new Date());
+                triggerShowDateNav();
+              }
             }}
             activeOpacity={0.85}
           >
@@ -604,54 +795,6 @@ export default function DailyScreen() {
       ))}
     </View>
   );
-
-  const quickBtns: { icon: string; label: string; action: QuickActionType }[] = [
-    { action: 'feeding_breast', label: 'Stillen', icon: '🤱' },
-    { action: 'feeding_bottle', label: 'Fläschchen', icon: '🍼' },
-    { action: 'feeding_solids', label: 'Beikost', icon: '🥄' },
-    { action: 'diaper_wet', label: 'Nass', icon: '💧' },
-    { action: 'diaper_dirty', label: 'Voll', icon: '💩' },
-    { action: 'diaper_both', label: 'Beides', icon: '💧💩' },
-  ];
-
-  const QuickActionRow = () => {
-    const renderQuickButton = ({ item }: { item: typeof quickBtns[0] }) => (
-      <GlassCard
-        style={s.circleButton}
-        intensity={30}
-        overlayColor="rgba(255,255,255,0.32)"
-        borderColor="rgba(255,255,255,0.70)"
-      >
-        <TouchableOpacity style={s.circleInner} onPress={() => handleQuickActionPress(item.action)} activeOpacity={0.9}>
-          <Text style={s.circleEmoji}>{item.icon}</Text>
-          <Text style={s.circleLabel}>{item.label}</Text>
-        </TouchableOpacity>
-      </GlassCard>
-    );
-
-
-
-    return (
-      <View style={s.quickActionSection}>
-        <FlatList
-          ref={quickActionsScrollRef}
-          data={quickBtns}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          renderItem={renderQuickButton}
-          keyExtractor={(_, i) => String(i)}
-          contentContainerStyle={s.quickScrollContainer}
-          ItemSeparatorComponent={() => <View style={{ width: 16 }} />}
-          decelerationRate="fast"
-          scrollEventThrottle={16}
-          snapToInterval={112} // 96 Breite + 16 Separator
-          // Wenn du 104px runde Buttons willst:
-          // - stelle circleButton width/height auf 104, borderRadius 52
-          // - setze snapToInterval auf 120
-        />
-      </View>
-    );
-  };
 
   // Week navigation functions
   const goToPreviousWeek = () => setWeekOffset((o) => o - 1);
@@ -691,7 +834,6 @@ export default function DailyScreen() {
     // Weekly summary totals
     const totalFeedings = weekEntries.filter((e) => e.entry_type === 'feeding').length;
     const totalDiapers = weekEntries.filter((e) => e.entry_type === 'diaper').length;
-    const avgPerDay = Math.round((weekEntries.length / 7) * 10) / 10;
 
     const weekStart = getWeekStart(refDate);
     const weekEnd = getWeekEnd(refDate);
@@ -847,31 +989,10 @@ export default function DailyScreen() {
                   <Text style={s.statValue}>{totalDiapers}</Text>
                   <Text style={s.statLabel}>Windeln</Text>
                 </View>
-                <View style={s.statItem}>
-                  <Text style={s.statEmoji}>⭐</Text>
-                  <Text style={s.statValue}>{avgPerDay}</Text>
-                  <Text style={s.statLabel}>Ø pro Tag</Text>
-                </View>
             </View>
           </View>
         </LiquidGlassCard>
 
-        {/* Trend-Analyse - Design Guide konform (EXAKT wie Sleep-Tracker) */}
-        <LiquidGlassCard style={s.trendCard}>
-          <View style={s.trendInner}>
-            <Text style={s.trendTitle}>Trend-Analyse</Text>
-            <View style={s.trendContent}>
-              <View style={s.trendItem}>
-                <Text style={s.trendEmoji}>📈</Text>
-                <Text style={s.trendText}>Konstante Aktivität</Text>
-              </View>
-              <View style={s.trendItem}>
-                <Text style={s.trendEmoji}>🕒</Text>
-                <Text style={s.trendText}>Regelmäßige Intervalle</Text>
-              </View>
-            </View>
-          </View>
-        </LiquidGlassCard>
       </View>
     );
   };
@@ -985,24 +1106,25 @@ export default function DailyScreen() {
 
     return (
       <View style={s.monthViewContainer}>
-        {/* Monats-Navigation - Design Guide konform */}
-        <View style={s.monthNavigationContainer}>
-          <TouchableOpacity style={s.monthNavButton} onPress={() => setMonthOffset(o => o - 1)}>
-            <Text style={s.monthNavButtonText}>‹</Text>
+        {/* Monats-Navigation - exakt gleich wie Wochenübersicht */}
+        <View style={s.weekNavigationContainer}>
+          <TouchableOpacity style={s.weekNavButton} onPress={() => setMonthOffset(o => o - 1)}>
+            <Text style={s.weekNavButtonText}>‹</Text>
           </TouchableOpacity>
 
-          <View style={s.monthHeaderCenter}>
-            <Text style={s.monthHeaderTitle}>
+          <View style={s.weekHeaderCenter}>
+            <Text style={s.weekHeaderTitle}>Monatsübersicht</Text>
+            <Text style={s.weekHeaderSubtitle}>
               {refMonthDate.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' })}
             </Text>
           </View>
 
           <TouchableOpacity
-            style={[s.monthNavButton, monthOffset >= 0 && { opacity: 0.4 }]}
+            style={[s.weekNavButton, monthOffset >= 0 && s.disabledNavButton]}
             disabled={monthOffset >= 0}
             onPress={() => setMonthOffset(o => o + 1)}
           >
-            <Text style={s.monthNavButtonText}>›</Text>
+            <Text style={s.weekNavButtonText}>›</Text>
           </TouchableOpacity>
         </View>
 
@@ -1089,11 +1211,6 @@ export default function DailyScreen() {
                 <Text style={s.statValue}>{monthEntries.filter(e => e.entry_type === 'diaper').length}</Text>
                 <Text style={s.statLabel}>Windeln</Text>
               </View>
-              <View style={s.statItem}>
-                <Text style={s.statEmoji}>📊</Text>
-                <Text style={s.statValue}>{monthEntries.length > 0 ? Math.round(monthEntries.length / daysInMonth) : 0}</Text>
-                <Text style={s.statLabel}>Ø pro Tag</Text>
-              </View>
             </View>
           </View>
         </LiquidGlassCard>
@@ -1155,7 +1272,12 @@ export default function DailyScreen() {
       <SafeAreaView style={s.container}>
         <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
 
-        <Header title="Unser Tag" subtitle="Euer Tag – voller kleiner Meilensteine ✨" />
+        <Header
+          title="Unser Tag"
+          subtitle="Euer Tag – voller kleiner Meilensteine ✨"
+          showBackButton
+          onBackPress={() => router.push('/(tabs)/home')}
+        />
 
         <ConnectionStatus showAlways={false} autoCheck={true} onRetry={loadEntries} />
 
@@ -1170,7 +1292,7 @@ export default function DailyScreen() {
                 text: 'Ja, verwerfen',
                 style: 'destructive',
                 onPress: async () => {
-                  const { error } = await deleteBabyCareEntry(activeTimer.id);
+                  const { error } = await deleteBabyCareEntry(activeTimer.id, activeBabyId ?? undefined);
                   if (!error) {
                     setActiveTimer(null);
                     loadEntries();
@@ -1196,7 +1318,30 @@ export default function DailyScreen() {
             <MonthView />
           ) : (
             <View style={s.content}>
-              <QuickActionRow />
+              {/* Day Navigation - gleich wie Sleep-Tracker */}
+              <View style={s.weekNavigationContainer}>
+                <TouchableOpacity
+                  style={s.weekNavButton}
+                  onPress={() => changeRelativeDate(-1)}
+                >
+                  <Text style={s.weekNavButtonText}>‹</Text>
+                </TouchableOpacity>
+                <View style={s.weekHeaderCenter}>
+                  <Text style={s.weekHeaderTitle}>Tagesansicht</Text>
+                  <Text style={s.weekHeaderSubtitle}>
+                    {selectedDate.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long' })}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={[s.weekNavButton, new Date(selectedDate).setHours(0,0,0,0) >= new Date().setHours(0,0,0,0) && s.disabledNavButton]}
+                  disabled={new Date(selectedDate).setHours(0,0,0,0) >= new Date().setHours(0,0,0,0)}
+                  onPress={() => changeRelativeDate(1)}
+                >
+                  <Text style={s.weekNavButtonText}>›</Text>
+                </TouchableOpacity>
+              </View>
+
+              <QuickActionRow onPressAction={handleQuickActionPress} />
 
               <Text style={s.sectionTitle}>Kennzahlen</Text>
               <KPISection />
@@ -1231,7 +1376,7 @@ export default function DailyScreen() {
                       marginHorizontal={8}
                     />
                   ))}
-                  {entries.length === 0 && <EmptyState type="day" message="Noch keine Aktivitäten heute 🤍" />}
+                  {entries.length === 0 && <EmptyState type="day" message="Tippe auf ein Symbol um einen Eintrag zu erstellen" />}
                 </View>
               </View>
             </View>
@@ -1247,6 +1392,7 @@ export default function DailyScreen() {
           date={selectedDate}
           onClose={() => { setShowInputModal(false); setEditingEntry(null); }}
           onSave={handleSaveEntry}
+          onDelete={handleDeleteEntry}
           initialData={editingEntry && editingEntry.id ? {
             id: editingEntry.id!,
             feeding_type: (editingEntry as any).feeding_type as any,
@@ -1259,6 +1405,7 @@ export default function DailyScreen() {
           } : (selectedSubType ? {
             // Preselect fields from quick actions
             feeding_type: selectedSubType === 'feeding_breast' ? 'BREAST' : selectedSubType === 'feeding_bottle' ? 'BOTTLE' : selectedSubType === 'feeding_solids' ? 'SOLIDS' : undefined,
+            feeding_volume_ml: selectedSubType === 'feeding_bottle' ? lastBottleVolumeMl : null,
             diaper_type: selectedSubType === 'diaper_wet' ? 'WET' : selectedSubType === 'diaper_dirty' ? 'DIRTY' : selectedSubType === 'diaper_both' ? 'BOTH' : undefined,
             start_time: new Date().toISOString(),
           } : undefined)}
@@ -1275,14 +1422,31 @@ export default function DailyScreen() {
           />
           <View style={s.splashCenterCard}>
             <Animated.View style={[s.splashEmojiRing, { transform: [{ scale: splashEmojiAnim }] }]}>
-              <Text style={s.splashEmoji}>{splashEmoji}</Text>
+              {splashEmojiParts.length <= 1 ? (
+                <Text style={s.splashEmoji} allowFontScaling={false}>{splashEmoji}</Text>
+              ) : (
+                <View style={s.splashEmojiRow}>
+                  {splashEmojiParts.map((emoji, index) => (
+                    <Text key={`${emoji}-${index}`} style={s.splashEmojiMulti} allowFontScaling={false}>
+                      {emoji}
+                    </Text>
+                  ))}
+                </View>
+              )}
             </Animated.View>
             {splashTitle ? <Text style={s.splashTitle}>{splashTitle}</Text> : null}
             {splashSubtitle ? <Text style={s.splashSubtitle}>{splashSubtitle}</Text> : null}
             {splashStatus ? <Text style={s.splashStatus}>{splashStatus}</Text> : null}
             {splashHint ? (
               <View style={s.splashHintCard}>
-                <Text style={s.splashHintText}>♡  {splashHint}</Text>
+                <Text style={s.splashHintText}>
+                  <Text style={s.splashHintEmoji} allowFontScaling={false}>♡</Text>
+                  {'  '}
+                  {splashHint}
+                  {splashHintEmoji ? (
+                    <Text style={s.splashHintEmoji} allowFontScaling={false}> {splashHintEmoji}</Text>
+                  ) : null}
+                </Text>
               </View>
             ) : null}
           </View>
@@ -1513,6 +1677,9 @@ kpiValueCentered: { textAlign: 'center', width: '100%' },
     borderColor: 'rgba(255, 255, 255, 0.3)',
     padding: 6,
   },
+  disabledNavButton: {
+    opacity: 0.35,
+  },
   weekNavButtonText: {
     fontSize: 24,
     color: PRIMARY,
@@ -1736,48 +1903,6 @@ kpiValueCentered: { textAlign: 'center', width: '100%' },
     textAlign: 'center',
     fontWeight: '500',
   },
-  // Trend Card (Design Guide konform - EXAKT wie Sleep-Tracker)
-  trendCard: {
-    padding: 0,
-    marginHorizontal: TIMELINE_INSET,
-    marginBottom: 8,
-  },
-  trendInner: {
-    width: WEEK_CONTENT_WIDTH,
-    alignSelf: 'center',
-    padding: 24,
-  },
-  trendTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#7D5A50',
-    marginBottom: SECTION_GAP_BOTTOM,
-    textAlign: 'center',
-  },
-  trendContent: {
-    flexDirection: 'column',
-    gap: 12,
-    paddingHorizontal: 8,
-  },
-  trendItem: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'flex-start',
-    paddingVertical: 4,
-  },
-  trendEmoji: {
-    fontSize: 24,
-    marginRight: 12,
-    width: 32,
-    textAlign: 'center',
-  },
-  trendText: {
-    fontSize: 14,
-    color: '#7D5A50',
-    fontWeight: '600',
-    flex: 1,
-    flexWrap: 'wrap',
-  },
   // Month View Styles (EXAKT wie Sleep-Tracker)
   monthViewContainer: {
     paddingHorizontal: 0,
@@ -1873,8 +1998,19 @@ kpiValueCentered: { textAlign: 'center', width: '100%' },
   splashEmoji: {
     fontSize: 72,
     textAlign: 'center',
-    marginBottom: 10,
     color: '#fff',
+    includeFontPadding: false,
+  },
+  splashEmojiRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  splashEmojiMulti: {
+    fontSize: 56,
+    color: '#fff',
+    includeFontPadding: false,
+    marginHorizontal: 2,
   },
   splashText: {
     fontSize: 20,
@@ -1925,14 +2061,20 @@ kpiValueCentered: { textAlign: 'center', width: '100%' },
     textAlign: 'center',
     fontWeight: '700',
   },
+  splashHintEmoji: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
   splashEmojiRing: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
+    width: 160,
+    height: 160,
+    borderRadius: 80,
     borderWidth: 2,
     borderColor: 'rgba(255,255,255,0.7)',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.08)'
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    overflow: 'visible',
   },
 });

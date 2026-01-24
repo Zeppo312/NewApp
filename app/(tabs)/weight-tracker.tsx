@@ -1,52 +1,121 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator, Platform, Modal, SafeAreaView, StatusBar, Text } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { StyleSheet, View, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Modal, SafeAreaView, StatusBar, Text, TouchableWithoutFeedback, Platform, TextInputProps } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { BlurView } from 'expo-blur';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { LineChart } from 'react-native-chart-kit';
 import { Dimensions } from 'react-native';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import { saveWeightEntry, getWeightEntries, deleteWeightEntry, WeightEntry } from '@/lib/weight';
-import { supabase } from '@/lib/supabase';
+import { getWeightEntries, deleteWeightEntry, WeightEntry, WeightSubject, saveWeightEntry } from '@/lib/weight';
+import { supabase, getCachedUser } from '@/lib/supabase';
 import { Stack } from 'expo-router';
 import Header from '@/components/Header';
 import { LiquidGlassCard, GLASS_OVERLAY, LAYOUT_PAD, SECTION_GAP_TOP, SECTION_GAP_BOTTOM } from '@/constants/DesignGuide';
 import ActivityCard from '@/components/ActivityCard';
+import { PRIMARY as PLANNER_PRIMARY } from '@/constants/PlannerDesign';
+import FloatingAddButton from '@/components/planner/FloatingAddButton';
+import TextInputOverlay from '@/components/modals/TextInputOverlay';
+import { useActiveBaby } from '@/contexts/ActiveBabyContext';
+
+const SUBJECT_COLORS: Record<WeightSubject, string> = {
+  mom: '#5E3DB3',
+  baby: '#2D9CDB',
+};
+
+const SUBJECT_OPTIONS: WeightSubject[] = ['mom', 'baby'];
+const BABY_WEIGHT_FACTOR = 1000;
+const isBabySubject = (subject: WeightSubject) => subject === 'baby';
+const getWeightUnit = (subject: WeightSubject) => (isBabySubject(subject) ? 'g' : 'kg');
+const getDisplayWeightValue = (weightKg: number, subject: WeightSubject) =>
+  isBabySubject(subject) ? Math.round(weightKg * BABY_WEIGHT_FACTOR) : weightKg;
+const getParentEmoji = (role?: string | null) => (role === 'papa' ? '👨' : '👩');
+const formatWeightDisplayValue = (weightKg: number, subject: WeightSubject) => {
+  if (isBabySubject(subject)) {
+    const grams = Math.round(weightKg * BABY_WEIGHT_FACTOR);
+    return `${grams.toLocaleString('de-DE')} g`;
+  }
+  const formattedKg = weightKg.toLocaleString('de-DE', { maximumFractionDigits: 2 });
+  return `${formattedKg} kg`;
+};
+const normalizeWeightInput = (value: string, subject: WeightSubject) => {
+  const trimmed = value.trim();
+  if (isBabySubject(subject)) {
+    return trimmed.replace(/[^0-9.,]/g, '').replace(/\./g, '').replace(',', '.');
+  }
+  return trimmed.replace(',', '.');
+};
+const HEADER_TEXT_COLOR = '#7D5A50';
+const toRgba = (hex: string, opacity = 1) => {
+  const cleanHex = hex.replace('#', '');
+  const int = parseInt(cleanHex, 16);
+  const r = (int >> 16) & 255;
+  const g = (int >> 8) & 255;
+  const b = int & 255;
+  return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+};
 
 export default function WeightTrackerScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   // router wird durch die BackButton-Komponente verwaltet
+  const insets = useSafeAreaInsets();
+  const { activeBaby, activeBabyId, isReady } = useActiveBaby();
 
   const [weightEntries, setWeightEntries] = useState<WeightEntry[]>([]);
+  const [selectedSubject, setSelectedSubject] = useState<WeightSubject>('mom');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  // Legacy inline form flag removed in favor of modal
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [showInputModal, setShowInputModal] = useState(false);
-  const [editingEntry, setEditingEntry] = useState<WeightEntry | null>(null);
   const [selectedRange, setSelectedRange] = useState<'week' | 'month' | 'year' | 'all'>('month');
-  const [weight, setWeight] = useState('');
-  const [notes, setNotes] = useState('');
-  const [date, setDate] = useState(new Date());
+  const [weightModalVisible, setWeightModalVisible] = useState(false);
+  const [weightModalSubject, setWeightModalSubject] = useState<WeightSubject>('mom');
+  const [weightInput, setWeightInput] = useState('');
+  const [weightNotes, setWeightNotes] = useState('');
+  const [editingEntry, setEditingEntry] = useState<WeightEntry | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [weightDate, setWeightDate] = useState<Date>(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  });
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [focusConfig, setFocusConfig] = useState<{ field: 'weight' | 'notes'; label: string; placeholder?: string; multiline?: boolean; keyboardType?: TextInputProps['keyboardType']; inputMode?: TextInputProps['inputMode']; } | null>(null);
+  const [focusValue, setFocusValue] = useState('');
+
+  const babyLabel = useMemo(() => activeBaby?.name?.trim() || 'Mini', [activeBaby?.name]);
+  const subjectLabels = useMemo(
+    () => ({ mom: 'Ich', baby: babyLabel }),
+    [babyLabel]
+  );
+  const subjectCopyLabels = useMemo(
+    () => ({ mom: 'dich', baby: babyLabel }),
+    [babyLabel]
+  );
 
   // Lade Gewichtsdaten beim ersten Rendern
   useEffect(() => {
-    loadWeightEntries();
+    loadUserRole();
   }, []);
+
+  useEffect(() => {
+    if (!isReady) return;
+    loadWeightEntries();
+  }, [isReady, activeBabyId]);
 
   // Lade Gewichtsdaten
   const loadWeightEntries = async () => {
     try {
       setIsLoading(true);
-      const { data, error } = await getWeightEntries();
+      const { data, error } = await getWeightEntries(undefined, activeBabyId);
       if (error) throw error;
-      setWeightEntries(data || []);
+      const normalized = (data || []).map((entry) => ({
+        ...entry,
+        subject: entry.subject ?? 'mom',
+      }));
+      setWeightEntries(normalized);
     } catch (error) {
       console.error('Error loading weight entries:', error);
       Alert.alert('Fehler', 'Beim Laden der Gewichtsdaten ist ein Fehler aufgetreten.');
@@ -55,58 +124,22 @@ export default function WeightTrackerScreen() {
     }
   };
 
-  // Speichere einen neuen Gewichtseintrag
-  const handleSaveWeightEntry = async () => {
-    if (!weight.trim()) {
-      Alert.alert('Hinweis', 'Bitte gib ein Gewicht ein.');
-      return;
-    }
-
-    const weightValue = parseFloat(weight.replace(',', '.'));
-    if (isNaN(weightValue) || weightValue <= 0) {
-      Alert.alert('Hinweis', 'Bitte gib ein gültiges Gewicht ein.');
-      return;
-    }
-
+  const loadUserRole = async () => {
     try {
-      setIsSaving(true);
-      const formattedDate = date.toISOString().split('T')[0]; // Format: YYYY-MM-DD
-      if (editingEntry?.id) {
-        const nowIso = new Date().toISOString();
-        const { error } = await supabase
-          .from('weight_entries')
-          .update({
-            date: formattedDate,
-            weight: weightValue,
-            notes: notes.trim() || null,
-            updated_at: nowIso,
-          })
-          .eq('id', editingEntry.id);
-        if (error) throw error;
-      } else {
-        const { error } = await saveWeightEntry({
-          date: formattedDate,
-          weight: weightValue,
-          notes: notes.trim() || undefined
-        });
-        if (error) throw error;
+      const { data: userData } = await getCachedUser();
+      if (!userData.user) return;
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('user_role')
+        .eq('id', userData.user.id)
+        .maybeSingle();
+      if (error) {
+        console.error('Error loading user role:', error);
+        return;
       }
-
-      // Lade Gewichtsdaten neu
-      setIsLoading(true);
-      await loadWeightEntries();
-      setWeight('');
-      setNotes('');
-      setDate(new Date());
-      setShowInputModal(false);
-      setEditingEntry(null);
-      Alert.alert('Erfolg', 'Dein Gewichtseintrag wurde erfolgreich gespeichert.');
+      setUserRole(data?.user_role ?? null);
     } catch (error) {
-      console.error('Error saving weight entry:', error);
-      Alert.alert('Fehler', 'Beim Speichern des Gewichtseintrags ist ein Fehler aufgetreten.');
-    } finally {
-      setIsSaving(false);
-      setIsLoading(false);
+      console.error('Failed to load user role:', error);
     }
   };
 
@@ -143,248 +176,373 @@ export default function WeightTrackerScreen() {
     );
   };
 
-  // Formatiere das Datum für die Anzeige
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('de-DE', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric'
-    });
+  const openWeightModal = (subject?: WeightSubject) => {
+    const nextSubject = subject ?? selectedSubject;
+    if (nextSubject === 'baby' && !activeBabyId) {
+      Alert.alert('Hinweis', 'Bitte wähle zuerst ein Kind aus.');
+      return;
+    }
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    setWeightDate(today);
+    setWeightModalSubject(nextSubject);
+    setWeightInput('');
+    setWeightNotes('');
+    setEditingEntry(null);
+    setShowDatePicker(false);
+    setWeightModalVisible(true);
+    setFocusConfig(null);
+    setFocusValue('');
+  };
+
+  const closeWeightModal = () => {
+    setWeightModalVisible(false);
+    setShowDatePicker(false);
+    setEditingEntry(null);
+    setFocusConfig(null);
+    setFocusValue('');
+  };
+
+  const formatDisplayDate = (date: Date) =>
+    date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+  const toDateString = (date: Date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const parseDateOnly = (dateStr: string) => {
+    const parts = dateStr.split('-').map((p) => Number(p));
+    if (parts.length === 3 && parts.every((n) => !Number.isNaN(n))) {
+      const [y, m, d] = parts;
+      const parsed = new Date();
+      parsed.setFullYear(y, (m ?? 1) - 1, d ?? 1);
+      parsed.setHours(12, 0, 0, 0);
+      return parsed;
+    }
+    const fallback = new Date(dateStr);
+    fallback.setHours(12, 0, 0, 0);
+    return fallback;
+  };
+
+  const handleSaveWeightEntry = async () => {
+    const normalizedInput = normalizeWeightInput(weightInput, weightModalSubject);
+    const parsedWeight = parseFloat(normalizedInput);
+    const unitLabel = isBabySubject(weightModalSubject) ? 'Gramm' : 'Kilogramm';
+    if (!normalizedInput || Number.isNaN(parsedWeight) || parsedWeight <= 0) {
+      Alert.alert('Hinweis', `Bitte gib ein gültiges Gewicht in ${unitLabel} ein.`);
+      return;
+    }
+    if (weightModalSubject === 'baby' && !activeBabyId) {
+      Alert.alert('Hinweis', 'Bitte wähle zuerst ein Kind aus.');
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      const storedWeight = isBabySubject(weightModalSubject)
+        ? parsedWeight / BABY_WEIGHT_FACTOR
+        : parsedWeight;
+      const { error } = await saveWeightEntry({
+        date: toDateString(weightDate),
+        weight: storedWeight,
+        subject: weightModalSubject,
+        baby_id: weightModalSubject === 'baby' ? activeBabyId : null,
+        notes: weightNotes.trim() ? weightNotes.trim() : undefined,
+      });
+      if (error) throw error;
+
+      await loadWeightEntries();
+      setSelectedSubject(weightModalSubject);
+      setEditingEntry(null);
+      setWeightModalVisible(false);
+      Alert.alert('Erfolg', 'Gewichtseintrag gespeichert.');
+    } catch (error) {
+      console.error('Error saving weight entry:', error);
+      Alert.alert('Fehler', 'Beim Speichern des Gewichtseintrags ist ein Fehler aufgetreten.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const openFocusEditor = (cfg: { field: 'weight' | 'notes'; label: string; placeholder?: string; multiline?: boolean; keyboardType?: TextInputProps['keyboardType']; inputMode?: TextInputProps['inputMode']; }) => {
+    setFocusConfig(cfg);
+    setFocusValue(cfg.field === 'weight' ? weightInput : weightNotes);
+  };
+
+  const closeFocusEditor = () => {
+    setFocusConfig(null);
+    setFocusValue('');
+  };
+
+  const saveFocusEditor = (next?: string) => {
+    if (!focusConfig) return;
+    const val = typeof next === 'string' ? next : focusValue;
+    if (focusConfig.field === 'weight') {
+      setWeightInput(val);
+    } else {
+      setWeightNotes(val);
+    }
+    closeFocusEditor();
+  };
+
+  const handleEditWeightEntry = (entry: any) => {
+    const source = weightEntries.find((e) => e.id === entry.id);
+    if (!source) return;
+    const parsedDate = parseDateOnly(source.date);
+    const subject = source.subject ?? 'mom';
+    const displayValue = getDisplayWeightValue(source.weight, subject);
+    setWeightModalSubject(subject);
+    setWeightInput(
+      isBabySubject(subject) ? String(displayValue) : String(source.weight).replace('.', ',')
+    );
+    setWeightNotes(source.notes ?? '');
+    setWeightDate(parsedDate);
+    setEditingEntry(source);
+    setShowDatePicker(false);
+    setWeightModalVisible(true);
+    setFocusConfig(null);
+    setFocusValue('');
   };
 
   // Bereite die Daten für das Diagramm vor (nach Range)
-  const prepareChartData = (range: 'week' | 'month' | 'year' | 'all') => {
-    const pad = (n: number) => n.toString().padStart(2, '0');
-    const sortedEntries = [...weightEntries].sort((a, b) =>
+  const prepareChartData = (
+    entries: WeightEntry[],
+    range: 'week' | 'month' | 'year' | 'all',
+    legendLabel: string,
+    colorHex: string
+  ) => {
+    const sortedEntries = [...entries].sort((a, b) =>
       new Date(a.date).getTime() - new Date(b.date).getTime()
     );
+    const colorFn = (opacity = 1) => toRgba(colorHex, opacity);
 
-    const now = new Date();
-
-    // Kein Datensatz -> leeres Chart
     if (sortedEntries.length === 0) {
-      return { labels: [], datasets: [{ data: [] as number[], color: (o = 1) => `rgba(94, 61, 179, ${o})`, strokeWidth: 3 }], legend: ['Gewicht'] };
-    }
-
-    if (range === 'week') {
-      const labels: string[] = [];
-      const data: number[] = [];
-      // Letzte 7 Tage betrachten; nur Tage mit Eintrag anzeigen (letzter pro Tag)
-      for (let i = 6; i >= 0; i--) {
-        const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
-        const dayStr = d.toISOString().split('T')[0];
-        const entriesOfDay = sortedEntries.filter(e => e.date === dayStr);
-        if (entriesOfDay.length > 0) {
-          const last = entriesOfDay[entriesOfDay.length - 1];
-          labels.push(`${d.getDate()}.${d.getMonth() + 1}.`);
-          data.push(last.weight);
-        }
-      }
       return {
-        labels,
-        datasets: [{ data, color: (o = 1) => `rgba(94, 61, 179, ${o})`, strokeWidth: 3 }],
-        legend: ['Gewicht']
+        data: {
+          labels: [],
+          datasets: [{ data: [] as number[], color: colorFn, strokeWidth: 3 }],
+          legend: [`Gewicht ${legendLabel}`],
+        },
+        meta: { segments: 5, decimalPlaces: 1 },
       };
     }
 
-    if (range === 'month') {
-      const labelsRaw: string[] = [];
-      const data: number[] = [];
-      for (let i = 29; i >= 0; i--) {
-        const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
-        const dayStr = d.toISOString().split('T')[0];
-        const entriesOfDay = sortedEntries.filter(e => e.date === dayStr);
-        if (entriesOfDay.length > 0) {
-          const last = entriesOfDay[entriesOfDay.length - 1];
-          labelsRaw.push(`${d.getDate()}.${d.getMonth() + 1}.`);
-          data.push(last.weight);
-        }
-      }
-      const maxLabels = 12;
-      const step = Math.max(1, Math.ceil(labelsRaw.length / maxLabels));
-      const labels = labelsRaw.map((l, i) => (i % step === 0 ? l : ''));
-      return {
-        labels,
-        datasets: [{ data, color: (o = 1) => `rgba(94, 61, 179, ${o})`, strokeWidth: 3 }],
-        legend: ['Gewicht']
-      };
-    }
+    const latestDate = new Date(sortedEntries[sortedEntries.length - 1].date);
 
-    if (range === 'year') {
-      // Aggregiere nach Wochen (letzte 52 Wochen), nur Wochen mit Eintrag anzeigen
-      const start = new Date(now);
-      start.setDate(start.getDate() - 364);
-      const filtered = sortedEntries.filter(e => new Date(e.date) >= start);
-
-      // Finde Wochen-Montag (lokal, Mo=0)
-      const weekStart = (d: Date) => {
-        const dt = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-        const day = (dt.getDay() + 6) % 7; // Mo=0..So=6
-        dt.setDate(dt.getDate() - day);
-        return dt;
-      };
-
-      const toWeekKey = (d: Date) => {
-        const ws = weekStart(d);
-        return `${ws.getFullYear()}-${pad(ws.getMonth() + 1)}-${pad(ws.getDate())}`;
-      };
-
-      const byWeek: Record<string, WeightEntry> = {};
-      filtered.forEach(e => {
-        const key = toWeekKey(new Date(e.date));
-        byWeek[key] = e; // letzter Eintrag in dieser Woche
+    const filterByRange = () => {
+      if (range === 'all') return sortedEntries;
+      const start = new Date(latestDate);
+      if (range === 'week') start.setDate(start.getDate() - 6);
+      if (range === 'month') start.setDate(start.getDate() - 29);
+      if (range === 'year') start.setDate(start.getDate() - 364);
+      return sortedEntries.filter((entry) => {
+        const d = new Date(entry.date);
+        return d >= start && d <= latestDate;
       });
+    };
 
-      // Laufe über alle Wochen im Zeitraum und sammle vorhandene Wochenpunkte
-      const firstWs = weekStart(start);
-      const weeks: { label: string; value: number }[] = [];
-      for (let i = 0; i < 54; i++) {
-        const d = new Date(firstWs.getFullYear(), firstWs.getMonth(), firstWs.getDate() + i * 7);
-        if (d > now) break;
-        const key = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-        const entry = byWeek[key];
-        if (entry) {
-          weeks.push({ label: `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.`, value: entry.weight });
-        }
-      }
+    // Immer mindestens zwei Punkte: falls Range zu wenige liefert, nehme die letzten beiden gesamten Einträge
+    const filtered = filterByRange();
+    const ensureMinimumEntries = () => {
+      if (filtered.length >= 2) return filtered;
+      if (sortedEntries.length >= 2) return sortedEntries.slice(-2);
+      return filtered;
+    };
 
-      const labelsRaw = weeks.map(w => w.label);
-      const data = weeks.map(w => w.value);
-      const maxLabels = 12;
-      const step = Math.max(1, Math.ceil(labelsRaw.length / maxLabels));
-      const labels = labelsRaw.map((l, i) => (i % step === 0 ? l : ''));
+    const effectiveEntries = ensureMinimumEntries();
+    if (effectiveEntries.length < 2) {
       return {
-        labels,
-        datasets: [{ data, color: (o = 1) => `rgba(94, 61, 179, ${o})`, strokeWidth: 3 }],
-        legend: ['Gewicht']
+        data: {
+          labels: [],
+          datasets: [{ data: [] as number[], color: colorFn, strokeWidth: 3 }],
+          legend: [`Gewicht ${legendLabel}`],
+        },
+        meta: { segments: 5, decimalPlaces: 1 },
       };
     }
 
-    // 'all' – alle Einträge
-    const labelsRaw = sortedEntries.map(entry => {
-      const d = new Date(entry.date);
-      return `${d.getDate()}.${d.getMonth() + 1}.`;
+    // Pro Datum nur den letzten Eintrag
+    const perDateMap: Record<string, WeightEntry> = {};
+    effectiveEntries.forEach((entry) => {
+      perDateMap[entry.date] = entry;
     });
-    const data = sortedEntries.map(entry => entry.weight);
+    const deduped = Object.values(perDateMap).sort(
+      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+    );
+
+    const labelsRaw = deduped.map((entry) => {
+      const d = new Date(entry.date);
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      return `${day}.${month}.`;
+    });
+    const dataPoints = deduped.map((entry) => entry.weight);
+
     const maxLabels = 12;
     const step = Math.max(1, Math.ceil(labelsRaw.length / maxLabels));
-    const labels = labelsRaw.map((l, i) => (i % step === 0 ? l : ''));
+    const labels = labelsRaw.map((label, i) => (i % step === 0 ? label : ''));
+
+    const minVal = Math.min(...dataPoints);
+    const maxVal = Math.max(...dataPoints);
+    const rangeSpan = Math.max(0.1, maxVal - minVal);
+    const decimalPlaces = maxVal < 10 ? 2 : maxVal < 100 ? 1 : 0;
+    const segments = rangeSpan <= 2 ? 4 : rangeSpan <= 10 ? 5 : 6;
+
     return {
-      labels,
-      datasets: [{ data, color: (o = 1) => `rgba(94, 61, 179, ${o})`, strokeWidth: 3 }],
-      legend: ['Gewicht']
+      data: {
+        labels,
+        datasets: [{ data: dataPoints, color: colorFn, strokeWidth: 3 }],
+        legend: [`Gewicht ${legendLabel}`],
+      },
+      meta: { segments, decimalPlaces },
     };
   };
 
-  const chartData = prepareChartData(selectedRange);
+  const filteredEntries = useMemo(
+    () => weightEntries.filter((entry) => (entry.subject ?? 'mom') === selectedSubject),
+    [weightEntries, selectedSubject]
+  );
+
+  const chartEntries = useMemo(
+    () =>
+      filteredEntries.map((entry) => ({
+        ...entry,
+        weight: getDisplayWeightValue(entry.weight, selectedSubject),
+      })),
+    [filteredEntries, selectedSubject]
+  );
+
+  const { data: chartData, meta: chartMeta } = useMemo(
+    () => prepareChartData(chartEntries, selectedRange, subjectLabels[selectedSubject], SUBJECT_COLORS[selectedSubject]),
+    [chartEntries, selectedRange, selectedSubject, subjectLabels]
+  );
 
   // Rendere die Gewichtskurve
   const renderWeightChart = () => {
-    if (!chartData || !chartData.datasets || chartData.datasets[0].data.length < 2) {
-      return (
-        <LiquidGlassCard style={styles.emptyChartContainer} intensity={26} overlayColor={GLASS_OVERLAY}>
-          <IconSymbol name="chart.line.uptrend.xyaxis" size={40} color={theme.tabIconDefault} />
-          <ThemedText style={styles.emptyChartText} lightColor="#888" darkColor="#E9D8C2">
-            Füge mindestens zwei Gewichtseinträge hinzu, um eine Kurve zu sehen.
-          </ThemedText>
-        </LiquidGlassCard>
-      );
-    }
+    const subjectColor = SUBJECT_COLORS[selectedSubject];
+    const subjectCopyLabel = subjectCopyLabels[selectedSubject];
+    const unitLabel = getWeightUnit(selectedSubject);
+    const hasSeries =
+      !!chartData &&
+      !!chartData.datasets &&
+      chartData.datasets.length > 0 &&
+      chartData.datasets[0].data.length >= 2;
 
     return (
       <>
-        {/* Range Tabs */}
+        {/* Range Tabs bleiben immer sichtbar */}
         <View style={styles.topTabsContainer}>
           {([
             { id: 'week', label: 'Woche' },
             { id: 'month', label: 'Monat' },
             { id: 'year', label: 'Jahr' },
             { id: 'all', label: 'Gesamt' },
-          ] as const).map(t => (
-            <TouchableOpacity
-              key={t.id}
-              style={[styles.topTab, selectedRange === t.id && styles.activeTopTab]}
-              onPress={() => setSelectedRange(t.id)}
-            >
-              <View style={styles.topTabInner}><Text style={[styles.topTabText, selectedRange === t.id && styles.activeTopTabText]}>{t.label}</Text></View>
-            </TouchableOpacity>
-          ))}
+          ] as const).map(t => {
+            const isActive = selectedRange === t.id;
+            return (
+              <TouchableOpacity
+                key={t.id}
+                style={[styles.topTab, isActive && [styles.activeTopTab, { borderColor: toRgba(subjectColor, 0.65) }]]}
+                onPress={() => setSelectedRange(t.id)}
+              >
+                <View style={styles.topTabInner}>
+                  <Text style={[styles.topTabText, isActive && [styles.activeTopTabText, { color: subjectColor }]]}>{t.label}</Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
         </View>
-        <LiquidGlassCard style={styles.chartContainer} intensity={26} overlayColor={GLASS_OVERLAY}>
-        <View style={styles.chartWrapper}>
-          <LineChart
-          data={chartData}
-          width={screenWidth - LAYOUT_PAD * 2}
-          height={220}
-          chartConfig={{
-            backgroundColor: 'transparent',
-            backgroundGradientFrom: 'transparent',
-            backgroundGradientTo: 'transparent',
-            decimalPlaces: 0, // Keine Dezimalstellen für kg-Werte
-            color: () => theme.text,
-            labelColor: () => theme.text,
-            style: {
-              borderRadius: 22
-            },
-            propsForDots: {
-              r: '5',
-              strokeWidth: '2',
-              stroke: '#5E3DB3',
-              fill: '#5E3DB3'
-            },
-            // Formatierung der Y-Achsen-Labels (kg-Anzeige)
-            formatYLabel: (value) => `${value} kg`, // Mit kg-Suffix bei jedem Wert
-            // Mehr Platz zwischen den Datenpunkten
-            propsForBackgroundLines: {
-              strokeWidth: 1,
-              stroke: 'rgba(0,0,0,0.06)'
-            },
-            // Anpassung der Beschriftungen
-            propsForLabels: {
-              fontSize: 12,
-              fontWeight: '600'
-            },
-            // Spezifische Anpassung der Y-Achsen-Labels
-            propsForVerticalLabels: {
-              fontSize: 12,
-              fontWeight: '500'
-            },
-            // Spezifische Anpassung der X-Achsen-Labels
-            propsForHorizontalLabels: {
-              fontSize: 12,
-              fontWeight: '600',
-              dy: -2,
-              rotation: 0
-            },
-            fillShadowGradientFrom: '#5E3DB3',
-            fillShadowGradientFromOpacity: 0.15,
-            fillShadowGradientTo: '#5E3DB3',
-            fillShadowGradientToOpacity: 0.02
-          }}
-          transparent
-          bezier
-          style={styles.chart}
-          withInnerLines={true}
-          withOuterLines={true}
-          segments={5} // Optimale Anzahl von Segmenten
-          withVerticalLines={false} // Keine vertikalen Linien für bessere Übersicht
-          withHorizontalLines={true} // Horizontale Linien beibehalten
-          withVerticalLabels={true}
-          withHorizontalLabels={true}
-          fromZero={false} // Automatische Skalierung
-          yAxisLabel="" // Leeres Präfix
-          yAxisSuffix="" // Kein Suffix an jedem Wert
-          formatXLabel={(value) => value} // Standard-Formatierung für X-Achse
-        />
-        </View>
-      </LiquidGlassCard>
+
+        {hasSeries ? (
+          <LiquidGlassCard style={styles.chartContainer} intensity={26} overlayColor={GLASS_OVERLAY}>
+            <View style={styles.chartWrapper}>
+              <LineChart
+                data={chartData}
+                width={screenWidth - LAYOUT_PAD * 2}
+                height={220}
+                chartConfig={{
+                  backgroundColor: 'transparent',
+                  backgroundGradientFrom: 'transparent',
+                  backgroundGradientTo: 'transparent',
+                  decimalPlaces: chartMeta.decimalPlaces, // Dynamische Nachkommastellen je nach Wertebereich
+                  color: () => theme.text,
+                  labelColor: () => theme.text,
+                  style: {
+                    borderRadius: 22,
+                  },
+                  propsForDots: {
+                    r: '5',
+                    strokeWidth: '2',
+                    stroke: subjectColor,
+                    fill: subjectColor,
+                  },
+                  // Formatierung der Y-Achsen-Labels (kg-Anzeige)
+                  formatYLabel: (value) => `${value} ${unitLabel}`, // Einheit je nach Subjekt
+                  // Mehr Platz zwischen den Datenpunkten
+                  propsForBackgroundLines: {
+                    strokeWidth: 1,
+                    stroke: 'rgba(0,0,0,0.06)',
+                  },
+                  // Anpassung der Beschriftungen
+                  propsForLabels: {
+                    fontSize: 12,
+                    fontWeight: '600',
+                  },
+                  // Spezifische Anpassung der Y-Achsen-Labels
+                  propsForVerticalLabels: {
+                    fontSize: 12,
+                    fontWeight: '500',
+                  },
+                  // Spezifische Anpassung der X-Achsen-Labels
+                  propsForHorizontalLabels: {
+                    fontSize: 12,
+                    fontWeight: '600',
+                    dy: -2,
+                    rotation: 0,
+                  },
+                  fillShadowGradientFrom: subjectColor,
+                  fillShadowGradientFromOpacity: 0.15,
+                  fillShadowGradientTo: subjectColor,
+                  fillShadowGradientToOpacity: 0.02,
+                }}
+                transparent
+                bezier
+                style={styles.chart}
+                withInnerLines={true}
+                withOuterLines={true}
+                segments={chartMeta.segments} // Dynamisch basierend auf Spannweite
+                withVerticalLines={false} // Keine vertikalen Linien für bessere Übersicht
+                withHorizontalLines={true} // Horizontale Linien beibehalten
+                withVerticalLabels={true}
+                withHorizontalLabels={true}
+                fromZero={false} // Automatische Skalierung (nicht auf 0 fixiert, damit Babys fein bleiben)
+                yAxisLabel="" // Leeres Präfix
+                yAxisSuffix="" // Kein Suffix an jedem Wert
+                formatXLabel={(value) => value} // Standard-Formatierung für X-Achse
+              />
+            </View>
+          </LiquidGlassCard>
+        ) : (
+          <LiquidGlassCard style={styles.emptyChartContainer} intensity={26} overlayColor={GLASS_OVERLAY}>
+            <IconSymbol name="chart.line.uptrend.xyaxis" size={40} color={theme.tabIconDefault} />
+            <ThemedText style={styles.emptyChartText} lightColor="#888" darkColor="#E9D8C2">
+              Füge mindestens zwei Gewichtseinträge für {subjectCopyLabel} hinzu, um eine Kurve zu sehen.
+            </ThemedText>
+          </LiquidGlassCard>
+        )}
       </>
     );
   };
 
   // Mappe Gewichtseintrag auf ActivityCard-kompatibles Format
   const convertWeightToDailyEntry = (e: WeightEntry): any => {
+    const subject = e.subject ?? 'mom';
+    const displayWeight = formatWeightDisplayValue(e.weight, subject);
+    const parentEmoji = getParentEmoji(userRole);
+    const displayDate = formatDisplayDate(parseDateOnly(e.date));
     return {
       id: e.id,
       entry_date: e.date,
@@ -392,44 +550,49 @@ export default function WeightTrackerScreen() {
       // keine Zeiten -> keine Zeit-Pills
       notes: e.notes ?? undefined,
       // Custom Anzeige wie im Sleep-Tracker (über emoji/label)
-      emoji: '⚖️',
-      label: `Gewicht ${e.weight} kg`,
+      emoji: subject === 'baby' ? '👶' : parentEmoji,
+      label: `${subjectLabels[subject]}: ${displayWeight}`,
+      weightValue: e.weight,
+      weightSubject: subject,
+      weightNotes: e.notes ?? '',
+      weightDate: e.date,
+      weightDateLabel: displayDate,
+      rawWeightEntry: e,
     };
   };
 
   // Rendere die Gewichtseinträge
   const renderWeightEntries = () => {
-    if (weightEntries.length === 0) {
+    const subjectLabel = subjectCopyLabels[selectedSubject];
+    if (filteredEntries.length === 0) {
       return (
         <LiquidGlassCard style={styles.emptyState} intensity={26} overlayColor={GLASS_OVERLAY}>
           <IconSymbol name="scalemass" size={40} color={theme.tabIconDefault} />
           <ThemedText style={styles.emptyStateText} lightColor="#5C4033" darkColor="#FFFFFF">
-            Noch keine Gewichtseinträge
+            Noch keine Gewichtseinträge für {subjectLabel}
           </ThemedText>
           <ThemedText style={styles.emptyStateSubtext} lightColor="#888" darkColor="#E9D8C2">
-            Füge deinen ersten Gewichtseintrag hinzu, um deine Gewichtskurve zu sehen.
+            Füge deinen ersten Gewichtseintrag hinzu, um die Kurve für {subjectLabel} zu sehen.
           </ThemedText>
         </LiquidGlassCard>
       );
     }
 
+    const sortedEntries = [...filteredEntries].sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+    );
+
     return (
       <View style={styles.timelineSection}>
-        <Text style={[styles.sectionTitleSleepLike]}>Gewichtseinträge</Text>
+        <Text style={[styles.sectionTitleSleepLike]}>Gewichtseinträge für {subjectLabel}</Text>
         <View style={{ alignSelf: 'center', width: contentWidth }}>
-          <View style={[styles.entriesContainer, { paddingHorizontal: TIMELINE_INSET }]}> 
-            {weightEntries.map((entry) => (
+          <View style={[styles.entriesContainer, { paddingHorizontal: TIMELINE_INSET }]}>
+            {sortedEntries.map((entry) => (
               <ActivityCard
                 key={entry.id}
                 entry={convertWeightToDailyEntry(entry)}
                 onDelete={(id) => handleDeleteWeightEntry(id)}
-                onEdit={() => {
-                  setEditingEntry(entry);
-                  setWeight(String(entry.weight));
-                  setNotes(entry.notes || '');
-                  setDate(new Date(entry.date));
-                  setShowInputModal(true);
-                }}
+                onEdit={(cardEntry) => handleEditWeightEntry(cardEntry)}
                 marginHorizontal={8}
               />
             ))}
@@ -438,6 +601,205 @@ export default function WeightTrackerScreen() {
       </View>
     );
   };
+
+  const renderSubjectSwitch = () => (
+    <LiquidGlassCard style={styles.subjectSwitcherCard} intensity={26} overlayColor={GLASS_OVERLAY}>
+      <ThemedText style={styles.subjectSwitcherTitle} lightColor="#5C4033" darkColor="#FFFFFF">
+        Für wen möchtest du tracken?
+      </ThemedText>
+      <ThemedText style={styles.subjectSwitcherSubtitle} lightColor="#7D5A50" darkColor="#E9D8C2">
+        Wechsle zwischen {babyLabel} und dir, um die passenden Einträge zu sehen.
+      </ThemedText>
+      <View style={styles.subjectPillRow}>
+        {SUBJECT_OPTIONS.map((subjectKey) => {
+          const isActive = selectedSubject === subjectKey;
+          return (
+            <TouchableOpacity
+              key={subjectKey}
+              style={[styles.subjectPill, isActive && [styles.subjectPillActive, { borderColor: toRgba(SUBJECT_COLORS[subjectKey], 0.6) }]]}
+              onPress={() => setSelectedSubject(subjectKey)}
+              activeOpacity={0.85}
+            >
+              <Text style={[styles.subjectPillText, isActive && styles.subjectPillTextActive]}>
+                {subjectLabels[subjectKey]}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </LiquidGlassCard>
+  );
+
+  const renderWeightCaptureModal = () => (
+    <Modal
+      visible={weightModalVisible}
+      transparent
+      animationType="slide"
+      onRequestClose={closeWeightModal}
+    >
+      <View style={styles.modalOverlay}>
+        <TouchableWithoutFeedback onPress={closeWeightModal}>
+          <View style={StyleSheet.absoluteFill} />
+        </TouchableWithoutFeedback>
+
+        <BlurView
+          intensity={80}
+          tint="extraLight"
+          style={[styles.modalContent, { paddingBottom: Math.max(28, insets.bottom + 16) }]}
+        >
+          <View style={styles.header}>
+            <TouchableOpacity
+              style={[styles.headerButton, styles.headerButtonGhost]}
+              onPress={closeWeightModal}
+            >
+              <Text style={styles.closeHeaderButtonText}>✕</Text>
+            </TouchableOpacity>
+            <View style={styles.headerCenter}>
+              <Text style={styles.modalTitle}>{editingEntry ? 'Gewicht bearbeiten' : 'Gewicht hinzufügen'}</Text>
+              <Text style={styles.modalSubtitle}>Für dich oder {babyLabel}</Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.headerButton, styles.saveHeaderButton, { backgroundColor: PLANNER_PRIMARY }]}
+              onPress={handleSaveWeightEntry}
+            >
+              <Text style={styles.saveHeaderButtonText}>✓</Text>
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.modalScrollContent}
+          >
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>Für wen?</Text>
+              <View style={styles.typeSwitchRow}>
+                {SUBJECT_OPTIONS.map((subjectKey) => {
+                  const isActive = weightModalSubject === subjectKey;
+                  return (
+                    <TouchableOpacity
+                      key={subjectKey}
+                      style={[styles.typeSwitchButton, isActive && styles.typeSwitchButtonActive]}
+                      onPress={() => setWeightModalSubject(subjectKey)}
+                      activeOpacity={0.88}
+                    >
+                      <Text style={[styles.typeSwitchLabel, isActive && styles.typeSwitchLabelActive]}>
+                        {subjectLabels[subjectKey]}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>Gewicht ({getWeightUnit(weightModalSubject)})</Text>
+              <View style={styles.pickerBlock}>
+                <TouchableOpacity
+                  style={styles.inlineField}
+                  activeOpacity={0.9}
+                    onPress={() =>
+                      openFocusEditor({
+                        field: 'weight',
+                        label: `Gewicht (${getWeightUnit(weightModalSubject)})`,
+                        placeholder: isBabySubject(weightModalSubject) ? 'z. B. 3500' : 'z. B. 65,4',
+                        keyboardType: isBabySubject(weightModalSubject) ? 'number-pad' : 'decimal-pad',
+                        inputMode: isBabySubject(weightModalSubject) ? 'numeric' : 'decimal',
+                      })
+                    }
+                >
+                  <Text style={styles.inlineFieldLabel}>Gewicht</Text>
+                  <Text style={weightInput.trim() ? styles.inlineFieldValue : styles.inlineFieldPlaceholder}>
+                    {weightInput.trim()
+                      ? `${weightInput.trim()} ${getWeightUnit(weightModalSubject)}`
+                      : 'Tippe zum Eingeben'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>Datum</Text>
+              <View style={styles.pickerBlock}>
+                <TouchableOpacity style={styles.selectorHeader} onPress={() => setShowDatePicker((prev) => !prev)} activeOpacity={0.9}>
+                  <Text style={styles.pickerLabel}>Messdatum</Text>
+                  <Text style={styles.selectorValue}>{formatDisplayDate(weightDate)}</Text>
+                </TouchableOpacity>
+                {showDatePicker && (
+                  <View style={styles.pickerInner}>
+                    <DateTimePicker
+                      value={weightDate}
+                      mode="date"
+                      display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                      onChange={(event, date) => {
+                        if (date) {
+                          const normalized = new Date(date);
+                          normalized.setHours(12, 0, 0, 0);
+                          setWeightDate(normalized);
+                        }
+                        if (Platform.OS !== 'ios') {
+                          setShowDatePicker(false);
+                        } else if (event?.type === 'dismissed') {
+                          setShowDatePicker(false);
+                        }
+                      }}
+                      maximumDate={new Date()}
+                      style={styles.dateTimePicker}
+                    />
+                    {Platform.OS === 'ios' && (
+                      <View style={styles.datePickerActions}>
+                        <TouchableOpacity style={styles.datePickerCancel} onPress={() => setShowDatePicker(false)}>
+                          <Text style={styles.datePickerCancelText}>Fertig</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </View>
+                )}
+              </View>
+            </View>
+
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>Notizen</Text>
+              <View style={styles.pickerBlock}>
+                <TouchableOpacity
+                  style={[styles.inlineField, styles.inlineFieldMultiline]}
+                  activeOpacity={0.9}
+                  onPress={() =>
+                    openFocusEditor({
+                      field: 'notes',
+                      label: 'Notizen',
+                      placeholder: 'z. B. Messzeitpunkt oder besondere Hinweise',
+                      multiline: true,
+                    })
+                  }
+                >
+                  <Text style={styles.inlineFieldLabel}>Details</Text>
+                  <Text
+                    style={weightNotes.trim() ? styles.inlineFieldValue : styles.inlineFieldPlaceholder}
+                    numberOfLines={3}
+                  >
+                    {weightNotes.trim() || 'Tippe zum Hinzufügen'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </ScrollView>
+          <TextInputOverlay
+            visible={!!focusConfig}
+            label={focusConfig?.label ?? ''}
+            value={focusValue}
+            placeholder={focusConfig?.placeholder}
+            multiline={!!focusConfig?.multiline}
+            accentColor={PLANNER_PRIMARY}
+            keyboardType={focusConfig?.keyboardType}
+            inputMode={focusConfig?.inputMode}
+            onClose={closeFocusEditor}
+            onSubmit={(next) => saveFocusEditor(next)}
+          />
+        </BlurView>
+      </View>
+    </Modal>
+  );
 
   // Rendere die SaveView-Komponente
   const renderSaveView = () => {
@@ -459,78 +821,6 @@ export default function WeightTrackerScreen() {
     );
   };
 
-  // Rendere das Formular zum Hinzufügen eines Gewichtseintrags
-  const renderAddForm = () => {
-    return (
-      <LiquidGlassCard style={styles.addFormContainer} intensity={26} overlayColor={GLASS_OVERLAY}>
-        <View style={styles.formHeader}>
-          <ThemedText style={styles.formTitle} lightColor="#5C4033" darkColor="#FFFFFF">Neuen Gewichtseintrag hinzufügen</ThemedText>
-          <TouchableOpacity onPress={() => setShowAddForm(false)}>
-            <IconSymbol name="xmark.circle.fill" size={24} color={theme.tabIconDefault} />
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.formGroup}>
-          <ThemedText style={styles.label} lightColor="#5C4033" darkColor="#FFFFFF">Datum</ThemedText>
-          <TouchableOpacity
-            style={styles.datePickerButton}
-            onPress={() => setShowDatePicker(true)}
-          >
-            <ThemedText lightColor="#333333" darkColor="#F8F0E5">{date.toLocaleDateString('de-DE')}</ThemedText>
-            <IconSymbol name="calendar" size={20} color={theme.tabIconDefault} />
-          </TouchableOpacity>
-          {showDatePicker && (
-            <DateTimePicker
-              value={date}
-              mode="date"
-              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-              onChange={(_, selectedDate) => {
-                setShowDatePicker(false);
-                if (selectedDate) {
-                  setDate(selectedDate);
-                }
-              }}
-            />
-          )}
-        </View>
-
-        <View style={styles.formGroup}>
-          <ThemedText style={styles.label} lightColor="#5C4033" darkColor="#FFFFFF">Gewicht (kg)</ThemedText>
-          <TextInput
-            style={[styles.input, { color: theme.text }]}
-            placeholder="z.B. 65.5"
-            placeholderTextColor={theme.tabIconDefault}
-            value={weight}
-            onChangeText={setWeight}
-            keyboardType="decimal-pad"
-          />
-        </View>
-
-        <View style={styles.formGroup}>
-          <ThemedText style={styles.label} lightColor="#5C4033" darkColor="#FFFFFF">Notizen (optional)</ThemedText>
-          <TextInput
-            style={[styles.input, styles.notesInput, { color: theme.text }]}
-            placeholder="z.B. Nach dem Sport gemessen"
-            placeholderTextColor={theme.tabIconDefault}
-            value={notes}
-            onChangeText={setNotes}
-            multiline
-          />
-        </View>
-
-        <TouchableOpacity
-          style={[styles.saveButton, { backgroundColor: theme.accent }]}
-          onPress={handleSaveWeightEntry}
-          disabled={isLoading || isSaving}
-        >
-          <ThemedText style={styles.saveButtonText}>
-            {isLoading || isSaving ? 'Wird gespeichert...' : 'Speichern'}
-          </ThemedText>
-        </TouchableOpacity>
-      </LiquidGlassCard>
-    );
-  };
-
   // Holen der Bildschirmabmessungen für das Diagramm
   const screenWidth = Dimensions.get('window').width;
   const contentWidth = screenWidth - 2 * LAYOUT_PAD;
@@ -545,6 +835,7 @@ export default function WeightTrackerScreen() {
       >
         {/* SaveView Modal */}
         {renderSaveView()}
+        {renderWeightCaptureModal()}
 
         <SafeAreaView style={styles.safeArea}>
           <StatusBar hidden={true} />
@@ -561,117 +852,14 @@ export default function WeightTrackerScreen() {
               </View>
             ) : (
               <>
+                {renderSubjectSwitch()}
                 {renderWeightChart()}
                 {renderWeightEntries()}
               </>
             )}
             </ScrollView>
-
-            {/* Floating Add Button - nur anzeigen, wenn nicht im Formular-Modus */}
-            {!showInputModal && !isLoading && (
-              <TouchableOpacity
-                style={[styles.floatingAddButton, { backgroundColor: '#5E3DB3' }]}
-                onPress={() => { setEditingEntry(null); setWeight(''); setNotes(''); setDate(new Date()); setShowInputModal(true); }}
-              >
-                <IconSymbol name="plus" size={24} color="#FFFFFF" />
-              </TouchableOpacity>
-            )}
-            {/* Add Entry Modal (like sleep-tracker) */}
-            <Modal 
-              visible={showInputModal}
-              transparent={true}
-              animationType="slide"
-              onRequestClose={() => setShowInputModal(false)}
-            >
-              <View style={styles.modalOverlay}>
-                <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setShowInputModal(false)} activeOpacity={1} />
-
-                <BlurView style={styles.modalContent} tint="extraLight" intensity={80}>
-                  {/* Header */}
-                  <View style={styles.header}>
-                    <TouchableOpacity style={styles.headerButton} onPress={() => setShowInputModal(false)}>
-                      <Text style={styles.closeHeaderButtonText}>✕</Text>
-                    </TouchableOpacity>
-                    <View style={styles.headerCenter}>
-                      <Text style={styles.modalTitle}>{editingEntry ? 'Gewicht bearbeiten' : 'Gewicht hinzufügen'}</Text>
-                      <Text style={styles.modalSubtitle}>{editingEntry ? 'Daten anpassen' : 'Neuen Eintrag erstellen'}</Text>
-                    </View>
-                    <TouchableOpacity
-                      style={[styles.headerButton, styles.saveHeaderButton, { backgroundColor: '#5E3DB3' }]}
-                      onPress={handleSaveWeightEntry}
-                      disabled={isLoading || isSaving}
-                    >
-                      <Text style={styles.saveHeaderButtonText}>✓</Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  <ScrollView showsVerticalScrollIndicator={false}>
-                    <TouchableOpacity activeOpacity={1}>
-                      <View style={{ width: '100%', alignItems: 'center' }}>
-                        {/* Datum */}
-                        <View style={styles.section}>
-                          <Text style={styles.sectionTitleSleepLike}>⏰ Datum</Text>
-                          <TouchableOpacity style={styles.timeButton} onPress={() => setShowDatePicker(true)}>
-                            <Text style={styles.timeLabel}>Datum</Text>
-                            <Text style={styles.timeValue}>{date.toLocaleDateString('de-DE')}</Text>
-                          </TouchableOpacity>
-
-                          {showDatePicker && (
-                            <View style={styles.datePickerContainer}>
-                              <DateTimePicker
-                                value={date}
-                                mode="date"
-                                display={Platform.OS === 'ios' ? 'compact' : 'default'}
-                                onChange={(_, selectedDate) => {
-                                  setShowDatePicker(false);
-                                  if (selectedDate) setDate(selectedDate);
-                                }}
-                                style={styles.dateTimePicker}
-                              />
-                              <View style={styles.datePickerActions}>
-                                <TouchableOpacity style={styles.datePickerCancel} onPress={() => setShowDatePicker(false)}>
-                                  <Text style={styles.datePickerCancelText}>Fertig</Text>
-                                </TouchableOpacity>
-                              </View>
-                            </View>
-                          )}
-                        </View>
-
-                        {/* Gewicht */}
-                        <View style={styles.section}>
-                          <Text style={styles.sectionTitleSleepLike}>⚖️ Gewicht</Text>
-                          <View style={styles.timeButton}>
-                            <Text style={styles.timeLabel}>kg</Text>
-                            <TextInput
-                              style={[styles.timeValue, { width: '100%', textAlign: 'center', color: '#333333' }]}
-                              placeholder="z.B. 65.5"
-                              placeholderTextColor="#888888"
-                              keyboardType="decimal-pad"
-                              value={weight}
-                              onChangeText={setWeight}
-                            />
-                          </View>
-                        </View>
-
-                        {/* Notizen */}
-                        <View style={styles.section}>
-                          <Text style={styles.sectionTitleSleepLike}>📝 Notizen</Text>
-                          <TextInput
-                            style={styles.modalNotesInput}
-                            placeholder="z.B. Nach dem Sport gemessen"
-                            placeholderTextColor="#888888"
-                            value={notes}
-                            onChangeText={setNotes}
-                            multiline
-                          />
-                        </View>
-                      </View>
-                    </TouchableOpacity>
-                  </ScrollView>
-                </BlurView>
-              </View>
-            </Modal>
           </View>
+          <FloatingAddButton onPress={() => openWeightModal(selectedSubject)} bottomInset={Math.max(88, insets.bottom + 54)} rightInset={18} />
         </SafeAreaView>
       </ThemedBackground>
     </>
@@ -778,37 +966,6 @@ const styles = StyleSheet.create({
     width: '100%',
     letterSpacing: -0.2,
   },
-  entryItem: {
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  entryHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  entryDate: {
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  entryWeight: {
-    fontSize: 18,
-    marginBottom: 4,
-  },
-  entryNotes: {
-    fontSize: 14,
-    fontStyle: 'italic',
-  },
-  deleteButton: {
-    padding: 8,
-  },
   floatingAddButton: {
     position: 'absolute',
     bottom: 80, // Höher positioniert, um nicht vom Navigationsbalken verdeckt zu werden
@@ -824,67 +981,6 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     elevation: 5,
     zIndex: 100,
-  },
-  addFormContainer: {
-    borderRadius: 22,
-    padding: 20,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  formHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  formTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  formGroup: {
-    marginBottom: 16,
-  },
-  label: {
-    fontSize: 16,
-    marginBottom: 8,
-    fontWeight: '500',
-  },
-  input: {
-    backgroundColor: 'rgba(255,255,255,0.30)',
-    borderColor: 'rgba(255,255,255,0.65)',
-    borderWidth: 1,
-    borderRadius: 20,
-    padding: 14,
-    fontSize: 16,
-  },
-  notesInput: {
-    minHeight: 80,
-    textAlignVertical: 'top',
-  },
-  datePickerButton: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.30)',
-    borderColor: 'rgba(255,255,255,0.65)',
-    borderWidth: 1,
-    borderRadius: 20,
-    padding: 14,
-  },
-  saveButton: {
-    borderRadius: 8,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  saveButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: 'bold',
   },
   loadingContainer: {
     flex: 1,
@@ -925,34 +1021,35 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.3)'
+    borderColor: 'rgba(255,255,255,0.3)',
   },
   topTabInner: { paddingHorizontal: 18, paddingVertical: 6 },
-  activeTopTab: { borderColor: 'rgba(94,61,179,0.65)' },
+  activeTopTab: { backgroundColor: 'rgba(255,255,255,0.9)' },
   topTabText: { fontSize: 13, fontWeight: '700', color: '#7D5A50' },
-  activeTopTabText: { color: '#5E3DB3' },
-  // Modal styles (aligned with sleep-tracker)
+  activeTopTabText: { fontWeight: '800' },
+  // Modal styles (match Planner Capture)
   modalOverlay: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'rgba(0,0,0,0.35)',
   },
   modalContent: {
     borderTopLeftRadius: 30,
     borderTopRightRadius: 30,
     width: '100%',
-    height: '80%',
-    maxHeight: 680,
-    minHeight: 560,
     overflow: 'hidden',
-    padding: 20,
-    paddingBottom: 40,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+  },
+  modalScrollContent: {
+    paddingBottom: 24,
+    gap: 20,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 25,
+    marginBottom: 18,
   },
   headerButton: {
     width: 44,
@@ -961,23 +1058,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: 22,
   },
+  headerButtonGhost: {
+    backgroundColor: 'rgba(0,0,0,0.08)',
+  },
   closeHeaderButtonText: {
     fontSize: 20,
-    fontWeight: '400',
-    color: '#888888',
+    fontWeight: '700',
+    color: HEADER_TEXT_COLOR,
   },
   headerCenter: {
     alignItems: 'center',
+    flex: 1,
   },
   modalTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#7D5A50',
+    fontWeight: '700',
+    color: HEADER_TEXT_COLOR,
   },
   modalSubtitle: {
-    fontSize: 14,
+    fontSize: 13,
     marginTop: 2,
-    color: '#A8978E',
+    color: HEADER_TEXT_COLOR,
   },
   saveHeaderButton: {
     shadowColor: '#000',
@@ -992,78 +1093,168 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   section: {
-    marginBottom: 22,
     width: '100%',
-    alignItems: 'center',
+    gap: 12,
   },
-  timeButton: {
-    width: '90%',
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
-    borderRadius: 15,
-    padding: 15,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
-  },
-  timeLabel: {
-    fontSize: 12,
-    color: '#888888',
+  sectionLabel: {
+    fontSize: 14,
     fontWeight: '600',
-    marginBottom: 5,
+    color: HEADER_TEXT_COLOR,
   },
-  timeValue: {
-    fontSize: 16,
-    color: '#333333',
-    fontWeight: 'bold',
+  typeSwitchRow: {
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
   },
-  modalNotesInput: {
-    width: '90%',
-    minHeight: 80,
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
-    borderRadius: 15,
-    padding: 15,
-    fontSize: 16,
-    color: '#333333',
-    textAlignVertical: 'top',
+  typeSwitchButton: {
+    flex: 1,
+    borderRadius: 16,
+    paddingVertical: 12,
+    backgroundColor: 'rgba(255,255,255,0.6)',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.05)',
+  },
+  typeSwitchButtonActive: {
+    backgroundColor: PLANNER_PRIMARY,
+    borderColor: PLANNER_PRIMARY,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
   },
-  datePickerContainer: {
-    marginTop: 15,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    borderRadius: 15,
-    padding: 15,
-    width: '90%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 4,
+  typeSwitchLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: HEADER_TEXT_COLOR,
+  },
+  typeSwitchLabelActive: {
+    color: '#fff',
+  },
+  pickerBlock: {
+    backgroundColor: 'rgba(255,255,255,0.85)',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.05)',
+    padding: 12,
+    gap: 8,
+  },
+  selectorHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  pickerLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: HEADER_TEXT_COLOR,
+  },
+  selectorValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: HEADER_TEXT_COLOR,
+  },
+  pickerInner: {
+    borderRadius: 14,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    paddingVertical: Platform.OS === 'ios' ? 0 : 8,
   },
   dateTimePicker: {
-    width: '100%',
-    backgroundColor: 'transparent',
+    alignSelf: 'stretch',
   },
   datePickerActions: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
-    marginTop: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   datePickerCancel: {
     paddingVertical: 8,
     paddingHorizontal: 16,
-    borderRadius: 8,
-    backgroundColor: '#5E3DB3',
+    borderRadius: 10,
+    backgroundColor: PLANNER_PRIMARY,
   },
   datePickerCancelText: {
     color: '#FFFFFF',
     fontSize: 14,
+    fontWeight: '700',
+  },
+  inlineField: {
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.05)',
+    gap: 6,
+  },
+  inlineFieldMultiline: {
+    minHeight: 110,
+    justifyContent: 'flex-start',
+  },
+  inlineFieldLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: HEADER_TEXT_COLOR,
+  },
+  inlineFieldValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: HEADER_TEXT_COLOR,
+  },
+  inlineFieldPlaceholder: {
+    fontSize: 16,
     fontWeight: '600',
+    color: 'rgba(125,90,80,0.7)',
+  },
+  subjectSwitcherCard: {
+    borderRadius: 20,
+    padding: 18,
+    marginBottom: 12,
+    gap: 6,
+  },
+  subjectSwitcherTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#7D5A50',
+    textAlign: 'center',
+  },
+  subjectSwitcherSubtitle: {
+    fontSize: 13,
+    color: '#7D5A50',
+    opacity: 0.8,
+    textAlign: 'center',
+    marginBottom: 6,
+  },
+  subjectPillRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 10,
+    marginTop: 6,
+  },
+  subjectPill: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.35)',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    backgroundColor: 'rgba(255,255,255,0.6)',
+  },
+  subjectPillActive: {
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  subjectPillText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#7D5A50',
+  },
+  subjectPillTextActive: {
+    color: '#2D2A32',
   },
 });

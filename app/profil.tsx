@@ -12,15 +12,18 @@ import {
   Switch,
   ActivityIndicator,
   Dimensions,
+  Image,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { router, Stack } from 'expo-router';
+import * as Linking from 'expo-linking';
 
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import Header from '@/components/Header';
+import TextInputOverlay from '@/components/modals/TextInputOverlay';
 
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
@@ -28,8 +31,11 @@ import { LiquidGlassCard, GLASS_OVERLAY, LAYOUT_PAD } from '@/constants/DesignGu
 
 import { useAuth } from '@/contexts/AuthContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
+import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { supabase } from '@/lib/supabase';
 import { getBabyInfo, saveBabyInfo } from '@/lib/baby';
+import * as ImagePicker from 'expo-image-picker';
+import { uploadProfileAvatar, deleteProfileAvatar, deleteUserAccount } from '@/lib/profile';
 
 const { width: screenWidth } = Dimensions.get('window');
 const TIMELINE_INSET = 8; // wie im Sleep-Tracker
@@ -40,14 +46,19 @@ const BABY_BLUE = '#87CEEB';
 export default function ProfilScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
-  const { user } = useAuth();
-  const { isBabyBorn, setIsBabyBorn } = useBabyStatus();
+  const { user, signOut } = useAuth();
+  const { isBabyBorn, setIsBabyBorn, refreshBabyDetails } = useBabyStatus();
+  const { activeBabyId, refreshBabies } = useActiveBaby();
 
   // Benutzerinformationen
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName]   = useState('');
   const [email, setEmail]         = useState('');
   const [userRole, setUserRole]   = useState<'mama' | 'papa' | ''>('');
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [avatarBase64, setAvatarBase64] = useState<string | null>(null);
+  const [avatarRemoved, setAvatarRemoved] = useState(false);
 
   // Baby-Informationen
   const [babyName, setBabyName]         = useState('');
@@ -56,17 +67,27 @@ export default function ProfilScreen() {
   const [birthDate, setBirthDate]       = useState<Date | null>(null);
   const [babyWeight, setBabyWeight]     = useState('');
   const [babyHeight, setBabyHeight]     = useState('');
+  const [babyPhotoUrl, setBabyPhotoUrl] = useState<string | null>(null);
+  const [babyPhotoPreview, setBabyPhotoPreview] = useState<string | null>(null);
+  const [babyPhotoBase64, setBabyPhotoBase64] = useState<string | null>(null);
+  const [babyPhotoRemoved, setBabyPhotoRemoved] = useState(false);
 
   // UI
   const [isLoading, setIsLoading]                   = useState(true);
   const [showDueDatePicker, setShowDueDatePicker]   = useState(false);
   const [showBirthDatePicker, setShowBirthDatePicker] = useState(false);
   const [isSaving, setIsSaving]                     = useState(false);
+  const [isDeletingAvatar, setIsDeletingAvatar]     = useState(false);
+  const [isDeletingProfile, setIsDeletingProfile]   = useState(false);
+  const [isSendingPasswordReset, setIsSendingPasswordReset] = useState(false);
+  const [isUpdatingEmail, setIsUpdatingEmail] = useState(false);
+  const [emailOverlayVisible, setEmailOverlayVisible] = useState(false);
+  const [emailOverlayValue, setEmailOverlayValue] = useState('');
 
   useEffect(() => {
     if (user) loadUserData();
     else setIsLoading(false);
-  }, [user]);
+  }, [user, activeBabyId]);
 
   const loadUserData = async () => {
     try {
@@ -77,7 +98,7 @@ export default function ProfilScreen() {
       // Profile
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select('first_name, last_name, user_role')
+        .select('first_name, last_name, user_role, avatar_url')
         .eq('id', user?.id)
         .single();
 
@@ -85,6 +106,9 @@ export default function ProfilScreen() {
         setFirstName(profileData.first_name || '');
         setLastName(profileData.last_name || '');
         setUserRole((profileData.user_role as any) || '');
+        setAvatarUrl(profileData.avatar_url || null);
+        setAvatarPreview(profileData.avatar_url || null);
+        setAvatarRemoved(false);
       }
 
       // Settings
@@ -102,12 +126,16 @@ export default function ProfilScreen() {
       }
 
       // Baby info
-      const { data: babyData } = await getBabyInfo();
+      const { data: babyData } = await getBabyInfo(activeBabyId ?? undefined);
       if (babyData) {
         setBabyName(babyData.name || '');
         setBabyGender(babyData.baby_gender || '');
         setBabyWeight(babyData.weight || '');
         setBabyHeight(babyData.height || '');
+        setBabyPhotoUrl(babyData.photo_url || null);
+        setBabyPhotoPreview(babyData.photo_url || null);
+        setBabyPhotoBase64(null);
+        setBabyPhotoRemoved(false);
         if (babyData.birth_date) setBirthDate(new Date(babyData.birth_date));
       }
     } catch (e) {
@@ -118,13 +146,329 @@ export default function ProfilScreen() {
     }
   };
 
-  const saveUserData = async () => {
+  const pickAvatarImage = async () => {
     try {
-      if (!user) {
-        Alert.alert('Hinweis', 'Bitte melde dich an, um deine Daten zu speichern.');
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Berechtigung erforderlich', 'Bitte erlaube den Zugriff auf deine Fotos.');
         return;
       }
-      setIsSaving(true);
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.7,
+        base64: true,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        let base64String = asset.base64;
+
+        if (!base64String && asset.uri) {
+          const response = await fetch(asset.uri);
+          const blob = await response.blob();
+          const reader = new FileReader();
+          base64String = await new Promise<string | null>((resolve, reject) => {
+            reader.onload = () => {
+              resolve(reader.result as string);
+            };
+            reader.onerror = () => reject(null);
+            reader.readAsDataURL(blob);
+          });
+        }
+
+        setAvatarPreview(asset.uri || avatarUrl);
+        setAvatarBase64(base64String || null);
+        setAvatarRemoved(false);
+      }
+    } catch (error) {
+      console.error('Error picking avatar image:', error);
+      Alert.alert('Fehler', 'Das Profilbild konnte nicht ausgewählt werden.');
+    }
+  };
+
+  const removeAvatarImage = (markRemoved = true) => {
+    setAvatarPreview(null);
+    setAvatarBase64(null);
+    setAvatarUrl(null);
+    setAvatarRemoved(markRemoved);
+  };
+
+  const pickBabyPhoto = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Berechtigung erforderlich', 'Bitte erlaube den Zugriff auf deine Fotos.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.5,
+        base64: true,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        let base64Data: string | null = null;
+
+        if (asset.base64) {
+          base64Data = `data:image/jpeg;base64,${asset.base64}`;
+        } else if (asset.uri) {
+          try {
+            const response = await fetch(asset.uri);
+            const blob = await response.blob();
+            const reader = new FileReader();
+            base64Data = await new Promise((resolve, reject) => {
+              reader.onload = () => resolve(reader.result as string);
+              reader.onerror = reject;
+              reader.readAsDataURL(blob);
+            });
+          } catch (error) {
+            console.error('Fehler bei der Bildkonvertierung:', error);
+            Alert.alert('Fehler', 'Das Bild konnte nicht verarbeitet werden.');
+            return;
+          }
+        }
+
+        if (!base64Data) {
+          Alert.alert('Fehler', 'Das Bild konnte nicht verarbeitet werden.');
+          return;
+        }
+
+        setBabyPhotoPreview(base64Data);
+        setBabyPhotoBase64(base64Data);
+        setBabyPhotoUrl(null);
+        setBabyPhotoRemoved(false);
+      }
+    } catch (error) {
+      console.error('Error picking baby photo:', error);
+      Alert.alert('Fehler', 'Das Babyfoto konnte nicht ausgewählt werden.');
+    }
+  };
+
+  const removeBabyPhoto = () => {
+    setBabyPhotoPreview(null);
+    setBabyPhotoBase64(null);
+    setBabyPhotoUrl(null);
+    setBabyPhotoRemoved(true);
+  };
+
+  const handleAvatarDeletePress = () => {
+    if (!avatarUrl || isDeletingAvatar) return;
+    const urlToDelete = avatarUrl;
+    Alert.alert(
+      'Profilbild löschen',
+      'Möchtest du dein aktuelles Profilbild wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.',
+      [
+        { text: 'Abbrechen', style: 'cancel' },
+        { text: 'Löschen', style: 'destructive', onPress: () => deleteAvatarFromServer(urlToDelete) },
+      ],
+    );
+  };
+
+  const deleteAvatarFromServer = async (url: string) => {
+    try {
+      setIsDeletingAvatar(true);
+      const { error } = await deleteProfileAvatar(url);
+      if (error) throw error;
+      removeAvatarImage(false);
+      Alert.alert('Profilbild gelöscht', 'Dein Profilbild wurde entfernt.');
+    } catch (error) {
+      console.error('Error deleting profile avatar:', error);
+      Alert.alert('Fehler', 'Das Profilbild konnte nicht gelöscht werden.');
+    } finally {
+      setIsDeletingAvatar(false);
+    }
+  };
+
+  const handleDeleteProfileRequest = () => {
+    if (isDeletingProfile) return;
+    Alert.alert(
+      'Profil & Konto löschen',
+      'Möchtest du dein Profil und dein Konto wirklich löschen? Alle gespeicherten Daten werden dauerhaft entfernt.',
+      [
+        { text: 'Abbrechen', style: 'cancel' },
+        { text: 'Löschen', style: 'destructive', onPress: deleteProfileAndSignOut },
+      ],
+    );
+  };
+
+  const deleteProfileAndSignOut = async () => {
+    if (!user) {
+      Alert.alert('Hinweis', 'Bitte melde dich an, um dein Profil zu löschen.');
+      return;
+    }
+    try {
+      setIsDeletingProfile(true);
+      const { error } = await deleteUserAccount({ avatarUrl });
+      if (error) throw error;
+      setIsDeletingProfile(false);
+      Alert.alert(
+        'Konto gelöscht',
+        'Dein Profil und Konto wurden gelöscht. Du wirst jetzt abgemeldet.',
+        [
+          {
+            text: 'OK',
+            onPress: async () => {
+              await signOut();
+              router.replace('/(auth)/login');
+            },
+          },
+        ],
+      );
+    } catch (error) {
+      console.error('Error deleting profile:', error);
+      setIsDeletingProfile(false);
+      Alert.alert('Fehler', 'Dein Profil konnte nicht gelöscht werden.');
+    }
+  };
+
+  const sendPasswordResetEmail = async () => {
+    if (!user?.email) {
+      Alert.alert('Fehler', 'Keine E-Mail-Adresse gefunden.');
+      return;
+    }
+    if (isSendingPasswordReset) return;
+
+    try {
+      setIsSendingPasswordReset(true);
+      const redirectTo = Linking.createURL('auth/reset-password');
+      const { error } = await supabase.auth.resetPasswordForEmail(user.email, { redirectTo });
+      if (error) throw error;
+
+      Alert.alert(
+        'E-Mail gesendet',
+        'Wir haben dir eine E-Mail mit einem Link zum Ändern deines Passworts geschickt. Bitte prüfe deinen Posteingang (ggf. auch Spam).',
+      );
+    } catch (error: any) {
+      console.error('Failed to send password reset email:', error);
+      Alert.alert(
+        'Fehler',
+        error?.message || 'Die E-Mail zum Passwort-Reset konnte nicht gesendet werden.',
+      );
+    } finally {
+      setIsSendingPasswordReset(false);
+    }
+  };
+
+  const handlePasswordChangePress = () => {
+    if (!user?.email) {
+      Alert.alert('Fehler', 'Keine E-Mail-Adresse gefunden.');
+      return;
+    }
+
+    Alert.alert(
+      'Passwort ändern',
+      'Wir senden dir eine Bestätigungs-E-Mail mit einem Link zum Ändern deines Passworts.',
+      [
+        { text: 'Abbrechen', style: 'cancel' },
+        { text: 'E-Mail senden', onPress: sendPasswordResetEmail },
+      ],
+    );
+  };
+
+  const isLikelyEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+
+  const requestEmailChange = (nextEmailRaw: string) => {
+    if (!user) {
+      Alert.alert('Hinweis', 'Bitte melde dich an, um deine E-Mail zu ändern.');
+      return;
+    }
+
+    const nextEmail = nextEmailRaw.trim().toLowerCase();
+    if (!nextEmail) {
+      Alert.alert('Hinweis', 'Bitte gib eine E-Mail-Adresse ein.');
+      return;
+    }
+    if (!isLikelyEmail(nextEmail)) {
+      Alert.alert('Hinweis', 'Bitte gib eine gültige E-Mail-Adresse ein.');
+      return;
+    }
+    if (user.email && nextEmail === user.email.trim().toLowerCase()) {
+      Alert.alert('Hinweis', 'Diese E-Mail ist bereits hinterlegt.');
+      return;
+    }
+
+    setEmailOverlayVisible(false);
+
+    Alert.alert(
+      'E-Mail ändern',
+      `Möchtest du deine E-Mail-Adresse auf\n${nextEmail}\nändern?\n\nWir senden dir eine Bestätigungs-E-Mail an die neue Adresse.`,
+      [
+        {
+          text: 'Abbrechen',
+          style: 'cancel',
+          onPress: () => {
+            setEmailOverlayValue(nextEmail);
+            setEmailOverlayVisible(true);
+          },
+        },
+        {
+          text: 'E-Mail ändern',
+          onPress: () => updateEmail(nextEmail),
+        },
+      ],
+    );
+  };
+
+  const updateEmail = async (nextEmail: string) => {
+    if (!user) return;
+    if (isUpdatingEmail) return;
+
+    try {
+      setIsUpdatingEmail(true);
+      const emailRedirectTo = Linking.createURL('auth/callback');
+      const { error } = await supabase.auth.updateUser(
+        { email: nextEmail },
+        { emailRedirectTo },
+      );
+      if (error) throw error;
+
+      Alert.alert(
+        'Fast fertig',
+        `Wir haben dir eine Bestätigungs-E-Mail an ${nextEmail} gesendet.\n\nBitte öffne den Link in der E-Mail, um die Änderung abzuschließen.`,
+      );
+    } catch (error: any) {
+      console.error('Failed to update email:', error);
+      Alert.alert(
+        'Fehler',
+        error?.message || 'Die E-Mail konnte nicht geändert werden. Bitte versuche es später erneut.',
+      );
+    } finally {
+      setIsUpdatingEmail(false);
+    }
+  };
+
+  const saveUserData = async () => {
+    if (!user) {
+      Alert.alert('Hinweis', 'Bitte melde dich an, um deine Daten zu speichern.');
+      return;
+    }
+
+    setIsSaving(true);
+
+    let finalAvatarUrl = avatarUrl;
+    let finalBabyPhoto = babyPhotoUrl;
+
+    try {
+      if (avatarBase64) {
+        const uploadResult = await uploadProfileAvatar(avatarBase64);
+        if (uploadResult.error) throw uploadResult.error;
+        finalAvatarUrl = uploadResult.url;
+      } else if (avatarRemoved) {
+        finalAvatarUrl = null;
+      }
+
+      if (babyPhotoBase64) {
+        finalBabyPhoto = babyPhotoBase64;
+      } else if (babyPhotoRemoved) {
+        finalBabyPhoto = null;
+      }
 
       // profiles upsert
       const { data: existingProfile } = await supabase
@@ -136,6 +480,7 @@ export default function ProfilScreen() {
           first_name: firstName,
           last_name: lastName,
           user_role: userRole,
+          avatar_url: finalAvatarUrl || null,
           updated_at: new Date().toISOString(),
         }).eq('id', user.id);
       } else {
@@ -144,6 +489,7 @@ export default function ProfilScreen() {
           first_name: firstName,
           last_name: lastName,
           user_role: userRole,
+          avatar_url: finalAvatarUrl || null,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         });
@@ -172,14 +518,20 @@ export default function ProfilScreen() {
       if (settingsResult.error) throw settingsResult.error;
 
       // baby info
-      const { error: babyError } = await saveBabyInfo({
-        name: babyName,
-        baby_gender: babyGender,
-        birth_date: birthDate ? birthDate.toISOString() : null,
-        weight: babyWeight,
-        height: babyHeight,
-      });
+      const { error: babyError } = await saveBabyInfo(
+        {
+          name: babyName,
+          baby_gender: babyGender,
+          birth_date: birthDate ? birthDate.toISOString() : null,
+          weight: babyWeight,
+          height: babyHeight,
+          photo_url: finalBabyPhoto,
+        },
+        activeBabyId ?? undefined
+      );
       if (babyError) throw babyError;
+      await refreshBabyDetails();
+      await refreshBabies();
 
       Alert.alert('Erfolg', 'Deine Daten wurden erfolgreich gespeichert.', [
         { text: 'OK', onPress: () => router.push('/more') },
@@ -189,6 +541,14 @@ export default function ProfilScreen() {
       Alert.alert('Fehler', e?.message || 'Deine Daten konnten nicht gespeichert werden.');
     } finally {
       setIsSaving(false);
+      setAvatarUrl(finalAvatarUrl || null);
+      setAvatarPreview(finalAvatarUrl || null);
+      setAvatarBase64(null);
+      setAvatarRemoved(false);
+      setBabyPhotoUrl(finalBabyPhoto || null);
+      setBabyPhotoPreview(finalBabyPhoto || null);
+      setBabyPhotoBase64(null);
+      setBabyPhotoRemoved(false);
     }
   };
 
@@ -245,6 +605,49 @@ export default function ProfilScreen() {
                   overlayColor={GLASS_OVERLAY}
                 >
                   <ThemedText style={styles.sectionTitle}>Persönliche Daten</ThemedText>
+                  <View style={styles.avatarSelector}>
+                    <TouchableOpacity
+                      style={styles.avatarPreviewWrapper}
+                      onPress={pickAvatarImage}
+                      activeOpacity={0.8}
+                    >
+                      {avatarPreview ? (
+                        <Image
+                          source={{ uri: avatarPreview }}
+                          style={styles.avatarPreviewImage}
+                        />
+                      ) : (
+                        <View style={styles.avatarPlaceholder}>
+                          <IconSymbol name="camera" size={30} color="#FFFFFF" />
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                    <View style={styles.avatarActions}>
+                      <TouchableOpacity style={styles.avatarActionButton} onPress={pickAvatarImage}>
+                        <ThemedText style={styles.avatarActionText}>Foto wählen</ThemedText>
+                      </TouchableOpacity>
+                      {!!avatarPreview && (
+                        <TouchableOpacity style={styles.avatarActionButton} onPress={() => removeAvatarImage()}>
+                          <ThemedText style={styles.avatarActionText}>Foto entfernen</ThemedText>
+                        </TouchableOpacity>
+                      )}
+                      {!!avatarUrl && (
+                        <TouchableOpacity
+                          style={styles.avatarActionButton}
+                          onPress={handleAvatarDeletePress}
+                          disabled={isDeletingAvatar}
+                        >
+                          {isDeletingAvatar ? (
+                            <ActivityIndicator size="small" color="#FF6B6B" />
+                          ) : (
+                            <ThemedText style={[styles.avatarActionText, styles.avatarDeleteText]}>
+                              Foto löschen
+                            </ThemedText>
+                          )}
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  </View>
                   <View style={styles.cardInner}>
                     <View style={styles.formGroup}>
                       <ThemedText style={styles.label}>E-Mail</ThemedText>
@@ -255,6 +658,29 @@ export default function ProfilScreen() {
                         placeholder="Deine E-Mail-Adresse"
                         placeholderTextColor="#9BA0A6"
                       />
+                      <View style={styles.inlineActions}>
+                        <TouchableOpacity
+                          style={styles.inlineActionButton}
+                          onPress={() => {
+                            setEmailOverlayValue(user?.new_email || '');
+                            setEmailOverlayVisible(true);
+                          }}
+                          activeOpacity={0.9}
+                          disabled={isUpdatingEmail}
+                        >
+                          {isUpdatingEmail ? (
+                            <ActivityIndicator size="small" color={ACCENT_PURPLE} />
+                          ) : (
+                            <IconSymbol name="envelope.fill" size={18} color={ACCENT_PURPLE} />
+                          )}
+                          <ThemedText style={styles.inlineActionText}>E-Mail ändern</ThemedText>
+                        </TouchableOpacity>
+                      </View>
+                      {!!user?.new_email && user?.new_email !== user?.email && (
+                        <ThemedText style={styles.helperText}>
+                          Neue E-Mail ausstehend: {user.new_email} (bitte bestätigen)
+                        </ThemedText>
+                      )}
                     </View>
 
                     <View style={styles.formGroup}>
@@ -340,6 +766,39 @@ export default function ProfilScreen() {
                 >
                   <ThemedText style={styles.sectionTitle}>Baby-Informationen</ThemedText>
                   <View style={styles.cardInner}>
+                    <View style={styles.formGroup}>
+                      <ThemedText style={styles.label}>Babyfoto</ThemedText>
+                      <View style={styles.babyPhotoSelector}>
+                        {babyPhotoPreview ? (
+                          <Image source={{ uri: babyPhotoPreview }} style={styles.babyPhotoPreview} />
+                        ) : (
+                          <View style={styles.babyPhotoPlaceholder}>
+                            <IconSymbol name="person.fill" size={40} color="#FFFFFF" />
+                          </View>
+                        )}
+                        <View style={styles.babyPhotoActions}>
+                          <TouchableOpacity
+                            style={styles.babyPhotoActionButton}
+                            onPress={pickBabyPhoto}
+                            activeOpacity={0.9}
+                            disabled={isSaving}
+                          >
+                            <ThemedText style={styles.babyPhotoActionText}>Foto wählen</ThemedText>
+                          </TouchableOpacity>
+                          {!!babyPhotoPreview && (
+                            <TouchableOpacity
+                              style={styles.babyPhotoActionButton}
+                              onPress={removeBabyPhoto}
+                              activeOpacity={0.9}
+                              disabled={isSaving}
+                            >
+                              <ThemedText style={styles.babyPhotoActionText}>Foto entfernen</ThemedText>
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      </View>
+                    </View>
+
                     <View style={styles.formGroup}>
                       <ThemedText style={styles.label}>Errechneter Geburtstermin</ThemedText>
                       <TouchableOpacity
@@ -526,11 +985,85 @@ export default function ProfilScreen() {
                     </BlurView>
                   </TouchableOpacity>
                 </View>
+
+                {/* Sicherheit */}
+                <View style={{ marginHorizontal: TIMELINE_INSET }}>
+                  <TouchableOpacity
+                    onPress={handlePasswordChangePress}
+                    activeOpacity={0.9}
+                    disabled={isSendingPasswordReset}
+                    style={{ borderRadius: 22, overflow: 'hidden', marginTop: 12 }}
+                  >
+                    <BlurView intensity={24} tint="light" style={{ borderRadius: 22, overflow: 'hidden' }}>
+                      <View
+                        style={[
+                          styles.saveCard,
+                          { backgroundColor: isSendingPasswordReset ? 'rgba(168,168,168,0.5)' : 'rgba(135,206,235,0.45)' },
+                        ]}
+                      >
+                        <View style={[styles.saveIconWrap, { backgroundColor: BABY_BLUE }]}>
+                          {isSendingPasswordReset ? (
+                            <ActivityIndicator color="#fff" />
+                          ) : (
+                            <ThemedText style={{ fontSize: 24, color: '#FFFFFF' }}>🔑</ThemedText>
+                          )}
+                        </View>
+                        <ThemedText style={styles.saveTitle}>
+                          {isSendingPasswordReset ? 'Sende E-Mail…' : 'Passwort ändern'}
+                        </ThemedText>
+                        <ThemedText style={styles.saveSub}>Bestätigungslink per E-Mail</ThemedText>
+                      </View>
+                    </BlurView>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={handleDeleteProfileRequest}
+                    activeOpacity={0.9}
+                    disabled={isDeletingProfile}
+                    style={{ borderRadius: 22, overflow: 'hidden', marginTop: 12 }}
+                  >
+                    <BlurView intensity={20} tint="light" style={{ borderRadius: 22, overflow: 'hidden' }}>
+                      <View
+                        style={[
+                          styles.saveCard,
+                          styles.dangerCard,
+                          { backgroundColor: 'rgba(255,130,130,0.5)' },
+                        ]}
+                      >
+                        <View style={[styles.saveIconWrap, { backgroundColor: '#FF6B6B' }]}>
+                          {isDeletingProfile ? (
+                            <ActivityIndicator color="#fff" />
+                          ) : (
+                            <IconSymbol name="trash.fill" size={24} color="#FFFFFF" />
+                          )}
+                        </View>
+                        <ThemedText style={[styles.saveTitle, styles.dangerText]}>
+                          {isDeletingProfile ? 'Profil wird gelöscht…' : 'Profil & Konto löschen'}
+                        </ThemedText>
+                        <ThemedText style={[styles.saveSub, styles.dangerSub]}>
+                          Entfernt Profil, Konto und alle Daten dauerhaft
+                        </ThemedText>
+                      </View>
+                    </BlurView>
+                  </TouchableOpacity>
+                </View>
               </>
             )}
           </ScrollView>
         </SafeAreaView>
       </ThemedBackground>
+
+      <TextInputOverlay
+        visible={emailOverlayVisible}
+        label="Neue E-Mail-Adresse"
+        value={emailOverlayValue}
+        placeholder="deine@email.de"
+        keyboardType="email-address"
+        inputMode="email"
+        accentColor={ACCENT_PURPLE}
+        onClose={() => setEmailOverlayVisible(false)}
+        onSubmit={(next) => requestEmailChange(next)}
+      />
     </>
   );
 }
@@ -580,6 +1113,90 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(200,200,200,0.35)',
   },
   numeric: { fontVariant: ['tabular-nums'] },
+
+  babyPhotoSelector: {
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  babyPhotoPreview: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    marginBottom: 12,
+  },
+  babyPhotoPlaceholder: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: 'rgba(255,255,255,0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.7)',
+  },
+  babyPhotoActions: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+  },
+  babyPhotoActionButton: {
+    borderRadius: 999,
+    paddingVertical: 8,
+    paddingHorizontal: 18,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.6)',
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    marginHorizontal: 8,
+    marginBottom: 8,
+  },
+  babyPhotoActionText: {
+    color: ACCENT_PURPLE,
+    fontWeight: '700',
+  },
+
+  avatarSelector: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  avatarPreviewWrapper: {
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    backgroundColor: 'rgba(255,255,255,0.7)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+    overflow: 'hidden',
+  },
+  avatarPreviewImage: {
+    width: '100%',
+    height: '100%',
+  },
+  avatarPlaceholder: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#D8D8D8',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarActions: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  avatarActionButton: {
+    marginHorizontal: 12,
+    marginVertical: 4,
+  },
+  avatarActionText: {
+    color: '#8E4EC6',
+    fontWeight: '700',
+  },
+  avatarDeleteText: {
+    color: '#FF6B6B',
+  },
 
   // Glas-DateButton
   dateButtonGlass: {
@@ -648,4 +1265,41 @@ const styles = StyleSheet.create({
   },
   saveTitle: { fontSize: 16, fontWeight: '800', color: PRIMARY_TEXT, marginBottom: 4 },
   saveSub: { fontSize: 11, color: PRIMARY_TEXT, opacity: 0.8 },
+  dangerCard: {
+    borderColor: 'rgba(255,107,107,0.6)',
+  },
+  dangerText: {
+    color: '#FF6B6B',
+  },
+  dangerSub: {
+    color: PRIMARY_TEXT,
+    opacity: 0.9,
+  },
+  inlineActions: {
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+  },
+  inlineActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderRadius: 999,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.6)',
+    backgroundColor: 'rgba(255,255,255,0.25)',
+  },
+  inlineActionText: {
+    color: ACCENT_PURPLE,
+    fontWeight: '700',
+  },
+  helperText: {
+    marginTop: 8,
+    fontSize: 12,
+    color: PRIMARY_TEXT,
+    opacity: 0.8,
+  },
 });

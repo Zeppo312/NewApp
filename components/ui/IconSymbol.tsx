@@ -44,6 +44,7 @@ const MAPPING = {
   'wind': 'air',
   'humidity': 'water_drop',
   'plus': 'add',
+  'photo': 'image',
   'fork.knife.circle.fill': 'restaurant',
 } as Partial<
   Record<

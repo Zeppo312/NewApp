@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Dimensions, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { BlurView } from 'expo-blur';
 
 import { PlannerAssignee, PlannerEvent, PlannerTodo } from '@/services/planner';
@@ -12,8 +12,12 @@ type Props = {
   date: Date;
   events: PlannerEvent[];
   todos: PlannerTodo[];
+  getOwnerLabel?: (ownerId?: string) => string | undefined;
+  getAssigneeLabel?: (assignee?: PlannerAssignee, babyId?: string, ownerId?: string) => string | undefined;
+  readOnly?: boolean;
   onToggleTodo: (id: string) => void;
   onMoveTomorrow: (id: string) => void;
+  onDelete?: (id: string) => void;
   onEditTodo?: (id: string) => void;
   onEditEvent?: (id: string) => void;
 };
@@ -24,6 +28,9 @@ type TimelineEvent = {
   title: string;
   subtitle: string;
   minute: number;
+  endMinute: number;
+  column?: number;
+  totalColumns?: number;
 };
 
 type TimelineTodo = {
@@ -32,8 +39,11 @@ type TimelineTodo = {
   title: string;
   completed: boolean;
   minute: number;
+  endMinute: number;
   timeLabel: string;
   assignee: PlannerAssignee;
+  column?: number;
+  totalColumns?: number;
 };
 
 type TimelineItem = TimelineEvent | TimelineTodo;
@@ -59,8 +69,12 @@ export const StructuredTimeline: React.FC<Props> = ({
   date,
   events,
   todos,
+  getOwnerLabel,
+  getAssigneeLabel,
+  readOnly = false,
   onToggleTodo,
   onMoveTomorrow,
+  onDelete,
   onEditTodo,
   onEditEvent,
 }) => {
@@ -75,12 +89,23 @@ export const StructuredTimeline: React.FC<Props> = ({
       const end = new Date(event.end);
       const startMinute = minutesFromMidnight(start);
       const endMinute = Math.max(startMinute + 30, minutesFromMidnight(end));
+      const ownerLabel = getOwnerLabel?.(event.userId);
+      const assigneeLabel = getAssigneeLabel?.(event.assignee, event.babyId, event.userId);
+      const metaLabel =
+        assigneeLabel && assigneeLabel !== 'Ich'
+          ? assigneeLabel
+          : ownerLabel && ownerLabel !== 'Ich'
+          ? ownerLabel
+          : '';
+      const metaSuffix = metaLabel ? ` · ${metaLabel}` : '';
+      const locationSuffix = event.location ? ` · ${event.location}` : '';
       entries.push({
         kind: 'event',
         id: event.id,
         title: event.title,
-        subtitle: `${start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – ${end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}${event.location ? ` · ${event.location}` : ''}`,
+        subtitle: `${start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – ${end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}${locationSuffix}${metaSuffix}`,
         minute: startMinute,
+        endMinute: endMinute,
       });
       minutesSet.add(startMinute);
       minutesSet.add(endMinute);
@@ -89,17 +114,30 @@ export const StructuredTimeline: React.FC<Props> = ({
     todos.forEach((todo) => {
       const dueDate = parseISO(todo.dueAt);
       const dueMinute = dueDate ? minutesFromMidnight(dueDate) : fallbackBase + floatingIndex * 25;
+      const endMinute = dueMinute + 30; // Todos take 30 minutes by default
       if (!dueDate) floatingIndex += 1;
+      const ownerLabel = getOwnerLabel?.(todo.userId);
+      const assigneeLabel = getAssigneeLabel?.(todo.assignee, todo.babyId, todo.userId);
+      const metaLabel =
+        assigneeLabel && assigneeLabel !== 'Ich'
+          ? assigneeLabel
+          : ownerLabel && ownerLabel !== 'Ich'
+          ? ownerLabel
+          : '';
+      const metaSuffix = metaLabel ? ` · ${metaLabel}` : '';
+      const timeLabel = `${dueDate ? dueDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Flexibel'}${metaSuffix}`;
       entries.push({
         kind: 'todo',
         id: todo.id,
         title: todo.title,
         completed: todo.completed,
         minute: dueMinute,
-        timeLabel: dueDate ? dueDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Flexibel',
+        endMinute: endMinute,
+        timeLabel,
         assignee: todo.assignee ?? 'me',
       });
       minutesSet.add(dueMinute);
+      minutesSet.add(endMinute);
     });
 
     entries.sort((a, b) => a.minute - b.minute);
@@ -115,6 +153,90 @@ export const StructuredTimeline: React.FC<Props> = ({
       };
     }
 
+    // Apple Calendar-style overlap detection for all items (events and todos)
+    // Helper function to check if two items overlap
+    const itemsOverlap = (item1: TimelineItem, item2: TimelineItem): boolean => {
+      return item1.minute < item2.endMinute && item2.minute < item1.endMinute;
+    };
+
+    // Group overlapping items
+    const itemGroups: TimelineItem[][] = [];
+    entries.forEach((item) => {
+      let addedToGroup = false;
+
+      for (const group of itemGroups) {
+        // Check if this item overlaps with ANY item in the group
+        if (group.some((groupItem) => itemsOverlap(item, groupItem))) {
+          group.push(item);
+          addedToGroup = true;
+          break;
+        }
+      }
+
+      if (!addedToGroup) {
+        itemGroups.push([item]);
+      }
+    });
+
+    // Assign columns within each group (Apple Calendar style)
+    // Maximum 2 columns allowed
+    const MAX_COLUMNS = 2;
+    const itemsWithLayout: TimelineItem[] = [];
+
+    itemGroups.forEach((group) => {
+      if (group.length === 1) {
+        itemsWithLayout.push({ ...group[0], column: 0, totalColumns: 1 });
+      } else {
+        // Sort group by start time, then end time
+        group.sort((a, b) => a.minute - b.minute || a.endMinute - b.endMinute);
+
+        // Assign columns to avoid overlap (max 2 columns)
+        const columns: TimelineItem[][] = [];
+        const itemColumns: Map<string, number> = new Map();
+
+        group.forEach((item) => {
+          let assignedColumn = -1;
+
+          // Find first column where this item doesn't overlap with any existing item
+          for (let colIdx = 0; colIdx < Math.min(columns.length, MAX_COLUMNS); colIdx++) {
+            const itemsInColumn = columns[colIdx];
+            const overlapsInColumn = itemsInColumn.some((i) => itemsOverlap(item, i));
+
+            if (!overlapsInColumn) {
+              columns[colIdx].push(item);
+              assignedColumn = colIdx;
+              break;
+            }
+          }
+
+          // If no suitable column found and we haven't reached max columns, create new one
+          if (assignedColumn === -1 && columns.length < MAX_COLUMNS) {
+            columns.push([item]);
+            assignedColumn = columns.length - 1;
+          } else if (assignedColumn === -1) {
+            // If we've reached max columns, add to the column with least items
+            const leastBusyColumn = columns.reduce((minIdx, col, idx, arr) =>
+              col.length < arr[minIdx].length ? idx : minIdx, 0
+            );
+            columns[leastBusyColumn].push(item);
+            assignedColumn = leastBusyColumn;
+          }
+
+          itemColumns.set(item.id, assignedColumn);
+        });
+
+        // Now add all items with correct totalColumns (capped at MAX_COLUMNS)
+        const totalColumns = Math.min(columns.length, MAX_COLUMNS);
+        group.forEach((item) => {
+          itemsWithLayout.push({
+            ...item,
+            column: itemColumns.get(item.id) ?? 0,
+            totalColumns,
+          });
+        });
+      }
+    });
+
     const minutes = Array.from(minutesSet).sort((a, b) => a - b);
     const positions = new Map<number, number>();
     let currentY = 0;
@@ -123,7 +245,23 @@ export const StructuredTimeline: React.FC<Props> = ({
 
     minutes.slice(1).forEach((minute) => {
       const deltaMinutes = minute - previousMinute;
-      const deltaPx = Math.min(Math.max(deltaMinutes * PX_PER_MIN, MIN_GAP_PX), MAX_GAP_PX);
+
+      let deltaPx: number;
+
+      if (deltaMinutes === 0) {
+        // Same time: stack vertically with card height spacing
+        deltaPx = 110;
+      } else if (deltaMinutes < 30) {
+        // Close together (< 30 min): granular spacing
+        deltaPx = Math.max(deltaMinutes * 2.5, 90);
+      } else if (deltaMinutes < 120) {
+        // Medium distance (30-120 min): normal spacing
+        deltaPx = Math.min(deltaMinutes * 1.2, 140);
+      } else {
+        // Far apart (> 120 min): compact spacing
+        deltaPx = Math.min(deltaMinutes * 0.7, 100);
+      }
+
       currentY += deltaPx;
       positions.set(minute, currentY);
       previousMinute = minute;
@@ -148,13 +286,26 @@ export const StructuredTimeline: React.FC<Props> = ({
 
     const contentHeight = positionFor(minutes[minutes.length - 1]) + CARD_VERTICAL_OFFSET + 80;
 
+    // Generate hour and half-hour labels for granular timeline
     const hourLabels: { label: string; top: number }[] = [];
     const startHour = Math.floor(minutes[0] / 60);
     const endHour = Math.ceil(minutes[minutes.length - 1] / 60);
+
     for (let hour = startHour; hour <= endHour; hour += 1) {
-      const minute = hour * 60;
-      const top = positionFor(minute) - 10;
-      hourLabels.push({ label: `${String(hour).padStart(2, '0')}:00`, top });
+      // Full hour
+      const hourMinute = hour * 60;
+      const hourTop = positionFor(hourMinute) - 10;
+      hourLabels.push({ label: `${String(hour).padStart(2, '0')}:00`, top: hourTop });
+
+      // Half hour (only if within range and with enough spacing)
+      const halfHourMinute = hour * 60 + 30;
+      if (halfHourMinute >= minutes[0] && halfHourMinute <= minutes[minutes.length - 1]) {
+        const halfHourTop = positionFor(halfHourMinute) - 10;
+        // Only add half-hour if it's at least 40px away from the full hour
+        if (Math.abs(hourTop - halfHourTop) > 40) {
+          hourLabels.push({ label: `${String(hour).padStart(2, '0')}:30`, top: halfHourTop });
+        }
+      }
     }
 
     const isToday = new Date().toDateString() === date.toDateString();
@@ -163,14 +314,14 @@ export const StructuredTimeline: React.FC<Props> = ({
     const nowTop = positionFor(nowMinute);
 
     return {
-      items: entries,
+      items: itemsWithLayout,
       positionFor,
       contentHeight,
       hourLabels,
       showNowLine,
       nowTop,
     };
-  }, [date, events, todos]);
+  }, [date, events, todos, getOwnerLabel, getAssigneeLabel]);
 
   const { items, positionFor, contentHeight, hourLabels, showNowLine, nowTop } = timeline;
 
@@ -190,27 +341,59 @@ export const StructuredTimeline: React.FC<Props> = ({
         {items.map((item) => {
           if (item.kind === 'event') {
             const top = Math.max(0, positionFor(item.minute) - CARD_VERTICAL_OFFSET);
+            const totalColumns = item.totalColumns ?? 1;
+            const column = item.column ?? 0;
+
+            // Calculate available width for events
+            const screenWidth = Dimensions.get('window').width;
+            const availableWidth = screenWidth - CARD_LEFT - LAYOUT_PAD;
+            const columnGap = 6;
+
+            // Calculate width and left position for Apple Calendar style
+            const columnWidth = (availableWidth - (totalColumns - 1) * columnGap) / totalColumns;
+            const leftPosition = CARD_LEFT + column * (columnWidth + columnGap);
+
+            const customStyle = totalColumns > 1 ? {
+              left: leftPosition,
+              right: undefined,
+              width: columnWidth,
+            } : {};
+
             return (
-              <View key={item.id} style={[styles.itemWrap, { top }]}> 
+              <View
+                key={item.id}
+                style={[
+                  styles.itemWrap,
+                  { top },
+                  customStyle,
+                ]}
+              >
                 <View style={styles.node} />
                 <TouchableOpacity
                   activeOpacity={0.9}
-                  onPress={() => onEditEvent?.(item.id)}
+                  onPress={readOnly ? undefined : () => onEditEvent?.(item.id)}
                   accessibilityRole="button"
                   accessibilityLabel={`Termin ${item.title}`}
-                  style={styles.eventCard}
+                  style={[
+                    styles.eventCard,
+                    totalColumns > 1 && { paddingHorizontal: 10 },
+                  ]}
                 >
                   <BlurView intensity={20} tint="light" style={StyleSheet.absoluteFill} />
                   <View
                     style={[StyleSheet.absoluteFill, styles.cardOverlay, { backgroundColor: GLASS_OVERLAY, borderColor: GLASS_BORDER }]}
                   />
-                  <View style={styles.cardRow}>
-                    <View style={[styles.cardIcon, styles.cardIconEvent]}>
-                      <IconSymbol name="calendar" size={14} color={PRIMARY as any} />
+                  <View style={[styles.cardRow, totalColumns > 1 && { gap: 8 }]}>
+                    <View style={[styles.cardIcon, styles.cardIconEvent, totalColumns > 1 && { width: 30, height: 30 }]}>
+                      <IconSymbol name="calendar" size={totalColumns > 1 ? 12 : 14} color={PRIMARY as any} />
                     </View>
                     <View style={styles.cardBody}>
-                      <ThemedText style={styles.eventTime}>{item.subtitle}</ThemedText>
-                      <ThemedText style={styles.itemTitle}>{item.title}</ThemedText>
+                      <ThemedText style={[styles.itemTitle, totalColumns > 1 && { fontSize: 14 }]} numberOfLines={1}>
+                        {item.title}
+                      </ThemedText>
+                      <ThemedText style={[styles.eventTime, totalColumns > 1 && { fontSize: 10 }]} numberOfLines={1}>
+                        {item.subtitle}
+                      </ThemedText>
                     </View>
                   </View>
                 </TouchableOpacity>
@@ -219,10 +402,32 @@ export const StructuredTimeline: React.FC<Props> = ({
           }
 
           const top = Math.max(0, positionFor(item.minute) - CARD_VERTICAL_OFFSET);
+          const totalColumns = item.totalColumns ?? 1;
+          const column = item.column ?? 0;
+
+          // Calculate available width for todos (same as events)
+          const screenWidth = Dimensions.get('window').width;
+          const availableWidth = screenWidth - CARD_LEFT - LAYOUT_PAD;
+          const columnGap = 6;
+
+          // Calculate width and left position for Apple Calendar style
+          const columnWidth = (availableWidth - (totalColumns - 1) * columnGap) / totalColumns;
+          const leftPosition = CARD_LEFT + column * (columnWidth + columnGap);
+
+          const customStyle = totalColumns > 1 ? {
+            left: leftPosition,
+            right: undefined,
+            width: columnWidth,
+          } : {};
+
           const iconName: IconSymbolName = item.completed
             ? 'checklist'
             : item.assignee === 'partner'
             ? 'person.2.fill'
+            : item.assignee === 'family'
+            ? 'house.fill'
+            : item.assignee === 'child'
+            ? 'heart.fill'
             : 'person.fill';
           const iconColor = item.completed || item.assignee === 'partner' ? '#fff' : PRIMARY;
           const iconWrapperStyle = item.completed
@@ -231,31 +436,43 @@ export const StructuredTimeline: React.FC<Props> = ({
             ? styles.cardIconPartner
             : styles.cardIconMe;
 
+          // Hide icon when todos are side-by-side
+          const showIcon = totalColumns === 1;
+
           return (
-            <View key={item.id} style={[styles.itemWrap, { top }]}> 
+            <View key={item.id} style={[styles.itemWrap, { top }, customStyle]}>
               <View style={styles.node} />
               <View style={styles.todoCard}>
                 <BlurView intensity={18} tint="light" style={StyleSheet.absoluteFill} />
                 <View
                   style={[StyleSheet.absoluteFill, styles.cardOverlay, { backgroundColor: GLASS_OVERLAY, borderColor: GLASS_BORDER }]}
                 />
-                <View style={styles.cardRow}>
-                  <View style={[styles.cardIcon, iconWrapperStyle]}>
-                    <IconSymbol name={iconName} size={14} color={iconColor as any} />
-                  </View>
+                <View style={[styles.cardRow, !showIcon && { gap: 0 }]}>
+                  {showIcon && (
+                    <View style={[styles.cardIcon, iconWrapperStyle]}>
+                      <IconSymbol name={iconName} size={14} color={iconColor as any} />
+                    </View>
+                  )}
                   <View style={styles.cardBody}>
                     <SwipeableListItem
                       id={item.id}
                       title={item.title}
                       type="todo"
                       completed={item.completed}
-                      onComplete={() => onToggleTodo(item.id)}
-                      onMoveTomorrow={() => onMoveTomorrow(item.id)}
-                      onPress={() => onEditTodo?.(item.id)}
+                      onComplete={readOnly ? undefined : () => onToggleTodo(item.id)}
+                      onMoveTomorrow={readOnly ? undefined : () => onMoveTomorrow(item.id)}
+                      onDelete={readOnly ? undefined : onDelete}
+                      onPress={readOnly ? undefined : () => onEditTodo?.(item.id)}
+                      onLongPress={readOnly ? () => {} : undefined}
                       showLeadingCheckbox={false}
                       trailingCheckbox
-                      style={styles.todoContent}
+                      style={[
+                        styles.todoContent,
+                        !showIcon && { paddingLeft: 4, paddingRight: 0 }
+                      ]}
                       subtitle={item.timeLabel}
+                      titleStyle={!showIcon ? { fontSize: 13 } : undefined}
+                      subtitleStyle={!showIcon ? { fontSize: 10 } : undefined}
                     />
                   </View>
                 </View>
@@ -288,14 +505,21 @@ const styles = StyleSheet.create({
   },
   hourLabel: {
     position: 'absolute',
-    left: LAYOUT_PAD,
+    left: LAYOUT_PAD - 6,
     zIndex: 2,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    backgroundColor: 'transparent',
   },
   hourText: {
     fontSize: 11,
-    opacity: 0.45,
+    opacity: 0.9,
     fontVariant: ['tabular-nums'] as any,
     color: TEXT_PRIMARY,
+    fontWeight: '700',
+    textShadowColor: 'rgba(255,255,255,0.65)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 6,
   },
   line: {
     position: 'absolute',
@@ -382,7 +606,7 @@ const styles = StyleSheet.create({
   eventTime: {
     fontSize: 12,
     opacity: 0.7,
-    marginBottom: 4,
+    marginTop: 4,
     fontVariant: ['tabular-nums'] as any,
     color: TEXT_PRIMARY,
   },

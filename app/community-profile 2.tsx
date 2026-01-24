@@ -299,14 +299,14 @@ export default function CommunityProfileScreen() {
         style={styles.userItem}
         onPress={() => router.push(`/profile/${item.id}` as any)}
       >
-        <View style={[styles.userAvatar, { backgroundColor: roleInfo.color }]}>
+        <View style={[styles.userAvatar, { backgroundColor: roleInfo.chipBg }]}>
           <IconSymbol name={roleInfo.icon as any} size={24} color="#FFFFFF" />
         </View>
         <View style={styles.userInfo}>
           <ThemedText style={styles.userNameItem}>
             {item.first_name} {item.last_name}
           </ThemedText>
-          <View style={[styles.userRoleTag, { backgroundColor: roleInfo.color }]}>
+          <View style={[styles.userRoleTag, { backgroundColor: roleInfo.chipBg }]}>
             <ThemedText style={styles.userRoleText}>{roleInfo.label}</ThemedText>
           </View>
         </View>

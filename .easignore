@@ -1,0 +1,11 @@
+node_modules/
+.expo/
+dist/
+dist 6/
+web-build/
+ios/Pods/
+ios/build/
+android/app/build/
+android/.gradle/
+node_local/
+.expo-shared/

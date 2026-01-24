@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedBackground } from '@/components/ThemedBackground';
@@ -11,12 +11,51 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 export default function Callback() {
   const router = useRouter();
   const [status, setStatus] = useState('Bestätigung wird verarbeitet...');
+  const searchParams = useLocalSearchParams();
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
+
+  const code = useMemo(() => {
+    const raw = searchParams.code;
+    return Array.isArray(raw) ? raw[0] : raw;
+  }, [searchParams.code]);
+
+  const type = useMemo(() => {
+    const raw = searchParams.type;
+    return Array.isArray(raw) ? raw[0] : raw;
+  }, [searchParams.type]);
 
   useEffect(() => {
     const handleAuthCallback = async () => {
       try {
+        // PKCE: Code aus Deep Link gegen Session tauschen (z.B. signup/recovery)
+        if (code) {
+          setStatus('Link wird verarbeitet...');
+          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+          if (exchangeError) {
+            console.error('Auth code exchange error:', exchangeError);
+            setStatus('Fehler bei der Bestätigung');
+            Alert.alert(
+              'Bestätigung fehlgeschlagen',
+              'Der Link ist ungültig oder abgelaufen. Bitte fordere ihn erneut an.',
+              [
+                {
+                  text: 'Zurück zum Login',
+                  onPress: () => router.replace('/(auth)/login'),
+                },
+              ],
+            );
+            return;
+          }
+        }
+
+        // Recovery-Link: direkt zur Passwort-Änderung weiterleiten
+        if (type === 'recovery') {
+          setStatus('Passwort-Reset wird vorbereitet...');
+          router.replace('/auth/reset-password' as any);
+          return;
+        }
+
         // Prüfen des aktuellen Auth-Status
         const { data: { session }, error } = await supabase.auth.getSession();
         
@@ -75,24 +114,9 @@ export default function Callback() {
       }
     };
 
-    // Auth State Listener
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log('Auth state changed:', event, session?.user?.email_confirmed_at);
-      
-      if (event === 'SIGNED_IN' && session?.user?.email_confirmed_at) {
-        handleAuthCallback();
-      } else if (event === 'TOKEN_REFRESHED') {
-        handleAuthCallback();
-      }
-    });
-
     // Initial check
     handleAuthCallback();
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, [router]);
+  }, [code, router, type]);
 
   return (
     <ThemedBackground style={styles.backgroundImage} resizeMode="repeat">

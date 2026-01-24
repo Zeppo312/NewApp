@@ -10,6 +10,23 @@
  * @returns {ExpoConfig}
  */
 module.exports = function({ config }) {
+  const addPlugin = (plugins, plugin) => {
+    const pluginName = Array.isArray(plugin) ? plugin[0] : plugin;
+    const exists = plugins.some((item) => (Array.isArray(item) ? item[0] : item) === pluginName);
+    if (!exists) plugins.push(plugin);
+  };
+
+  const plugins = [...(config.plugins || [])];
+
+  addPlugin(plugins, [
+    './plugins/withRevenueCat',
+    {
+      iosApiKey: process.env.EXPO_PUBLIC_RC_IOS_KEY,
+      androidApiKey: process.env.EXPO_PUBLIC_RC_ANDROID_KEY,
+    },
+  ]);
+  addPlugin(plugins, 'expo-task-manager');
+
   // Konfiguration für Updates
   const updatedConfig = {
     ...config,
@@ -31,10 +48,7 @@ module.exports = function({ config }) {
       }
     },
     // Plugins konfigurieren
-    plugins: [
-      ...(config.plugins || []),
-      "expo-task-manager"
-    ],
+    plugins,
     // iOS-spezifische Konfiguration 
     ios: {
       ...config.ios,

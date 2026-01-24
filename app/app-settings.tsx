@@ -2,26 +2,37 @@ import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, SafeAreaView, StatusBar, TouchableOpacity, ScrollView, Switch, Alert, ActivityIndicator } from 'react-native';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
-import { useTheme } from '@/contexts/ThemeContext';
 import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useRouter, Stack } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { getAppSettings, saveAppSettings, AppSettings } from '@/lib/supabase';
+import { exportUserData } from '@/lib/dataExport';
+import { deleteUserAccount, deleteUserData } from '@/lib/profile';
 import Header from '@/components/Header';
 import { LiquidGlassCard, GLASS_OVERLAY, LAYOUT_PAD } from '@/constants/DesignGuide';
+
+// Admin emails - nur diese User sehen Debug Tools
+const ADMIN_EMAILS = [
+  'jan.zepp1999@gmail.com',
+  'anyhelptoolate@gmail.com',
+];
 
 export default function AppSettingsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
 
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [isDeletingData, setIsDeletingData] = useState(false);
+
+  // Check if current user is admin
+  const isAdmin = user?.email ? ADMIN_EMAILS.includes(user.email) : false;
 
   // no extra width logic; match "Mehr" padding rhythm via ScrollView
 
@@ -84,10 +95,106 @@ export default function AppSettingsScreen() {
     await handleSaveSettings({ notifications_enabled: value });
   };
 
-  const { themePreference, setThemePreference } = useTheme();
+  const handleExportData = async () => {
+    if (!user) {
+      Alert.alert('Fehler', 'Bitte melde dich erneut an.');
+      return;
+    }
 
-  const handleChangeTheme = async (theme: 'light' | 'dark' | 'system') => {
-    await setThemePreference(theme);
+    try {
+      setIsExporting(true);
+      const result = await exportUserData('pdf');
+
+      if (!result.success) {
+        Alert.alert('Fehler', result.error ?? 'Datenexport fehlgeschlagen.');
+        return;
+      }
+
+      const totalRecords = result.summary
+        ? Object.values(result.summary).reduce((sum, val) => sum + (typeof val === 'number' ? val : 0), 0)
+        : undefined;
+      const sizeKb = result.bytesWritten ? (result.bytesWritten / 1024).toFixed(1) : null;
+      const warningText = result.warnings && result.warnings.length
+        ? `\n\nHinweise:\n- ${result.warnings.slice(0, 3).join('\n- ')}`
+        : '';
+      const locationHint = result.shared || !result.fileUri
+        ? ''
+        : `\n\nDatei gespeichert unter:\n${result.fileUri}`;
+
+      Alert.alert(
+        'Export abgeschlossen',
+        `Deine Daten wurden als PDF vorbereitet${totalRecords !== undefined ? ` (${totalRecords} Einträge)` : ''}${sizeKb ? `, ca. ${sizeKb} KB` : ''}.${locationHint}${warningText}`
+      );
+    } catch (err) {
+      console.error('Failed to export data:', err);
+      Alert.alert('Fehler', 'Datenexport fehlgeschlagen. Bitte versuche es erneut.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const runDeleteDataFlow = async (deleteAccount: boolean) => {
+    if (!user) {
+      Alert.alert('Fehler', 'Bitte melde dich erneut an.');
+      return;
+    }
+
+    try {
+      setIsDeletingData(true);
+      const { error } = deleteAccount ? await deleteUserAccount() : await deleteUserData();
+      if (error) throw error;
+
+      if (deleteAccount) {
+        Alert.alert(
+          'Konto gelöscht',
+          'Dein Profil und Konto wurden gelöscht. Du wirst jetzt abgemeldet.',
+          [
+            {
+              text: 'OK',
+              onPress: async () => {
+                await signOut();
+                router.replace('/(auth)/login');
+              },
+            },
+          ],
+        );
+        return;
+      }
+
+      await loadSettings();
+      Alert.alert('Daten gelöscht', 'Deine gespeicherten Daten wurden entfernt.');
+    } catch (err: any) {
+      console.error('Failed to delete user data:', err);
+      Alert.alert('Fehler', err?.message || 'Daten konnten nicht gelöscht werden.');
+    } finally {
+      setIsDeletingData(false);
+    }
+  };
+
+  const handleDeleteDataRequest = () => {
+    if (isDeletingData) return;
+    Alert.alert(
+      'Daten löschen',
+      'Möchtest du wirklich alle deine Daten löschen? Diese Aktion kann nicht rückgängig gemacht werden.',
+      [
+        { text: 'Abbrechen', style: 'cancel' },
+        {
+          text: 'Weiter',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert(
+              'Konto ebenfalls löschen?',
+              'Soll dein Konto auch dauerhaft gelöscht werden?',
+              [
+                { text: 'Abbrechen', style: 'cancel' },
+                { text: 'Nur Daten löschen', style: 'destructive', onPress: () => runDeleteDataFlow(false) },
+                { text: 'Daten + Konto löschen', style: 'destructive', onPress: () => runDeleteDataFlow(true) },
+              ],
+            );
+          },
+        },
+      ],
+    );
   };
 
   return (
@@ -99,7 +206,7 @@ export default function AppSettingsScreen() {
           <View style={styles.container}>
             <Header
               title="App-Einstellungen"
-              subtitle="Benachrichtigungen, Erscheinungsbild und mehr"
+              subtitle="Benachrichtigungen und mehr"
               showBackButton
               onBackPress={() => router.push('/more')}
             />
@@ -113,59 +220,6 @@ export default function AppSettingsScreen() {
                 <View style={styles.contentWrap}>
                 {settings ? (
                 <>
-                  {/* Erscheinungsbild-Einstellungen */}
-                  <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
-                    <ThemedText style={styles.sectionTitle}>Erscheinungsbild</ThemedText>
-
-                    <TouchableOpacity style={styles.rowItem} onPress={() => handleChangeTheme('light')} disabled={isSaving}>
-                      <View style={styles.rowIcon}>
-                        <IconSymbol name="sun.max" size={24} color={theme.accent} />
-                      </View>
-                      <View style={styles.rowContent}>
-                        <ThemedText style={styles.rowTitle}>Helles Design</ThemedText>
-                      </View>
-                      <View style={styles.trailing}>
-                        <View style={[styles.themeButton, themePreference === 'light' && styles.selectedThemeButton]}>
-                          <ThemedText style={[styles.themeButtonText, themePreference === 'light' && styles.selectedThemeButtonText]}>
-                            {themePreference === 'light' && '✓'}
-                          </ThemedText>
-                        </View>
-                      </View>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity style={styles.rowItem} onPress={() => handleChangeTheme('dark')} disabled={isSaving}>
-                      <View style={styles.rowIcon}>
-                        <IconSymbol name="moon" size={24} color={theme.accent} />
-                      </View>
-                      <View style={styles.rowContent}>
-                        <ThemedText style={styles.rowTitle}>Dunkles Design</ThemedText>
-                      </View>
-                      <View style={styles.trailing}>
-                        <View style={[styles.themeButton, themePreference === 'dark' && styles.selectedThemeButton]}>
-                          <ThemedText style={[styles.themeButtonText, themePreference === 'dark' && styles.selectedThemeButtonText]}>
-                            {themePreference === 'dark' && '✓'}
-                          </ThemedText>
-                        </View>
-                      </View>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity style={styles.rowItem} onPress={() => handleChangeTheme('system')} disabled={isSaving}>
-                      <View style={styles.rowIcon}>
-                        <IconSymbol name="gearshape" size={24} color={theme.accent} />
-                      </View>
-                      <View style={styles.rowContent}>
-                        <ThemedText style={styles.rowTitle}>Systemeinstellung</ThemedText>
-                      </View>
-                      <View style={styles.trailing}>
-                        <View style={[styles.themeButton, themePreference === 'system' && styles.selectedThemeButton]}>
-                          <ThemedText style={[styles.themeButtonText, themePreference === 'system' && styles.selectedThemeButtonText]}>
-                            {themePreference === 'system' && '✓'}
-                          </ThemedText>
-                        </View>
-                      </View>
-                    </TouchableOpacity>
-                  </LiquidGlassCard>
-
                   {/* Benachrichtigungen-Einstellungen */}
                   <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
                     <ThemedText style={styles.sectionTitle}>Benachrichtigungen</ThemedText>
@@ -232,7 +286,11 @@ export default function AppSettingsScreen() {
                   <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
                     <ThemedText style={styles.sectionTitle}>Daten verwalten</ThemedText>
 
-                    <TouchableOpacity style={styles.rowItem}>
+                    <TouchableOpacity
+                      style={[styles.rowItem, isExporting && styles.disabledRow]}
+                      onPress={handleExportData}
+                      disabled={isExporting}
+                    >
                       <View style={styles.rowIcon}>
                         <IconSymbol name="arrow.down.doc" size={24} color={theme.accent} />
                       </View>
@@ -240,28 +298,19 @@ export default function AppSettingsScreen() {
                         <ThemedText style={styles.rowTitle}>Daten exportieren</ThemedText>
                         <ThemedText style={styles.rowDescription}>Exportiere deine Daten als Backup</ThemedText>
                       </View>
-                      <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
+                      <View style={styles.trailing}>
+                        {isExporting ? (
+                          <ActivityIndicator size="small" color={theme.accent} />
+                        ) : (
+                          <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
+                        )}
+                      </View>
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                      style={styles.rowItem}
-                      onPress={() => {
-                        Alert.alert(
-                          'Daten löschen',
-                          'Möchtest du wirklich alle deine Daten löschen? Diese Aktion kann nicht rückgängig gemacht werden.',
-                          [
-                            { text: 'Abbrechen', style: 'cancel' },
-                            {
-                              text: 'Löschen',
-                              style: 'destructive',
-                              onPress: () => {
-                                // Hier würde die Funktion zum Löschen aller Daten aufgerufen werden
-                                Alert.alert('Info', 'Diese Funktion ist noch nicht implementiert.');
-                              }
-                            }
-                          ]
-                        );
-                      }}
+                      style={[styles.rowItem, isDeletingData && styles.disabledRow]}
+                      onPress={handleDeleteDataRequest}
+                      disabled={isDeletingData}
                     >
                       <View style={styles.rowIcon}>
                         <IconSymbol name="trash" size={24} color="#FF6B6B" />
@@ -270,9 +319,38 @@ export default function AppSettingsScreen() {
                         <ThemedText style={[styles.rowTitle, styles.dangerText]}>Alle Daten löschen</ThemedText>
                         <ThemedText style={styles.rowDescription}>Lösche alle deine gespeicherten Daten</ThemedText>
                       </View>
-                      <IconSymbol name="chevron.right" size={20} color="#FF6B6B" />
+                      <View style={styles.trailing}>
+                        {isDeletingData ? (
+                          <ActivityIndicator size="small" color="#FF6B6B" />
+                        ) : (
+                          <IconSymbol name="chevron.right" size={20} color="#FF6B6B" />
+                        )}
+                      </View>
                     </TouchableOpacity>
                   </LiquidGlassCard>
+
+                  {/* Debug Tools - nur für Admins */}
+                  {isAdmin && (
+                    <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
+                      <ThemedText style={styles.sectionTitle}>🐛 Debug Tools (Admin)</ThemedText>
+
+                      <TouchableOpacity
+                        style={styles.rowItem}
+                        onPress={() => router.push('/debug-notifications')}
+                      >
+                        <View style={styles.rowIcon}>
+                          <ThemedText style={{ fontSize: 24 }}>🔔</ThemedText>
+                        </View>
+                        <View style={styles.rowContent}>
+                          <ThemedText style={styles.rowTitle}>Debug Notifications</ThemedText>
+                          <ThemedText style={styles.rowDescription}>Benachrichtigungen testen und debuggen</ThemedText>
+                        </View>
+                        <View style={styles.trailing}>
+                          <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
+                        </View>
+                      </TouchableOpacity>
+                    </LiquidGlassCard>
+                  )}
                 </>
               ) : (
                 <LiquidGlassCard style={[styles.sectionCard, styles.errorContainerGlass]} intensity={26} overlayColor={GLASS_OVERLAY}>
@@ -383,6 +461,9 @@ const styles = StyleSheet.create({
   },
   dangerItem: {
     borderBottomWidth: 0,
+  },
+  disabledRow: {
+    opacity: 0.6,
   },
   dangerText: {
     color: '#FF6B6B',

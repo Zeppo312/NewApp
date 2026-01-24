@@ -12,6 +12,7 @@ Speichert grundlegende Benutzerinformationen.
 | id | UUID | Primärschlüssel, verknüpft mit auth.users |
 | first_name | TEXT | Vorname des Benutzers |
 | last_name | TEXT | Nachname des Benutzers |
+| username | TEXT | Öffentlicher Community-Name (optional & eindeutig) |
 | avatar_url | TEXT | URL zum Profilbild |
 | created_at | TIMESTAMP | Erstellungszeitpunkt |
 | updated_at | TIMESTAMP | Letzter Aktualisierungszeitpunkt |
