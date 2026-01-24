@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase';
+import { supabase, getCachedUser } from '@/lib/supabase';
 
 const WIKI_BUCKET = 'community-images';
 

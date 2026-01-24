@@ -11,7 +11,7 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { LineChart } from 'react-native-chart-kit';
 import { Dimensions } from 'react-native';
 import { getWeightEntries, deleteWeightEntry, WeightEntry, WeightSubject, saveWeightEntry } from '@/lib/weight';
-import { supabase } from '@/lib/supabase';
+import { supabase, getCachedUser } from '@/lib/supabase';
 import { Stack } from 'expo-router';
 import Header from '@/components/Header';
 import { LiquidGlassCard, GLASS_OVERLAY, LAYOUT_PAD, SECTION_GAP_TOP, SECTION_GAP_BOTTOM } from '@/constants/DesignGuide';
