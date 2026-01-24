@@ -591,13 +591,6 @@ export default function ProfileScreen() {
                       onFollowStatusChange={handleFollowStatusChange}
                       style={styles.followButton}
                     />
-                    <TouchableOpacity 
-                      style={[styles.dmButton, { backgroundColor: theme.accent }]}
-                      onPress={() => router.push(`/chat/${profile.id}` as any)}
-                    >
-                      <IconSymbol name="paperplane.fill" size={18} color="#FFFFFF" />
-                      <ThemedText style={styles.dmButtonText}>Direktnachricht</ThemedText>
-                    </TouchableOpacity>
                   </View>
                 )}
 

@@ -130,6 +130,24 @@ const minutesToHMM = (mins: number) => {
   return `${h}h ${m}m`;
 };
 
+const toNumber = (value: unknown, fallback = 0): number => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return fallback;
+};
+
+const toOptionalNumber = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+};
+
 const StatusMetricsBar = ({
   stats,
   selectedDate,
@@ -144,8 +162,8 @@ const StatusMetricsBar = ({
 
   const getConfidenceLevel = (): 'high' | 'medium' | 'low' => {
     if (!sleepPrediction || !sleepPrediction.debug) return 'low';
-    const historicalSamples = sleepPrediction.debug.historicalSampleCount ?? 0;
-    const personalizationSamples = sleepPrediction.debug.personalizationSampleCount ?? 0;
+    const historicalSamples = toNumber(sleepPrediction.debug.historicalSampleCount, 0);
+    const personalizationSamples = toNumber(sleepPrediction.debug.personalizationSampleCount, 0);
     const totalSamples = historicalSamples + personalizationSamples;
     if (historicalSamples >= 10 || totalSamples >= 12) return 'high';
     if (historicalSamples >= 5 || totalSamples >= 6) return 'medium';
@@ -157,10 +175,10 @@ const StatusMetricsBar = ({
       return { emoji: '😌', label: 'entspannt', color: '#A8C4A2' };
     }
 
-    const windowMinutes = sleepPrediction.windowMinutes as number;
-    const minutesUntilWindow = sleepPrediction.debug.awakeSinceLastNap !== null
-      ? (windowMinutes - (sleepPrediction.debug.awakeSinceLastNap as number))
-      : windowMinutes;
+    const windowMinutes = sleepPrediction.windowMinutes;
+    const awakeSinceLastNap = toOptionalNumber(sleepPrediction.debug.awakeSinceLastNap);
+    const minutesUntilWindow =
+      awakeSinceLastNap !== null ? windowMinutes - awakeSinceLastNap : windowMinutes;
 
     if (minutesUntilWindow > 20) {
       return { emoji: '😌', label: 'entspannt', color: '#A8C4A2' };
@@ -180,27 +198,32 @@ const StatusMetricsBar = ({
   const getReasoningText = (): string => {
     if (!sleepPrediction || !sleepPrediction.debug) return 'Keine Vorhersage verfügbar';
 
-    const { lastNapDuration, targetNapDuration, sleepDebt, circadianHour, napDurationAdjustment, sleepDebtAdjustment } = sleepPrediction.debug;
+    const lastNapDuration = toOptionalNumber(sleepPrediction.debug.lastNapDuration);
+    const targetNapDuration = toOptionalNumber(sleepPrediction.debug.targetNapDuration);
+    const sleepDebt = toNumber(sleepPrediction.debug.sleepDebt, 0);
+    const circadianHour = toOptionalNumber(sleepPrediction.debug.circadianHour);
+    const napDurationAdjustment = toNumber(sleepPrediction.debug.napDurationAdjustment, 0);
+    const sleepDebtAdjustment = toNumber(sleepPrediction.debug.sleepDebtAdjustment, 0);
 
     const reasons: string[] = [];
 
-    if (lastNapDuration && targetNapDuration && Math.abs(napDurationAdjustment as number) > 5) {
-      if ((napDurationAdjustment as number) < -5) {
+    if (lastNapDuration !== null && targetNapDuration !== null && Math.abs(napDurationAdjustment) > 5) {
+      if (napDurationAdjustment < -5) {
         reasons.push('Letzter Nap war kurz');
-      } else if ((napDurationAdjustment as number) > 5) {
+      } else if (napDurationAdjustment > 5) {
         reasons.push('Letzter Nap war lang');
       }
     }
 
-    if (Math.abs(sleepDebt as number) > 30) {
-      if ((sleepDebtAdjustment as number) < -5) {
+    if (Math.abs(sleepDebt) > 30) {
+      if (sleepDebtAdjustment < -5) {
         reasons.push('Heute schon viel wach gewesen');
-      } else if ((sleepDebtAdjustment as number) > 5) {
+      } else if (sleepDebtAdjustment > 5) {
         reasons.push('Heute schon viel geschlafen');
       }
     }
 
-    if (circadianHour !== null && (circadianHour as number) >= 16) {
+    if (circadianHour !== null && circadianHour >= 16) {
       reasons.push('Nachmittags werden Babys schneller müde');
     }
 
@@ -242,12 +265,13 @@ const StatusMetricsBar = ({
   };
 
   const getBedtimeWarning = (): string | null => {
-    if (!sleepPrediction || !sleepPrediction.debug.anchorConstraintApplied) {
+    const anchorConstraintApplied = sleepPrediction?.debug?.anchorConstraintApplied === true;
+    if (!sleepPrediction || !anchorConstraintApplied) {
       return null;
     }
 
-    const { dynamicBedtimeGap } = sleepPrediction.debug;
-    if (!dynamicBedtimeGap || (dynamicBedtimeGap as number) < 90) {
+    const dynamicBedtimeGap = toNumber(sleepPrediction.debug.dynamicBedtimeGap, 0);
+    if (dynamicBedtimeGap < 90) {
       return null;
     }
 
@@ -255,12 +279,14 @@ const StatusMetricsBar = ({
   };
 
   const getHistoricalText = (): string | null => {
-    if (!sleepPrediction || !sleepPrediction.debug.historicalSampleCount) {
+    const historicalSampleCount = sleepPrediction
+      ? toNumber(sleepPrediction.debug.historicalSampleCount, 0)
+      : 0;
+    if (!sleepPrediction || historicalSampleCount <= 0) {
       return null;
     }
 
-    const { historicalSampleCount } = sleepPrediction.debug;
-    if ((historicalSampleCount as number) < 5) {
+    if (historicalSampleCount < 5) {
       return null;
     }
 
@@ -290,7 +316,9 @@ const StatusMetricsBar = ({
   const historicalText = getHistoricalText();
   const hintText = bedtimeWarning ?? 'Kein besonderer Hinweis';
   const historyText = historicalText ?? 'Noch zu wenig Daten für einen Trend';
-  const personalizationSamples = sleepPrediction?.debug?.personalizationSampleCount ?? 0;
+  const personalizationSamples = sleepPrediction
+    ? toNumber(sleepPrediction.debug.personalizationSampleCount, 0)
+    : 0;
   const hasPersonalization = personalizationSamples > 0;
   const confidenceLevel = sleepPrediction ? getConfidenceLevel() : null;
   const confidenceLabel =

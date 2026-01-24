@@ -370,11 +370,8 @@ export default function NotificationsScreen() {
           .eq('id', message.id);
       }
       
-      // Zum Chat navigieren
-      router.navigate({
-        pathname: "chat/[id]",
-        params: { id: message.sender_id }
-      } as any);
+      // Chat entfernt -> Profil des Absenders öffnen
+      router.push(`/profile/${message.sender_id}` as any);
     } catch (error) {
       console.error('Fehler beim Öffnen des Chats:', error);
     }
@@ -433,7 +430,7 @@ export default function NotificationsScreen() {
           styles.notificationItem,
           !item.is_read && !isFromCurrentUser && styles.unreadItem // Nur als ungelesen markieren, wenn es eine empfangene Nachricht ist
         ]}
-        onPress={() => router.push(`/chat/${chatPartnerId}` as any)}
+        onPress={() => router.push(`/profile/${chatPartnerId}` as any)}
       >
         <View style={styles.notificationIcon}>
           <IconSymbol name={iconName} size={24} color="#7D5A50" />
@@ -547,7 +544,7 @@ export default function NotificationsScreen() {
         router.push(`/profile/${item.reference_id}` as any);
       } else if (item.type === 'message') {
         console.log('Navigating to chat from notification click:', item.reference_id);
-        router.push(`/chat/${item.reference_id}` as any);
+        router.push(`/profile/${item.reference_id}` as any);
       } else {
         handleNotificationPress(item);
       }

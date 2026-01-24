@@ -149,8 +149,8 @@ export function navigateToNotificationTarget(type: string, referenceId: string) 
 
       // Community notification types
       case 'message':
-        // Öffne den Chat mit dieser Nachricht
-        router.push(`/chat/${referenceId}` as any);
+        // Chat entfernt -> gehe zur Benachrichtigungsübersicht
+        router.push('/notifications' as any);
         break;
 
       case 'like_post':

@@ -227,7 +227,6 @@ function RootLayoutNav() {
         <Stack.Screen name="diary-entries" />
         <Stack.Screen name="mini-wiki" />
         <Stack.Screen name="community" />
-        <Stack.Screen name="chat/[id]" />
         <Stack.Screen name="notifications" />
         <Stack.Screen name="paywall" />
         <Stack.Screen name="pregnancy-stats" />

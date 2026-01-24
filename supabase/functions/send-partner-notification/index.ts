@@ -1,10 +1,18 @@
 // Supabase Edge Function to send push notifications when partner activities are created
 // This function is triggered by a database webhook when a new partner_activity_notification is inserted
 
+// @ts-ignore - Deno edge function import.
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+// @ts-ignore - Deno edge function import.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
+
+declare const Deno: {
+  env: {
+    get: (key: string) => string | undefined;
+  };
+};
 
 interface NotificationPayload {
   type: 'INSERT';
@@ -104,7 +112,7 @@ const getNotificationContent = (
   }
 };
 
-serve(async (req) => {
+serve(async (req: Request) => {
   try {
     // Get the webhook payload
     const payload: NotificationPayload = await req.json();
@@ -230,7 +238,7 @@ serve(async (req) => {
     console.log(`📬 Sending notification: ${emoji} ${title} - ${body}`);
 
     // Send push notification to each token
-    const pushPromises = tokens.map((tokenRecord) =>
+    const pushPromises = tokens.map((tokenRecord: { token: string }) =>
       fetch(EXPO_PUSH_URL, {
         method: 'POST',
         headers: {
@@ -298,10 +306,11 @@ serve(async (req) => {
       }
     );
   } catch (error) {
-    console.error('❌ Function error:', error);
+    const err = error instanceof Error ? error : new Error(String(error));
+    console.error('❌ Function error:', err);
     return new Response(
       JSON.stringify({
-        error: error.message,
+        error: err.message,
       }),
       {
         headers: { 'Content-Type': 'application/json' },

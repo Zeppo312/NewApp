@@ -396,19 +396,6 @@ export default function ProfileScreen() {
                 </View>
               </View>
               
-              {/* Chat-Button für gegenseitige Follower */}
-              {mutualFollow && !isOwnProfile && (
-                <TouchableOpacity 
-                  style={[styles.chatButton, { backgroundColor: theme.accent }]}
-                  onPress={() => {
-                    // Zum Chat navigieren
-                    router.push(`/chat/${profile.id}` as any);
-                  }}
-                >
-                  <IconSymbol name="envelope.fill" size={20} color="#FFFFFF" />
-                  <Text style={styles.chatButtonText}>Nachricht senden</Text>
-                </TouchableOpacity>
-              )}
             </ThemedView>
 
             {/* Benutzerbeiträge */}
