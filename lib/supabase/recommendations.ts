@@ -1,4 +1,4 @@
-import { supabase } from '../supabase';
+import { supabase, getCachedUser } from '../supabase';
 
 export interface LottiRecommendation {
   id: string;

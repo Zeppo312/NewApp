@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView } fr
 import { usePartnerNotifications } from '@/hooks/usePartnerNotifications';
 import { pollPartnerActivities, getUnreadPartnerNotificationCount } from '@/lib/partnerNotificationService';
 import { getPartnerId } from '@/lib/accountLinks';
-import { supabase } from '@/lib/supabase';
+import { supabase, getCachedUser } from '@/lib/supabase';
 
 export default function DebugNotificationsScreen() {
   const [logs, setLogs] = useState<string[]>([]);

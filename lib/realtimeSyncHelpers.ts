@@ -1,4 +1,4 @@
-import { supabase } from "./supabase";
+import { supabase, getCachedUser } from "./supabase";
 import { RealtimeChannel } from '@supabase/supabase-js';
 
 // Globale Variablen für Realtime-Abonnements

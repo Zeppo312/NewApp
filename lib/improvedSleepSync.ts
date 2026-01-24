@@ -1,4 +1,4 @@
-import { supabase } from "./supabase";
+import { supabase, getCachedUser } from "./supabase";
 import { SleepEntry, SleepQuality, ConnectedUser } from "./sleepData";
 import { setupSleepEntriesRealtime, cleanupSleepEntriesRealtime } from "./realtimeSyncHelpers";
 
