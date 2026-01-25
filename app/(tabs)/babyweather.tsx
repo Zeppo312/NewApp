@@ -60,6 +60,10 @@ const getClothingImage = (imageName: string | null) => {
       return require('@/assets/images/Regenjacke.png');
     case 'Schal.png':
       return require('@/assets/images/Schal.png');
+    case 'Halstuch.png':
+      return require('@/assets/images/Halstuch.png');
+    case 'Fuesslinge.png':
+      return require('@/assets/images/Fuesslinge.png');
     case 'Kinderwagendecke.png':
       return require('@/assets/images/Kinderwagendecke.png');
     
@@ -153,11 +157,11 @@ const clothingCatalogue: Record<ClothingCategory, ClothingItem[]> = {
     { id: '11', name: 'Socken', image: 'Socken.png', recommended: false, category: 'accessory', tempRange: { min: -20, max: 20 } },
     { id: '12', name: 'Handschuhe', image: 'Handschuhe.png', recommended: false, category: 'accessory', tempRange: { min: -20, max: 10 } },
     { id: '20', name: 'Sonnenhut', image: null, recommended: false, category: 'accessory', tempRange: { min: 20, max: 40 } },
-    { id: '21', name: 'Halstuch', image: null, recommended: false, category: 'accessory', tempRange: { min: 8, max: 20 } },
+    { id: '21', name: 'Halstuch', image: 'Halstuch.png', recommended: false, category: 'accessory', tempRange: { min: 8, max: 20 } },
     { id: '22', name: 'Schal', image: 'Schal.png', recommended: false, category: 'accessory', tempRange: { min: -20, max: 10 } },
     { id: '23', name: 'Schuhe', image: null, recommended: false, category: 'accessory', tempRange: { min: -10, max: 20 } },
     { id: '24', name: 'Kinderwagen-Decke', image: 'Kinderwagendecke.png', recommended: false, category: 'accessory', tempRange: { min: -20, max: 15 } },
-    { id: '27', name: 'Füßlinge', image: null, recommended: false, category: 'accessory', tempRange: { min: -20, max: 15 } },
+    { id: '27', name: 'Füßlinge', image: 'Fuesslinge.png', recommended: false, category: 'accessory', tempRange: { min: -20, max: 15 } },
   ],
   sleep: [
     { id: '13', name: 'Schlafsack 0.5 TOG', image: 'Schlafsack.png', recommended: false, category: 'sleep', tempRange: { min: 24, max: 27 } },
@@ -570,7 +574,7 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
               {metaCards.map((card, index) => (
                 <LiquidGlassCard key={index} style={styles.metaCard} intensity={26}>
                   <View style={styles.metaCardHeader}>
-                    <IconSymbol name={card.icon} size={22} color={theme.accent} />
+                    <IconSymbol name={card.icon} size={22} color={theme.accent} style={styles.metaCardIcon} />
                     <ThemedText style={styles.metaCardTitle}>{card.title}</ThemedText>
                   </View>
                   <ThemedText style={styles.metaCardContent}>{card.content}</ThemedText>
@@ -1315,7 +1319,7 @@ export default function BabyWeatherScreen() {
   const renderMetaCard = ({ item }: { item: {title: string, content: string, icon: any} }) => (
     <LiquidGlassCard style={styles.metaCard} intensity={26}>
       <View style={styles.metaCardHeader}>
-        <IconSymbol name={item.icon} size={22} color={theme.accent} />
+        <IconSymbol name={item.icon} size={22} color={theme.accent} style={styles.metaCardIcon} />
         <ThemedText style={styles.metaCardTitle}>{item.title}</ThemedText>
       </View>
       <ThemedText style={styles.metaCardContent}>{item.content}</ThemedText>
@@ -2040,17 +2044,21 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   metaCardHeader: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     alignItems: 'center',
-    marginBottom: 8,
+    justifyContent: 'center',
+    marginBottom: 12,
     paddingHorizontal: 2,
   },
+  metaCardIcon: {
+    marginBottom: 6,
+  },
   metaCardTitle: {
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: '700',
     color: '#7D5A50',
-    marginLeft: 8,
-    flexShrink: 1,
+    textAlign: 'center',
+    lineHeight: 22,
   },
   metaCardContent: {
     fontSize: 13,
