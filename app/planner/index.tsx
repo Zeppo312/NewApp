@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Header from '@/components/Header';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { ThemedText } from '@/components/ThemedText';
+import { IconSymbol } from '@/components/ui/IconSymbol';
 import GreetingCard from '@/components/planner/GreetingCard';
 import TodayOverviewCard from '@/components/planner/TodayOverviewCard';
 import { FloatingAddButton } from '@/components/planner/FloatingAddButton';
@@ -378,7 +379,7 @@ export default function PlannerScreen() {
         const { data: itemRows, error: itemError } = await supabase
           .from('planner_items')
           .select(
-            'id,user_id,day_id,entry_type,title,completed,assignee,baby_id,notes,location,due_at,start_at,end_at,created_at,updated_at,planner_days!inner(day)',
+            'id,user_id,day_id,entry_type,title,completed,assignee,baby_id,notes,location,due_at,start_at,end_at,is_all_day,created_at,updated_at,planner_days!inner(day)',
           )
           .in('user_id', ownerIds)
           .gte('planner_days.day', startIso)
@@ -416,7 +417,7 @@ export default function PlannerScreen() {
 
           if (item.entry_type === 'event') {
             assignBlock(dayIso, item, 'event');
-          } else if (item.entry_type === 'todo' || item.entry_type === 'note') {
+          } else if (item.entry_type === 'todo') {
             assignBlock(dayIso, item, 'todo');
           }
         });
@@ -575,7 +576,7 @@ export default function PlannerScreen() {
             notes: payload.notes,
             assignee: payload.assignee,
           });
-        } else if (payload.type === 'todo' || payload.type === 'note') {
+        } else if (payload.type === 'todo') {
           const dueIso = payload.dueAt === null ? null : payload.dueAt ? payload.dueAt.toISOString() : undefined;
           convertPlannerItem(payload.id, payload.type, {
             title: payload.title,
@@ -595,9 +596,10 @@ export default function PlannerScreen() {
             location: payload.location,
             assignee: payload.assignee,
             babyId: payload.babyId,
+            isAllDay: payload.isAllDay,
           });
         } else {
-          addEvent(payload.title, startIso, endIso, payload.location, payload.assignee ?? 'me', payload.babyId, undefined, payload.ownerId);
+          addEvent(payload.title, startIso, endIso, payload.location, payload.assignee ?? 'me', payload.babyId, undefined, payload.ownerId, payload.isAllDay);
         }
       } else if (payload.type === 'todo') {
         const dueIso = payload.dueAt === null ? null : payload.dueAt ? payload.dueAt.toISOString() : undefined;
@@ -611,17 +613,6 @@ export default function PlannerScreen() {
           });
         } else {
           addTodo(payload.title, undefined, dueIso, payload.notes, payload.assignee, payload.babyId, payload.ownerId);
-        }
-      } else if (payload.type === 'note') {
-        const dueIso = payload.dueAt === null ? null : payload.dueAt ? payload.dueAt.toISOString() : undefined;
-        if (payload.id) {
-          updateTodo(payload.id, {
-            title: payload.title,
-            dueAt: dueIso,
-            notes: payload.notes,
-          });
-        } else {
-          addTodo(payload.title, undefined, dueIso, payload.notes, 'me', payload.ownerId);
         }
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -829,6 +820,7 @@ export default function PlannerScreen() {
                         ownerId: ev.user_id,
                         assignee: ev.assignee,
                         babyId: ev.baby_id,
+                        isAllDay: !!ev.is_all_day,
                         type: 'event' as const,
                       })),
                       ...todos.map((todo: any) => ({
@@ -892,6 +884,7 @@ export default function PlannerScreen() {
                         <View style={styles.weekItems}>
                           <View style={styles.weekTimelineLine} />
                           {combined.map((item) => {
+                            const isAllDayEvent = item.type === 'event' && item.isAllDay;
                             const timeLabel = item.time
                               ? new Intl.DateTimeFormat('de-DE', {
                                   hour: '2-digit',
@@ -909,17 +902,36 @@ export default function PlannerScreen() {
                                   ]}
                                 />
                                 <View style={styles.timelineContent}>
-                                  <View style={styles.timelineMetaRow}>
-                                    <Text style={styles.timelineTime}>{timeLabel}</Text>
-                                    {showDisplayLabel && (
-                                      <View style={styles.ownerPill}>
-                                        <Text style={styles.ownerPillText}>{displayLabel}</Text>
+                                  {isAllDayEvent ? (
+                                    <>
+                                      <View style={styles.timelineTitleRow}>
+                                        <IconSymbol name="calendar" size={12} color={PRIMARY as any} />
+                                        <Text numberOfLines={2} style={[styles.timelineTitle, styles.timelineTitleRowText]}>
+                                          {item.title}
+                                        </Text>
+                                        {showDisplayLabel && (
+                                          <View style={styles.ownerPill}>
+                                            <Text style={styles.ownerPillText}>{displayLabel}</Text>
+                                          </View>
+                                        )}
                                       </View>
-                                    )}
-                                  </View>
-                                  <Text numberOfLines={2} style={styles.timelineTitle}>
-                                    {item.title}
-                                  </Text>
+                                      <Text style={styles.timelineAllDayLabel}>Ganztägig</Text>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <View style={styles.timelineMetaRow}>
+                                        <Text style={styles.timelineTime}>{timeLabel}</Text>
+                                        {showDisplayLabel && (
+                                          <View style={styles.ownerPill}>
+                                            <Text style={styles.ownerPillText}>{displayLabel}</Text>
+                                          </View>
+                                        )}
+                                      </View>
+                                      <Text numberOfLines={2} style={styles.timelineTitle}>
+                                        {item.title}
+                                      </Text>
+                                    </>
+                                  )}
                                 </View>
                               </View>
                             );
@@ -1264,7 +1276,17 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 8,
   },
+  timelineTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   timelineTime: {
+    fontSize: 11,
+    color: TEXT_PRIMARY,
+    opacity: 0.7,
+  },
+  timelineAllDayLabel: {
     fontSize: 11,
     color: TEXT_PRIMARY,
     opacity: 0.7,
@@ -1287,6 +1309,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: TEXT_PRIMARY,
     fontWeight: '700',
+  },
+  timelineTitleRowText: {
+    flex: 1,
   },
   weekCellWeekday: { fontSize: 12, color: TEXT_PRIMARY, opacity: 0.8 },
   weekCellWeekdayActive: { color: PRIMARY, fontWeight: '700', opacity: 1 },

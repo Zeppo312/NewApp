@@ -144,6 +144,7 @@ const clothingCatalogue: Record<ClothingCategory, ClothingItem[]> = {
   outer: [
     { id: '8', name: 'Jacke', image: 'Jacke.png', recommended: false, category: 'outer', tempRange: { min: -20, max: 10 } },
     { id: '9', name: 'Overall', image: 'Overall.png', recommended: false, category: 'outer', tempRange: { min: -20, max: 5 } },
+    { id: '26', name: 'Tragejacke/-cover', image: null, recommended: false, category: 'outer', tempRange: { min: -20, max: 15 } },
     { id: '18', name: 'Softshellanzug', image: 'Softshellanzug.png', recommended: false, category: 'outer', tempRange: { min: 5, max: 15 } },
     { id: '19', name: 'Regenjacke', image: 'Regenjacke.png', recommended: false, category: 'outer', tempRange: { min: 5, max: 20 } },
   ],
@@ -156,11 +157,13 @@ const clothingCatalogue: Record<ClothingCategory, ClothingItem[]> = {
     { id: '22', name: 'Schal', image: 'Schal.png', recommended: false, category: 'accessory', tempRange: { min: -20, max: 10 } },
     { id: '23', name: 'Schuhe', image: null, recommended: false, category: 'accessory', tempRange: { min: -10, max: 20 } },
     { id: '24', name: 'Kinderwagen-Decke', image: 'Kinderwagendecke.png', recommended: false, category: 'accessory', tempRange: { min: -20, max: 15 } },
+    { id: '27', name: 'Füßlinge', image: null, recommended: false, category: 'accessory', tempRange: { min: -20, max: 15 } },
   ],
   sleep: [
     { id: '13', name: 'Schlafsack 0.5 TOG', image: 'Schlafsack.png', recommended: false, category: 'sleep', tempRange: { min: 24, max: 27 } },
     { id: '14', name: 'Schlafsack 1.0 TOG', image: 'Schlafsack.png', recommended: false, category: 'sleep', tempRange: { min: 20, max: 24 } },
     { id: '15', name: 'Schlafsack 2.5 TOG', image: 'Schlafsack.png', recommended: false, category: 'sleep', tempRange: { min: 16, max: 20 } },
+    { id: '25', name: 'Schlafanzug', image: null, recommended: false, category: 'sleep', tempRange: { min: 18, max: 24 } },
   ],
 };
 
@@ -260,6 +263,9 @@ interface HeaderProps {
   errorMessage: string;
   selectedMode: ContextMode;
   setSelectedMode: (mode: ContextMode) => void;
+  feltTemperature: number | null;
+  setFeltTemperature: (value: number | null) => void;
+  feltTemperatureOptions: number[];
   babyAgeMonths: number;
   babyWeightPercentile: number;
   metaCards: {title: string, content: string, icon: any}[];
@@ -286,11 +292,15 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
   errorMessage,
   selectedMode,
   setSelectedMode,
+  feltTemperature,
+  setFeltTemperature,
+  feltTemperatureOptions,
   babyAgeMonths,
   babyWeightPercentile,
   metaCards
 }) => {
   const theme = Colors[colorScheme || 'light'];
+  const autoFeltTemp = weatherData?.feelsLike ?? weatherData?.temperature;
   
   return (
     <View style={styles.headerWrapper}>
@@ -503,6 +513,57 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
             </View>
           </LiquidGlassCard>
 
+          {(selectedMode === 'indoor' || selectedMode === 'sleeping') && (
+            <LiquidGlassCard style={[styles.sectionCard]} intensity={26}>
+              <ThemedText style={styles.sectionTitle}>Gefühlte Temperatur wählen</ThemedText>
+              <View style={styles.feltTempOptions}>
+                <TouchableOpacity
+                  style={[
+                    styles.feltTempButton,
+                    feltTemperature === null && styles.feltTempButtonActive
+                  ]}
+                  onPress={() => setFeltTemperature(null)}
+                >
+                  <ThemedText
+                    style={[
+                      styles.feltTempButtonText,
+                      feltTemperature === null && styles.feltTempButtonTextActive
+                    ]}
+                  >
+                    Auto
+                  </ThemedText>
+                </TouchableOpacity>
+                {feltTemperatureOptions.map((temp) => {
+                  const isSelected = feltTemperature === temp;
+                  return (
+                    <TouchableOpacity
+                      key={`felt-${temp}`}
+                      style={[
+                        styles.feltTempButton,
+                        isSelected && styles.feltTempButtonActive
+                      ]}
+                      onPress={() => setFeltTemperature(temp)}
+                    >
+                      <ThemedText
+                        style={[
+                          styles.feltTempButtonText,
+                          isSelected && styles.feltTempButtonTextActive
+                        ]}
+                      >
+                        {temp}°C
+                      </ThemedText>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              {autoFeltTemp !== undefined && autoFeltTemp !== null && (
+                <ThemedText style={styles.feltTempHint}>
+                  Aktuell (Wetter): {autoFeltTemp}°C
+                </ThemedText>
+              )}
+            </LiquidGlassCard>
+          )}
+
           {/* Meta-Cards vor den Kleidungsempfehlungen anzeigen */}
           {!isLoading && !errorMessage && weatherData && (
             <View style={styles.metaCardsContainer}>
@@ -535,6 +596,8 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
 // Memoize the BabyWeatherHeader to prevent unnecessary rerenders
 const MemoHeader = React.memo(BabyWeatherHeader);
 
+const FELT_TEMPERATURE_OPTIONS = [16, 18, 20, 22, 24, 26];
+
 export default function BabyWeatherScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
@@ -563,6 +626,7 @@ export default function BabyWeatherScreen() {
   const [searchType, setSearchType] = useState<'location' | 'zipCode' | 'cityName'>('location');
   const [showBabyInfo, setShowBabyInfo] = useState(false);
   const [metaCards, setMetaCards] = useState<{title: string, content: string, icon: any}[]>([]);
+  const [feltTemperature, setFeltTemperature] = useState<number | null>(null);
 
   // Alternativen-System
   const [layerAlternatives, setLayerAlternatives] = useState<LayerAlternatives>({});
@@ -772,6 +836,13 @@ export default function BabyWeatherScreen() {
     }
   }, [selectedMode, weatherData, babyAgeMonths, babyWeightPercentile]);
 
+  useEffect(() => {
+    if (!weatherData) return;
+    if (selectedMode === 'indoor' || selectedMode === 'sleeping') {
+      updateClothingRecommendations(weatherData.temperature, selectedMode);
+    }
+  }, [feltTemperature]);
+
   // Helper: Wähle genau EINES aus einer Liste basierend auf Priorität
   const selectOne = (candidates: string[], priorities: string[]): string | null => {
     for (const priority of priorities) {
@@ -786,8 +857,9 @@ export default function BabyWeatherScreen() {
   const layerPriorities = {
     bottom: ['Shorts', 'Strumpfhose', 'Hose'],
     mid: ['Fleecejacke', 'Pullover', 'Dünner Pullover'],
-    outer: ['Overall', 'Softshellanzug', 'Regenjacke', 'Jacke'],
+    outer: ['Overall', 'Tragejacke/-cover', 'Softshellanzug', 'Regenjacke', 'Jacke'],
   };
+  const carrierOuterPriorities = ['Tragejacke/-cover', 'Jacke', 'Overall'];
 
   // Berechne die Kleidungsempfehlungen basierend auf Temperatur und Kontext
   const updateClothingRecommendations = (
@@ -802,28 +874,34 @@ export default function BabyWeatherScreen() {
     const humidity = weatherData?.humidity ?? 50;
     const windSpeed = weatherData?.windSpeed ?? 0;
 
-    let effectiveTemp = weatherData?.feelsLike ?? temperature;
-    console.log(`Gefühlte Temperatur aus API oder Basis: ${effectiveTemp}°C`);
+    const manualFeltTemp = (mode === 'indoor' || mode === 'sleeping') ? feltTemperature : null;
+    const hasManualFeltTemp = manualFeltTemp !== null && manualFeltTemp !== undefined;
+    if (hasManualFeltTemp) {
+      console.log(`Manuelle gefühlte Temperatur: ${manualFeltTemp}°C`);
+    }
+    let effectiveTemp = manualFeltTemp ?? weatherData?.feelsLike ?? temperature;
+    console.log(`Gefühlte Temperatur Basis: ${effectiveTemp}°C`);
 
-    if (temperature > 27 && !weatherData?.feelsLike) {
+    if (!hasManualFeltTemp && temperature > 27 && !weatherData?.feelsLike) {
       const heatIndex = temperature + (0.05 * humidity);
       console.log(`Berechneter Heat Index: ${heatIndex}°C (bei ${humidity}% Luftfeuchtigkeit)`);
       effectiveTemp = heatIndex;
     }
 
-    if (temperature < 10 && !weatherData?.feelsLike && windSpeed > 5) {
+    if (!hasManualFeltTemp && temperature < 10 && !weatherData?.feelsLike && windSpeed > 5) {
       const windChill = temperature - (windSpeed * 0.1);
       console.log(`Berechneter Windchill: ${windChill}°C (bei ${windSpeed} km/h Wind)`);
       effectiveTemp = windChill;
     }
 
-    const contextModifier = contextModifiers[mode];
+    const contextModifier = (hasManualFeltTemp && (mode === 'indoor' || mode === 'sleeping')) ? 0 : contextModifiers[mode];
     console.log(`Kontext-Modifikator: ${contextModifier}°C (${contextDescriptions[mode]})`);
 
-    const ageModifier = babyAgeMonths < 3 ? -2 : (babyAgeMonths < 6 ? -1 : 0);
+    const usePersonalModifiers = !(hasManualFeltTemp && (mode === 'indoor' || mode === 'sleeping'));
+    const ageModifier = usePersonalModifiers ? (babyAgeMonths < 3 ? -2 : (babyAgeMonths < 6 ? -1 : 0)) : 0;
     console.log(`Altersmodifikator: ${ageModifier}°C (${babyAgeMonths} Monate)`);
 
-    const weightModifier = babyWeightPercentile < 25 ? -0.5 : 0;
+    const weightModifier = usePersonalModifiers ? (babyWeightPercentile < 25 ? -0.5 : 0) : 0;
     console.log(`Gewichtsmodifikator: ${weightModifier}°C (${babyWeightPercentile}. Perzentile)`);
 
     const modifierSum = ageModifier + weightModifier;
@@ -833,7 +911,11 @@ export default function BabyWeatherScreen() {
     const temperatureBand = getTemperatureBand(adjustedTemp);
     console.log(`Temperatur-Band (Außen): ${temperatureBand}`);
 
-    const indoorComfortTemp = Math.min(Math.max(effectiveTemp + contextModifiers.indoor + modifierSum, 16), 26);
+    const indoorReferenceTemp = hasManualFeltTemp ? manualFeltTemp : effectiveTemp;
+    const indoorComfortTemp = Math.min(
+      Math.max(indoorReferenceTemp + (hasManualFeltTemp ? 0 : contextModifiers.indoor) + modifierSum, 16),
+      26
+    );
     const layeringBand = mode === 'sleeping' ? getTemperatureBand(indoorComfortTemp) : temperatureBand;
     const referenceTemp = mode === 'sleeping' ? indoorComfortTemp : adjustedTemp;
 
@@ -857,7 +939,11 @@ export default function BabyWeatherScreen() {
     };
 
     // Base Layer (Windel + Body)
-    layers.base = ['hot', 'warm'].includes(layeringBand) ? 'Kurzarmbody' : 'Langarmbody';
+    if (mode === 'sleeping') {
+      layers.base = referenceTemp >= 20 ? 'Kurzarmbody' : 'Langarmbody';
+    } else {
+      layers.base = ['hot', 'warm'].includes(layeringBand) ? 'Kurzarmbody' : 'Langarmbody';
+    }
 
     // Bottom Layer: Sammle Kandidaten, wähle dann EINEN
     const bottomCandidates: string[] = [];
@@ -906,20 +992,30 @@ export default function BabyWeatherScreen() {
 
     // Outer Layer: Sammle Kandidaten, wähle dann EINEN
     const outerCandidates: string[] = [];
-    if (layeringBand === 'fresh') {
-      outerCandidates.push('Jacke');
-    } else if (layeringBand === 'cold' && mode !== 'carSeat') {
-      outerCandidates.push('Overall');
-    }
+    if (mode === 'carrier') {
+      if (['fresh', 'cold'].includes(layeringBand)) {
+        outerCandidates.push('Jacke');
+        outerCandidates.push('Tragejacke/-cover');
+      }
+      if (layeringBand === 'cold') {
+        outerCandidates.push('Overall');
+      }
+    } else {
+      if (layeringBand === 'fresh') {
+        outerCandidates.push('Jacke');
+      } else if (layeringBand === 'cold' && mode !== 'carSeat') {
+        outerCandidates.push('Overall');
+      }
 
-    if ((requiresRainProtection || indicatesSnow) && layeringBand !== 'hot') {
-      outerCandidates.push('Regenjacke');
-    }
+      if ((requiresRainProtection || indicatesSnow) && layeringBand !== 'hot') {
+        outerCandidates.push('Regenjacke');
+      }
 
-    if (indicatesWind && ['cool', 'fresh', 'cold'].includes(layeringBand)) {
-      outerCandidates.push('Softshellanzug');
-    } else if (layeringBand === 'fresh' && mode === 'stroller') {
-      outerCandidates.push('Softshellanzug');
+      if (indicatesWind && ['cool', 'fresh', 'cold'].includes(layeringBand)) {
+        outerCandidates.push('Softshellanzug');
+      } else if (layeringBand === 'fresh' && mode === 'stroller') {
+        outerCandidates.push('Softshellanzug');
+      }
     }
 
     // Duplikate entfernen
@@ -929,7 +1025,12 @@ export default function BabyWeatherScreen() {
     }
 
     const outerIndex = activeIndices.outer ?? 0;
-    layers.outer = uniqueOuterCandidates[outerIndex] || selectOne(uniqueOuterCandidates, layerPriorities.outer);
+    const outerPriorities = mode === 'carrier' ? carrierOuterPriorities : layerPriorities.outer;
+    layers.outer = uniqueOuterCandidates[outerIndex] || selectOne(uniqueOuterCandidates, outerPriorities);
+
+    if (mode === 'carrier' && layeringBand === 'cold') {
+      delete alternatives.bottom;
+    }
 
     // Speichere Alternativen für die UI
     setLayerAlternatives(alternatives);
@@ -954,11 +1055,13 @@ export default function BabyWeatherScreen() {
       addAccessory('Sonnenhut');
     }
 
-    if (['cool', 'fresh'].includes(layeringBand) && isOutdoorMode) {
+    if (mode === 'carrier' && ['cool', 'fresh', 'cold'].includes(layeringBand)) {
+      addAccessory('Halstuch');
+    } else if (['cool', 'fresh'].includes(layeringBand) && isOutdoorMode) {
       addAccessory('Halstuch');
     }
 
-    if (layeringBand === 'cold' && isOutdoorMode) {
+    if (layeringBand === 'cold' && isOutdoorMode && mode !== 'carrier') {
       addAccessory('Schal');
     }
 
@@ -974,6 +1077,10 @@ export default function BabyWeatherScreen() {
       addAccessory('Schuhe');
     }
 
+    if (mode === 'carrier' && babyAgeMonths < 9 && ['cool', 'fresh', 'cold'].includes(layeringBand)) {
+      addAccessory('Füßlinge');
+    }
+
     if ((mode === 'stroller' || (mode === 'carSeat' && ['fresh', 'cold'].includes(layeringBand))) && ['cool', 'fresh', 'cold'].includes(layeringBand)) {
       addAccessory('Kinderwagen-Decke');
     }
@@ -984,13 +1091,7 @@ export default function BabyWeatherScreen() {
     const metaWarnings = new Set<string>();
 
     if (mode === 'carrier' && layeringBand !== 'hot') {
-      // In der Trage: Entferne outer oder mid Layer
-      if (layers.outer) {
-        layers.outer = null;
-      } else if (layers.mid) {
-        layers.mid = null;
-      }
-      metaWarnings.add("In der Trage wird es wärmer - eine Schicht weniger als normal empfohlen.");
+      metaWarnings.add("In der Trage wird es wärmer - bei Bedarf eine Schicht weniger wählen.");
     }
 
     if (mode === 'carSeat') {
@@ -1016,14 +1117,18 @@ export default function BabyWeatherScreen() {
     let finalRecommendations: string[] = [];
 
     if (mode === 'sleeping') {
-      // Schlafen: Base + Schlafsack + ggf. Socken
-      if (layers.base) finalRecommendations.push(layers.base);
+      // Schlafen: Windel + Body + ggf. Schlafanzug + Schlafsack + ggf. Socken
       finalRecommendations.push('Windel');
+      if (layers.base) finalRecommendations.push(layers.base);
 
-      if (['hot', 'warm'].includes(layeringBand)) {
+      if (referenceTemp < 24) {
+        finalRecommendations.push('Schlafanzug');
+      }
+
+      if (referenceTemp >= 24) {
         finalRecommendations.push('Schlafsack 0.5 TOG');
-      } else if (['mild', 'cool'].includes(layeringBand)) {
-        finalRecommendations.push(referenceTemp >= 20 ? 'Schlafsack 1.0 TOG' : 'Schlafsack 2.5 TOG');
+      } else if (referenceTemp >= 20) {
+        finalRecommendations.push('Schlafsack 1.0 TOG');
       } else {
         finalRecommendations.push('Schlafsack 2.5 TOG');
       }
@@ -1045,6 +1150,14 @@ export default function BabyWeatherScreen() {
       finalRecommendations.push('Windel');
       if (layers.base) finalRecommendations.push(layers.base);
       if (layers.bottom) finalRecommendations.push(layers.bottom);
+      if (mode === 'carrier' && layeringBand === 'cold') {
+        if (!finalRecommendations.includes('Strumpfhose')) {
+          finalRecommendations.push('Strumpfhose');
+        }
+        if (!finalRecommendations.includes('Hose')) {
+          finalRecommendations.push('Hose');
+        }
+      }
       if (layers.mid) finalRecommendations.push(layers.mid);
       if (layers.outer) finalRecommendations.push(layers.outer);
       finalRecommendations.push(...layers.accessories);
@@ -1143,12 +1256,22 @@ export default function BabyWeatherScreen() {
     return null;
   };
 
+  const getDisplayName = (name: string, mode: ContextMode): string => {
+    if (mode === 'carrier') {
+      if (name === 'Strumpfhose') return 'Leggings';
+      if (name === 'Mütze') return 'Wintermütze';
+    }
+    return name;
+  };
+
   const renderClothingItem = ({ item }: { item: ClothingItem }) => {
     const itemLayer = getItemLayer(item.name);
     const hasAlternatives = itemLayer && layerAlternatives[itemLayer] && layerAlternatives[itemLayer]!.length > 1;
     const alternatives = itemLayer ? layerAlternatives[itemLayer] : null;
     const currentIndex = itemLayer ? (currentAlternativeIndex[itemLayer] ?? 0) : 0;
     const nextAlternative = hasAlternatives && alternatives ? alternatives[(currentIndex + 1) % alternatives.length] : null;
+    const displayName = getDisplayName(item.name, selectedMode);
+    const displayAlternative = nextAlternative ? getDisplayName(nextAlternative, selectedMode) : null;
 
     return (
       <View style={styles.clothingItem}>
@@ -1178,10 +1301,10 @@ export default function BabyWeatherScreen() {
             </TouchableOpacity>
           )}
         </View>
-        <ThemedText style={styles.clothingName}>{item.name}</ThemedText>
-        {hasAlternatives && nextAlternative && (
+        <ThemedText style={styles.clothingName}>{displayName}</ThemedText>
+        {hasAlternatives && displayAlternative && (
           <ThemedText style={styles.alternativeHint}>
-            Alternative: {nextAlternative}
+            Alternative: {displayAlternative}
           </ThemedText>
         )}
       </View>
@@ -1232,6 +1355,9 @@ export default function BabyWeatherScreen() {
                 errorMessage={errorMessage}
                 selectedMode={selectedMode}
                 setSelectedMode={setSelectedMode}
+                feltTemperature={feltTemperature}
+                setFeltTemperature={setFeltTemperature}
+                feltTemperatureOptions={FELT_TEMPERATURE_OPTIONS}
                 babyAgeMonths={babyAgeMonths}
                 babyWeightPercentile={babyWeightPercentile}
                 metaCards={metaCards}
@@ -1272,6 +1398,9 @@ export default function BabyWeatherScreen() {
               errorMessage={errorMessage}
               selectedMode={selectedMode}
               setSelectedMode={setSelectedMode}
+              feltTemperature={feltTemperature}
+              setFeltTemperature={setFeltTemperature}
+              feltTemperatureOptions={FELT_TEMPERATURE_OPTIONS}
               babyAgeMonths={babyAgeMonths}
               babyWeightPercentile={babyWeightPercentile}
               metaCards={metaCards}
@@ -1346,6 +1475,12 @@ function getClothingIcon(name: string): any {
       return 'shoeprints.fill';
     case 'kinderwagen-decke':
       return 'bed.double';
+    case 'tragejacke/-cover':
+      return 'person.2.fill';
+    case 'füßlinge':
+      return 'shoeprints.fill';
+    case 'schlafanzug':
+      return 'moon.stars.fill';
     case 'schlafsack 0.5 tog':
     case 'schlafsack 1.0 tog':
     case 'schlafsack 2.5 tog':
@@ -1399,6 +1534,12 @@ function getClothingColor(name: string): string {
       return '#8B4513';
     case 'kinderwagen-decke':
       return '#F0E68C';
+    case 'tragejacke/-cover':
+      return '#C2B1A1';
+    case 'füßlinge':
+      return '#C8A87A';
+    case 'schlafanzug':
+      return '#D6C4B5';
     case 'schlafsack 0.5 tog':
       return '#ADD8E6';
     case 'schlafsack 1.0 tog':
@@ -2078,6 +2219,44 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
     color: '#7D5A50',
+  },
+  feltTempOptions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  feltTempButton: {
+    width: '30%',
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderRadius: 16,
+    marginBottom: 8,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.3)',
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  feltTempButtonActive: {
+    borderColor: 'rgba(100,150,255,0.55)',
+    backgroundColor: 'rgba(166,205,237,0.25)',
+  },
+  feltTempButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#7D5A50',
+  },
+  feltTempButtonTextActive: {
+    fontWeight: '700',
+    color: '#5D4A40',
+  },
+  feltTempHint: {
+    marginTop: 6,
+    fontSize: 12,
+    textAlign: 'center',
+    opacity: 0.7,
+    color: '#7D5A50',
+    fontWeight: '500',
   },
   recommendationTitle: {
     fontSize: 24,

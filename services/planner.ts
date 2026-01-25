@@ -30,6 +30,7 @@ export type PlannerEvent = {
   babyId?: string;
   blockId?: string;
   userId?: string;
+  isAllDay?: boolean;
 };
 
 export type PlannerBlock = {
@@ -73,7 +74,7 @@ type PlannerItemRow = {
   user_id: string;
   day_id: string;
   block_id: string | null;
-  entry_type: 'todo' | 'event' | 'note';
+  entry_type: 'todo' | 'event';
   title: string;
   completed: boolean;
   assignee: PlannerAssignee | null;
@@ -83,6 +84,7 @@ type PlannerItemRow = {
   due_at: string | null;
   start_at: string | null;
   end_at: string | null;
+  is_all_day: boolean | null;
   created_at: string;
   updated_at: string;
 };
@@ -274,6 +276,7 @@ function buildAggregatedData(date: Date, dayRows: PlannerDayRow[], itemRows: Pla
         babyId: row.baby_id ?? undefined,
         blockId: row.block_id ?? undefined,
         userId: row.user_id,
+        isAllDay: row.is_all_day ?? false,
       };
       const minute = startDate ? minutesSinceMidnight(startDate) : null;
       const targetIndex =
@@ -452,7 +455,7 @@ export function usePlannerDay(date: Date) {
       ? await supabase
           .from('planner_items')
           .select(
-            'id,user_id,day_id,block_id,entry_type,title,completed,assignee,baby_id,notes,location,due_at,start_at,end_at,created_at,updated_at',
+            'id,user_id,day_id,block_id,entry_type,title,completed,assignee,baby_id,notes,location,due_at,start_at,end_at,is_all_day,created_at,updated_at',
           )
           .in('day_id', dayIds)
       : { data: [], error: null };
@@ -462,7 +465,7 @@ export function usePlannerDay(date: Date) {
     const { data: floatingOpenRows, error: floatingOpenError } = await supabase
       .from('planner_items')
       .select(
-        'id,user_id,day_id,block_id,entry_type,title,completed,assignee,baby_id,notes,location,due_at,start_at,end_at,created_at,updated_at',
+        'id,user_id,day_id,block_id,entry_type,title,completed,assignee,baby_id,notes,location,due_at,start_at,end_at,is_all_day,created_at,updated_at',
       )
       .in('user_id', ownerIds)
       .is('due_at', null)
@@ -480,7 +483,7 @@ export function usePlannerDay(date: Date) {
     const { data: floatingDoneRows, error: floatingDoneError } = await supabase
       .from('planner_items')
       .select(
-        'id,user_id,day_id,block_id,entry_type,title,completed,assignee,baby_id,notes,location,due_at,start_at,end_at,created_at,updated_at',
+        'id,user_id,day_id,block_id,entry_type,title,completed,assignee,baby_id,notes,location,due_at,start_at,end_at,is_all_day,created_at,updated_at',
       )
       .in('user_id', ownerIds)
       .is('due_at', null)
@@ -687,6 +690,7 @@ export function usePlannerDay(date: Date) {
       babyId?: string,
       blockId?: string,
       ownerIdOverride?: string,
+      isAllDay?: boolean,
     ) => {
       if (!user?.id) return;
       const viewerId = user.id;
@@ -722,6 +726,7 @@ export function usePlannerDay(date: Date) {
         location: location ?? null,
         assignee: convertAssigneePerspective(assignee, viewerId, ownerId),
         baby_id: babyId ?? null,
+        is_all_day: isAllDay ?? false,
       };
       const { error: insertError } = await supabase.from('planner_items').insert(payload);
       if (insertError) {
@@ -737,7 +742,7 @@ export function usePlannerDay(date: Date) {
   const updateTodo = useCallback(
     async (id: string, updates: { title?: string; notes?: string; dueAt?: string | null; assignee?: PlannerAssignee; babyId?: string | null }) => {
       const row = itemsMapRef.current[id];
-      if (!row || (row.entry_type !== 'todo' && row.entry_type !== 'note')) return;
+      if (!row || row.entry_type !== 'todo') return;
       if (!user?.id) return;
       const viewerId = user.id;
       const payload: Record<string, any> = {};
@@ -789,7 +794,7 @@ export function usePlannerDay(date: Date) {
   );
 
   const updateEvent = useCallback(
-    async (id: string, updates: { title?: string; start?: string; end?: string; location?: string; assignee?: PlannerAssignee; babyId?: string | null }) => {
+    async (id: string, updates: { title?: string; start?: string; end?: string; location?: string; assignee?: PlannerAssignee; babyId?: string | null; isAllDay?: boolean }) => {
       const row = itemsMapRef.current[id];
       if (!row || row.entry_type !== 'event') return;
       if (!user?.id) return;
@@ -804,6 +809,9 @@ export function usePlannerDay(date: Date) {
       }
       if (updates.babyId !== undefined) {
         payload.baby_id = updates.babyId ?? null;
+      }
+      if (updates.isAllDay !== undefined) {
+        payload.is_all_day = updates.isAllDay;
       }
 
       let newDayId: string | undefined;
@@ -842,7 +850,7 @@ export function usePlannerDay(date: Date) {
   );
 
   const convertPlannerItem = useCallback(
-    async (id: string, nextType: 'todo' | 'event' | 'note', updates: PlannerItemConversion) => {
+    async (id: string, nextType: 'todo' | 'event', updates: PlannerItemConversion) => {
       const row = itemsMapRef.current[id];
       if (!row || !user?.id) return;
       const viewerId = user.id;
@@ -890,13 +898,10 @@ export function usePlannerDay(date: Date) {
         payload.end_at = null;
         payload.location = null;
         payload.completed = false;
+        payload.is_all_day = false;
 
-        if (nextType === 'todo') {
-          const nextAssignee = updates.assignee ?? 'me';
-          payload.assignee = convertAssigneePerspective(nextAssignee, viewerId, ownerId);
-        } else {
-          payload.assignee = null;
-        }
+        const nextAssignee = updates.assignee ?? 'me';
+        payload.assignee = convertAssigneePerspective(nextAssignee, viewerId, ownerId);
 
         if (updates.dueAt) {
           const dueDate = parseISO(updates.dueAt);
@@ -949,7 +954,7 @@ export function usePlannerDay(date: Date) {
   const moveToTomorrow = useCallback(
     async (id: string) => {
       const row = itemsMapRef.current[id];
-      if (!row || (row.entry_type !== 'todo' && row.entry_type !== 'note')) return;
+      if (!row || row.entry_type !== 'todo') return;
       const ownerId = row.user_id ?? user?.id;
       if (!ownerId) return;
       const tomorrow = new Date(normalizedDate);

@@ -329,6 +329,24 @@ export default function MoreScreen() {
               </View>
               <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
             </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => router.push('/feature-requests' as any)}
+            >
+              <View style={styles.menuItemIcon}>
+                <IconSymbol name="lightbulb.fill" size={24} color={theme.accent} />
+              </View>
+              <View style={styles.menuItemContent}>
+                <ThemedText style={styles.menuItemTitle}>
+                  Verbesserungsvorschläge
+                </ThemedText>
+                <ThemedText style={styles.menuItemDescription}>
+                  Teile deine Ideen zur Verbesserung der App
+                </ThemedText>
+              </View>
+              <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
+            </TouchableOpacity>
           </LiquidGlassCard>
 
           {/* Logout Section */}

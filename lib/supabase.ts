@@ -185,6 +185,18 @@ export type BabyCareEntry = {
   updated_at?: string;
 };
 
+export type FeatureRequest = {
+  id: string;
+  user_id: string;
+  title: string;
+  description: string;
+  category: 'feature' | 'improvement' | 'bug-fix';
+  priority: 'low' | 'medium' | 'high';
+  status?: 'pending' | 'under_review' | 'planned' | 'completed' | 'rejected';
+  created_at: string;
+  updated_at: string;
+};
+
 // Hilfsfunktionen für die Authentifizierung
 
 // E-Mail-Authentifizierung
@@ -1590,5 +1602,76 @@ export const updateDueDateAndSync = async (userId: string, dueDate: Date) => {
       success: false,
       error: { message: 'Fehler beim Aktualisieren des Entbindungstermins.' }
     };
+  }
+};
+
+// Hilfsfunktionen für Verbesserungsvorschläge
+
+// Verbesserungsvorschlag speichern
+export const saveFeatureRequest = async (request: Omit<FeatureRequest, 'id' | 'user_id' | 'created_at' | 'updated_at'>) => {
+  try {
+    const { data: userData } = await getCachedUser();
+    if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
+
+    const { data, error } = await supabase
+      .from('feature_requests')
+      .insert({
+        user_id: userData.user.id,
+        title: request.title,
+        description: request.description,
+        category: request.category,
+        priority: request.priority,
+        status: 'pending',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return { data, error: null };
+  } catch (error) {
+    console.error('Error saving feature request:', error);
+    return { data: null, error };
+  }
+};
+
+// Alle Verbesserungsvorschläge des Benutzers abrufen
+export const getFeatureRequests = async () => {
+  try {
+    const { data: userData } = await getCachedUser();
+    if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
+
+    const { data, error } = await supabase
+      .from('feature_requests')
+      .select('*')
+      .eq('user_id', userData.user.id)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return { data, error: null };
+  } catch (error) {
+    console.error('Error fetching feature requests:', error);
+    return { data: null, error };
+  }
+};
+
+// Verbesserungsvorschlag löschen
+export const deleteFeatureRequest = async (id: string) => {
+  try {
+    const { data: userData } = await getCachedUser();
+    if (!userData.user) return { error: new Error('Nicht angemeldet') };
+
+    const { error } = await supabase
+      .from('feature_requests')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', userData.user.id);
+
+    if (error) throw error;
+    return { error: null };
+  } catch (error) {
+    console.error('Error deleting feature request:', error);
+    return { error };
   }
 };

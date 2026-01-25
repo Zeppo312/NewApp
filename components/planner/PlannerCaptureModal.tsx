@@ -22,7 +22,7 @@ import { PRIMARY, GLASS_OVERLAY } from '@/constants/PlannerDesign';
 import { PlannerAssignee, PlannerEvent, PlannerTodo } from '@/services/planner';
 import TextInputOverlay from '@/components/modals/TextInputOverlay';
 
-export type PlannerCaptureType = 'todo' | 'event' | 'note';
+export type PlannerCaptureType = 'todo' | 'event';
 type FocusField = 'title' | 'location' | 'notes';
 type FocusConfig = {
   field: FocusField;
@@ -43,6 +43,7 @@ export type PlannerCapturePayload = {
   assignee?: PlannerAssignee;
   babyId?: string;
   ownerId?: string;
+  isAllDay?: boolean;
 };
 
 type OwnerOption = {
@@ -117,6 +118,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
   const [showBabyPicker, setShowBabyPicker] = useState(false);
   const [focusConfig, setFocusConfig] = useState<FocusConfig | null>(null);
   const [focusValue, setFocusValue] = useState('');
+  const [isAllDay, setIsAllDay] = useState(false);
 
   const partnerLabel = useMemo(() => {
     if (!ownerOptions || ownerOptions.length === 0) return 'Partner';
@@ -159,11 +161,13 @@ export const PlannerCaptureModal: React.FC<Props> = ({
       if (editingType === 'event') {
         const start = new Date(item.start);
         const end = new Date(item.end);
+        const allDay = 'isAllDay' in item ? item.isAllDay ?? false : false;
         setStartTime(start);
         setEndTime(end);
         setShowEnd(true);
         setDueTime(null);
         setLocation(item.location ?? '');
+        setIsAllDay(allDay);
       } else {
         const due = item.dueAt ? new Date(item.dueAt) : null;
         setStartTime(due ?? new Date(initialStart));
@@ -195,9 +199,10 @@ export const PlannerCaptureModal: React.FC<Props> = ({
       setDueTime(null);
       setHasDueTime(false);
       setLocation('');
-      setNotesExpanded(type === 'note');
+      setNotesExpanded(false);
       setAssignee('me');
       setSelectedBabyId(null);
+      setIsAllDay(false);
     }
   }, [visible, type, baseDate, editingItem, defaultOwnerId]);
 
@@ -225,17 +230,18 @@ export const PlannerCaptureModal: React.FC<Props> = ({
     visible: boolean,
     toggle: () => void,
     onChange: (date: Date) => void,
+    dateOnly: boolean = false,
   ) => (
     <View style={styles.pickerBlock}>
       <TouchableOpacity style={styles.selectorHeader} onPress={toggle} activeOpacity={0.8}>
         <Text style={styles.pickerLabel}>{label}</Text>
-        <Text style={styles.selectorValue}>{formatDateTime(value)}</Text>
+        <Text style={styles.selectorValue}>{dateOnly ? formatDate(value) : formatDateTime(value)}</Text>
       </TouchableOpacity>
       {visible && (
         <View style={styles.pickerInner}>
           <DateTimePicker
             value={value}
-            mode="datetime"
+            mode={dateOnly ? 'date' : 'datetime'}
             display={Platform.OS === 'ios' ? 'inline' : 'spinner'}
             onChange={(event, date) => {
               if (event?.type === 'dismissed') {
@@ -262,37 +268,47 @@ export const PlannerCaptureModal: React.FC<Props> = ({
     const trimmedTitle = title.trim();
     const trimmedNotes = notes.trim();
 
-    if (currentType !== 'note' && trimmedTitle.length === 0) {
+    if (trimmedTitle.length === 0) {
       return;
     }
 
-    if (currentType === 'event' && (!startTime || (!endTime && showEnd))) {
+    if (currentType === 'event' && (!startTime || (!endTime && showEnd && !isAllDay))) {
       return;
     }
 
     const payload: PlannerCapturePayload = {
       type: currentType,
-      title: currentType === 'note' ? (trimmedTitle || trimmedNotes || 'Notiz') : trimmedTitle,
+      title: trimmedTitle,
       notes: trimmedNotes || undefined,
       ownerId: defaultOwnerId ?? undefined,
     };
 
     if (currentType === 'todo') {
       payload.dueAt = hasDueTime ? dueTime || startTime : null;
-      payload.assignee = assignee ?? deriveAssigneeForOwner(ownerId);
+      payload.assignee = assignee ?? deriveAssigneeForOwner(defaultOwnerId);
       payload.babyId = assignee === 'child' ? selectedBabyId ?? undefined : undefined;
     }
 
     if (currentType === 'event') {
-      payload.start = startTime;
-      payload.end = showEnd ? endTime : null;
-      payload.location = location.trim() || undefined;
-      payload.assignee = assignee ?? deriveAssigneeForOwner(ownerId);
-      payload.babyId = assignee === 'child' ? selectedBabyId ?? undefined : undefined;
-    }
+      if (isAllDay) {
+        // Ensure all-day events have proper start/end times
+        const allDayStart = new Date(startTime);
+        allDayStart.setHours(0, 0, 0, 0);
 
-    if (currentType === 'note') {
-      payload.dueAt = dueTime || undefined;
+        const allDayEnd = new Date(startTime);
+        allDayEnd.setHours(23, 59, 59, 999);
+
+        payload.start = allDayStart;
+        payload.end = allDayEnd;
+      } else {
+        payload.start = startTime;
+        payload.end = showEnd ? endTime : null;
+      }
+
+      payload.location = location.trim() || undefined;
+      payload.assignee = assignee ?? deriveAssigneeForOwner(defaultOwnerId);
+      payload.babyId = assignee === 'child' ? selectedBabyId ?? undefined : undefined;
+      payload.isAllDay = isAllDay;
     }
 
     if (editingItem) {
@@ -326,6 +342,11 @@ export const PlannerCaptureModal: React.FC<Props> = ({
   const formatDateTime = (date: Date | null) => {
     if (!date) return 'Offen';
     return date.toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  };
+
+  const formatDate = (date: Date | null) => {
+    if (!date) return 'Offen';
+    return date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
   };
 
   const openFocusEditor = (config: FocusConfig) => {
@@ -400,7 +421,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
             </TouchableOpacity>
             <View style={styles.headerCenter}>
               <Text style={styles.title}>
-                {currentType === 'todo' ? 'Neue Aufgabe' : currentType === 'event' ? 'Neuer Termin' : 'Notiz'}
+                {currentType === 'todo' ? 'Neue Aufgabe' : 'Neuer Termin'}
               </Text>
               <Text style={styles.subtitle}>Details hinzufügen</Text>
             </View>
@@ -417,26 +438,26 @@ export const PlannerCaptureModal: React.FC<Props> = ({
             <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
               <View style={styles.contentWrapper}>
                 <View style={styles.typeSwitchRow}>
-                  {(['todo', 'event', 'note'] as PlannerCaptureType[]).map((btnType) => (
+                  {(['todo', 'event'] as PlannerCaptureType[]).map((btnType) => (
                     <TouchableOpacity
                       key={btnType}
                       style={[styles.typeSwitchButton, currentType === btnType && styles.typeSwitchButtonActive]}
                       onPress={() => setCurrentType(btnType)}
                     >
                       <Text style={[styles.typeSwitchLabel, currentType === btnType && styles.typeSwitchLabelActive]}>
-                        {btnType === 'todo' ? 'Aufgabe' : btnType === 'event' ? 'Termin' : 'Notiz'}
+                        {btnType === 'todo' ? 'Aufgabe' : 'Termin'}
                       </Text>
                     </TouchableOpacity>
                   ))}
                 </View>
                 {renderInlineField(
                   title,
-                  currentType === 'note' ? 'Titel oder Betreff' : 'Titel',
+                  'Titel',
                   () =>
                     openFocusEditor({
                       field: 'title',
-                      label: currentType === 'note' ? 'Titel oder Betreff' : 'Titel',
-                      placeholder: currentType === 'note' ? 'Titel oder Betreff' : 'Titel',
+                      label: 'Titel',
+                      placeholder: 'Titel',
                     }),
                   styles.titleInput,
                 )}
@@ -481,14 +502,69 @@ export const PlannerCaptureModal: React.FC<Props> = ({
 
                 {currentType === 'event' && (
                   <View style={styles.section}>
-                    <Text style={styles.sectionLabel}>⏰ Zeitraum</Text>
-                    {renderDateSelector('Start', startTime, showStartPicker, () => setShowStartPicker((prev) => !prev), (date) => {
-                      setStartTime(date);
-                      if (showEnd && endTime && endTime < date) {
-                        setEndTime(new Date(date.getTime() + 30 * 60000));
-                      }
-                    })}
-                    {showEnd && endTime ? (
+                    <View style={styles.allDayRow}>
+                      <Text style={styles.sectionLabel}>⏰ Zeitraum</Text>
+                      <TouchableOpacity
+                        style={[styles.allDayToggle, isAllDay && styles.allDayToggleActive]}
+                        onPress={() => {
+                          const newIsAllDay = !isAllDay;
+                          setIsAllDay(newIsAllDay);
+
+                          if (newIsAllDay) {
+                            // Set to all-day: 00:00 - 23:59:59
+                            const allDayStart = new Date(startTime);
+                            allDayStart.setHours(0, 0, 0, 0);
+                            setStartTime(allDayStart);
+
+                            const allDayEnd = new Date(startTime);
+                            allDayEnd.setHours(23, 59, 59, 999);
+                            setEndTime(allDayEnd);
+
+                            setShowEnd(false);
+                            setShowStartPicker(false);
+                            setShowEndPicker(false);
+                          } else {
+                            // Back to timed event
+                            const now = new Date();
+                            const timedStart = new Date(startTime);
+                            timedStart.setHours(now.getHours(), now.getMinutes(), 0, 0);
+                            setStartTime(timedStart);
+
+                            const timedEnd = new Date(timedStart.getTime() + 30 * 60000);
+                            setEndTime(timedEnd);
+                            setShowEnd(true);
+                          }
+                        }}
+                      >
+                        <Text style={[styles.allDayToggleText, isAllDay && styles.allDayToggleTextActive]}>
+                          Ganztägig
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                    {renderDateSelector(
+                      isAllDay ? 'Datum' : 'Start',
+                      startTime,
+                      showStartPicker,
+                      () => setShowStartPicker((prev) => !prev),
+                      (date) => {
+                        if (isAllDay) {
+                          const allDayStart = new Date(date);
+                          allDayStart.setHours(0, 0, 0, 0);
+                          setStartTime(allDayStart);
+
+                          const allDayEnd = new Date(date);
+                          allDayEnd.setHours(23, 59, 59, 999);
+                          setEndTime(allDayEnd);
+                        } else {
+                          setStartTime(date);
+                          if (showEnd && endTime && endTime < date) {
+                            setEndTime(new Date(date.getTime() + 30 * 60000));
+                          }
+                        }
+                      },
+                      isAllDay
+                    )}
+                    {!isAllDay && showEnd && endTime ? (
                       <>
                         {renderDateSelector('Ende', endTime, showEndPicker, () => setShowEndPicker((prev) => !prev), setEndTime)}
                         <TouchableOpacity
@@ -502,7 +578,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                           <Text style={styles.removeEndLabel}>Ende entfernen</Text>
                         </TouchableOpacity>
                       </>
-                    ) : (
+                    ) : !isAllDay ? (
                       <TouchableOpacity
                         style={styles.timeButton}
                         onPress={() => {
@@ -514,7 +590,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                       >
                         <Text style={styles.timeButtonLabel}>Ende hinzufügen</Text>
                       </TouchableOpacity>
-                    )}
+                    ) : null}
                     {renderInlineField(
                       location,
                       'Ort (optional)',
@@ -991,6 +1067,32 @@ const styles = StyleSheet.create({
   pickerEmptyText: {
     fontSize: 14,
     color: THEME.textSecondary,
+  },
+  allDayRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  allDayToggle: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.6)',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.05)',
+  },
+  allDayToggleActive: {
+    backgroundColor: PRIMARY,
+    borderColor: PRIMARY,
+  },
+  allDayToggleText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: THEME.text,
+  },
+  allDayToggleTextActive: {
+    color: '#fff',
   },
 });
 

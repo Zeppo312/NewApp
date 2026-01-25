@@ -78,13 +78,19 @@ export const StructuredTimeline: React.FC<Props> = ({
   onEditTodo,
   onEditEvent,
 }) => {
+  const { allDayEvents, timedEvents } = useMemo(() => {
+    const allDay = events.filter(e => e.isAllDay);
+    const timed = events.filter(e => !e.isAllDay);
+    return { allDayEvents: allDay, timedEvents: timed };
+  }, [events]);
+
   const timeline = useMemo(() => {
     const entries: TimelineItem[] = [];
     const minutesSet = new Set<number>();
     const fallbackBase = 13 * 60;
     let floatingIndex = 0;
 
-    events.forEach((event) => {
+    timedEvents.forEach((event) => {
       const start = new Date(event.start);
       const end = new Date(event.end);
       const startMinute = minutesFromMidnight(start);
@@ -294,16 +300,22 @@ export const StructuredTimeline: React.FC<Props> = ({
     for (let hour = startHour; hour <= endHour; hour += 1) {
       // Full hour
       const hourMinute = hour * 60;
-      const hourTop = positionFor(hourMinute) - 10;
-      hourLabels.push({ label: `${String(hour).padStart(2, '0')}:00`, top: hourTop });
+      const hourTopRaw = positionFor(hourMinute) - 10;
+      hourLabels.push({
+        label: `${String(hour).padStart(2, '0')}:00`,
+        top: Math.max(0, hourTopRaw),
+      });
 
       // Half hour (only if within range and with enough spacing)
       const halfHourMinute = hour * 60 + 30;
       if (halfHourMinute >= minutes[0] && halfHourMinute <= minutes[minutes.length - 1]) {
         const halfHourTop = positionFor(halfHourMinute) - 10;
         // Only add half-hour if it's at least 40px away from the full hour
-        if (Math.abs(hourTop - halfHourTop) > 40) {
-          hourLabels.push({ label: `${String(hour).padStart(2, '0')}:30`, top: halfHourTop });
+        if (Math.abs(hourTopRaw - halfHourTop) > 40) {
+          hourLabels.push({
+            label: `${String(hour).padStart(2, '0')}:30`,
+            top: Math.max(0, halfHourTop),
+          });
         }
       }
     }
@@ -321,12 +333,65 @@ export const StructuredTimeline: React.FC<Props> = ({
       showNowLine,
       nowTop,
     };
-  }, [date, events, todos, getOwnerLabel, getAssigneeLabel]);
+  }, [date, timedEvents, todos, getOwnerLabel, getAssigneeLabel]);
 
   const { items, positionFor, contentHeight, hourLabels, showNowLine, nowTop } = timeline;
 
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 32 }} showsVerticalScrollIndicator={false}>
+      {allDayEvents.length > 0 && (
+        <View style={styles.allDaySection}>
+          <View style={styles.allDayHeader}>
+            <ThemedText style={styles.allDayLabel}>Ganztägig</ThemedText>
+          </View>
+          <View style={styles.allDayEventsContainer}>
+            {allDayEvents.map((event) => {
+              const ownerLabel = getOwnerLabel?.(event.userId);
+              const assigneeLabel = getAssigneeLabel?.(event.assignee, event.babyId, event.userId);
+              const metaLabel =
+                assigneeLabel && assigneeLabel !== 'Ich'
+                  ? assigneeLabel
+                  : ownerLabel && ownerLabel !== 'Ich'
+                  ? ownerLabel
+                  : '';
+              const metaSuffix = metaLabel ? ` · ${metaLabel}` : '';
+              const locationSuffix = event.location ? ` · ${event.location}` : '';
+              const subtitle = `${locationSuffix}${metaSuffix}`.replace(/^·\s*/, '').trim();
+
+              return (
+                <TouchableOpacity
+                  key={event.id}
+                  activeOpacity={0.9}
+                  onPress={readOnly ? undefined : () => onEditEvent?.(event.id)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Ganztägiger Termin ${event.title}`}
+                  style={styles.allDayEventCard}
+                >
+                  <BlurView intensity={22} tint="light" style={StyleSheet.absoluteFill} />
+                  <View
+                    style={[StyleSheet.absoluteFill, styles.cardOverlay, { backgroundColor: GLASS_OVERLAY, borderColor: GLASS_BORDER }]}
+                  />
+                  <View style={styles.allDayEventContent}>
+                    <View style={styles.allDayEventIcon}>
+                      <IconSymbol name="calendar" size={14} color={PRIMARY as any} />
+                    </View>
+                    <View style={styles.allDayEventBody}>
+                      <ThemedText style={styles.allDayEventTitle} numberOfLines={1}>
+                        {event.title}
+                      </ThemedText>
+                      {subtitle && (
+                        <ThemedText style={styles.allDayEventSubtitle} numberOfLines={1}>
+                          {subtitle}
+                        </ThemedText>
+                      )}
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+      )}
       <View style={[styles.timeline, { minHeight: contentHeight }]}> 
         {hourLabels.map((label) => (
           <View key={label.label} style={[styles.hourLabel, { top: label.top }]}> 
@@ -497,6 +562,64 @@ export const StructuredTimeline: React.FC<Props> = ({
 };
 
 const styles = StyleSheet.create({
+  allDaySection: {
+    paddingHorizontal: LAYOUT_PAD,
+    paddingTop: 8,
+    paddingBottom: 16,
+  },
+  allDayHeader: {
+    paddingLeft: 6,
+    paddingBottom: 8,
+  },
+  allDayLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: TEXT_PRIMARY,
+    opacity: 0.8,
+  },
+  allDayEventsContainer: {
+    gap: 8,
+  },
+  allDayEventCard: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 18,
+    overflow: 'hidden',
+    backgroundColor: 'transparent',
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+  },
+  allDayEventContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  allDayEventIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(94,61,179,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(94,61,179,0.3)',
+  },
+  allDayEventBody: {
+    flex: 1,
+  },
+  allDayEventTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: TEXT_PRIMARY,
+  },
+  allDayEventSubtitle: {
+    fontSize: 12,
+    opacity: 0.7,
+    marginTop: 2,
+    color: TEXT_PRIMARY,
+  },
   timeline: {
     position: 'relative',
     paddingLeft: LAYOUT_PAD,
