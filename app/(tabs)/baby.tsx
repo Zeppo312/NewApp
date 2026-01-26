@@ -28,7 +28,7 @@ export default function BabyScreen() {
   const { activeBabyId, refreshBabies, isReady } = useActiveBaby();
   const { refreshBabyDetails } = useBabyStatus();
   const router = useRouter();
-  
+
   // Set fallback route for smart back navigation
   useSmartBack('/(tabs)/home');
 

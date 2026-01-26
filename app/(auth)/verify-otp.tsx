@@ -12,7 +12,7 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { verifyOTPToken, resendOTPToken } from '@/lib/supabase';
 
 export default function VerifyOTPScreen() {
-  const { email } = useLocalSearchParams<{ email: string }>();
+  const { email, invitationCode } = useLocalSearchParams<{ email: string, invitationCode?: string }>();
   const [otp, setOTP] = useState(['', '', '', '', '', '']);
   const [isLoading, setIsLoading] = useState(false);
   const [canResend, setCanResend] = useState(true);
@@ -87,12 +87,14 @@ export default function VerifyOTPScreen() {
       
       if (error) {
         console.error('OTP verification error:', error);
-        
+
         // Spezifische Fehlermeldungen
         if (error.message?.includes('invalid') || error.message?.includes('expired')) {
           Alert.alert('Ungültiger Code', 'Der eingegebene Code ist ungültig oder abgelaufen');
           setOTP(['', '', '', '', '', '']);
           inputRefs.current[0]?.focus();
+        } else if (error.message?.toLowerCase().includes('rate limit')) {
+          Alert.alert('Zu viele Versuche', 'Bitte warte kurz, bevor du einen neuen Code anforderst oder erneut prüfst.');
         } else {
           Alert.alert('Verifikation fehlgeschlagen', error.message || 'Bitte versuche es erneut');
         }
@@ -108,7 +110,13 @@ export default function VerifyOTPScreen() {
           [
             {
               text: 'Weiter',
-              onPress: () => router.replace('../getUserInfo')
+              onPress: () => {
+                const nextParams = invitationCode ? { invitationCode: String(invitationCode) } : {};
+                router.replace({
+                  pathname: '../getUserInfo',
+                  params: nextParams
+                });
+              }
             }
           ]
         );
@@ -135,7 +143,11 @@ export default function VerifyOTPScreen() {
       
       if (error) {
         console.error('Resend OTP error:', error);
-        Alert.alert('Fehler', 'Code konnte nicht erneut gesendet werden');
+        if (error.message?.toLowerCase().includes('rate limit')) {
+          Alert.alert('Zu viele Anfragen', 'Du hast zu viele Codes angefordert. Bitte warte eine Minute, bevor du es erneut versuchst.');
+        } else {
+          Alert.alert('Fehler', 'Code konnte nicht erneut gesendet werden');
+        }
         setCanResend(true);
       } else {
         Alert.alert(

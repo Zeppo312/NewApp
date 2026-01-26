@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, View, ScrollView, SafeAreaView, StatusBar, TouchableOpacity, Image, ActivityIndicator, Alert, TextInput, FlatList, Dimensions } from 'react-native';
+import { StyleSheet, View, ScrollView, SafeAreaView, StatusBar, TouchableOpacity, Image, ActivityIndicator, Alert, TextInput, Dimensions } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedBackground } from '@/components/ThemedBackground';
@@ -16,8 +16,9 @@ import { useSmartBack } from '@/contexts/NavigationContext';
 import { LiquidGlassCard, LAYOUT_PAD, TIMELINE_INSET } from '@/constants/DesignGuide';
 
 const { width: screenWidth } = Dimensions.get('window');
-const contentWidth = screenWidth - 2 * LAYOUT_PAD;
 const TIMELINE_CONTENT_WIDTH = screenWidth - LAYOUT_PAD;
+const BLUE_GLASS_OVERLAY = 'rgba(166,205,237,0.18)';
+const BLUE_GLASS_BORDER = 'rgba(166,205,237,0.35)';
 
 // Funktion zum Laden der Bilder
 const getClothingImage = (imageName: string | null) => {
@@ -174,37 +175,37 @@ const clothingCatalogue: Record<ClothingCategory, ClothingItem[]> = {
 // Tipps für verschiedene Wetterbedingungen
 const weatherTips: Record<TemperatureBand, string[]> = {
   hot: [
-    'Sonnencreme nicht vergessen - auch im Schatten!',
-    'Hut mit breiter Krempe bietet zusätzlichen Sonnenschutz',
-    'Im Kinderwagen auf ausreichend Luftzirkulation achten',
-    'Besonders mittags (11-15 Uhr) Schatten suchen',
-    'Regelmäßig Flüssigkeit anbieten',
+    'Schatten, Wasser, Sonnenhut – so bleibt es entspannt.',
+    'Leichte Stoffe lassen die Haut atmen.',
+    'Kurze Check-ins: Nacken warm? Dann passt alles.',
+    'In der Mittagssonne lieber eine Pause drinnen machen.',
+    'Luftig im Kinderwagen hilft gegen Hitzestau.',
   ],
   warm: [
-    'Bei Aktivitäten im Freien immer eine dünne Jacke mitnehmen',
-    'Sonnenschutz bei klarem Himmel verwenden',
-    'Eine leichte Decke im Kinderwagen kann bei Wind nützlich sein',
+    'Eine leichte Schicht dabei haben – falls Wind aufzieht.',
+    'Sonnenschutz lohnt sich auch bei milder Sonne.',
+    'Im Kinderwagen hilft eine dünne Decke gegen Zugluft.',
   ],
   mild: [
-    'Kleidung in Schichten, die sich bei Bedarf abnehmen lassen',
-    'Eine dünne Mütze kann bei Wind sinnvoll sein',
-    'Vor dem Schlafengehen ausreichend lüften',
+    'Schichten sind praktisch, wenn das Wetter kippt.',
+    'Eine dünne Mütze kann bei Wind helfen.',
+    'Kurz lüften, dann wieder kuschelig machen.',
   ],
   cool: [
-    'Kalte Hände und Füße im Blick behalten',
-    'Bei längeren Ausflügen Wechselkleidung mitnehmen',
-    'Im Kinderwagen Fußsack verwenden',
+    'Kalte Hände sind ok – der Nacken zählt mehr.',
+    'Für längere Ausflüge Wechselkleidung einpacken.',
+    'Im Kinderwagen schützt ein Fußsack vor Kälte.',
   ],
   fresh: [
     'Windschutz oder Softshell hilft gegen Zugluft.',
-    'Ein Halstuch schützt empfindliche Haut vor Kälte.',
-    'Bei wechselhaftem Wetter Regenverdeck für den Kinderwagen einpacken.',
+    'Ein Halstuch schützt empfindliche Haut.',
+    'Regenverdeck griffbereit, falls es umschlägt.',
   ],
   cold: [
-    'Mehrere dünne Schichten wärmen besser als eine dicke',
-    'Auf trockene Kleidung achten, besonders nach Aktivitäten',
-    'Wind-Schutz für den Kinderwagen nutzen',
-    'Wechselkleidung mitnehmen',
+    'Mehrere dünne Schichten wärmen oft besser.',
+    'Trocken bleibt warm – nasse Kleidung zügig wechseln.',
+    'Windschutz am Kinderwagen macht viel aus.',
+    'Ein kleines Wechselset beruhigt unterwegs.',
   ],
 };
 
@@ -245,6 +246,54 @@ const getTemperatureBand = (value: number): TemperatureBand => {
   return 'cold';
 };
 
+const temperatureBandLabels: Record<TemperatureBand, string> = {
+  hot: 'heiß',
+  warm: 'warm',
+  mild: 'mild',
+  cool: 'kühl',
+  fresh: 'frisch',
+  cold: 'kalt',
+};
+
+const getHeroRecommendation = (band: TemperatureBand, mode: ContextMode): string => {
+  const baseRecommendations: Record<TemperatureBand, string> = {
+    hot: 'Kurzarm & luftig',
+    warm: 'Kurzarm + leichte Schicht',
+    mild: 'Langarm + leichte Schicht',
+    cool: 'Langarm + Schichten',
+    fresh: 'Langarm + warme Schichten',
+    cold: 'Warm einpacken + Schichten',
+  };
+
+  const indoorRecommendations: Record<TemperatureBand, string> = {
+    hot: 'Luftig & leicht',
+    warm: 'Leicht & bequem',
+    mild: 'Langarm + leichte Schicht',
+    cool: 'Langarm + Schichten',
+    fresh: 'Langarm + warme Schichten',
+    cold: 'Warm & kuschelig',
+  };
+
+  const sleepingRecommendations: Record<TemperatureBand, string> = {
+    hot: 'Leichter Schlafsack reicht',
+    warm: 'Leichter Schlafsack + Body',
+    mild: 'Schlafsack + Langarm',
+    cool: 'Schlafsack + warme Schichten',
+    fresh: 'Wärmerer Schlafsack + Schichten',
+    cold: 'Wärmerer Schlafsack + extra Schichten',
+  };
+
+  if (mode === 'sleeping') {
+    return sleepingRecommendations[band];
+  }
+
+  if (mode === 'indoor') {
+    return indoorRecommendations[band];
+  }
+
+  return baseRecommendations[band];
+};
+
 // Header component that will be memoized
 interface HeaderProps {
   colorScheme: 'light' | 'dark';
@@ -272,7 +321,8 @@ interface HeaderProps {
   feltTemperatureOptions: number[];
   babyAgeMonths: number;
   babyWeightPercentile: number;
-  metaCards: {title: string, content: string, icon: any}[];
+  heroTitle: string;
+  heroSubtitle: string;
 }
 
 const BabyWeatherHeader: React.FC<HeaderProps> = ({ 
@@ -301,7 +351,8 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
   feltTemperatureOptions,
   babyAgeMonths,
   babyWeightPercentile,
-  metaCards
+  heroTitle,
+  heroSubtitle
 }) => {
   const theme = Colors[colorScheme || 'light'];
   const autoFeltTemp = weatherData?.feelsLike ?? weatherData?.temperature;
@@ -334,7 +385,12 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
       )}
 
       {/* Standort-/Postleitzahl-Auswahl */}
-      <LiquidGlassCard style={styles.sectionCard} intensity={26}>
+      <LiquidGlassCard
+        style={styles.sectionCard}
+        intensity={26}
+        overlayColor={BLUE_GLASS_OVERLAY}
+        borderColor={BLUE_GLASS_BORDER}
+      >
         <ThemedText style={styles.sectionTitle}>Standort</ThemedText>
         <View style={styles.locationToggle}>
           <TouchableOpacity
@@ -437,14 +493,24 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
           <ThemedText style={styles.loadingText}>Wetterdaten werden geladen...</ThemedText>
         </View>
       ) : errorMessage ? (
-        <LiquidGlassCard style={styles.errorContainer} intensity={26}>
+        <LiquidGlassCard
+          style={styles.errorContainer}
+          intensity={26}
+          overlayColor={BLUE_GLASS_OVERLAY}
+          borderColor={BLUE_GLASS_BORDER}
+        >
           <IconSymbol name="exclamationmark.triangle" size={40} color="#FF6B6B" />
           <ThemedText style={styles.errorText}>{errorMessage}</ThemedText>
         </LiquidGlassCard>
       ) : (
         <>
           {/* Wetteranzeige */}
-          <LiquidGlassCard style={[styles.sectionCard, styles.weatherCard]} intensity={26}>
+          <LiquidGlassCard
+            style={[styles.sectionCard, styles.weatherCard]}
+            intensity={26}
+            overlayColor={BLUE_GLASS_OVERLAY}
+            borderColor={BLUE_GLASS_BORDER}
+          >
             <ThemedText style={[styles.sectionTitle, styles.weatherTitle]}>Aktuelle Wetterlage</ThemedText>
             
             {/* New weather display layout */}
@@ -482,8 +548,25 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
             </View>
           </LiquidGlassCard>
 
+          {heroTitle && heroSubtitle && (
+            <LiquidGlassCard
+              style={[styles.sectionCard, styles.heroCard]}
+              intensity={26}
+              overlayColor={BLUE_GLASS_OVERLAY}
+              borderColor={BLUE_GLASS_BORDER}
+            >
+              <ThemedText style={[styles.sectionTitle, styles.heroTitle]}>{heroTitle}</ThemedText>
+              <ThemedText style={styles.heroSubtitle}>{heroSubtitle}</ThemedText>
+            </LiquidGlassCard>
+          )}
+
           {/* Kontext-Auswahl */}
-          <LiquidGlassCard style={[styles.sectionCard]} intensity={26}>
+          <LiquidGlassCard
+            style={[styles.sectionCard]}
+            intensity={26}
+            overlayColor={BLUE_GLASS_OVERLAY}
+            borderColor={BLUE_GLASS_BORDER}
+          >
             <ThemedText style={styles.sectionTitle}>Situation auswählen</ThemedText>
             <View style={styles.contextButtonsContainer}>
               {(Object.keys(contextDescriptions) as ContextMode[]).map((mode) => (
@@ -518,7 +601,12 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
           </LiquidGlassCard>
 
           {(selectedMode === 'indoor' || selectedMode === 'sleeping') && (
-            <LiquidGlassCard style={[styles.sectionCard]} intensity={26}>
+            <LiquidGlassCard
+              style={[styles.sectionCard]}
+              intensity={26}
+              overlayColor={BLUE_GLASS_OVERLAY}
+              borderColor={BLUE_GLASS_BORDER}
+            >
               <ThemedText style={styles.sectionTitle}>Gefühlte Temperatur wählen</ThemedText>
               <View style={styles.feltTempOptions}>
                 <TouchableOpacity
@@ -568,29 +656,7 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
             </LiquidGlassCard>
           )}
 
-          {/* Meta-Cards vor den Kleidungsempfehlungen anzeigen */}
-          {!isLoading && !errorMessage && weatherData && (
-            <View style={styles.metaCardsContainer}>
-              {metaCards.map((card, index) => (
-                <LiquidGlassCard key={index} style={styles.metaCard} intensity={26}>
-                  <View style={styles.metaCardHeader}>
-                    <IconSymbol name={card.icon} size={22} color={theme.accent} style={styles.metaCardIcon} />
-                    <ThemedText style={styles.metaCardTitle}>{card.title}</ThemedText>
-                  </View>
-                  <ThemedText style={styles.metaCardContent}>{card.content}</ThemedText>
-                </LiquidGlassCard>
-              ))}
-            </View>
-          )}
           
-          {/* Neue Überschrift für Kleidungsempfehlungen */}
-          {!isLoading && !errorMessage && weatherData && (
-            <LiquidGlassCard style={[styles.sectionCard, styles.recommendationCard]} intensity={26}>
-              <ThemedText style={[styles.sectionTitle, styles.recommendationTitle]}>
-                Empfohlene Kleidung für {contextDescriptions[selectedMode]}
-              </ThemedText>
-            </LiquidGlassCard>
-          )}
         </>
       )}
     </View>
@@ -631,6 +697,9 @@ export default function BabyWeatherScreen() {
   const [showBabyInfo, setShowBabyInfo] = useState(false);
   const [metaCards, setMetaCards] = useState<{title: string, content: string, icon: any}[]>([]);
   const [feltTemperature, setFeltTemperature] = useState<number | null>(null);
+  const [heroTitle, setHeroTitle] = useState('');
+  const [heroSubtitle, setHeroSubtitle] = useState('');
+  const [tipsExpanded, setTipsExpanded] = useState(false);
 
   // Alternativen-System
   const [layerAlternatives, setLayerAlternatives] = useState<LayerAlternatives>({});
@@ -847,6 +916,10 @@ export default function BabyWeatherScreen() {
     }
   }, [feltTemperature]);
 
+  useEffect(() => {
+    setTipsExpanded(false);
+  }, [metaCards]);
+
   // Helper: Wähle genau EINES aus einer Liste basierend auf Priorität
   const selectOne = (candidates: string[], priorities: string[]): string | null => {
     for (const priority of priorities) {
@@ -926,6 +999,13 @@ export default function BabyWeatherScreen() {
     if (mode === 'sleeping') {
       console.log(`Schlaf-Referenztemperatur: ${indoorComfortTemp}°C (Band ${layeringBand})`);
     }
+
+    const heroTempValue = Math.round(hasManualFeltTemp ? manualFeltTemp : temperature);
+    const heroBandLabel = temperatureBandLabels[temperatureBand] ?? 'mild';
+    const heroTitleText = `Heute ${heroBandLabel} (${heroTempValue}°C)`;
+    const heroSubtitleText = getHeroRecommendation(layeringBand, mode);
+    setHeroTitle(heroTitleText);
+    setHeroSubtitle(heroSubtitleText);
 
     const description = weatherData?.description?.toLowerCase() ?? '';
     const iconName = weatherData?.icon ?? '';
@@ -1176,7 +1256,7 @@ export default function BabyWeatherScreen() {
 
     if (randomTip) {
       cards.push({
-        title: "Tipp des Tages",
+        title: "Tipp für heute",
         content: randomTip,
         icon: "lightbulb.fill" as any
       });
@@ -1185,7 +1265,7 @@ export default function BabyWeatherScreen() {
     const warnings = Array.from(metaWarnings);
     if (warnings.length > 0) {
       cards.push({
-        title: "Wichtiger Hinweis",
+        title: "Gut zu wissen",
         content: warnings[0],
         icon: "exclamationmark.triangle.fill" as any
       });
@@ -1193,14 +1273,14 @@ export default function BabyWeatherScreen() {
 
     if (temperatureBand === 'hot') {
       cards.push({
-        title: "Hitze-Tipp",
-        content: "Denken Sie an Schatten, ausreichend Flüssigkeit, Sonnencreme und einen Sonnenhut.",
+        title: "Hitze-Hinweis",
+        content: "Schatten, trinken, Sonnenhut – kurze Nacken-Checks reichen.",
         icon: "sun.max.fill" as any
       });
     } else if (temperatureBand === 'cold') {
       cards.push({
-        title: "Kälte-Tipp",
-        content: "Mehrere dünne Schichten wärmen besser als eine dicke. Prüfen Sie die Temperatur im Nacken, nicht an Händen oder Füßen.",
+        title: "Kälte-Hinweis",
+        content: "Fühlt sich der Nacken warm an? Dann ist alles gut.",
         icon: "snowflake" as any
       });
     }
@@ -1237,15 +1317,6 @@ export default function BabyWeatherScreen() {
     setSearchType('cityName');
   };
 
-  const renderEmpty = () => (
-    <View style={styles.noRecommendations}>
-      <IconSymbol name="questionmark.circle" size={40} color={theme.tabIconDefault} />
-      <ThemedText style={styles.noRecommendationsText}>
-        Keine spezifischen Empfehlungen für diese Temperatur und Situation.
-      </ThemedText>
-    </View>
-  );
-
   const renderFooter = () => (
     <ThemedText style={styles.disclaimer}>
       Hinweis: Die Empfehlungen sind Richtwerte und sollten an die individuellen Bedürfnisse deines Babys angepasst werden.
@@ -1275,56 +1346,120 @@ export default function BabyWeatherScreen() {
     const currentIndex = itemLayer ? (currentAlternativeIndex[itemLayer] ?? 0) : 0;
     const nextAlternative = hasAlternatives && alternatives ? alternatives[(currentIndex + 1) % alternatives.length] : null;
     const displayName = getDisplayName(item.name, selectedMode);
-    const displayAlternative = nextAlternative ? getDisplayName(nextAlternative, selectedMode) : null;
 
     return (
-      <View style={styles.clothingItem}>
-        <View style={styles.clothesPin} />
-        <View style={[
-          styles.clothingItemContent,
-          { backgroundColor: 'rgba(255, 255, 255, 0.85)' }
-        ]}>
+      <View style={styles.outfitItem}>
+        <View style={styles.outfitTile}>
           {item.image ? (
             <Image source={getClothingImage(item.image)} style={styles.clothingImage} />
           ) : (
-            <View style={[
-              styles.iconBackground,
-              { backgroundColor: getClothingColor(item.name) }
-            ]}>
+            <View style={[styles.iconBackground, { backgroundColor: getClothingColor(item.name) }]}>
               <IconSymbol name={getClothingIcon(item.name)} size={36} color="#FFFFFF" />
             </View>
           )}
-
-          {/* Alternativen-Button */}
-          {hasAlternatives && nextAlternative && (
+          {hasAlternatives && (
             <TouchableOpacity
               style={styles.swapButton}
               onPress={() => itemLayer && swapLayerAlternative(itemLayer)}
+              accessibilityLabel="Alternative wechseln"
             >
               <IconSymbol name="arrow.triangle.2.circlepath" size={16} color="#FFFFFF" />
             </TouchableOpacity>
           )}
         </View>
-        <ThemedText style={styles.clothingName}>{displayName}</ThemedText>
-        {hasAlternatives && displayAlternative && (
-          <ThemedText style={styles.alternativeHint}>
-            Alternative: {displayAlternative}
-          </ThemedText>
-        )}
+        <ThemedText style={styles.outfitName}>{displayName}</ThemedText>
       </View>
     );
   };
 
-  // Zusätzliches Rendering für Meta-Cards
-  const renderMetaCard = ({ item }: { item: {title: string, content: string, icon: any} }) => (
-    <LiquidGlassCard style={styles.metaCard} intensity={26}>
-      <View style={styles.metaCardHeader}>
-        <IconSymbol name={item.icon} size={22} color={theme.accent} style={styles.metaCardIcon} />
-        <ThemedText style={styles.metaCardTitle}>{item.title}</ThemedText>
-      </View>
-      <ThemedText style={styles.metaCardContent}>{item.content}</ThemedText>
-    </LiquidGlassCard>
-  );
+  const renderOutfitCard = () => {
+    const recommendedItems = clothingRecommendations.filter(item => item.recommended);
+
+    return (
+      <LiquidGlassCard
+        style={[styles.sectionCard, styles.outfitCard]}
+        intensity={26}
+        overlayColor={BLUE_GLASS_OVERLAY}
+        borderColor={BLUE_GLASS_BORDER}
+      >
+        <View style={styles.outfitHeader}>
+          <IconSymbol name="tshirt.fill" size={22} color={theme.accent} />
+          <View style={styles.outfitHeaderText}>
+            <ThemedText style={styles.outfitTitle}>
+              Kleidung für {contextDescriptions[selectedMode]}
+            </ThemedText>
+            <ThemedText style={styles.outfitSubtitle}>
+              Das empfohlene Outfit auf einen Blick
+            </ThemedText>
+          </View>
+        </View>
+        {recommendedItems.length > 0 ? (
+          <View style={styles.outfitGrid}>
+            {recommendedItems.map(item => (
+              <View key={item.id} style={styles.outfitGridItem}>
+                {renderClothingItem({ item })}
+              </View>
+            ))}
+          </View>
+        ) : (
+          <View style={styles.noRecommendations}>
+            <IconSymbol name="questionmark.circle" size={32} color={theme.tabIconDefault} />
+            <ThemedText style={styles.noRecommendationsText}>
+              Keine spezifischen Empfehlungen für diese Situation.
+            </ThemedText>
+          </View>
+        )}
+      </LiquidGlassCard>
+    );
+  };
+
+  const renderTipsCard = () => {
+    if (!metaCards || metaCards.length === 0) {
+      return null;
+    }
+
+    const primaryTip = metaCards[0];
+    const extraTips = metaCards.slice(1);
+
+    return (
+      <LiquidGlassCard
+        style={[styles.sectionCard, styles.tipCard]}
+        intensity={26}
+        overlayColor={BLUE_GLASS_OVERLAY}
+        borderColor={BLUE_GLASS_BORDER}
+      >
+        <View style={styles.tipHeader}>
+          <ThemedText style={[styles.sectionTitle, styles.tipTitle]}>{primaryTip.title}</ThemedText>
+        </View>
+        <ThemedText style={styles.tipContent}>{primaryTip.content}</ThemedText>
+        {extraTips.length > 0 && (
+          <TouchableOpacity
+            style={styles.tipToggle}
+            onPress={() => setTipsExpanded(!tipsExpanded)}
+          >
+            <ThemedText style={styles.tipToggleText}>
+              {tipsExpanded ? 'Weniger anzeigen' : 'Mehr erfahren'}
+            </ThemedText>
+            <IconSymbol
+              name={tipsExpanded ? 'chevron.up' : 'chevron.down'}
+              size={14}
+              color={theme.tabIconDefault}
+            />
+          </TouchableOpacity>
+        )}
+        {tipsExpanded && extraTips.length > 0 && (
+          <View style={styles.tipList}>
+            {extraTips.map((tip, index) => (
+              <View key={`${tip.title}-${index}`} style={styles.tipListItem}>
+                <IconSymbol name={tip.icon} size={16} color={theme.tabIconDefault} />
+                <ThemedText style={styles.tipListText}>{tip.content}</ThemedText>
+              </View>
+            ))}
+          </View>
+        )}
+      </LiquidGlassCard>
+    );
+  };
 
   return (
     <>
@@ -1335,51 +1470,6 @@ export default function BabyWeatherScreen() {
           
           <Header title="Babywetter" showBackButton />
           
-          {!isLoading && !errorMessage && weatherData ? (
-          <FlatList
-            ListHeaderComponent={
-              <MemoHeader 
-                colorScheme={colorScheme}
-                showBabyInfo={showBabyInfo}
-                setShowBabyInfo={setShowBabyInfo}
-                searchType={searchType}
-                toggleLocationMode={toggleLocationMode}
-                switchToZipCodeSearch={switchToZipCodeSearch}
-                switchToCitySearch={switchToCitySearch}
-                zipCode={zipCode}
-                handleZipCodeChange={handleZipCodeChange}
-                handleZipCodeSearch={handleZipCodeSearch}
-                cityName={cityName}
-                handleCityNameChange={handleCityNameChange}
-                handleCitySearch={handleCitySearch}
-                zipCodeInputRef={zipCodeInputRef}
-                cityNameInputRef={cityNameInputRef}
-                weatherData={weatherData}
-                isLoading={isLoading}
-                errorMessage={errorMessage}
-                selectedMode={selectedMode}
-                setSelectedMode={setSelectedMode}
-                feltTemperature={feltTemperature}
-                setFeltTemperature={setFeltTemperature}
-                feltTemperatureOptions={FELT_TEMPERATURE_OPTIONS}
-                babyAgeMonths={babyAgeMonths}
-                babyWeightPercentile={babyWeightPercentile}
-                metaCards={metaCards}
-              />
-            }
-            ListEmptyComponent={renderEmpty}
-            ListFooterComponent={renderFooter}
-            data={clothingRecommendations.filter(item => item.recommended)}
-            renderItem={renderClothingItem}
-            keyExtractor={item => item.id}
-            numColumns={3}
-            style={styles.scrollView}
-            contentContainerStyle={styles.contentContainer}
-            columnWrapperStyle={styles.columnWrapper}
-            initialNumToRender={9}
-            removeClippedSubviews={false}
-          />
-        ) : (
           <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
             <MemoHeader 
               colorScheme={colorScheme}
@@ -1407,10 +1497,17 @@ export default function BabyWeatherScreen() {
               feltTemperatureOptions={FELT_TEMPERATURE_OPTIONS}
               babyAgeMonths={babyAgeMonths}
               babyWeightPercentile={babyWeightPercentile}
-              metaCards={metaCards}
+              heroTitle={heroTitle}
+              heroSubtitle={heroSubtitle}
             />
+            {!isLoading && !errorMessage && weatherData && (
+              <>
+                {renderOutfitCard()}
+                {renderTipsCard()}
+                {renderFooter()}
+              </>
+            )}
           </ScrollView>
-        )}
         </SafeAreaView>
       </ThemedBackground>
     </>
@@ -1756,6 +1853,68 @@ const styles = StyleSheet.create({
     justifyContent: 'space-around',
     width: '100%',
   },
+  outfitCard: {
+    paddingVertical: 18,
+    paddingHorizontal: 14,
+  },
+  outfitHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 14,
+    gap: 10,
+  },
+  outfitHeaderText: {
+    flex: 1,
+  },
+  outfitTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#7D5A50',
+  },
+  outfitSubtitle: {
+    fontSize: 12,
+    marginTop: 2,
+    opacity: 0.7,
+    color: '#7D5A50',
+  },
+  outfitGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  outfitGridItem: {
+    width: '32%',
+    marginBottom: 12,
+  },
+  outfitItem: {
+    alignItems: 'center',
+  },
+  outfitTile: {
+    width: 84,
+    height: 84,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.5)',
+    marginBottom: 8,
+  },
+  outfitName: {
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'center',
+    color: '#7D5A50',
+  },
+  altLink: {
+    marginTop: 4,
+  },
+  altLinkText: {
+    fontSize: 10,
+    textAlign: 'center',
+    color: '#A67C52',
+    textDecorationLine: 'underline',
+  },
   clothingItem: {
     alignItems: 'center',
     marginVertical: 10,
@@ -1836,9 +1995,10 @@ const styles = StyleSheet.create({
   },
   noRecommendations: {
     alignItems: 'center',
-    padding: 20,
+    paddingVertical: 18,
+    paddingHorizontal: 10,
     alignSelf: 'center',
-    width: TIMELINE_CONTENT_WIDTH,
+    width: '100%',
   },
   noRecommendationsText: {
     fontSize: 14,
@@ -1874,8 +2034,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.12)',
   },
   activeLocationButton: {
-    borderColor: 'rgba(100,150,255,0.55)',
-    backgroundColor: 'rgba(166,205,237,0.2)',
+    borderColor: 'rgba(100,150,255,0.75)',
+    backgroundColor: 'rgba(166,205,237,0.35)',
   },
   locationButtonText: {
     marginLeft: 6,
@@ -2016,6 +2176,84 @@ const styles = StyleSheet.create({
     paddingVertical: 18,
     paddingHorizontal: 14,
     alignItems: 'stretch',
+  },
+  heroCard: {
+    paddingVertical: 20,
+    alignItems: 'center',
+  },
+  heroTitle: {
+    marginBottom: 6,
+  },
+  heroSubtitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#7D5A50',
+    textAlign: 'center',
+    opacity: 0.85,
+  },
+  heroContextPill: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.5)',
+    backgroundColor: 'rgba(255,255,255,0.25)',
+  },
+  heroContextText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#7D5A50',
+  },
+  tipCard: {
+    paddingVertical: 18,
+  },
+  tipHeader: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  tipTitle: {
+    marginBottom: 0,
+    textAlign: 'center',
+  },
+  tipContent: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: '#7D5A50',
+    textAlign: 'center',
+    paddingHorizontal: 6,
+    marginTop: 2,
+  },
+  tipToggle: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  tipToggleText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#7D5A50',
+  },
+  tipList: {
+    marginTop: 12,
+    gap: 10,
+  },
+  tipListItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  tipListText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 18,
+    color: '#7D5A50',
+    opacity: 0.9,
   },
   recommendationCard: {
     paddingVertical: 18,

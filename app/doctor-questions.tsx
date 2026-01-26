@@ -18,13 +18,8 @@ import { ThemedBackground } from '@/components/ThemedBackground';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Stack } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
-import {
-  getDoctorQuestions,
-  saveDoctorQuestion,
-  updateDoctorQuestion,
-  deleteDoctorQuestion,
-  DoctorQuestion,
-} from '@/lib/supabase';
+import { DoctorQuestion } from '@/lib/supabase';
+import { useDoctorQuestionsService } from '@/hooks/useDoctorQuestionsService';
 import Header from '@/components/Header';
 import {
   LiquidGlassCard,
@@ -41,6 +36,7 @@ export default function DoctorQuestionsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const { user } = useAuth();
+  const service = useDoctorQuestionsService();
 
   const [questions, setQuestions] = useState<DoctorQuestion[]>([]);
   const [newQuestion, setNewQuestion] = useState('');
@@ -61,9 +57,14 @@ export default function DoctorQuestionsScreen() {
   }, [user]);
 
   const loadQuestions = async () => {
+    if (!service) {
+      setIsLoading(false);
+      return;
+    }
+
     try {
       setIsLoading(true);
-      const { data, error } = await getDoctorQuestions();
+      const { data, error } = await service.getQuestions();
 
       if (error) {
         console.error('Error loading doctor questions:', error);
@@ -87,18 +88,29 @@ export default function DoctorQuestionsScreen() {
       return;
     }
 
+    if (!service) {
+      Alert.alert('Fehler', 'Service nicht verfügbar.');
+      return;
+    }
+
     try {
       setIsSaving(true);
-      const { data, error } = await saveDoctorQuestion(newQuestion.trim());
+      const result = await service.saveQuestion(newQuestion.trim());
 
-      if (error) {
-        console.error('Error saving doctor question:', error);
+      // Use primary result for user feedback (dual-write pattern)
+      if (result.primary.error) {
+        console.error('Error saving doctor question:', result.primary.error);
         Alert.alert('Fehler', 'Frage konnte nicht gespeichert werden.');
         return;
       }
 
-      if (data) {
-        setQuestions((prev) => [data, ...prev]);
+      // Log secondary write failure (non-blocking)
+      if (result.secondary.error) {
+        console.warn('Secondary backend write failed:', result.secondary.error);
+      }
+
+      if (result.primary.data) {
+        setQuestions((prev) => [result.primary.data!, ...prev]);
         setNewQuestion('');
         Alert.alert('Erfolg', 'Deine Frage wurde gespeichert.');
       }
@@ -110,19 +122,30 @@ export default function DoctorQuestionsScreen() {
   };
 
   const handleToggleAnswered = async (question: DoctorQuestion) => {
+    if (!service) {
+      Alert.alert('Fehler', 'Service nicht verfügbar.');
+      return;
+    }
+
     try {
-      const { data, error } = await updateDoctorQuestion(question.id, {
+      const result = await service.updateQuestion(question.id, {
         is_answered: !question.is_answered,
       });
 
-      if (error) {
-        console.error('Error updating doctor question:', error);
+      // Use primary result for user feedback (dual-write pattern)
+      if (result.primary.error) {
+        console.error('Error updating doctor question:', result.primary.error);
         Alert.alert('Fehler', 'Status konnte nicht aktualisiert werden.');
         return;
       }
 
-      if (data) {
-        setQuestions((prev) => prev.map((q) => (q.id === question.id ? data : q)));
+      // Log secondary write failure (non-blocking)
+      if (result.secondary.error) {
+        console.warn('Secondary backend write failed:', result.secondary.error);
+      }
+
+      if (result.primary.data) {
+        setQuestions((prev) => prev.map((q) => (q.id === question.id ? result.primary.data! : q)));
       }
     } catch (err) {
       console.error('Failed to update doctor question:', err);
@@ -139,13 +162,24 @@ export default function DoctorQuestionsScreen() {
         text: 'Löschen',
         style: 'destructive',
         onPress: async () => {
-          try {
-            const { error } = await deleteDoctorQuestion(questionId);
+          if (!service) {
+            Alert.alert('Fehler', 'Service nicht verfügbar.');
+            return;
+          }
 
-            if (error) {
-              console.error('Error deleting doctor question:', error);
+          try {
+            const result = await service.deleteQuestion(questionId);
+
+            // Use primary result for user feedback (dual-write pattern)
+            if (result.primary.error) {
+              console.error('Error deleting doctor question:', result.primary.error);
               Alert.alert('Fehler', 'Frage konnte nicht gelöscht werden.');
               return;
+            }
+
+            // Log secondary write failure (non-blocking)
+            if (result.secondary.error) {
+              console.warn('Secondary backend delete failed:', result.secondary.error);
             }
 
             setQuestions((prev) => prev.filter((q) => q.id !== questionId));
@@ -175,19 +209,30 @@ export default function DoctorQuestionsScreen() {
   };
 
   const handleSaveAnswer = async (questionId: string) => {
+    if (!service) {
+      Alert.alert('Fehler', 'Service nicht verfügbar.');
+      return;
+    }
+
     try {
-      const { data, error } = await updateDoctorQuestion(questionId, {
-        answer: answerText.trim() || null,
+      const result = await service.updateQuestion(questionId, {
+        answer: answerText.trim() || undefined,
       });
 
-      if (error) {
-        console.error('Error saving answer:', error);
+      // Use primary result for user feedback (dual-write pattern)
+      if (result.primary.error) {
+        console.error('Error saving answer:', result.primary.error);
         Alert.alert('Fehler', 'Antwort konnte nicht gespeichert werden.');
         return;
       }
 
-      if (data) {
-        setQuestions((prev) => prev.map((q) => (q.id === questionId ? data : q)));
+      // Log secondary write failure (non-blocking)
+      if (result.secondary.error) {
+        console.warn('Secondary backend write failed:', result.secondary.error);
+      }
+
+      if (result.primary.data) {
+        setQuestions((prev) => prev.map((q) => (q.id === questionId ? result.primary.data! : q)));
         setEditingAnswer(null);
         Keyboard.dismiss();
       }

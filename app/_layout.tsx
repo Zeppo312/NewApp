@@ -16,6 +16,8 @@ import { BabyStatusProvider } from '@/contexts/BabyStatusContext';
 import { ActiveBabyProvider, useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { ThemeProvider as AppThemeProvider } from '@/contexts/ThemeContext';
 import { NavigationProvider } from '@/contexts/NavigationContext';
+import { ConvexProvider } from '@/contexts/ConvexContext';
+import { BackendProvider } from '@/contexts/BackendContext';
 import { checkForNewNotifications, registerBackgroundNotificationTask, BACKGROUND_NOTIFICATION_TASK } from '@/lib/notificationService';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useSleepWindowNotifications } from '@/hooks/useSleepWindowNotifications';
@@ -291,17 +293,22 @@ export default Sentry.wrap(function RootLayout() {
   }
 
   // Umschließen der App mit dem AuthProvider und BabyStatusProvider
+  // ConvexProvider und BackendProvider für Dual-Backend-Architektur hinzugefügt
   return (
     <AuthProvider>
-      <AppThemeProvider>
-        <NavigationProvider>
-          <ActiveBabyProvider>
-            <BabyStatusProvider>
-              <RootLayoutNav />
-            </BabyStatusProvider>
-          </ActiveBabyProvider>
-        </NavigationProvider>
-      </AppThemeProvider>
+      <ConvexProvider>
+        <BackendProvider>
+          <AppThemeProvider>
+            <NavigationProvider>
+              <ActiveBabyProvider>
+                <BabyStatusProvider>
+                  <RootLayoutNav />
+                </BabyStatusProvider>
+              </ActiveBabyProvider>
+            </NavigationProvider>
+          </AppThemeProvider>
+        </BackendProvider>
+      </ConvexProvider>
     </AuthProvider>
   );
 });

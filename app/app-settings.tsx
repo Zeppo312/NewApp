@@ -7,6 +7,8 @@ import { ThemedBackground } from '@/components/ThemedBackground';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useRouter, Stack } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
+import { useConvex } from '@/contexts/ConvexContext';
+import { useBackend } from '@/contexts/BackendContext';
 import { getAppSettings, saveAppSettings, AppSettings } from '@/lib/supabase';
 import { exportUserData } from '@/lib/dataExport';
 import { deleteUserAccount, deleteUserData } from '@/lib/profile';
@@ -30,6 +32,11 @@ export default function AppSettingsScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isDeletingData, setIsDeletingData] = useState(false);
+  const [isSyncingConvex, setIsSyncingConvex] = useState(false);
+
+  // Convex context
+  const { convexClient, syncUser, lastSyncError } = useConvex();
+  const { activeBackend } = useBackend();
 
   // Check if current user is admin
   const isAdmin = user?.email ? ADMIN_EMAILS.includes(user.email) : false;
@@ -168,6 +175,33 @@ export default function AppSettingsScreen() {
       Alert.alert('Fehler', err?.message || 'Daten konnten nicht gelöscht werden.');
     } finally {
       setIsDeletingData(false);
+    }
+  };
+
+  const handleSyncToConvex = async () => {
+    setIsSyncingConvex(true);
+    try {
+      const success = await syncUser();
+
+      if (success) {
+        Alert.alert(
+          '✅ Sync erfolgreich',
+          `User wurde erfolgreich zu Convex synchronisiert.\n\nUser ID: ${user?.id}\nEmail: ${user?.email || 'N/A'}`,
+          [{ text: 'OK' }]
+        );
+      } else {
+        Alert.alert(
+          '❌ Sync fehlgeschlagen',
+          lastSyncError
+            ? `Fehler: ${lastSyncError.message}\n\nBitte prüfe die Console Logs für Details.`
+            : 'Unbekannter Fehler. Prüfe die Console Logs.',
+          [{ text: 'OK' }]
+        );
+      }
+    } catch (error) {
+      Alert.alert('Fehler', `Sync fehlgeschlagen: ${error}`);
+    } finally {
+      setIsSyncingConvex(false);
     }
   };
 
@@ -349,6 +383,48 @@ export default function AppSettingsScreen() {
                           <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
                         </View>
                       </TouchableOpacity>
+
+                      {/* Convex Sync */}
+                      <TouchableOpacity
+                        style={[styles.rowItem, (!convexClient || isSyncingConvex) && styles.disabledRow]}
+                        onPress={handleSyncToConvex}
+                        disabled={!convexClient || isSyncingConvex}
+                      >
+                        <View style={styles.rowIcon}>
+                          <ThemedText style={{ fontSize: 24 }}>🔄</ThemedText>
+                        </View>
+                        <View style={styles.rowContent}>
+                          <ThemedText style={styles.rowTitle}>Convex User Sync</ThemedText>
+                          <ThemedText style={styles.rowDescription}>
+                            User zu Convex syncen • Backend: {activeBackend === 'supabase' ? 'Supabase' : 'Convex'}
+                          </ThemedText>
+                        </View>
+                        <View style={styles.trailing}>
+                          {isSyncingConvex ? (
+                            <ActivityIndicator size="small" color={theme.accent} />
+                          ) : (
+                            <IconSymbol
+                              name={convexClient ? "arrow.triangle.2.circlepath" : "xmark.circle"}
+                              size={20}
+                              color={convexClient ? theme.accent : "#FF6B6B"}
+                            />
+                          )}
+                        </View>
+                      </TouchableOpacity>
+
+                      {/* Convex Status Info */}
+                      <View style={[styles.rowItem, styles.infoRow]}>
+                        <View style={styles.rowIcon}>
+                          <ThemedText style={{ fontSize: 24 }}>ℹ️</ThemedText>
+                        </View>
+                        <View style={styles.rowContent}>
+                          <ThemedText style={styles.rowTitle}>Convex Status</ThemedText>
+                          <ThemedText style={[styles.rowDescription, { fontSize: 11 }]}>
+                            Client: {convexClient ? '✅ Bereit' : '❌ Nicht verfügbar'}
+                            {lastSyncError && `\n❌ Fehler: ${lastSyncError.message.substring(0, 50)}...`}
+                          </ThemedText>
+                        </View>
+                      </View>
                     </LiquidGlassCard>
                   )}
                 </>
@@ -467,6 +543,9 @@ const styles = StyleSheet.create({
   },
   dangerText: {
     color: '#FF6B6B',
+  },
+  infoRow: {
+    borderBottomWidth: 0,
   },
   errorContainerGlass: {
     borderRadius: 22,

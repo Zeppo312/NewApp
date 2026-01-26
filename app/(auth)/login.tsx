@@ -12,7 +12,7 @@ import { ThemedBackground } from '@/components/ThemedBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase, supabaseUrl, supabaseAnonKey, redeemInvitationCode } from '@/lib/supabase';
+import { supabase, supabaseUrl } from '@/lib/supabase';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -120,7 +120,10 @@ export default function LoginScreen() {
           console.log('Registration successful, redirecting to OTP verification...');
           router.replace({
             pathname: './verify-otp',
-            params: { email: email }
+            params: {
+              email: email,
+              invitationCode: showInvitationField && invitationCode ? invitationCode.trim() : undefined
+            }
           });
           return;
         } else if (data && !data.user) {
@@ -128,7 +131,10 @@ export default function LoginScreen() {
           console.log('Registration pending OTP verification...');
           router.replace({
             pathname: './verify-otp', 
-            params: { email: email }
+            params: {
+              email: email,
+              invitationCode: showInvitationField && invitationCode ? invitationCode.trim() : undefined
+            }
           });
           return;
         }
@@ -161,7 +167,9 @@ export default function LoginScreen() {
       // Benutzerfreundliche Fehlermeldungen
       console.error('Authentication error:', err);
 
-      if (err.message?.includes('Invalid login')) {
+      if (err.message?.toLowerCase().includes('rate limit')) {
+        setError('Zu viele Versuche. Bitte warte kurz, bevor du es erneut probierst.');
+      } else if (err.message?.includes('Invalid login')) {
         setError('Ungültige E-Mail oder Passwort');
       } else if (err.message?.includes('Email not confirmed')) {
         setError('Bitte bestätige deine E-Mail-Adresse');
@@ -171,9 +179,11 @@ export default function LoginScreen() {
           [{ text: 'OK' }]
         );
       } else {
-        setError(isRegistering
+        const friendlyFallback = isRegistering
           ? 'Registrierung fehlgeschlagen. Bitte versuche es erneut.'
-          : 'Login fehlgeschlagen. Bitte versuche es erneut.');
+          : 'Login fehlgeschlagen. Bitte versuche es erneut.';
+        // Zeige den Supabase-Fehlertext mit Fallback, damit wir den echten Grund sehen
+        setError(err?.message ? `${friendlyFallback} (${err.message})` : friendlyFallback);
       }
     } finally {
       setIsLoading(false);

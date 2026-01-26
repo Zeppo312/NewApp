@@ -26,7 +26,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import TextInputOverlay from '@/components/modals/TextInputOverlay';
 
-import { SleepEntry, SleepQuality, startSleepTracking, stopSleepTracking, loadConnectedUsers } from '@/lib/sleepData';
+import { SleepEntry, SleepQuality, loadConnectedUsers } from '@/lib/sleepData';
 import { loadAllVisibleSleepEntries } from '@/lib/sleepSharing';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import {
@@ -38,8 +38,10 @@ import Header from '@/components/Header';
 import ActivityCard from '@/components/ActivityCard';
 import ActivityInputModal from '@/components/ActivityInputModal';
 // SplashOverlay Import entfernt - keine Popups
-import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { useBackend } from '@/contexts/BackendContext';
+import { useConvex } from '@/contexts/ConvexContext';
+import { useSleepEntriesService } from '@/hooks/useSleepEntriesService';
 import { ProgressCircle } from '@/components/ProgressCircle';
 import type { ViewStyle } from 'react-native';
 import { GlassCard, LiquidGlassCard, LAYOUT_PAD, SECTION_GAP_TOP, SECTION_GAP_BOTTOM, RADIUS, PRIMARY, GLASS_BORDER, GLASS_OVERLAY, FONT_SM, FONT_MD, FONT_LG } from '@/constants/DesignGuide';
@@ -49,7 +51,6 @@ import { predictNextSleepWindow, updatePersonalizationAfterNap, initializePerson
 import { markPaywallShown, shouldShowPaywall } from '@/lib/paywall';
 import { useNotifications } from '@/hooks/useNotifications';
 import { usePartnerNotifications } from '@/hooks/usePartnerNotifications';
-
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 // Typografie helper
@@ -92,8 +93,6 @@ const GRID_COL_W = Math.floor((contentWidth - (GRID_COLS - 1) * GRID_GUTTER) / G
 const GRID_LEFTOVER = contentWidth - (GRID_COLS * GRID_COL_W + (GRID_COLS - 1) * GRID_GUTTER);
 
 const MAX_BAR_H = 140; // Höhe der Balkenfläche (mehr Luft)
-
-// GlassCard imported from DesignGuide
 
 // Types for sleep periods
 type SleepPeriod = 'day' | 'night';
@@ -654,7 +653,10 @@ export default function SleepTrackerScreen() {
   const theme = Colors[colorScheme];
   const router = useRouter();
   const { user } = useAuth();
+  const { activeBackend } = useBackend();
+  const { convexClient } = useConvex();
   const { activeBabyId } = useActiveBaby();
+  const sleepService = user ? useSleepEntriesService() : null;
   const paywallCheckInFlight = useRef(false);
   const triggerHaptic = useCallback(() => {
     try {
@@ -795,7 +797,7 @@ export default function SleepTrackerScreen() {
 
   useEffect(() => {
     loadSleepData();
-  }, [activeBabyId]);
+  }, [activeBabyId, activeBackend, convexClient]);
 
   // Initialize personalization on mount or when baby changes
   useEffect(() => {
@@ -967,10 +969,40 @@ export default function SleepTrackerScreen() {
     };
   };
 
+  // Sync function removed - now using dual-write via SleepEntriesService
+
+  const loadVisibleSleepEntries = useCallback(
+    async (babyId?: string) => {
+      if (!sleepService) {
+        // Fallback to old method if service not available (user not logged in)
+        return await loadAllVisibleSleepEntries(babyId);
+      }
+
+      try {
+        const result = await sleepService.getEntries(babyId);
+
+        if (result.data) {
+          return { success: true, entries: result.data };
+        }
+
+        if (result.error) {
+          console.error('[SleepTracker] Failed to load sleep entries:', result.error);
+          return { success: false, entries: [] };
+        }
+
+        return { success: false, entries: [] };
+      } catch (error) {
+        console.error('[SleepTracker] Unexpected error loading sleep entries:', error);
+        return { success: false, entries: [] };
+      }
+    },
+    [sleepService]
+  );
+
   // Load LIVE status (active sleep entry) - NEVER cache!
   const loadLiveStatus = async () => {
     try {
-      const { success, entries } = await loadAllVisibleSleepEntries(activeBabyId ?? undefined);
+      const { success, entries } = await loadVisibleSleepEntries(activeBabyId ?? undefined);
       if (success && entries) {
         const active = entries.find(entry => !entry.end_time);
         return active ? classifySleepEntry(active) : null;
@@ -984,12 +1016,12 @@ export default function SleepTrackerScreen() {
   // Load sleep history (finished entries) - WITH cache!
   const loadSleepHistory = async () => {
     // WICHTIG: Cache-Key nur mit Baby-ID, damit Partner denselben Cache teilen!
-    const cacheKey = `screen_cache_sleep_history_${activeBabyId || 'default'}`;
+    const cacheKey = `screen_cache_sleep_history_${activeBackend}_${activeBabyId || 'default'}`;
 
     const result = await loadWithRevalidate(
       cacheKey,
       async () => {
-        const { success, entries } = await loadAllVisibleSleepEntries(activeBabyId ?? undefined);
+        const { success, entries } = await loadVisibleSleepEntries(activeBabyId ?? undefined);
         if (success && entries) {
           // Only return finished entries for history
           return entries.filter(entry => entry.end_time);
@@ -1078,54 +1110,78 @@ export default function SleepTrackerScreen() {
   // Start sleep tracking
   const handleStartSleep = async (_period: SleepPeriod) => {
     if (isStartingSleep) return;
+    if (!user?.id || !sleepService) {
+      Alert.alert('Fehler', 'Service nicht verfügbar');
+      return;
+    }
+
     setIsStartingSleep(true);
     try {
       const effectivePartnerId = await getEffectivePartnerId();
-      const { success, entry, error } = await startSleepTracking(
-        undefined,
-        effectivePartnerId || undefined,
-        activeBabyId ?? undefined
-      );
-      
-      if (success && entry) {
-        const classifiedEntry = classifySleepEntry(entry);
-        setActiveSleepEntry(classifiedEntry);
-        setIsStartingSleep(false);
+      const now = new Date();
+      const startTime = now.toISOString();
 
-        if (user?.id && predictionRef.current) {
-          try {
-            // Verwende babyId statt userId für gemeinsame Personalization zwischen Partnern
-            await updatePersonalizationAfterNap(
-              activeBabyId || user.id,
-              predictionRef.current.napIndexToday,
-              predictionRef.current.timeOfDayBucket,
-              predictionRef.current.recommendedStart,
-              new Date(entry.start_time),
-            );
-          } catch (personalizationError) {
-            console.error('Failed to update sleep personalization:', personalizationError);
-          } finally {
-            predictionRef.current = null;
-            setSleepPrediction(null);
-            setPredictionError(null);
-            setPredictionLoading(true);
-          }
-        }
+      // Dual-write to both backends (completely separate, no sync)
+      const result = await sleepService.createEntry({
+        user_id: user.id,
+        baby_id: activeBabyId ?? null,
+        start_time: startTime,
+        end_time: null, // Active sleep has no end time yet
+        quality: null,
+        notes: null,
+        duration_minutes: null,
+        partner_id: effectivePartnerId ?? null,
+      });
 
-        await loadSleepData();
-
-        // Splash anzeigen
-        const currentPeriod: SleepPeriod =
-          new Date().getHours() >= 20 || new Date().getHours() < 10 ? 'night' : 'day';
-        showSuccessSplash(
-          '#87CEEB', // Baby blue
-          currentPeriod === 'night' ? '🌙' : '😴',
-          currentPeriod === 'night' ? 'sleep_start_night' : 'sleep_start_day'
-        );
-      } else {
-        Alert.alert('Fehler', error || 'Schlaftracking konnte nicht gestartet werden');
+      if (result.primary.error) {
+        console.error('❌ Start sleep error:', result.primary.error);
+        Alert.alert('Fehler', 'Schlaftracking konnte nicht gestartet werden');
+        return;
       }
+
+      if (result.secondary.error) {
+        console.warn('[SleepTracker] Secondary backend write failed:', result.secondary.error);
+      }
+
+      // Use primary result to set active sleep entry
+      const entry = result.primary.data!;
+      const classifiedEntry = classifySleepEntry(entry);
+      setActiveSleepEntry(classifiedEntry);
+
+      if (predictionRef.current) {
+        try {
+          // Verwende babyId statt userId für gemeinsame Personalization zwischen Partnern
+          await updatePersonalizationAfterNap(
+            activeBabyId || user.id,
+            predictionRef.current.napIndexToday,
+            predictionRef.current.timeOfDayBucket,
+            predictionRef.current.recommendedStart,
+            now,
+          );
+        } catch (personalizationError) {
+          console.error('Failed to update sleep personalization:', personalizationError);
+        } finally {
+          predictionRef.current = null;
+          setSleepPrediction(null);
+          setPredictionError(null);
+          setPredictionLoading(true);
+        }
+      }
+
+      // Invalidate cache and reload
+      await invalidateCacheAfterAction(`sleep_history_${activeBackend}_${activeBabyId || 'default'}`);
+      await loadSleepData();
+
+      // Splash anzeigen
+      const currentPeriod: SleepPeriod =
+        now.getHours() >= 20 || now.getHours() < 10 ? 'night' : 'day';
+      showSuccessSplash(
+        '#87CEEB', // Baby blue
+        currentPeriod === 'night' ? '🌙' : '😴',
+        currentPeriod === 'night' ? 'sleep_start_night' : 'sleep_start_day'
+      );
     } catch (error) {
+      console.error('❌ Unexpected start sleep error:', error);
       Alert.alert('Fehler', 'Unerwarteter Fehler beim Starten des Schlaftrackers');
     } finally {
       setIsStartingSleep(false);
@@ -1134,34 +1190,45 @@ export default function SleepTrackerScreen() {
 
   // Stop sleep tracking
   const handleStopSleep = async (quality?: SleepQuality, notes?: string) => {
-    if (!activeSleepEntry?.id || isStoppingSleep) return;
+    if (!activeSleepEntry?.id || isStoppingSleep || !sleepService) return;
     const resolvedQuality = quality || 'medium';
     setIsStoppingSleep(true);
 
     try {
-      const { success, error } = await stopSleepTracking(
-        activeSleepEntry.id,
-        resolvedQuality,
-        notes,
-        undefined,
-        activeBabyId ?? undefined
-      );
-      
-      if (success) {
-        setActiveSleepEntry(null);
-        const splashKind = resolvedQuality === 'good' ? 'sleep_stop_good' : resolvedQuality === 'bad' ? 'sleep_stop_bad' : 'sleep_stop_medium';
-        const splashColor = resolvedQuality === 'good' ? '#38A169' : resolvedQuality === 'bad' ? '#E53E3E' : '#F5A623';
-        const splashEmoji = resolvedQuality === 'good' ? '😴' : resolvedQuality === 'bad' ? '😵' : '😐';
-        showSuccessSplash(splashColor, splashEmoji, splashKind);
+      const endTime = new Date();
+      const startTime = new Date(activeSleepEntry.start_time);
+      const durationMinutes = Math.round((endTime.getTime() - startTime.getTime()) / 60000);
 
-        // Invalidate cache because stopped sleep now appears in history
-        // WICHTIG: Korrekter Cache-Key wie in loadSleepHistory!
-        await invalidateCacheAfterAction(`sleep_history_${activeBabyId || 'default'}`);
-        await loadSleepData();
-      } else {
-        Alert.alert('Fehler', error || 'Schlaftracking konnte nicht gestoppt werden');
+      // Dual-write update to both backends (completely separate, no sync)
+      const result = await sleepService.updateEntry(activeSleepEntry.id, {
+        end_time: endTime.toISOString(),
+        quality: resolvedQuality,
+        notes: notes ?? null,
+        duration_minutes: durationMinutes,
+      });
+
+      if (result.primary.error) {
+        console.error('❌ Stop sleep error:', result.primary.error);
+        Alert.alert('Fehler', 'Schlaftracking konnte nicht gestoppt werden');
+        return;
       }
+
+      if (result.secondary.error) {
+        console.warn('[SleepTracker] Secondary backend update failed:', result.secondary.error);
+      }
+
+      setActiveSleepEntry(null);
+
+      const splashKind = resolvedQuality === 'good' ? 'sleep_stop_good' : resolvedQuality === 'bad' ? 'sleep_stop_bad' : 'sleep_stop_medium';
+      const splashColor = resolvedQuality === 'good' ? '#38A169' : resolvedQuality === 'bad' ? '#E53E3E' : '#F5A623';
+      const splashEmoji = resolvedQuality === 'good' ? '😴' : resolvedQuality === 'bad' ? '😵' : '😐';
+      showSuccessSplash(splashColor, splashEmoji, splashKind);
+
+      // Invalidate cache because stopped sleep now appears in history
+      await invalidateCacheAfterAction(`sleep_history_${activeBackend}_${activeBabyId || 'default'}`);
+      await loadSleepData();
     } catch (error) {
+      console.error('❌ Unexpected stop sleep error:', error);
       Alert.alert('Fehler', 'Unerwarteter Fehler beim Stoppen des Schlaftrackers');
     } finally {
       setIsStoppingSleep(false);
@@ -1225,58 +1292,66 @@ export default function SleepTrackerScreen() {
 
       if (editingEntry?.id) {
         console.log('🔄 Updating existing entry:', editingEntry.id);
-        // Update existing entry
-        let updateQuery = supabase
-          .from('sleep_entries')
-          .update({
-            start_time: sleepData.start_time,
-            end_time: sleepData.end_time ?? null,
-            quality: sleepData.quality || null,
-            notes: sleepData.notes ?? null,
-            duration_minutes: calculatedDuration,
-            partner_id: editingEntry.partner_id ?? effectivePartnerId ?? null
-        })
-          .eq('id', editingEntry.id);
 
-        if (activeBabyId) {
-          updateQuery = updateQuery.eq('baby_id', activeBabyId);
-        }
-
-        const { data, error } = await updateQuery.select();
-
-        if (error) {
-          console.error('❌ Update error:', error);
-          Alert.alert('Fehler beim Aktualisieren', `${error.message}\nCode: ${error.code || 'unknown'}`);
+        if (!sleepService) {
+          Alert.alert('Fehler', 'Service nicht verfügbar');
           return;
         }
 
-        console.log('✅ Entry updated successfully:', data);
+        // Update existing entry via service (dual-write)
+        const result = await sleepService.updateEntry(editingEntry.id, {
+          start_time: sleepData.start_time,
+          end_time: sleepData.end_time ?? null,
+          quality: sleepData.quality || null,
+          notes: sleepData.notes ?? null,
+          duration_minutes: calculatedDuration,
+          partner_id: editingEntry.partner_id ?? effectivePartnerId ?? null,
+        });
+
+        if (result.primary.error) {
+          console.error('❌ Update error:', result.primary.error);
+          Alert.alert('Fehler beim Aktualisieren', `${result.primary.error.message || 'Unbekannter Fehler'}`);
+          return;
+        }
+
+        if (result.secondary.error) {
+          console.warn('[SleepTracker] Secondary backend update failed:', result.secondary.error);
+        }
+
+        console.log('✅ Entry updated successfully:', result.primary.data);
         // Splash anzeigen für Bearbeitung
         showSuccessSplash('#4A90E2', '✏️', 'sleep_edit_save');
       } else {
         console.log('➕ Creating new entry');
-        // Create new entry
-        const { data, error } = await supabase
-          .from('sleep_entries')
-          .insert({
-            user_id: user.id,
-            baby_id: activeBabyId ?? null,
-            start_time: sleepData.start_time,
-            end_time: sleepData.end_time ?? null,
-            quality: sleepData.quality || null,
-            notes: sleepData.notes ?? null,
-            duration_minutes: calculatedDuration,
-            partner_id: effectivePartnerId ?? null
-          })
-          .select();
 
-        if (error) {
-          console.error('❌ Insert error:', error);
-          Alert.alert('Fehler beim Speichern', `${error.message}\nCode: ${error.code || 'unknown'}\nHint: ${error.hint || 'keine'}`);
+        if (!sleepService) {
+          Alert.alert('Fehler', 'Service nicht verfügbar');
           return;
         }
 
-        console.log('✅ Entry created successfully:', data);
+        // Create new entry via service (dual-write)
+        const result = await sleepService.createEntry({
+          user_id: user.id,
+          baby_id: activeBabyId ?? null,
+          start_time: sleepData.start_time,
+          end_time: sleepData.end_time ?? null,
+          quality: sleepData.quality || null,
+          notes: sleepData.notes ?? null,
+          duration_minutes: calculatedDuration,
+          partner_id: effectivePartnerId ?? null,
+        });
+
+        if (result.primary.error) {
+          console.error('❌ Insert error:', result.primary.error);
+          Alert.alert('Fehler beim Speichern', `${result.primary.error.message || 'Unbekannter Fehler'}`);
+          return;
+        }
+
+        if (result.secondary.error) {
+          console.warn('[SleepTracker] Secondary backend write failed:', result.secondary.error);
+        }
+
+        console.log('✅ Entry created successfully:', result.primary.data);
         // Splash anzeigen für neuen Eintrag
         showSuccessSplash('#8E4EC6', '💤', 'sleep_manual_save');
       }
@@ -1294,7 +1369,7 @@ export default function SleepTrackerScreen() {
 
       // Invalidate cache because new/updated entry should appear immediately
       // WICHTIG: Korrekter Cache-Key wie in loadSleepHistory!
-      await invalidateCacheAfterAction(`sleep_history_${activeBabyId || 'default'}`);
+      await invalidateCacheAfterAction(`sleep_history_${activeBackend}_${activeBabyId || 'default'}`);
       await loadSleepData();
     } catch (error) {
       console.error('❌ Sleep entry save error:', error);
@@ -1319,22 +1394,27 @@ export default function SleepTrackerScreen() {
           onPress: async () => {
             triggerHaptic();
             try {
-              let deleteQuery = supabase
-                .from('sleep_entries')
-                .delete()
-                .eq('id', entryId);
-
-              if (activeBabyId) {
-                deleteQuery = deleteQuery.eq('baby_id', activeBabyId);
+              if (!sleepService) {
+                Alert.alert('Fehler', 'Service nicht verfügbar');
+                return;
               }
 
-              const { error } = await deleteQuery;
+              // Delete entry via service (dual-write)
+              const result = await sleepService.deleteEntry(entryId);
 
-              if (error) throw error;
+              if (result.primary.error) {
+                console.error('❌ Delete error:', result.primary.error);
+                Alert.alert('Fehler', 'Eintrag konnte nicht gelöscht werden');
+                return;
+              }
+
+              if (result.secondary.error) {
+                console.warn('[SleepTracker] Secondary backend delete failed:', result.secondary.error);
+              }
 
               // Invalidate cache because entry was deleted
               // WICHTIG: Korrekter Cache-Key wie in loadSleepHistory!
-              await invalidateCacheAfterAction(`sleep_history_${activeBabyId || 'default'}`);
+              await invalidateCacheAfterAction(`sleep_history_${activeBackend}_${activeBabyId || 'default'}`);
               await loadSleepData();
               Alert.alert('Erfolg', 'Eintrag wurde gelöscht! 🗑️');
             } catch (error) {

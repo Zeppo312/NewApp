@@ -96,8 +96,41 @@ export interface CurrentPhase {
 export const invalidateBabyListCache = async () => {
   try {
     await AsyncStorage.removeItem(BABY_LIST_CACHE_KEY);
+    try {
+      const { data: userData } = await getCachedUser();
+      if (userData.user?.id) {
+        await AsyncStorage.removeItem(`${BABY_LIST_CACHE_KEY}_${userData.user.id}`);
+      }
+    } catch (userCacheError) {
+      console.error('Failed to invalidate user baby list cache:', userCacheError);
+    }
   } catch (error) {
     console.error('Failed to invalidate baby list cache:', error);
+  }
+};
+
+/**
+ * Sync all partner babies for the current user based on accepted account_links.
+ */
+export const syncBabiesForLinkedUsers = async () => {
+  try {
+    const { data: userData } = await getCachedUser();
+    if (!userData.user) return { success: false, error: new Error('Nicht angemeldet') };
+
+    const { data, error } = await supabase.rpc('sync_babies_for_user_links', {
+      p_user_id: userData.user.id,
+    });
+
+    if (error) {
+      console.error('Error syncing linked babies:', error);
+      return { success: false, error };
+    }
+
+    await invalidateBabyListCache();
+    return { success: true, data };
+  } catch (err) {
+    console.error('Failed to sync linked babies:', err);
+    return { success: false, error: err };
   }
 };
 

@@ -33,7 +33,7 @@ Diese App verwendet RevenueCat (`react-native-purchases`) für genau **ein** Abo
 
 ## 📋 Voraussetzungen
 
-- [Node.js](https://nodejs.org/) (v18 oder höher)
+- [Node.js](https://nodejs.org/) (v20 oder höher)
 - [npm](https://www.npmjs.com/) oder [yarn](https://yarnpkg.com/)
 - [Expo CLI](https://docs.expo.dev/workflow/expo-cli/)
 - Ein [Supabase](https://supabase.com/)-Konto

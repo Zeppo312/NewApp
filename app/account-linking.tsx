@@ -16,6 +16,7 @@ import { BlurView } from 'expo-blur';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/contexts/AuthContext';
+import { useConvex } from '@/contexts/ConvexContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { router } from 'expo-router';
 import { createInvitationLink, getUserInvitations, getLinkedUsers } from '@/lib/supabase';
@@ -48,6 +49,7 @@ export default function AccountLinkingScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const { user } = useAuth();
+  const { syncUser } = useConvex();
 
   const [isLoading, setIsLoading] = useState(false);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
@@ -83,6 +85,7 @@ export default function AccountLinkingScreen() {
           title: 'Einladung'
         });
         loadData();
+        void syncUser();
       } else {
         Alert.alert('Fehler', 'Der Einladungscode konnte nicht erstellt werden.');
       }
@@ -111,7 +114,14 @@ export default function AccountLinkingScreen() {
       if (result.success) {
         const creatorName = result.creatorInfo?.first_name || 'einem anderen Benutzer';
         Alert.alert('Erfolg', `Code eingelöst. Jetzt verknüpft mit ${creatorName}.`, [
-          { text: 'OK', onPress: () => { setInvitationCode(''); loadData(); } }
+          {
+            text: 'OK',
+            onPress: () => {
+              setInvitationCode('');
+              loadData();
+              void syncUser();
+            }
+          }
         ]);
       } else {
         const errorMessage = result.error?.message ||

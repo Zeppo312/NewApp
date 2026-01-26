@@ -7,8 +7,9 @@ import React, {
   useState,
 } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { BabyInfo, createBaby, listBabies } from '@/lib/baby';
+import { BabyInfo, createBaby, listBabies, syncBabiesForLinkedUsers } from '@/lib/baby';
 import { useAuth } from './AuthContext';
+import { supabase } from '@/lib/supabase';
 
 type ActiveBabyContextType = {
   babies: BabyInfo[];
@@ -129,6 +130,49 @@ export const ActiveBabyProvider: React.FC<{ children: React.ReactNode }> = ({
 
     let nextBabies = data ?? [];
     setLoadError(null);
+
+    // Try to pull shared babies from linked accounts before creating a placeholder
+    if (nextBabies.length === 0) {
+      const syncResult = await syncBabiesForLinkedUsers();
+      if (syncResult.success) {
+        const { data: reloaded } = await listBabies(true);
+        nextBabies = reloaded ?? [];
+      }
+    }
+
+    // Skip auto-creation while the profile is unfinished (early onboarding)
+    if (nextBabies.length === 0) {
+      try {
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('first_name')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        if (!profileError || profileError?.code === 'PGRST116') {
+          if (!profileData || !profileData.first_name) {
+            setBabies([]);
+            setActiveBabyIdState(null);
+            setIsLoading(false);
+            setIsReady(true);
+            setLoadError(null);
+            return;
+          }
+        }
+
+        if (profileError && profileError.code !== 'PGRST116') {
+          setBabies([]);
+          setActiveBabyIdState(null);
+          setIsLoading(false);
+          setIsReady(true);
+          setLoadError(null);
+          console.error('Error loading profile during baby sync:', profileError);
+          return;
+        }
+      } catch (profileCheckError) {
+        console.error('Unexpected error during profile check:', profileCheckError);
+      }
+    }
 
     // Ensure at least one baby exists
     if (nextBabies.length === 0) {

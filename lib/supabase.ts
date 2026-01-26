@@ -1324,6 +1324,7 @@ export type AppSettings = {
   notifications_enabled: boolean;
   due_date?: string | null;
   is_baby_born?: boolean;
+  preferred_backend?: 'supabase' | 'convex'; // Backend preference for dual-backend architecture
   created_at?: string;
   updated_at?: string;
 };

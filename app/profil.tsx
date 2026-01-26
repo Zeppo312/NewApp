@@ -32,6 +32,7 @@ import { LiquidGlassCard, GLASS_OVERLAY, LAYOUT_PAD } from '@/constants/DesignGu
 import { useAuth } from '@/contexts/AuthContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
+import { useConvex } from '@/contexts/ConvexContext';
 import { supabase } from '@/lib/supabase';
 import { getBabyInfo, saveBabyInfo } from '@/lib/baby';
 import * as ImagePicker from 'expo-image-picker';
@@ -49,6 +50,7 @@ export default function ProfilScreen() {
   const { user, signOut } = useAuth();
   const { isBabyBorn, setIsBabyBorn, refreshBabyDetails } = useBabyStatus();
   const { activeBabyId, refreshBabies } = useActiveBaby();
+  const { syncUser } = useConvex();
 
   // Benutzerinformationen
   const [firstName, setFirstName] = useState('');
@@ -532,6 +534,7 @@ export default function ProfilScreen() {
       if (babyError) throw babyError;
       await refreshBabyDetails();
       await refreshBabies();
+      void syncUser();
 
       Alert.alert('Erfolg', 'Deine Daten wurden erfolgreich gespeichert.', [
         { text: 'OK', onPress: () => router.push('/more') },
