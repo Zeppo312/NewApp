@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Image } from 'expo-image';
+import { CachedImage } from '@/components/CachedImage';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { ThemedText } from '@/components/ThemedText';
@@ -96,11 +96,10 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({ size = 36 }) =>
         disabled={isLoading}
       >
         {activeBaby?.photo_url ? (
-          <Image
-            source={{ uri: activeBaby.photo_url }}
+          <CachedImage
+            uri={activeBaby.photo_url}
             style={styles.avatarImage}
-            cachePolicy="disk"
-            transition={200}
+            showLoader={false}
           />
         ) : (
           <View
@@ -152,11 +151,10 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({ size = 36 }) =>
                     onPress={() => baby.id && handleSelectBaby(baby.id)}
                   >
                     {baby.photo_url ? (
-                      <Image
-                        source={{ uri: baby.photo_url }}
+                      <CachedImage
+                        uri={baby.photo_url}
                         style={styles.babyRowAvatar}
-                        cachePolicy="disk"
-                        transition={200}
+                        showLoader={false}
                       />
                     ) : (
                       <View style={[styles.babyRowAvatar, styles.babyRowFallback]}>

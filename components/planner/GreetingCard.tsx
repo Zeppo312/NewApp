@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, Animated, Easing, Image } from 'react-native';
+import { View, StyleSheet, Animated, Easing } from 'react-native';
+import { CachedImage } from '@/components/CachedImage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ThemedText } from '@/components/ThemedText';
 import { LiquidGlassCard } from '@/constants/DesignGuide';
@@ -130,7 +131,7 @@ export const GreetingCard: React.FC<Props> = ({
             <View style={styles.avatarGlow} />
             <View style={styles.avatarBubble}>
               {avatarUrl ? (
-                <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
+                <CachedImage uri={avatarUrl} style={styles.avatarImage} showLoader={false} />
               ) : (
                 <IconSymbol name="person.fill" size={30} color={PRIMARY} />
               )}

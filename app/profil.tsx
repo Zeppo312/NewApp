@@ -12,8 +12,8 @@ import {
   Switch,
   ActivityIndicator,
   Dimensions,
-  Image,
 } from 'react-native';
+import { CachedImage } from '@/components/CachedImage';
 import { BlurView } from 'expo-blur';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { router, Stack } from 'expo-router';
@@ -615,9 +615,10 @@ export default function ProfilScreen() {
                       activeOpacity={0.8}
                     >
                       {avatarPreview ? (
-                        <Image
-                          source={{ uri: avatarPreview }}
+                        <CachedImage
+                          uri={avatarPreview}
                           style={styles.avatarPreviewImage}
+                          showLoader={false}
                         />
                       ) : (
                         <View style={styles.avatarPlaceholder}>
@@ -773,7 +774,7 @@ export default function ProfilScreen() {
                       <ThemedText style={styles.label}>Babyfoto</ThemedText>
                       <View style={styles.babyPhotoSelector}>
                         {babyPhotoPreview ? (
-                          <Image source={{ uri: babyPhotoPreview }} style={styles.babyPhotoPreview} />
+                          <CachedImage uri={babyPhotoPreview} style={styles.babyPhotoPreview} showLoader={false} />
                         ) : (
                           <View style={styles.babyPhotoPlaceholder}>
                             <IconSymbol name="person.fill" size={40} color="#FFFFFF" />

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Animated, Easing, StyleSheet, ScrollView, View, TouchableOpacity, Text, SafeAreaView, StatusBar, Image, ActivityIndicator, RefreshControl, Alert, Platform, StyleProp, ViewStyle } from 'react-native';
+import { CachedImage } from '@/components/CachedImage';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { ThemedText } from '@/components/ThemedText';
@@ -1099,13 +1100,11 @@ export default function HomeScreen() {
                   <View style={styles.recommendationRow}>
                     <View style={styles.recommendationImagePane}>
                       {showRecommendationImage ? (
-                        <Image
+                        <CachedImage
                           key={`${featuredRecommendation.id}-${recommendationImageRetryKey}`}
-                          source={{ uri: imageUri }}
+                          uri={imageUri}
                           style={styles.recommendationImage}
-                          onLoadStart={handleRecommendationImageLoadStart}
-                          onError={handleRecommendationImageError}
-                          onLoad={handleRecommendationImageLoad}
+                          showLoader={false}
                         />
                       ) : (
                         <View style={styles.recommendationImageFallback}>

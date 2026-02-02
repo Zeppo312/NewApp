@@ -10,8 +10,10 @@ import {
   checkEmailVerification,
   signOut,
   checkSupabaseConnection,
-  isSupabaseReady
+  isSupabaseReady,
+  invalidateUserCache
 } from '@/lib/supabase';
+import { invalidateAllCaches } from '@/lib/appCache';
 
 // Typdefinitionen für den Kontext
 type AuthContextType = {
@@ -125,6 +127,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Abmeldung
   const handleSignOut = async () => {
+    // Alle Caches invalidieren bei Logout
+    invalidateUserCache();
+    await invalidateAllCaches();
+
     const { error } = await signOut();
     return { error };
   };

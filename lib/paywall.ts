@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 import { getCachedUser } from './supabase';
-import { hasRevenueCatEntitlement } from './revenuecat';
+import { getCachedPremiumStatus, getCachedUserSettings } from './appCache';
 
 export const PAYWALL_INTERVAL_MS = 2 * 60 * 60 * 1000; // 2 Stunden
 
@@ -9,9 +9,9 @@ export type PaywallState = {
   lastShownAt: Date | null;
 };
 
-const mapRowToState = (row: any, isPro: boolean): PaywallState => ({
+const mapRowToState = (settings: any, isPro: boolean): PaywallState => ({
   isPro,
-  lastShownAt: row?.paywall_last_shown_at ? new Date(row.paywall_last_shown_at) : null,
+  lastShownAt: settings?.paywall_last_shown_at ? new Date(settings.paywall_last_shown_at) : null,
 });
 
 export const fetchPaywallState = async (): Promise<PaywallState> => {
@@ -21,25 +21,13 @@ export const fetchPaywallState = async (): Promise<PaywallState> => {
   }
 
   try {
-    const userId = userData.user.id;
+    // Nutze gecachte Daten für bessere Performance
     const [isPro, settings] = await Promise.all([
-      hasRevenueCatEntitlement(userId),
-      supabase
-        .from('user_settings')
-        .select('paywall_last_shown_at')
-        .eq('user_id', userId)
-        .order('updated_at', { ascending: false })
-        .limit(1)
-        .maybeSingle(),
+      getCachedPremiumStatus(),
+      getCachedUserSettings(),
     ]);
-    const { data, error } = settings;
 
-    if (error && (error as any).code !== 'PGRST116') {
-      console.error('Failed to fetch paywall state:', error);
-      return { isPro: false, lastShownAt: null };
-    }
-
-    return mapRowToState(data, isPro);
+    return mapRowToState(settings, isPro);
   } catch (err) {
     console.error('Exception while fetching paywall state:', err);
     return { isPro: false, lastShownAt: null };
@@ -87,6 +75,10 @@ export const markPaywallShown = async (source?: string) => {
     console.error('Failed to mark paywall as shown', { error, source });
     return { error };
   }
+
+  // Cache invalidieren nach Update
+  const { invalidateUserSettingsCache } = await import('./appCache');
+  await invalidateUserSettingsCache();
 
   return { error: null };
 };

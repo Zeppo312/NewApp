@@ -23,8 +23,9 @@ import { useNotifications } from '@/hooks/useNotifications';
 import { useSleepWindowNotifications } from '@/hooks/useSleepWindowNotifications';
 import { predictNextSleepWindow, type SleepWindowPrediction } from '@/lib/sleep-window';
 import { getBabyInfo } from '@/lib/baby';
-import { supabase } from '@/lib/supabase';
+import { supabase, invalidateUserCache } from '@/lib/supabase';
 import type { SleepEntry } from '@/lib/sleepData';
+import { preloadAppData, invalidateAllCaches } from '@/lib/appCache';
 
 // Importieren der Meilenstein-Task-Definition
 import { defineMilestoneCheckerTask } from '@/tasks/milestoneCheckerTask';
@@ -257,8 +258,16 @@ export default Sentry.wrap(function RootLayout() {
       try {
         // Warten, bis die Schriftarten geladen sind
         if (loaded) {
-          // Simulierte Verzögerung, um sicherzustellen, dass alles bereit ist
-          await new Promise(resolve => setTimeout(resolve, 500));
+          // Preload wichtige App-Daten (User Settings, Profile, Premium Status)
+          // Dies reduziert Supabase-Aufrufe während der App-Nutzung
+          try {
+            await preloadAppData();
+          } catch (preloadError) {
+            console.warn('Preload warning (non-critical):', preloadError);
+          }
+
+          // Kurze Verzögerung, um sicherzustellen, dass alles bereit ist
+          await new Promise(resolve => setTimeout(resolve, 300));
 
           // App ist bereit
           setAppIsReady(true);
