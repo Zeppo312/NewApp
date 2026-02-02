@@ -26,6 +26,41 @@ export default function LoginScreen() {
   const theme = Colors[colorScheme];
   const { signInWithEmail, signUpWithEmail, signInWithApple } = useAuth();
 
+  const handleForgotPassword = async () => {
+    if (!email) {
+      Alert.alert(
+        'E-Mail erforderlich',
+        'Bitte gib deine E-Mail-Adresse ein, um dein Passwort zurückzusetzen.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      setError('');
+
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: 'lottibaby://reset-password',
+      });
+
+      if (resetError) {
+        throw resetError;
+      }
+
+      Alert.alert(
+        'E-Mail gesendet',
+        'Wir haben dir eine E-Mail mit einem Link zum Zurücksetzen deines Passworts gesendet. Bitte überprüfe dein Postfach.',
+        [{ text: 'OK' }]
+      );
+    } catch (err: any) {
+      console.error('Password reset error:', err);
+      setError(err.message || 'Passwort zurücksetzen fehlgeschlagen. Bitte versuche es erneut.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // Funktion zum Abrufen des is_baby_born-Flags
   const checkIsBabyBorn = async (userId: string) => {
     try {
@@ -396,6 +431,18 @@ export default function LoginScreen() {
                   </View>
                 </View>
 
+                {!isRegistering && (
+                  <TouchableOpacity
+                    style={styles.forgotPasswordButton}
+                    onPress={handleForgotPassword}
+                    disabled={isLoading}
+                  >
+                    <ThemedText style={styles.forgotPasswordText} lightColor={theme.accent} darkColor={theme.accent}>
+                      Passwort vergessen?
+                    </ThemedText>
+                  </TouchableOpacity>
+                )}
+
                 <TouchableOpacity
                   style={[styles.button, styles.loginButton, isLoading && styles.buttonDisabled]}
                   onPress={handleAuth}
@@ -694,5 +741,15 @@ const styles = StyleSheet.create({
   invitationToggleText: {
     fontSize: 14,
     textDecorationLine: 'underline',
+  },
+  forgotPasswordButton: {
+    alignSelf: 'flex-end',
+    marginTop: 8,
+    marginBottom: 4,
+    padding: 4,
+  },
+  forgotPasswordText: {
+    fontSize: 14,
+    fontWeight: '500',
   },
 });

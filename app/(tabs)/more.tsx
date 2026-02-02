@@ -69,7 +69,12 @@ export default function MoreScreen() {
               router.replace('/(auth)');
             } catch (error) {
               console.error('Logout error:', error);
-              Alert.alert('Fehler', 'Beim Abmelden ist ein Fehler aufgetreten.');
+              const message = error instanceof Error
+                ? error.message
+                : (typeof error === 'object' && error?.message)
+                  ? String((error as any).message)
+                  : 'Unbekannter Fehler';
+              Alert.alert('Fehler', `Beim Abmelden ist ein Fehler aufgetreten.\n${message}`);
             }
           },
         },

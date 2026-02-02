@@ -65,8 +65,12 @@ const getClothingImage = (imageName: string | null) => {
       return require('@/assets/images/Halstuch.png');
     case 'Fuesslinge.png':
       return require('@/assets/images/Fuesslinge.png');
+    case 'Tragejacke.jpg':
+      return require('@/assets/images/Tragejacke.png');
     case 'Kinderwagendecke.png':
       return require('@/assets/images/Kinderwagendecke.png');
+    case 'Schlafanzug.png':
+      return require('@/assets/images/Schlafanzug.png');
     
     default:
       return null;
@@ -149,7 +153,7 @@ const clothingCatalogue: Record<ClothingCategory, ClothingItem[]> = {
   outer: [
     { id: '8', name: 'Jacke', image: 'Jacke.png', recommended: false, category: 'outer', tempRange: { min: -20, max: 10 } },
     { id: '9', name: 'Overall', image: 'Overall.png', recommended: false, category: 'outer', tempRange: { min: -20, max: 5 } },
-    { id: '26', name: 'Tragejacke/-cover', image: null, recommended: false, category: 'outer', tempRange: { min: -20, max: 15 } },
+    { id: '26', name: 'Tragejacke/-cover', image: 'Tragejacke.jpg', recommended: false, category: 'outer', tempRange: { min: -20, max: 15 } },
     { id: '18', name: 'Softshellanzug', image: 'Softshellanzug.png', recommended: false, category: 'outer', tempRange: { min: 5, max: 15 } },
     { id: '19', name: 'Regenjacke', image: 'Regenjacke.png', recommended: false, category: 'outer', tempRange: { min: 5, max: 20 } },
   ],
@@ -168,7 +172,7 @@ const clothingCatalogue: Record<ClothingCategory, ClothingItem[]> = {
     { id: '13', name: 'Schlafsack 0.5 TOG', image: 'Schlafsack.png', recommended: false, category: 'sleep', tempRange: { min: 24, max: 27 } },
     { id: '14', name: 'Schlafsack 1.0 TOG', image: 'Schlafsack.png', recommended: false, category: 'sleep', tempRange: { min: 20, max: 24 } },
     { id: '15', name: 'Schlafsack 2.5 TOG', image: 'Schlafsack.png', recommended: false, category: 'sleep', tempRange: { min: 16, max: 20 } },
-    { id: '25', name: 'Schlafanzug', image: null, recommended: false, category: 'sleep', tempRange: { min: 18, max: 24 } },
+    { id: '25', name: 'Schlafanzug', image: 'Schlafanzug.png', recommended: false, category: 'sleep', tempRange: { min: 18, max: 24 } },
   ],
 };
 
@@ -554,6 +558,7 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
               intensity={26}
               overlayColor={BLUE_GLASS_OVERLAY}
               borderColor={BLUE_GLASS_BORDER}
+              radius={16}
             >
               <ThemedText style={[styles.sectionTitle, styles.heroTitle]}>{heroTitle}</ThemedText>
               <ThemedText style={styles.heroSubtitle}>{heroSubtitle}</ThemedText>
@@ -1377,22 +1382,14 @@ export default function BabyWeatherScreen() {
 
     return (
       <LiquidGlassCard
-        style={[styles.sectionCard, styles.outfitCard]}
+        style={[styles.sectionCard, styles.outfitCard, styles.outfitCardWide]}
         intensity={26}
         overlayColor={BLUE_GLASS_OVERLAY}
         borderColor={BLUE_GLASS_BORDER}
       >
-        <View style={styles.outfitHeader}>
-          <IconSymbol name="tshirt.fill" size={22} color={theme.accent} />
-          <View style={styles.outfitHeaderText}>
-            <ThemedText style={styles.outfitTitle}>
-              Kleidung für {contextDescriptions[selectedMode]}
-            </ThemedText>
-            <ThemedText style={styles.outfitSubtitle}>
-              Das empfohlene Outfit auf einen Blick
-            </ThemedText>
-          </View>
-        </View>
+        <ThemedText style={styles.sectionTitle}>
+          Kleidung für {contextDescriptions[selectedMode]}
+        </ThemedText>
         {recommendedItems.length > 0 ? (
           <View style={styles.outfitGrid}>
             {recommendedItems.map(item => (
@@ -1427,6 +1424,7 @@ export default function BabyWeatherScreen() {
         intensity={26}
         overlayColor={BLUE_GLASS_OVERLAY}
         borderColor={BLUE_GLASS_BORDER}
+        radius={18}
       >
         <View style={styles.tipHeader}>
           <ThemedText style={[styles.sectionTitle, styles.tipTitle]}>{primaryTip.title}</ThemedText>
@@ -1664,7 +1662,7 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     paddingHorizontal: LAYOUT_PAD,
-    paddingTop: 16,
+    paddingTop: 12,
     paddingBottom: 40,
     alignItems: 'stretch',
   },
@@ -1688,7 +1686,7 @@ const styles = StyleSheet.create({
     padding: 20,
     borderRadius: 22,
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 4,
     overflow: 'hidden',
   },
   errorText: {
@@ -1769,10 +1767,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   weatherDetailText: {
-    fontSize: 13,
+    fontSize: 12,
     marginLeft: 6,
     color: '#7D5A50',
     fontWeight: '500',
+    lineHeight: 16,
+    flexShrink: 1,
   },
   contextContainer: {
     borderRadius: 15,
@@ -1785,16 +1785,20 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   sectionTitle: {
-    fontSize: 17,
+    fontSize: 20,
     fontWeight: '700',
+    letterSpacing: -0.3,
     color: '#7D5A50',
-    marginBottom: 12,
+    marginBottom: 10,
     textAlign: 'center',
-    paddingHorizontal: 2,
-    lineHeight: 22,
+    paddingHorizontal: 8,
+    paddingTop: 4,
+    lineHeight: 28,
+    flexWrap: 'wrap',
+    width: '100%',
   },
   weatherTitle: {
-    marginBottom: 16,
+    marginBottom: 10,
   },
   contextButtons: {
     flexDirection: 'row',
@@ -1854,8 +1858,13 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   outfitCard: {
-    paddingVertical: 18,
-    paddingHorizontal: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+    marginBottom: 4,
+  },
+  outfitCardWide: {
+    width: TIMELINE_CONTENT_WIDTH,
+    alignSelf: 'center',
   },
   outfitHeader: {
     flexDirection: 'row',
@@ -1884,10 +1893,12 @@ const styles = StyleSheet.create({
   },
   outfitGridItem: {
     width: '32%',
-    marginBottom: 12,
+    marginBottom: 16,
+    minHeight: 110,
   },
   outfitItem: {
     alignItems: 'center',
+    width: '100%',
   },
   outfitTile: {
     width: 84,
@@ -1898,13 +1909,16 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.7)',
     borderWidth: 1.5,
     borderColor: 'rgba(255,255,255,0.5)',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   outfitName: {
     fontSize: 12,
     fontWeight: '700',
     textAlign: 'center',
     color: '#7D5A50',
+    flexWrap: 'wrap',
+    lineHeight: 16,
+    paddingHorizontal: 2,
   },
   altLink: {
     marginTop: 4,
@@ -1963,8 +1977,8 @@ const styles = StyleSheet.create({
   },
   swapButton: {
     position: 'absolute',
-    top: 5,
-    right: 5,
+    top: -4,
+    right: -4,
     backgroundColor: 'rgba(125, 90, 80, 0.85)',
     borderRadius: 15,
     width: 30,
@@ -1992,6 +2006,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     opacity: 0.7,
     color: '#7D5A50',
+    lineHeight: 18,
+    paddingHorizontal: 8,
+    flexWrap: 'wrap',
   },
   noRecommendations: {
     alignItems: 'center',
@@ -2004,6 +2021,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
     marginTop: 10,
+    lineHeight: 20,
+    paddingHorizontal: 8,
+    color: '#7D5A50',
+    flexWrap: 'wrap',
   },
   locationContainer: {
     borderRadius: 15,
@@ -2084,7 +2105,8 @@ const styles = StyleSheet.create({
     fontSize: 13,
     textAlign: 'center',
     opacity: 0.7,
-    marginTop: 8,
+    marginTop: 6,
+    marginBottom: 2,
     color: '#7D5A50',
     fontWeight: '500',
   },
@@ -2129,9 +2151,9 @@ const styles = StyleSheet.create({
   },
   infoButton: {
     position: 'absolute',
-    right: 16,
-    top: 14,
-    padding: 5,
+    right: 10,
+    top: 10,
+    padding: 8,
     zIndex: 10,
   },
   infoCard: {
@@ -2139,7 +2161,7 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     paddingVertical: 16,
     paddingHorizontal: 14,
-    marginBottom: 14,
+    marginBottom: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -2171,18 +2193,22 @@ const styles = StyleSheet.create({
   },
   sectionCard: {
     width: '100%',
-    marginBottom: 14,
+    marginBottom: 4,
     borderRadius: 22,
-    paddingVertical: 18,
-    paddingHorizontal: 14,
+    paddingTop: 16,
+    paddingBottom: 14,
+    paddingHorizontal: 20,
     alignItems: 'stretch',
   },
   heroCard: {
-    paddingVertical: 20,
+    paddingVertical: 14,
+    paddingHorizontal: 18,
     alignItems: 'center',
+    borderRadius: 16,
   },
   heroTitle: {
     marginBottom: 6,
+    textAlign: 'center',
   },
   heroSubtitle: {
     fontSize: 15,
@@ -2190,6 +2216,10 @@ const styles = StyleSheet.create({
     color: '#7D5A50',
     textAlign: 'center',
     opacity: 0.85,
+    lineHeight: 22,
+    paddingHorizontal: 8,
+    paddingBottom: 4,
+    flexWrap: 'wrap',
   },
   heroContextPill: {
     marginTop: 12,
@@ -2209,7 +2239,11 @@ const styles = StyleSheet.create({
     color: '#7D5A50',
   },
   tipCard: {
-    paddingVertical: 18,
+    paddingTop: 16,
+    paddingBottom: 18,
+    paddingHorizontal: 18,
+    borderRadius: 18,
+    marginBottom: 4,
   },
   tipHeader: {
     alignItems: 'center',
@@ -2222,30 +2256,41 @@ const styles = StyleSheet.create({
   },
   tipContent: {
     fontSize: 13,
-    lineHeight: 19,
+    lineHeight: 20,
     color: '#7D5A50',
     textAlign: 'center',
     paddingHorizontal: 6,
-    marginTop: 2,
+    marginTop: 4,
+    marginBottom: 10,
+    flexWrap: 'wrap',
   },
   tipToggle: {
     marginTop: 12,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    alignSelf: 'center',
   },
   tipToggleText: {
     fontSize: 12,
     fontWeight: '600',
     color: '#7D5A50',
+    lineHeight: 16,
+    textAlign: 'center',
   },
   tipList: {
     marginTop: 12,
     gap: 10,
+    paddingBottom: 6,
+    paddingHorizontal: 12,
   },
   tipListItem: {
     flexDirection: 'row',
     alignItems: 'flex-start',
+    justifyContent: 'flex-start',
     gap: 8,
   },
   tipListText: {
@@ -2254,6 +2299,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     color: '#7D5A50',
     opacity: 0.9,
+    textAlign: 'left',
   },
   recommendationCard: {
     paddingVertical: 18,
@@ -2272,14 +2318,14 @@ const styles = StyleSheet.create({
   },
   metaCardsContainer: {
     width: '100%',
-    marginBottom: 10,
+    marginBottom: 12,
   },
   metaCard: {
     width: '100%',
     borderRadius: 22,
-    paddingVertical: 18,
-    paddingHorizontal: 14,
-    marginBottom: 10,
+    paddingVertical: 20,
+    paddingHorizontal: 16,
+    marginBottom: 12,
   },
   metaCardHeader: {
     flexDirection: 'column',
@@ -2296,13 +2342,17 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#7D5A50',
     textAlign: 'center',
-    lineHeight: 22,
+    lineHeight: 24,
+    paddingHorizontal: 4,
+    flexWrap: 'wrap',
   },
   metaCardContent: {
     fontSize: 13,
-    lineHeight: 19,
+    lineHeight: 20,
     color: '#7D5A50',
-    paddingHorizontal: 2,
+    paddingHorizontal: 4,
+    textAlign: 'center',
+    flexWrap: 'wrap',
   },
   contextImage: {
     width: 40,
@@ -2311,17 +2361,18 @@ const styles = StyleSheet.create({
     marginBottom: 5,
   },
   weatherCard: {
-    paddingVertical: 16,
-    paddingHorizontal: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 18,
   },
   weatherDisplayContainer: {
     width: '100%',
+    paddingHorizontal: 4,
   },
   mainWeatherRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 14,
     paddingHorizontal: 2,
   },
   temperatureBox: {
@@ -2330,7 +2381,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: 'rgba(255,255,255,0.35)',
     borderRadius: 18,
-    padding: 14,
+    padding: 12,
     marginRight: 12,
     minWidth: 130,
     minHeight: 90,
@@ -2346,7 +2397,7 @@ const styles = StyleSheet.create({
   },
   feelsLikeValue: {
     fontSize: 13,
-    marginTop: 4,
+    marginTop: 2,
     opacity: 0.75,
     color: '#7D5A50',
     fontWeight: '600',
@@ -2366,23 +2417,30 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.3)',
     borderRadius: 14,
-    padding: 10,
-    marginBottom: 12,
+    padding: 14,
+    marginBottom: 14,
+    marginHorizontal: 2,
   },
   weatherDescriptionText: {
     fontSize: 15,
     fontWeight: '600',
     color: '#7D5A50',
+    lineHeight: 20,
+    flexWrap: 'wrap',
   },
   locationText: {
     fontSize: 12,
     opacity: 0.7,
     marginTop: 4,
     color: '#7D5A50',
+    lineHeight: 16,
+    flexWrap: 'wrap',
   },
   weatherDetailsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    paddingHorizontal: 2,
+    marginBottom: 8,
   },
   weatherDetailBox: {
     flexDirection: 'row',
@@ -2391,8 +2449,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.3)',
     borderRadius: 14,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
     flex: 0.48,
   },
   tempMainContainer: {
@@ -2423,6 +2481,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
+    marginBottom: 4,
+    paddingHorizontal: 4,
   },
   contextButtonNew: {
     width: '48%',
@@ -2465,6 +2525,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
     color: '#7D5A50',
+    lineHeight: 18,
+    paddingHorizontal: 4,
+    flexWrap: 'wrap',
   },
   feltTempOptions: {
     flexDirection: 'row',

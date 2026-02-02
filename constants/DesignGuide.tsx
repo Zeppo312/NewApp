@@ -68,6 +68,7 @@ export const LiquidGlassCard: React.FC<{
   borderColor?: string;
   onPress?: () => void;
   activeOpacity?: number;
+  radius?: number;
 }> = ({
   children,
   style,
@@ -76,23 +77,28 @@ export const LiquidGlassCard: React.FC<{
   borderColor = 'rgba(255,255,255,0.3)',
   onPress,
   activeOpacity = 0.9,
+  radius,
 }) => {
   const CardComponent = onPress ? TouchableOpacity : View;
+  const flattenedStyle = StyleSheet.flatten(style);
+  const resolvedRadius = radius ?? flattenedStyle?.borderRadius ?? RADIUS;
+  const radiusStyle = { borderRadius: resolvedRadius };
+
   return (
     <CardComponent
-      // Wichtig: Erst die Defaults, DANN der externe Style (kommt zuletzt)
-      style={[styles.liquidGlassWrapper, style]}
+      // Defaults, dann externe Styles, der Radius liegt bewusst zuletzt
+      style={[styles.liquidGlassWrapper, style, radiusStyle]}
       onPress={onPress}
       activeOpacity={activeOpacity}
     >
       <BlurView
         intensity={intensity}
         tint="light"
-        style={styles.liquidGlassBackground as any}
+        style={[styles.liquidGlassBackground as any, radiusStyle]}
       >
-        <View style={[styles.liquidGlassContainer as any, { borderColor }]}>
+        <View style={[styles.liquidGlassContainer as any, { borderColor, borderRadius: resolvedRadius }]}>
           <View
-            style={[styles.liquidGlassOverlay as any, { backgroundColor: overlayColor }]}
+            style={[styles.liquidGlassOverlay as any, { backgroundColor: overlayColor, borderRadius: resolvedRadius }]}
           />
           {children}
         </View>
