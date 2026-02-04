@@ -8,6 +8,7 @@ import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { ThemedText } from '@/components/ThemedText';
 import { useNavigation } from '@/contexts/NavigationContext';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import BabySwitcherButton from '@/components/BabySwitcherButton';
 
 export interface HeaderProps {
@@ -20,10 +21,10 @@ export interface HeaderProps {
   showBabySwitcher?: boolean;
 }
 
-const Header: React.FC<HeaderProps> = ({ 
-  title, 
-  subtitle, 
-  showBackButton = false, 
+const Header: React.FC<HeaderProps> = ({
+  title,
+  subtitle,
+  showBackButton = false,
   onBackPress,
   leftContent,
   rightContent,
@@ -33,6 +34,7 @@ const Header: React.FC<HeaderProps> = ({
   const theme = Colors[colorScheme];
   const router = useRouter();
   const navigation = useNavigation();
+  const adaptiveColors = useAdaptiveColors();
 
   const handleBackPress = () => {
     if (onBackPress) {
@@ -49,12 +51,12 @@ const Header: React.FC<HeaderProps> = ({
       <View style={[styles.sideContainer, styles.left]}>
         <View style={styles.leftContentWrapper}>
           {showBackButton && (
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.backButton}
               onPress={handleBackPress}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
-              <IconSymbol name="chevron.left" size={20} color={theme.text} />
+              <IconSymbol name="chevron.left" size={20} color={adaptiveColors.text} />
             </TouchableOpacity>
           )}
           {leftContent}
@@ -63,11 +65,11 @@ const Header: React.FC<HeaderProps> = ({
       
       {/* Mittlerer Bereich - immer bildschirmmittig */}
       <View style={styles.titleContainer} pointerEvents="none">
-        <ThemedText style={styles.title} numberOfLines={2} ellipsizeMode="tail">
+        <ThemedText style={[styles.title, { color: adaptiveColors.textPrimary }]} numberOfLines={2} ellipsizeMode="tail">
           {title}
         </ThemedText>
         {subtitle && (
-          <ThemedText style={styles.subtitle}>{subtitle}</ThemedText>
+          <ThemedText style={[styles.subtitle, { color: adaptiveColors.textTertiary }]}>{subtitle}</ThemedText>
         )}
       </View>
       
@@ -138,14 +140,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#7D5A50',
     textAlign: 'center',
     flexShrink: 1,
     lineHeight: 28,
   },
   subtitle: {
     fontSize: 13,
-    color: '#A8978E',
     marginTop: 3,
     textAlign: 'center',
   },

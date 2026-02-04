@@ -18,6 +18,7 @@ import { ThemeProvider as AppThemeProvider } from '@/contexts/ThemeContext';
 import { NavigationProvider } from '@/contexts/NavigationContext';
 import { ConvexProvider } from '@/contexts/ConvexContext';
 import { BackendProvider } from '@/contexts/BackendContext';
+import { BackgroundProvider } from '@/contexts/BackgroundContext';
 import { checkForNewNotifications, registerBackgroundNotificationTask, BACKGROUND_NOTIFICATION_TASK } from '@/lib/notificationService';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useSleepWindowNotifications } from '@/hooks/useSleepWindowNotifications';
@@ -306,15 +307,17 @@ export default Sentry.wrap(function RootLayout() {
     <AuthProvider>
       <ConvexProvider>
         <BackendProvider>
-          <AppThemeProvider>
-            <NavigationProvider>
-              <ActiveBabyProvider>
-                <BabyStatusProvider>
-                  <RootLayoutNav />
-                </BabyStatusProvider>
-              </ActiveBabyProvider>
-            </NavigationProvider>
-          </AppThemeProvider>
+          <BackgroundProvider>
+            <AppThemeProvider>
+              <NavigationProvider>
+                <ActiveBabyProvider>
+                  <BabyStatusProvider>
+                    <RootLayoutNav />
+                  </BabyStatusProvider>
+                </ActiveBabyProvider>
+              </NavigationProvider>
+            </AppThemeProvider>
+          </BackgroundProvider>
         </BackendProvider>
       </ConvexProvider>
     </AuthProvider>

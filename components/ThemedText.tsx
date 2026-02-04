@@ -1,11 +1,17 @@
 import { Text, type TextProps, StyleSheet } from 'react-native';
 
 import { useThemeColor } from '@/hooks/useThemeColor';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 
 export type ThemedTextProps = TextProps & {
   lightColor?: string;
   darkColor?: string;
   type?: 'default' | 'title' | 'defaultSemiBold' | 'subtitle' | 'link';
+  /**
+   * Wenn true, passt sich die Textfarbe an das benutzerdefinierte Hintergrundbild an.
+   * Bei dunklem Hintergrund wird heller Text verwendet und umgekehrt.
+   */
+  adaptive?: boolean;
 };
 
 export function ThemedText({
@@ -13,9 +19,16 @@ export function ThemedText({
   lightColor,
   darkColor,
   type = 'default',
+  adaptive = false,
   ...rest
 }: ThemedTextProps) {
-  const color = useThemeColor({ light: lightColor, dark: darkColor }, 'text');
+  const themeColor = useThemeColor({ light: lightColor, dark: darkColor }, 'text');
+  const adaptiveColors = useAdaptiveColors();
+
+  // Wenn adaptive=true und ein custom Hintergrund gesetzt ist, verwende die adaptive Farbe
+  const color = adaptive && adaptiveColors.hasCustomBackground
+    ? adaptiveColors.text
+    : themeColor;
 
   return (
     <Text

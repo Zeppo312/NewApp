@@ -31,6 +31,7 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/contexts/AuthContext';
+import { useBackground } from '@/contexts/BackgroundContext';
 import { BlogPost, createBlogPost, getBlogPosts, updateBlogPost, uploadBlogCover, deleteBlogPost } from '@/lib/blog';
 import { supabase } from '@/lib/supabase';
 
@@ -115,6 +116,10 @@ export default function CommunityScreen() {
   const [currentUserName, setCurrentUserName] = useState('Lotti Baby Team');
   const [showDraftList, setShowDraftList] = useState(false);
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
+
+  // Background context
+  const { customUri, hasCustomBackground } = useBackground();
+
   const openModal = useCallback((publish: boolean, draft?: BlogPost) => {
     setErrorMessage('');
     setCoverIsLocal(false);
@@ -441,11 +446,16 @@ export default function CommunityScreen() {
     </View>
   );
 
+  // Custom Bild oder Default verwenden
+  const backgroundSource = hasCustomBackground && customUri
+    ? { uri: customUri }
+    : require('@/assets/images/Background_Hell.png');
+
   return (
     <ImageBackground
-      source={require('@/assets/images/Background_Hell.png')}
+      source={backgroundSource}
       style={styles.bgImage}
-      resizeMode="repeat"
+      resizeMode={hasCustomBackground ? 'cover' : 'repeat'}
     >
       <ThemedView style={styles.screen}>
         <StatusBar barStyle={statusBarStyle} backgroundColor={theme.background} />

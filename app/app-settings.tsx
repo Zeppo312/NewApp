@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, SafeAreaView, StatusBar, TouchableOpacity, ScrollView, Switch, Alert, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, SafeAreaView, StatusBar, TouchableOpacity, ScrollView, Switch, Alert, ActivityIndicator, Image } from 'react-native';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { ThemedText } from '@/components/ThemedText';
@@ -8,6 +8,7 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useRouter, Stack } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { useConvex } from '@/contexts/ConvexContext';
+import { useBackground } from '@/contexts/BackgroundContext';
 import { getAppSettings, saveAppSettings, AppSettings } from '@/lib/supabase';
 import { exportUserData } from '@/lib/dataExport';
 import { deleteUserAccount, deleteUserData } from '@/lib/profile';
@@ -31,9 +32,13 @@ export default function AppSettingsScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isDeletingData, setIsDeletingData] = useState(false);
+  const [isChangingBackground, setIsChangingBackground] = useState(false);
 
   // Convex context
   const { convexClient, lastSyncError } = useConvex();
+
+  // Background context
+  const { customUri, hasCustomBackground, isDarkBackground, pickAndSaveBackground, setBackgroundMode, resetToDefault } = useBackground();
 
   // Check if current user is admin
   const isAdmin = user?.email ? ADMIN_EMAILS.includes(user.email) : false;
@@ -97,6 +102,73 @@ export default function AppSettingsScreen() {
 
   const handleToggleNotifications = async (value: boolean) => {
     await handleSaveSettings({ notifications_enabled: value });
+  };
+
+  const handleChangeBackground = async () => {
+    if (isChangingBackground) return;
+
+    try {
+      setIsChangingBackground(true);
+      const result = await pickAndSaveBackground();
+
+      if (result.error) {
+        Alert.alert('Fehler', result.error);
+        return;
+      }
+
+      // Nach erfolgreicher Bildauswahl: Helligkeit abfragen
+      if (result.success && result.needsModeSelection) {
+        Alert.alert(
+          'Bildhelligkeit',
+          'Ist dein Hintergrundbild eher hell oder dunkel? Dies passt die Textfarben an.',
+          [
+            {
+              text: 'Hell',
+              onPress: () => setBackgroundMode(false),
+            },
+            {
+              text: 'Dunkel',
+              onPress: () => setBackgroundMode(true),
+            },
+          ]
+        );
+      }
+    } catch (err) {
+      console.error('Error changing background:', err);
+      Alert.alert('Fehler', 'Hintergrundbild konnte nicht geändert werden.');
+    } finally {
+      setIsChangingBackground(false);
+    }
+  };
+
+  const handleResetBackground = async () => {
+    if (isChangingBackground) return;
+
+    Alert.alert(
+      'Hintergrund zurücksetzen',
+      'Möchtest du zum Standard-Hintergrundbild zurückkehren?',
+      [
+        { text: 'Abbrechen', style: 'cancel' },
+        {
+          text: 'Zurücksetzen',
+          onPress: async () => {
+            try {
+              setIsChangingBackground(true);
+              const result = await resetToDefault();
+
+              if (result.error) {
+                Alert.alert('Fehler', result.error);
+              }
+            } catch (err) {
+              console.error('Error resetting background:', err);
+              Alert.alert('Fehler', 'Hintergrundbild konnte nicht zurückgesetzt werden.');
+            } finally {
+              setIsChangingBackground(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleExportData = async () => {
@@ -247,6 +319,90 @@ export default function AppSettingsScreen() {
                         />
                       </View>
                     </View>
+                  </LiquidGlassCard>
+
+                  {/* Hintergrundbild */}
+                  <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
+                    <ThemedText style={styles.sectionTitle}>Hintergrundbild</ThemedText>
+
+                    {/* Vorschau */}
+                    <View style={styles.backgroundPreviewContainer}>
+                      <Image
+                        source={hasCustomBackground && customUri
+                          ? { uri: customUri }
+                          : require('@/assets/images/Background_Hell.png')
+                        }
+                        style={styles.backgroundPreview}
+                        resizeMode={hasCustomBackground ? 'cover' : 'repeat'}
+                      />
+                      <View style={styles.backgroundPreviewOverlay}>
+                        <ThemedText style={styles.backgroundPreviewLabel}>
+                          {hasCustomBackground
+                            ? `Eigenes Bild (${isDarkBackground ? 'dunkel' : 'hell'})`
+                            : 'Standard'}
+                        </ThemedText>
+                      </View>
+                    </View>
+
+                    <TouchableOpacity
+                      style={[styles.rowItem, isChangingBackground && styles.disabledRow]}
+                      onPress={handleChangeBackground}
+                      disabled={isChangingBackground}
+                    >
+                      <View style={styles.rowIcon}>
+                        <IconSymbol name="photo" size={24} color={theme.accent} />
+                      </View>
+                      <View style={styles.rowContent}>
+                        <ThemedText style={styles.rowTitle}>Hintergrund ändern</ThemedText>
+                        <ThemedText style={styles.rowDescription}>Wähle ein Bild aus deiner Galerie</ThemedText>
+                      </View>
+                      <View style={styles.trailing}>
+                        {isChangingBackground ? (
+                          <ActivityIndicator size="small" color={theme.accent} />
+                        ) : (
+                          <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
+                        )}
+                      </View>
+                    </TouchableOpacity>
+
+                    {hasCustomBackground && (
+                      <>
+                        <TouchableOpacity
+                          style={styles.rowItem}
+                          onPress={() => setBackgroundMode(!isDarkBackground)}
+                        >
+                          <View style={styles.rowIcon}>
+                            <IconSymbol name={isDarkBackground ? 'sun.max' : 'moon'} size={24} color={theme.accent} />
+                          </View>
+                          <View style={styles.rowContent}>
+                            <ThemedText style={styles.rowTitle}>Textfarbe anpassen</ThemedText>
+                            <ThemedText style={styles.rowDescription}>
+                              Aktuell: {isDarkBackground ? 'Heller Text (dunkles Bild)' : 'Dunkler Text (helles Bild)'}
+                            </ThemedText>
+                          </View>
+                          <View style={styles.trailing}>
+                            <IconSymbol name="arrow.left.arrow.right" size={20} color={theme.tabIconDefault} />
+                          </View>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={[styles.rowItem, isChangingBackground && styles.disabledRow]}
+                          onPress={handleResetBackground}
+                          disabled={isChangingBackground}
+                        >
+                          <View style={styles.rowIcon}>
+                            <IconSymbol name="arrow.counterclockwise" size={24} color={theme.accent} />
+                          </View>
+                          <View style={styles.rowContent}>
+                            <ThemedText style={styles.rowTitle}>Zurücksetzen</ThemedText>
+                            <ThemedText style={styles.rowDescription}>Standard-Hintergrundbild wiederherstellen</ThemedText>
+                          </View>
+                          <View style={styles.trailing}>
+                            <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
+                          </View>
+                        </TouchableOpacity>
+                      </>
+                    )}
                   </LiquidGlassCard>
 
                   {/* Daten verwalten */}
@@ -444,6 +600,32 @@ const styles = StyleSheet.create({
   },
   dangerText: {
     color: '#FF6B6B',
+  },
+  backgroundPreviewContainer: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    borderRadius: 12,
+    overflow: 'hidden',
+    height: 120,
+    position: 'relative',
+  },
+  backgroundPreview: {
+    width: '100%',
+    height: '100%',
+  },
+  backgroundPreviewOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  backgroundPreviewLabel: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
   },
   infoRow: {
     borderBottomWidth: 0,
