@@ -3,21 +3,34 @@ import { getCachedUser } from './supabase';
 import { getCachedPremiumStatus, getCachedUserSettings } from './appCache';
 
 export const PAYWALL_INTERVAL_MS = 2 * 60 * 60 * 1000; // 2 Stunden
+export const PAYWALL_ACCOUNT_CREATION_GRACE_MS = 24 * 60 * 60 * 1000; // 24 Stunden
 
 export type PaywallState = {
   isPro: boolean;
   lastShownAt: Date | null;
+  accountCreatedAt: Date | null;
 };
 
-const mapRowToState = (settings: any, isPro: boolean): PaywallState => ({
+const parseDate = (value?: string | null): Date | null => {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const resolveAccountCreatedAt = (user: any): Date | null => {
+  return parseDate(user?.created_at);
+};
+
+const mapRowToState = (settings: any, isPro: boolean, accountCreatedAt: Date | null): PaywallState => ({
   isPro,
-  lastShownAt: settings?.paywall_last_shown_at ? new Date(settings.paywall_last_shown_at) : null,
+  lastShownAt: parseDate(settings?.paywall_last_shown_at),
+  accountCreatedAt,
 });
 
 export const fetchPaywallState = async (): Promise<PaywallState> => {
   const { data: userData } = await getCachedUser();
   if (!userData.user) {
-    return { isPro: false, lastShownAt: null };
+    return { isPro: false, lastShownAt: null, accountCreatedAt: null };
   }
 
   try {
@@ -27,10 +40,11 @@ export const fetchPaywallState = async (): Promise<PaywallState> => {
       getCachedUserSettings(),
     ]);
 
-    return mapRowToState(settings, isPro);
+    const accountCreatedAt = resolveAccountCreatedAt(userData.user);
+    return mapRowToState(settings, isPro, accountCreatedAt);
   } catch (err) {
     console.error('Exception while fetching paywall state:', err);
-    return { isPro: false, lastShownAt: null };
+    return { isPro: false, lastShownAt: null, accountCreatedAt: null };
   }
 };
 
@@ -43,6 +57,12 @@ export const shouldShowPaywall = async (
   }
 
   const now = Date.now();
+  if (state.accountCreatedAt) {
+    const accountAge = now - state.accountCreatedAt.getTime();
+    if (accountAge < PAYWALL_ACCOUNT_CREATION_GRACE_MS) {
+      return { shouldShow: false, state };
+    }
+  }
   const last = state.lastShownAt?.getTime() ?? 0;
   const delta = now - last;
   const shouldShow = !state.lastShownAt || delta >= intervalMs;

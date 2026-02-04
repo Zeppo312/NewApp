@@ -8,7 +8,6 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useRouter, Stack } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { useConvex } from '@/contexts/ConvexContext';
-import { useBackend } from '@/contexts/BackendContext';
 import { getAppSettings, saveAppSettings, AppSettings } from '@/lib/supabase';
 import { exportUserData } from '@/lib/dataExport';
 import { deleteUserAccount, deleteUserData } from '@/lib/profile';
@@ -32,11 +31,9 @@ export default function AppSettingsScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isDeletingData, setIsDeletingData] = useState(false);
-  const [isSyncingConvex, setIsSyncingConvex] = useState(false);
 
   // Convex context
-  const { convexClient, syncUser, lastSyncError } = useConvex();
-  const { activeBackend } = useBackend();
+  const { convexClient, lastSyncError } = useConvex();
 
   // Check if current user is admin
   const isAdmin = user?.email ? ADMIN_EMAILS.includes(user.email) : false;
@@ -178,33 +175,6 @@ export default function AppSettingsScreen() {
     }
   };
 
-  const handleSyncToConvex = async () => {
-    setIsSyncingConvex(true);
-    try {
-      const success = await syncUser();
-
-      if (success) {
-        Alert.alert(
-          '✅ Sync erfolgreich',
-          `User wurde erfolgreich zu Convex synchronisiert.\n\nUser ID: ${user?.id}\nEmail: ${user?.email || 'N/A'}`,
-          [{ text: 'OK' }]
-        );
-      } else {
-        Alert.alert(
-          '❌ Sync fehlgeschlagen',
-          lastSyncError
-            ? `Fehler: ${lastSyncError.message}\n\nBitte prüfe die Console Logs für Details.`
-            : 'Unbekannter Fehler. Prüfe die Console Logs.',
-          [{ text: 'OK' }]
-        );
-      }
-    } catch (error) {
-      Alert.alert('Fehler', `Sync fehlgeschlagen: ${error}`);
-    } finally {
-      setIsSyncingConvex(false);
-    }
-  };
-
   const handleDeleteDataRequest = () => {
     if (isDeletingData) return;
     Alert.alert(
@@ -279,43 +249,6 @@ export default function AppSettingsScreen() {
                     </View>
                   </LiquidGlassCard>
 
-                  {/* Über die App */}
-                  <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
-                    <ThemedText style={styles.sectionTitle}>Über die App</ThemedText>
-
-                    <View style={styles.rowItem}>
-                      <View style={styles.rowIcon}>
-                        <IconSymbol name="info.circle" size={24} color={theme.accent} />
-                      </View>
-                      <View style={styles.rowContent}>
-                        <ThemedText style={styles.rowTitle}>Version</ThemedText>
-                      </View>
-                      <View style={styles.trailing}>
-                        <ThemedText style={styles.versionText}>1.0.0</ThemedText>
-                      </View>
-                    </View>
-
-                    <TouchableOpacity style={styles.rowItem}>
-                      <View style={styles.rowIcon}>
-                        <IconSymbol name="doc.text" size={24} color={theme.accent} />
-                      </View>
-                      <View style={styles.rowContent}>
-                        <ThemedText style={styles.rowTitle}>Datenschutzerklärung</ThemedText>
-                      </View>
-                      <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
-                    </TouchableOpacity>
-
-                    <TouchableOpacity style={styles.rowItem}>
-                      <View style={styles.rowIcon}>
-                        <IconSymbol name="doc.text" size={24} color={theme.accent} />
-                      </View>
-                      <View style={styles.rowContent}>
-                        <ThemedText style={styles.rowTitle}>Impressum</ThemedText>
-                      </View>
-                      <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
-                    </TouchableOpacity>
-                  </LiquidGlassCard>
-
                   {/* Daten verwalten */}
                   <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
                     <ThemedText style={styles.sectionTitle}>Daten verwalten</ThemedText>
@@ -381,34 +314,6 @@ export default function AppSettingsScreen() {
                         </View>
                         <View style={styles.trailing}>
                           <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
-                        </View>
-                      </TouchableOpacity>
-
-                      {/* Convex Sync */}
-                      <TouchableOpacity
-                        style={[styles.rowItem, (!convexClient || isSyncingConvex) && styles.disabledRow]}
-                        onPress={handleSyncToConvex}
-                        disabled={!convexClient || isSyncingConvex}
-                      >
-                        <View style={styles.rowIcon}>
-                          <ThemedText style={{ fontSize: 24 }}>🔄</ThemedText>
-                        </View>
-                        <View style={styles.rowContent}>
-                          <ThemedText style={styles.rowTitle}>Convex User Sync</ThemedText>
-                          <ThemedText style={styles.rowDescription}>
-                            User zu Convex syncen • Backend: {activeBackend === 'supabase' ? 'Supabase' : 'Convex'}
-                          </ThemedText>
-                        </View>
-                        <View style={styles.trailing}>
-                          {isSyncingConvex ? (
-                            <ActivityIndicator size="small" color={theme.accent} />
-                          ) : (
-                            <IconSymbol
-                              name={convexClient ? "arrow.triangle.2.circlepath" : "xmark.circle"}
-                              size={20}
-                              color={convexClient ? theme.accent : "#FF6B6B"}
-                            />
-                          )}
                         </View>
                       </TouchableOpacity>
 
@@ -530,10 +435,6 @@ const styles = StyleSheet.create({
   },
   selectedThemeButtonText: {
     color: '#FFFFFF',
-  },
-  versionText: {
-    fontSize: 16,
-    opacity: 0.7,
   },
   dangerItem: {
     borderBottomWidth: 0,

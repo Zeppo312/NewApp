@@ -3,6 +3,7 @@ import { Animated, Easing, StyleSheet, ScrollView, View, TouchableOpacity, Text,
 import { CachedImage } from '@/components/CachedImage';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
+import { useFocusEffect } from '@react-navigation/native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedBackground } from '@/components/ThemedBackground';
@@ -12,7 +13,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Canvas, RoundedRect, LinearGradient as SkiaLinearGradient, RadialGradient, Circle, vec } from '@shopify/react-native-skia';
-import { getBabyInfo, getDiaryEntries, getCurrentPhase, getPhaseProgress, getMilestonesByPhase } from '@/lib/baby';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { supabase, addBabyCareEntry } from '@/lib/supabase';
 import { getRecommendations, LottiRecommendation } from '@/lib/supabase/recommendations';
@@ -21,6 +21,7 @@ import ActivityInputModal from '@/components/ActivityInputModal';
 import SleepQuickAddModal, { SleepQuickEntry } from '@/components/SleepQuickAddModal';
 import BabySwitcherButton from '@/components/BabySwitcherButton';
 import { loadCachedHomeData, cacheHomeData, isCacheFresh } from '@/lib/homeCache';
+import { getLocalProfileName } from '@/lib/localProfile';
 
 // Tägliche Tipps für Mamas
 const dailyTips = [
@@ -254,12 +255,7 @@ export default function HomeScreen() {
   const OVERVIEW_ROTATION_INTERVAL_MS = 20000;
   const OVERVIEW_ROTATION_PAUSE_MS = 12000;
 
-  const [babyInfo, setBabyInfo] = useState<any>(null);
-  const [diaryEntries, setDiaryEntries] = useState<any[]>([]);
   const [dailyEntries, setDailyEntries] = useState<any[]>([]);
-  const [currentPhase, setCurrentPhase] = useState<any>(null);
-  const [phaseProgress, setPhaseProgress] = useState<any>(null);
-  const [milestones, setMilestones] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [dailyTip, setDailyTip] = useState("");
   const [userName, setUserName] = useState("");
@@ -318,6 +314,22 @@ export default function HomeScreen() {
     if (words.length <= limit) return value.trim();
     return `${words.slice(0, limit).join(' ')}...`;
   };
+
+  const loadLocalProfileName = useCallback(async () => {
+    if (!user?.id) {
+      setUserName('');
+      return;
+    }
+    const localProfile = await getLocalProfileName(user.id);
+    const nextName = localProfile?.firstName || localProfile?.lastName || '';
+    setUserName(nextName);
+  }, [user?.id]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadLocalProfileName();
+    }, [loadLocalProfileName])
+  );
 
   useEffect(() => {
     if (featuredRecommendation?.image_url) {
@@ -477,15 +489,9 @@ export default function HomeScreen() {
       if (cachedData) {
         console.log('Loading cached home data (age:', new Date().toISOString(), '-', cachedData.lastUpdate, ')');
         // Zeige sofort gecachte Daten für instant load
-        if (cachedData.babyInfo) setBabyInfo(cachedData.babyInfo);
-        if (cachedData.diaryEntries) setDiaryEntries(cachedData.diaryEntries);
         if (cachedData.dailyEntries) setDailyEntries(cachedData.dailyEntries);
         if (cachedData.todaySleepMinutes !== undefined) setTodaySleepMinutes(cachedData.todaySleepMinutes);
-        if (cachedData.currentPhase) setCurrentPhase(cachedData.currentPhase);
-        if (cachedData.phaseProgress) setPhaseProgress(cachedData.phaseProgress);
-        if (cachedData.milestones) setMilestones(cachedData.milestones);
         if (cachedData.recommendations) setRecommendations(cachedData.recommendations);
-        if (cachedData.userName) setUserName(cachedData.userName);
 
         // Wenn Cache frisch ist (< 5 Min), beende Loading sofort
         if (isCacheFresh(cachedData.lastUpdate) && !refreshing) {
@@ -496,35 +502,6 @@ export default function HomeScreen() {
       // Lade trotzdem immer frische Daten von Supabase (parallel)
       if (!refreshing && !cachedData) {
         setIsLoading(true);
-      }
-
-      // Benutzernamen laden
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('first_name')
-        .eq('id', user?.id)
-        .single();
-
-      let freshUserName = userName;
-      if (profileError) {
-        console.error('Error loading user profile:', profileError);
-      } else if (profileData) {
-        if (profileData.first_name) {
-          freshUserName = profileData.first_name;
-          setUserName(freshUserName);
-        }
-      }
-
-      // Baby-Informationen laden
-      const { data: babyData } = await getBabyInfo(activeBabyId ?? undefined);
-      setBabyInfo(babyData);
-
-      // Tagebucheinträge laden (nur die neuesten 5)
-      const { data: diaryData } = await getDiaryEntries(activeBabyId ?? undefined);
-      let freshDiaryEntries: any[] = [];
-      if (diaryData) {
-        freshDiaryEntries = diaryData.slice(0, 5);
-        setDiaryEntries(freshDiaryEntries);
       }
 
       // Alltags-Einträge für heute laden
@@ -552,30 +529,7 @@ export default function HomeScreen() {
         setDailyEntries(dailyData);
       }
 
-      await fetchTodaySleepMinutes(startOfDay, endOfDay);
-
-      // Aktuelle Entwicklungsphase laden
-      const { data: phaseData } = await getCurrentPhase();
-      let freshCurrentPhase = null;
-      let freshPhaseProgress = null;
-      let freshMilestones: any[] = [];
-
-      if (phaseData) {
-        freshCurrentPhase = phaseData;
-        setCurrentPhase(phaseData);
-
-        // Fortschritt für die aktuelle Phase berechnen
-        const { progress, completedCount, totalCount } = await getPhaseProgress(phaseData.phase_id);
-        freshPhaseProgress = { progress, completedCount, totalCount };
-        setPhaseProgress(freshPhaseProgress);
-
-        // Meilensteine für die aktuelle Phase laden
-        const { data: milestonesData } = await getMilestonesByPhase(phaseData.phase_id);
-        if (milestonesData) {
-          freshMilestones = milestonesData;
-          setMilestones(milestonesData);
-        }
-      }
+      const freshSleepMinutes = await fetchTodaySleepMinutes(startOfDay, endOfDay);
 
       let freshRecommendations: any[] = [];
       try {
@@ -588,15 +542,9 @@ export default function HomeScreen() {
 
       // 🆕 Speichere frische Daten im Cache für nächstes Mal
       await cacheHomeData({
-        babyInfo: babyData,
-        diaryEntries: freshDiaryEntries,
         dailyEntries: freshDailyEntries,
-        todaySleepMinutes: todaySleepMinutes,
-        currentPhase: freshCurrentPhase,
-        phaseProgress: freshPhaseProgress,
-        milestones: freshMilestones,
+        todaySleepMinutes: freshSleepMinutes,
         recommendations: freshRecommendations,
-        userName: freshUserName,
       });
     } catch (err) {
       console.error('Failed to load home data:', err);
@@ -634,31 +582,6 @@ export default function HomeScreen() {
       return `${hours}h ${mins}m`;
     }
     return `${mins}m`;
-  };
-
-  // Berechne die Anzahl der heutigen Einträge (für Referenz, wird nicht mehr angezeigt)
-  const getTodayEntries = () => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    return diaryEntries.filter(entry => {
-      const entryDate = new Date(entry.entry_date);
-      entryDate.setHours(0, 0, 0, 0);
-      return entryDate.getTime() === today.getTime();
-    }).length;
-  };
-
-  // Berechne die Anzahl der heute erreichten Meilensteine (für Referenz, wird nicht mehr angezeigt)
-  const getTodayMilestones = () => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    return milestones.filter(milestone => {
-      if (!milestone.completion_date) return false;
-      const completionDate = new Date(milestone.completion_date);
-      completionDate.setHours(0, 0, 0, 0);
-      return completionDate.getTime() === today.getTime();
-    }).length;
   };
 
   // Handle stat item press
@@ -713,11 +636,11 @@ export default function HomeScreen() {
     }
   };
 
-  const fetchTodaySleepMinutes = async (startOfDay: Date, endOfDay: Date) => {
+  const fetchTodaySleepMinutes = async (startOfDay: Date, endOfDay: Date): Promise<number> => {
     try {
       if (!user?.id) {
         setTodaySleepMinutes(0);
-        return;
+        return 0;
       }
 
       const startIso = startOfDay.toISOString();
@@ -742,7 +665,7 @@ export default function HomeScreen() {
       if (error || !data) {
         console.error('Error loading sleep entries for today:', error);
         setTodaySleepMinutes(0);
-        return;
+        return 0;
       }
 
       const totalMinutes = data.reduce((sum, entry) => {
@@ -755,9 +678,11 @@ export default function HomeScreen() {
       }, 0);
 
       setTodaySleepMinutes(totalMinutes);
+      return totalMinutes;
     } catch (error) {
       console.error('Failed to calculate today sleep minutes:', error);
       setTodaySleepMinutes(0);
+      return 0;
     }
   };
 
@@ -849,8 +774,11 @@ export default function HomeScreen() {
   };
   // Rendere den Begrüßungsbereich
   const renderGreetingSection = () => {
-    // Verwende den Benutzernamen aus der profiles-Tabelle
-    const displayName = userName || 'Mama';
+    const metadataFirstName =
+      typeof user?.user_metadata?.first_name === 'string' ? user.user_metadata.first_name : '';
+    const metadataFullName =
+      typeof user?.user_metadata?.full_name === 'string' ? user.user_metadata.full_name : '';
+    const displayName = userName || metadataFirstName || metadataFullName || 'Mama';
 
     return (
       <View style={[styles.liquidGlassWrapper, styles.greetingCardWrapper]}>

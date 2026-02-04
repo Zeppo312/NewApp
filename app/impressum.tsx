@@ -5,7 +5,9 @@ import { Stack, useRouter } from 'expo-router';
 import Header from '@/components/Header';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { ThemedText } from '@/components/ThemedText';
-import { LiquidGlassCard, GLASS_OVERLAY, LAYOUT_PAD } from '@/constants/DesignGuide';
+import { LAYOUT_PAD } from '@/constants/DesignGuide';
+import { Colors } from '@/constants/Colors';
+import { useColorScheme } from '@/hooks/useColorScheme';
 
 const PLACEHOLDER = '[Bitte ergänzen]';
 
@@ -28,6 +30,8 @@ const Section = ({ title, children }: { title: string; children: React.ReactNode
 
 export default function ImpressumScreen() {
   const router = useRouter();
+  const colorScheme = useColorScheme() ?? 'light';
+  const theme = Colors[colorScheme];
 
   return (
     <>
@@ -44,7 +48,12 @@ export default function ImpressumScreen() {
           />
 
           <ScrollView contentContainerStyle={styles.content}>
-            <LiquidGlassCard style={styles.card} intensity={26} overlayColor={GLASS_OVERLAY}>
+            <View
+              style={[
+                styles.card,
+                { backgroundColor: colorScheme === 'dark' ? theme.cardDark : '#FFF5EE', borderColor: theme.border },
+              ]}
+            >
               <Section title="Angaben zum Anbieter">
                 <ThemedText style={styles.paragraph}>Name/Firma: Laura-Michelle Zeppenfeld</ThemedText>
                 <ThemedText style={styles.paragraph}>Straße, Hausnummer: Tilburger Str. 31</ThemedText>
@@ -85,7 +94,7 @@ export default function ImpressumScreen() {
                   ]}
                 />
               </Section>
-            </LiquidGlassCard>
+            </View>
           </ScrollView>
         </SafeAreaView>
       </ThemedBackground>
@@ -107,14 +116,15 @@ const styles = StyleSheet.create({
     paddingTop: 10,
   },
   card: {
-    borderRadius: 22,
+    borderRadius: 18,
+    borderWidth: 1,
     overflow: 'hidden',
     paddingHorizontal: 20,
-    paddingTop: 18,
-    paddingBottom: 12,
+    paddingVertical: 18,
+    gap: 10,
   },
   section: {
-    marginBottom: 16,
+    marginBottom: 8,
   },
   sectionTitle: {
     fontSize: 16,

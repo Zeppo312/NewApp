@@ -35,6 +35,7 @@ import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { useConvex } from '@/contexts/ConvexContext';
 import { supabase } from '@/lib/supabase';
 import { getBabyInfo, saveBabyInfo } from '@/lib/baby';
+import { setLocalProfileName } from '@/lib/localProfile';
 import * as ImagePicker from 'expo-image-picker';
 import { uploadProfileAvatar, deleteProfileAvatar, deleteUserAccount } from '@/lib/profile';
 import { compressImage } from '@/lib/imageCompression';
@@ -112,6 +113,11 @@ export default function ProfilScreen() {
         setAvatarUrl(profileData.avatar_url || null);
         setAvatarPreview(profileData.avatar_url || null);
         setAvatarRemoved(false);
+        await setLocalProfileName(
+          user.id,
+          profileData.first_name || '',
+          profileData.last_name || '',
+        );
       }
 
       // Settings
@@ -503,6 +509,7 @@ export default function ProfilScreen() {
         });
       }
       if (profileResult.error) throw profileResult.error;
+      await setLocalProfileName(user.id, firstName, lastName);
 
       // user_settings upsert
       const { data: existingSettings } = await supabase

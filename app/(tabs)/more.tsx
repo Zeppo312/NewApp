@@ -342,39 +342,18 @@ export default function MoreScreen() {
             </ThemedText>
 
             <TouchableOpacity
-              style={styles.menuItem}
+              style={styles.legalItem}
               onPress={() => router.push('/datenschutz' as any)}
             >
-              <View style={styles.menuItemIcon}>
-                <IconSymbol name="info.circle.fill" size={24} color={theme.accent} />
-              </View>
-              <View style={styles.menuItemContent}>
-                <ThemedText style={styles.menuItemTitle}>
-                  Datenschutz
-                </ThemedText>
-                <ThemedText style={styles.menuItemDescription}>
-                  Informationen zur Datenverarbeitung
-                </ThemedText>
-              </View>
-              <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
+              <ThemedText style={styles.legalTitle}>Datenschutz</ThemedText>
+              <ThemedText style={styles.legalMeta}>Stand: 03.02.2026</ThemedText>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.menuItem}
+              style={styles.legalItem}
               onPress={() => router.push('/impressum' as any)}
             >
-              <View style={styles.menuItemIcon}>
-                <IconSymbol name="doc.text.fill" size={24} color={theme.accent} />
-              </View>
-              <View style={styles.menuItemContent}>
-                <ThemedText style={styles.menuItemTitle}>
-                  Impressum
-                </ThemedText>
-                <ThemedText style={styles.menuItemDescription}>
-                  Anbieterkennzeichnung und Kontakt
-                </ThemedText>
-              </View>
-              <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
+              <ThemedText style={styles.legalTitle}>Impressum</ThemedText>
             </TouchableOpacity>
           </LiquidGlassCard>
 
@@ -450,6 +429,21 @@ const styles = StyleSheet.create({
   menuItemDescription: {
     fontSize: 13,
     opacity: 0.8,
+  },
+  legalItem: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(0,0,0,0.08)',
+  },
+  legalTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  legalMeta: {
+    marginTop: 2,
+    fontSize: 12,
+    opacity: 0.7,
   },
   logoutSection: {
     marginTop: 20,

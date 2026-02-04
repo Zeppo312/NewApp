@@ -41,13 +41,17 @@ export default function PaywallScreen() {
 
   const billingLabel =
     Platform.OS === 'ios'
-      ? 'Zahlung über den App Store'
+      ? 'Abrechnung über den App Store'
       : Platform.OS === 'android'
-        ? 'Zahlung über Google Play'
-        : 'Zahlung';
+        ? 'Abrechnung über Google Play'
+        : 'Abrechnung';
+
+  const monthlyPriceText = monthlyPriceLabel
+    ? `${monthlyPriceLabel} / Monat`
+    : 'Preis wird im Store angezeigt (monatlich)';
 
   useEffect(() => {
-    // Anzeige registrieren, damit das 2h-Fenster in Supabase gesetzt ist
+    // Anzeige registrieren (Cooldown in Supabase)
     markPaywallShown(origin);
   }, [origin]);
 
@@ -160,8 +164,8 @@ export default function PaywallScreen() {
     () => [
       {
         id: 'intro',
-        title: 'Mehr Überblick für deinen Mama-Alltag 💛',
-        subtitle: 'Schlaf, Mahlzeiten, Planung & Shareables – alles an einem Ort.',
+        title: 'Premium erklärt – kurz & klar 💛',
+        subtitle: 'Premium ist ein Monatsabo mit allen Funktionen – für dich und deine Familie.',
         showMiniBenefit: true,
         body: (
           <BlurView intensity={32} tint="light" style={styles.heroCard}>
@@ -195,22 +199,31 @@ export default function PaywallScreen() {
       },
       {
         id: 'reminder',
-        title: 'Keine Sorge – volle Flexibilität 💛',
-        subtitle: 'Du kannst jederzeit kündigen. Keine Abofalle. Keine versteckten Kosten.',
+        title: 'Transparente Kosten',
+        subtitle: 'Du zahlst erst nach Aktivierung. Den Preis siehst du im Store.',
         body: (
           <View style={styles.timelineCard}>
             <View style={styles.timelineRow}>
               <View style={styles.dot} />
               <View style={styles.timelineTextWrap}>
-                <Text style={styles.timelineLabel}>Heute</Text>
-                <Text style={styles.timelineDesc}>Alle Funktionen sofort freischalten</Text>
+                <Text style={styles.timelineLabel}>Zahlung startet</Text>
+                <Text style={styles.timelineDesc}>Erst nach Bestätigung im Store („Premium aktivieren“).</Text>
+              </View>
+            </View>
+            <View style={styles.timelineRow}>
+              <View style={styles.dot} />
+              <View style={styles.timelineTextWrap}>
+                <Text style={styles.timelineLabel}>Monatspreis</Text>
+                <Text style={styles.timelineDesc}>
+                  {monthlyPriceText} · {billingLabel}
+                </Text>
               </View>
             </View>
             <View style={[styles.timelineRow, { marginBottom: 0 }]}>
               <View style={styles.dot} />
               <View style={styles.timelineTextWrap}>
-                <Text style={styles.timelineLabel}>Monatlich kündbar</Text>
-                <Text style={styles.timelineDesc}>{billingLabel}</Text>
+                <Text style={styles.timelineLabel}>Kündigung</Text>
+                <Text style={styles.timelineDesc}>Jederzeit in den Store-Einstellungen.</Text>
               </View>
             </View>
           </View>
@@ -219,12 +232,12 @@ export default function PaywallScreen() {
       {
         id: 'pricing',
         title: 'Premium freischalten',
-        subtitle: 'Ein Abo – alle Funktionen. Monatlich kündbar.',
+        subtitle: 'Ein Monatsabo – alle Funktionen. Monatlich kündbar.',
         body: (
           <View style={styles.pricingBody}>
-            <Text style={styles.socialProof}>Schon viele Mamas nutzen Lotti Baby täglich.</Text>
+            <Text style={styles.socialProof}>Schon viele Familien nutzen Lotti Baby täglich.</Text>
             <BlurView intensity={20} tint="light" style={styles.featureCard}>
-              <Text style={styles.featureTitle}>Das steckt drin:</Text>
+              <Text style={styles.featureTitle}>Das steckt in Premium:</Text>
               <View style={styles.featurePill}>
                 <Text style={styles.featureText}>✨ Schlaftracker + persönliche Baby-Insights</Text>
               </View>
@@ -242,7 +255,7 @@ export default function PaywallScreen() {
         ),
       },
     ],
-    [billingLabel],
+    [billingLabel, monthlyPriceText],
   );
 
   const handleClose = () => {
@@ -274,8 +287,8 @@ export default function PaywallScreen() {
         <Text style={styles.subline}>{slides[step].subtitle}</Text>
         {step === 0 && (
           <>
-            <Text style={styles.sublineAlt}>Alles an einem Ort. Kein Stress. Keine Limits.</Text>
-            <Text style={styles.miniBenefit}>Mehr Überblick. Weniger Mental Load.</Text>
+            <Text style={styles.sublineAlt}>Den Preis siehst du vor dem Kauf im Store.</Text>
+            <Text style={styles.miniBenefit}>Zahlung startet erst, wenn du „Premium aktivieren“ bestätigst.</Text>
           </>
         )}
 
@@ -307,11 +320,12 @@ export default function PaywallScreen() {
             <View style={[styles.planCard, styles.planCardHighlight]}>
               <View style={styles.planBadgeRow}>
                 <Text style={styles.planBadge}>Monatsabo</Text>
-                <Text style={styles.planSave}>{monthlyPriceLabel ? `${monthlyPriceLabel} / Monat` : 'Jederzeit kündbar'}</Text>
+                <Text style={styles.planSave}>{monthlyPriceLabel ? `Preis: ${monthlyPriceLabel} / Monat` : 'Preis im Store'}</Text>
               </View>
               <Text style={styles.planTitle}>Premium freischalten</Text>
               <Text style={styles.planPrice}>{billingLabel}</Text>
-              <Text style={styles.planDesc}>Alle Premium-Funktionen freischalten · jederzeit kündbar</Text>
+              <Text style={styles.planDesc}>Zahlung wird bei Bestätigung im Store fällig. Danach monatliche Abrechnung.</Text>
+              <Text style={styles.planNote}>Jederzeit kündbar in den Store-Einstellungen.</Text>
               <Pressable style={styles.primaryButton} disabled={isPurchaseActionDisabled} onPress={purchaseAndNavigate}>
                 <LinearGradient
                   colors={['#FFCFAE', '#FEB493']}
@@ -666,6 +680,11 @@ const styles = StyleSheet.create({
     color: '#6A5952',
     marginBottom: 12,
   },
+  planNote: {
+    fontSize: 12,
+    color: '#6A5952',
+    marginBottom: 12,
+  },
   primaryButton: {
     paddingVertical: 16,
     borderRadius: 22,
@@ -704,4 +723,3 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 });
-

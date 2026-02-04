@@ -5,7 +5,9 @@ import { Stack, useRouter } from 'expo-router';
 import Header from '@/components/Header';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { ThemedText } from '@/components/ThemedText';
-import { LiquidGlassCard, GLASS_OVERLAY, LAYOUT_PAD } from '@/constants/DesignGuide';
+import { LAYOUT_PAD } from '@/constants/DesignGuide';
+import { Colors } from '@/constants/Colors';
+import { useColorScheme } from '@/hooks/useColorScheme';
 
 type BulletItem = string | { label: string; text: string };
 
@@ -43,6 +45,8 @@ const Subsection = ({ title, children }: { title: string; children: React.ReactN
 
 export default function DatenschutzScreen() {
   const router = useRouter();
+  const colorScheme = useColorScheme() ?? 'light';
+  const theme = Colors[colorScheme];
 
   return (
     <>
@@ -59,7 +63,12 @@ export default function DatenschutzScreen() {
           />
 
           <ScrollView contentContainerStyle={styles.content}>
-            <LiquidGlassCard style={styles.card} intensity={26} overlayColor={GLASS_OVERLAY}>
+            <View
+              style={[
+                styles.card,
+                { backgroundColor: colorScheme === 'dark' ? theme.cardDark : '#FFF5EE', borderColor: theme.border },
+              ]}
+            >
               <ThemedText style={styles.pageTitle}>Datenschutzerklärung</ThemedText>
 
               <Section title="Präambel">
@@ -760,7 +769,7 @@ export default function DatenschutzScreen() {
                 Erstellt mit kostenlosem Datenschutz-Generator.de von Dr. Thomas Schwenke
                 (https://datenschutz-generator.de/)
               </ThemedText>
-            </LiquidGlassCard>
+            </View>
           </ScrollView>
         </SafeAreaView>
       </ThemedBackground>
@@ -782,11 +791,12 @@ const styles = StyleSheet.create({
     paddingTop: 10,
   },
   card: {
-    borderRadius: 22,
+    borderRadius: 18,
+    borderWidth: 1,
     overflow: 'hidden',
-    paddingHorizontal: 16,
-    paddingTop: 18,
-    paddingBottom: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 18,
+    gap: 10,
   },
   pageTitle: {
     fontSize: 20,
@@ -795,7 +805,7 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   section: {
-    marginBottom: 18,
+    marginBottom: 8,
   },
   sectionTitle: {
     fontSize: 16,
@@ -817,7 +827,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   list: {
-    paddingLeft: 2,
+    paddingLeft: 6,
     marginBottom: 8,
   },
   listItem: {
