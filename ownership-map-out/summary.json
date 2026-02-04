@@ -1,0 +1,134 @@
+{
+  "generated_at": "2026-02-03T10:45:42.515130+00:00",
+  "repo": "/Users/janzeppenfeld/Documents/LottiBaby",
+  "parameters": {
+    "since": null,
+    "until": null,
+    "half_life_days": 180.0,
+    "bus_factor_threshold": 1,
+    "stale_days": 365,
+    "owner_threshold": 0.5,
+    "sensitive_config": null,
+    "identity": "author",
+    "date_field": "author",
+    "include_merges": false,
+    "cochange_enabled": true,
+    "cochange_max_files": 50,
+    "cochange_min_count": 2,
+    "cochange_min_jaccard": 0.05,
+    "cochange_default_excludes": true,
+    "cochange_excludes": [
+      "**/Cargo.lock",
+      "**/Cargo.toml",
+      "**/package-lock.json",
+      "**/yarn.lock",
+      "**/pnpm-lock.yaml",
+      "**/go.sum",
+      "**/go.mod",
+      "**/Gemfile.lock",
+      "**/Pipfile.lock",
+      "**/poetry.lock",
+      "**/composer.lock",
+      "**/.github/**",
+      "**/.gitignore",
+      "**/.gitattributes",
+      "**/.gitmodules",
+      "**/.editorconfig",
+      "**/.vscode/**",
+      "**/.idea/**"
+    ],
+    "author_default_excludes": true,
+    "author_exclude_regexes": [
+      "dependabot"
+    ],
+    "community_top_owners": 5
+  },
+  "orphaned_sensitive_code": [],
+  "hidden_owners": [
+    {
+      "person": "janzeppenfeld@icloud.com",
+      "name": "Jan Zeppenfeld",
+      "controls": "85% of auth code",
+      "category": "auth",
+      "share": 0.8462
+    },
+    {
+      "person": "janzeppenfeld@icloud.com",
+      "name": "Jan Zeppenfeld",
+      "controls": "50% of crypto code",
+      "category": "crypto",
+      "share": 0.5
+    }
+  ],
+  "bus_factor_hotspots": [
+    {
+      "path": "app/auth/reset-password.tsx",
+      "bus_factor": 1,
+      "last_touch": "2025-12-21T23:44:15+01:00",
+      "sensitivity_tags": [
+        "auth"
+      ],
+      "top_owner": "janzeppenfeld@icloud.com"
+    },
+    {
+      "path": "dist-web-validate/auth/callback.html",
+      "bus_factor": 1,
+      "last_touch": "2025-12-21T23:44:15+01:00",
+      "sensitivity_tags": [
+        "auth"
+      ],
+      "top_owner": "janzeppenfeld@icloud.com"
+    },
+    {
+      "path": "dist-web-validate/auth/reset-password.html",
+      "bus_factor": 1,
+      "last_touch": "2025-12-21T23:44:15+01:00",
+      "sensitivity_tags": [
+        "auth"
+      ],
+      "top_owner": "janzeppenfeld@icloud.com"
+    },
+    {
+      "path": "dist 2/auth/callback.html",
+      "bus_factor": 1,
+      "last_touch": "2025-11-03T22:22:37+01:00",
+      "sensitivity_tags": [
+        "auth"
+      ],
+      "top_owner": "janzeppenfeld@icloud.com"
+    },
+    {
+      "path": "dist 4/auth/callback.html",
+      "bus_factor": 1,
+      "last_touch": "2025-11-03T22:22:37+01:00",
+      "sensitivity_tags": [
+        "auth"
+      ],
+      "top_owner": "janzeppenfeld@icloud.com"
+    },
+    {
+      "path": "dist 5/auth/callback.html",
+      "bus_factor": 1,
+      "last_touch": "2025-11-03T22:22:37+01:00",
+      "sensitivity_tags": [
+        "auth"
+      ],
+      "top_owner": "janzeppenfeld@icloud.com"
+    }
+  ],
+  "stats": {
+    "commits": 214,
+    "commits_seen": 215,
+    "commits_excluded_identities": 0,
+    "commits_excluded_merges": 0,
+    "edges": 8585,
+    "people": 2,
+    "files": 4795,
+    "cochange_pairs_total": 5124,
+    "cochange_edges": 353,
+    "cochange_commits_used": 126,
+    "cochange_commits_skipped": 8,
+    "cochange_commits_filtered": 0,
+    "cochange_files_excluded": 15
+  }
+}

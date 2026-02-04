@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { compressImage } from './imageCompression';
 
 type ProfileRecord = {
   id: string;
@@ -192,23 +193,37 @@ export const updateBlogPost = async (id: string, payload: UpdateBlogPostPayload)
 
 export const uploadBlogCover = async (uri: string, userId: string) => {
   try {
-    const extMatch = uri.split('.').pop();
-    const ext = extMatch?.split('?')[0]?.toLowerCase() || 'jpg';
-    const mimeType = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
-    const response = await fetch(uri);
+    const fileName = `blog_${userId}_${Date.now()}.jpg`;
+    const filePath = `blog-covers/${fileName}`;
 
-    if (!response.ok) {
-      return { data: null, error: new Error(`Bild konnte nicht geladen werden (${response.status})`) };
+    // Remote URIs zuerst laden, lokale URIs direkt nutzen
+    const isRemote = uri.startsWith('http');
+    let compressInput;
+
+    if (isRemote) {
+      const response = await fetch(uri);
+      if (!response.ok) {
+        return { data: null, error: new Error(`Bild konnte nicht geladen werden (${response.status})`) };
+      }
+      const buffer = new Uint8Array(await response.arrayBuffer());
+      const binary = Array.from(buffer)
+        .map((b) => String.fromCharCode(b))
+        .join('');
+      const base64 = btoa(binary);
+      compressInput = { base64 };
+    } else {
+      compressInput = { uri };
     }
 
-    const arrayBuffer = await response.arrayBuffer();
-    const fileBuffer = new Uint8Array(arrayBuffer); // RN fetch liefert kein .blob, deshalb ArrayBuffer nutzen
-    const fileName = `blog_${userId}_${Date.now()}.${ext}`;
-    const filePath = `blog-covers/${fileName}`;
+    // Max ~1600px Kantenlänge, moderate Qualität
+    const { bytes } = await compressImage(compressInput, {
+      maxDimension: 1600,
+      quality: 0.72,
+    });
 
     const { error: uploadError } = await supabase.storage
       .from(BLOG_BUCKET)
-      .upload(filePath, fileBuffer, { contentType: mimeType, upsert: false });
+      .upload(filePath, bytes, { contentType: 'image/jpeg', upsert: false });
 
     if (uploadError) {
       return { data: null, error: uploadError };

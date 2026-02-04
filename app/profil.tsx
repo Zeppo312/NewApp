@@ -37,6 +37,7 @@ import { supabase } from '@/lib/supabase';
 import { getBabyInfo, saveBabyInfo } from '@/lib/baby';
 import * as ImagePicker from 'expo-image-picker';
 import { uploadProfileAvatar, deleteProfileAvatar, deleteUserAccount } from '@/lib/profile';
+import { compressImage } from '@/lib/imageCompression';
 
 const { width: screenWidth } = Dimensions.get('window');
 const TIMELINE_INSET = 8; // wie im Sleep-Tracker
@@ -467,7 +468,12 @@ export default function ProfilScreen() {
       }
 
       if (babyPhotoBase64) {
-        finalBabyPhoto = babyPhotoBase64;
+        // Babyfotos ebenfalls verkleinern (max ~900px, moderat komprimiert)
+        const { dataUrl } = await compressImage(
+          { base64: babyPhotoBase64 },
+          { maxDimension: 900, quality: 0.65 }
+        );
+        finalBabyPhoto = dataUrl;
       } else if (babyPhotoRemoved) {
         finalBabyPhoto = null;
       }

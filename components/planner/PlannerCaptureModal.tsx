@@ -295,7 +295,8 @@ export const PlannerCaptureModal: React.FC<Props> = ({
         const allDayStart = new Date(startTime);
         allDayStart.setHours(0, 0, 0, 0);
 
-        const allDayEnd = new Date(startTime);
+        // Use the selected end date for multi-day events
+        const allDayEnd = new Date(endTime ?? startTime);
         allDayEnd.setHours(23, 59, 59, 999);
 
         payload.start = allDayStart;
@@ -516,11 +517,11 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                             allDayStart.setHours(0, 0, 0, 0);
                             setStartTime(allDayStart);
 
-                            const allDayEnd = new Date(startTime);
+                            // Keep end date if already set, otherwise same day
+                            const allDayEnd = new Date(endTime ?? startTime);
                             allDayEnd.setHours(23, 59, 59, 999);
                             setEndTime(allDayEnd);
 
-                            setShowEnd(false);
                             setShowStartPicker(false);
                             setShowEndPicker(false);
                           } else {
@@ -541,56 +542,91 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                         </Text>
                       </TouchableOpacity>
                     </View>
-                    {renderDateSelector(
-                      isAllDay ? 'Datum' : 'Start',
-                      startTime,
-                      showStartPicker,
-                      () => setShowStartPicker((prev) => !prev),
-                      (date) => {
-                        if (isAllDay) {
-                          const allDayStart = new Date(date);
-                          allDayStart.setHours(0, 0, 0, 0);
-                          setStartTime(allDayStart);
-
-                          const allDayEnd = new Date(date);
-                          allDayEnd.setHours(23, 59, 59, 999);
-                          setEndTime(allDayEnd);
-                        } else {
-                          setStartTime(date);
-                          if (showEnd && endTime && endTime < date) {
-                            setEndTime(new Date(date.getTime() + 30 * 60000));
-                          }
-                        }
-                      },
-                      isAllDay
-                    )}
-                    {!isAllDay && showEnd && endTime ? (
+                    {isAllDay ? (
                       <>
-                        {renderDateSelector('Ende', endTime, showEndPicker, () => setShowEndPicker((prev) => !prev), setEndTime)}
-                        <TouchableOpacity
-                          style={styles.removeEndButton}
-                          onPress={() => {
-                            setShowEnd(false);
-                            setEndTime(null);
-                            setShowEndPicker(false);
-                          }}
-                        >
-                          <Text style={styles.removeEndLabel}>Ende entfernen</Text>
-                        </TouchableOpacity>
+                        {renderDateSelector(
+                          'Von',
+                          startTime,
+                          showStartPicker,
+                          () => setShowStartPicker((prev) => !prev),
+                          (date) => {
+                            const allDayStart = new Date(date);
+                            allDayStart.setHours(0, 0, 0, 0);
+                            setStartTime(allDayStart);
+
+                            // If end date is before start date, adjust it
+                            if (endTime && endTime < allDayStart) {
+                              const allDayEnd = new Date(allDayStart);
+                              allDayEnd.setHours(23, 59, 59, 999);
+                              setEndTime(allDayEnd);
+                            }
+                          },
+                          true
+                        )}
+                        {renderDateSelector(
+                          'Bis',
+                          endTime ?? startTime,
+                          showEndPicker,
+                          () => setShowEndPicker((prev) => !prev),
+                          (date) => {
+                            const allDayEnd = new Date(date);
+                            allDayEnd.setHours(23, 59, 59, 999);
+
+                            // Don't allow end date before start date
+                            if (allDayEnd < startTime) {
+                              setEndTime(new Date(startTime.getTime()));
+                              (endTime ?? startTime).setHours(23, 59, 59, 999);
+                            } else {
+                              setEndTime(allDayEnd);
+                            }
+                          },
+                          true
+                        )}
                       </>
-                    ) : !isAllDay ? (
-                      <TouchableOpacity
-                        style={styles.timeButton}
-                        onPress={() => {
-                          const defaultEnd = new Date(startTime.getTime() + 30 * 60000);
-                          setEndTime(defaultEnd);
-                          setShowEnd(true);
-                          setShowEndPicker(true);
-                        }}
-                      >
-                        <Text style={styles.timeButtonLabel}>Ende hinzufügen</Text>
-                      </TouchableOpacity>
-                    ) : null}
+                    ) : (
+                      <>
+                        {renderDateSelector(
+                          'Start',
+                          startTime,
+                          showStartPicker,
+                          () => setShowStartPicker((prev) => !prev),
+                          (date) => {
+                            setStartTime(date);
+                            if (showEnd && endTime && endTime < date) {
+                              setEndTime(new Date(date.getTime() + 30 * 60000));
+                            }
+                          },
+                          false
+                        )}
+                        {showEnd && endTime ? (
+                          <>
+                            {renderDateSelector('Ende', endTime, showEndPicker, () => setShowEndPicker((prev) => !prev), setEndTime)}
+                            <TouchableOpacity
+                              style={styles.removeEndButton}
+                              onPress={() => {
+                                setShowEnd(false);
+                                setEndTime(null);
+                                setShowEndPicker(false);
+                              }}
+                            >
+                              <Text style={styles.removeEndLabel}>Ende entfernen</Text>
+                            </TouchableOpacity>
+                          </>
+                        ) : (
+                          <TouchableOpacity
+                            style={styles.timeButton}
+                            onPress={() => {
+                              const defaultEnd = new Date(startTime.getTime() + 30 * 60000);
+                              setEndTime(defaultEnd);
+                              setShowEnd(true);
+                              setShowEndPicker(true);
+                            }}
+                          >
+                            <Text style={styles.timeButtonLabel}>Ende hinzufügen</Text>
+                          </TouchableOpacity>
+                        )}
+                      </>
+                    )}
                     {renderInlineField(
                       location,
                       'Ort (optional)',

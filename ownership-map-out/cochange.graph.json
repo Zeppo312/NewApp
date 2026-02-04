@@ -1,0 +1,2871 @@
+{
+  "directed": false,
+  "multigraph": false,
+  "graph": {
+    "community_maintainers": [
+      {
+        "id": 1,
+        "size": 22,
+        "maintainers": [
+          {
+            "person_id": "janzeppenfeld@icloud.com",
+            "name": "Jan Zeppenfeld",
+            "touches": 165,
+            "touch_share": 0.6346,
+            "recency_share": 0.7368,
+            "sensitive_share": 0.0,
+            "primary_tz_offset": "+01:00"
+          },
+          {
+            "person_id": "jan.niklas.zeppenfeld@gmail.com",
+            "name": "Jan Zeppenfeld",
+            "touches": 95,
+            "touch_share": 0.3654,
+            "recency_share": 0.2632,
+            "sensitive_share": 0.0,
+            "primary_tz_offset": "+02:00"
+          }
+        ],
+        "bus_factor": 2,
+        "owner_count": 2,
+        "totals": {
+          "touches": 260,
+          "recency_weight": 180.872006,
+          "sensitive_weight": 0
+        }
+      },
+      {
+        "id": 2,
+        "size": 21,
+        "maintainers": [
+          {
+            "person_id": "janzeppenfeld@icloud.com",
+            "name": "Jan Zeppenfeld",
+            "touches": 82,
+            "touch_share": 0.8119,
+            "recency_share": 0.885,
+            "sensitive_share": 0.0,
+            "primary_tz_offset": "+01:00"
+          },
+          {
+            "person_id": "jan.niklas.zeppenfeld@gmail.com",
+            "name": "Jan Zeppenfeld",
+            "touches": 19,
+            "touch_share": 0.1881,
+            "recency_share": 0.115,
+            "sensitive_share": 0.0,
+            "primary_tz_offset": "+02:00"
+          }
+        ],
+        "bus_factor": 2,
+        "owner_count": 2,
+        "totals": {
+          "touches": 101,
+          "recency_weight": 80.354134,
+          "sensitive_weight": 0
+        }
+      },
+      {
+        "id": 3,
+        "size": 15,
+        "maintainers": [
+          {
+            "person_id": "janzeppenfeld@icloud.com",
+            "name": "Jan Zeppenfeld",
+            "touches": 77,
+            "touch_share": 0.9872,
+            "recency_share": 0.9925,
+            "sensitive_share": 0.0,
+            "primary_tz_offset": "+01:00"
+          },
+          {
+            "person_id": "jan.niklas.zeppenfeld@gmail.com",
+            "name": "Jan Zeppenfeld",
+            "touches": 1,
+            "touch_share": 0.0128,
+            "recency_share": 0.0075,
+            "sensitive_share": 0.0,
+            "primary_tz_offset": "+02:00"
+          }
+        ],
+        "bus_factor": 2,
+        "owner_count": 2,
+        "totals": {
+          "touches": 78,
+          "recency_weight": 62.548553,
+          "sensitive_weight": 0
+        }
+      },
+      {
+        "id": 4,
+        "size": 13,
+        "maintainers": [
+          {
+            "person_id": "janzeppenfeld@icloud.com",
+            "name": "Jan Zeppenfeld",
+            "touches": 51,
+            "touch_share": 0.6623,
+            "recency_share": 0.7717,
+            "sensitive_share": 0.3333,
+            "primary_tz_offset": "+01:00"
+          },
+          {
+            "person_id": "jan.niklas.zeppenfeld@gmail.com",
+            "name": "Jan Zeppenfeld",
+            "touches": 26,
+            "touch_share": 0.3377,
+            "recency_share": 0.2283,
+            "sensitive_share": 0.6667,
+            "primary_tz_offset": "+02:00"
+          }
+        ],
+        "bus_factor": 2,
+        "owner_count": 2,
+        "totals": {
+          "touches": 77,
+          "recency_weight": 57.396356,
+          "sensitive_weight": 3.0
+        }
+      },
+      {
+        "id": 5,
+        "size": 9,
+        "maintainers": [
+          {
+            "person_id": "janzeppenfeld@icloud.com",
+            "name": "Jan Zeppenfeld",
+            "touches": 56,
+            "touch_share": 0.8889,
+            "recency_share": 0.9278,
+            "sensitive_share": 0.0,
+            "primary_tz_offset": "+01:00"
+          },
+          {
+            "person_id": "jan.niklas.zeppenfeld@gmail.com",
+            "name": "Jan Zeppenfeld",
+            "touches": 7,
+            "touch_share": 0.1111,
+            "recency_share": 0.0722,
+            "sensitive_share": 0.0,
+            "primary_tz_offset": "+02:00"
+          }
+        ],
+        "bus_factor": 2,
+        "owner_count": 2,
+        "totals": {
+          "touches": 63,
+          "recency_weight": 46.367097,
+          "sensitive_weight": 0
+        }
+      },
+      {
+        "id": 6,
+        "size": 8,
+        "maintainers": [
+          {
+            "person_id": "janzeppenfeld@icloud.com",
+            "name": "Jan Zeppenfeld",
+            "touches": 37,
+            "touch_share": 0.8222,
+            "recency_share": 0.8891,
+            "sensitive_share": 0.0,
+            "primary_tz_offset": "+01:00"
+          },
+          {
+            "person_id": "jan.niklas.zeppenfeld@gmail.com",
+            "name": "Jan Zeppenfeld",
+            "touches": 8,
+            "touch_share": 0.1778,
+            "recency_share": 0.1109,
+            "sensitive_share": 0.0,
+            "primary_tz_offset": "+02:00"
+          }
+        ],
+        "bus_factor": 2,
+        "owner_count": 2,
+        "totals": {
+          "touches": 45,
+          "recency_weight": 34.929944,
+          "sensitive_weight": 0
+        }
+      },
+      {
+        "id": 7,
+        "size": 7,
+        "maintainers": [
+          {
+            "person_id": "janzeppenfeld@icloud.com",
+            "name": "Jan Zeppenfeld",
+            "touches": 27,
+            "touch_share": 0.7297,
+            "recency_share": 0.8132,
+            "sensitive_share": 0.0,
+            "primary_tz_offset": "+01:00"
+          },
+          {
+            "person_id": "jan.niklas.zeppenfeld@gmail.com",
+            "name": "Jan Zeppenfeld",
+            "touches": 10,
+            "touch_share": 0.2703,
+            "recency_share": 0.1868,
+            "sensitive_share": 0.0,
+            "primary_tz_offset": "+02:00"
+          }
+        ],
+        "bus_factor": 2,
+        "owner_count": 2,
+        "totals": {
+          "touches": 37,
+          "recency_weight": 26.161346,
+          "sensitive_weight": 0
+        }
+      },
+      {
+        "id": 8,
+        "size": 7,
+        "maintainers": [
+          {
+            "person_id": "janzeppenfeld@icloud.com",
+            "name": "Jan Zeppenfeld",
+            "touches": 44,
+            "touch_share": 1.0,
+            "recency_share": 1.0,
+            "sensitive_share": 0.0,
+            "primary_tz_offset": "+01:00"
+          }
+        ],
+        "bus_factor": 1,
+        "owner_count": 1,
+        "totals": {
+          "touches": 44,
+          "recency_weight": 34.807388,
+          "sensitive_weight": 0
+        }
+      },
+      {
+        "id": 9,
+        "size": 5,
+        "maintainers": [
+          {
+            "person_id": "janzeppenfeld@icloud.com",
+            "name": "Jan Zeppenfeld",
+            "touches": 8,
+            "touch_share": 0.6154,
+            "recency_share": 0.7043,
+            "sensitive_share": 0.0,
+            "primary_tz_offset": "+01:00"
+          },
+          {
+            "person_id": "jan.niklas.zeppenfeld@gmail.com",
+            "name": "Jan Zeppenfeld",
+            "touches": 5,
+            "touch_share": 0.3846,
+            "recency_share": 0.2957,
+            "sensitive_share": 0.0,
+            "primary_tz_offset": "+02:00"
+          }
+        ],
+        "bus_factor": 2,
+        "owner_count": 2,
+        "totals": {
+          "touches": 13,
+          "recency_weight": 10.109095,
+          "sensitive_weight": 0
+        }
+      },
+      {
+        "id": 10,
+        "size": 3,
+        "maintainers": [
+          {
+            "person_id": "janzeppenfeld@icloud.com",
+            "name": "Jan Zeppenfeld",
+            "touches": 7,
+            "touch_share": 0.6364,
+            "recency_share": 0.7506,
+            "sensitive_share": 0.0,
+            "primary_tz_offset": "+01:00"
+          },
+          {
+            "person_id": "jan.niklas.zeppenfeld@gmail.com",
+            "name": "Jan Zeppenfeld",
+            "touches": 4,
+            "touch_share": 0.3636,
+            "recency_share": 0.2494,
+            "sensitive_share": 0.0,
+            "primary_tz_offset": "+02:00"
+          }
+        ],
+        "bus_factor": 2,
+        "owner_count": 2,
+        "totals": {
+          "touches": 11,
+          "recency_weight": 8.193291,
+          "sensitive_weight": 0
+        }
+      }
+    ]
+  },
+  "nodes": [
+    {
+      "community_id": 1,
+      "id": "app/(tabs)/home.tsx"
+    },
+    {
+      "community_id": 4,
+      "id": "app/_layout.tsx"
+    },
+    {
+      "community_id": 5,
+      "id": "app/profil.tsx"
+    },
+    {
+      "community_id": 4,
+      "id": "components/BabySwitcherButton.tsx"
+    },
+    {
+      "community_id": 3,
+      "id": "components/planner/GreetingCard.tsx"
+    },
+    {
+      "community_id": 4,
+      "id": "package.json"
+    },
+    {
+      "community_id": 4,
+      "id": "lib/paywall.ts"
+    },
+    {
+      "community_id": 4,
+      "id": "contexts/AuthContext.tsx"
+    },
+    {
+      "community_id": 6,
+      "id": "app/(tabs)/babyweather.tsx"
+    },
+    {
+      "community_id": 6,
+      "id": "app/(tabs)/more.tsx"
+    },
+    {
+      "community_id": 6,
+      "id": "assets/images/Babytrage.png"
+    },
+    {
+      "community_id": 6,
+      "id": "assets/images/Fuesslinge.png"
+    },
+    {
+      "community_id": 6,
+      "id": "assets/images/Halstuch.png"
+    },
+    {
+      "community_id": 3,
+      "id": "app/planner/index.tsx"
+    },
+    {
+      "community_id": 3,
+      "id": "components/planner/PlannerCaptureModal.tsx"
+    },
+    {
+      "community_id": 3,
+      "id": "components/planner/StructuredTimeline.tsx"
+    },
+    {
+      "community_id": 3,
+      "id": "services/planner.ts"
+    },
+    {
+      "community_id": 2,
+      "id": "lib/supabase.ts"
+    },
+    {
+      "community_id": 1,
+      "id": "app/(tabs)/sleep-tracker.tsx"
+    },
+    {
+      "community_id": 1,
+      "id": "app/notifications.tsx"
+    },
+    {
+      "community_id": 2,
+      "id": "lib/notificationService.ts"
+    },
+    {
+      "community_id": 4,
+      "id": "supabase/functions/send-partner-notification/index.ts"
+    },
+    {
+      "community_id": 5,
+      "id": "app/community-profile.tsx"
+    },
+    {
+      "community_id": 5,
+      "id": "app/profile/[id] 2.tsx"
+    },
+    {
+      "community_id": 5,
+      "id": "app/profile/[id].tsx"
+    },
+    {
+      "community_id": 2,
+      "id": "app/(tabs)/weight-tracker.tsx"
+    },
+    {
+      "community_id": 2,
+      "id": "app/community 2.tsx"
+    },
+    {
+      "community_id": 2,
+      "id": "app/community-profile 2.tsx"
+    },
+    {
+      "community_id": 2,
+      "id": "app/debug-notifications.tsx"
+    },
+    {
+      "community_id": 2,
+      "id": "lib/improvedSleepSync.ts"
+    },
+    {
+      "community_id": 2,
+      "id": "lib/realtimeSyncHelpers.ts"
+    },
+    {
+      "community_id": 2,
+      "id": "lib/sleepData.ts"
+    },
+    {
+      "community_id": 2,
+      "id": "lib/supabase/recommendations.ts"
+    },
+    {
+      "community_id": 2,
+      "id": "lib/supabase/wiki.ts"
+    },
+    {
+      "community_id": 5,
+      "id": "lib/community.ts"
+    },
+    {
+      "community_id": 3,
+      "id": "lib/weight.ts"
+    },
+    {
+      "community_id": 2,
+      "id": "lib/baby.ts"
+    },
+    {
+      "community_id": 2,
+      "id": "lib/partnerNotificationService.ts"
+    },
+    {
+      "community_id": 4,
+      "id": "app/paywall.tsx"
+    },
+    {
+      "community_id": 3,
+      "id": "lib/accountLinks.ts"
+    },
+    {
+      "community_id": 2,
+      "id": "lib/sleepSharing.ts"
+    },
+    {
+      "community_id": 5,
+      "id": "lib/follows.ts"
+    },
+    {
+      "community_id": 5,
+      "id": "lib/profile.ts"
+    },
+    {
+      "community_id": 3,
+      "id": "lib/dataExport.ts"
+    },
+    {
+      "community_id": 2,
+      "id": "contexts/ActiveBabyContext.tsx"
+    },
+    {
+      "community_id": 1,
+      "id": "lib/sleep-window.ts"
+    },
+    {
+      "community_id": 1,
+      "id": "app/(tabs)/_layout.tsx"
+    },
+    {
+      "community_id": 1,
+      "id": "app/(tabs)/baby.tsx"
+    },
+    {
+      "community_id": 1,
+      "id": "app/(tabs)/daily_old.tsx"
+    },
+    {
+      "community_id": 1,
+      "id": "app/(tabs)/pregnancy-home.tsx"
+    },
+    {
+      "community_id": 8,
+      "id": "app/recipe-generator.tsx"
+    },
+    {
+      "community_id": 4,
+      "id": "metro.config.js"
+    },
+    {
+      "community_id": 5,
+      "id": "app/community.tsx"
+    },
+    {
+      "community_id": 1,
+      "id": "components/ActivityInputModal.tsx"
+    },
+    {
+      "community_id": 3,
+      "id": "components/planner/SwipeableListItem.tsx"
+    },
+    {
+      "community_id": 4,
+      "id": "android/app/build.gradle"
+    },
+    {
+      "community_id": 4,
+      "id": "android/sentry.properties"
+    },
+    {
+      "community_id": 9,
+      "id": "ios/LottiBaby/Images.xcassets/AppIcon.appiconset/App-Icon-1024x1024@1x.png"
+    },
+    {
+      "community_id": 9,
+      "id": "ios/LottiBaby/Images.xcassets/SplashScreenLogo.imageset/image.png"
+    },
+    {
+      "community_id": 9,
+      "id": "ios/LottiBaby/Images.xcassets/SplashScreenLogo.imageset/image@2x.png"
+    },
+    {
+      "community_id": 9,
+      "id": "ios/LottiBaby/Images.xcassets/SplashScreenLogo.imageset/image@3x.png"
+    },
+    {
+      "community_id": 9,
+      "id": "ios/LottiBaby/Info.plist"
+    },
+    {
+      "community_id": 10,
+      "id": "app/(auth)/verify-email.tsx"
+    },
+    {
+      "community_id": 10,
+      "id": "app/(auth)/verify-otp.tsx"
+    },
+    {
+      "community_id": 1,
+      "id": "app/(tabs)/feeding-stats.tsx"
+    },
+    {
+      "community_id": 1,
+      "id": "app/app-settings.tsx"
+    },
+    {
+      "community_id": 1,
+      "id": "app/faq.tsx"
+    },
+    {
+      "community_id": 1,
+      "id": "app/mini-wiki.tsx"
+    },
+    {
+      "community_id": 1,
+      "id": "contexts/BabyStatusContext.tsx"
+    },
+    {
+      "community_id": 7,
+      "id": "app/(tabs)/index.tsx"
+    },
+    {
+      "community_id": 7,
+      "id": "app/baby-names.tsx"
+    },
+    {
+      "community_id": 2,
+      "id": "app/lottis-empfehlungen.tsx"
+    },
+    {
+      "community_id": 7,
+      "id": "lib/geburtsplan-utils.ts"
+    },
+    {
+      "community_id": 1,
+      "id": "app/baby-stats.tsx"
+    },
+    {
+      "community_id": 1,
+      "id": "app/diary-entries.tsx"
+    },
+    {
+      "community_id": 1,
+      "id": "components/Header.tsx"
+    },
+    {
+      "community_id": 2,
+      "id": "components/FeedingEventManager.tsx"
+    },
+    {
+      "community_id": 2,
+      "id": "lib/redeemInvitationCodeFixed.ts"
+    },
+    {
+      "community_id": 3,
+      "id": "create_planner_tables 2.sql"
+    },
+    {
+      "community_id": 3,
+      "id": "create_planner_tables.sql"
+    },
+    {
+      "community_id": 8,
+      "id": "lib/recipes.ts"
+    },
+    {
+      "community_id": 8,
+      "id": "scripts/setup_recipes_table.sql"
+    },
+    {
+      "community_id": 1,
+      "id": "components/ActivityCard.tsx"
+    },
+    {
+      "community_id": 7,
+      "id": "app/pregnancy-stats.tsx"
+    },
+    {
+      "community_id": 7,
+      "id": "components/VerticalContractionTimeline.tsx"
+    },
+    {
+      "community_id": 1,
+      "id": "app/mini-wiki/[id].tsx"
+    },
+    {
+      "community_id": 8,
+      "id": "app/recipe-admin.tsx"
+    },
+    {
+      "community_id": 8,
+      "id": "supabase/migrations/20261227000000_add_admin_recipes_policy.sql"
+    },
+    {
+      "community_id": 8,
+      "id": "lib/recipes-samples.ts"
+    },
+    {
+      "community_id": 2,
+      "id": "docs/LOTTIS_EMPFEHLUNGEN.md"
+    },
+    {
+      "community_id": 4,
+      "id": "app.json"
+    },
+    {
+      "community_id": 2,
+      "id": "scripts/setup-lotti-empfehlungen.js"
+    },
+    {
+      "community_id": 4,
+      "id": "app/auth/callback.tsx"
+    },
+    {
+      "community_id": 6,
+      "id": "app/baby-size.tsx"
+    },
+    {
+      "community_id": 3,
+      "id": "components/planner/TodayOverviewCard.tsx"
+    },
+    {
+      "community_id": 3,
+      "id": "constants/PlannerDesign.ts"
+    },
+    {
+      "community_id": 3,
+      "id": "components/modals/TextInputOverlay.tsx"
+    },
+    {
+      "community_id": 6,
+      "id": "app/(tabs)/explore.tsx"
+    },
+    {
+      "community_id": 6,
+      "id": "components/AddChecklistItem.tsx"
+    },
+    {
+      "community_id": 1,
+      "id": "app/(tabs)/selfcare.tsx"
+    },
+    {
+      "community_id": 5,
+      "id": "supabase/migrations/20260605000000_add_avatar_url_to_profiles.sql"
+    },
+    {
+      "community_id": 2,
+      "id": "scripts/check-storage-bucket.js"
+    },
+    {
+      "community_id": 8,
+      "id": "constants/DesignGuide.tsx"
+    },
+    {
+      "community_id": 10,
+      "id": "app/(auth)/login.tsx"
+    },
+    {
+      "community_id": 3,
+      "id": "components/planner/EveningReflectionCard.tsx"
+    },
+    {
+      "community_id": 7,
+      "id": "app/(tabs)/geburtsplan.tsx"
+    },
+    {
+      "community_id": 7,
+      "id": "app/doctor-questions.tsx"
+    },
+    {
+      "community_id": 4,
+      "id": "eas.json"
+    },
+    {
+      "community_id": 1,
+      "id": "DesignGuide.md"
+    },
+    {
+      "community_id": 1,
+      "id": "constants/Colors.ts"
+    }
+  ],
+  "edges": [
+    {
+      "weight": 0.051282,
+      "count": 2,
+      "source": "app/(tabs)/home.tsx",
+      "target": "app/_layout.tsx"
+    },
+    {
+      "weight": 0.105263,
+      "count": 4,
+      "source": "app/(tabs)/home.tsx",
+      "target": "app/profil.tsx"
+    },
+    {
+      "weight": 0.09375,
+      "count": 3,
+      "source": "app/(tabs)/home.tsx",
+      "target": "components/BabySwitcherButton.tsx"
+    },
+    {
+      "weight": 0.055556,
+      "count": 2,
+      "source": "app/(tabs)/home.tsx",
+      "target": "components/planner/GreetingCard.tsx"
+    },
+    {
+      "weight": 0.073171,
+      "count": 3,
+      "source": "app/(tabs)/home.tsx",
+      "target": "package.json"
+    },
+    {
+      "weight": 0.12,
+      "count": 6,
+      "source": "app/(tabs)/home.tsx",
+      "target": "app/(tabs)/sleep-tracker.tsx"
+    },
+    {
+      "weight": 0.22,
+      "count": 11,
+      "source": "app/(tabs)/home.tsx",
+      "target": "app/(tabs)/daily_old.tsx"
+    },
+    {
+      "weight": 0.205882,
+      "count": 7,
+      "source": "app/(tabs)/home.tsx",
+      "target": "app/(tabs)/pregnancy-home.tsx"
+    },
+    {
+      "weight": 0.073171,
+      "count": 3,
+      "source": "app/(tabs)/home.tsx",
+      "target": "app/recipe-generator.tsx"
+    },
+    {
+      "weight": 0.090909,
+      "count": 4,
+      "source": "app/(tabs)/home.tsx",
+      "target": "components/ActivityInputModal.tsx"
+    },
+    {
+      "weight": 0.121212,
+      "count": 4,
+      "source": "app/(tabs)/home.tsx",
+      "target": "app/(tabs)/feeding-stats.tsx"
+    },
+    {
+      "weight": 0.060606,
+      "count": 2,
+      "source": "app/(tabs)/home.tsx",
+      "target": "app/(tabs)/index.tsx"
+    },
+    {
+      "weight": 0.058824,
+      "count": 2,
+      "source": "app/(tabs)/home.tsx",
+      "target": "app/app-settings.tsx"
+    },
+    {
+      "weight": 0.088235,
+      "count": 3,
+      "source": "app/(tabs)/home.tsx",
+      "target": "app/baby-names.tsx"
+    },
+    {
+      "weight": 0.051282,
+      "count": 2,
+      "source": "app/(tabs)/home.tsx",
+      "target": "app/community.tsx"
+    },
+    {
+      "weight": 0.090909,
+      "count": 3,
+      "source": "app/(tabs)/home.tsx",
+      "target": "app/faq.tsx"
+    },
+    {
+      "weight": 0.055556,
+      "count": 2,
+      "source": "app/(tabs)/home.tsx",
+      "target": "app/lottis-empfehlungen.tsx"
+    },
+    {
+      "weight": 0.088235,
+      "count": 3,
+      "source": "app/(tabs)/home.tsx",
+      "target": "app/mini-wiki.tsx"
+    },
+    {
+      "weight": 0.0625,
+      "count": 2,
+      "source": "app/(tabs)/home.tsx",
+      "target": "contexts/BabyStatusContext.tsx"
+    },
+    {
+      "weight": 0.054054,
+      "count": 2,
+      "source": "app/(tabs)/home.tsx",
+      "target": "lib/baby.ts"
+    },
+    {
+      "weight": 0.0625,
+      "count": 2,
+      "source": "app/(tabs)/home.tsx",
+      "target": "lib/geburtsplan-utils.ts"
+    },
+    {
+      "weight": 0.142857,
+      "count": 5,
+      "source": "app/(tabs)/home.tsx",
+      "target": "app/(tabs)/baby.tsx"
+    },
+    {
+      "weight": 0.0625,
+      "count": 2,
+      "source": "app/(tabs)/home.tsx",
+      "target": "app/baby-stats.tsx"
+    },
+    {
+      "weight": 0.064516,
+      "count": 2,
+      "source": "app/(tabs)/home.tsx",
+      "target": "app/diary-entries.tsx"
+    },
+    {
+      "weight": 0.114286,
+      "count": 4,
+      "source": "app/(tabs)/home.tsx",
+      "target": "components/Header.tsx"
+    },
+    {
+      "weight": 0.064516,
+      "count": 2,
+      "source": "app/(tabs)/home.tsx",
+      "target": "lib/redeemInvitationCodeFixed.ts"
+    },
+    {
+      "weight": 0.060606,
+      "count": 2,
+      "source": "app/(tabs)/home.tsx",
+      "target": "lib/sleepData.ts"
+    },
+    {
+      "weight": 0.0625,
+      "count": 2,
+      "source": "app/(tabs)/home.tsx",
+      "target": "lib/sleepSharing.ts"
+    },
+    {
+      "weight": 0.057143,
+      "count": 2,
+      "source": "app/(tabs)/home.tsx",
+      "target": "lib/supabase.ts"
+    },
+    {
+      "weight": 0.052632,
+      "count": 2,
+      "source": "app/(tabs)/home.tsx",
+      "target": "components/ActivityCard.tsx"
+    },
+    {
+      "weight": 0.054054,
+      "count": 2,
+      "source": "app/(tabs)/home.tsx",
+      "target": "app/(tabs)/babyweather.tsx"
+    },
+    {
+      "weight": 0.058824,
+      "count": 2,
+      "source": "app/(tabs)/home.tsx",
+      "target": "app/(tabs)/selfcare.tsx"
+    },
+    {
+      "weight": 0.0625,
+      "count": 2,
+      "source": "app/(tabs)/home.tsx",
+      "target": "app/(tabs)/_layout.tsx"
+    },
+    {
+      "weight": 0.064516,
+      "count": 2,
+      "source": "app/(tabs)/home.tsx",
+      "target": "constants/Colors.ts"
+    },
+    {
+      "weight": 0.166667,
+      "count": 3,
+      "source": "app/_layout.tsx",
+      "target": "app/profil.tsx"
+    },
+    {
+      "weight": 0.166667,
+      "count": 2,
+      "source": "app/_layout.tsx",
+      "target": "components/BabySwitcherButton.tsx"
+    },
+    {
+      "weight": 0.181818,
+      "count": 2,
+      "source": "app/_layout.tsx",
+      "target": "lib/paywall.ts"
+    },
+    {
+      "weight": 0.15,
+      "count": 3,
+      "source": "app/_layout.tsx",
+      "target": "package.json"
+    },
+    {
+      "weight": 0.129032,
+      "count": 4,
+      "source": "app/_layout.tsx",
+      "target": "app/(tabs)/sleep-tracker.tsx"
+    },
+    {
+      "weight": 0.153846,
+      "count": 2,
+      "source": "app/_layout.tsx",
+      "target": "lib/notificationService.ts"
+    },
+    {
+      "weight": 0.181818,
+      "count": 2,
+      "source": "app/_layout.tsx",
+      "target": "supabase/functions/send-partner-notification/index.ts"
+    },
+    {
+      "weight": 0.2,
+      "count": 2,
+      "source": "app/_layout.tsx",
+      "target": "android/app/build.gradle"
+    },
+    {
+      "weight": 0.181818,
+      "count": 2,
+      "source": "app/_layout.tsx",
+      "target": "android/sentry.properties"
+    },
+    {
+      "weight": 0.117647,
+      "count": 2,
+      "source": "app/_layout.tsx",
+      "target": "app/(tabs)/baby.tsx"
+    },
+    {
+      "weight": 0.081081,
+      "count": 3,
+      "source": "app/_layout.tsx",
+      "target": "app/(tabs)/daily_old.tsx"
+    },
+    {
+      "weight": 0.142857,
+      "count": 2,
+      "source": "app/_layout.tsx",
+      "target": "app/(tabs)/feeding-stats.tsx"
+    },
+    {
+      "weight": 0.125,
+      "count": 2,
+      "source": "app/_layout.tsx",
+      "target": "components/Header.tsx"
+    },
+    {
+      "weight": 0.08,
+      "count": 2,
+      "source": "app/_layout.tsx",
+      "target": "components/ActivityInputModal.tsx"
+    },
+    {
+      "weight": 0.125,
+      "count": 2,
+      "source": "app/_layout.tsx",
+      "target": "app.json"
+    },
+    {
+      "weight": 0.153846,
+      "count": 2,
+      "source": "app/profil.tsx",
+      "target": "components/BabySwitcherButton.tsx"
+    },
+    {
+      "weight": 0.25,
+      "count": 4,
+      "source": "app/profil.tsx",
+      "target": "app/(tabs)/baby.tsx"
+    },
+    {
+      "weight": 0.078947,
+      "count": 3,
+      "source": "app/profil.tsx",
+      "target": "app/(tabs)/daily_old.tsx"
+    },
+    {
+      "weight": 0.133333,
+      "count": 2,
+      "source": "app/profil.tsx",
+      "target": "app/(tabs)/feeding-stats.tsx"
+    },
+    {
+      "weight": 0.181818,
+      "count": 2,
+      "source": "app/profil.tsx",
+      "target": "app/diary-entries.tsx"
+    },
+    {
+      "weight": 0.117647,
+      "count": 2,
+      "source": "app/profil.tsx",
+      "target": "components/Header.tsx"
+    },
+    {
+      "weight": 0.166667,
+      "count": 2,
+      "source": "app/profil.tsx",
+      "target": "contexts/BabyStatusContext.tsx"
+    },
+    {
+      "weight": 0.117647,
+      "count": 2,
+      "source": "app/profil.tsx",
+      "target": "app.json"
+    },
+    {
+      "weight": 0.142857,
+      "count": 2,
+      "source": "app/profil.tsx",
+      "target": "app/app-settings.tsx"
+    },
+    {
+      "weight": 0.25,
+      "count": 3,
+      "source": "app/profil.tsx",
+      "target": "lib/profile.ts"
+    },
+    {
+      "weight": 0.142857,
+      "count": 2,
+      "source": "app/profil.tsx",
+      "target": "app/faq.tsx"
+    },
+    {
+      "weight": 0.142857,
+      "count": 2,
+      "source": "app/profil.tsx",
+      "target": "app/(tabs)/selfcare.tsx"
+    },
+    {
+      "weight": 0.214286,
+      "count": 3,
+      "source": "app/profil.tsx",
+      "target": "app/profile/[id].tsx"
+    },
+    {
+      "weight": 0.105263,
+      "count": 2,
+      "source": "app/profil.tsx",
+      "target": "app/community.tsx"
+    },
+    {
+      "weight": 0.142857,
+      "count": 2,
+      "source": "app/profil.tsx",
+      "target": "lib/community.ts"
+    },
+    {
+      "weight": 0.133333,
+      "count": 2,
+      "source": "components/BabySwitcherButton.tsx",
+      "target": "package.json"
+    },
+    {
+      "weight": 0.181818,
+      "count": 2,
+      "source": "components/BabySwitcherButton.tsx",
+      "target": "app/(tabs)/baby.tsx"
+    },
+    {
+      "weight": 0.0625,
+      "count": 2,
+      "source": "components/BabySwitcherButton.tsx",
+      "target": "app/(tabs)/daily_old.tsx"
+    },
+    {
+      "weight": 0.074074,
+      "count": 2,
+      "source": "components/BabySwitcherButton.tsx",
+      "target": "app/(tabs)/sleep-tracker.tsx"
+    },
+    {
+      "weight": 0.357143,
+      "count": 5,
+      "source": "components/planner/GreetingCard.tsx",
+      "target": "app/planner/index.tsx"
+    },
+    {
+      "weight": 0.214286,
+      "count": 3,
+      "source": "components/planner/GreetingCard.tsx",
+      "target": "components/planner/PlannerCaptureModal.tsx"
+    },
+    {
+      "weight": 0.25,
+      "count": 2,
+      "source": "components/planner/GreetingCard.tsx",
+      "target": "components/planner/TodayOverviewCard.tsx"
+    },
+    {
+      "weight": 0.285714,
+      "count": 2,
+      "source": "components/planner/GreetingCard.tsx",
+      "target": "constants/PlannerDesign.ts"
+    },
+    {
+      "weight": 0.285714,
+      "count": 2,
+      "source": "components/planner/GreetingCard.tsx",
+      "target": "components/planner/EveningReflectionCard.tsx"
+    },
+    {
+      "weight": 0.153846,
+      "count": 2,
+      "source": "components/planner/GreetingCard.tsx",
+      "target": "components/planner/StructuredTimeline.tsx"
+    },
+    {
+      "weight": 0.25,
+      "count": 2,
+      "source": "components/planner/GreetingCard.tsx",
+      "target": "components/planner/SwipeableListItem.tsx"
+    },
+    {
+      "weight": 0.133333,
+      "count": 2,
+      "source": "components/planner/GreetingCard.tsx",
+      "target": "services/planner.ts"
+    },
+    {
+      "weight": 0.153846,
+      "count": 2,
+      "source": "package.json",
+      "target": "contexts/AuthContext.tsx"
+    },
+    {
+      "weight": 0.085714,
+      "count": 3,
+      "source": "package.json",
+      "target": "app/(tabs)/sleep-tracker.tsx"
+    },
+    {
+      "weight": 0.083333,
+      "count": 2,
+      "source": "package.json",
+      "target": "app/recipe-generator.tsx"
+    },
+    {
+      "weight": 0.142857,
+      "count": 2,
+      "source": "package.json",
+      "target": "metro.config.js"
+    },
+    {
+      "weight": 0.117647,
+      "count": 2,
+      "source": "package.json",
+      "target": "lib/supabase.ts"
+    },
+    {
+      "weight": 0.142857,
+      "count": 2,
+      "source": "package.json",
+      "target": "android/sentry.properties"
+    },
+    {
+      "weight": 0.071429,
+      "count": 2,
+      "source": "package.json",
+      "target": "components/ActivityInputModal.tsx"
+    },
+    {
+      "weight": 0.153846,
+      "count": 2,
+      "source": "package.json",
+      "target": "eas.json"
+    },
+    {
+      "weight": 0.235294,
+      "count": 4,
+      "source": "package.json",
+      "target": "app.json"
+    },
+    {
+      "weight": 0.4,
+      "count": 2,
+      "source": "lib/paywall.ts",
+      "target": "app/paywall.tsx"
+    },
+    {
+      "weight": 0.363636,
+      "count": 4,
+      "source": "app/(tabs)/babyweather.tsx",
+      "target": "app/(tabs)/more.tsx"
+    },
+    {
+      "weight": 0.25,
+      "count": 2,
+      "source": "app/(tabs)/babyweather.tsx",
+      "target": "assets/images/Babytrage.png"
+    },
+    {
+      "weight": 0.25,
+      "count": 2,
+      "source": "app/(tabs)/babyweather.tsx",
+      "target": "assets/images/Fuesslinge.png"
+    },
+    {
+      "weight": 0.25,
+      "count": 2,
+      "source": "app/(tabs)/babyweather.tsx",
+      "target": "assets/images/Halstuch.png"
+    },
+    {
+      "weight": 0.111111,
+      "count": 2,
+      "source": "app/(tabs)/babyweather.tsx",
+      "target": "app/planner/index.tsx"
+    },
+    {
+      "weight": 0.125,
+      "count": 2,
+      "source": "app/(tabs)/babyweather.tsx",
+      "target": "components/planner/PlannerCaptureModal.tsx"
+    },
+    {
+      "weight": 0.142857,
+      "count": 2,
+      "source": "app/(tabs)/babyweather.tsx",
+      "target": "components/planner/StructuredTimeline.tsx"
+    },
+    {
+      "weight": 0.125,
+      "count": 2,
+      "source": "app/(tabs)/babyweather.tsx",
+      "target": "services/planner.ts"
+    },
+    {
+      "weight": 0.085714,
+      "count": 3,
+      "source": "app/(tabs)/babyweather.tsx",
+      "target": "app/(tabs)/daily_old.tsx"
+    },
+    {
+      "weight": 0.181818,
+      "count": 2,
+      "source": "app/(tabs)/babyweather.tsx",
+      "target": "app/app-settings.tsx"
+    },
+    {
+      "weight": 0.214286,
+      "count": 3,
+      "source": "app/(tabs)/babyweather.tsx",
+      "target": "app/(tabs)/baby.tsx"
+    },
+    {
+      "weight": 0.166667,
+      "count": 2,
+      "source": "app/(tabs)/babyweather.tsx",
+      "target": "app/(tabs)/feeding-stats.tsx"
+    },
+    {
+      "weight": 0.181818,
+      "count": 2,
+      "source": "app/(tabs)/babyweather.tsx",
+      "target": "app/(tabs)/selfcare.tsx"
+    },
+    {
+      "weight": 0.142857,
+      "count": 2,
+      "source": "app/(tabs)/babyweather.tsx",
+      "target": "components/Header.tsx"
+    },
+    {
+      "weight": 0.285714,
+      "count": 2,
+      "source": "app/(tabs)/more.tsx",
+      "target": "assets/images/Babytrage.png"
+    },
+    {
+      "weight": 0.117647,
+      "count": 2,
+      "source": "app/(tabs)/more.tsx",
+      "target": "app/planner/index.tsx"
+    },
+    {
+      "weight": 0.133333,
+      "count": 2,
+      "source": "app/(tabs)/more.tsx",
+      "target": "components/planner/PlannerCaptureModal.tsx"
+    },
+    {
+      "weight": 0.153846,
+      "count": 2,
+      "source": "app/(tabs)/more.tsx",
+      "target": "components/planner/StructuredTimeline.tsx"
+    },
+    {
+      "weight": 0.133333,
+      "count": 2,
+      "source": "app/(tabs)/more.tsx",
+      "target": "services/planner.ts"
+    },
+    {
+      "weight": 0.057143,
+      "count": 2,
+      "source": "app/(tabs)/more.tsx",
+      "target": "app/(tabs)/daily_old.tsx"
+    },
+    {
+      "weight": 0.133333,
+      "count": 2,
+      "source": "app/(tabs)/more.tsx",
+      "target": "app/community.tsx"
+    },
+    {
+      "weight": 0.25,
+      "count": 2,
+      "source": "app/(tabs)/more.tsx",
+      "target": "app/baby-size.tsx"
+    },
+    {
+      "weight": 0.090909,
+      "count": 2,
+      "source": "app/(tabs)/more.tsx",
+      "target": "components/ActivityInputModal.tsx"
+    },
+    {
+      "weight": 1.0,
+      "count": 2,
+      "source": "assets/images/Fuesslinge.png",
+      "target": "assets/images/Halstuch.png"
+    },
+    {
+      "weight": 0.466667,
+      "count": 7,
+      "source": "app/planner/index.tsx",
+      "target": "components/planner/PlannerCaptureModal.tsx"
+    },
+    {
+      "weight": 0.428571,
+      "count": 6,
+      "source": "app/planner/index.tsx",
+      "target": "components/planner/StructuredTimeline.tsx"
+    },
+    {
+      "weight": 0.571429,
+      "count": 8,
+      "source": "app/planner/index.tsx",
+      "target": "services/planner.ts"
+    },
+    {
+      "weight": 0.076923,
+      "count": 3,
+      "source": "app/planner/index.tsx",
+      "target": "app/(tabs)/daily_old.tsx"
+    },
+    {
+      "weight": 0.074074,
+      "count": 2,
+      "source": "app/planner/index.tsx",
+      "target": "components/ActivityInputModal.tsx"
+    },
+    {
+      "weight": 0.25,
+      "count": 3,
+      "source": "app/planner/index.tsx",
+      "target": "components/planner/SwipeableListItem.tsx"
+    },
+    {
+      "weight": 0.142857,
+      "count": 2,
+      "source": "app/planner/index.tsx",
+      "target": "create_planner_tables.sql"
+    },
+    {
+      "weight": 0.25,
+      "count": 3,
+      "source": "app/planner/index.tsx",
+      "target": "components/planner/TodayOverviewCard.tsx"
+    },
+    {
+      "weight": 0.166667,
+      "count": 2,
+      "source": "app/planner/index.tsx",
+      "target": "constants/PlannerDesign.ts"
+    },
+    {
+      "weight": 0.166667,
+      "count": 2,
+      "source": "app/planner/index.tsx",
+      "target": "components/planner/EveningReflectionCard.tsx"
+    },
+    {
+      "weight": 0.636364,
+      "count": 7,
+      "source": "components/planner/PlannerCaptureModal.tsx",
+      "target": "components/planner/StructuredTimeline.tsx"
+    },
+    {
+      "weight": 0.538462,
+      "count": 7,
+      "source": "components/planner/PlannerCaptureModal.tsx",
+      "target": "services/planner.ts"
+    },
+    {
+      "weight": 0.08,
+      "count": 2,
+      "source": "components/planner/PlannerCaptureModal.tsx",
+      "target": "components/ActivityInputModal.tsx"
+    },
+    {
+      "weight": 0.3,
+      "count": 3,
+      "source": "components/planner/PlannerCaptureModal.tsx",
+      "target": "components/planner/SwipeableListItem.tsx"
+    },
+    {
+      "weight": 0.181818,
+      "count": 2,
+      "source": "components/planner/PlannerCaptureModal.tsx",
+      "target": "create_planner_tables 2.sql"
+    },
+    {
+      "weight": 0.272727,
+      "count": 3,
+      "source": "components/planner/PlannerCaptureModal.tsx",
+      "target": "create_planner_tables.sql"
+    },
+    {
+      "weight": 0.3,
+      "count": 3,
+      "source": "components/planner/PlannerCaptureModal.tsx",
+      "target": "components/planner/TodayOverviewCard.tsx"
+    },
+    {
+      "weight": 0.2,
+      "count": 2,
+      "source": "components/planner/PlannerCaptureModal.tsx",
+      "target": "constants/PlannerDesign.ts"
+    },
+    {
+      "weight": 0.2,
+      "count": 2,
+      "source": "components/planner/PlannerCaptureModal.tsx",
+      "target": "components/modals/TextInputOverlay.tsx"
+    },
+    {
+      "weight": 0.2,
+      "count": 2,
+      "source": "components/planner/PlannerCaptureModal.tsx",
+      "target": "components/planner/EveningReflectionCard.tsx"
+    },
+    {
+      "weight": 0.636364,
+      "count": 7,
+      "source": "components/planner/StructuredTimeline.tsx",
+      "target": "services/planner.ts"
+    },
+    {
+      "weight": 0.086957,
+      "count": 2,
+      "source": "components/planner/StructuredTimeline.tsx",
+      "target": "components/ActivityInputModal.tsx"
+    },
+    {
+      "weight": 0.375,
+      "count": 3,
+      "source": "components/planner/StructuredTimeline.tsx",
+      "target": "components/planner/SwipeableListItem.tsx"
+    },
+    {
+      "weight": 0.222222,
+      "count": 2,
+      "source": "components/planner/StructuredTimeline.tsx",
+      "target": "create_planner_tables 2.sql"
+    },
+    {
+      "weight": 0.333333,
+      "count": 3,
+      "source": "components/planner/StructuredTimeline.tsx",
+      "target": "create_planner_tables.sql"
+    },
+    {
+      "weight": 0.222222,
+      "count": 2,
+      "source": "components/planner/StructuredTimeline.tsx",
+      "target": "components/planner/TodayOverviewCard.tsx"
+    },
+    {
+      "weight": 0.25,
+      "count": 2,
+      "source": "components/planner/StructuredTimeline.tsx",
+      "target": "components/planner/EveningReflectionCard.tsx"
+    },
+    {
+      "weight": 0.142857,
+      "count": 2,
+      "source": "services/planner.ts",
+      "target": "lib/supabase.ts"
+    },
+    {
+      "weight": 0.2,
+      "count": 2,
+      "source": "services/planner.ts",
+      "target": "lib/accountLinks.ts"
+    },
+    {
+      "weight": 0.2,
+      "count": 2,
+      "source": "services/planner.ts",
+      "target": "lib/dataExport.ts"
+    },
+    {
+      "weight": 0.166667,
+      "count": 2,
+      "source": "services/planner.ts",
+      "target": "lib/weight.ts"
+    },
+    {
+      "weight": 0.08,
+      "count": 2,
+      "source": "services/planner.ts",
+      "target": "components/ActivityInputModal.tsx"
+    },
+    {
+      "weight": 0.3,
+      "count": 3,
+      "source": "services/planner.ts",
+      "target": "components/planner/SwipeableListItem.tsx"
+    },
+    {
+      "weight": 0.181818,
+      "count": 2,
+      "source": "services/planner.ts",
+      "target": "create_planner_tables 2.sql"
+    },
+    {
+      "weight": 0.272727,
+      "count": 3,
+      "source": "services/planner.ts",
+      "target": "create_planner_tables.sql"
+    },
+    {
+      "weight": 0.181818,
+      "count": 2,
+      "source": "services/planner.ts",
+      "target": "components/planner/TodayOverviewCard.tsx"
+    },
+    {
+      "weight": 0.2,
+      "count": 2,
+      "source": "services/planner.ts",
+      "target": "components/planner/EveningReflectionCard.tsx"
+    },
+    {
+      "weight": 0.272727,
+      "count": 3,
+      "source": "lib/supabase.ts",
+      "target": "lib/baby.ts"
+    },
+    {
+      "weight": 0.428571,
+      "count": 3,
+      "source": "lib/supabase.ts",
+      "target": "lib/sleepData.ts"
+    },
+    {
+      "weight": 0.5,
+      "count": 3,
+      "source": "lib/supabase.ts",
+      "target": "lib/sleepSharing.ts"
+    },
+    {
+      "weight": 0.058824,
+      "count": 2,
+      "source": "lib/supabase.ts",
+      "target": "app/(tabs)/daily_old.tsx"
+    },
+    {
+      "weight": 0.068966,
+      "count": 2,
+      "source": "lib/supabase.ts",
+      "target": "app/(tabs)/sleep-tracker.tsx"
+    },
+    {
+      "weight": 0.333333,
+      "count": 2,
+      "source": "lib/supabase.ts",
+      "target": "lib/redeemInvitationCodeFixed.ts"
+    },
+    {
+      "weight": 0.08,
+      "count": 2,
+      "source": "app/(tabs)/sleep-tracker.tsx",
+      "target": "app/notifications.tsx"
+    },
+    {
+      "weight": 0.071429,
+      "count": 2,
+      "source": "app/(tabs)/sleep-tracker.tsx",
+      "target": "lib/notificationService.ts"
+    },
+    {
+      "weight": 0.076923,
+      "count": 2,
+      "source": "app/(tabs)/sleep-tracker.tsx",
+      "target": "supabase/functions/send-partner-notification/index.ts"
+    },
+    {
+      "weight": 0.08,
+      "count": 2,
+      "source": "app/(tabs)/sleep-tracker.tsx",
+      "target": "contexts/ActiveBabyContext.tsx"
+    },
+    {
+      "weight": 0.1,
+      "count": 3,
+      "source": "app/(tabs)/sleep-tracker.tsx",
+      "target": "lib/baby.ts"
+    },
+    {
+      "weight": 0.24,
+      "count": 6,
+      "source": "app/(tabs)/sleep-tracker.tsx",
+      "target": "lib/sleep-window.ts"
+    },
+    {
+      "weight": 0.0625,
+      "count": 2,
+      "source": "app/(tabs)/sleep-tracker.tsx",
+      "target": "app/(tabs)/baby.tsx"
+    },
+    {
+      "weight": 0.170213,
+      "count": 8,
+      "source": "app/(tabs)/sleep-tracker.tsx",
+      "target": "app/(tabs)/daily_old.tsx"
+    },
+    {
+      "weight": 0.09375,
+      "count": 3,
+      "source": "app/(tabs)/sleep-tracker.tsx",
+      "target": "app/(tabs)/pregnancy-home.tsx"
+    },
+    {
+      "weight": 0.055556,
+      "count": 2,
+      "source": "app/(tabs)/sleep-tracker.tsx",
+      "target": "app/recipe-generator.tsx"
+    },
+    {
+      "weight": 0.09375,
+      "count": 3,
+      "source": "app/(tabs)/sleep-tracker.tsx",
+      "target": "app/community.tsx"
+    },
+    {
+      "weight": 0.076923,
+      "count": 3,
+      "source": "app/(tabs)/sleep-tracker.tsx",
+      "target": "components/ActivityInputModal.tsx"
+    },
+    {
+      "weight": 0.068966,
+      "count": 2,
+      "source": "app/(tabs)/sleep-tracker.tsx",
+      "target": "app/(tabs)/feeding-stats.tsx"
+    },
+    {
+      "weight": 0.068966,
+      "count": 2,
+      "source": "app/(tabs)/sleep-tracker.tsx",
+      "target": "app/mini-wiki.tsx"
+    },
+    {
+      "weight": 0.076923,
+      "count": 2,
+      "source": "app/(tabs)/sleep-tracker.tsx",
+      "target": "contexts/BabyStatusContext.tsx"
+    },
+    {
+      "weight": 0.074074,
+      "count": 2,
+      "source": "app/(tabs)/sleep-tracker.tsx",
+      "target": "lib/weight.ts"
+    },
+    {
+      "weight": 0.064516,
+      "count": 2,
+      "source": "app/(tabs)/sleep-tracker.tsx",
+      "target": "components/Header.tsx"
+    },
+    {
+      "weight": 0.08,
+      "count": 2,
+      "source": "app/(tabs)/sleep-tracker.tsx",
+      "target": "lib/redeemInvitationCodeFixed.ts"
+    },
+    {
+      "weight": 0.074074,
+      "count": 2,
+      "source": "app/(tabs)/sleep-tracker.tsx",
+      "target": "lib/sleepData.ts"
+    },
+    {
+      "weight": 0.076923,
+      "count": 2,
+      "source": "app/(tabs)/sleep-tracker.tsx",
+      "target": "lib/sleepSharing.ts"
+    },
+    {
+      "weight": 0.0625,
+      "count": 2,
+      "source": "app/(tabs)/sleep-tracker.tsx",
+      "target": "components/ActivityCard.tsx"
+    },
+    {
+      "weight": 0.428571,
+      "count": 3,
+      "source": "lib/notificationService.ts",
+      "target": "app/debug-notifications.tsx"
+    },
+    {
+      "weight": 0.181818,
+      "count": 2,
+      "source": "lib/notificationService.ts",
+      "target": "lib/baby.ts"
+    },
+    {
+      "weight": 0.4,
+      "count": 2,
+      "source": "lib/notificationService.ts",
+      "target": "lib/partnerNotificationService.ts"
+    },
+    {
+      "weight": 0.060606,
+      "count": 2,
+      "source": "lib/notificationService.ts",
+      "target": "app/(tabs)/daily_old.tsx"
+    },
+    {
+      "weight": 0.333333,
+      "count": 2,
+      "source": "app/community-profile.tsx",
+      "target": "app/profile/[id] 2.tsx"
+    },
+    {
+      "weight": 0.5,
+      "count": 4,
+      "source": "app/community-profile.tsx",
+      "target": "app/profile/[id].tsx"
+    },
+    {
+      "weight": 0.375,
+      "count": 3,
+      "source": "app/community-profile.tsx",
+      "target": "lib/community.ts"
+    },
+    {
+      "weight": 0.333333,
+      "count": 4,
+      "source": "app/community-profile.tsx",
+      "target": "app/community.tsx"
+    },
+    {
+      "weight": 0.333333,
+      "count": 2,
+      "source": "app/profile/[id] 2.tsx",
+      "target": "app/profile/[id].tsx"
+    },
+    {
+      "weight": 0.25,
+      "count": 2,
+      "source": "app/profile/[id].tsx",
+      "target": "lib/profile.ts"
+    },
+    {
+      "weight": 0.333333,
+      "count": 4,
+      "source": "app/profile/[id].tsx",
+      "target": "app/community.tsx"
+    },
+    {
+      "weight": 0.375,
+      "count": 3,
+      "source": "app/profile/[id].tsx",
+      "target": "lib/community.ts"
+    },
+    {
+      "weight": 0.142857,
+      "count": 2,
+      "source": "app/(tabs)/weight-tracker.tsx",
+      "target": "app/community 2.tsx"
+    },
+    {
+      "weight": 0.142857,
+      "count": 2,
+      "source": "app/(tabs)/weight-tracker.tsx",
+      "target": "app/community-profile 2.tsx"
+    },
+    {
+      "weight": 0.125,
+      "count": 2,
+      "source": "app/(tabs)/weight-tracker.tsx",
+      "target": "app/debug-notifications.tsx"
+    },
+    {
+      "weight": 0.153846,
+      "count": 2,
+      "source": "app/(tabs)/weight-tracker.tsx",
+      "target": "lib/improvedSleepSync.ts"
+    },
+    {
+      "weight": 0.153846,
+      "count": 2,
+      "source": "app/(tabs)/weight-tracker.tsx",
+      "target": "lib/realtimeSyncHelpers.ts"
+    },
+    {
+      "weight": 0.133333,
+      "count": 2,
+      "source": "app/(tabs)/weight-tracker.tsx",
+      "target": "lib/sleepData.ts"
+    },
+    {
+      "weight": 0.125,
+      "count": 2,
+      "source": "app/(tabs)/weight-tracker.tsx",
+      "target": "lib/supabase/recommendations.ts"
+    },
+    {
+      "weight": 0.133333,
+      "count": 2,
+      "source": "app/(tabs)/weight-tracker.tsx",
+      "target": "lib/supabase/wiki.ts"
+    },
+    {
+      "weight": 0.125,
+      "count": 2,
+      "source": "app/(tabs)/weight-tracker.tsx",
+      "target": "lib/community.ts"
+    },
+    {
+      "weight": 0.214286,
+      "count": 3,
+      "source": "app/(tabs)/weight-tracker.tsx",
+      "target": "lib/weight.ts"
+    },
+    {
+      "weight": 0.157895,
+      "count": 3,
+      "source": "app/(tabs)/weight-tracker.tsx",
+      "target": "components/ActivityCard.tsx"
+    },
+    {
+      "weight": 0.125,
+      "count": 2,
+      "source": "app/(tabs)/weight-tracker.tsx",
+      "target": "app/app-settings.tsx"
+    },
+    {
+      "weight": 0.125,
+      "count": 2,
+      "source": "app/(tabs)/weight-tracker.tsx",
+      "target": "app/faq.tsx"
+    },
+    {
+      "weight": 0.1875,
+      "count": 3,
+      "source": "app/(tabs)/weight-tracker.tsx",
+      "target": "app/mini-wiki.tsx"
+    },
+    {
+      "weight": 1.0,
+      "count": 3,
+      "source": "app/community 2.tsx",
+      "target": "app/community-profile 2.tsx"
+    },
+    {
+      "weight": 0.333333,
+      "count": 2,
+      "source": "app/community 2.tsx",
+      "target": "app/debug-notifications.tsx"
+    },
+    {
+      "weight": 0.181818,
+      "count": 2,
+      "source": "app/community 2.tsx",
+      "target": "app/community.tsx"
+    },
+    {
+      "weight": 0.111111,
+      "count": 2,
+      "source": "app/community 2.tsx",
+      "target": "components/ActivityInputModal.tsx"
+    },
+    {
+      "weight": 0.333333,
+      "count": 2,
+      "source": "app/community-profile 2.tsx",
+      "target": "app/debug-notifications.tsx"
+    },
+    {
+      "weight": 0.181818,
+      "count": 2,
+      "source": "app/community-profile 2.tsx",
+      "target": "app/community.tsx"
+    },
+    {
+      "weight": 0.111111,
+      "count": 2,
+      "source": "app/community-profile 2.tsx",
+      "target": "components/ActivityInputModal.tsx"
+    },
+    {
+      "weight": 0.4,
+      "count": 2,
+      "source": "app/debug-notifications.tsx",
+      "target": "lib/improvedSleepSync.ts"
+    },
+    {
+      "weight": 0.4,
+      "count": 2,
+      "source": "app/debug-notifications.tsx",
+      "target": "lib/realtimeSyncHelpers.ts"
+    },
+    {
+      "weight": 0.285714,
+      "count": 2,
+      "source": "app/debug-notifications.tsx",
+      "target": "lib/sleepData.ts"
+    },
+    {
+      "weight": 0.25,
+      "count": 2,
+      "source": "app/debug-notifications.tsx",
+      "target": "lib/supabase/recommendations.ts"
+    },
+    {
+      "weight": 0.285714,
+      "count": 2,
+      "source": "app/debug-notifications.tsx",
+      "target": "lib/supabase/wiki.ts"
+    },
+    {
+      "weight": 0.181818,
+      "count": 2,
+      "source": "app/debug-notifications.tsx",
+      "target": "lib/baby.ts"
+    },
+    {
+      "weight": 0.4,
+      "count": 2,
+      "source": "app/debug-notifications.tsx",
+      "target": "lib/partnerNotificationService.ts"
+    },
+    {
+      "weight": 1.0,
+      "count": 2,
+      "source": "lib/improvedSleepSync.ts",
+      "target": "lib/realtimeSyncHelpers.ts"
+    },
+    {
+      "weight": 0.5,
+      "count": 2,
+      "source": "lib/improvedSleepSync.ts",
+      "target": "lib/sleepData.ts"
+    },
+    {
+      "weight": 0.4,
+      "count": 2,
+      "source": "lib/improvedSleepSync.ts",
+      "target": "lib/supabase/recommendations.ts"
+    },
+    {
+      "weight": 0.5,
+      "count": 2,
+      "source": "lib/improvedSleepSync.ts",
+      "target": "lib/supabase/wiki.ts"
+    },
+    {
+      "weight": 0.5,
+      "count": 2,
+      "source": "lib/realtimeSyncHelpers.ts",
+      "target": "lib/sleepData.ts"
+    },
+    {
+      "weight": 0.4,
+      "count": 2,
+      "source": "lib/realtimeSyncHelpers.ts",
+      "target": "lib/supabase/recommendations.ts"
+    },
+    {
+      "weight": 0.5,
+      "count": 2,
+      "source": "lib/realtimeSyncHelpers.ts",
+      "target": "lib/supabase/wiki.ts"
+    },
+    {
+      "weight": 0.285714,
+      "count": 2,
+      "source": "lib/sleepData.ts",
+      "target": "lib/supabase/recommendations.ts"
+    },
+    {
+      "weight": 0.333333,
+      "count": 2,
+      "source": "lib/sleepData.ts",
+      "target": "lib/supabase/wiki.ts"
+    },
+    {
+      "weight": 0.2,
+      "count": 2,
+      "source": "lib/sleepData.ts",
+      "target": "lib/baby.ts"
+    },
+    {
+      "weight": 0.75,
+      "count": 3,
+      "source": "lib/sleepData.ts",
+      "target": "lib/sleepSharing.ts"
+    },
+    {
+      "weight": 0.5,
+      "count": 2,
+      "source": "lib/sleepData.ts",
+      "target": "lib/redeemInvitationCodeFixed.ts"
+    },
+    {
+      "weight": 0.285714,
+      "count": 2,
+      "source": "lib/supabase/recommendations.ts",
+      "target": "lib/supabase/wiki.ts"
+    },
+    {
+      "weight": 0.285714,
+      "count": 2,
+      "source": "lib/supabase/recommendations.ts",
+      "target": "lib/profile.ts"
+    },
+    {
+      "weight": 0.333333,
+      "count": 3,
+      "source": "lib/supabase/recommendations.ts",
+      "target": "app/lottis-empfehlungen.tsx"
+    },
+    {
+      "weight": 0.333333,
+      "count": 2,
+      "source": "lib/supabase/recommendations.ts",
+      "target": "docs/LOTTIS_EMPFEHLUNGEN.md"
+    },
+    {
+      "weight": 0.4,
+      "count": 2,
+      "source": "lib/supabase/recommendations.ts",
+      "target": "scripts/setup-lotti-empfehlungen.js"
+    },
+    {
+      "weight": 0.25,
+      "count": 2,
+      "source": "lib/supabase/wiki.ts",
+      "target": "app/mini-wiki.tsx"
+    },
+    {
+      "weight": 0.4,
+      "count": 2,
+      "source": "lib/supabase/wiki.ts",
+      "target": "app/mini-wiki/[id].tsx"
+    },
+    {
+      "weight": 0.4,
+      "count": 2,
+      "source": "lib/community.ts",
+      "target": "lib/follows.ts"
+    },
+    {
+      "weight": 0.285714,
+      "count": 2,
+      "source": "lib/community.ts",
+      "target": "lib/profile.ts"
+    },
+    {
+      "weight": 0.4,
+      "count": 2,
+      "source": "lib/community.ts",
+      "target": "supabase/migrations/20260605000000_add_avatar_url_to_profiles.sql"
+    },
+    {
+      "weight": 0.25,
+      "count": 3,
+      "source": "lib/community.ts",
+      "target": "app/community.tsx"
+    },
+    {
+      "weight": 0.5,
+      "count": 2,
+      "source": "lib/weight.ts",
+      "target": "lib/accountLinks.ts"
+    },
+    {
+      "weight": 0.25,
+      "count": 2,
+      "source": "lib/baby.ts",
+      "target": "lib/partnerNotificationService.ts"
+    },
+    {
+      "weight": 0.222222,
+      "count": 2,
+      "source": "lib/baby.ts",
+      "target": "lib/sleepSharing.ts"
+    },
+    {
+      "weight": 0.25,
+      "count": 2,
+      "source": "lib/baby.ts",
+      "target": "contexts/ActiveBabyContext.tsx"
+    },
+    {
+      "weight": 0.1875,
+      "count": 6,
+      "source": "lib/baby.ts",
+      "target": "app/(tabs)/daily_old.tsx"
+    },
+    {
+      "weight": 0.166667,
+      "count": 2,
+      "source": "lib/baby.ts",
+      "target": "app/(tabs)/feeding-stats.tsx"
+    },
+    {
+      "weight": 0.25,
+      "count": 5,
+      "source": "lib/baby.ts",
+      "target": "components/ActivityInputModal.tsx"
+    },
+    {
+      "weight": 0.222222,
+      "count": 2,
+      "source": "lib/baby.ts",
+      "target": "contexts/BabyStatusContext.tsx"
+    },
+    {
+      "weight": 0.25,
+      "count": 2,
+      "source": "lib/baby.ts",
+      "target": "components/FeedingEventManager.tsx"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "lib/sleepSharing.ts",
+      "target": "lib/redeemInvitationCodeFixed.ts"
+    },
+    {
+      "weight": 0.2,
+      "count": 2,
+      "source": "app/(tabs)/_layout.tsx",
+      "target": "app/(tabs)/baby.tsx"
+    },
+    {
+      "weight": 0.064516,
+      "count": 2,
+      "source": "app/(tabs)/_layout.tsx",
+      "target": "app/(tabs)/daily_old.tsx"
+    },
+    {
+      "weight": 0.181818,
+      "count": 2,
+      "source": "app/(tabs)/_layout.tsx",
+      "target": "app/(tabs)/pregnancy-home.tsx"
+    },
+    {
+      "weight": 0.181818,
+      "count": 6,
+      "source": "app/(tabs)/baby.tsx",
+      "target": "app/(tabs)/daily_old.tsx"
+    },
+    {
+      "weight": 0.117647,
+      "count": 2,
+      "source": "app/(tabs)/baby.tsx",
+      "target": "app/(tabs)/pregnancy-home.tsx"
+    },
+    {
+      "weight": 0.1,
+      "count": 2,
+      "source": "app/(tabs)/baby.tsx",
+      "target": "app/recipe-generator.tsx"
+    },
+    {
+      "weight": 0.363636,
+      "count": 4,
+      "source": "app/(tabs)/baby.tsx",
+      "target": "app/(tabs)/feeding-stats.tsx"
+    },
+    {
+      "weight": 0.333333,
+      "count": 3,
+      "source": "app/(tabs)/baby.tsx",
+      "target": "app/baby-stats.tsx"
+    },
+    {
+      "weight": 0.222222,
+      "count": 2,
+      "source": "app/(tabs)/baby.tsx",
+      "target": "app/diary-entries.tsx"
+    },
+    {
+      "weight": 0.214286,
+      "count": 3,
+      "source": "app/(tabs)/baby.tsx",
+      "target": "components/Header.tsx"
+    },
+    {
+      "weight": 0.2,
+      "count": 2,
+      "source": "app/(tabs)/baby.tsx",
+      "target": "contexts/BabyStatusContext.tsx"
+    },
+    {
+      "weight": 0.272727,
+      "count": 3,
+      "source": "app/(tabs)/baby.tsx",
+      "target": "app/(tabs)/selfcare.tsx"
+    },
+    {
+      "weight": 0.111111,
+      "count": 4,
+      "source": "app/(tabs)/daily_old.tsx",
+      "target": "app/(tabs)/pregnancy-home.tsx"
+    },
+    {
+      "weight": 0.075,
+      "count": 3,
+      "source": "app/(tabs)/daily_old.tsx",
+      "target": "app/recipe-generator.tsx"
+    },
+    {
+      "weight": 0.081081,
+      "count": 3,
+      "source": "app/(tabs)/daily_old.tsx",
+      "target": "app/community.tsx"
+    },
+    {
+      "weight": 0.342857,
+      "count": 12,
+      "source": "app/(tabs)/daily_old.tsx",
+      "target": "components/ActivityInputModal.tsx"
+    },
+    {
+      "weight": 0.16129,
+      "count": 5,
+      "source": "app/(tabs)/daily_old.tsx",
+      "target": "app/(tabs)/feeding-stats.tsx"
+    },
+    {
+      "weight": 0.060606,
+      "count": 2,
+      "source": "app/(tabs)/daily_old.tsx",
+      "target": "app/app-settings.tsx"
+    },
+    {
+      "weight": 0.09375,
+      "count": 3,
+      "source": "app/(tabs)/daily_old.tsx",
+      "target": "app/faq.tsx"
+    },
+    {
+      "weight": 0.058824,
+      "count": 2,
+      "source": "app/(tabs)/daily_old.tsx",
+      "target": "app/mini-wiki.tsx"
+    },
+    {
+      "weight": 0.064516,
+      "count": 2,
+      "source": "app/(tabs)/daily_old.tsx",
+      "target": "contexts/BabyStatusContext.tsx"
+    },
+    {
+      "weight": 0.1,
+      "count": 3,
+      "source": "app/(tabs)/daily_old.tsx",
+      "target": "app/baby-stats.tsx"
+    },
+    {
+      "weight": 0.066667,
+      "count": 2,
+      "source": "app/(tabs)/daily_old.tsx",
+      "target": "app/diary-entries.tsx"
+    },
+    {
+      "weight": 0.066667,
+      "count": 2,
+      "source": "app/(tabs)/daily_old.tsx",
+      "target": "components/FeedingEventManager.tsx"
+    },
+    {
+      "weight": 0.151515,
+      "count": 5,
+      "source": "app/(tabs)/daily_old.tsx",
+      "target": "components/Header.tsx"
+    },
+    {
+      "weight": 0.066667,
+      "count": 2,
+      "source": "app/(tabs)/daily_old.tsx",
+      "target": "constants/Colors.ts"
+    },
+    {
+      "weight": 0.083333,
+      "count": 3,
+      "source": "app/(tabs)/daily_old.tsx",
+      "target": "components/ActivityCard.tsx"
+    },
+    {
+      "weight": 0.055556,
+      "count": 2,
+      "source": "app/(tabs)/daily_old.tsx",
+      "target": "app.json"
+    },
+    {
+      "weight": 0.15,
+      "count": 3,
+      "source": "app/(tabs)/pregnancy-home.tsx",
+      "target": "app/recipe-generator.tsx"
+    },
+    {
+      "weight": 0.173913,
+      "count": 4,
+      "source": "app/(tabs)/pregnancy-home.tsx",
+      "target": "components/ActivityInputModal.tsx"
+    },
+    {
+      "weight": 0.142857,
+      "count": 2,
+      "source": "app/(tabs)/pregnancy-home.tsx",
+      "target": "app/(tabs)/feeding-stats.tsx"
+    },
+    {
+      "weight": 0.166667,
+      "count": 2,
+      "source": "app/(tabs)/pregnancy-home.tsx",
+      "target": "app/(tabs)/index.tsx"
+    },
+    {
+      "weight": 0.142857,
+      "count": 2,
+      "source": "app/(tabs)/pregnancy-home.tsx",
+      "target": "app/baby-names.tsx"
+    },
+    {
+      "weight": 0.111111,
+      "count": 2,
+      "source": "app/(tabs)/pregnancy-home.tsx",
+      "target": "app/community.tsx"
+    },
+    {
+      "weight": 0.153846,
+      "count": 2,
+      "source": "app/(tabs)/pregnancy-home.tsx",
+      "target": "app/faq.tsx"
+    },
+    {
+      "weight": 0.117647,
+      "count": 2,
+      "source": "app/(tabs)/pregnancy-home.tsx",
+      "target": "components/ActivityCard.tsx"
+    },
+    {
+      "weight": 0.2,
+      "count": 2,
+      "source": "app/(tabs)/pregnancy-home.tsx",
+      "target": "DesignGuide.md"
+    },
+    {
+      "weight": 0.111111,
+      "count": 3,
+      "source": "app/recipe-generator.tsx",
+      "target": "components/ActivityInputModal.tsx"
+    },
+    {
+      "weight": 0.266667,
+      "count": 4,
+      "source": "app/recipe-generator.tsx",
+      "target": "lib/recipes.ts"
+    },
+    {
+      "weight": 0.153846,
+      "count": 2,
+      "source": "app/recipe-generator.tsx",
+      "target": "scripts/setup_recipes_table.sql"
+    },
+    {
+      "weight": 0.153846,
+      "count": 2,
+      "source": "app/recipe-generator.tsx",
+      "target": "lib/recipes-samples.ts"
+    },
+    {
+      "weight": 0.133333,
+      "count": 2,
+      "source": "app/recipe-generator.tsx",
+      "target": "constants/DesignGuide.tsx"
+    },
+    {
+      "weight": 0.153846,
+      "count": 2,
+      "source": "app/community.tsx",
+      "target": "app/faq.tsx"
+    },
+    {
+      "weight": 0.125,
+      "count": 3,
+      "source": "app/community.tsx",
+      "target": "components/ActivityInputModal.tsx"
+    },
+    {
+      "weight": 0.117647,
+      "count": 2,
+      "source": "app/community.tsx",
+      "target": "components/ActivityCard.tsx"
+    },
+    {
+      "weight": 0.095238,
+      "count": 2,
+      "source": "components/ActivityInputModal.tsx",
+      "target": "app/(tabs)/feeding-stats.tsx"
+    },
+    {
+      "weight": 0.157895,
+      "count": 3,
+      "source": "components/ActivityInputModal.tsx",
+      "target": "app/faq.tsx"
+    },
+    {
+      "weight": 0.117647,
+      "count": 2,
+      "source": "components/ActivityInputModal.tsx",
+      "target": "lib/recipes-samples.ts"
+    },
+    {
+      "weight": 0.3,
+      "count": 6,
+      "source": "components/ActivityInputModal.tsx",
+      "target": "components/ActivityCard.tsx"
+    },
+    {
+      "weight": 0.111111,
+      "count": 2,
+      "source": "components/ActivityInputModal.tsx",
+      "target": "android/sentry.properties"
+    },
+    {
+      "weight": 0.086957,
+      "count": 2,
+      "source": "components/ActivityInputModal.tsx",
+      "target": "app.json"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "components/planner/SwipeableListItem.tsx",
+      "target": "components/planner/EveningReflectionCard.tsx"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "android/app/build.gradle",
+      "target": "android/sentry.properties"
+    },
+    {
+      "weight": 1.0,
+      "count": 2,
+      "source": "ios/LottiBaby/Images.xcassets/AppIcon.appiconset/App-Icon-1024x1024@1x.png",
+      "target": "ios/LottiBaby/Images.xcassets/SplashScreenLogo.imageset/image.png"
+    },
+    {
+      "weight": 1.0,
+      "count": 2,
+      "source": "ios/LottiBaby/Images.xcassets/AppIcon.appiconset/App-Icon-1024x1024@1x.png",
+      "target": "ios/LottiBaby/Images.xcassets/SplashScreenLogo.imageset/image@2x.png"
+    },
+    {
+      "weight": 1.0,
+      "count": 2,
+      "source": "ios/LottiBaby/Images.xcassets/AppIcon.appiconset/App-Icon-1024x1024@1x.png",
+      "target": "ios/LottiBaby/Images.xcassets/SplashScreenLogo.imageset/image@3x.png"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "ios/LottiBaby/Images.xcassets/AppIcon.appiconset/App-Icon-1024x1024@1x.png",
+      "target": "ios/LottiBaby/Info.plist"
+    },
+    {
+      "weight": 1.0,
+      "count": 2,
+      "source": "ios/LottiBaby/Images.xcassets/SplashScreenLogo.imageset/image.png",
+      "target": "ios/LottiBaby/Images.xcassets/SplashScreenLogo.imageset/image@2x.png"
+    },
+    {
+      "weight": 1.0,
+      "count": 2,
+      "source": "ios/LottiBaby/Images.xcassets/SplashScreenLogo.imageset/image.png",
+      "target": "ios/LottiBaby/Images.xcassets/SplashScreenLogo.imageset/image@3x.png"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "ios/LottiBaby/Images.xcassets/SplashScreenLogo.imageset/image.png",
+      "target": "ios/LottiBaby/Info.plist"
+    },
+    {
+      "weight": 1.0,
+      "count": 2,
+      "source": "ios/LottiBaby/Images.xcassets/SplashScreenLogo.imageset/image@2x.png",
+      "target": "ios/LottiBaby/Images.xcassets/SplashScreenLogo.imageset/image@3x.png"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "ios/LottiBaby/Images.xcassets/SplashScreenLogo.imageset/image@2x.png",
+      "target": "ios/LottiBaby/Info.plist"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "ios/LottiBaby/Images.xcassets/SplashScreenLogo.imageset/image@3x.png",
+      "target": "ios/LottiBaby/Info.plist"
+    },
+    {
+      "weight": 0.222222,
+      "count": 2,
+      "source": "ios/LottiBaby/Info.plist",
+      "target": "app.json"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "app/(auth)/verify-email.tsx",
+      "target": "app/(auth)/verify-otp.tsx"
+    },
+    {
+      "weight": 0.5,
+      "count": 2,
+      "source": "app/(auth)/verify-otp.tsx",
+      "target": "app/(auth)/login.tsx"
+    },
+    {
+      "weight": 0.222222,
+      "count": 2,
+      "source": "app/(tabs)/feeding-stats.tsx",
+      "target": "app/app-settings.tsx"
+    },
+    {
+      "weight": 0.222222,
+      "count": 2,
+      "source": "app/(tabs)/feeding-stats.tsx",
+      "target": "app/faq.tsx"
+    },
+    {
+      "weight": 0.2,
+      "count": 2,
+      "source": "app/(tabs)/feeding-stats.tsx",
+      "target": "app/mini-wiki.tsx"
+    },
+    {
+      "weight": 0.285714,
+      "count": 2,
+      "source": "app/(tabs)/feeding-stats.tsx",
+      "target": "contexts/BabyStatusContext.tsx"
+    },
+    {
+      "weight": 0.333333,
+      "count": 2,
+      "source": "app/(tabs)/feeding-stats.tsx",
+      "target": "app/diary-entries.tsx"
+    },
+    {
+      "weight": 0.272727,
+      "count": 3,
+      "source": "app/(tabs)/feeding-stats.tsx",
+      "target": "components/Header.tsx"
+    },
+    {
+      "weight": 0.222222,
+      "count": 2,
+      "source": "app/(tabs)/feeding-stats.tsx",
+      "target": "app/(tabs)/selfcare.tsx"
+    },
+    {
+      "weight": 0.428571,
+      "count": 3,
+      "source": "app/app-settings.tsx",
+      "target": "app/faq.tsx"
+    },
+    {
+      "weight": 0.2,
+      "count": 2,
+      "source": "app/app-settings.tsx",
+      "target": "app/lottis-empfehlungen.tsx"
+    },
+    {
+      "weight": 0.375,
+      "count": 3,
+      "source": "app/app-settings.tsx",
+      "target": "app/mini-wiki.tsx"
+    },
+    {
+      "weight": 0.375,
+      "count": 3,
+      "source": "app/faq.tsx",
+      "target": "app/mini-wiki.tsx"
+    },
+    {
+      "weight": 0.25,
+      "count": 2,
+      "source": "app/mini-wiki.tsx",
+      "target": "app/(tabs)/index.tsx"
+    },
+    {
+      "weight": 0.285714,
+      "count": 2,
+      "source": "app/mini-wiki.tsx",
+      "target": "lib/geburtsplan-utils.ts"
+    },
+    {
+      "weight": 0.5,
+      "count": 3,
+      "source": "app/mini-wiki.tsx",
+      "target": "app/mini-wiki/[id].tsx"
+    },
+    {
+      "weight": 0.166667,
+      "count": 2,
+      "source": "app/mini-wiki.tsx",
+      "target": "components/Header.tsx"
+    },
+    {
+      "weight": 0.25,
+      "count": 2,
+      "source": "app/(tabs)/index.tsx",
+      "target": "app/baby-names.tsx"
+    },
+    {
+      "weight": 0.75,
+      "count": 3,
+      "source": "app/(tabs)/index.tsx",
+      "target": "lib/geburtsplan-utils.ts"
+    },
+    {
+      "weight": 0.5,
+      "count": 2,
+      "source": "app/(tabs)/index.tsx",
+      "target": "app/pregnancy-stats.tsx"
+    },
+    {
+      "weight": 0.5,
+      "count": 2,
+      "source": "app/(tabs)/index.tsx",
+      "target": "components/VerticalContractionTimeline.tsx"
+    },
+    {
+      "weight": 0.285714,
+      "count": 2,
+      "source": "app/baby-names.tsx",
+      "target": "lib/geburtsplan-utils.ts"
+    },
+    {
+      "weight": 0.285714,
+      "count": 2,
+      "source": "app/baby-names.tsx",
+      "target": "app/(tabs)/geburtsplan.tsx"
+    },
+    {
+      "weight": 0.333333,
+      "count": 2,
+      "source": "app/baby-names.tsx",
+      "target": "app/doctor-questions.tsx"
+    },
+    {
+      "weight": 0.428571,
+      "count": 3,
+      "source": "app/lottis-empfehlungen.tsx",
+      "target": "docs/LOTTIS_EMPFEHLUNGEN.md"
+    },
+    {
+      "weight": 0.285714,
+      "count": 2,
+      "source": "app/lottis-empfehlungen.tsx",
+      "target": "scripts/setup-lotti-empfehlungen.js"
+    },
+    {
+      "weight": 0.285714,
+      "count": 2,
+      "source": "app/lottis-empfehlungen.tsx",
+      "target": "scripts/check-storage-bucket.js"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "lib/geburtsplan-utils.ts",
+      "target": "components/VerticalContractionTimeline.tsx"
+    },
+    {
+      "weight": 0.25,
+      "count": 2,
+      "source": "app/diary-entries.tsx",
+      "target": "components/Header.tsx"
+    },
+    {
+      "weight": 0.181818,
+      "count": 2,
+      "source": "components/Header.tsx",
+      "target": "app/(tabs)/selfcare.tsx"
+    },
+    {
+      "weight": 0.25,
+      "count": 2,
+      "source": "components/Header.tsx",
+      "target": "constants/Colors.ts"
+    },
+    {
+      "weight": 0.75,
+      "count": 3,
+      "source": "create_planner_tables 2.sql",
+      "target": "create_planner_tables.sql"
+    },
+    {
+      "weight": 0.333333,
+      "count": 2,
+      "source": "lib/recipes.ts",
+      "target": "scripts/setup_recipes_table.sql"
+    },
+    {
+      "weight": 0.333333,
+      "count": 2,
+      "source": "lib/recipes.ts",
+      "target": "app/recipe-admin.tsx"
+    },
+    {
+      "weight": 0.333333,
+      "count": 2,
+      "source": "lib/recipes.ts",
+      "target": "supabase/migrations/20261227000000_add_admin_recipes_policy.sql"
+    },
+    {
+      "weight": 1.0,
+      "count": 2,
+      "source": "app/recipe-admin.tsx",
+      "target": "supabase/migrations/20261227000000_add_admin_recipes_policy.sql"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "docs/LOTTIS_EMPFEHLUNGEN.md",
+      "target": "scripts/setup-lotti-empfehlungen.js"
+    },
+    {
+      "weight": 0.25,
+      "count": 2,
+      "source": "app.json",
+      "target": "app/auth/callback.tsx"
+    },
+    {
+      "weight": 0.5,
+      "count": 2,
+      "source": "app/baby-size.tsx",
+      "target": "app/(tabs)/explore.tsx"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "components/planner/TodayOverviewCard.tsx",
+      "target": "constants/PlannerDesign.ts"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "app/(tabs)/explore.tsx",
+      "target": "components/AddChecklistItem.tsx"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "app/(tabs)/geburtsplan.tsx",
+      "target": "app/doctor-questions.tsx"
+    }
+  ]
+}

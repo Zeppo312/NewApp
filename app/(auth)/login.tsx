@@ -12,7 +12,7 @@ import { ThemedBackground } from '@/components/ThemedBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase, supabaseUrl } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -117,25 +117,6 @@ export default function LoginScreen() {
     try {
       setIsLoading(true);
       console.log('Starting authentication process...');
-
-      // HINWEIS: Für Testzwecke ohne Supabase-Verbindung
-      // Wir simulieren eine erfolgreiche Anmeldung
-      if (supabaseUrl.includes('example.supabase.co')) {
-        console.log('Using demo mode because Supabase credentials are not set');
-        // Simulierte Verzögerung
-        await new Promise(resolve => setTimeout(resolve, 1000));
-
-        // Im Demo-Modus zur Countdown-Seite navigieren
-        console.log('Demo mode: Navigating to countdown page');
-        try {
-          router.replace('/(tabs)/countdown');
-        } catch (navError) {
-          console.error('Navigation error:', navError);
-          // Fallback-Navigation
-          router.navigate('/(tabs)/countdown');
-        }
-        return;
-      }
 
       if (isRegistering) {
         console.log('Registering with email:', email);
@@ -274,84 +255,6 @@ export default function LoginScreen() {
     }
   };
 
-  const handleDemoLogin = async () => {
-    try {
-      setIsLoading(true);
-      console.log('Starting demo login...');
-
-      // HINWEIS: Für Testzwecke ohne Supabase-Verbindung
-      // Wir simulieren eine erfolgreiche Anmeldung
-      if (supabaseUrl.includes('example.supabase.co')) {
-        console.log('Using demo mode because Supabase credentials are not set');
-        // Simulierte Verzögerung
-        await new Promise(resolve => setTimeout(resolve, 1000));
-
-        // Im Demo-Modus zur Countdown-Seite navigieren
-        console.log('Demo login mode: Navigating to countdown page');
-        try {
-          router.replace('/(tabs)/countdown');
-        } catch (navError) {
-          console.error('Navigation error:', navError);
-          // Fallback-Navigation
-          router.navigate('/(tabs)/countdown');
-        }
-        return;
-      }
-
-      // Demo-Login mit einem Test-Konto
-      const { data, error: authError } = await signInWithEmail('demo@example.com', 'password123');
-
-      if (authError) {
-        console.error('Demo login auth error:', authError);
-        // Wenn das Demo-Konto nicht existiert, erstellen wir es
-        if (authError.message?.includes('Invalid login')) {
-          console.log('Demo account does not exist, creating it...');
-          const { data: signUpData, error: signUpError } = await signUpWithEmail('demo@example.com', 'password123');
-
-          if (signUpError) {
-            console.error('Demo account creation error:', signUpError);
-            throw signUpError;
-          }
-
-          console.log('Demo account created successfully:', signUpData);
-
-          // Nach der Registrierung anmelden
-          console.log('Signing in with demo account...');
-          const { data: loginData, error: loginError } = await signInWithEmail('demo@example.com', 'password123');
-
-          if (loginError) {
-            console.error('Demo account login error after creation:', loginError);
-            throw loginError;
-          }
-
-          console.log('Demo login successful after account creation:', loginData);
-        } else {
-          throw authError;
-        }
-      } else {
-        console.log('Demo login successful:', data);
-      }
-
-      // Bei erfolgreicher Anmeldung basierend auf is_baby_born-Flag navigieren
-      if (data && data.user && data.user.id) {
-        await navigateBasedOnBabyBornFlag(data.user.id);
-      } else {
-        // Fallback zur Countdown-Seite, wenn keine Benutzer-ID verfügbar ist
-        try {
-          router.replace('/(tabs)/countdown');
-        } catch (navError) {
-          console.error('Navigation error:', navError);
-          router.navigate('/(tabs)/countdown');
-        }
-      }
-    } catch (err) {
-      setError('Demo-Login fehlgeschlagen. Bitte versuche es erneut.');
-      console.error('Demo login error:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
@@ -479,22 +382,6 @@ export default function LoginScreen() {
                     </View>
                   </TouchableOpacity>
                 )}
-
-                <TouchableOpacity
-                  style={[styles.button, styles.demoButton]}
-                  onPress={handleDemoLogin}
-                  disabled={isLoading}
-                  activeOpacity={0.9}
-                >
-                  <BlurView intensity={15} tint="light" style={StyleSheet.absoluteFill} />
-                  <LinearGradient
-                    colors={['rgba(255,255,255,0.2)', 'rgba(255,255,255,0.1)']}
-                    style={StyleSheet.absoluteFill}
-                  />
-                  <ThemedText style={styles.demoButtonText}>
-                    Demo-Modus
-                  </ThemedText>
-                </TouchableOpacity>
 
                 {isRegistering && (
                   <View style={styles.inputContainer}>
@@ -684,9 +571,6 @@ const styles = StyleSheet.create({
   appleButton: {
     marginTop: 16,
   },
-  demoButton: {
-    marginTop: 16,
-  },
   buttonContent: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -708,17 +592,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     letterSpacing: 0.3,
     textShadowColor: 'rgba(0,0,0,0.15)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-    position: 'relative',
-    zIndex: 1,
-  },
-  demoButtonText: {
-    color: '#7D5A50',
-    fontWeight: '700',
-    fontSize: 18,
-    letterSpacing: 0.3,
-    textShadowColor: 'rgba(255,255,255,0.3)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
     position: 'relative',

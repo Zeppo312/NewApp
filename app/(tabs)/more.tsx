@@ -190,24 +190,6 @@ export default function MoreScreen() {
               <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={() => router.push('/mini-wiki')}
-            >
-              <View style={styles.menuItemIcon}>
-                <IconSymbol name="book.fill" size={24} color={theme.accent} />
-              </View>
-              <View style={styles.menuItemContent}>
-                <ThemedText style={styles.menuItemTitle}>
-                  Mini-Wiki
-                </ThemedText>
-                <ThemedText style={styles.menuItemDescription}>
-                  Wissenswertes über die ersten Monate
-                </ThemedText>
-              </View>
-              <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
-            </TouchableOpacity>
-
           </LiquidGlassCard>
 
           <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
@@ -348,6 +330,48 @@ export default function MoreScreen() {
                 </ThemedText>
                 <ThemedText style={styles.menuItemDescription}>
                   Teile deine Ideen zur Verbesserung der App
+                </ThemedText>
+              </View>
+              <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
+            </TouchableOpacity>
+          </LiquidGlassCard>
+
+          <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
+            <ThemedText style={styles.sectionTitle}>
+              Rechtliches
+            </ThemedText>
+
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => router.push('/datenschutz' as any)}
+            >
+              <View style={styles.menuItemIcon}>
+                <IconSymbol name="info.circle.fill" size={24} color={theme.accent} />
+              </View>
+              <View style={styles.menuItemContent}>
+                <ThemedText style={styles.menuItemTitle}>
+                  Datenschutz
+                </ThemedText>
+                <ThemedText style={styles.menuItemDescription}>
+                  Informationen zur Datenverarbeitung
+                </ThemedText>
+              </View>
+              <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => router.push('/impressum' as any)}
+            >
+              <View style={styles.menuItemIcon}>
+                <IconSymbol name="doc.text.fill" size={24} color={theme.accent} />
+              </View>
+              <View style={styles.menuItemContent}>
+                <ThemedText style={styles.menuItemTitle}>
+                  Impressum
+                </ThemedText>
+                <ThemedText style={styles.menuItemDescription}>
+                  Anbieterkennzeichnung und Kontakt
                 </ThemedText>
               </View>
               <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />

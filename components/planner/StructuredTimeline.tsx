@@ -79,8 +79,19 @@ export const StructuredTimeline: React.FC<Props> = ({
   onEditEvent,
 }) => {
   const { allDayEvents, timedEvents } = useMemo(() => {
-    const allDay = events.filter(e => e.isAllDay);
-    const timed = events.filter(e => !e.isAllDay);
+    // Treat events as all-day if:
+    // 1. They have isAllDay flag set, OR
+    // 2. They span more than 10 hours (600 minutes) - likely a day trip or multi-day event
+    const isEffectivelyAllDay = (e: PlannerEvent): boolean => {
+      if (e.isAllDay) return true;
+      const start = new Date(e.start);
+      const end = new Date(e.end);
+      const durationMinutes = (end.getTime() - start.getTime()) / (1000 * 60);
+      return durationMinutes >= 600; // 10 hours or more
+    };
+
+    const allDay = events.filter(isEffectivelyAllDay);
+    const timed = events.filter(e => !isEffectivelyAllDay(e));
     return { allDayEvents: allDay, timedEvents: timed };
   }, [events]);
 

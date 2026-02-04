@@ -31,11 +31,11 @@ const BABY_WEIGHT_FACTOR = 1000;
 const isBabySubject = (subject: WeightSubject) => subject === 'baby';
 const getWeightUnit = (subject: WeightSubject) => (isBabySubject(subject) ? 'g' : 'kg');
 const getDisplayWeightValue = (weightKg: number, subject: WeightSubject) =>
-  isBabySubject(subject) ? Math.round(weightKg * BABY_WEIGHT_FACTOR) : weightKg;
+  isBabySubject(subject) ? weightKg * BABY_WEIGHT_FACTOR : weightKg;
 const getParentEmoji = (role?: string | null) => (role === 'papa' ? '👨' : '👩');
 const formatWeightDisplayValue = (weightKg: number, subject: WeightSubject) => {
   if (isBabySubject(subject)) {
-    const grams = Math.round(weightKg * BABY_WEIGHT_FACTOR);
+    const grams = weightKg * BABY_WEIGHT_FACTOR;
     return `${grams.toLocaleString('de-DE')} g`;
   }
   const formattedKg = weightKg.toLocaleString('de-DE', { maximumFractionDigits: 2 });

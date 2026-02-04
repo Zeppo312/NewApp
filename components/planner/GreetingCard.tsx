@@ -187,8 +187,8 @@ const styles = StyleSheet.create({
   },
   textColumn: {
     flex: 1,
-    paddingLeft: 10,
-    paddingRight: 44,
+    paddingLeft: 18,
+    paddingRight: 12,
   },
   headline: {
     fontSize: 22,

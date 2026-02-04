@@ -228,7 +228,6 @@ function RootLayoutNav() {
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="diary-entries" />
-        <Stack.Screen name="mini-wiki" />
         <Stack.Screen name="community" />
         <Stack.Screen name="notifications" />
         <Stack.Screen name="paywall" />

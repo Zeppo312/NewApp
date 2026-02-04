@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { getCachedUser } from './supabase';
+import { compressImage } from './imageCompression';
 
 const AVATAR_BUCKET = 'community-images';
 
@@ -10,19 +11,18 @@ export const uploadProfileAvatar = async (base64Data: string) => {
       return { url: null, error: new Error('Nicht angemeldet') };
     }
 
-    const cleaned = base64Data.includes('base64,') ? base64Data.split('base64,')[1] : base64Data;
-    const binary = atob(cleaned);
-    const buffer = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i += 1) {
-      buffer[i] = binary.charCodeAt(i);
-    }
+    // Komprimieren & resizen (Avatar max ~640px Kantenlänge, moderate Qualität)
+    const { bytes } = await compressImage(
+      { base64: base64Data },
+      { maxDimension: 640, quality: 0.72 }
+    );
 
     const fileName = `avatar_${userData.user.id}_${Date.now()}.jpg`;
     const filePath = `avatars/${fileName}`;
 
     const { error: uploadError } = await supabase.storage
       .from(AVATAR_BUCKET)
-      .upload(filePath, buffer, {
+      .upload(filePath, bytes, {
         contentType: 'image/jpeg',
         upsert: true,
       });

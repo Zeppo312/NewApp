@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { getCachedUser } from './supabase';
+import { compressImage } from './imageCompression';
 
 // Typdefinitionen
 export interface Post {
@@ -680,42 +681,32 @@ export const createPost = async (content: string, isAnonymous: boolean = false, 
     
     // Bild hochladen, falls vorhanden
     let imageUrl = null;
-    if (imageBase64 && imageBase64.length > 0) {
-      try {
-        console.log('Starting DIRECT image upload...');
-        
-        // 1. Eindeutigen Dateinamen erzeugen
-        const timestamp = new Date().getTime();
-        const randomStr = Math.random().toString(36).substring(2, 15);
-        const fileName = `post_${timestamp}_${randomStr}.jpg`;
-        const filePath = `posts/${fileName}`;
+  if (imageBase64 && imageBase64.length > 0) {
+    try {
+      console.log('Starting DIRECT image upload...');
+
+      // 1. Eindeutigen Dateinamen erzeugen
+      const timestamp = new Date().getTime();
+      const randomStr = Math.random().toString(36).substring(2, 15);
+      const fileName = `post_${timestamp}_${randomStr}.jpg`;
+      const filePath = `posts/${fileName}`;
         
         console.log('File path:', filePath);
 
-        // 2. Base64-Encoding vorbereiten
-        let base64Data = imageBase64;
-        if (imageBase64.includes('base64,')) {
-          console.log('Extracting base64 data from data URL...');
-          base64Data = imageBase64.split('base64,')[1];
-        }
+      // 2. Komprimieren & resizen (max ~1400px, moderate Qualität)
+      const { bytes } = await compressImage(
+        { base64: imageBase64 },
+        { maxDimension: 1400, quality: 0.7 }
+      );
+      console.log('Compressed image bytes length:', bytes.length);
 
-        // 3. In Binärdaten umwandeln
-        console.log('Converting to binary...');
-        const binary = atob(base64Data);
-        const array = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) {
-          array[i] = binary.charCodeAt(i);
-        }
-        
-        console.log('Binary data created, length:', array.length);
-
-        // 4. Datei hochladen
-        console.log('Uploading file to Supabase...');
-        const { data: uploadResult, error: uploadError } = await supabase.storage
-          .from('community-images')
-          .upload(filePath, array, {
-            contentType: 'image/jpeg'
-          });
+      // 3. Datei hochladen
+      console.log('Uploading file to Supabase...');
+      const { data: uploadResult, error: uploadError } = await supabase.storage
+        .from('community-images')
+        .upload(filePath, bytes, {
+          contentType: 'image/jpeg'
+        });
 
         if (uploadError) {
           console.error('Upload error details:', JSON.stringify(uploadError));

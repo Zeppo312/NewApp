@@ -7,6 +7,7 @@ import {
   Alert,
   Keyboard,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   RefreshControl,
@@ -357,9 +358,15 @@ export default function CommunityScreen() {
     [primaryTextOnCommunity, theme.textSecondary],
   );
 
+  const openInstagram = () => {
+    Linking.openURL('https://www.instagram.com/anyhelptoolate?igsh=MXRkb3VpcGRrNjJ1cA==');
+  };
+
   const hero = (
     <View style={[styles.hero, { backgroundColor: colorScheme === 'dark' ? '#3A2E2A' : '#FFE7D6' }]}>
-      <View style={styles.heroBubbleOne} />
+      <TouchableOpacity style={styles.heroImageContainer} onPress={openInstagram} activeOpacity={0.8}>
+        <Image source={require('@/assets/images/LottiPic.png')} style={styles.heroImage} />
+      </TouchableOpacity>
       <View style={styles.heroBubbleTwo} />
       <View style={styles.heroTextBlock}>
         <ThemedText type="title" style={[styles.heroTitle, { color: primaryTextOnCommunity }]}>Lotti Baby Blog</ThemedText>
@@ -735,14 +742,18 @@ const styles = StyleSheet.create({
     marginTop: 4,
     overflow: 'hidden',
   },
-  heroBubbleOne: {
+  heroImageContainer: {
     position: 'absolute',
-    width: 140,
-    height: 140,
-    backgroundColor: 'rgba(255, 255, 255, 0.45)',
-    borderRadius: 70,
-    top: -30,
-    right: -20,
+    width: 100,
+    height: 100,
+    top: 10,
+    right: 10,
+    zIndex: 10,
+  },
+  heroImage: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
   },
   heroBubbleTwo: {
     position: 'absolute',
@@ -755,6 +766,7 @@ const styles = StyleSheet.create({
   },
   heroTextBlock: {
     gap: 8,
+    paddingRight: 115,
   },
   heroTitle: {
     fontSize: 26,
@@ -768,18 +780,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
     marginTop: 6,
-    flexWrap: 'wrap',
   },
   heroChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 16,
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 14,
   },
   heroChipText: {
-    fontSize: 13,
+    fontSize: 12,
     color: '#7D5A50',
     fontWeight: '600',
   },

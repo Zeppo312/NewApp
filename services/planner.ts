@@ -262,10 +262,22 @@ function buildAggregatedData(date: Date, dayRows: PlannerDayRow[], itemRows: Pla
     if (row.entry_type === 'event') {
       const startDate = parseISO(row.start_at) ?? parseISO(row.due_at) ?? new Date(workingDate);
       const endDate = parseISO(row.end_at) ?? new Date(startDate.getTime() + 30 * 60000);
-      if (startDate && toDateOnlyISO(startDate) !== selectedIso) {
+
+      // Check if the selected date falls within the event's date range
+      const startIso = toDateOnlyISO(startDate);
+      const endIso = toDateOnlyISO(endDate);
+      const isOnStartDay = startIso === selectedIso;
+      const isMultiDayOverlap = startIso < selectedIso && endIso >= selectedIso;
+
+      if (!isOnStartDay && !isMultiDayOverlap) {
         return;
       }
+
       includedEventRows.push(row);
+
+      // For multi-day events shown on days other than the start day, treat as all-day
+      const isEffectivelyAllDay = row.is_all_day || isMultiDayOverlap;
+
       const event: PlannerEvent = {
         id: row.id,
         title: row.title,
@@ -276,11 +288,11 @@ function buildAggregatedData(date: Date, dayRows: PlannerDayRow[], itemRows: Pla
         babyId: row.baby_id ?? undefined,
         blockId: row.block_id ?? undefined,
         userId: row.user_id,
-        isAllDay: row.is_all_day ?? false,
+        isAllDay: isEffectivelyAllDay,
       };
       const minute = startDate ? minutesSinceMidnight(startDate) : null;
       const targetIndex =
-        minute === null
+        minute === null || isEffectivelyAllDay
           ? -1
           : BLOCK_DEFS.findIndex((def) => minute >= def.startMinutes && minute < def.endMinutes);
       if (targetIndex === -1) fallbackBlock.items.push(event);
@@ -462,6 +474,35 @@ export function usePlannerDay(date: Date) {
 
     if (itemsError) throw itemsError;
 
+    // Query for multi-day events that overlap with the selected date
+    // These are events that started before this day but end on or after this day
+    const selectedDayStart = new Date(normalizedDate);
+    selectedDayStart.setHours(0, 0, 0, 0);
+    const selectedDayEnd = new Date(normalizedDate);
+    selectedDayEnd.setHours(23, 59, 59, 999);
+
+    const { data: multiDayEventRows, error: multiDayError } = await supabase
+      .from('planner_items')
+      .select(
+        'id,user_id,day_id,block_id,entry_type,title,completed,assignee,baby_id,notes,location,due_at,start_at,end_at,is_all_day,created_at,updated_at',
+      )
+      .in('user_id', ownerIds)
+      .eq('entry_type', 'event')
+      .lt('start_at', selectedDayStart.toISOString()) // Started before this day
+      .gte('end_at', selectedDayStart.toISOString()); // Ends on or after this day
+
+    if (multiDayError) throw multiDayError;
+
+    // Merge multi-day events with regular items, avoiding duplicates
+    const allItemRows = [...(itemRows ?? [])];
+    const existingIds = new Set(allItemRows.map(row => row.id));
+    (multiDayEventRows ?? []).forEach(row => {
+      if (!existingIds.has(row.id)) {
+        allItemRows.push(row);
+        existingIds.add(row.id);
+      }
+    });
+
     const { data: floatingOpenRows, error: floatingOpenError } = await supabase
       .from('planner_items')
       .select(
@@ -496,7 +537,7 @@ export function usePlannerDay(date: Date) {
 
     if (floatingDoneError) throw floatingDoneError;
 
-    const aggregated = buildAggregatedData(normalizedDate, dayRows ?? [], itemRows ?? [], user.id);
+    const aggregated = buildAggregatedData(normalizedDate, dayRows ?? [], allItemRows, user.id);
     const floatingItemsMap: Record<string, PlannerItemRow> = {};
     [...(floatingOpenRows ?? []), ...(floatingDoneRows ?? [])].forEach((row) => {
       if (!row?.id) return;
