@@ -22,8 +22,8 @@ export interface HeaderProps {
 }
 
 // Original-Farben für hellen Modus
-const HEADER_TITLE_COLOR = '#7D5A50';
-const HEADER_SUBTITLE_COLOR = '#A8978E';
+const HEADER_TITLE_COLOR_LIGHT = '#7D5A50';
+const HEADER_SUBTITLE_COLOR_LIGHT = '#A8978E';
 
 const Header: React.FC<HeaderProps> = ({
   title,
@@ -42,8 +42,13 @@ const Header: React.FC<HeaderProps> = ({
 
   // Nur bei dunklem Hintergrundbild die adaptiven Farben verwenden
   const useDarkMode = adaptiveColors.hasCustomBackground && adaptiveColors.isDarkBackground;
-  const titleColor = useDarkMode ? adaptiveColors.textPrimary : HEADER_TITLE_COLOR;
-  const subtitleColor = useDarkMode ? adaptiveColors.textTertiary : HEADER_SUBTITLE_COLOR;
+  // Im Dark Mode helle Farben verwenden
+  const titleColor = useDarkMode
+    ? adaptiveColors.textPrimary
+    : (colorScheme === 'dark' ? Colors.dark.textPrimary : HEADER_TITLE_COLOR_LIGHT);
+  const subtitleColor = useDarkMode
+    ? adaptiveColors.textTertiary
+    : (colorScheme === 'dark' ? Colors.dark.textTertiary : HEADER_SUBTITLE_COLOR_LIGHT);
   const iconColor = useDarkMode ? adaptiveColors.text : theme.text;
 
   const handleBackPress = () => {

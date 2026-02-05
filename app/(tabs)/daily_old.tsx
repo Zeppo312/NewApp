@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Colors } from '@/constants/Colors';
-import { useColorScheme } from '@/hooks/useColorScheme';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
@@ -81,11 +81,17 @@ type QuickActionType =
 
 // DateSpider as glass pill
 const DateSpider: React.FC<{ date: Date; visible: boolean }> = ({ date, visible }) => {
+  // Adaptive Farben für Dark Mode
+  const adaptiveColors = useAdaptiveColors();
+  const colorScheme = adaptiveColors.effectiveScheme;
+  const isDark = colorScheme === 'dark' || adaptiveColors.isDarkBackground;
+  const textPrimary = isDark ? Colors.dark.textPrimary : PRIMARY;
+
   if (!visible) return null;
   return (
     <View style={s.dateSpiderWrap}>
       <GlassCard style={s.dateSpiderCard} intensity={22} overlayColor="rgba(255,255,255,0.24)">
-        <Text style={s.dateSpiderText}>
+        <Text style={[s.dateSpiderText, { color: textPrimary }]}>
           {date.toLocaleDateString('de-DE', {
             weekday: 'long',
             day: '2-digit',
@@ -103,6 +109,13 @@ const TimerBanner: React.FC<{
   onStop: () => void;
   onCancel: () => void;
 }> = ({ timer, onStop, onCancel }) => {
+  // Adaptive Farben für Dark Mode
+  const adaptiveColors = useAdaptiveColors();
+  const colorScheme = adaptiveColors.effectiveScheme;
+  const isDark = colorScheme === 'dark' || adaptiveColors.isDarkBackground;
+  const textPrimary = isDark ? Colors.dark.textPrimary : PRIMARY;
+  const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
+
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
     if (!timer) return;
@@ -129,17 +142,17 @@ const TimerBanner: React.FC<{
   return (
     <GlassCard style={[s.timerBanner, { paddingVertical: 12, paddingHorizontal: 16 }]} intensity={28}>
       <View style={{ flex: 1 }}>
-        <Text style={[s.timerType, { color: PRIMARY }]}>
+        <Text style={[s.timerType, { color: textPrimary }]}>
           {timerLabel} • läuft seit {new Date(timer.start).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
         </Text>
-        <Text style={[s.timerTime, { color: '#7D5A50' }]}>{formatTime(elapsed)}</Text>
+        <Text style={[s.timerTime, { color: textSecondary }]}>{formatTime(elapsed)}</Text>
       </View>
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
         <TouchableOpacity style={s.timerCancelButton} onPress={onCancel}>
-          <IconSymbol name="xmark.circle" size={26} color="#a3a3a3" />
+          <IconSymbol name="xmark.circle" size={26} color={isDark ? '#888888' : '#a3a3a3'} />
         </TouchableOpacity>
         <TouchableOpacity style={s.timerStopButton} onPress={onStop}>
-          <IconSymbol name="stop.circle.fill" size={28} color={PRIMARY} />
+          <IconSymbol name="stop.circle.fill" size={28} color={textPrimary} />
         </TouchableOpacity>
       </View>
     </GlassCard>
@@ -156,6 +169,12 @@ const quickBtns: { icon: string; label: string; action: QuickActionType }[] = [
 ];
 
 const QuickActionRow: React.FC<{ onPressAction: (action: QuickActionType) => void }> = ({ onPressAction }) => {
+  // Adaptive Farben für Dark Mode
+  const adaptiveColors = useAdaptiveColors();
+  const colorScheme = adaptiveColors.effectiveScheme;
+  const isDark = colorScheme === 'dark' || adaptiveColors.isDarkBackground;
+  const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
+
   const itemWidth = 96 + 16; // Button width + separator
 
   const renderQuickButton = ({ item }: { item: (typeof quickBtns)[number] }) => (
@@ -167,7 +186,7 @@ const QuickActionRow: React.FC<{ onPressAction: (action: QuickActionType) => voi
     >
       <TouchableOpacity style={s.circleInner} onPress={() => onPressAction(item.action)} activeOpacity={0.9}>
         <Text style={s.circleEmoji}>{item.icon}</Text>
-        <Text style={s.circleLabel}>{item.label}</Text>
+        <Text style={[s.circleLabel, { color: textSecondary }]}>{item.label}</Text>
       </TouchableOpacity>
     </GlassCard>
   );
@@ -194,8 +213,15 @@ const QuickActionRow: React.FC<{ onPressAction: (action: QuickActionType) => voi
 };
 
 export default function DailyScreen() {
-  const colorScheme = useColorScheme() ?? 'light';
+  // Adaptive Farben für Dark Mode (basierend auf Hintergrundbild-Einstellung)
+  const adaptiveColors = useAdaptiveColors();
+  const colorScheme = adaptiveColors.effectiveScheme;
   const theme = Colors[colorScheme];
+  const isDark = colorScheme === 'dark' || adaptiveColors.isDarkBackground;
+
+  // Dark Mode angepasste Farben
+  const textPrimary = isDark ? Colors.dark.textPrimary : PRIMARY;
+  const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
   const router = useRouter();
   const { quickAction } = useLocalSearchParams<{ quickAction?: string | string[] }>();
   
@@ -787,7 +813,7 @@ export default function DailyScreen() {
             }}
             activeOpacity={0.85}
           >
-            <Text style={[s.topTabText, selectedTab === tab && s.activeTopTabText]}>
+            <Text style={[s.topTabText, { color: textSecondary }, selectedTab === tab && s.activeTopTabText]}>
               {tab === 'day' ? 'Tag' : tab === 'week' ? 'Woche' : 'Monat'}
             </Text>
           </TouchableOpacity>
@@ -843,24 +869,24 @@ export default function DailyScreen() {
         {/* Week Navigation - identical structure */}
         <View style={s.weekNavigationContainer}>
           <TouchableOpacity style={s.weekNavButton} onPress={goToPreviousWeek}>
-            <Text style={s.weekNavButtonText}>‹</Text>
+            <Text style={[s.weekNavButtonText, { color: textSecondary }]}>‹</Text>
           </TouchableOpacity>
 
           <View style={s.weekHeaderCenter}>
-            <Text style={s.weekHeaderTitle}>Wochenübersicht</Text>
-            <Text style={s.weekHeaderSubtitle}>
+            <Text style={[s.weekHeaderTitle, { color: textSecondary }]}>Wochenübersicht</Text>
+            <Text style={[s.weekHeaderSubtitle, { color: textSecondary }]}>
               {weekStart.toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })} - {weekEnd.toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })}
             </Text>
           </View>
 
           <TouchableOpacity style={s.weekNavButton} onPress={goToNextWeek}>
-            <Text style={s.weekNavButtonText}>›</Text>
+            <Text style={[s.weekNavButtonText, { color: textSecondary }]}>›</Text>
           </TouchableOpacity>
         </View>
 
         {/* Wickeln diese Woche - Design Guide konform mit Liquid Glass (EXAKT wie Sleep-Tracker) */}
         <LiquidGlassCard style={s.chartGlassCard}>
-          <Text style={s.chartTitle}>Wickeln diese Woche</Text>
+          <Text style={[s.chartTitle, { color: textSecondary }]}>Wickeln diese Woche</Text>
 
           {/* feste Gesamtbreite = WEEK_CONTENT_WIDTH (wie Timeline) */}
           <View style={[s.chartArea, { width: WEEK_CONTENT_WIDTH, alignSelf: 'center' }]}>
@@ -892,8 +918,8 @@ export default function DailyScreen() {
                   </View>
 
                   <View style={[s.chartLabelContainer, { width: WEEK_COL_WIDTH + extra }]}>
-                    <Text allowFontScaling={false} style={s.chartLabel}>{dayNames[i]}</Text>
-                    <Text allowFontScaling={false} style={s.chartValue}>{diaperCount}</Text>
+                    <Text allowFontScaling={false} style={[s.chartLabel, { color: textSecondary }]}>{dayNames[i]}</Text>
+                    <Text allowFontScaling={false} style={[s.chartValue, { color: textSecondary }]}>{diaperCount}</Text>
                   </View>
                 </View>
               );
@@ -903,7 +929,7 @@ export default function DailyScreen() {
 
         {/* Füttern diese Woche (Stillen, Fläschchen, Beikost) - EXAKT wie Sleep-Tracker */}
         <LiquidGlassCard style={s.chartGlassCard}>
-          <Text style={s.chartTitle}>Füttern diese Woche</Text>
+          <Text style={[s.chartTitle, { color: textSecondary }]}>Füttern diese Woche</Text>
 
           {/* feste Gesamtbreite = WEEK_CONTENT_WIDTH (wie Timeline) */}
           <View style={[s.chartArea, { width: WEEK_CONTENT_WIDTH, alignSelf: 'center' }]}>
@@ -949,8 +975,8 @@ export default function DailyScreen() {
                   </View>
 
                   <View style={[s.chartLabelContainer, { width: WEEK_COL_WIDTH + extra }]}>
-                    <Text allowFontScaling={false} style={s.chartLabel}>{dayNames[i]}</Text>
-                    <Text allowFontScaling={false} style={s.chartValue}>{breast + bottle + solids}</Text>
+                    <Text allowFontScaling={false} style={[s.chartLabel, { color: textSecondary }]}>{dayNames[i]}</Text>
+                    <Text allowFontScaling={false} style={[s.chartValue, { color: textSecondary }]}>{breast + bottle + solids}</Text>
                   </View>
                 </View>
               );
@@ -961,15 +987,15 @@ export default function DailyScreen() {
           <View style={s.chartLegend}>
             <View style={s.legendItem}>
               <View style={[s.legendSwatch, s.legendBreast]} />
-              <Text style={s.legendLabel}>Stillen</Text>
+              <Text style={[s.legendLabel, { color: textSecondary }]}>Stillen</Text>
             </View>
             <View style={s.legendItem}>
               <View style={[s.legendSwatch, s.legendBottle]} />
-              <Text style={s.legendLabel}>Fläschchen</Text>
+              <Text style={[s.legendLabel, { color: textSecondary }]}>Fläschchen</Text>
             </View>
             <View style={s.legendItem}>
               <View style={[s.legendSwatch, s.legendSolids]} />
-              <Text style={s.legendLabel}>Beikost</Text>
+              <Text style={[s.legendLabel, { color: textSecondary }]}>Beikost</Text>
             </View>
           </View>
         </LiquidGlassCard>
@@ -977,17 +1003,17 @@ export default function DailyScreen() {
         {/* Wochenzusammenfassung - Design Guide konform (EXAKT wie Sleep-Tracker) */}
         <LiquidGlassCard style={s.weekSummaryCard}>
           <View style={s.summaryInner}>
-            <Text style={s.summaryTitle}>Wochenzusammenfassung</Text>
+            <Text style={[s.summaryTitle, { color: textSecondary }]}>Wochenzusammenfassung</Text>
             <View style={s.summaryStats}>
                 <View style={s.statItem}>
                   <Text style={s.statEmoji}>🍼</Text>
-                  <Text style={s.statValue}>{totalFeedings}</Text>
-                  <Text style={s.statLabel}>Fütterungen</Text>
+                  <Text style={[s.statValue, { color: textPrimary }]}>{totalFeedings}</Text>
+                  <Text style={[s.statLabel, { color: textSecondary }]}>Fütterungen</Text>
                 </View>
                 <View style={s.statItem}>
                   <Text style={s.statEmoji}>💧</Text>
-                  <Text style={s.statValue}>{totalDiapers}</Text>
-                  <Text style={s.statLabel}>Windeln</Text>
+                  <Text style={[s.statValue, { color: textPrimary }]}>{totalDiapers}</Text>
+                  <Text style={[s.statLabel, { color: textSecondary }]}>Windeln</Text>
                 </View>
             </View>
           </View>
@@ -1100,7 +1126,7 @@ export default function DailyScreen() {
         case 'poor':
           return { bg: 'rgba(229,62,62,0.18)',  text: '#9B2C2C', border: 'rgba(255,255,255,0.55)' };
         default:
-          return { bg: 'rgba(255,255,255,0.10)', text: '#7D5A50', border: 'rgba(255,255,255,0.35)' };
+          return { bg: 'rgba(255,255,255,0.10)', text: textSecondary, border: 'rgba(255,255,255,0.35)' };
       }
     };
 
@@ -1109,12 +1135,12 @@ export default function DailyScreen() {
         {/* Monats-Navigation - exakt gleich wie Wochenübersicht */}
         <View style={s.weekNavigationContainer}>
           <TouchableOpacity style={s.weekNavButton} onPress={() => setMonthOffset(o => o - 1)}>
-            <Text style={s.weekNavButtonText}>‹</Text>
+            <Text style={[s.weekNavButtonText, { color: textSecondary }]}>‹</Text>
           </TouchableOpacity>
 
           <View style={s.weekHeaderCenter}>
-            <Text style={s.weekHeaderTitle}>Monatsübersicht</Text>
-            <Text style={s.weekHeaderSubtitle}>
+            <Text style={[s.weekHeaderTitle, { color: textSecondary }]}>Monatsübersicht</Text>
+            <Text style={[s.weekHeaderSubtitle, { color: textSecondary }]}>
               {refMonthDate.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' })}
             </Text>
           </View>
@@ -1124,13 +1150,13 @@ export default function DailyScreen() {
             disabled={monthOffset >= 0}
             onPress={() => setMonthOffset(o => o + 1)}
           >
-            <Text style={s.weekNavButtonText}>›</Text>
+            <Text style={[s.weekNavButtonText, { color: textSecondary }]}>›</Text>
           </TouchableOpacity>
         </View>
 
         {/* Kalender-Block mit exakt gleicher Innenbreite wie Week-Chart */}
         <LiquidGlassCard style={s.chartGlassCard}>
-          <Text style={s.chartTitle}>Aktivitätskalender</Text>
+          <Text style={[s.chartTitle, { color: textSecondary }]}>Aktivitätskalender</Text>
           <View style={{ width: WEEK_CONTENT_WIDTH, alignSelf: 'center', paddingVertical: 16 }}>
             {/* Wochentags-Header mit exakten Spaltenbreiten */}
             <View style={s.weekdayHeader}>
@@ -1145,7 +1171,7 @@ export default function DailyScreen() {
                       alignItems: 'center',
                     }}
                   >
-                    <Text style={s.weekdayLabel}>{label}</Text>
+                    <Text style={[s.weekdayLabel, { color: textSecondary }]}>{label}</Text>
                   </View>
                 );
               })}
@@ -1199,17 +1225,17 @@ export default function DailyScreen() {
         {/* Monatsstatistiken - Design Guide konform */}
         <LiquidGlassCard style={s.monthSummaryCard}>
           <View style={s.summaryInner}>
-            <Text style={s.summaryTitle}>Monatsübersicht</Text>
+            <Text style={[s.summaryTitle, { color: textSecondary }]}>Monatsübersicht</Text>
             <View style={s.summaryStats}>
               <View style={s.statItem}>
                 <Text style={s.statEmoji}>🍼</Text>
-                <Text style={s.statValue}>{monthEntries.filter(e => e.entry_type === 'feeding').length}</Text>
-                <Text style={s.statLabel}>Fütterungen</Text>
+                <Text style={[s.statValue, { color: textPrimary }]}>{monthEntries.filter(e => e.entry_type === 'feeding').length}</Text>
+                <Text style={[s.statLabel, { color: textSecondary }]}>Fütterungen</Text>
               </View>
               <View style={s.statItem}>
                 <Text style={s.statEmoji}>💧</Text>
-                <Text style={s.statValue}>{monthEntries.filter(e => e.entry_type === 'diaper').length}</Text>
-                <Text style={s.statLabel}>Windeln</Text>
+                <Text style={[s.statValue, { color: textPrimary }]}>{monthEntries.filter(e => e.entry_type === 'diaper').length}</Text>
+                <Text style={[s.statLabel, { color: textSecondary }]}>Windeln</Text>
               </View>
             </View>
           </View>
@@ -1244,10 +1270,10 @@ export default function DailyScreen() {
         >
           <View style={s.kpiHeaderRow}>
             <Text style={s.kpiEmoji}>🍼</Text>
-            <Text style={s.kpiTitle}>Fütterung</Text>
+            <Text style={[s.kpiTitle, { color: textSecondary }]}>Fütterung</Text>
           </View>
-          <Text style={[s.kpiValue, s.kpiValueCentered]}>{feedingEntries.length}</Text>
-          <Text style={s.kpiSub}>{breastCount}× Stillen • {bottleCount}× Flasche</Text>
+          <Text style={[s.kpiValue, s.kpiValueCentered, { color: textPrimary }]}>{feedingEntries.length}</Text>
+          <Text style={[s.kpiSub, { color: textSecondary }]}>{breastCount}× Stillen • {bottleCount}× Flasche</Text>
         </GlassCard>
 
         <GlassCard
@@ -1258,10 +1284,10 @@ export default function DailyScreen() {
         >
           <View style={s.kpiHeaderRow}>
             <Text style={s.kpiEmoji}>🧷</Text>
-            <Text style={s.kpiTitle}>Wickeln</Text>
+            <Text style={[s.kpiTitle, { color: textSecondary }]}>Wickeln</Text>
           </View>
-          <Text style={[s.kpiValue, s.kpiValueCentered]}>{diaperEntries.length}</Text>
-          <Text style={s.kpiSub}>Letzter: {lastDiaperTime}</Text>
+          <Text style={[s.kpiValue, s.kpiValueCentered, { color: textPrimary }]}>{diaperEntries.length}</Text>
+          <Text style={[s.kpiSub, { color: textSecondary }]}>Letzter: {lastDiaperTime}</Text>
         </GlassCard>
       </View>
     );
@@ -1324,11 +1350,11 @@ export default function DailyScreen() {
                   style={s.weekNavButton}
                   onPress={() => changeRelativeDate(-1)}
                 >
-                  <Text style={s.weekNavButtonText}>‹</Text>
+                  <Text style={[s.weekNavButtonText, { color: textSecondary }]}>‹</Text>
                 </TouchableOpacity>
                 <View style={s.weekHeaderCenter}>
-                  <Text style={s.weekHeaderTitle}>Tagesansicht</Text>
-                  <Text style={s.weekHeaderSubtitle}>
+                  <Text style={[s.weekHeaderTitle, { color: textSecondary }]}>Tagesansicht</Text>
+                  <Text style={[s.weekHeaderSubtitle, { color: textSecondary }]}>
                     {selectedDate.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long' })}
                   </Text>
                 </View>
@@ -1337,13 +1363,13 @@ export default function DailyScreen() {
                   disabled={new Date(selectedDate).setHours(0,0,0,0) >= new Date().setHours(0,0,0,0)}
                   onPress={() => changeRelativeDate(1)}
                 >
-                  <Text style={s.weekNavButtonText}>›</Text>
+                  <Text style={[s.weekNavButtonText, { color: textSecondary }]}>›</Text>
                 </TouchableOpacity>
               </View>
 
               <QuickActionRow onPressAction={handleQuickActionPress} />
 
-              <Text style={s.sectionTitle}>Kennzahlen</Text>
+              <Text style={[s.sectionTitle, { color: textSecondary }]}>Kennzahlen</Text>
               <KPISection />
 
               <View style={s.recipeButtonSection}>
@@ -1352,13 +1378,13 @@ export default function DailyScreen() {
                   activeOpacity={0.88}
                   onPress={() => router.push('/recipe-generator')}
                 >
-                  <IconSymbol name="fork.knife.circle.fill" size={22} color={PRIMARY} />
-                  <Text style={s.recipeText}>BLW-Rezepte entdecken</Text>
+                  <IconSymbol name="fork.knife.circle.fill" size={22} color={textPrimary} />
+                  <Text style={[s.recipeText, { color: textPrimary }]}>BLW-Rezepte entdecken</Text>
                 </TouchableOpacity>
               </View>
 
               <View style={s.timelineSection}>
-                <Text style={s.sectionTitle}>Timeline</Text>
+                <Text style={[s.sectionTitle, { color: textSecondary }]}>Timeline</Text>
 
                 <View style={s.entriesSection}>
                   {entries.map((item) => (

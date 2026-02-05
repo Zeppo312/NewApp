@@ -19,6 +19,8 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { getSampleRecipeImage, RECIPE_SAMPLES } from '@/lib/recipes-samples';
 import { fetchRecipes, RecipeRecord } from '@/lib/recipes';
 import TextInputOverlay from '@/components/modals/TextInputOverlay';
+import { Colors } from '@/constants/Colors';
+import { useColorScheme } from '@/hooks/useColorScheme';
 
 // Typ-Definitionen
 type ActivityType = 'feeding' | 'diaper' | 'other';
@@ -63,8 +65,23 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   onDelete,
   initialData,
 }) => {
-  // Theme und Farben
-  const theme = {
+  const colorScheme = useColorScheme() ?? 'light';
+  const isDark = colorScheme === 'dark';
+
+  // Theme und Farben - angepasst für Dark Mode
+  const theme = isDark ? {
+    background: Colors.dark.background,
+    modalBackground: 'rgba(45, 37, 34, 0.98)', // Dark background
+    text: Colors.dark.text, // Light text for contrast
+    textSecondary: Colors.dark.textTertiary, // Lighter gray for subtitles
+    primary: '#4A90E2', // Solid blue for selected bottle
+    accent: '#E5B9A0',  // Warm orange for save button
+    lightGray: 'rgba(60, 60, 60, 0.8)', // Dark gray for unselected buttons
+    mediumGray: 'rgba(80, 80, 80, 0.5)',
+    green: '#38A169', // Solid green for BOTH
+    orange: '#F5A623', // Orange for Beikost
+    purple: '#9B59B6', // Solid purple
+  } : {
     background: '#F4F1ED',
     modalBackground: 'rgba(255, 255, 255, 0.95)', // Brighter background
     text: '#333333', // Dark text for contrast

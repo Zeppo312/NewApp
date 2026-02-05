@@ -3,7 +3,7 @@ import { View, StyleSheet, TouchableOpacity, Animated, Easing } from 'react-nati
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { Colors } from '@/constants/Colors';
-import { useColorScheme } from '@/hooks/useColorScheme';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { DailyEntry } from '@/lib/baby';
 import { Swipeable } from 'react-native-gesture-handler';
@@ -18,8 +18,16 @@ interface ActivityCardProps {
 }
 
 const ActivityCard: React.FC<ActivityCardProps> = ({ entry, onDelete, onEdit, marginHorizontal = 16 }) => {
-  const colorScheme = useColorScheme() ?? 'light';
+  // Adaptive Farben für Dark Mode (basierend auf Hintergrundbild-Einstellung)
+  const adaptiveColors = useAdaptiveColors();
+  const colorScheme = adaptiveColors.effectiveScheme;
   const theme = Colors[colorScheme];
+  const isDark = colorScheme === 'dark' || adaptiveColors.isDarkBackground;
+  // Im Dark Mode alle Texte hell/weiß
+  const textColor = isDark ? Colors.dark.textPrimary : '#7D5A50';
+  const secondaryTextColor = isDark ? Colors.dark.textSecondary : '#333';
+  const tertiaryTextColor = isDark ? Colors.dark.textTertiary : '#666666';
+  const badgeTextColor = isDark ? Colors.dark.textPrimary : '#5E3DB3';
   const [expanded, setExpanded] = useState(false);
   const [pressed, setPressed] = useState(false);
 
@@ -287,7 +295,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({ entry, onDelete, onEdit, ma
 
               <View style={styles.titleContainer}>
                 <View style={styles.titleRow}>
-                  <ThemedText style={styles.title}>{detail.label}</ThemedText>
+                  <ThemedText style={[styles.title, { color: textColor }]}>{detail.label}</ThemedText>
 
                   <Animated.View
                     style={{
@@ -308,17 +316,17 @@ const ActivityCard: React.FC<ActivityCardProps> = ({ entry, onDelete, onEdit, ma
                 </View>
                 {recipeNote ? (
                   <View style={styles.badgeRow}>
-                    <ThemedText style={styles.badgeText}>🥄 BLW: {recipeNote}</ThemedText>
+                    <ThemedText style={[styles.badgeText, { color: badgeTextColor }]}>🥄 BLW: {recipeNote}</ThemedText>
                   </View>
                 ) : null}
                 {weightDateLabel ? (
                   <View style={styles.badgeRow}>
-                    <ThemedText style={styles.badgeText}>📅 {weightDateLabel}</ThemedText>
+                    <ThemedText style={[styles.badgeText, { color: badgeTextColor }]}>📅 {weightDateLabel}</ThemedText>
                   </View>
                 ) : null}
                 {showNotesBadge ? (
                   <View style={styles.badgeRow}>
-                    <ThemedText style={styles.badgeText}>📝 {notesWithoutRecipe}</ThemedText>
+                    <ThemedText style={[styles.badgeText, { color: badgeTextColor }]}>📝 {notesWithoutRecipe}</ThemedText>
                   </View>
                 ) : null}
 
@@ -326,17 +334,17 @@ const ActivityCard: React.FC<ActivityCardProps> = ({ entry, onDelete, onEdit, ma
                 {(entry.start_time || entry.end_time || duration > 0) && (
                 <View style={styles.timeRowTop}>
                   <View style={styles.timePill}>
-                    <ThemedText style={styles.timePillText}>Start {entry.start_time && formatTime(entry.start_time)}</ThemedText>
+                    <ThemedText style={[styles.timePillText, { color: secondaryTextColor }]}>Start {entry.start_time && formatTime(entry.start_time)}</ThemedText>
                   </View>
                   {entry.end_time && (
                     <View style={[styles.timePill, { marginLeft: 6 }]}>
-                      <ThemedText style={styles.timePillText}>Ende {formatTime(entry.end_time)}</ThemedText>
+                      <ThemedText style={[styles.timePillText, { color: secondaryTextColor }]}>Ende {formatTime(entry.end_time)}</ThemedText>
                     </View>
                   )}
 
                  {duration > 0 && (
                     <View style={[styles.timePill, { marginLeft: 6, backgroundColor: 'rgba(94,61,179,0.18)', borderColor: 'rgba(94,61,179,0.35)' }]}>
-                      <ThemedText style={[styles.timePillText, { fontWeight: '700' }]}>{duration} Min</ThemedText>
+                      <ThemedText style={[styles.timePillText, { fontWeight: '700', color: secondaryTextColor }]}>{duration} Min</ThemedText>
                     </View>
                   )}
                 </View>
@@ -398,7 +406,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#7D5A50',
+    // color wird dynamisch gesetzt
     textShadowColor: 'rgba(0,0,0,0.06)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 1,
@@ -427,7 +435,7 @@ const styles = StyleSheet.create({
   },
   time: {
     fontSize: 13,
-    color: '#666666',
+    // color wird dynamisch gesetzt
   },
   timePill: {
     flexDirection: 'row',
@@ -442,16 +450,16 @@ const styles = StyleSheet.create({
   timePillText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#333'
+    // color wird dynamisch gesetzt
   },
   timeSeparator: {
     fontSize: 13,
     marginHorizontal: 4,
-    color: '#666666',
+    // color wird dynamisch gesetzt
   },
   duration: {
     fontSize: 13,
-    color: '#666666',
+    // color wird dynamisch gesetzt
   },
   notesContainer: {
     overflow: 'hidden',
@@ -468,12 +476,12 @@ const styles = StyleSheet.create({
   },
   detailLabel: {
     fontSize: 12,
-    color: '#666',
+    // color wird dynamisch gesetzt
   },
   detailValue: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#333',
+    // color wird dynamisch gesetzt
   },
   actionRow: {
     flexDirection: 'row',

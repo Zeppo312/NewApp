@@ -19,7 +19,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { Colors } from '@/constants/Colors';
-import { useColorScheme } from '@/hooks/useColorScheme';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -155,6 +155,13 @@ const StatusMetricsBar = ({
   statsPage,
   onPageChange,
 }: StatusMetricsBarProps) => {
+  // Adaptive Farben für Dark Mode
+  const adaptiveColors = useAdaptiveColors();
+  const colorScheme = adaptiveColors.effectiveScheme;
+  const isDark = colorScheme === 'dark' || adaptiveColors.isDarkBackground;
+  const textPrimary = isDark ? Colors.dark.textPrimary : PRIMARY;
+  const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
+
   const statsPageCount = 3;
   const statsScrollRef = useRef<ScrollView>(null);
   const [autoScrollEnabled, setAutoScrollEnabled] = useState(true);
@@ -357,9 +364,9 @@ const StatusMetricsBar = ({
             >
               <View style={styles.kpiHeaderRow}>
                 <IconSymbol name="moon.fill" size={12} color="#8E4EC6" />
-                <Text style={styles.kpiTitle}>{dayLabel}</Text>
+                <Text style={[styles.kpiTitle, { color: textSecondary }]}>{dayLabel}</Text>
               </View>
-              <Text style={[styles.kpiValue, styles.kpiValueCentered]}>{minutesToHMM(stats.totalMinutes)}</Text>
+              <Text style={[styles.kpiValue, styles.kpiValueCentered, { color: textPrimary }]}>{minutesToHMM(stats.totalMinutes)}</Text>
             </GlassCard>
 
             <GlassCard
@@ -370,9 +377,9 @@ const StatusMetricsBar = ({
             >
               <View style={styles.kpiHeaderRow}>
                 <IconSymbol name="zzz" size={12} color="#FF8C42" />
-                <Text style={styles.kpiTitle}>Naps</Text>
+                <Text style={[styles.kpiTitle, { color: textSecondary }]}>Naps</Text>
               </View>
-              <Text style={[styles.kpiValue, styles.kpiValueCentered]}>{stats.napsCount}</Text>
+              <Text style={[styles.kpiValue, styles.kpiValueCentered, { color: textPrimary }]}>{stats.napsCount}</Text>
             </GlassCard>
           </View>
 
@@ -385,9 +392,9 @@ const StatusMetricsBar = ({
             >
               <View style={styles.kpiHeaderRow}>
                 <IconSymbol name="clock.fill" size={12} color="#A8C4A2" />
-                <Text style={styles.kpiTitle}>Längster</Text>
+                <Text style={[styles.kpiTitle, { color: textSecondary }]}>Längster</Text>
               </View>
-              <Text style={[styles.kpiValue, styles.kpiValueCentered]}>{minutesToHMM(stats.longestStretch)}</Text>
+              <Text style={[styles.kpiValue, styles.kpiValueCentered, { color: textPrimary }]}>{minutesToHMM(stats.longestStretch)}</Text>
             </GlassCard>
 
             <GlassCard
@@ -398,9 +405,9 @@ const StatusMetricsBar = ({
             >
               <View style={styles.kpiHeaderRow}>
                 <IconSymbol name="chart.line.uptrend.xyaxis" size={12} color="#FF9B9B" />
-                <Text style={styles.kpiTitle}>Score</Text>
+                <Text style={[styles.kpiTitle, { color: textSecondary }]}>Score</Text>
               </View>
-              <Text style={[styles.kpiValue, styles.kpiValueCentered]}>{stats.score}%</Text>
+              <Text style={[styles.kpiValue, styles.kpiValueCentered, { color: textPrimary }]}>{stats.score}%</Text>
             </GlassCard>
           </View>
         </View>
@@ -415,17 +422,17 @@ const StatusMetricsBar = ({
             >
               <View style={styles.kpiHeaderRow}>
                 <IconSymbol name="clock.badge" size={12} color="#8E4EC6" />
-                <Text style={styles.kpiTitle}>Nächstes Fenster</Text>
+                <Text style={[styles.kpiTitle, { color: textSecondary }]}>Nächstes Fenster</Text>
                 {(hasPersonalization || confidenceLevel) && (
                   <View style={styles.predictionMetaInline}>
                     {hasPersonalization && (
                       <View style={styles.predictionBadge}>
-                        <Text style={styles.predictionBadgeText}>✨ abgestimmt</Text>
+                        <Text style={[styles.predictionBadgeText, { color: textSecondary }]}>✨ abgestimmt</Text>
                       </View>
                     )}
                     {confidenceLevel && (
                       <View style={styles.predictionBadge}>
-                        <Text style={styles.predictionBadgeText}>{confidenceDot} {confidenceLabel}</Text>
+                        <Text style={[styles.predictionBadgeText, { color: textSecondary }]}>{confidenceDot} {confidenceLabel}</Text>
                       </View>
                     )}
                   </View>
@@ -433,15 +440,15 @@ const StatusMetricsBar = ({
               </View>
               {sleepPrediction && !activeSleepEntry ? (
                 <>
-                  <Text style={[styles.kpiValue, styles.kpiValueCentered, { fontSize: 16 }]}>
+                  <Text style={[styles.kpiValue, styles.kpiValueCentered, { fontSize: 16, color: textPrimary }]}>
                     {sleepPrediction.earliest.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
                     {' – '}
                     {sleepPrediction.latest.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
                   </Text>
-                  <Text style={styles.kpiSub}>{countdownText}</Text>
+                  <Text style={[styles.kpiSub, { color: textSecondary }]}>{countdownText}</Text>
                 </>
               ) : (
-                <Text style={[styles.kpiValue, styles.kpiValueCentered]}>
+                <Text style={[styles.kpiValue, styles.kpiValueCentered, { color: textPrimary }]}>
                   {activeSleepEntry ? '💤' : '—'}
                 </Text>
               )}
@@ -457,9 +464,9 @@ const StatusMetricsBar = ({
             >
               <View style={styles.kpiHeaderRow}>
                 <Text style={{ fontSize: 14 }}>{tirednessLevel.emoji}</Text>
-                <Text style={styles.kpiTitle}>Müdigkeit</Text>
+                <Text style={[styles.kpiTitle, { color: textSecondary }]}>Müdigkeit</Text>
               </View>
-              <Text style={[styles.kpiValue, styles.kpiValueCentered, { fontSize: 14 }]}>
+              <Text style={[styles.kpiValue, styles.kpiValueCentered, { fontSize: 14, color: textPrimary }]}>
                 {tirednessLevel.label}
               </Text>
             </GlassCard>
@@ -472,9 +479,9 @@ const StatusMetricsBar = ({
             >
               <View style={styles.kpiHeaderRow}>
                 <IconSymbol name="lightbulb.fill" size={12} color="#A8C4A2" />
-                <Text style={styles.kpiTitle}>Grund</Text>
+                <Text style={[styles.kpiTitle, { color: textSecondary }]}>Grund</Text>
               </View>
-              <Text style={[styles.kpiValue, styles.kpiValueCentered, { fontSize: 11, lineHeight: 14 }]} numberOfLines={2}>
+              <Text style={[styles.kpiValue, styles.kpiValueCentered, { fontSize: 11, lineHeight: 14, color: textPrimary }]} numberOfLines={2}>
                 {reasoningText}
               </Text>
               </GlassCard>
@@ -492,9 +499,9 @@ const StatusMetricsBar = ({
             >
               <View style={styles.kpiHeaderRow}>
                 <IconSymbol name="chart.xyaxis.line" size={12} color="#FF8C42" />
-                <Text style={styles.kpiTitle}>Verlauf</Text>
+                <Text style={[styles.kpiTitle, { color: textSecondary }]}>Verlauf</Text>
               </View>
-              <Text style={[styles.kpiValue, styles.kpiValueCentered, { fontSize: 10, lineHeight: 13 }]} numberOfLines={3}>
+              <Text style={[styles.kpiValue, styles.kpiValueCentered, { fontSize: 10, lineHeight: 13, color: textPrimary }]} numberOfLines={3}>
                 {historyText}
               </Text>
             </GlassCard>
@@ -507,9 +514,9 @@ const StatusMetricsBar = ({
             >
               <View style={styles.kpiHeaderRow}>
                 <IconSymbol name="exclamationmark.triangle.fill" size={12} color="#FF9B9B" />
-                <Text style={styles.kpiTitle}>Hinweis</Text>
+                <Text style={[styles.kpiTitle, { color: textSecondary }]}>Hinweis</Text>
               </View>
-              <Text style={[styles.kpiValue, styles.kpiValueCentered, { fontSize: 11, lineHeight: 14 }]} numberOfLines={2}>
+              <Text style={[styles.kpiValue, styles.kpiValueCentered, { fontSize: 11, lineHeight: 14, color: textPrimary }]} numberOfLines={2}>
                 {hintText}
               </Text>
             </GlassCard>
@@ -649,8 +656,15 @@ interface ManualEntryData {
 
 
 export default function SleepTrackerScreen() {
-  const colorScheme = useColorScheme() ?? 'light';
+  // Verwende useAdaptiveColors für korrekte Farben basierend auf Hintergrundbild
+  const adaptiveColors = useAdaptiveColors();
+  const colorScheme = adaptiveColors.effectiveScheme;
   const theme = Colors[colorScheme];
+  const isDark = colorScheme === 'dark' || adaptiveColors.isDarkBackground;
+
+  // Dark Mode angepasste Farben
+  const textPrimary = isDark ? Colors.dark.textPrimary : '#6B4C3B';
+  const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
   const router = useRouter();
   const { user } = useAuth();
   const { activeBackend } = useBackend();
@@ -1693,7 +1707,7 @@ export default function SleepTrackerScreen() {
             }}
             activeOpacity={0.85}
           >
-            <Text style={[styles.topTabText, selectedTab === tab && styles.activeTopTabText]}>
+            <Text style={[styles.topTabText, { color: textSecondary }, selectedTab === tab && styles.activeTopTabText]}>
               {tab === 'day' ? 'Tag' : tab === 'week' ? 'Woche' : 'Monat'}
             </Text>
           </TouchableOpacity>
@@ -1745,7 +1759,7 @@ export default function SleepTrackerScreen() {
               <Text
                 style={[
                   styles.centralTime,
-                  { color: '#6B4C3B', fontWeight: '800' },
+                  { color: textPrimary, fontWeight: '800' },
                 ]}
               >
                 {activeSleepEntry
@@ -1767,25 +1781,25 @@ export default function SleepTrackerScreen() {
 
             <View pointerEvents="none" style={styles.lowerContent}>
               {activeSleepEntry && (
-                <Text style={[styles.centralStatus, { color: '#6B4C3B', fontWeight: '700' }]}>
+                <Text style={[styles.centralStatus, { color: textPrimary, fontWeight: '700' }]}>
                   Schläft
                 </Text>
               )}
               {activeSleepEntry ? (
-                <Text style={[styles.centralHint, { color: '#7D5A50', fontWeight: '500' }]}>
+                <Text style={[styles.centralHint, { color: textSecondary, fontWeight: '500' }]}>
                   Seit {new Date(activeSleepEntry.start_time).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
                 </Text>
               ) : predictionLoading ? (
-                <Text style={[styles.centralHint, { color: '#7D5A50', fontWeight: '500' }]}>
+                <Text style={[styles.centralHint, { color: textSecondary, fontWeight: '500' }]}>
                   Schlaffenster wird berechnet...
                 </Text>
               ) : sleepPrediction ? (
-                <Text style={[styles.centralHintPrimary, { color: '#6B4C3B' }]}>
+                <Text style={[styles.centralHintPrimary, { color: textPrimary }]}>
                   Nächstes Schlaffenster{'\n'}
                   {formatClockTime(sleepPrediction.earliest)} – {formatClockTime(sleepPrediction.latest)}
                 </Text>
               ) : (
-                <Text style={[styles.centralHint, { color: '#7D5A50', fontWeight: '500' }]}>
+                <Text style={[styles.centralHint, { color: textSecondary, fontWeight: '500' }]}>
                   {predictionError || 'Bereit für den nächsten Schlaf'}
                 </Text>
               )}
@@ -1815,8 +1829,8 @@ export default function SleepTrackerScreen() {
               <View style={[styles.iconContainer, { backgroundColor: 'rgba(255, 140, 160, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.6)', shadowColor: 'rgba(255, 255, 255, 0.3)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.12, shadowRadius: 2, elevation: 4 }]}>
                 <IconSymbol name="stop.fill" size={28} color="#FFFFFF" />
               </View>
-              <Text style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: '#7D5A50', fontWeight: '700' }]}>Schlaf beenden</Text>
-              <Text style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: '#7D5A50', fontWeight: '500' }]}>Timer stoppen</Text>
+              <Text style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>Schlaf beenden</Text>
+              <Text style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>Timer stoppen</Text>
             </View>
           </BlurView>
         </TouchableOpacity>
@@ -1835,8 +1849,8 @@ export default function SleepTrackerScreen() {
                 <View style={[styles.iconContainer, { backgroundColor: 'rgba(142, 78, 198, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.6)', shadowColor: 'rgba(255, 255, 255, 0.3)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.12, shadowRadius: 2, elevation: 4 }]}>
                   <IconSymbol name="moon.fill" size={28} color="#FFFFFF" />
                 </View>
-                <Text style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: '#7D5A50', fontWeight: '700' }]}>Schlaf starten</Text>
-                <Text style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: '#7D5A50', fontWeight: '500' }]}>Timer beginnen</Text>
+                <Text style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>Schlaf starten</Text>
+                <Text style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>Timer beginnen</Text>
               </View>
             </BlurView>
           </TouchableOpacity>
@@ -1855,8 +1869,8 @@ export default function SleepTrackerScreen() {
                 <View style={[styles.iconContainer, { backgroundColor: 'rgba(168, 196, 193, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.6)', shadowColor: 'rgba(255, 255, 255, 0.3)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.12, shadowRadius: 2, elevation: 4 }]}>
                   <IconSymbol name="plus.circle.fill" size={28} color="#FFFFFF" />
                 </View>
-                <Text style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: '#7D5A50', fontWeight: '700' }]}>Manuell</Text>
-                <Text style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: '#7D5A50', fontWeight: '500' }]}>Eintrag hinzufügen</Text>
+                <Text style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>Manuell</Text>
+                <Text style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>Eintrag hinzufügen</Text>
               </View>
             </BlurView>
           </TouchableOpacity>
@@ -1983,12 +1997,12 @@ export default function SleepTrackerScreen() {
               setWeekOffset(o => o - 1);
             }}
           >
-            <Text style={styles.weekNavButtonText}>‹</Text>
+            <Text style={[styles.weekNavButtonText, { color: textSecondary }]}>‹</Text>
           </TouchableOpacity>
 
           <View style={styles.weekHeaderCenter}>
-            <Text style={styles.weekHeaderTitle}>Wochenübersicht</Text>
-            <Text style={styles.weekHeaderSubtitle}>
+            <Text style={[styles.weekHeaderTitle, { color: textSecondary }]}>Wochenübersicht</Text>
+            <Text style={[styles.weekHeaderSubtitle, { color: textSecondary }]}>
               {weekStart.toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })} - {weekEnd.toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })}
             </Text>
               </View>
@@ -2001,13 +2015,13 @@ export default function SleepTrackerScreen() {
               setWeekOffset(o => o + 1);
             }}
           >
-            <Text style={styles.weekNavButtonText}>›</Text>
+            <Text style={[styles.weekNavButtonText, { color: textSecondary }]}>›</Text>
           </TouchableOpacity>
         </View>
 
         {/* Balkendiagramm - Design Guide konform mit Liquid Glass */}
         <LiquidGlassCard style={styles.chartGlassCard}>
-          <Text style={styles.chartTitle}>Schlafzeiten dieser Woche</Text>
+          <Text style={[styles.chartTitle, { color: textSecondary }]}>Schlafzeiten dieser Woche</Text>
 
           {/* feste Gesamtbreite = WEEK_CONTENT_WIDTH (wie Timeline) */}
           <View style={[styles.chartArea, { width: WEEK_CONTENT_WIDTH, alignSelf: 'center' }]}>
@@ -2046,8 +2060,8 @@ export default function SleepTrackerScreen() {
                   </View>
 
                   <View style={[styles.chartLabelContainer, { width: WEEK_COL_WIDTH + extra }]}>
-                    <Text allowFontScaling={false} style={styles.chartLabel}>{['Mo','Di','Mi','Do','Fr','Sa','So'][i]}</Text>
-                    <Text allowFontScaling={false} style={styles.chartValue}>
+                    <Text allowFontScaling={false} style={[styles.chartLabel, { color: textSecondary }]}>{['Mo','Di','Mi','Do','Fr','Sa','So'][i]}</Text>
+                    <Text allowFontScaling={false} style={[styles.chartValue, { color: textSecondary }]}>
                       {hours > 24 ? '24h+' : `${hours}h`}
                     </Text>
                   </View>
@@ -2060,22 +2074,22 @@ export default function SleepTrackerScreen() {
         {/* Wochenzusammenfassung - Design Guide konform */}
         <LiquidGlassCard style={styles.weekSummaryCard}>
           <View style={styles.summaryInner}>
-            <Text style={styles.summaryTitle}>Wochenzusammenfassung</Text>
+            <Text style={[styles.summaryTitle, { color: textSecondary }]}>Wochenzusammenfassung</Text>
             <View style={styles.summaryStats}>
                 <View style={styles.statItem}>
                   <Text style={styles.statEmoji}>🌙</Text>
-                  <Text style={styles.statValue}>{Math.round(nightWeekMins / 60)}h</Text>
-                  <Text style={styles.statLabel}>Nachtschlaf</Text>
+                  <Text style={[styles.statValue, { color: textSecondary }]}>{Math.round(nightWeekMins / 60)}h</Text>
+                  <Text style={[styles.statLabel, { color: textSecondary }]}>Nachtschlaf</Text>
                 </View>
                 <View style={styles.statItem}>
                   <Text style={styles.statEmoji}>☀️</Text>
-                  <Text style={styles.statValue}>{Math.round(dayWeekMins / 60)}h</Text>
-                  <Text style={styles.statLabel}>Tagschlaf</Text>
+                  <Text style={[styles.statValue, { color: textSecondary }]}>{Math.round(dayWeekMins / 60)}h</Text>
+                  <Text style={[styles.statLabel, { color: textSecondary }]}>Tagschlaf</Text>
                 </View>
                 <View style={styles.statItem}>
                   <Text style={styles.statEmoji}>⭐</Text>
-                  <Text style={styles.statValue}>{Math.round(totalWeekMins / 7 / 60)}h</Text>
-                  <Text style={styles.statLabel}>Ø pro Tag</Text>
+                  <Text style={[styles.statValue, { color: textSecondary }]}>{Math.round(totalWeekMins / 7 / 60)}h</Text>
+                  <Text style={[styles.statLabel, { color: textSecondary }]}>Ø pro Tag</Text>
                 </View>
             </View>
           </View>
@@ -2216,7 +2230,7 @@ export default function SleepTrackerScreen() {
         case 'poor':      // <4h
           return { bg: 'rgba(229,62,62,0.18)',  text: '#9B2C2C', border: 'rgba(255,255,255,0.55)' }; // rot
         default:
-          return { bg: 'rgba(255,255,255,0.10)', text: '#7D5A50', border: 'rgba(255,255,255,0.35)' }; // glas neutral
+          return { bg: 'rgba(255,255,255,0.10)', text: textSecondary, border: 'rgba(255,255,255,0.35)' }; // glas neutral
       }
     };
 
@@ -2231,11 +2245,11 @@ export default function SleepTrackerScreen() {
               setMonthOffset(o => o - 1);
             }}
           >
-            <Text style={styles.monthNavButtonText}>‹</Text>
+            <Text style={[styles.monthNavButtonText, { color: textSecondary }]}>‹</Text>
           </TouchableOpacity>
 
           <View style={styles.monthHeaderCenter}>
-            <Text style={styles.monthHeaderTitle}>
+            <Text style={[styles.monthHeaderTitle, { color: textSecondary }]}>
               {refMonthDate.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' })}
             </Text>
           </View>
@@ -2248,13 +2262,13 @@ export default function SleepTrackerScreen() {
               setMonthOffset(o => o + 1);
             }}
           >
-            <Text style={styles.monthNavButtonText}>›</Text>
+            <Text style={[styles.monthNavButtonText, { color: textSecondary }]}>›</Text>
           </TouchableOpacity>
         </View>
 
         {/* Kalender-Block mit exakt gleicher Innenbreite wie Week-Chart */}
         <LiquidGlassCard style={styles.chartGlassCard}>
-          <Text style={styles.chartTitle}>Schlafkalender</Text>
+          <Text style={[styles.chartTitle, { color: textSecondary }]}>Schlafkalender</Text>
           <View style={{ width: WEEK_CONTENT_WIDTH, alignSelf: 'center', paddingVertical: 16 }}>
             {/* Wochentags-Header mit exakten Spaltenbreiten */}
             <View style={styles.weekdayHeader}>
@@ -2269,7 +2283,7 @@ export default function SleepTrackerScreen() {
                       alignItems: 'center',
                     }}
                   >
-                    <Text style={styles.weekdayLabel}>{label}</Text>
+                    <Text style={[styles.weekdayLabel, { color: textSecondary }]}>{label}</Text>
                   </View>
                 );
               })}
@@ -2389,7 +2403,7 @@ export default function SleepTrackerScreen() {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={handleRefresh}
-              colors={['#7D5A50']}
+              colors={[textSecondary]}
               tintColor={theme.text}
             />
           }
@@ -2409,11 +2423,11 @@ export default function SleepTrackerScreen() {
                     goPrevDay();
                   }}
                 >
-                  <Text style={styles.weekNavButtonText}>‹</Text>
+                  <Text style={[styles.weekNavButtonText, { color: textSecondary }]}>‹</Text>
                 </TouchableOpacity>
                 <View style={styles.weekHeaderCenter}>
-                  <Text style={styles.weekHeaderTitle}>Tagesansicht</Text>
-                  <Text style={styles.weekHeaderSubtitle}>
+                  <Text style={[styles.weekHeaderTitle, { color: textSecondary }]}>Tagesansicht</Text>
+                  <Text style={[styles.weekHeaderSubtitle, { color: textSecondary }]}>
                     {isSameDay(selectedDate, today)
                       ? new Date().toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long' })
                       : selectedDate.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long' })}
@@ -2427,7 +2441,7 @@ export default function SleepTrackerScreen() {
                     goNextDay();
                   }}
                 >
-                  <Text style={styles.weekNavButtonText}>›</Text>
+                  <Text style={[styles.weekNavButtonText, { color: textSecondary }]}>›</Text>
                 </TouchableOpacity>
               </View>
 
@@ -2438,7 +2452,7 @@ export default function SleepTrackerScreen() {
 
               {/* Schlaferfassung Section - nur in Tag-Ansicht */}
               <View style={styles.sleepCaptureSection}>
-                <Text style={[styles.sectionTitle, styles.sectionTitleTight]}>Schlaferfassung</Text>
+                <Text style={[styles.sectionTitle, styles.sectionTitleTight, { color: textSecondary }]}>Schlaferfassung</Text>
 
                 {/* Action Buttons - nur in Tag-Ansicht */}
           <ActionButtons />
@@ -2446,7 +2460,7 @@ export default function SleepTrackerScreen() {
 
               {/* Timeline Section - nur in Tag-Ansicht */}
             <View style={styles.timelineSection}>
-              <Text style={[styles.sectionTitle, styles.sectionTitleTight]}>Timeline</Text>
+              <Text style={[styles.sectionTitle, styles.sectionTitleTight, { color: textSecondary }]}>Timeline</Text>
 
               {/* Sleep Entries - Timeline Style like daily_old.tsx - nur in Tag-Ansicht */}
               <View style={styles.entriesContainer}>
@@ -2469,7 +2483,7 @@ export default function SleepTrackerScreen() {
           {dayEntries.length === 0 && !isLoading && (
             <LiquidGlassCard style={styles.emptyState}>
               <Text style={styles.emptyEmoji}>💤</Text>
-              <Text style={styles.emptyTitle}>Keine Einträge für diesen Tag</Text>
+              <Text style={[styles.emptyTitle, { color: textSecondary }]}>Keine Einträge für diesen Tag</Text>
               <Text style={styles.emptySubtitle}>
                 {sleepEntries.length > 0
                   ? 'Wechsle das Datum oder springe zum letzten Eintrag.'
@@ -2483,7 +2497,7 @@ export default function SleepTrackerScreen() {
                     jumpToLatestEntry();
                   }}
                 >
-                  <Text style={styles.actionButtonText}>Zum letzten Eintrag</Text>
+                  <Text style={[styles.actionButtonText, { color: textSecondary }]}>Zum letzten Eintrag</Text>
                 </TouchableOpacity>
               )}
                 <TouchableOpacity
@@ -2494,7 +2508,7 @@ export default function SleepTrackerScreen() {
                     setShowInputModal(true);
                   }}
                 >
-                <Text style={styles.actionButtonText}>Manuell hinzufügen</Text>
+                <Text style={[styles.actionButtonText, { color: textSecondary }]}>Manuell hinzufügen</Text>
               </TouchableOpacity>
             </LiquidGlassCard>
           )}
@@ -2516,8 +2530,8 @@ export default function SleepTrackerScreen() {
                   <View style={[styles.iconContainer, { backgroundColor: 'rgba(168, 196, 193, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.6)', shadowColor: 'rgba(255, 255, 255, 0.3)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.12, shadowRadius: 2, elevation: 4 }]}>
                     <IconSymbol name="plus.circle.fill" size={28} color="#FFFFFF" />
                   </View>
-                  <Text style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: '#7D5A50', fontWeight: '700' }]}>Manuell</Text>
-                  <Text style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: '#7D5A50', fontWeight: '500' }]}>Eintrag hinzufügen</Text>
+                  <Text style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>Manuell</Text>
+                  <Text style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>Eintrag hinzufügen</Text>
                 </View>
               </BlurView>
             </TouchableOpacity>
@@ -2563,7 +2577,7 @@ export default function SleepTrackerScreen() {
                 </TouchableOpacity>
 
                 <View style={styles.headerCenter}>
-                  <Text style={styles.modalTitle}>
+                  <Text style={[styles.modalTitle, { color: textSecondary }]}>
                     {editingEntry ? 'Schlaf bearbeiten' : 'Schlaf hinzufügen'}
                   </Text>
                   <Text style={styles.modalSubtitle}>
@@ -2592,15 +2606,15 @@ export default function SleepTrackerScreen() {
                     
                     {/* Zeit Sektion */}
                     <View style={styles.section}>
-                      <Text style={styles.sectionTitle}>⏰ Zeitraum</Text>
+                      <Text style={[styles.sectionTitle, { color: textSecondary }]}>⏰ Zeitraum</Text>
                       
                       <View style={styles.timeRow}>
-                        <TouchableOpacity 
+                        <TouchableOpacity
                           style={styles.timeButton}
                           onPress={openStartPicker}
                         >
-                          <Text style={styles.timeLabel}>Start</Text>
-                          <Text style={styles.timeValue}>
+                          <Text style={[styles.timeLabel, isDark && { color: Colors.dark.textSecondary }]}>Start</Text>
+                          <Text style={[styles.timeValue, isDark && { color: Colors.dark.textPrimary }]}>
                             {sleepModalData.start_time.toLocaleString('de-DE', {
                               hour: '2-digit',
                               minute: '2-digit',
@@ -2610,12 +2624,12 @@ export default function SleepTrackerScreen() {
                           </Text>
                         </TouchableOpacity>
 
-                        <TouchableOpacity 
+                        <TouchableOpacity
                           style={styles.timeButton}
                           onPress={openEndPicker}
                         >
-                          <Text style={styles.timeLabel}>Ende</Text>
-                          <Text style={styles.timeValue}>
+                          <Text style={[styles.timeLabel, isDark && { color: Colors.dark.textSecondary }]}>Ende</Text>
+                          <Text style={[styles.timeValue, isDark && { color: Colors.dark.textPrimary }]}>
                             {sleepModalData.end_time
                               ? sleepModalData.end_time.toLocaleString('de-DE', {
                                   hour: '2-digit',
@@ -2688,7 +2702,7 @@ export default function SleepTrackerScreen() {
 
                     {/* Qualität Sektion */}
                     <View style={styles.section}>
-                      <Text style={styles.sectionTitle}>😴 Schlafqualität</Text>
+                      <Text style={[styles.sectionTitle, { color: textSecondary }]}>😴 Schlafqualität</Text>
                       <View style={styles.optionsGrid}>
                         {(['good','medium','bad'] as const).map(q => (
                           <TouchableOpacity
@@ -2713,8 +2727,8 @@ export default function SleepTrackerScreen() {
                             </Text>
                             <Text style={[
                               styles.optionLabel,
-                              { 
-                                color: sleepModalData.quality === q ? '#FFFFFF' : '#333333'
+                              {
+                                color: sleepModalData.quality === q ? '#FFFFFF' : (isDark ? Colors.dark.textPrimary : '#333333')
                               }
                             ]}>
                               {q === 'good' ? 'Gut' : q === 'medium' ? 'Mittel' : 'Schlecht'}
@@ -2726,7 +2740,7 @@ export default function SleepTrackerScreen() {
 
                     {/* Notizen Sektion */}
                     <View style={styles.section}>
-                      <Text style={styles.sectionTitle}>📝 Notizen</Text>
+                      <Text style={[styles.sectionTitle, { color: textSecondary }]}>📝 Notizen</Text>
                       <TouchableOpacity
                         style={styles.notesInput}
                         activeOpacity={0.9}
@@ -2736,7 +2750,10 @@ export default function SleepTrackerScreen() {
                         }}
                       >
                         <Text
-                          style={sleepModalData.notes.trim() ? styles.notesText : styles.notesPlaceholder}
+                          style={[
+                            sleepModalData.notes.trim() ? styles.notesText : styles.notesPlaceholder,
+                            isDark && { color: sleepModalData.notes.trim() ? Colors.dark.textPrimary : Colors.dark.textSecondary }
+                          ]}
                           numberOfLines={3}
                         >
                           {sleepModalData.notes.trim() || 'Optionale Notizen zum Schlaf...'}

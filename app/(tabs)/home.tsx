@@ -8,7 +8,7 @@ import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { Colors } from '@/constants/Colors';
-import { useColorScheme } from '@/hooks/useColorScheme';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { useAuth } from '@/contexts/AuthContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -244,8 +244,16 @@ function TipHighlightDots() {
 }
 
 export default function HomeScreen() {
-  const colorScheme = useColorScheme() ?? 'light';
+  // Verwende useAdaptiveColors für korrekte Farben basierend auf Hintergrundbild
+  const adaptiveColors = useAdaptiveColors();
+  const colorScheme = adaptiveColors.effectiveScheme;
   const theme = Colors[colorScheme];
+  const isDark = colorScheme === 'dark' || adaptiveColors.isDarkBackground;
+
+  // Dark Mode angepasste Farben
+  const textPrimary = isDark ? Colors.dark.textPrimary : '#6B4C3B';
+  const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
+  const accentPurple = isDark ? Colors.dark.textAccent : '#5E3DB3';
   const { user } = useAuth();
   const { activeBabyId } = useActiveBaby();
   const router = useRouter();
@@ -804,10 +812,10 @@ export default function HomeScreen() {
 
             <View style={styles.greetingHeader}>
               <View>
-                <ThemedText style={[styles.greeting, styles.liquidGlassText, { color: '#6B4C3B' }]}>
+                <ThemedText adaptive={false} style={[styles.greeting, styles.liquidGlassText, { color: textPrimary }]}>
                   Hallo {displayName}!
                 </ThemedText>
-                <ThemedText style={[styles.dateText, styles.liquidGlassSecondaryText, { color: '#6B4C3B' }]}>
+                <ThemedText adaptive={false} style={[styles.dateText, styles.liquidGlassSecondaryText, { color: textPrimary }]}>
                   {formatDate()}
                 </ThemedText>
               </View>
@@ -826,8 +834,8 @@ export default function HomeScreen() {
                   <IconSymbol name="lightbulb.fill" size={18} color="#D6B28C" />
                 </View>
                 <View style={styles.tipContent}>
-                  <ThemedText style={styles.tipLabel}>Tipp des Tages</ThemedText>
-                  <ThemedText style={styles.tipText}>{dailyTip}</ThemedText>
+                  <ThemedText adaptive={false} style={[styles.tipLabel, { color: accentPurple }]}>Tipp des Tages</ThemedText>
+                  <ThemedText adaptive={false} style={[styles.tipText, { color: textPrimary }]}>{dailyTip}</ThemedText>
                 </View>
               </View>
             </View>
@@ -866,11 +874,11 @@ export default function HomeScreen() {
             darkColor="rgba(255, 255, 255, 0.02)"
           >
             <View style={styles.sectionTitleContainer}>
-              <ThemedText style={[styles.sectionTitle, { color: '#7D5A50', fontSize: 22 }]}>
+              <ThemedText adaptive={false} style={[styles.sectionTitle, { color: textSecondary, fontSize: 22 }]}>
                 Dein Tag im Überblick
               </ThemedText>
               <View style={styles.liquidGlassChevron}>
-                <IconSymbol name="chevron.right" size={20} color="#7D5A50" />
+                <IconSymbol name="chevron.right" size={20} color={textSecondary} />
               </View>
             </View>
 
@@ -889,13 +897,13 @@ export default function HomeScreen() {
                 <View style={styles.liquidGlassStatIcon}>
                   <Text style={styles.statEmoji}>🍼</Text>
                 </View>
-                <ThemedText style={[styles.statValue, styles.liquidGlassStatValue, {
-                  color: '#5E3DB3',
+                <ThemedText adaptive={false} style={[styles.statValue, styles.liquidGlassStatValue, {
+                  color: accentPurple,
                   textShadowColor: 'rgba(255, 255, 255, 0.8)',
                   textShadowOffset: { width: 0, height: 1 },
                   textShadowRadius: 2,
                 }]}>{todayFeedings}</ThemedText>
-                <ThemedText style={[styles.statLabel, styles.liquidGlassStatLabel, { color: '#7D5A50' }]}>Essen</ThemedText>
+                <ThemedText adaptive={false} style={[styles.statLabel, styles.liquidGlassStatLabel, { color: textSecondary }]}>Essen</ThemedText>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -912,19 +920,19 @@ export default function HomeScreen() {
                 <View style={styles.liquidGlassStatIcon}>
                   <Text style={styles.statEmoji}>💩</Text>
                 </View>
-                <ThemedText style={[styles.statValue, styles.liquidGlassStatValue, {
-                  color: '#5E3DB3',
+                <ThemedText adaptive={false} style={[styles.statValue, styles.liquidGlassStatValue, {
+                  color: accentPurple,
                   textShadowColor: 'rgba(255, 255, 255, 0.8)',
                   textShadowOffset: { width: 0, height: 1 },
                   textShadowRadius: 2,
                 }]}>{todayDiaperChanges}</ThemedText>
-                <ThemedText style={[styles.statLabel, styles.liquidGlassStatLabel, { color: '#7D5A50' }]}>Windeln</ThemedText>
+                <ThemedText adaptive={false} style={[styles.statLabel, styles.liquidGlassStatLabel, { color: textSecondary }]}>Windeln</ThemedText>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.statItem, styles.liquidGlassStatItem, { 
-                  backgroundColor: 'rgba(94, 61, 179, 0.05)', 
-                  borderColor: 'rgba(94, 61, 179, 0.15)' 
+                style={[styles.statItem, styles.liquidGlassStatItem, {
+                  backgroundColor: 'rgba(94, 61, 179, 0.05)',
+                  borderColor: 'rgba(94, 61, 179, 0.15)'
                 }]}
                 activeOpacity={0.85}
                 onPress={(event) => {
@@ -935,13 +943,13 @@ export default function HomeScreen() {
                 <View style={styles.liquidGlassStatIcon}>
                   <Text style={styles.statEmoji}>💤</Text>
                 </View>
-                <ThemedText style={[styles.statValue, styles.liquidGlassStatValue, { 
-                  color: '#5E3DB3',
+                <ThemedText adaptive={false} style={[styles.statValue, styles.liquidGlassStatValue, {
+                  color: accentPurple,
                   textShadowColor: 'rgba(255, 255, 255, 0.8)',
                   textShadowOffset: { width: 0, height: 1 },
                   textShadowRadius: 2,
                 }]}>{formatMinutes(todaySleepMinutes)}</ThemedText>
-                <ThemedText style={[styles.statLabel, styles.liquidGlassStatLabel, { color: '#7D5A50' }]}>Schlaf</ThemedText>
+                <ThemedText adaptive={false} style={[styles.statLabel, styles.liquidGlassStatLabel, { color: textSecondary }]}>Schlaf</ThemedText>
               </TouchableOpacity>
             </View>
           </ThemedView>
@@ -1015,7 +1023,7 @@ export default function HomeScreen() {
             {featuredRecommendation ? (
               <View style={styles.recommendationCard}>
                 <View style={styles.sectionTitleContainer}>
-                  <ThemedText style={[styles.sectionTitle, styles.liquidGlassText, { color: '#6B4C3B', fontSize: 22 }]}>
+                  <ThemedText adaptive={false} style={[styles.sectionTitle, styles.liquidGlassText, { color: textPrimary, fontSize: 22 }]}>
                     Lottis Empfehlungen
                   </ThemedText>
                   <View style={[styles.liquidGlassChevron, styles.recommendationHeaderSpacer]} />
@@ -1036,16 +1044,16 @@ export default function HomeScreen() {
                         />
                       ) : (
                         <View style={styles.recommendationImageFallback}>
-                          <IconSymbol name="bag.fill" size={22} color="#6B4C3B" />
+                          <IconSymbol name="bag.fill" size={22} color={textPrimary} />
                         </View>
                       )}
                     </View>
                     <View style={styles.recommendationContentPane}>
                       <View style={styles.recommendationTextWrap}>
-                        <ThemedText style={styles.recommendationTitle}>
+                        <ThemedText adaptive={false} style={[styles.recommendationTitle, { color: textPrimary }]}>
                           {featuredRecommendation.title}
                         </ThemedText>
-                        <ThemedText style={styles.recommendationDescription}>
+                        <ThemedText adaptive={false} style={[styles.recommendationDescription, { color: isDark ? Colors.dark.textSecondary : 'rgba(125, 90, 80, 0.88)' }]}>
                           {getPreviewText(featuredRecommendation.description, 10)}
                         </ThemedText>
                       </View>
@@ -1061,14 +1069,14 @@ export default function HomeScreen() {
             ) : (
               <View style={styles.recommendationEmptyWrapper}>
                 <View style={styles.sectionTitleContainer}>
-                  <ThemedText style={[styles.sectionTitle, styles.liquidGlassText, { color: '#6B4C3B', fontSize: 22 }]}>
+                  <ThemedText adaptive={false} style={[styles.sectionTitle, styles.liquidGlassText, { color: textPrimary, fontSize: 22 }]}>
                     Lottis Empfehlungen
                   </ThemedText>
                   <View style={[styles.liquidGlassChevron, styles.recommendationHeaderSpacer]} />
                 </View>
                 <View style={styles.recommendationEmpty}>
-                  <IconSymbol name="bag.fill" size={20} color="#7D5A50" />
-                  <ThemedText style={styles.recommendationEmptyText}>
+                  <IconSymbol name="bag.fill" size={20} color={textSecondary} />
+                  <ThemedText adaptive={false} style={[styles.recommendationEmptyText, { color: textSecondary }]}>
                     Noch keine Empfehlungen verfügbar.
                   </ThemedText>
                 </View>
@@ -1132,7 +1140,8 @@ export default function HomeScreen() {
             key={`overview-dot-${index}`}
             style={[
               styles.carouselDot,
-              overviewIndex === index && styles.carouselDotActive,
+              { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.25)' : 'rgba(107, 76, 59, 0.25)' },
+              overviewIndex === index && { backgroundColor: isDark ? Colors.dark.text : '#6B4C3B' },
             ]}
           />
         ))}
@@ -1144,7 +1153,7 @@ export default function HomeScreen() {
   const renderQuickAccessCards = () => {
     return (
       <View style={styles.cardsSection}>
-           <ThemedText style={[styles.cardsSectionTitle, styles.liquidGlassText, { color: '#7D5A50', fontSize: 22 }]}> 
+           <ThemedText adaptive={false} style={[styles.cardsSectionTitle, styles.liquidGlassText, { color: textSecondary, fontSize: 22 }]}>
           Schnellzugriff
         </ThemedText>
 
@@ -1164,8 +1173,8 @@ export default function HomeScreen() {
                 <View style={[styles.iconContainer, { backgroundColor: 'rgba(168, 196, 193, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
                   <IconSymbol name="fork.knife" size={28} color="#FFFFFF" />
                 </View>
-                <ThemedText style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: '#7D5A50', fontWeight: '700' }]}>BLW-Rezepte</ThemedText>
-                <ThemedText style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: '#7D5A50', fontWeight: '500' }]}>Rezepte entdecken</ThemedText>
+                <ThemedText adaptive={false} style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>BLW-Rezepte</ThemedText>
+                <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>Rezepte entdecken</ThemedText>
               </View>
             </BlurView>
           </TouchableOpacity>
@@ -1185,8 +1194,8 @@ export default function HomeScreen() {
                 <View style={[styles.iconContainer, { backgroundColor: 'rgba(255, 140, 160, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
                   <IconSymbol name="person.fill" size={28} color="#FFFFFF" />
                 </View>
-                <ThemedText style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: '#7D5A50', fontWeight: '700' }]}>Mein Baby</ThemedText>
-                <ThemedText style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: '#7D5A50', fontWeight: '500' }]}>Alle Infos & Entwicklungen</ThemedText>
+                <ThemedText adaptive={false} style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>Mein Baby</ThemedText>
+                <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>Alle Infos & Entwicklungen</ThemedText>
               </View>
             </BlurView>
           </TouchableOpacity>
@@ -1206,8 +1215,8 @@ export default function HomeScreen() {
                 <View style={[styles.iconContainer, { backgroundColor: 'rgba(200, 130, 220, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
                   <IconSymbol name="calendar" size={28} color="#FFFFFF" />
                 </View>
-                <ThemedText style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: '#7D5A50', fontWeight: '700' }]}>Planer</ThemedText>
-                <ThemedText style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: '#7D5A50', fontWeight: '500' }]}>Tagesplan & To‑dos</ThemedText>
+                <ThemedText adaptive={false} style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>Planer</ThemedText>
+                <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>Tagesplan & To‑dos</ThemedText>
               </View>
             </BlurView>
           </TouchableOpacity>
@@ -1227,8 +1236,8 @@ export default function HomeScreen() {
                 <View style={[styles.iconContainer, { backgroundColor: 'rgba(255, 180, 130, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
                   <IconSymbol name="list.bullet" size={28} color="#FFFFFF" />
                 </View>
-                <ThemedText style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: '#7D5A50', fontWeight: '700' }]}>Unser Tag</ThemedText>
-                <ThemedText style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: '#7D5A50', fontWeight: '500' }]}>Tagesaktivitäten verwalten</ThemedText>
+                <ThemedText adaptive={false} style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>Unser Tag</ThemedText>
+                <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>Tagesaktivitäten verwalten</ThemedText>
               </View>
             </BlurView>
           </TouchableOpacity>
@@ -1248,8 +1257,8 @@ export default function HomeScreen() {
                 <View style={[styles.iconContainer, { backgroundColor: 'rgba(255, 160, 180, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
                   <IconSymbol name="heart.fill" size={28} color="#FFFFFF" />
                 </View>
-                <ThemedText style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: '#7D5A50', fontWeight: '700' }]}>Mama Selfcare</ThemedText>
-                <ThemedText style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: '#7D5A50', fontWeight: '500' }]}>Nimm dir Zeit für dich</ThemedText>
+                <ThemedText adaptive={false} style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>Mama Selfcare</ThemedText>
+                <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>Nimm dir Zeit für dich</ThemedText>
               </View>
             </BlurView>
           </TouchableOpacity>
@@ -1269,8 +1278,8 @@ export default function HomeScreen() {
                 <View style={[styles.iconContainer, { backgroundColor: 'rgba(140, 190, 255, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
                   <IconSymbol name="cloud.sun.fill" size={28} color="#FFFFFF" />
                 </View>
-                <ThemedText style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: '#7D5A50', fontWeight: '700' }]}>Babywetter</ThemedText>
-                <ThemedText style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: '#7D5A50', fontWeight: '500' }]}>Aktuelle Wetterinfos</ThemedText>
+                <ThemedText adaptive={false} style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>Babywetter</ThemedText>
+                <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>Aktuelle Wetterinfos</ThemedText>
               </View>
             </BlurView>
           </TouchableOpacity>
@@ -1290,8 +1299,8 @@ export default function HomeScreen() {
                 <View style={[styles.iconContainer, { backgroundColor: 'rgba(255, 200, 120, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
                   <IconSymbol name="star.fill" size={28} color="#FFFFFF" />
                 </View>
-                <ThemedText style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: '#7D5A50', fontWeight: '700' }]}>Lottis Empfehlungen</ThemedText>
-                <ThemedText style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: '#7D5A50', fontWeight: '500' }]}>Handverlesene Produkte</ThemedText>
+                <ThemedText adaptive={false} style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>Lottis Empfehlungen</ThemedText>
+                <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>Handverlesene Produkte</ThemedText>
               </View>
             </BlurView>
           </TouchableOpacity>
@@ -1311,8 +1320,8 @@ export default function HomeScreen() {
                 <View style={[styles.iconContainer, { backgroundColor: 'rgba(130, 210, 130, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
                   <IconSymbol name="chart.line.uptrend.xyaxis" size={28} color="#FFFFFF" />
                 </View>
-                <ThemedText style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: '#7D5A50', fontWeight: '700' }]}>Gewichtskurve</ThemedText>
-                <ThemedText style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: '#7D5A50', fontWeight: '500' }]}>Gewicht tracken</ThemedText>
+                <ThemedText adaptive={false} style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>Gewichtskurve</ThemedText>
+                <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>Gewicht tracken</ThemedText>
               </View>
             </BlurView>
           </TouchableOpacity>

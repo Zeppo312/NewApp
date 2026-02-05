@@ -24,6 +24,12 @@ type BabySwitcherButtonProps = {
 const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({ size = 36 }) => {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
+  const isDark = colorScheme === 'dark';
+  const modalBgColor = isDark ? Colors.dark.cardLight : '#FFF7F3';
+  const textColor = isDark ? Colors.dark.text : '#7D5A50';
+  const subtitleColor = isDark ? Colors.dark.textTertiary : '#A8978E';
+  const inputBgColor = isDark ? Colors.dark.cardDark : '#FFFFFF';
+  const rowBgColor = isDark ? Colors.dark.cardDark : '#FFFFFF';
   const { user } = useAuth();
   const {
     babies,
@@ -120,22 +126,22 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({ size = 36 }) =>
 
       <Modal visible={isOpen} transparent animationType="fade" onRequestClose={() => setIsOpen(false)}>
         <Pressable style={styles.modalBackdrop} onPress={() => setIsOpen(false)}>
-          <Pressable style={styles.modalCard} onPress={(event) => event.stopPropagation()}>
+          <Pressable style={[styles.modalCard, { backgroundColor: modalBgColor }]} onPress={(event) => event.stopPropagation()}>
             <View style={styles.modalHeader}>
-              <ThemedText style={styles.modalTitle}>Kind auswählen</ThemedText>
+              <ThemedText style={[styles.modalTitle, { color: textColor }]}>Kind auswählen</ThemedText>
               <TouchableOpacity onPress={() => setIsOpen(false)}>
-                <IconSymbol name="xmark" size={18} color="#7D5A50" />
+                <IconSymbol name="xmark" size={18} color={textColor} />
               </TouchableOpacity>
             </View>
 
             <View style={styles.listContainer}>
               {!isLoading && babies.length === 0 && (
                 <View style={styles.emptyState}>
-                  <ThemedText style={styles.emptyStateTitle}>
+                  <ThemedText style={[styles.emptyStateTitle, { color: textColor }]}>
                     Keine Kinder gefunden.
                   </ThemedText>
                   {loadError && (
-                    <ThemedText style={styles.emptyStateHint}>
+                    <ThemedText style={[styles.emptyStateHint, { color: subtitleColor }]}>
                       Fehler: {loadError}
                     </ThemedText>
                   )}
@@ -147,7 +153,7 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({ size = 36 }) =>
                 return (
                   <TouchableOpacity
                     key={baby.id ?? `${label}-${index}`}
-                    style={[styles.babyRow, isActive && styles.babyRowActive]}
+                    style={[styles.babyRow, { backgroundColor: rowBgColor }, isActive && styles.babyRowActive]}
                     onPress={() => baby.id && handleSelectBaby(baby.id)}
                   >
                     {baby.photo_url ? (
@@ -158,14 +164,14 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({ size = 36 }) =>
                       />
                     ) : (
                       <View style={[styles.babyRowAvatar, styles.babyRowFallback]}>
-                        <ThemedText style={styles.babyRowInitial}>
+                        <ThemedText style={[styles.babyRowInitial, { color: textColor }]}>
                           {label.charAt(0).toUpperCase()}
                         </ThemedText>
                       </View>
                     )}
                     <View style={styles.babyRowText}>
-                      <ThemedText style={styles.babyRowTitle}>{label}</ThemedText>
-                      {isActive && <ThemedText style={styles.babyRowSubtitle}>Aktiv</ThemedText>}
+                      <ThemedText style={[styles.babyRowTitle, { color: textColor }]}>{label}</ThemedText>
+                      {isActive && <ThemedText style={[styles.babyRowSubtitle, { color: subtitleColor }]}>Aktiv</ThemedText>}
                     </View>
                     {isActive && (
                       <IconSymbol name="checkmark.circle.fill" size={18} color="#E9C9B6" />
@@ -175,12 +181,12 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({ size = 36 }) =>
               })}
             </View>
 
-            <View style={styles.newBabySection}>
-              <ThemedText style={styles.newBabyTitle}>Neues Kind</ThemedText>
+            <View style={[styles.newBabySection, isDark && { borderTopColor: Colors.dark.border }]}>
+              <ThemedText style={[styles.newBabyTitle, { color: textColor }]}>Neues Kind</ThemedText>
               <TextInput
-                style={styles.newBabyInput}
+                style={[styles.newBabyInput, { backgroundColor: inputBgColor, color: textColor }]}
                 placeholder="Name (optional)"
-                placeholderTextColor="#B2A8A1"
+                placeholderTextColor={subtitleColor}
                 value={newBabyName}
                 onChangeText={setNewBabyName}
               />
@@ -189,7 +195,7 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({ size = 36 }) =>
                 onPress={handleCreateBaby}
                 disabled={isCreating}
               >
-                <ThemedText style={styles.createButtonText}>
+                <ThemedText style={[styles.createButtonText, { color: textColor }]}>
                   {isCreating ? 'Wird angelegt...' : 'Kind anlegen'}
                 </ThemedText>
               </TouchableOpacity>
@@ -251,7 +257,7 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#7D5A50',
+    // color wird dynamisch gesetzt
   },
   listContainer: {
     gap: 8,
@@ -264,11 +270,11 @@ const styles = StyleSheet.create({
   emptyStateTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#7D5A50',
+    // color wird dynamisch gesetzt
   },
   emptyStateHint: {
     fontSize: 12,
-    color: '#A8978E',
+    // color wird dynamisch gesetzt
     marginTop: 4,
   },
   babyRow: {
@@ -298,7 +304,7 @@ const styles = StyleSheet.create({
   babyRowInitial: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#7D5A50',
+    // color wird dynamisch gesetzt
   },
   babyRowText: {
     flex: 1,
@@ -306,11 +312,11 @@ const styles = StyleSheet.create({
   babyRowTitle: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#7D5A50',
+    // color wird dynamisch gesetzt
   },
   babyRowSubtitle: {
     fontSize: 12,
-    color: '#A8978E',
+    // color wird dynamisch gesetzt
     marginTop: 2,
   },
   newBabySection: {
@@ -321,17 +327,16 @@ const styles = StyleSheet.create({
   newBabyTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#7D5A50',
+    // color wird dynamisch gesetzt
     marginBottom: 8,
   },
   newBabyInput: {
-    backgroundColor: '#FFFFFF',
+    // backgroundColor und color werden dynamisch gesetzt
     borderRadius: 12,
     borderWidth: 1,
     borderColor: 'rgba(125, 90, 80, 0.15)',
     paddingHorizontal: 12,
     paddingVertical: 8,
-    color: '#7D5A50',
     marginBottom: 10,
   },
   createButton: {
@@ -346,7 +351,7 @@ const styles = StyleSheet.create({
   createButtonText: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#7D5A50',
+    // color wird dynamisch gesetzt
   },
 });
 

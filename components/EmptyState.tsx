@@ -11,26 +11,27 @@ interface EmptyStateProps {
   message?: string;
 }
 
-const EmptyState: React.FC<EmptyStateProps> = ({ 
+const EmptyState: React.FC<EmptyStateProps> = ({
   type = 'day',
   message = 'Noch nichts eingetragen für heute – los geht\'s!'
 }) => {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
-  
+  const iconColor = colorScheme === 'dark' ? Colors.dark.text : '#7D5A50';
+
   // Wähle das passende Icon basierend auf dem Typ
   const getIcon = () => {
     switch (type) {
       case 'day':
-        return <IconSymbol name="moon.stars.fill" size={40} color="#7D5A50" />;
+        return <IconSymbol name="moon.stars.fill" size={40} color={iconColor} />;
       case 'timeline':
-        return <IconSymbol name="clock.fill" size={40} color="#7D5A50" />;
+        return <IconSymbol name="clock.fill" size={40} color={iconColor} />;
       case 'week':
-        return <IconSymbol name="calendar" size={40} color="#7D5A50" />;
+        return <IconSymbol name="calendar" size={40} color={iconColor} />;
       case 'month':
-        return <IconSymbol name="calendar.badge.plus" size={40} color="#7D5A50" />;
+        return <IconSymbol name="calendar.badge.plus" size={40} color={iconColor} />;
       default:
-        return <IconSymbol name="moon.stars.fill" size={40} color="#7D5A50" />;
+        return <IconSymbol name="moon.stars.fill" size={40} color={iconColor} />;
     }
   };
   
@@ -88,7 +89,7 @@ const styles = StyleSheet.create({
   hint: {
     fontSize: 14,
     marginLeft: 6,
-    color: '#7D5A50',
+    // color wird dynamisch gesetzt
   },
 });
 

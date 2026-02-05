@@ -16,6 +16,8 @@ import Header from '@/components/Header';
 export default function DiaryEntriesScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
+  const isDark = colorScheme === 'dark';
+  const textColor = isDark ? Colors.dark.text : '#7D5A50';
   const { user } = useAuth();
   const { activeBabyId } = useActiveBaby();
 
@@ -302,7 +304,7 @@ export default function DiaryEntriesScreen() {
               style={[styles.filterTab, activeFilter === 'all' && styles.activeFilterTab]}
               onPress={() => setActiveFilter('all')}
             >
-              <ThemedText style={[styles.filterText, activeFilter === 'all' && styles.activeFilterText]}>
+              <ThemedText style={[styles.filterText, { color: activeFilter === 'all' ? '#FFFFFF' : textColor }]}>
                 Alle
               </ThemedText>
             </TouchableOpacity>
@@ -311,7 +313,7 @@ export default function DiaryEntriesScreen() {
               style={[styles.filterTab, activeFilter === 'milestones' && styles.activeFilterTab]}
               onPress={() => setActiveFilter('milestones')}
             >
-              <ThemedText style={[styles.filterText, activeFilter === 'milestones' && styles.activeFilterText]}>
+              <ThemedText style={[styles.filterText, { color: activeFilter === 'milestones' ? '#FFFFFF' : textColor }]}>
                 Meilensteine
               </ThemedText>
             </TouchableOpacity>
@@ -320,7 +322,7 @@ export default function DiaryEntriesScreen() {
               style={[styles.filterTab, activeFilter === 'photos' && styles.activeFilterTab]}
               onPress={() => setActiveFilter('photos')}
             >
-              <ThemedText style={[styles.filterText, activeFilter === 'photos' && styles.activeFilterText]}>
+              <ThemedText style={[styles.filterText, { color: activeFilter === 'photos' ? '#FFFFFF' : textColor }]}>
                 Fotos
               </ThemedText>
             </TouchableOpacity>
@@ -329,7 +331,7 @@ export default function DiaryEntriesScreen() {
               style={[styles.filterTab, activeFilter === 'favorites' && styles.activeFilterTab]}
               onPress={() => setActiveFilter('favorites')}
             >
-              <ThemedText style={[styles.filterText, activeFilter === 'favorites' && styles.activeFilterText]}>
+              <ThemedText style={[styles.filterText, { color: activeFilter === 'favorites' ? '#FFFFFF' : textColor }]}>
                 Favoriten
               </ThemedText>
             </TouchableOpacity>
@@ -363,7 +365,7 @@ export default function DiaryEntriesScreen() {
         {/* Highlight-Fotos Karussell */}
         {entries.filter(entry => entry.photo_url).length > 0 && (
           <View style={styles.highlightsContainer}>
-            <ThemedText style={styles.highlightsTitle}>Highlight-Fotos:</ThemedText>
+            <ThemedText style={[styles.highlightsTitle, { color: textColor }]}>Highlight-Fotos:</ThemedText>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.highlightsScroll}>
               {entries
                 .filter(entry => entry.photo_url)

@@ -2,6 +2,8 @@ import { Text, type TextProps, StyleSheet } from 'react-native';
 
 import { useThemeColor } from '@/hooks/useThemeColor';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
+import { useColorScheme } from '@/hooks/useColorScheme';
+import { Colors } from '@/constants/Colors';
 
 export type ThemedTextProps = TextProps & {
   lightColor?: string;
@@ -22,6 +24,7 @@ export function ThemedText({
   adaptive = true, // Standardmäßig adaptiv für automatische Anpassung an Hintergrundbilder
   ...rest
 }: ThemedTextProps) {
+  const colorScheme = useColorScheme() ?? 'light';
   const themeColor = useThemeColor({ light: lightColor, dark: darkColor }, 'text');
   const adaptiveColors = useAdaptiveColors();
 
@@ -33,6 +36,9 @@ export function ThemedText({
     ? adaptiveColors.text
     : themeColor;
 
+  // Helle Link-Farbe für Dark Mode
+  const linkColor = colorScheme === 'dark' ? Colors.dark.textAccent : '#0a7ea4';
+
   return (
     <Text
       style={[
@@ -41,7 +47,7 @@ export function ThemedText({
         type === 'title' ? styles.title : undefined,
         type === 'defaultSemiBold' ? styles.defaultSemiBold : undefined,
         type === 'subtitle' ? styles.subtitle : undefined,
-        type === 'link' ? styles.link : undefined,
+        type === 'link' ? [styles.link, { color: linkColor }] : undefined,
         style,
       ]}
       {...rest}
