@@ -38,10 +38,36 @@ import Header from '@/components/Header';
 // Sleep-Tracker Design Tokens
 import { LiquidGlassCard, GLASS_OVERLAY, GLASS_OVERLAY_DARK, LAYOUT_PAD } from '@/constants/DesignGuide';
 
-const PRIMARY_TEXT = '#7D5A50';
+const PRIMARY_TEXT = '#5C4033';
+const SECONDARY_TEXT = '#7D5A50';
 const ACCENT_PURPLE = '#8E4EC6';
+const ACCENT_MINT = '#389D91';
+const ACCENT_ORANGE = '#FF8C42';
 const WARN = '#E57373';
 const TIMELINE_INSET = 8;
+
+const toRgba = (hex: string, opacity = 1) => {
+  const cleanHex = hex.replace('#', '');
+  const int = parseInt(cleanHex, 16);
+  const r = (int >> 16) & 255;
+  const g = (int >> 8) & 255;
+  const b = int & 255;
+  return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+};
+
+const lightenHex = (hex: string, amount = 0.35) => {
+  const cleanHex = hex.replace('#', '');
+  const int = parseInt(cleanHex, 16);
+  const r = (int >> 16) & 255;
+  const g = (int >> 8) & 255;
+  const b = int & 255;
+
+  const lightenChannel = (channel: number) =>
+    Math.min(255, Math.round(channel + (255 - channel) * amount));
+  const toHex = (channel: number) => channel.toString(16).padStart(2, '0');
+
+  return `#${toHex(lightenChannel(r))}${toHex(lightenChannel(g))}${toHex(lightenChannel(b))}`;
+};
 
 // Definiere Typen für die verknüpften Benutzer
 interface LinkedUser {
@@ -157,8 +183,26 @@ export default function CountdownScreen() {
   const adaptiveColors = useAdaptiveColors();
   const isDark = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
   const textPrimary = isDark ? Colors.dark.textPrimary : PRIMARY_TEXT;
-  const textSecondary = isDark ? Colors.dark.textSecondary : PRIMARY_TEXT;
+  const textSecondary = isDark ? Colors.dark.textSecondary : SECONDARY_TEXT;
   const glassOverlay = isDark ? GLASS_OVERLAY_DARK : GLASS_OVERLAY;
+
+  const accentPurple = isDark ? lightenHex(ACCENT_PURPLE) : ACCENT_PURPLE;
+  const accentMint = isDark ? lightenHex(ACCENT_MINT) : ACCENT_MINT;
+  const accentOrange = isDark ? lightenHex(ACCENT_ORANGE) : ACCENT_ORANGE;
+  const warnColor = isDark ? lightenHex(WARN) : WARN;
+
+  const cardBorderColor = isDark ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.6)';
+  const infoDividerColor = isDark ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.35)';
+  const avatarBorderColor = isDark ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.8)';
+  const badgeBorderColor = isDark ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.6)';
+  const badgeBg = isDark ? toRgba(accentPurple, 0.25) : 'rgba(142,78,198,0.15)';
+  const pillBorderColor = isDark ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.65)';
+  const pillGhostBg = isDark ? 'rgba(255,255,255,0.06)' : 'transparent';
+  const pillPrimaryBorder = isDark ? toRgba(accentPurple, 0.7) : 'rgba(255,255,255,0.7)';
+  const cardBlurTint = isDark ? 'dark' : 'light';
+  const actionPurpleBg = isDark ? toRgba(accentPurple, 0.22) : 'rgba(220,200,255,0.55)';
+  const actionMintBg = isDark ? toRgba(accentMint, 0.22) : 'rgba(168,196,193,0.6)';
+  const actionWarnBg = isDark ? toRgba(warnColor, 0.2) : 'rgba(255,180,180,0.6)';
   const { user } = useAuth();
   const { isBabyBorn, setIsBabyBorn } = useBabyStatus();
   const router = useRouter();
@@ -441,9 +485,9 @@ export default function CountdownScreen() {
             </ThemedText>
 
             <TouchableOpacity onPress={showDatepicker} activeOpacity={0.9} style={styles.fullWidthAction}>
-              <BlurView intensity={24} tint={isDark ? "dark" : "light"} style={styles.cardBlur}>
-                <View style={[styles.actionCard, { backgroundColor: 'rgba(220,200,255,0.55)' }]}>
-                  <View style={[styles.actionIcon, { backgroundColor: ACCENT_PURPLE }]}>
+              <BlurView intensity={24} tint={cardBlurTint} style={styles.cardBlur}>
+                <View style={[styles.actionCard, { backgroundColor: actionPurpleBg, borderColor: cardBorderColor }]}>
+                  <View style={[styles.actionIcon, { backgroundColor: accentPurple, borderColor: cardBorderColor }]}>
                     <IconSymbol name="calendar" size={24} color="#fff" />
                   </View>
                   <ThemedText style={[styles.actionTitle, { color: textPrimary }]}>
@@ -469,14 +513,20 @@ export default function CountdownScreen() {
                     display="spinner"
                     onChange={handleDateChange}
                     minimumDate={new Date()}
-                    textColor={colorScheme === 'dark' ? theme.text : undefined}
+                    textColor={isDark ? textPrimary : undefined}
                     style={styles.datePicker}
                   />
                   <View style={styles.modalButtonRow}>
-                    <TouchableOpacity style={[styles.pillBtn, styles.pillGhost]} onPress={handleIOSCancel}>
+                    <TouchableOpacity
+                      style={[styles.pillBtn, styles.pillGhost, { borderColor: pillBorderColor, backgroundColor: pillGhostBg }]}
+                      onPress={handleIOSCancel}
+                    >
                       <ThemedText style={[styles.pillGhostText, { color: textPrimary }]}>Abbrechen</ThemedText>
                     </TouchableOpacity>
-                    <TouchableOpacity style={[styles.pillBtn, styles.pillPrimary]} onPress={handleIOSConfirm}>
+                    <TouchableOpacity
+                      style={[styles.pillBtn, styles.pillPrimary, { backgroundColor: accentPurple, borderColor: pillPrimaryBorder }]}
+                      onPress={handleIOSConfirm}
+                    >
                       <ThemedText style={styles.pillPrimaryText}>Bestätigen</ThemedText>
                     </TouchableOpacity>
                   </View>
@@ -493,21 +543,21 @@ export default function CountdownScreen() {
           {/* Wöchentliche Infos */}
           {currentWeek && currentWeek >= 4 && (
             <LiquidGlassCard
-              style={[styles.sectionCard, isOverdue && styles.overdueBorder]}
+              style={[styles.sectionCard, isOverdue && styles.overdueBorder, isOverdue && { borderLeftColor: warnColor }]}
               intensity={26}
               overlayColor={glassOverlay}
             >
-              <ThemedText style={[styles.sectionTitle, { color: textPrimary }, isOverdue && styles.warnTitle]}>
+              <ThemedText style={[styles.sectionTitle, { color: textPrimary }, isOverdue && { color: warnColor }]}>
                 {isOverdue
                   ? `${daysOverdue} ${daysOverdue === 1 ? 'Tag' : 'Tage'} über dem ET: Was jetzt wichtig ist`
                   : `SSW ${currentWeek}: Was geschieht diese Woche?`}
               </ThemedText>
 
               {/* Baby */}
-              <View style={styles.infoBlock}>
+              <View style={[styles.infoBlock, { borderBottomColor: infoDividerColor }]}>
                 <View style={styles.infoHeader}>
-                  <View style={[styles.avatar, { backgroundColor: 'rgba(142,78,198,0.18)' }]}>
-                    <IconSymbol name="figure.child" size={18} color={ACCENT_PURPLE} />
+                  <View style={[styles.avatar, { backgroundColor: isDark ? toRgba(accentPurple, 0.2) : 'rgba(142,78,198,0.18)', borderColor: avatarBorderColor }]}>
+                    <IconSymbol name="figure.child" size={18} color={accentPurple} />
                   </View>
                   <ThemedText style={[styles.infoTitle, { color: textPrimary }]}>Beim Baby</ThemedText>
                 </View>
@@ -519,10 +569,10 @@ export default function CountdownScreen() {
               </View>
 
               {/* Mutter */}
-              <View style={styles.infoBlock}>
+              <View style={[styles.infoBlock, { borderBottomColor: infoDividerColor }]}>
                 <View style={styles.infoHeader}>
-                  <View style={[styles.avatar, { backgroundColor: 'rgba(56,157,145,0.18)' }]}>
-                    <IconSymbol name="person.fill" size={18} color="#389D91" />
+                  <View style={[styles.avatar, { backgroundColor: isDark ? toRgba(accentMint, 0.2) : 'rgba(56,157,145,0.18)', borderColor: avatarBorderColor }]}>
+                    <IconSymbol name="person.fill" size={18} color={accentMint} />
                   </View>
                   <ThemedText style={[styles.infoTitle, { color: textPrimary }]}>Bei der Mutter</ThemedText>
                 </View>
@@ -534,10 +584,10 @@ export default function CountdownScreen() {
               </View>
 
               {/* Partner */}
-              <View style={styles.infoBlock}>
+              <View style={[styles.infoBlock, { borderBottomColor: infoDividerColor }]}>
                 <View style={styles.infoHeader}>
-                  <View style={[styles.avatar, { backgroundColor: 'rgba(255,140,66,0.18)' }]}>
-                    <IconSymbol name="person.2.fill" size={18} color="#FF8C42" />
+                  <View style={[styles.avatar, { backgroundColor: isDark ? toRgba(accentOrange, 0.2) : 'rgba(255,140,66,0.18)', borderColor: avatarBorderColor }]}>
+                    <IconSymbol name="person.2.fill" size={18} color={accentOrange} />
                   </View>
                   <ThemedText style={[styles.infoTitle, { color: textPrimary }]}>Für den Partner</ThemedText>
                 </View>
@@ -553,11 +603,11 @@ export default function CountdownScreen() {
           {/* Symptome */}
           {currentWeek && currentWeek >= 4 && (
             <LiquidGlassCard
-              style={[styles.sectionCard, isOverdue && styles.overdueBorder]}
+              style={[styles.sectionCard, isOverdue && styles.overdueBorder, isOverdue && { borderLeftColor: warnColor }]}
               intensity={26}
               overlayColor={glassOverlay}
             >
-              <ThemedText style={[styles.sectionTitle, { color: textPrimary }, isOverdue && styles.warnTitle]}>
+              <ThemedText style={[styles.sectionTitle, { color: textPrimary }, isOverdue && { color: warnColor }]}>
                 {isOverdue ? 'Häufige Anzeichen kurz vor der Geburt' : `Mögliche Symptome in SSW ${currentWeek}`}
               </ThemedText>
 
@@ -567,7 +617,7 @@ export default function CountdownScreen() {
                   : pregnancySymptoms[currentWeek < 43 ? currentWeek : 42]
                 ).map((symptom: string, idx: number) => (
                   <View key={idx} style={styles.symptomItem}>
-                    <IconSymbol name="circle.fill" size={8} color={isOverdue ? WARN : '#389D91'} />
+                    <IconSymbol name="circle.fill" size={8} color={isOverdue ? warnColor : accentMint} />
                     <ThemedText style={[styles.symptomText, { color: textSecondary }]}>{symptom}</ThemedText>
                   </View>
                 ))}
@@ -577,11 +627,11 @@ export default function CountdownScreen() {
 
           {/* Hinweis Überfälligkeit */}
           {isOverdue && (
-            <LiquidGlassCard style={[styles.sectionCard, styles.overdueBorder]} intensity={26} overlayColor={glassOverlay}>
+            <LiquidGlassCard style={[styles.sectionCard, styles.overdueBorder, { borderLeftColor: warnColor }]} intensity={26} overlayColor={glassOverlay}>
               <View style={styles.infoInset}>
                 <View style={[styles.infoHeader, { marginBottom: 8 }]}>
-                  <IconSymbol name="info.circle.fill" size={20} color={WARN} />
-                  <ThemedText style={[styles.infoTitle, { color: isDark ? '#FF9A8A' : WARN }]}>Wichtige Information</ThemedText>
+                  <IconSymbol name="info.circle.fill" size={20} color={warnColor} />
+                  <ThemedText style={[styles.infoTitle, { color: warnColor }]}>Wichtige Information</ThemedText>
                 </View>
                 <ThemedText style={[styles.bodyText, { color: textSecondary }]}>
                   Ab dem errechneten Geburtstermin wird die Schwangerschaft als „überfällig" bezeichnet. Etwa 5–10% aller Schwangerschaften dauern länger als 42 Wochen. Die meisten Geburten finden jedoch bis zu zwei Wochen vor oder nach dem ET statt.
@@ -604,9 +654,9 @@ export default function CountdownScreen() {
 
             {/* Hauptaktion: exakt wie ET-Button aufgebaut */}
             <TouchableOpacity onPress={() => router.push('/geburtsplan')} activeOpacity={0.9} style={styles.fullWidthAction}>
-              <BlurView intensity={24} tint={isDark ? "dark" : "light"} style={styles.cardBlur}>
-                <View style={[styles.actionCard, { backgroundColor: 'rgba(220,200,255,0.55)' }]}>
-                  <View style={[styles.actionIcon, { backgroundColor: ACCENT_PURPLE }]}>
+              <BlurView intensity={24} tint={cardBlurTint} style={styles.cardBlur}>
+                <View style={[styles.actionCard, { backgroundColor: actionPurpleBg, borderColor: cardBorderColor }]}>
+                  <View style={[styles.actionIcon, { backgroundColor: accentPurple, borderColor: cardBorderColor }]}>
                     <IconSymbol name={geburtsplanExists ? 'pencil' : 'plus.circle'} size={24} color="#fff" />
                   </View>
                   <ThemedText style={[styles.actionTitle, { color: textPrimary }]}>
@@ -621,14 +671,14 @@ export default function CountdownScreen() {
             {geburtsplanExists && (
               isGeneratingPDF ? (
                 <View style={styles.loadingRow}>
-                  <ActivityIndicator size="small" />
-                  <ThemedText style={{ marginLeft: 8 }}>PDF wird generiert…</ThemedText>
+                  <ActivityIndicator size="small" color={isDark ? adaptiveColors.accent : theme.tint} />
+                  <ThemedText style={{ marginLeft: 8, color: textSecondary }}>PDF wird generiert…</ThemedText>
                 </View>
               ) : (
                 <TouchableOpacity onPress={handleDownloadPDF} activeOpacity={0.9} style={styles.fullWidthAction}>
-                  <BlurView intensity={24} tint={isDark ? "dark" : "light"} style={styles.cardBlur}>
-                    <View style={[styles.actionCard, { backgroundColor: 'rgba(168,196,193,0.6)' }]}>
-                      <View style={[styles.actionIcon, { backgroundColor: '#389D91' }]}>
+                  <BlurView intensity={24} tint={cardBlurTint} style={styles.cardBlur}>
+                    <View style={[styles.actionCard, { backgroundColor: actionMintBg, borderColor: cardBorderColor }]}>
+                      <View style={[styles.actionIcon, { backgroundColor: accentMint, borderColor: cardBorderColor }]}>
                         <IconSymbol name="arrow.down.doc" size={22} color="#fff" />
                       </View>
                       <ThemedText style={[styles.actionTitle, { color: textPrimary }]}>Als PDF herunterladen</ThemedText>
@@ -643,9 +693,9 @@ export default function CountdownScreen() {
           {/* Baby geboren */}
           {dueDate && isOverdue && !isBabyBorn && (
             <TouchableOpacity onPress={handleBabyBorn} activeOpacity={0.9} style={styles.fullWidthAction}>
-              <BlurView intensity={24} tint={isDark ? "dark" : "light"} style={styles.cardBlur}>
-                <View style={[styles.actionCard, { backgroundColor: 'rgba(255,180,180,0.6)' }]}>
-                  <View style={[styles.actionIcon, { backgroundColor: WARN }]}>
+              <BlurView intensity={24} tint={cardBlurTint} style={styles.cardBlur}>
+                <View style={[styles.actionCard, { backgroundColor: actionWarnBg, borderColor: cardBorderColor }]}>
+                  <View style={[styles.actionIcon, { backgroundColor: warnColor, borderColor: cardBorderColor }]}>
                     <IconSymbol name="heart.fill" size={22} color="#fff" />
                   </View>
                   <ThemedText style={[styles.actionTitle, { color: textPrimary }]}>Mein Baby ist geboren!</ThemedText>
@@ -661,7 +711,7 @@ export default function CountdownScreen() {
               <ThemedText style={[styles.sectionTitle, { color: textPrimary }]}>Geteilter Countdown</ThemedText>
               <View style={styles.badgeWrap}>
                 {linkedUsers.map((lu) => (
-                  <View key={lu.id} style={[styles.badge, isDark && { backgroundColor: 'rgba(142,78,198,0.25)', borderColor: 'rgba(255,255,255,0.25)' }]}>
+                  <View key={lu.id} style={[styles.badge, { backgroundColor: badgeBg, borderColor: badgeBorderColor }]}>
                     <ThemedText style={[styles.badgeText, { color: textPrimary }]}>{lu.firstName}</ThemedText>
                   </View>
                 ))}
@@ -713,7 +763,6 @@ const styles = StyleSheet.create({
     color: PRIMARY_TEXT,
     opacity: 0.95,
   },
-  warnTitle: { color: WARN },
 
   // Action Cards (Sleep-Tracker Stil)
   fullWidthAction: {

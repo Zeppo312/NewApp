@@ -1557,6 +1557,37 @@ export const getLinkedUsers = async (userId: string) => {
   }
 };
 
+// Funktion zum Deaktivieren einer bestehenden Account-Verknüpfung
+export const deactivateAccountLink = async (linkId: string) => {
+  try {
+    if (!linkId) {
+      return { success: false, error: { message: 'Link-ID fehlt.' } };
+    }
+
+    const { data: userData, error: userErr } = await getCachedUser();
+    if (userErr || !userData.user) {
+      return { success: false, error: userErr ?? { message: 'Nicht angemeldet.' } };
+    }
+
+    const { data, error } = await supabase
+      .from('account_links')
+      .update({ status: 'rejected' })
+      .eq('id', linkId)
+      .select()
+      .maybeSingle();
+
+    if (error) {
+      console.error('Error deactivating account link:', error);
+      return { success: false, error };
+    }
+
+    return { success: true, link: data };
+  } catch (error) {
+    console.error('Exception deactivating account link:', error);
+    return { success: false, error: { message: 'Fehler beim Deaktivieren der Verknüpfung.' } };
+  }
+};
+
 // Funktion zum Abrufen des Entbindungstermins mit Informationen über verknüpfte Benutzer
 export const getDueDateWithLinkedUsers = async (userId: string) => {
   try {

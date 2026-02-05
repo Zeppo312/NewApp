@@ -1,13 +1,13 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, ScrollView, View, TextInput, TouchableOpacity, Alert, ActivityIndicator, Switch, SafeAreaView, StatusBar, FlatList, Linking, useWindowDimensions, Platform } from 'react-native';
-import { Text as RNText } from 'react-native';
-import { router, useRouter } from 'expo-router';
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, ScrollView, View, TextInput, TouchableOpacity, Alert, ActivityIndicator, Switch, SafeAreaView, StatusBar } from 'react-native';
+import { useRouter } from 'expo-router';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedBackground } from '@/components/ThemedBackground';
-import { LiquidGlassCard, GLASS_OVERLAY, LAYOUT_PAD, RADIUS, PRIMARY, TEXT_PRIMARY, TIMELINE_INSET } from '@/constants/DesignGuide';
+import { LiquidGlassCard, GLASS_OVERLAY, GLASS_OVERLAY_DARK, LAYOUT_PAD, TIMELINE_INSET } from '@/constants/DesignGuide';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 
 // TIMELINE_INSET zentral aus DesignGuide
 import { supabase } from '@/lib/supabase';
@@ -98,9 +98,20 @@ const generateTextFromStructuredData = (data: GeburtsplanData): string => {
 export default function GeburtsplanScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
+  const adaptiveColors = useAdaptiveColors();
+  const isDark = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
+  const textPrimary = isDark ? Colors.dark.textPrimary : '#5C4033';
+  const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
+  const glassOverlay = isDark ? GLASS_OVERLAY_DARK : GLASS_OVERLAY;
+  const iconAccentColor = isDark ? adaptiveColors.accent : theme.accent;
+  const iconSecondaryColor = isDark ? adaptiveColors.iconSecondary : theme.tabIconDefault;
+  const heroIconBackground = isDark ? 'rgba(142,78,198,0.7)' : 'rgba(142,78,198,0.9)';
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
-  const styles = React.useMemo(() => createStyles(theme), [theme]);
+  const styles = React.useMemo(
+    () => createStyles({ textPrimary, textSecondary, isDark }),
+    [textPrimary, textSecondary, isDark]
+  );
 
   // State für den Geburtsplan
   const [geburtsplan, setGeburtsplan] = useState('');
@@ -271,7 +282,7 @@ export default function GeburtsplanScreen() {
   return (
     <ThemedBackground style={styles.container}>
       <SafeAreaView style={{ flex: 1 }}>
-        <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
+        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
         
         <Header 
           title="Geburtsplan" 
@@ -281,9 +292,9 @@ export default function GeburtsplanScreen() {
         
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
 
-                <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
+                <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={glassOverlay}>
                   <View style={styles.heroHeader}>
-                    <View style={[styles.heroIcon, { backgroundColor: 'rgba(142,78,198,0.9)' }]}>
+                    <View style={[styles.heroIcon, { backgroundColor: heroIconBackground }]}>
                       <IconSymbol name="doc.text.fill" size={24} color="#FFFFFF" />
                     </View>
                     <ThemedText style={[styles.sectionTitle, styles.centerText]}>
@@ -295,7 +306,7 @@ export default function GeburtsplanScreen() {
                   </View>
                 </LiquidGlassCard>
 
-                <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
+                <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={glassOverlay}>
                   <ThemedText style={styles.sectionTitle}>
                     Editor-Modus
                   </ThemedText>
@@ -312,7 +323,7 @@ export default function GeburtsplanScreen() {
                 </LiquidGlassCard>
 
                 {isLoading ? (
-                  <ActivityIndicator size="large" color={theme.accent} style={styles.loader} />
+                  <ActivityIndicator size="large" color={iconAccentColor} style={styles.loader} />
                 ) : useStructuredEditor ? (
                   // Strukturierter Editor
                   <>
@@ -372,16 +383,16 @@ export default function GeburtsplanScreen() {
                   </>
                 ) : (
                   // Einfacher Texteditor
-                  <LiquidGlassCard style={styles.textAreaGlass} intensity={26} overlayColor={GLASS_OVERLAY}>
+                  <LiquidGlassCard style={styles.textAreaGlass} intensity={26} overlayColor={glassOverlay}>
                     <TextInput
                       style={[
                         styles.textArea,
-                        { color: colorScheme === 'dark' ? theme.text : theme.text }
+                        { color: textPrimary }
                       ]}
                       multiline
                       numberOfLines={20}
                       placeholder="Schreibe hier deinen Geburtsplan..."
-                      placeholderTextColor={colorScheme === 'dark' ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)'}
+                      placeholderTextColor={isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)'}
                       value={geburtsplan}
                       onChangeText={setGeburtsplan}
                     />
@@ -389,23 +400,23 @@ export default function GeburtsplanScreen() {
                 )}
 
                 {/* Quick Actions im More-Style */}
-                <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
+                <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={glassOverlay}>
                   <TouchableOpacity
                     style={styles.menuItem}
                     onPress={handleSaveGeburtsplan}
                     disabled={isSaving}
                   >
                     <View style={styles.menuItemIcon}>
-                      <IconSymbol name="tray.and.arrow.down.fill" size={24} color={theme.accent} />
+                      <IconSymbol name="tray.and.arrow.down.fill" size={24} color={iconAccentColor} />
                     </View>
                     <View style={styles.menuItemContent}>
                       <ThemedText style={styles.menuItemTitle}>Speichern</ThemedText>
                       <ThemedText style={styles.menuItemDescription}>Geburtsplan</ThemedText>
                     </View>
                     {isSaving ? (
-                      <ActivityIndicator size="small" color={theme.accent} />
+                      <ActivityIndicator size="small" color={iconAccentColor} />
                     ) : (
-                      <IconSymbol name="chevron.right" size={20} color={colorScheme === 'dark' ? '#ddd' : '#8b756d'} />
+                      <IconSymbol name="chevron.right" size={20} color={iconSecondaryColor} />
                     )}
                   </TouchableOpacity>
 
@@ -415,21 +426,21 @@ export default function GeburtsplanScreen() {
                     disabled={isGeneratingPDF}
                   >
                     <View style={styles.menuItemIcon}>
-                      <IconSymbol name="arrow.down.doc" size={24} color={theme.accent} />
+                      <IconSymbol name="arrow.down.doc" size={24} color={iconAccentColor} />
                     </View>
                     <View style={styles.menuItemContent}>
                       <ThemedText style={styles.menuItemTitle}>PDF</ThemedText>
                       <ThemedText style={styles.menuItemDescription}>Herunterladen</ThemedText>
                     </View>
                     {isGeneratingPDF ? (
-                      <ActivityIndicator size="small" color={theme.accent} />
+                      <ActivityIndicator size="small" color={iconAccentColor} />
                     ) : (
-                      <IconSymbol name="chevron.right" size={20} color={colorScheme === 'dark' ? '#ddd' : '#8b756d'} />
+                      <IconSymbol name="chevron.right" size={20} color={iconSecondaryColor} />
                     )}
                   </TouchableOpacity>
                 </LiquidGlassCard>
 
-                <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
+                <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={glassOverlay}>
                   <ThemedText style={styles.sectionTitle}>
                     Tipps für deinen Geburtsplan
                   </ThemedText>
@@ -445,7 +456,15 @@ export default function GeburtsplanScreen() {
   );
 }
 
-const createStyles = (theme: any) => StyleSheet.create({
+const createStyles = ({
+  textPrimary,
+  textSecondary,
+  isDark,
+}: {
+  textPrimary: string;
+  textSecondary: string;
+  isDark: boolean;
+}) => StyleSheet.create({
   container: {
     flex: 1,
   },
@@ -472,13 +491,14 @@ const createStyles = (theme: any) => StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 12,
     paddingHorizontal: 16,
+    color: textPrimary,
   },
-  infoText: { fontSize: 14, lineHeight: 20, color: TEXT_PRIMARY, paddingHorizontal: 16, marginBottom: 16 },
+  infoText: { fontSize: 14, lineHeight: 20, color: textSecondary, paddingHorizontal: 16, marginBottom: 16 },
   switchContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 16 },
   switchLabel: {
     fontSize: 16,
     fontWeight: '600',
-    color: TEXT_PRIMARY,
+    color: textPrimary,
   },
   centerText: { textAlign: 'center' },
   heroHeader: { alignItems: 'center', paddingVertical: 6 },
@@ -490,7 +510,7 @@ const createStyles = (theme: any) => StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8,
     borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.6)'
+    borderColor: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.6)'
   },
   textAreaGlass: {
     borderRadius: 22,
@@ -525,12 +545,12 @@ const createStyles = (theme: any) => StyleSheet.create({
     borderWidth: 2, borderColor: 'rgba(255,255,255,0.6)'
   },
   cardTitle: { fontSize: 16, fontWeight: '800' },
-  cardDesc: { fontSize: 12, opacity: 0.9 },
+  cardDesc: { fontSize: 12, opacity: 0.9, color: textSecondary },
   tipText: {
     fontSize: 15,
     lineHeight: 24,
     marginBottom: 5,
-    color: TEXT_PRIMARY,
+    color: textSecondary,
     paddingHorizontal: 16,
   },
   menuItem: {
@@ -540,7 +560,7 @@ const createStyles = (theme: any) => StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(255,255,255,0.2)',
+    borderBottomColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)',
     gap: 12,
   },
   menuItemIcon: {
@@ -549,9 +569,9 @@ const createStyles = (theme: any) => StyleSheet.create({
     borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(142, 78, 198, 0.15)',
+    backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(142, 78, 198, 0.15)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.35)',
+    borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.35)',
   },
   menuItemContent: {
     flex: 1,
@@ -559,11 +579,12 @@ const createStyles = (theme: any) => StyleSheet.create({
   menuItemTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: TEXT_PRIMARY,
+    color: textPrimary,
   },
   menuItemDescription: {
     fontSize: 12,
-    color: 'rgba(125,90,80,0.75)',
+    color: textSecondary,
+    opacity: 0.8,
     marginTop: 2,
   },
   loader: {

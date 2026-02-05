@@ -254,6 +254,8 @@ export default function HomeScreen() {
   const textPrimary = isDark ? Colors.dark.textPrimary : '#6B4C3B';
   const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
   const accentPurple = isDark ? Colors.dark.textAccent : '#5E3DB3';
+  const glassCardBg = isDark ? 'rgba(0, 0, 0, 0.22)' : 'rgba(255, 255, 255, 0.04)';
+  const glassBlurBg = isDark ? 'rgba(0, 0, 0, 0.25)' : 'rgba(255, 255, 255, 0.35)';
   const { user } = useAuth();
   const { activeBabyId } = useActiveBaby();
   const router = useRouter();
@@ -794,10 +796,10 @@ export default function HomeScreen() {
           {...androidBlurProps}
           intensity={22}
           tint={colorScheme === 'dark' ? 'dark' : 'light'}
-          style={[styles.liquidGlassBackground, styles.greetingGlassBackground]}
+          style={[styles.liquidGlassBackground, styles.greetingGlassBackground, { backgroundColor: glassBlurBg }]}
         >
           <ThemedView
-            style={[styles.greetingContainer, styles.liquidGlassContainer, styles.greetingGlassContainer]}
+            style={[styles.greetingContainer, styles.liquidGlassContainer, styles.greetingGlassContainer, { backgroundColor: glassCardBg }]}
             lightColor="rgba(255, 255, 255, 0.04)"
             darkColor="rgba(255, 255, 255, 0.02)"
           >
@@ -866,10 +868,10 @@ export default function HomeScreen() {
         <BlurView
           intensity={22}
           tint={colorScheme === 'dark' ? 'dark' : 'light'}
-          style={styles.liquidGlassBackground}
+          style={[styles.liquidGlassBackground, { backgroundColor: glassBlurBg }]}
         >
           <ThemedView
-            style={[styles.summaryContainer, styles.liquidGlassContainer]}
+            style={[styles.summaryContainer, styles.liquidGlassContainer, { backgroundColor: glassCardBg }]}
             lightColor="rgba(255, 255, 255, 0.04)"
             darkColor="rgba(255, 255, 255, 0.02)"
           >
@@ -1009,13 +1011,14 @@ export default function HomeScreen() {
           {...androidBlurProps}
           intensity={22}
           tint={colorScheme === 'dark' ? 'dark' : 'light'}
-          style={[styles.liquidGlassBackground, cardHeightStyle]}
+          style={[styles.liquidGlassBackground, cardHeightStyle, { backgroundColor: glassBlurBg }]}
         >
           <ThemedView
             style={[
               styles.liquidGlassContainer,
               styles.recommendationContainer,
               cardHeightStyle,
+              { backgroundColor: glassCardBg },
             ]}
             lightColor="rgba(255, 255, 255, 0.04)"
             darkColor="rgba(255, 255, 255, 0.02)"

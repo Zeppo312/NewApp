@@ -2,8 +2,7 @@ import React from 'react';
 import { StyleSheet, View, TouchableOpacity } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors } from '@/constants/Colors';
-import { useColorScheme } from '@/hooks/useColorScheme';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 
 interface CheckboxOptionProps {
   label: string;
@@ -12,14 +11,14 @@ interface CheckboxOptionProps {
 }
 
 export const CheckboxOption: React.FC<CheckboxOptionProps> = ({ label, checked, onToggle }) => {
-  const colorScheme = useColorScheme() ?? 'light';
-  const theme = Colors[colorScheme];
+  const adaptiveColors = useAdaptiveColors();
+  const accentColor = adaptiveColors.accent;
 
   return (
     <TouchableOpacity style={styles.container} onPress={onToggle} activeOpacity={0.7}>
-      <View style={[styles.checkbox, { borderColor: theme.accent }]}>
+      <View style={[styles.checkbox, { borderColor: accentColor }]}>
         {checked && (
-          <Ionicons name="checkmark" size={16} color={theme.accent} />
+          <Ionicons name="checkmark" size={16} color={accentColor} />
         )}
       </View>
       <ThemedText style={styles.label}>{label}</ThemedText>

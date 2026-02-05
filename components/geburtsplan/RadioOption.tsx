@@ -1,8 +1,7 @@
 import React from 'react';
 import { StyleSheet, View, TouchableOpacity } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
-import { Colors } from '@/constants/Colors';
-import { useColorScheme } from '@/hooks/useColorScheme';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 
 interface RadioOptionProps {
   label: string;
@@ -11,14 +10,14 @@ interface RadioOptionProps {
 }
 
 export const RadioOption: React.FC<RadioOptionProps> = ({ label, selected, onSelect }) => {
-  const colorScheme = useColorScheme() ?? 'light';
-  const theme = Colors[colorScheme];
+  const adaptiveColors = useAdaptiveColors();
+  const accentColor = adaptiveColors.accent;
 
   return (
     <TouchableOpacity style={styles.container} onPress={onSelect} activeOpacity={0.7}>
-      <View style={[styles.radio, { borderColor: theme.accent }]}>
+      <View style={[styles.radio, { borderColor: accentColor }]}>
         {selected && (
-          <View style={[styles.radioInner, { backgroundColor: theme.accent }]} />
+          <View style={[styles.radioInner, { backgroundColor: accentColor }]} />
         )}
       </View>
       <ThemedText style={styles.label}>{label}</ThemedText>

@@ -20,7 +20,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useConvex } from '@/contexts/ConvexContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { router } from 'expo-router';
-import { createInvitationLink, getUserInvitations, getLinkedUsers } from '@/lib/supabase';
+import { createInvitationLink, getUserInvitations, getLinkedUsers, deactivateAccountLink } from '@/lib/supabase';
 import { redeemInvitationCodeFixed } from '@/lib/redeemInvitationCodeFixed';
 import Header from '@/components/Header';
 import { ThemedText } from '@/components/ThemedText';
@@ -47,6 +47,7 @@ const PRIMARY_TEXT   = '#7D5A50';    // Sleep-Tracker Typo-Farbe
 const ACCENT_PURPLE  = '#8E4EC6';    // Sleep-Tracker Akzent
 const ACCENT_MINT    = '#A8C4C1';
 const ACCENT_ORANGE  = '#FF8C42';
+const ACCENT_RED     = '#E06464';
 
 const toRgba = (hex: string, opacity = 1) => {
   const cleanHex = hex.replace('#', '');
@@ -83,6 +84,7 @@ export default function AccountLinkingScreen() {
   const accentPurple = isDark ? lightenHex(ACCENT_PURPLE) : ACCENT_PURPLE;
   const accentMint = isDark ? lightenHex(ACCENT_MINT) : ACCENT_MINT;
   const accentOrange = isDark ? lightenHex(ACCENT_ORANGE) : ACCENT_ORANGE;
+  const accentRed = isDark ? lightenHex(ACCENT_RED) : ACCENT_RED;
 
   const cardBorderColor = isDark ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.6)';
   const listItemBorderColor = isDark ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.6)';
@@ -102,6 +104,7 @@ export default function AccountLinkingScreen() {
   const [linkedUsers, setLinkedUsers] = useState<LinkedUser[]>([]);
   const [invitationCode, setInvitationCode] = useState('');
   const [isRedeeming, setIsRedeeming] = useState(false);
+  const [unlinkingId, setUnlinkingId] = useState<string | null>(null);
 
   useEffect(() => { if (user) loadData(); }, [user]);
 
@@ -180,6 +183,43 @@ export default function AccountLinkingScreen() {
     } finally {
       setIsRedeeming(false);
     }
+  };
+
+  const performDeactivateLink = async (link: LinkedUser) => {
+    if (!link?.linkId) return;
+    setUnlinkingId(link.linkId);
+    try {
+      const result = await deactivateAccountLink(link.linkId);
+      if (result.success) {
+        Alert.alert('Verknüpfung deaktiviert', 'Die Verbindung wurde deaktiviert.');
+        loadData();
+        void syncUser();
+      } else {
+        const errorMessage = result.error?.message || 'Die Verknüpfung konnte nicht deaktiviert werden.';
+        Alert.alert('Fehler', errorMessage);
+      }
+    } catch (error) {
+      console.error('Error deactivating account link:', error);
+      Alert.alert('Fehler', 'Die Verknüpfung konnte nicht deaktiviert werden.');
+    } finally {
+      setUnlinkingId(null);
+    }
+  };
+
+  const handleDeactivateLink = (link: LinkedUser) => {
+    const displayName = [link.firstName, link.lastName].filter(Boolean).join(' ').trim() || 'diesem Account';
+    Alert.alert(
+      'Verknüpfung deaktivieren',
+      `Möchtest du die Verknüpfung mit ${displayName} wirklich deaktivieren?`,
+      [
+        { text: 'Abbrechen', style: 'cancel' },
+        {
+          text: 'Deaktivieren',
+          style: 'destructive',
+          onPress: () => performDeactivateLink(link),
+        },
+      ]
+    );
   };
 
   const formatDate = (d: string | Date) =>
@@ -312,6 +352,26 @@ export default function AccountLinkingScreen() {
                             </ThemedText>
                           </View>
                         </View>
+                        <TouchableOpacity
+                          onPress={() => handleDeactivateLink(u)}
+                          disabled={unlinkingId === u.linkId}
+                          accessibilityLabel="Verknüpfung deaktivieren"
+                          accessibilityRole="button"
+                          style={[
+                            styles.unlinkPill,
+                            {
+                              backgroundColor: isDark ? toRgba(accentRed, 0.18) : 'rgba(255,200,200,0.6)',
+                              borderColor: listItemBorderColor,
+                            },
+                            unlinkingId === u.linkId && { opacity: 0.7 },
+                          ]}
+                        >
+                          {unlinkingId === u.linkId ? (
+                            <ActivityIndicator color={accentRed} />
+                          ) : (
+                            <IconSymbol name="xmark.circle.fill" size={18} color={accentRed} />
+                          )}
+                        </TouchableOpacity>
                       </View>
                     ))}
                   </View>
@@ -471,5 +531,10 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.9)',
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.6)',
+  },
+  unlinkPill: {
+    width: 40, height: 40, borderRadius: 20,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1,
   },
 });

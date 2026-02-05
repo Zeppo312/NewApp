@@ -6,6 +6,7 @@ import { Colors } from '@/constants/Colors';
 import { pregnancyWeekInfo, pregnancyWeekCircleInfo } from '@/constants/PregnancyWeekInfo';
 import { babySizeComparison } from '@/constants/BabySizeComparison';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { router } from 'expo-router';
 import Svg, { Circle, G, Text as SvgText, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { PRIMARY, TEXT_PRIMARY, GLASS_BORDER, FONT_SM, FONT_MD, FONT_LG, RADIUS } from '@/constants/DesignGuide';
@@ -58,6 +59,9 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({
 }) => {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
+  const adaptiveColors = useAdaptiveColors();
+  const isDark = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
+  const textPrimary = isDark ? adaptiveColors.textPrimary : TEXT_PRIMARY;
   const [daysLeft, setDaysLeft] = useState<number | null>(null);
   const [currentWeek, setCurrentWeek] = useState<number | null>(null);
   const [currentDay, setCurrentDay] = useState<number | null>(null);
@@ -190,8 +194,8 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({
   const circumference = radius * 2 * Math.PI;
   const strokeDashoffset = circumference * (1 - progress);
   const WARN = '#E57373';
-  const bgStroke = colorScheme === 'dark' ? 'rgba(255,255,255,0.22)' : GLASS_BORDER;
-  const bgStrokeGlass = colorScheme === 'dark' ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.55)';
+  const bgStroke = isDark ? 'rgba(255,255,255,0.22)' : GLASS_BORDER;
+  const bgStrokeGlass = isDark ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.55)';
 
   return (
     <ThemedView 
@@ -212,8 +216,8 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({
           <Defs>
             {/* Gradient für den Fortschrittsring (Liquid Glass Stil) */}
             <LinearGradient id="progressGradient" x1="0" y1="0" x2={String(size)} y2={String(size)} gradientUnits="userSpaceOnUse">
-              <Stop offset="0%" stopColor={colorScheme === 'dark' ? '#C9B3E8' : '#E6D8F7'} stopOpacity={1} />
-              <Stop offset="55%" stopColor={colorScheme === 'dark' ? '#A677D8' : '#B88CE8'} stopOpacity={1} />
+              <Stop offset="0%" stopColor={isDark ? '#C9B3E8' : '#E6D8F7'} stopOpacity={1} />
+              <Stop offset="55%" stopColor={isDark ? '#A677D8' : '#B88CE8'} stopOpacity={1} />
               <Stop offset="100%" stopColor={PRIMARY} stopOpacity={1} />
             </LinearGradient>
             {/* Gradient für Überfälligkeit (warme Glas-Töne) */}
@@ -252,7 +256,7 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({
             cx={size / 2}
             cy={size / 2}
             r={radius}
-            stroke={colorScheme === 'dark' ? 'rgba(255,255,255,0.28)' : 'rgba(255,255,255,0.45)'}
+            stroke={isDark ? 'rgba(255,255,255,0.28)' : 'rgba(255,255,255,0.45)'}
             strokeWidth={strokeWidth * 0.55}
             strokeDasharray={`${(circumference * 0.22).toFixed(2)} ${(circumference).toFixed(2)}`}
             strokeDashoffset={(circumference * 0.15).toFixed(2)}
@@ -269,11 +273,7 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({
               textAnchor="middle"
               fontSize="64"
               fontWeight="bold"
-              fill={
-                isOverdue
-                  ? (colorScheme === 'dark' ? '#FFFFFF' : TEXT_PRIMARY)
-                  : (colorScheme === 'dark' ? '#FFFFFF' : TEXT_PRIMARY)
-              }
+              fill={textPrimary}
             >
               {currentWeek}
             </SvgText>
@@ -282,7 +282,7 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({
               y={size / 2}
               textAnchor="middle"
               fontSize="22"
-              fill={colorScheme === 'dark' ? '#FFFFFF' : TEXT_PRIMARY}
+              fill={textPrimary}
             >
               SSW
             </SvgText>
@@ -312,7 +312,7 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({
                     textAnchor="middle"
                     fontSize="15"
                     fontWeight="500"
-                    fill={colorScheme === 'dark' ? '#FFFFFF' : TEXT_PRIMARY}
+                    fill={textPrimary}
                   >
                     Geburtszeit! Dein
                   </SvgText>
@@ -322,7 +322,7 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({
                     textAnchor="middle"
                     fontSize="15"
                     fontWeight="500"
-                    fill={colorScheme === 'dark' ? '#FFFFFF' : TEXT_PRIMARY}
+                    fill={textPrimary}
                   >
                     Baby macht sich auf
                   </SvgText>
@@ -332,7 +332,7 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({
                     textAnchor="middle"
                     fontSize="15"
                     fontWeight="500"
-                    fill={colorScheme === 'dark' ? '#FFFFFF' : TEXT_PRIMARY}
+                    fill={textPrimary}
                   >
                     den Weg in die Welt.
                   </SvgText>
@@ -355,7 +355,7 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({
                       textAnchor="middle"
                       fontSize="15"
                       fontWeight="500"
-                      fill={colorScheme === 'dark' ? '#FFFFFF' : TEXT_PRIMARY}
+                      fill={textPrimary}
                     >
                       {line}
                     </SvgText>
@@ -365,14 +365,14 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({
           </G>
         </Svg>
 
-        <ThemedText style={[styles.tapHint]} lightColor={TEXT_PRIMARY} darkColor={TEXT_PRIMARY}>
+        <ThemedText style={[styles.tapHint, { color: textPrimary }]}>
           Tippen für Details
         </ThemedText>
 
         {/* Tage bis zur Geburt oder Tage überfällig */}
         <View style={styles.detailsContainer}>
           <View style={styles.detailRow}>
-            <ThemedText style={styles.detailLabel} lightColor={TEXT_PRIMARY} darkColor={TEXT_PRIMARY}>Noch:</ThemedText>
+            <ThemedText style={[styles.detailLabel, { color: textPrimary }]}>Noch:</ThemedText>
             <ThemedText 
               style={[
                 styles.detailValue,
@@ -388,15 +388,15 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({
           </View>
           
           <View style={styles.detailRow}>
-            <ThemedText style={styles.detailLabel} lightColor={TEXT_PRIMARY} darkColor={TEXT_PRIMARY}>Genau:</ThemedText>
-            <ThemedText style={[styles.detailValue, { color: TEXT_PRIMARY }]}>
+            <ThemedText style={[styles.detailLabel, { color: textPrimary }]}>Genau:</ThemedText>
+            <ThemedText style={[styles.detailValue, { color: textPrimary }]}>
               {currentWeek !== null && currentDay !== null ? 
                 `SSW ${currentWeek-1}+${currentDay}` : ''}
             </ThemedText>
           </View>
           
           <View style={styles.detailRow}>
-            <ThemedText style={styles.detailLabel} lightColor={TEXT_PRIMARY} darkColor={TEXT_PRIMARY}>Geschafft:</ThemedText>
+            <ThemedText style={[styles.detailLabel, { color: textPrimary }]}>Geschafft:</ThemedText>
             <ThemedText style={[styles.detailValue, { color: PRIMARY }]}>
               {progress ? `${Math.round(progress * 100)}%` : '0%'}
             </ThemedText>
@@ -412,7 +412,7 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({
           activeOpacity={0.8}
         >
           <ThemedView style={styles.babySizeInnerContainer} lightColor={'transparent'} darkColor={'transparent'}>
-            <ThemedText style={styles.babySizeLabel} lightColor={TEXT_PRIMARY} darkColor={TEXT_PRIMARY}>Babygröße:</ThemedText>
+            <ThemedText style={[styles.babySizeLabel, { color: textPrimary }]}>Babygröße:</ThemedText>
             <ThemedText style={[styles.babySizeValue, { color: PRIMARY }]}>
               {babySizeComparison[currentWeek] || "Noch nicht berechenbar"}
             </ThemedText>

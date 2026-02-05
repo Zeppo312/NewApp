@@ -4,17 +4,21 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedBackground } from '@/components/ThemedBackground';
+import { Colors } from '@/constants/Colors';
 import Header from '@/components/Header';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { babySizeData, BabySizeData } from '@/lib/baby-size-data';
 import { useAuth } from '@/contexts/AuthContext';
 import { getDueDateWithLinkedUsers } from '@/lib/supabase';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import {
   LiquidGlassCard,
   LAYOUT_PAD,
   TIMELINE_INSET,
-  TEXT_PRIMARY,
   GLASS_BORDER,
+  GLASS_BORDER_DARK,
+  GLASS_OVERLAY,
+  GLASS_OVERLAY_DARK,
 } from '@/constants/DesignGuide';
 
 const pastelPalette = {
@@ -28,6 +32,29 @@ const pastelPalette = {
 
 const DAYS_IN_PREGNANCY = 280;
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
+
+const lightenHex = (hex: string, amount = 0.35) => {
+  const cleanHex = hex.replace('#', '');
+  const int = parseInt(cleanHex, 16);
+  const r = (int >> 16) & 255;
+  const g = (int >> 8) & 255;
+  const b = int & 255;
+
+  const lightenChannel = (channel: number) =>
+    Math.min(255, Math.round(channel + (255 - channel) * amount));
+  const toHex = (channel: number) => channel.toString(16).padStart(2, '0');
+
+  return `#${toHex(lightenChannel(r))}${toHex(lightenChannel(g))}${toHex(lightenChannel(b))}`;
+};
+
+const scaleRgbaAlpha = (rgba: string, multiplier: number) => {
+  const match = rgba.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([0-9.]+)\)/);
+  if (!match) return rgba;
+  const [, r, g, b, a] = match;
+  const baseAlpha = Number.parseFloat(a);
+  const nextAlpha = Number.isFinite(baseAlpha) ? Math.min(1, Math.max(0, baseAlpha * multiplier)) : baseAlpha;
+  return `rgba(${r}, ${g}, ${b}, ${nextAlpha})`;
+};
 
 const GlassLayer = ({
   tint = 'rgba(255,255,255,0.22)',
@@ -79,6 +106,37 @@ function BabySizeContent() {
   const params = useLocalSearchParams<{ week?: string | string[] }>();
   const weekParam = params.week;
   const { user } = useAuth();
+  const adaptiveColors = useAdaptiveColors();
+  const isDark = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
+  const textPrimary = isDark ? Colors.dark.textPrimary : '#5C4033';
+  const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
+  const glassOverlay = isDark ? GLASS_OVERLAY_DARK : GLASS_OVERLAY;
+  const glassBorder = isDark ? GLASS_BORDER_DARK : GLASS_BORDER;
+  const glassSurfaceBackground = isDark ? 'rgba(0,0,0,0.25)' : 'rgba(255,255,255,0.15)';
+  const glassSurfaceStyle = { borderColor: glassBorder, backgroundColor: glassSurfaceBackground };
+  const pastelPaletteResolved = isDark
+    ? {
+        peach: scaleRgbaAlpha(pastelPalette.peach, 0.35),
+        rose: scaleRgbaAlpha(pastelPalette.rose, 0.35),
+        honey: scaleRgbaAlpha(pastelPalette.honey, 0.35),
+        sage: scaleRgbaAlpha(pastelPalette.sage, 0.35),
+        lavender: scaleRgbaAlpha(pastelPalette.lavender, 0.35),
+        sky: scaleRgbaAlpha(pastelPalette.sky, 0.35),
+      }
+    : pastelPalette;
+  const iconBlue = isDark ? lightenHex('#6C87C1') : '#6C87C1';
+  const iconRose = isDark ? lightenHex('#C26D62') : '#C26D62';
+  const quickStatIconBackground = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.85)';
+  const heroSheen = isDark ? 0.12 : 0.22;
+  const statSheen = isDark ? 0.1 : 0.2;
+  const descriptionSheen = isDark ? 0.08 : 0.16;
+  const chipSheenSelected = isDark ? 0.14 : 0.28;
+  const chipSheen = isDark ? 0.08 : 0.12;
+  const neutralChipTint = isDark ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.12)';
+  const weekChipSelectedStyle = {
+    borderColor: isDark ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.85)',
+    backgroundColor: isDark ? 'rgba(0,0,0,0.25)' : 'rgba(255,255,255,0.2)',
+  };
   const [dueWeek, setDueWeek] = useState<number | null>(null);
   const [imageError, setImageError] = useState(false);
   const splitFruit = (comparison: string) => {
@@ -166,16 +224,16 @@ function BabySizeContent() {
       label: 'Größe',
       value: babyData.length,
       icon: 'person.fill' as const,
-      accent: pastelPalette.sky,
-      iconColor: '#6C87C1',
+      accent: pastelPaletteResolved.sky,
+      iconColor: iconBlue,
     },
     {
       key: 'weight',
       label: 'Gewicht',
       value: babyData.weight,
       icon: 'chart.bar.fill' as const,
-      accent: pastelPalette.rose,
-      iconColor: '#C26D62',
+      accent: pastelPaletteResolved.rose,
+      iconColor: iconRose,
     },
   ];
 
@@ -193,12 +251,16 @@ function BabySizeContent() {
           contentContainerStyle={styles.contentContainer}
           showsVerticalScrollIndicator={false}
         >
-          <LiquidGlassCard style={[styles.glassCard, styles.heroCard]}>
+          <LiquidGlassCard
+            style={[styles.glassCard, styles.heroCard]}
+            overlayColor={glassOverlay}
+            borderColor={glassBorder}
+          >
             <View style={styles.glassInner}>
-              <View style={[styles.heroHighlight, styles.glassSurface]}>
-                <GlassLayer tint={pastelPalette.honey} sheenOpacity={0.22} />
+              <View style={[styles.heroHighlight, styles.glassSurface, glassSurfaceStyle]}>
+                <GlassLayer tint={pastelPaletteResolved.honey} sheenOpacity={heroSheen} />
                 <ThemedText
-                  style={styles.heroWeek}
+                  style={[styles.heroWeek, { color: textSecondary }]}
                   numberOfLines={1}
                   adjustsFontSizeToFit
                   minimumFontScale={0.75}
@@ -208,11 +270,11 @@ function BabySizeContent() {
 
                 <View style={styles.heroContentRow}>
                   <View style={styles.heroTextBlock}>
-                    <ThemedText style={styles.heroSubline}>
+                    <ThemedText style={[styles.heroSubline, { color: textSecondary }]}>
                       Diese Woche ist dein Baby so groß wie {article ? `${article}` : ''}
                     </ThemedText>
                     <ThemedText
-                      style={styles.heroFruit}
+                      style={[styles.heroFruit, { color: textPrimary }]}
                       numberOfLines={1}
                       adjustsFontSizeToFit
                       minimumFontScale={0.85}
@@ -232,28 +294,28 @@ function BabySizeContent() {
 
               <View style={styles.quickStatRow}>
                 {quickStats.map((stat) => (
-                  <View key={stat.key} style={[styles.quickStat, styles.glassSurface]}>
-                    <GlassLayer tint={stat.accent} sheenOpacity={0.2} />
-                    <View style={styles.quickStatIcon}>
+                  <View key={stat.key} style={[styles.quickStat, styles.glassSurface, glassSurfaceStyle]}>
+                    <GlassLayer tint={stat.accent} sheenOpacity={statSheen} />
+                    <View style={[styles.quickStatIcon, { backgroundColor: quickStatIconBackground }]}>
                       <IconSymbol name={stat.icon} size={18} color={stat.iconColor} />
                     </View>
-                    <ThemedText style={styles.quickStatValue}>{stat.value}</ThemedText>
-                    <ThemedText style={styles.quickStatLabel}>{stat.label}</ThemedText>
+                    <ThemedText style={[styles.quickStatValue, { color: textPrimary }]}>{stat.value}</ThemedText>
+                    <ThemedText style={[styles.quickStatLabel, { color: textSecondary }]}>{stat.label}</ThemedText>
                   </View>
                 ))}
               </View>
 
-              <View style={[styles.descriptionBlock, styles.glassSurface]}>
-                <GlassLayer tint={pastelPalette.peach} sheenOpacity={0.16} />
-                <ThemedText style={styles.descriptionTitle}>Entwicklung in dieser Woche</ThemedText>
-                <ThemedText style={styles.descriptionText}>{babyData.description}</ThemedText>
+              <View style={[styles.descriptionBlock, styles.glassSurface, glassSurfaceStyle]}>
+                <GlassLayer tint={pastelPaletteResolved.peach} sheenOpacity={descriptionSheen} />
+                <ThemedText style={[styles.descriptionTitle, { color: textPrimary }]}>Entwicklung in dieser Woche</ThemedText>
+                <ThemedText style={[styles.descriptionText, { color: textSecondary }]}>{babyData.description}</ThemedText>
               </View>
             </View>
           </LiquidGlassCard>
 
-          <LiquidGlassCard style={styles.glassCard}>
+          <LiquidGlassCard style={styles.glassCard} overlayColor={glassOverlay} borderColor={glassBorder}>
             <View style={styles.glassInner}>
-              <ThemedText style={styles.sectionTitle}>Andere Wochen entdecken</ThemedText>
+              <ThemedText style={[styles.sectionTitle, { color: textPrimary }]}>Andere Wochen entdecken</ThemedText>
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
@@ -267,17 +329,22 @@ function BabySizeContent() {
                       style={[
                         styles.weekChip,
                         styles.glassSurface,
-                        isSelected && styles.weekChipSelected,
+                        glassSurfaceStyle,
+                        isSelected && weekChipSelectedStyle,
                       ]}
                       activeOpacity={0.85}
                       onPress={() => router.setParams({ week: data.week.toString() })}
                     >
                       <GlassLayer
-                        tint={isSelected ? pastelPalette.lavender : 'rgba(255,255,255,0.12)'}
-                        sheenOpacity={isSelected ? 0.28 : 0.12}
+                        tint={isSelected ? pastelPaletteResolved.lavender : neutralChipTint}
+                        sheenOpacity={isSelected ? chipSheenSelected : chipSheen}
                       />
                       <ThemedText
-                        style={[styles.weekChipLabel, isSelected && styles.weekChipLabelSelected]}
+                        style={[
+                          styles.weekChipLabel,
+                          { color: textSecondary },
+                          isSelected && styles.weekChipLabelSelected,
+                        ]}
                       >
                         {data.week}
                       </ThemedText>
@@ -327,8 +394,6 @@ const styles = StyleSheet.create({
     position: 'relative',
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: GLASS_BORDER,
-    backgroundColor: 'rgba(255,255,255,0.15)',
     shadowColor: '#000',
     shadowOpacity: 0.06,
     shadowRadius: 8,
@@ -368,26 +433,22 @@ const styles = StyleSheet.create({
   heroWeek: {
     fontSize: 13,
     letterSpacing: 0.6,
-    color: TEXT_PRIMARY,
     textTransform: 'uppercase',
     opacity: 0.7,
     marginBottom: 4,
   },
   heroSubline: {
     fontSize: 14,
-    color: TEXT_PRIMARY,
     marginTop: 8,
     lineHeight: 22,
   },
   heroArticle: {
     fontSize: 15,
-    color: TEXT_PRIMARY,
     fontWeight: '600',
   },
   heroFruit: {
     fontSize: 26,
     fontWeight: '800',
-    color: TEXT_PRIMARY,
     lineHeight: 32,
     marginTop: 4,
   },
@@ -424,11 +485,9 @@ const styles = StyleSheet.create({
   quickStatValue: {
     fontSize: 18,
     fontWeight: '800',
-    color: TEXT_PRIMARY,
   },
   quickStatLabel: {
     fontSize: 12,
-    color: TEXT_PRIMARY,
     opacity: 0.75,
     marginTop: 2,
   },
@@ -439,19 +498,16 @@ const styles = StyleSheet.create({
   descriptionTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: TEXT_PRIMARY,
     marginBottom: 8,
   },
   descriptionText: {
     fontSize: 14,
     lineHeight: 21,
-    color: TEXT_PRIMARY,
     opacity: 0.9,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: TEXT_PRIMARY,
     marginBottom: 12,
     textAlign: 'center',
   },
@@ -467,14 +523,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  weekChipSelected: {
-    borderColor: 'rgba(255,255,255,0.85)',
-    backgroundColor: 'rgba(255,255,255,0.2)',
-  },
   weekChipLabel: {
     fontSize: 14,
     fontWeight: '700',
-    color: TEXT_PRIMARY,
   },
   weekChipLabelSelected: {
     color: '#ffffff',
