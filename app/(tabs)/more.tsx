@@ -11,15 +11,22 @@ import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import Header from '@/components/Header';
 import { GlassCard, LiquidGlassCard, GLASS_OVERLAY, LAYOUT_PAD } from '@/constants/DesignGuide';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 
 const TIMELINE_INSET = 8; // wie im Sleep-Tracker
 
 export default function MoreScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
+  const adaptiveColors = useAdaptiveColors();
   const { isBabyBorn, setIsBabyBorn } = useBabyStatus();
   const router = useRouter();
   const { signOut } = useAuth();
+
+  // Nur bei dunklem Hintergrundbild die adaptiven Farben verwenden
+  const useDarkMode = adaptiveColors.hasCustomBackground && adaptiveColors.isDarkBackground;
+  const iconAccentColor = useDarkMode ? adaptiveColors.accent : theme.accent;
+  const iconSecondaryColor = useDarkMode ? adaptiveColors.iconSecondary : theme.tabIconDefault;
 
   const handleSwitchBack = () => {
     Alert.alert(
@@ -132,7 +139,7 @@ export default function MoreScreen() {
               onPress={() => router.push('/(tabs)/weight-tracker')}
             >
               <View style={styles.menuItemIcon}>
-                <IconSymbol name="chart.line.uptrend.xyaxis" size={24} color={theme.accent} />
+                <IconSymbol name="chart.line.uptrend.xyaxis" size={24} color={iconAccentColor} />
               </View>
               <View style={styles.menuItemContent}>
                 <ThemedText style={styles.menuItemTitle}>
@@ -142,7 +149,7 @@ export default function MoreScreen() {
                   Verfolge deine Gewichtsentwicklung
                 </ThemedText>
               </View>
-              <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
+              <IconSymbol name="chevron.right" size={20} color={iconSecondaryColor} />
             </TouchableOpacity>
           </LiquidGlassCard>
 
@@ -158,7 +165,7 @@ export default function MoreScreen() {
                 onPress={() => router.push('/(tabs)/geburtsplan')}
               >
                 <View style={styles.menuItemIcon}>
-                  <IconSymbol name="doc.text.fill" size={24} color={theme.accent} />
+                  <IconSymbol name="doc.text.fill" size={24} color={iconAccentColor} />
                 </View>
                 <View style={styles.menuItemContent}>
                   <ThemedText style={styles.menuItemTitle}>
@@ -168,7 +175,7 @@ export default function MoreScreen() {
                     Erstelle und bearbeite deinen persönlichen Geburtsplan
                   </ThemedText>
                 </View>
-                <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
+                <IconSymbol name="chevron.right" size={20} color={iconSecondaryColor} />
               </TouchableOpacity>
             )}
 
@@ -177,7 +184,7 @@ export default function MoreScreen() {
               onPress={() => router.push('/lottis-empfehlungen')}
             >
               <View style={styles.menuItemIcon}>
-                <IconSymbol name="star.fill" size={24} color={theme.accent} />
+                <IconSymbol name="star.fill" size={24} color={iconAccentColor} />
               </View>
               <View style={styles.menuItemContent}>
                 <ThemedText style={styles.menuItemTitle}>
@@ -187,7 +194,7 @@ export default function MoreScreen() {
                   Handverlesene Produkte für dich und dein Baby
                 </ThemedText>
               </View>
-              <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
+              <IconSymbol name="chevron.right" size={20} color={iconSecondaryColor} />
             </TouchableOpacity>
 
           </LiquidGlassCard>
@@ -202,7 +209,7 @@ export default function MoreScreen() {
               onPress={() => router.push('/app-settings')}
             >
               <View style={styles.menuItemIcon}>
-                <IconSymbol name="gear" size={24} color={theme.accent} />
+                <IconSymbol name="gear" size={24} color={iconAccentColor} />
               </View>
               <View style={styles.menuItemContent}>
                 <ThemedText style={styles.menuItemTitle}>
@@ -212,7 +219,7 @@ export default function MoreScreen() {
                   Benachrichtigungen, Erscheinungsbild, etc.
                 </ThemedText>
               </View>
-              <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
+              <IconSymbol name="chevron.right" size={20} color={iconSecondaryColor} />
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -220,7 +227,7 @@ export default function MoreScreen() {
               onPress={() => router.push('/profil')}
             >
               <View style={styles.menuItemIcon}>
-                <IconSymbol name="person.crop.circle" size={24} color={theme.accent} />
+                <IconSymbol name="person.crop.circle" size={24} color={iconAccentColor} />
               </View>
               <View style={styles.menuItemContent}>
                 <ThemedText style={styles.menuItemTitle}>
@@ -230,7 +237,7 @@ export default function MoreScreen() {
                   Deine persönlichen Daten verwalten
                 </ThemedText>
               </View>
-              <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
+              <IconSymbol name="chevron.right" size={20} color={iconSecondaryColor} />
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -238,7 +245,7 @@ export default function MoreScreen() {
               onPress={() => router.push('/account-linking')}
             >
               <View style={styles.menuItemIcon}>
-                <IconSymbol name="link" size={24} color={theme.accent} />
+                <IconSymbol name="link" size={24} color={iconAccentColor} />
               </View>
               <View style={styles.menuItemContent}>
                 <ThemedText style={styles.menuItemTitle}>
@@ -248,7 +255,7 @@ export default function MoreScreen() {
                   Verbinde dich mit deinem Partner oder Familie
                 </ThemedText>
               </View>
-              <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
+              <IconSymbol name="chevron.right" size={20} color={iconSecondaryColor} />
             </TouchableOpacity>
 
             {/* Zur Babyansicht wechseln (nur vor der Geburt anzeigen) */}
@@ -268,7 +275,7 @@ export default function MoreScreen() {
                     Wechsle zur Ansicht nach der Geburt
                   </ThemedText>
                 </View>
-                <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
+                <IconSymbol name="chevron.right" size={20} color={iconSecondaryColor} />
               </TouchableOpacity>
             )}
 
@@ -289,7 +296,7 @@ export default function MoreScreen() {
                     Wechsle zurück zur Ansicht vor der Geburt
                   </ThemedText>
                 </View>
-                <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
+                <IconSymbol name="chevron.right" size={20} color={iconSecondaryColor} />
               </TouchableOpacity>
             )}
           </LiquidGlassCard>
@@ -304,7 +311,7 @@ export default function MoreScreen() {
               onPress={() => router.push('/support' as any)}
             >
               <View style={styles.menuItemIcon}>
-                <IconSymbol name="envelope.fill" size={24} color={theme.accent} />
+                <IconSymbol name="envelope.fill" size={24} color={iconAccentColor} />
               </View>
               <View style={styles.menuItemContent}>
                 <ThemedText style={styles.menuItemTitle}>
@@ -314,7 +321,7 @@ export default function MoreScreen() {
                   support@lottibaby.de
                 </ThemedText>
               </View>
-              <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
+              <IconSymbol name="chevron.right" size={20} color={iconSecondaryColor} />
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -322,7 +329,7 @@ export default function MoreScreen() {
               onPress={() => router.push('/feature-requests' as any)}
             >
               <View style={styles.menuItemIcon}>
-                <IconSymbol name="lightbulb.fill" size={24} color={theme.accent} />
+                <IconSymbol name="lightbulb.fill" size={24} color={iconAccentColor} />
               </View>
               <View style={styles.menuItemContent}>
                 <ThemedText style={styles.menuItemTitle}>
@@ -332,7 +339,7 @@ export default function MoreScreen() {
                   Teile deine Ideen zur Verbesserung der App
                 </ThemedText>
               </View>
-              <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
+              <IconSymbol name="chevron.right" size={20} color={iconSecondaryColor} />
             </TouchableOpacity>
           </LiquidGlassCard>
 

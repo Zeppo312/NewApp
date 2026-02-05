@@ -19,14 +19,17 @@ export function ThemedText({
   lightColor,
   darkColor,
   type = 'default',
-  adaptive = false,
+  adaptive = true, // Standardmäßig adaptiv für automatische Anpassung an Hintergrundbilder
   ...rest
 }: ThemedTextProps) {
   const themeColor = useThemeColor({ light: lightColor, dark: darkColor }, 'text');
   const adaptiveColors = useAdaptiveColors();
 
-  // Wenn adaptive=true und ein custom Hintergrund gesetzt ist, verwende die adaptive Farbe
-  const color = adaptive && adaptiveColors.hasCustomBackground
+  // Nur bei dunklem Hintergrundbild die adaptive Farbe verwenden
+  // Bei hellem Hintergrund oder ohne custom Hintergrund: normale Farben
+  const hasExplicitColor = lightColor !== undefined || darkColor !== undefined;
+  const useDarkMode = adaptive && adaptiveColors.hasCustomBackground && adaptiveColors.isDarkBackground;
+  const color = (useDarkMode && !hasExplicitColor)
     ? adaptiveColors.text
     : themeColor;
 

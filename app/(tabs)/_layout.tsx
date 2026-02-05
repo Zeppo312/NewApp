@@ -8,11 +8,13 @@ import TabBarBackground from '@/components/ui/TabBarBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
   const { isBabyBorn, isLoading } = useBabyStatus();
   const theme = Colors[colorScheme ?? 'light'];
+  const adaptiveColors = useAdaptiveColors();
 
   if (isLoading) {
     return (
@@ -22,10 +24,14 @@ export default function TabLayout() {
     );
   }
 
+  // Nur bei dunklem Hintergrundbild die adaptiven Farben verwenden
+  const useDarkMode = adaptiveColors.hasCustomBackground && adaptiveColors.isDarkBackground;
+
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: theme.tint,
+        tabBarActiveTintColor: useDarkMode ? adaptiveColors.tabIconSelected : theme.tint,
+        tabBarInactiveTintColor: useDarkMode ? adaptiveColors.tabIconDefault : undefined,
         headerShown: false,
         tabBarButton: HapticTab,
         tabBarBackground: TabBarBackground,
@@ -33,8 +39,11 @@ export default function TabLayout() {
           ios: {
             // Use a transparent background on iOS to show the blur effect
             position: 'absolute',
+            backgroundColor: useDarkMode ? adaptiveColors.tabBarBackground : undefined,
           },
-          default: {},
+          default: {
+            backgroundColor: useDarkMode ? adaptiveColors.tabBarBackground : theme.background,
+          },
         }),
       }}>
       {/* VERSTECKTE TABS - diese werden in keiner der Ansichten in der Tab-Leiste angezeigt */}

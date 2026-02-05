@@ -21,6 +21,10 @@ export interface HeaderProps {
   showBabySwitcher?: boolean;
 }
 
+// Original-Farben für hellen Modus
+const HEADER_TITLE_COLOR = '#7D5A50';
+const HEADER_SUBTITLE_COLOR = '#A8978E';
+
 const Header: React.FC<HeaderProps> = ({
   title,
   subtitle,
@@ -35,6 +39,12 @@ const Header: React.FC<HeaderProps> = ({
   const router = useRouter();
   const navigation = useNavigation();
   const adaptiveColors = useAdaptiveColors();
+
+  // Nur bei dunklem Hintergrundbild die adaptiven Farben verwenden
+  const useDarkMode = adaptiveColors.hasCustomBackground && adaptiveColors.isDarkBackground;
+  const titleColor = useDarkMode ? adaptiveColors.textPrimary : HEADER_TITLE_COLOR;
+  const subtitleColor = useDarkMode ? adaptiveColors.textTertiary : HEADER_SUBTITLE_COLOR;
+  const iconColor = useDarkMode ? adaptiveColors.text : theme.text;
 
   const handleBackPress = () => {
     if (onBackPress) {
@@ -56,7 +66,7 @@ const Header: React.FC<HeaderProps> = ({
               onPress={handleBackPress}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
-              <IconSymbol name="chevron.left" size={20} color={adaptiveColors.text} />
+              <IconSymbol name="chevron.left" size={20} color={iconColor} />
             </TouchableOpacity>
           )}
           {leftContent}
@@ -65,11 +75,11 @@ const Header: React.FC<HeaderProps> = ({
       
       {/* Mittlerer Bereich - immer bildschirmmittig */}
       <View style={styles.titleContainer} pointerEvents="none">
-        <ThemedText style={[styles.title, { color: adaptiveColors.textPrimary }]} numberOfLines={2} ellipsizeMode="tail">
+        <ThemedText style={[styles.title, { color: titleColor }]} numberOfLines={2} ellipsizeMode="tail">
           {title}
         </ThemedText>
         {subtitle && (
-          <ThemedText style={[styles.subtitle, { color: adaptiveColors.textTertiary }]}>{subtitle}</ThemedText>
+          <ThemedText style={[styles.subtitle, { color: subtitleColor }]}>{subtitle}</ThemedText>
         )}
       </View>
       
