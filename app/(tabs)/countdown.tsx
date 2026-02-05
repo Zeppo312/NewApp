@@ -22,6 +22,7 @@ import { ThemedText } from '@/components/ThemedText';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import CountdownTimer from '@/components/CountdownTimer';
 import { supabase, hasGeburtsplan, getDueDateWithLinkedUsers, updateDueDateAndSync } from '@/lib/supabase';
 import { generateAndDownloadPDF } from '@/lib/geburtsplan-utils';
@@ -35,7 +36,7 @@ import { pregnancySymptoms } from '@/constants/PregnancySymptoms';
 import Header from '@/components/Header';
 
 // Sleep-Tracker Design Tokens
-import { LiquidGlassCard, GLASS_OVERLAY, LAYOUT_PAD } from '@/constants/DesignGuide';
+import { LiquidGlassCard, GLASS_OVERLAY, GLASS_OVERLAY_DARK, LAYOUT_PAD } from '@/constants/DesignGuide';
 
 const PRIMARY_TEXT = '#7D5A50';
 const ACCENT_PURPLE = '#8E4EC6';
@@ -153,6 +154,11 @@ const overdueInfo: Record<number, DayInfo> & { default: DayInfo } = {
 export default function CountdownScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
+  const adaptiveColors = useAdaptiveColors();
+  const isDark = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
+  const textPrimary = isDark ? Colors.dark.textPrimary : PRIMARY_TEXT;
+  const textSecondary = isDark ? Colors.dark.textSecondary : PRIMARY_TEXT;
+  const glassOverlay = isDark ? GLASS_OVERLAY_DARK : GLASS_OVERLAY;
   const { user } = useAuth();
   const { isBabyBorn, setIsBabyBorn } = useBabyStatus();
   const router = useRouter();
@@ -404,9 +410,9 @@ export default function CountdownScreen() {
     return (
       <ThemedBackground>
         <SafeAreaView style={{ flex: 1 }}>
-          <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
+          <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
           <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-            <ActivityIndicator size="large" color={theme.tint} />
+            <ActivityIndicator size="large" color={isDark ? adaptiveColors.accent : theme.tint} />
           </View>
         </SafeAreaView>
       </ThemedBackground>
@@ -416,36 +422,36 @@ export default function CountdownScreen() {
   const isOverdue = !!dueDate && new Date() > dueDate;
 
   return (
-    <ThemedBackground style={{ flex: 1, backgroundColor: '#f5eee0' }}>
+    <ThemedBackground style={{ flex: 1 }}>
       <SafeAreaView style={{ flex: 1 }}>
-        <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
+        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
         <Header title="Countdown" subtitle="Verfolge die Zeit bis zur Geburt" />
 
         <ScrollView contentContainerStyle={styles.scrollContent}>
           {/* Countdown im Glas-Card */}
-          <LiquidGlassCard style={[styles.sectionCard, styles.centerCard]} intensity={26} overlayColor={GLASS_OVERLAY}>
+          <LiquidGlassCard style={[styles.sectionCard, styles.centerCard]} intensity={26} overlayColor={glassOverlay}>
             <CountdownTimer dueDate={dueDate} variant="embedded" />
           </LiquidGlassCard>
 
           {/* Entbindungstermin */}
-          <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
-            <ThemedText style={styles.sectionTitle}>Entbindungstermin</ThemedText>
-            <ThemedText style={styles.sectionDescription}>
+          <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={glassOverlay}>
+            <ThemedText style={[styles.sectionTitle, { color: textPrimary }]}>Entbindungstermin</ThemedText>
+            <ThemedText style={[styles.sectionDescription, { color: textSecondary }]}>
               Wähle den ET, damit Countdown & Inhalte exakt passen.
             </ThemedText>
 
             <TouchableOpacity onPress={showDatepicker} activeOpacity={0.9} style={styles.fullWidthAction}>
-              <BlurView intensity={24} tint="light" style={styles.cardBlur}>
+              <BlurView intensity={24} tint={isDark ? "dark" : "light"} style={styles.cardBlur}>
                 <View style={[styles.actionCard, { backgroundColor: 'rgba(220,200,255,0.55)' }]}>
                   <View style={[styles.actionIcon, { backgroundColor: ACCENT_PURPLE }]}>
                     <IconSymbol name="calendar" size={24} color="#fff" />
                   </View>
-                  <ThemedText style={styles.actionTitle}>
+                  <ThemedText style={[styles.actionTitle, { color: textPrimary }]}>
                     {dueDate
                       ? dueDate.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
                       : 'ET auswählen'}
                   </ThemedText>
-                  <ThemedText style={styles.actionSub}>Tippen zum Ändern</ThemedText>
+                  <ThemedText style={[styles.actionSub, { color: textSecondary }]}>Tippen zum Ändern</ThemedText>
                 </View>
               </BlurView>
             </TouchableOpacity>
@@ -455,8 +461,8 @@ export default function CountdownScreen() {
           {Platform.OS === 'ios' && (
             <Modal transparent visible={showDatePicker} animationType="fade" onRequestClose={() => setShowDatePicker(false)}>
               <Pressable style={styles.modalOverlay} onPress={handleIOSCancel}>
-                <LiquidGlassCard style={styles.modalGlass} intensity={28} overlayColor={GLASS_OVERLAY}>
-                  <ThemedText style={[styles.modalTitle, { color: PRIMARY_TEXT }]}>Entbindungstermin wählen</ThemedText>
+                <LiquidGlassCard style={styles.modalGlass} intensity={28} overlayColor={glassOverlay}>
+                  <ThemedText style={[styles.modalTitle, { color: textPrimary }]}>Entbindungstermin wählen</ThemedText>
                   <DateTimePicker
                     value={tempDate}
                     mode="date"
@@ -468,7 +474,7 @@ export default function CountdownScreen() {
                   />
                   <View style={styles.modalButtonRow}>
                     <TouchableOpacity style={[styles.pillBtn, styles.pillGhost]} onPress={handleIOSCancel}>
-                      <ThemedText style={styles.pillGhostText}>Abbrechen</ThemedText>
+                      <ThemedText style={[styles.pillGhostText, { color: textPrimary }]}>Abbrechen</ThemedText>
                     </TouchableOpacity>
                     <TouchableOpacity style={[styles.pillBtn, styles.pillPrimary]} onPress={handleIOSConfirm}>
                       <ThemedText style={styles.pillPrimaryText}>Bestätigen</ThemedText>
@@ -489,9 +495,9 @@ export default function CountdownScreen() {
             <LiquidGlassCard
               style={[styles.sectionCard, isOverdue && styles.overdueBorder]}
               intensity={26}
-              overlayColor={GLASS_OVERLAY}
+              overlayColor={glassOverlay}
             >
-              <ThemedText style={[styles.sectionTitle, isOverdue && styles.warnTitle]}>
+              <ThemedText style={[styles.sectionTitle, { color: textPrimary }, isOverdue && styles.warnTitle]}>
                 {isOverdue
                   ? `${daysOverdue} ${daysOverdue === 1 ? 'Tag' : 'Tage'} über dem ET: Was jetzt wichtig ist`
                   : `SSW ${currentWeek}: Was geschieht diese Woche?`}
@@ -503,9 +509,9 @@ export default function CountdownScreen() {
                   <View style={[styles.avatar, { backgroundColor: 'rgba(142,78,198,0.18)' }]}>
                     <IconSymbol name="figure.child" size={18} color={ACCENT_PURPLE} />
                   </View>
-                  <ThemedText style={styles.infoTitle}>Beim Baby</ThemedText>
+                  <ThemedText style={[styles.infoTitle, { color: textPrimary }]}>Beim Baby</ThemedText>
                 </View>
-                <ThemedText style={styles.infoText}>
+                <ThemedText style={[styles.infoText, { color: textSecondary }]}>
                   {isOverdue
                     ? (overdueInfo[Math.min(daysOverdue, 14)] || overdueInfo.default).baby
                     : pregnancyWeekInfo[currentWeek < 43 ? currentWeek : 42]}
@@ -518,9 +524,9 @@ export default function CountdownScreen() {
                   <View style={[styles.avatar, { backgroundColor: 'rgba(56,157,145,0.18)' }]}>
                     <IconSymbol name="person.fill" size={18} color="#389D91" />
                   </View>
-                  <ThemedText style={styles.infoTitle}>Bei der Mutter</ThemedText>
+                  <ThemedText style={[styles.infoTitle, { color: textPrimary }]}>Bei der Mutter</ThemedText>
                 </View>
-                <ThemedText style={styles.infoText}>
+                <ThemedText style={[styles.infoText, { color: textSecondary }]}>
                   {isOverdue
                     ? (overdueInfo[Math.min(daysOverdue, 14)] || overdueInfo.default).mother
                     : pregnancyMotherInfo[currentWeek < 43 ? currentWeek : 42]}
@@ -533,9 +539,9 @@ export default function CountdownScreen() {
                   <View style={[styles.avatar, { backgroundColor: 'rgba(255,140,66,0.18)' }]}>
                     <IconSymbol name="person.2.fill" size={18} color="#FF8C42" />
                   </View>
-                  <ThemedText style={styles.infoTitle}>Für den Partner</ThemedText>
+                  <ThemedText style={[styles.infoTitle, { color: textPrimary }]}>Für den Partner</ThemedText>
                 </View>
-                <ThemedText style={styles.infoText}>
+                <ThemedText style={[styles.infoText, { color: textSecondary }]}>
                   {isOverdue
                     ? (overdueInfo[Math.min(daysOverdue, 14)] || overdueInfo.default).partner
                     : pregnancyPartnerInfo[currentWeek < 43 ? currentWeek : 42]}
@@ -549,9 +555,9 @@ export default function CountdownScreen() {
             <LiquidGlassCard
               style={[styles.sectionCard, isOverdue && styles.overdueBorder]}
               intensity={26}
-              overlayColor={GLASS_OVERLAY}
+              overlayColor={glassOverlay}
             >
-              <ThemedText style={[styles.sectionTitle, isOverdue && styles.warnTitle]}>
+              <ThemedText style={[styles.sectionTitle, { color: textPrimary }, isOverdue && styles.warnTitle]}>
                 {isOverdue ? 'Häufige Anzeichen kurz vor der Geburt' : `Mögliche Symptome in SSW ${currentWeek}`}
               </ThemedText>
 
@@ -562,7 +568,7 @@ export default function CountdownScreen() {
                 ).map((symptom: string, idx: number) => (
                   <View key={idx} style={styles.symptomItem}>
                     <IconSymbol name="circle.fill" size={8} color={isOverdue ? WARN : '#389D91'} />
-                    <ThemedText style={styles.symptomText}>{symptom}</ThemedText>
+                    <ThemedText style={[styles.symptomText, { color: textSecondary }]}>{symptom}</ThemedText>
                   </View>
                 ))}
               </View>
@@ -571,16 +577,16 @@ export default function CountdownScreen() {
 
           {/* Hinweis Überfälligkeit */}
           {isOverdue && (
-            <LiquidGlassCard style={[styles.sectionCard, styles.overdueBorder]} intensity={26} overlayColor={GLASS_OVERLAY}>
+            <LiquidGlassCard style={[styles.sectionCard, styles.overdueBorder]} intensity={26} overlayColor={glassOverlay}>
               <View style={styles.infoInset}>
                 <View style={[styles.infoHeader, { marginBottom: 8 }]}>
                   <IconSymbol name="info.circle.fill" size={20} color={WARN} />
-                  <ThemedText style={[styles.infoTitle, { color: WARN }]}>Wichtige Information</ThemedText>
+                  <ThemedText style={[styles.infoTitle, { color: isDark ? '#FF9A8A' : WARN }]}>Wichtige Information</ThemedText>
                 </View>
-                <ThemedText style={styles.bodyText}>
+                <ThemedText style={[styles.bodyText, { color: textSecondary }]}>
                   Ab dem errechneten Geburtstermin wird die Schwangerschaft als „überfällig" bezeichnet. Etwa 5–10% aller Schwangerschaften dauern länger als 42 Wochen. Die meisten Geburten finden jedoch bis zu zwei Wochen vor oder nach dem ET statt.
                 </ThemedText>
-                <ThemedText style={styles.bodyText}>
+                <ThemedText style={[styles.bodyText, { color: textSecondary }]}>
                   Halte regelmäßigen Kontakt zu deiner Hebamme oder deinem Frauenarzt. In dieser Phase werden häufigere Kontrollen durchgeführt, um das Wohlbefinden deines Babys sicherzustellen.
                 </ThemedText>
               </View>
@@ -588,9 +594,9 @@ export default function CountdownScreen() {
           )}
 
           {/* Geburtsplan */}
-          <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
-            <ThemedText style={styles.sectionTitle}>Geburtsplan</ThemedText>
-            <ThemedText style={styles.sectionDescription}>
+          <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={glassOverlay}>
+            <ThemedText style={[styles.sectionTitle, { color: textPrimary }]}>Geburtsplan</ThemedText>
+            <ThemedText style={[styles.sectionDescription, { color: textSecondary }]}>
               {geburtsplanExists
                 ? 'Du hast bereits einen Geburtsplan. Du kannst ihn als PDF exportieren oder bearbeiten.'
                 : 'Erstelle einen individuellen Geburtsplan und teile ihn mit deinem Team.'}
@@ -598,15 +604,15 @@ export default function CountdownScreen() {
 
             {/* Hauptaktion: exakt wie ET-Button aufgebaut */}
             <TouchableOpacity onPress={() => router.push('/geburtsplan')} activeOpacity={0.9} style={styles.fullWidthAction}>
-              <BlurView intensity={24} tint="light" style={styles.cardBlur}>
+              <BlurView intensity={24} tint={isDark ? "dark" : "light"} style={styles.cardBlur}>
                 <View style={[styles.actionCard, { backgroundColor: 'rgba(220,200,255,0.55)' }]}>
                   <View style={[styles.actionIcon, { backgroundColor: ACCENT_PURPLE }]}>
                     <IconSymbol name={geburtsplanExists ? 'pencil' : 'plus.circle'} size={24} color="#fff" />
                   </View>
-                  <ThemedText style={styles.actionTitle}>
+                  <ThemedText style={[styles.actionTitle, { color: textPrimary }]}>
                     {geburtsplanExists ? 'Geburtsplan bearbeiten' : 'Geburtsplan erstellen'}
                   </ThemedText>
-                  <ThemedText style={styles.actionSub}>Tippen zum {geburtsplanExists ? 'Bearbeiten' : 'Erstellen'}</ThemedText>
+                  <ThemedText style={[styles.actionSub, { color: textSecondary }]}>Tippen zum {geburtsplanExists ? 'Bearbeiten' : 'Erstellen'}</ThemedText>
                 </View>
               </BlurView>
             </TouchableOpacity>
@@ -620,13 +626,13 @@ export default function CountdownScreen() {
                 </View>
               ) : (
                 <TouchableOpacity onPress={handleDownloadPDF} activeOpacity={0.9} style={styles.fullWidthAction}>
-                  <BlurView intensity={24} tint="light" style={styles.cardBlur}>
+                  <BlurView intensity={24} tint={isDark ? "dark" : "light"} style={styles.cardBlur}>
                     <View style={[styles.actionCard, { backgroundColor: 'rgba(168,196,193,0.6)' }]}>
                       <View style={[styles.actionIcon, { backgroundColor: '#389D91' }]}>
                         <IconSymbol name="arrow.down.doc" size={22} color="#fff" />
                       </View>
-                      <ThemedText style={styles.actionTitle}>Als PDF herunterladen</ThemedText>
-                      <ThemedText style={styles.actionSub}>Tippen zum Exportieren</ThemedText>
+                      <ThemedText style={[styles.actionTitle, { color: textPrimary }]}>Als PDF herunterladen</ThemedText>
+                      <ThemedText style={[styles.actionSub, { color: textSecondary }]}>Tippen zum Exportieren</ThemedText>
                     </View>
                   </BlurView>
                 </TouchableOpacity>
@@ -637,13 +643,13 @@ export default function CountdownScreen() {
           {/* Baby geboren */}
           {dueDate && isOverdue && !isBabyBorn && (
             <TouchableOpacity onPress={handleBabyBorn} activeOpacity={0.9} style={styles.fullWidthAction}>
-              <BlurView intensity={24} tint="light" style={styles.cardBlur}>
+              <BlurView intensity={24} tint={isDark ? "dark" : "light"} style={styles.cardBlur}>
                 <View style={[styles.actionCard, { backgroundColor: 'rgba(255,180,180,0.6)' }]}>
                   <View style={[styles.actionIcon, { backgroundColor: WARN }]}>
                     <IconSymbol name="heart.fill" size={22} color="#fff" />
                   </View>
-                  <ThemedText style={[styles.actionTitle, { color: '#5C4033' }]}>Mein Baby ist geboren!</ThemedText>
-                  <ThemedText style={[styles.actionSub, { color: '#5C4033', opacity: 0.85 }]}>Tippen zum Bestätigen</ThemedText>
+                  <ThemedText style={[styles.actionTitle, { color: textPrimary }]}>Mein Baby ist geboren!</ThemedText>
+                  <ThemedText style={[styles.actionSub, { color: textSecondary, opacity: 0.85 }]}>Tippen zum Bestätigen</ThemedText>
                 </View>
               </BlurView>
             </TouchableOpacity>
@@ -651,12 +657,12 @@ export default function CountdownScreen() {
 
           {/* Geteilter Countdown */}
           {linkedUsers.length > 0 && (
-            <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
-              <ThemedText style={styles.sectionTitle}>Geteilter Countdown</ThemedText>
+            <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={glassOverlay}>
+              <ThemedText style={[styles.sectionTitle, { color: textPrimary }]}>Geteilter Countdown</ThemedText>
               <View style={styles.badgeWrap}>
                 {linkedUsers.map((lu) => (
-                  <View key={lu.id} style={styles.badge}>
-                    <ThemedText style={styles.badgeText}>{lu.firstName}</ThemedText>
+                  <View key={lu.id} style={[styles.badge, isDark && { backgroundColor: 'rgba(142,78,198,0.25)', borderColor: 'rgba(255,255,255,0.25)' }]}>
+                    <ThemedText style={[styles.badgeText, { color: textPrimary }]}>{lu.firstName}</ThemedText>
                   </View>
                 ))}
               </View>
@@ -741,7 +747,7 @@ const styles = StyleSheet.create({
   actionSub: { fontSize: 11, color: PRIMARY_TEXT, opacity: 0.8, textAlign: 'center' },
 
   // Info Blöcke
-  infoBlock: { marginBottom: 12, paddingBottom: 12, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.55)' },
+  infoBlock: { marginBottom: 12, paddingBottom: 12, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.35)' },
   infoHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
   infoTitle: { fontSize: 15, fontWeight: '800', color: PRIMARY_TEXT },
   infoText: { fontSize: 14, lineHeight: 20, color: PRIMARY_TEXT, opacity: 0.95, paddingLeft: 40 },

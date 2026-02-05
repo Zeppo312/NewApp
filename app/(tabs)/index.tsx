@@ -5,6 +5,7 @@ import { ThemedBackground } from '@/components/ThemedBackground';
 import VerticalContractionTimeline from '@/components/VerticalContractionTimeline';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { useAuth } from '@/contexts/AuthContext';
 import { saveContraction, getContractions, deleteContraction, updateContraction, syncAllExistingContractions, getLinkedUsersWithDetails } from '@/lib/supabase';
 import * as Notifications from 'expo-notifications';
@@ -18,7 +19,7 @@ import {
   formatTime as formatBackgroundTime
 } from '@/lib/background-tasks';
 import Header from '@/components/Header';
-import { GlassCard, LiquidGlassCard, GLASS_OVERLAY, TIMELINE_INSET, LAYOUT_PAD, RADIUS, SECTION_GAP_BOTTOM, SECTION_GAP_TOP, PRIMARY } from '@/constants/DesignGuide';
+import { GlassCard, LiquidGlassCard, GLASS_OVERLAY, GLASS_OVERLAY_DARK, TIMELINE_INSET, LAYOUT_PAD, RADIUS, SECTION_GAP_BOTTOM, SECTION_GAP_TOP, PRIMARY } from '@/constants/DesignGuide';
 import { BlurView } from 'expo-blur';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { ProgressCircle } from '@/components/ProgressCircle';
@@ -128,6 +129,11 @@ export default function HomeScreen() {
   const [showManualEndPicker, setShowManualEndPicker] = useState(false);
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
+  const adaptiveColors = useAdaptiveColors();
+  const isDark = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
+  const textPrimary = isDark ? Colors.dark.textPrimary : '#5C4033';
+  const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
+  const glassOverlay = isDark ? GLASS_OVERLAY_DARK : GLASS_OVERLAY;
   const { user } = useAuth();
   const appState = useRef(AppState.currentState);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -876,7 +882,7 @@ export default function HomeScreen() {
             onPress={() => setSelectedTab(tab)}
             activeOpacity={0.85}
           >
-            <Text style={[styles.topTabText, selectedTab === tab && styles.activeTopTabText]}>
+            <Text style={[styles.topTabText, { color: textSecondary }, selectedTab === tab && styles.activeTopTabText]}>
               {tab === 'day' ? 'Tag' : tab === 'week' ? 'Woche' : 'Monat'}
             </Text>
           </TouchableOpacity>
@@ -896,9 +902,9 @@ export default function HomeScreen() {
         >
           <View style={styles.kpiHeaderRow}>
             <IconSymbol name="waveform.path.ecg" size={12} color="#8E4EC6" />
-            <Text style={styles.kpiTitle}>Wehen</Text>
+            <Text style={[styles.kpiTitle, { color: textSecondary }]}>Wehen</Text>
           </View>
-          <Text style={[styles.kpiValue, styles.kpiValueCentered]}>{stats.count}</Text>
+          <Text style={[styles.kpiValue, styles.kpiValueCentered, { color: textPrimary }]}>{stats.count}</Text>
         </GlassCard>
 
         <GlassCard
@@ -909,9 +915,9 @@ export default function HomeScreen() {
         >
           <View style={styles.kpiHeaderRow}>
             <IconSymbol name="timer" size={12} color="#FF8C42" />
-            <Text style={styles.kpiTitle}>Ø Dauer</Text>
+            <Text style={[styles.kpiTitle, { color: textSecondary }]}>Ø Dauer</Text>
           </View>
-          <Text style={[styles.kpiValue, styles.kpiValueCentered]}>
+          <Text style={[styles.kpiValue, styles.kpiValueCentered, { color: textPrimary }]}>
             {formatSecondsCompact(stats.avgDuration)}
           </Text>
         </GlassCard>
@@ -926,9 +932,9 @@ export default function HomeScreen() {
         >
           <View style={styles.kpiHeaderRow}>
             <IconSymbol name="clock.fill" size={12} color="#A8C4A2" />
-            <Text style={styles.kpiTitle}>Ø Intervall</Text>
+            <Text style={[styles.kpiTitle, { color: textSecondary }]}>Ø Intervall</Text>
           </View>
-          <Text style={[styles.kpiValue, styles.kpiValueCentered]}>
+          <Text style={[styles.kpiValue, styles.kpiValueCentered, { color: textPrimary }]}>
             {formatSecondsCompact(stats.avgInterval)}
           </Text>
         </GlassCard>
@@ -941,9 +947,9 @@ export default function HomeScreen() {
         >
           <View style={styles.kpiHeaderRow}>
             <IconSymbol name="heart.fill" size={12} color="#FF9B9B" />
-            <Text style={styles.kpiTitle}>Letzte Wehe</Text>
+            <Text style={[styles.kpiTitle, { color: textSecondary }]}>Letzte Wehe</Text>
           </View>
-          <Text style={[styles.kpiValue, styles.kpiValueCentered]}>
+          <Text style={[styles.kpiValue, styles.kpiValueCentered, { color: textPrimary }]}>
             {formatAgo(stats.lastStart)}
           </Text>
         </GlassCard>
@@ -957,8 +963,8 @@ export default function HomeScreen() {
         <ThemedText style={styles.weekNavButtonText}>‹</ThemedText>
       </TouchableOpacity>
       <View style={styles.weekHeaderCenter}>
-        <ThemedText style={styles.weekHeaderTitle}>{rangeTitle}</ThemedText>
-        <ThemedText style={styles.weekHeaderSubtitle}>{rangeSubtitle}</ThemedText>
+        <ThemedText style={[styles.weekHeaderTitle, { color: textSecondary }]}>{rangeTitle}</ThemedText>
+        <ThemedText style={[styles.weekHeaderSubtitle, { color: textSecondary }]}>{rangeSubtitle}</ThemedText>
       </View>
       <TouchableOpacity
         style={[styles.weekNavButton, nextRangeDisabled && { opacity: 0.4 }]}
@@ -979,7 +985,7 @@ export default function HomeScreen() {
           onPress={stopContraction}
           activeOpacity={0.9}
         >
-          <BlurView intensity={24} tint="light" style={styles.liquidGlassCardBackground}>
+          <BlurView intensity={24} tint={isDark ? "dark" : "light"} style={styles.liquidGlassCardBackground}>
             <View
               style={[
                 styles.card,
@@ -995,8 +1001,8 @@ export default function HomeScreen() {
               >
                 <IconSymbol name="stop.fill" size={28} color="#FFFFFF" />
               </View>
-              <Text style={styles.cardTitle}>Wehe beenden</Text>
-              <Text style={styles.cardDescription}>Timer stoppen</Text>
+              <Text style={[styles.cardTitle, { color: textSecondary }]}>Wehe beenden</Text>
+              <Text style={[styles.cardDescription, { color: textSecondary }]}>Timer stoppen</Text>
             </View>
           </BlurView>
         </TouchableOpacity>
@@ -1007,7 +1013,7 @@ export default function HomeScreen() {
             onPress={startContraction}
             activeOpacity={0.9}
           >
-            <BlurView intensity={24} tint="light" style={styles.liquidGlassCardBackground}>
+            <BlurView intensity={24} tint={isDark ? "dark" : "light"} style={styles.liquidGlassCardBackground}>
               <View
                 style={[
                   styles.card,
@@ -1023,8 +1029,8 @@ export default function HomeScreen() {
                 >
                   <IconSymbol name="waveform.path.ecg" size={28} color="#FFFFFF" />
                 </View>
-                <Text style={styles.cardTitle}>Wehe starten</Text>
-                <Text style={styles.cardDescription}>Timer beginnen</Text>
+                <Text style={[styles.cardTitle, { color: textSecondary }]}>Wehe starten</Text>
+                <Text style={[styles.cardDescription, { color: textSecondary }]}>Timer beginnen</Text>
               </View>
             </BlurView>
           </TouchableOpacity>
@@ -1034,7 +1040,7 @@ export default function HomeScreen() {
             onPress={openManualModal}
             activeOpacity={0.9}
           >
-            <BlurView intensity={24} tint="light" style={styles.liquidGlassCardBackground}>
+            <BlurView intensity={24} tint={isDark ? "dark" : "light"} style={styles.liquidGlassCardBackground}>
               <View
                 style={[
                   styles.card,
@@ -1050,8 +1056,8 @@ export default function HomeScreen() {
                 >
                   <IconSymbol name="plus.circle.fill" size={28} color="#FFFFFF" />
                 </View>
-                <Text style={styles.cardTitle}>Manuell</Text>
-                <Text style={styles.cardDescription}>Eintrag hinzufügen</Text>
+                <Text style={[styles.cardTitle, { color: textSecondary }]}>Manuell</Text>
+                <Text style={[styles.cardDescription, { color: textSecondary }]}>Eintrag hinzufügen</Text>
               </View>
             </BlurView>
           </TouchableOpacity>
@@ -1063,7 +1069,7 @@ export default function HomeScreen() {
   return (
     <ThemedBackground style={styles.background}>
       <SafeAreaView style={styles.safeArea}>
-        <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
+        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
         
         <Header 
           title="Wehen-Tracker" 
@@ -1105,8 +1111,8 @@ export default function HomeScreen() {
                     return (
                       <View style={[styles.circleArea, { width: circleSize, height: circleSize, borderRadius: circleSize / 2 }]}>
                         <View style={[styles.glassCircle, { width: circleSize, height: circleSize, borderRadius: circleSize / 2 }]}>
-                          <BlurView intensity={18} tint="light" style={[styles.glassCircleBlur, { borderRadius: circleSize / 2 }]}>
-                            <View style={[styles.glassCircleOverlay, { borderRadius: circleSize / 2 }]} />
+                          <BlurView intensity={18} tint={isDark ? 'dark' : 'light'} style={[styles.glassCircleBlur, { borderRadius: circleSize / 2 }]}>
+                            <View style={[styles.glassCircleOverlay, { borderRadius: circleSize / 2, borderColor: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.6)' }]} />
                           </BlurView>
                         </View>
 
@@ -1122,7 +1128,7 @@ export default function HomeScreen() {
                         </View>
 
                         <View pointerEvents="none" style={styles.centerOverlay}>
-                          <Text style={[styles.centralTime, { color: '#6B4C3B', fontWeight: '800' }]}>
+                          <Text style={[styles.centralTime, { color: textPrimary, fontWeight: '800' }]}>
                             {formatTime(elapsedTime)}
                           </Text>
                         </View>
@@ -1150,15 +1156,15 @@ export default function HomeScreen() {
                         </View>
 
                         <View pointerEvents="none" style={styles.lowerContent}>
-                          <Text style={[styles.centralStatus, { color: '#6B4C3B', fontWeight: '700' }]}>
+                          <Text style={[styles.centralStatus, { color: textPrimary, fontWeight: '700' }]}>
                             {timerRunning ? 'Wehe läuft' : 'Bereit'}
                           </Text>
                           {timerRunning ? (
-                            <Text style={[styles.centralHint, { color: '#7D5A50', fontWeight: '500' }]}>
+                            <Text style={[styles.centralHint, { color: textSecondary, fontWeight: '500' }]}>
                               Timer läuft auch im Hintergrund weiter
                             </Text>
                           ) : (
-                            <Text style={[styles.centralHint, { color: '#7D5A50', fontWeight: '500' }]}>
+                            <Text style={[styles.centralHint, { color: textSecondary, fontWeight: '500' }]}>
                               Tippe unten, um eine neue Wehe zu starten
                             </Text>
                           )}
@@ -1171,7 +1177,7 @@ export default function HomeScreen() {
             </View>
 
             <View style={styles.captureSection}>
-              <Text style={styles.sectionTitle}>Wehenerfassung</Text>
+              <Text style={[styles.sectionTitle, { color: textSecondary }]}>Wehenerfassung</Text>
               <ActionButtons />
             </View>
 
@@ -1188,9 +1194,9 @@ export default function HomeScreen() {
               </View>
 
               {linkedUsers.length > 0 && (
-                <LiquidGlassCard style={styles.fullWidthCard} intensity={26} overlayColor={GLASS_OVERLAY}>
+                <LiquidGlassCard style={styles.fullWidthCard} intensity={26} overlayColor={glassOverlay}>
                   <View style={{ padding: 12 }}>
-                    <ThemedText style={styles.syncInfoText} lightColor="#5C4033" darkColor="#F2E6DD">
+                    <ThemedText style={[styles.syncInfoText, { color: textSecondary }]}>
                       Deine Wehen werden automatisch mit {linkedUsers.map(user => user.firstName).join(', ')} synchronisiert.
                     </ThemedText>
                   </View>
@@ -1209,18 +1215,18 @@ export default function HomeScreen() {
               )}
 
               {isLoading || isSyncing ? (
-                <LiquidGlassCard style={[styles.emptyGlass, styles.fullWidthCard]} intensity={26} overlayColor={GLASS_OVERLAY}>
+                <LiquidGlassCard style={[styles.emptyGlass, styles.fullWidthCard]} intensity={26} overlayColor={glassOverlay}>
                   <View style={styles.emptyInner}>
-                    <ActivityIndicator size="large" color={theme.accent} />
-                    <ThemedText style={{marginTop: 10}} lightColor={theme.text} darkColor={theme.text}>
+                    <ActivityIndicator size="large" color={isDark ? adaptiveColors.accent : theme.accent} />
+                    <ThemedText style={{marginTop: 10, color: textSecondary}}>
                       {isSyncing ? 'Wehen werden synchronisiert...' : 'Wehen werden geladen...'}
                     </ThemedText>
                   </View>
                 </LiquidGlassCard>
               ) : filteredContractions.length === 0 ? (
-                <LiquidGlassCard style={[styles.emptyGlass, styles.fullWidthCard]} intensity={26} overlayColor={GLASS_OVERLAY}>
+                <LiquidGlassCard style={[styles.emptyGlass, styles.fullWidthCard]} intensity={26} overlayColor={glassOverlay}>
                   <View style={styles.emptyInner}>
-                    <ThemedText lightColor={theme.text} darkColor={theme.text}>
+                    <ThemedText style={{ color: textSecondary }}>
                       Noch keine Wehen im Zeitraum aufgezeichnet
                     </ThemedText>
                   </View>
@@ -1244,8 +1250,8 @@ export default function HomeScreen() {
                     <Text style={styles.manualHeaderButtonText}>✕</Text>
                   </TouchableOpacity>
                   <View style={styles.manualHeaderCenter}>
-                    <Text style={styles.manualTitle}>Manuelle Wehe</Text>
-                    <Text style={styles.manualSubtitle}>Trage Start- und Endzeit ein</Text>
+                    <Text style={[styles.manualTitle, { color: textSecondary }]}>Manuelle Wehe</Text>
+                    <Text style={[styles.manualSubtitle, { color: textSecondary }]}>Trage Start- und Endzeit ein</Text>
                   </View>
                   <TouchableOpacity style={[styles.manualHeaderButton, styles.manualSaveButton]} onPress={handleManualSave}>
                     <Text style={styles.manualSaveButtonText}>✓</Text>
@@ -1255,7 +1261,7 @@ export default function HomeScreen() {
                 <ScrollView style={styles.manualScroll} showsVerticalScrollIndicator={false}>
                   <View style={styles.manualContent}>
                     <View style={styles.manualSection}>
-                      <Text style={styles.manualSectionTitle}>⏰ Zeitraum</Text>
+                      <Text style={[styles.manualSectionTitle, { color: textSecondary }]}>⏰ Zeitraum</Text>
                       <View style={styles.manualTimeRow}>
                         <TouchableOpacity
                           style={styles.manualTimeButton}
@@ -1340,7 +1346,7 @@ export default function HomeScreen() {
                     </View>
 
                     <View style={styles.manualSection}>
-                      <Text style={styles.manualSectionTitle}>💪 Intensität</Text>
+                      <Text style={[styles.manualSectionTitle, { color: textSecondary }]}>💪 Intensität</Text>
                       <View style={styles.manualIntensityRow}>
                         {(['schwach', 'mittel', 'stark'] as const).map(level => (
                           <TouchableOpacity
