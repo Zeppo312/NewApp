@@ -26,8 +26,8 @@ import Header from '@/components/Header';
 import TextInputOverlay from '@/components/modals/TextInputOverlay';
 
 import { Colors } from '@/constants/Colors';
-import { useColorScheme } from '@/hooks/useColorScheme';
-import { LiquidGlassCard, GLASS_OVERLAY, LAYOUT_PAD } from '@/constants/DesignGuide';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
+import { LiquidGlassCard, GLASS_OVERLAY, GLASS_OVERLAY_DARK, LAYOUT_PAD } from '@/constants/DesignGuide';
 
 import { useAuth } from '@/contexts/AuthContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
@@ -45,10 +45,52 @@ const TIMELINE_INSET = 8; // wie im Sleep-Tracker
 const PRIMARY_TEXT = '#7D5A50';
 const ACCENT_PURPLE = '#8E4EC6'; // Sleep-Tracker Akzent
 const BABY_BLUE = '#87CEEB';
+const BABY_PINK = '#FFB3C1';
+
+const toRgba = (hex: string, opacity = 1) => {
+  const cleanHex = hex.replace('#', '');
+  const int = parseInt(cleanHex, 16);
+  const r = (int >> 16) & 255;
+  const g = (int >> 8) & 255;
+  const b = int & 255;
+  return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+};
+
+const lightenHex = (hex: string, amount = 0.35) => {
+  const cleanHex = hex.replace('#', '');
+  const int = parseInt(cleanHex, 16);
+  const r = (int >> 16) & 255;
+  const g = (int >> 8) & 255;
+  const b = int & 255;
+
+  const lightenChannel = (channel: number) =>
+    Math.min(255, Math.round(channel + (255 - channel) * amount));
+  const toHex = (channel: number) => channel.toString(16).padStart(2, '0');
+
+  return `#${toHex(lightenChannel(r))}${toHex(lightenChannel(g))}${toHex(lightenChannel(b))}`;
+};
 
 export default function ProfilScreen() {
-  const colorScheme = useColorScheme() ?? 'light';
-  const theme = Colors[colorScheme];
+  const adaptiveColors = useAdaptiveColors();
+  const colorScheme = adaptiveColors.effectiveScheme;
+  const isDark = colorScheme === 'dark' || adaptiveColors.isDarkBackground;
+
+  const textPrimary = isDark ? Colors.dark.textPrimary : '#5C4033';
+  const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
+  const glassOverlay = isDark ? GLASS_OVERLAY_DARK : GLASS_OVERLAY;
+  const glassBorder = isDark ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.6)';
+  const glassBorderStrong = isDark ? 'rgba(255,255,255,0.28)' : 'rgba(255,255,255,0.85)';
+  const glassSurface = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.7)';
+  const glassSurfaceSoft = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.2)';
+  const glassSurfaceButton = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.5)';
+  const accentPurple = isDark ? lightenHex(ACCENT_PURPLE) : ACCENT_PURPLE;
+  const babyBlue = isDark ? lightenHex(BABY_BLUE) : BABY_BLUE;
+  const babyPink = isDark ? lightenHex(BABY_PINK) : BABY_PINK;
+  const loadingAccent = adaptiveColors.accent;
+  const saveCardBackground = isDark ? toRgba(accentPurple, 0.22) : 'rgba(220,200,255,0.6)';
+  const securityCardBackground = isDark ? toRgba(babyBlue, 0.2) : 'rgba(135,206,235,0.45)';
+  const dangerCardBackground = isDark ? 'rgba(255,107,107,0.22)' : 'rgba(255,130,130,0.5)';
+  const actionDisabledBackground = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(168,168,168,0.5)';
   const { user, signOut } = useAuth();
   const { isBabyBorn, setIsBabyBorn, refreshBabyDetails } = useBabyStatus();
   const { activeBabyId, refreshBabies } = useActiveBaby();
@@ -609,21 +651,29 @@ export default function ProfilScreen() {
           >
             {isLoading ? (
               <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color={theme.accent} />
-                <ThemedText style={styles.loadingText}>Lade Daten...</ThemedText>
+                <ActivityIndicator size="large" color={loadingAccent} />
+                <ThemedText style={[styles.loadingText, { color: textPrimary }]}>Lade Daten...</ThemedText>
               </View>
             ) : (
               <>
                 {/* Persönliche Daten */}
                 <LiquidGlassCard
-                  style={[styles.sectionCard, { marginHorizontal: TIMELINE_INSET }]}
+                  style={[
+                    styles.sectionCard,
+                    { marginHorizontal: TIMELINE_INSET },
+                    isDark && { backgroundColor: 'rgba(0,0,0,0.35)' },
+                  ]}
                   intensity={26}
-                  overlayColor={GLASS_OVERLAY}
+                  overlayColor={glassOverlay}
+                  borderColor={glassBorder}
                 >
-                  <ThemedText style={styles.sectionTitle}>Persönliche Daten</ThemedText>
+                  <ThemedText style={[styles.sectionTitle, { color: textPrimary }]}>Persönliche Daten</ThemedText>
                   <View style={styles.avatarSelector}>
                     <TouchableOpacity
-                      style={styles.avatarPreviewWrapper}
+                      style={[
+                        styles.avatarPreviewWrapper,
+                        { backgroundColor: glassSurface, borderColor: glassBorderStrong, borderWidth: 1.5 },
+                      ]}
                       onPress={pickAvatarImage}
                       activeOpacity={0.8}
                     >
@@ -634,18 +684,18 @@ export default function ProfilScreen() {
                           showLoader={false}
                         />
                       ) : (
-                        <View style={styles.avatarPlaceholder}>
+                        <View style={[styles.avatarPlaceholder, { backgroundColor: glassSurfaceSoft, borderColor: glassBorder }]}>
                           <IconSymbol name="camera" size={30} color="#FFFFFF" />
                         </View>
                       )}
                     </TouchableOpacity>
                     <View style={styles.avatarActions}>
                       <TouchableOpacity style={styles.avatarActionButton} onPress={pickAvatarImage}>
-                        <ThemedText style={styles.avatarActionText}>Foto wählen</ThemedText>
+                        <ThemedText style={[styles.avatarActionText, { color: textPrimary }]}>Foto wählen</ThemedText>
                       </TouchableOpacity>
                       {!!avatarPreview && (
                         <TouchableOpacity style={styles.avatarActionButton} onPress={() => removeAvatarImage()}>
-                          <ThemedText style={styles.avatarActionText}>Foto entfernen</ThemedText>
+                          <ThemedText style={[styles.avatarActionText, { color: textPrimary }]}>Foto entfernen</ThemedText>
                         </TouchableOpacity>
                       )}
                       {!!avatarUrl && (
@@ -667,17 +717,24 @@ export default function ProfilScreen() {
                   </View>
                   <View style={styles.cardInner}>
                     <View style={styles.formGroup}>
-                      <ThemedText style={styles.label}>E-Mail</ThemedText>
+                      <ThemedText style={[styles.label, { color: textPrimary }]}>E-Mail</ThemedText>
                       <TextInput
-                        style={[styles.inputGlass, styles.inputDisabled]}
+                        style={[
+                          styles.inputGlass,
+                          styles.inputDisabled,
+                          { borderColor: glassBorder, backgroundColor: glassSurface, color: textPrimary },
+                        ]}
                         value={email}
                         editable={false}
                         placeholder="Deine E-Mail-Adresse"
-                        placeholderTextColor="#9BA0A6"
+                        placeholderTextColor={isDark ? '#CFC7BC' : '#9BA0A6'}
                       />
                       <View style={styles.inlineActions}>
                         <TouchableOpacity
-                          style={styles.inlineActionButton}
+                          style={[
+                            styles.inlineActionButton,
+                            { borderColor: glassBorder, backgroundColor: glassSurfaceSoft },
+                          ]}
                           onPress={() => {
                             setEmailOverlayValue(user?.new_email || '');
                             setEmailOverlayVisible(true);
@@ -686,49 +743,50 @@ export default function ProfilScreen() {
                           disabled={isUpdatingEmail}
                         >
                           {isUpdatingEmail ? (
-                            <ActivityIndicator size="small" color={ACCENT_PURPLE} />
+                            <ActivityIndicator size="small" color={accentPurple} />
                           ) : (
-                            <IconSymbol name="envelope.fill" size={18} color={ACCENT_PURPLE} />
+                            <IconSymbol name="envelope.fill" size={18} color={accentPurple} />
                           )}
-                          <ThemedText style={styles.inlineActionText}>E-Mail ändern</ThemedText>
+                          <ThemedText style={[styles.inlineActionText, { color: textPrimary }]}>E-Mail ändern</ThemedText>
                         </TouchableOpacity>
                       </View>
                       {!!user?.new_email && user?.new_email !== user?.email && (
-                        <ThemedText style={styles.helperText}>
+                        <ThemedText style={[styles.helperText, { color: textPrimary }]}>
                           Neue E-Mail ausstehend: {user.new_email} (bitte bestätigen)
                         </ThemedText>
                       )}
                     </View>
 
                     <View style={styles.formGroup}>
-                      <ThemedText style={styles.label}>Vorname</ThemedText>
+                      <ThemedText style={[styles.label, { color: textPrimary }]}>Vorname</ThemedText>
                       <TextInput
-                        style={styles.inputGlass}
+                        style={[styles.inputGlass, { borderColor: glassBorder, backgroundColor: glassSurface, color: textPrimary }]}
                         value={firstName}
                         onChangeText={setFirstName}
                         placeholder="Dein Vorname"
-                        placeholderTextColor="#9BA0A6"
+                        placeholderTextColor={isDark ? '#CFC7BC' : '#9BA0A6'}
                       />
                     </View>
 
                     <View style={styles.formGroup}>
-                      <ThemedText style={styles.label}>Nachname</ThemedText>
+                      <ThemedText style={[styles.label, { color: textPrimary }]}>Nachname</ThemedText>
                       <TextInput
-                        style={styles.inputGlass}
+                        style={[styles.inputGlass, { borderColor: glassBorder, backgroundColor: glassSurface, color: textPrimary }]}
                         value={lastName}
                         onChangeText={setLastName}
                         placeholder="Dein Nachname"
-                        placeholderTextColor="#9BA0A6"
+                        placeholderTextColor={isDark ? '#CFC7BC' : '#9BA0A6'}
                       />
                     </View>
 
                     <View style={styles.formGroup}>
-                      <ThemedText style={styles.label}>Rolle</ThemedText>
+                      <ThemedText style={[styles.label, { color: textPrimary }]}>Rolle</ThemedText>
                       <View style={styles.duoRow}>
                         <TouchableOpacity
                           style={[
                             styles.pickButton,
-                            userRole === 'mama' && styles.pickButtonActive,
+                            { borderColor: glassBorder, backgroundColor: glassSurfaceButton },
+                            userRole === 'mama' && [styles.pickButtonActive, { backgroundColor: accentPurple, borderColor: glassBorderStrong }],
                           ]}
                           onPress={() => setUserRole('mama')}
                           activeOpacity={0.9}
@@ -736,11 +794,12 @@ export default function ProfilScreen() {
                           <IconSymbol
                             name="person.fill"
                             size={24}
-                            color={userRole === 'mama' ? '#FFFFFF' : '#7D7D85'}
+                            color={userRole === 'mama' ? '#FFFFFF' : textSecondary}
                           />
                           <ThemedText
                             style={[
                               styles.pickButtonText,
+                              { color: textSecondary },
                               userRole === 'mama' && styles.pickButtonTextActive,
                             ]}
                           >
@@ -751,7 +810,8 @@ export default function ProfilScreen() {
                         <TouchableOpacity
                           style={[
                             styles.pickButton,
-                            userRole === 'papa' && styles.pickButtonActive,
+                            { borderColor: glassBorder, backgroundColor: glassSurfaceButton },
+                            userRole === 'papa' && [styles.pickButtonActive, { backgroundColor: accentPurple, borderColor: glassBorderStrong }],
                           ]}
                           onPress={() => setUserRole('papa')}
                           activeOpacity={0.9}
@@ -759,11 +819,12 @@ export default function ProfilScreen() {
                           <IconSymbol
                             name="person.fill"
                             size={24}
-                            color={userRole === 'papa' ? '#FFFFFF' : '#7D7D85'}
+                            color={userRole === 'papa' ? '#FFFFFF' : textSecondary}
                           />
                           <ThemedText
                             style={[
                               styles.pickButtonText,
+                              { color: textSecondary },
                               userRole === 'papa' && styles.pickButtonTextActive,
                             ]}
                           >
@@ -777,39 +838,44 @@ export default function ProfilScreen() {
 
                 {/* Baby-Infos */}
                 <LiquidGlassCard
-                  style={[styles.sectionCard, { marginHorizontal: TIMELINE_INSET }]}
+                  style={[
+                    styles.sectionCard,
+                    { marginHorizontal: TIMELINE_INSET },
+                    isDark && { backgroundColor: 'rgba(0,0,0,0.35)' },
+                  ]}
                   intensity={26}
-                  overlayColor={GLASS_OVERLAY}
+                  overlayColor={glassOverlay}
+                  borderColor={glassBorder}
                 >
-                  <ThemedText style={styles.sectionTitle}>Baby-Informationen</ThemedText>
+                  <ThemedText style={[styles.sectionTitle, { color: textPrimary }]}>Baby-Informationen</ThemedText>
                   <View style={styles.cardInner}>
                     <View style={styles.formGroup}>
-                      <ThemedText style={styles.label}>Babyfoto</ThemedText>
+                      <ThemedText style={[styles.label, { color: textPrimary }]}>Babyfoto</ThemedText>
                       <View style={styles.babyPhotoSelector}>
                         {babyPhotoPreview ? (
                           <CachedImage uri={babyPhotoPreview} style={styles.babyPhotoPreview} showLoader={false} />
                         ) : (
-                          <View style={styles.babyPhotoPlaceholder}>
+                          <View style={[styles.babyPhotoPlaceholder, { backgroundColor: glassSurfaceSoft, borderColor: glassBorder }]}>
                             <IconSymbol name="person.fill" size={40} color="#FFFFFF" />
                           </View>
                         )}
                         <View style={styles.babyPhotoActions}>
                           <TouchableOpacity
-                            style={styles.babyPhotoActionButton}
+                            style={[styles.babyPhotoActionButton, { borderColor: glassBorder, backgroundColor: glassSurfaceSoft }]}
                             onPress={pickBabyPhoto}
                             activeOpacity={0.9}
                             disabled={isSaving}
                           >
-                            <ThemedText style={styles.babyPhotoActionText}>Foto wählen</ThemedText>
+                            <ThemedText style={[styles.babyPhotoActionText, { color: textPrimary }]}>Foto wählen</ThemedText>
                           </TouchableOpacity>
                           {!!babyPhotoPreview && (
                             <TouchableOpacity
-                              style={styles.babyPhotoActionButton}
+                              style={[styles.babyPhotoActionButton, { borderColor: glassBorder, backgroundColor: glassSurfaceSoft }]}
                               onPress={removeBabyPhoto}
                               activeOpacity={0.9}
                               disabled={isSaving}
                             >
-                              <ThemedText style={styles.babyPhotoActionText}>Foto entfernen</ThemedText>
+                              <ThemedText style={[styles.babyPhotoActionText, { color: textPrimary }]}>Foto entfernen</ThemedText>
                             </TouchableOpacity>
                           )}
                         </View>
@@ -817,16 +883,16 @@ export default function ProfilScreen() {
                     </View>
 
                     <View style={styles.formGroup}>
-                      <ThemedText style={styles.label}>Errechneter Geburtstermin</ThemedText>
+                      <ThemedText style={[styles.label, { color: textPrimary }]}>Errechneter Geburtstermin</ThemedText>
                       <TouchableOpacity
-                        style={styles.dateButtonGlass}
+                        style={[styles.dateButtonGlass, { borderColor: glassBorder, backgroundColor: glassSurface, shadowColor: 'transparent' }]}
                         onPress={() => setShowDueDatePicker(true)}
                         activeOpacity={0.9}
                       >
-                        <ThemedText style={styles.dateButtonText}>
+                        <ThemedText style={[styles.dateButtonText, { color: textPrimary }]}>
                           {dueDate ? formatDate(dueDate) : 'Geburtstermin auswählen'}
                         </ThemedText>
-                        <IconSymbol name="calendar" size={20} color="#7D7D85" />
+                        <IconSymbol name="calendar" size={20} color={textSecondary} />
                       </TouchableOpacity>
                       {showDueDatePicker && (
                         <DateTimePicker
@@ -839,9 +905,9 @@ export default function ProfilScreen() {
                     </View>
 
                     <View style={styles.formGroup}>
-                      <ThemedText style={styles.label}>Baby bereits geboren?</ThemedText>
+                      <ThemedText style={[styles.label, { color: textPrimary }]}>Baby bereits geboren?</ThemedText>
                       <View style={styles.switchContainer}>
-                        <ThemedText style={styles.switchLabel}>
+                        <ThemedText style={[styles.switchLabel, { color: textPrimary }]}>
                           {isBabyBorn ? 'Ja' : 'Nein'}
                         </ThemedText>
                         <Switch
@@ -856,23 +922,24 @@ export default function ProfilScreen() {
                     </View>
 
                     <View style={styles.formGroup}>
-                      <ThemedText style={styles.label}>Name des Babys</ThemedText>
+                      <ThemedText style={[styles.label, { color: textPrimary }]}>Name des Babys</ThemedText>
                       <TextInput
-                        style={styles.inputGlass}
+                        style={[styles.inputGlass, { borderColor: glassBorder, backgroundColor: glassSurface, color: textPrimary }]}
                         value={babyName}
                         onChangeText={setBabyName}
                         placeholder="Name deines Babys"
-                        placeholderTextColor="#9BA0A6"
+                        placeholderTextColor={isDark ? '#CFC7BC' : '#9BA0A6'}
                       />
                     </View>
 
                     <View style={styles.formGroup}>
-                      <ThemedText style={styles.label}>Geschlecht</ThemedText>
+                      <ThemedText style={[styles.label, { color: textPrimary }]}>Geschlecht</ThemedText>
                       <View style={styles.duoRow}>
                         <TouchableOpacity
                           style={[
                             styles.pickButton,
-                            babyGender === 'male' && styles.pickButtonActive,
+                            { borderColor: glassBorder, backgroundColor: glassSurfaceButton },
+                            babyGender === 'male' && [styles.pickButtonActive, { backgroundColor: babyBlue, borderColor: glassBorderStrong }],
                           ]}
                           onPress={() => setBabyGender('male')}
                           activeOpacity={0.9}
@@ -880,11 +947,12 @@ export default function ProfilScreen() {
                           <IconSymbol
                             name="person.fill"
                             size={24}
-                            color={babyGender === 'male' ? '#FFFFFF' : '#7D7D85'}
+                            color={babyGender === 'male' ? '#FFFFFF' : textSecondary}
                           />
                           <ThemedText
                             style={[
                               styles.pickButtonText,
+                              { color: textSecondary },
                               babyGender === 'male' && styles.pickButtonTextActive,
                             ]}
                           >
@@ -895,7 +963,8 @@ export default function ProfilScreen() {
                         <TouchableOpacity
                           style={[
                             styles.pickButton,
-                            babyGender === 'female' && styles.pickButtonActive,
+                            { borderColor: glassBorder, backgroundColor: glassSurfaceButton },
+                            babyGender === 'female' && [styles.pickButtonActive, { backgroundColor: babyPink, borderColor: glassBorderStrong }],
                           ]}
                           onPress={() => setBabyGender('female')}
                           activeOpacity={0.9}
@@ -903,11 +972,12 @@ export default function ProfilScreen() {
                           <IconSymbol
                             name="person.fill"
                             size={24}
-                            color={babyGender === 'female' ? '#FFFFFF' : '#7D7D85'}
+                            color={babyGender === 'female' ? '#FFFFFF' : textSecondary}
                           />
                           <ThemedText
                             style={[
                               styles.pickButtonText,
+                              { color: textSecondary },
                               babyGender === 'female' && styles.pickButtonTextActive,
                             ]}
                           >
@@ -920,16 +990,19 @@ export default function ProfilScreen() {
                     {isBabyBorn && (
                       <>
                         <View style={styles.formGroup}>
-                          <ThemedText style={styles.label}>Geburtsdatum</ThemedText>
+                          <ThemedText style={[styles.label, { color: textPrimary }]}>Geburtsdatum</ThemedText>
                           <TouchableOpacity
-                            style={styles.dateButtonGlass}
+                            style={[
+                              styles.dateButtonGlass,
+                              { borderColor: glassBorder, backgroundColor: glassSurface, shadowColor: 'transparent' },
+                            ]}
                             onPress={() => setShowBirthDatePicker(true)}
                             activeOpacity={0.9}
                           >
-                            <ThemedText style={styles.dateButtonText}>
+                            <ThemedText style={[styles.dateButtonText, { color: textPrimary }]}>
                               {birthDate ? formatDate(birthDate) : 'Geburtsdatum auswählen'}
                             </ThemedText>
-                            <IconSymbol name="calendar" size={20} color="#7D7D85" />
+                            <IconSymbol name="calendar" size={20} color={textSecondary} />
                           </TouchableOpacity>
                           {showBirthDatePicker && (
                             <DateTimePicker
@@ -944,25 +1017,33 @@ export default function ProfilScreen() {
 
                         <View style={styles.formRow2}>
                           <View style={[styles.formGroup, { flex: 1 }]}>
-                            <ThemedText style={styles.label}>Geburtsgewicht (g)</ThemedText>
+                            <ThemedText style={[styles.label, { color: textPrimary }]}>Geburtsgewicht (g)</ThemedText>
                             <TextInput
-                              style={[styles.inputGlass, styles.numeric]}
+                              style={[
+                                styles.inputGlass,
+                                styles.numeric,
+                                { borderColor: glassBorder, backgroundColor: glassSurface, color: textPrimary },
+                              ]}
                               value={babyWeight}
                               onChangeText={setBabyWeight}
                               placeholder="z.B. 3500"
-                              placeholderTextColor="#9BA0A6"
+                              placeholderTextColor={isDark ? '#CFC7BC' : '#9BA0A6'}
                               keyboardType="numeric"
                             />
                           </View>
 
                           <View style={[styles.formGroup, { flex: 1 }]}>
-                            <ThemedText style={styles.label}>Größe (cm)</ThemedText>
+                            <ThemedText style={[styles.label, { color: textPrimary }]}>Größe (cm)</ThemedText>
                             <TextInput
-                              style={[styles.inputGlass, styles.numeric]}
+                              style={[
+                                styles.inputGlass,
+                                styles.numeric,
+                                { borderColor: glassBorder, backgroundColor: glassSurface, color: textPrimary },
+                              ]}
                               value={babyHeight}
                               onChangeText={setBabyHeight}
                               placeholder="z.B. 52"
-                              placeholderTextColor="#9BA0A6"
+                              placeholderTextColor={isDark ? '#CFC7BC' : '#9BA0A6'}
                               keyboardType="numeric"
                             />
                           </View>
@@ -980,24 +1061,24 @@ export default function ProfilScreen() {
                     disabled={isSaving}
                     style={{ borderRadius: 22, overflow: 'hidden', marginTop: 12 }}
                   >
-                    <BlurView intensity={24} tint="light" style={{ borderRadius: 22, overflow: 'hidden' }}>
+                    <BlurView intensity={24} tint={isDark ? 'dark' : 'light'} style={{ borderRadius: 22, overflow: 'hidden' }}>
                       <View
                         style={[
                           styles.saveCard,
-                          { backgroundColor: isSaving ? 'rgba(168,168,168,0.5)' : 'rgba(220,200,255,0.6)' },
+                          { backgroundColor: isSaving ? actionDisabledBackground : saveCardBackground },
                         ]}
                       >
-                        <View style={[styles.saveIconWrap, { backgroundColor: ACCENT_PURPLE }]}>
+                        <View style={[styles.saveIconWrap, { backgroundColor: accentPurple }]}>
                           {isSaving ? (
                             <ActivityIndicator color="#fff" />
                           ) : (
                             <IconSymbol name="tray.and.arrow.down.fill" size={26} color="#FFFFFF" />
                           )}
                         </View>
-                        <ThemedText style={styles.saveTitle}>
+                        <ThemedText style={[styles.saveTitle, { color: textPrimary }]}>
                           {isSaving ? 'Speichern…' : 'Änderungen speichern'}
                         </ThemedText>
-                        <ThemedText style={styles.saveSub}>Deine Daten sicher aktualisieren</ThemedText>
+                        <ThemedText style={[styles.saveSub, { color: textPrimary }]}>Deine Daten sicher aktualisieren</ThemedText>
                       </View>
                     </BlurView>
                   </TouchableOpacity>
@@ -1011,24 +1092,24 @@ export default function ProfilScreen() {
                     disabled={isSendingPasswordReset}
                     style={{ borderRadius: 22, overflow: 'hidden', marginTop: 12 }}
                   >
-                    <BlurView intensity={24} tint="light" style={{ borderRadius: 22, overflow: 'hidden' }}>
+                    <BlurView intensity={24} tint={isDark ? 'dark' : 'light'} style={{ borderRadius: 22, overflow: 'hidden' }}>
                       <View
                         style={[
                           styles.saveCard,
-                          { backgroundColor: isSendingPasswordReset ? 'rgba(168,168,168,0.5)' : 'rgba(135,206,235,0.45)' },
+                          { backgroundColor: isSendingPasswordReset ? actionDisabledBackground : securityCardBackground },
                         ]}
                       >
-                        <View style={[styles.saveIconWrap, { backgroundColor: BABY_BLUE }]}>
+                        <View style={[styles.saveIconWrap, { backgroundColor: babyBlue }]}>
                           {isSendingPasswordReset ? (
                             <ActivityIndicator color="#fff" />
                           ) : (
                             <ThemedText style={{ fontSize: 24, color: '#FFFFFF' }}>🔑</ThemedText>
                           )}
                         </View>
-                        <ThemedText style={styles.saveTitle}>
+                        <ThemedText style={[styles.saveTitle, { color: textPrimary }]}>
                           {isSendingPasswordReset ? 'Sende E-Mail…' : 'Passwort ändern'}
                         </ThemedText>
-                        <ThemedText style={styles.saveSub}>Bestätigungslink per E-Mail</ThemedText>
+                        <ThemedText style={[styles.saveSub, { color: textPrimary }]}>Bestätigungslink per E-Mail</ThemedText>
                       </View>
                     </BlurView>
                   </TouchableOpacity>
@@ -1039,25 +1120,25 @@ export default function ProfilScreen() {
                     disabled={isDeletingProfile}
                     style={{ borderRadius: 22, overflow: 'hidden', marginTop: 12 }}
                   >
-                    <BlurView intensity={20} tint="light" style={{ borderRadius: 22, overflow: 'hidden' }}>
+                    <BlurView intensity={20} tint={isDark ? 'dark' : 'light'} style={{ borderRadius: 22, overflow: 'hidden' }}>
                       <View
                         style={[
                           styles.saveCard,
                           styles.dangerCard,
-                          { backgroundColor: 'rgba(255,130,130,0.5)' },
+                          { backgroundColor: dangerCardBackground },
                         ]}
                       >
-                        <View style={[styles.saveIconWrap, { backgroundColor: '#FF6B6B' }]}>
+                        <View style={[styles.saveIconWrap, { backgroundColor: '#FF6B6B', borderColor: glassBorderStrong }]}>
                           {isDeletingProfile ? (
                             <ActivityIndicator color="#fff" />
                           ) : (
                             <IconSymbol name="trash.fill" size={24} color="#FFFFFF" />
                           )}
                         </View>
-                        <ThemedText style={[styles.saveTitle, styles.dangerText]}>
+                        <ThemedText style={[styles.saveTitle, styles.dangerText, { color: '#FF6B6B' }]}>
                           {isDeletingProfile ? 'Profil wird gelöscht…' : 'Profil & Konto löschen'}
                         </ThemedText>
-                        <ThemedText style={[styles.saveSub, styles.dangerSub]}>
+                        <ThemedText style={[styles.saveSub, styles.dangerSub, { color: textPrimary }]}>
                           Entfernt Profil, Konto und alle Daten dauerhaft
                         </ThemedText>
                       </View>
@@ -1077,7 +1158,7 @@ export default function ProfilScreen() {
         placeholder="deine@email.de"
         keyboardType="email-address"
         inputMode="email"
-        accentColor={ACCENT_PURPLE}
+        accentColor={accentPurple}
         onClose={() => setEmailOverlayVisible(false)}
         onSubmit={(next) => requestEmailChange(next)}
       />

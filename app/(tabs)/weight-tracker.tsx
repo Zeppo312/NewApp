@@ -7,6 +7,7 @@ import { ThemedText } from '@/components/ThemedText';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { LineChart } from 'react-native-chart-kit';
 import { Dimensions } from 'react-native';
@@ -14,7 +15,7 @@ import { getWeightEntries, deleteWeightEntry, WeightEntry, WeightSubject, saveWe
 import { supabase, getCachedUser } from '@/lib/supabase';
 import { Stack } from 'expo-router';
 import Header from '@/components/Header';
-import { LiquidGlassCard, GLASS_OVERLAY, LAYOUT_PAD, SECTION_GAP_TOP, SECTION_GAP_BOTTOM } from '@/constants/DesignGuide';
+import { LiquidGlassCard, GLASS_OVERLAY, GLASS_OVERLAY_DARK, LAYOUT_PAD, SECTION_GAP_TOP, SECTION_GAP_BOTTOM } from '@/constants/DesignGuide';
 import ActivityCard from '@/components/ActivityCard';
 import { PRIMARY as PLANNER_PRIMARY } from '@/constants/PlannerDesign';
 import FloatingAddButton from '@/components/planner/FloatingAddButton';
@@ -48,7 +49,7 @@ const normalizeWeightInput = (value: string, subject: WeightSubject) => {
   }
   return trimmed.replace(',', '.');
 };
-const HEADER_TEXT_COLOR = '#7D5A50';
+// HEADER_TEXT_COLOR wird nun dynamisch über useAdaptiveColors bestimmt
 const toRgba = (hex: string, opacity = 1) => {
   const cleanHex = hex.replace('#', '');
   const int = parseInt(cleanHex, 16);
@@ -58,9 +59,38 @@ const toRgba = (hex: string, opacity = 1) => {
   return `rgba(${r}, ${g}, ${b}, ${opacity})`;
 };
 
+const lightenHex = (hex: string, amount = 0.35) => {
+  const cleanHex = hex.replace('#', '');
+  const int = parseInt(cleanHex, 16);
+  const r = (int >> 16) & 255;
+  const g = (int >> 8) & 255;
+  const b = int & 255;
+
+  const lightenChannel = (channel: number) =>
+    Math.min(255, Math.round(channel + (255 - channel) * amount));
+  const toHex = (channel: number) => channel.toString(16).padStart(2, '0');
+
+  return `#${toHex(lightenChannel(r))}${toHex(lightenChannel(g))}${toHex(lightenChannel(b))}`;
+};
+
 export default function WeightTrackerScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
+  // Verwende useAdaptiveColors für korrekte Farben basierend auf Hintergrundbild
+  const adaptiveColors = useAdaptiveColors();
+  const isDark = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
+
+  const getSubjectColor = (subject: WeightSubject) =>
+    isDark ? lightenHex(SUBJECT_COLORS[subject]) : SUBJECT_COLORS[subject];
+
+  // Dark Mode angepasste Farben (wie in sleep-tracker.tsx)
+  const textPrimary = isDark ? Colors.dark.textPrimary : '#5C4033';
+  const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
+  const headerTextColor = textSecondary; // Ersetzt HEADER_TEXT_COLOR
+
+  // Glass-Overlay Farbe: bei dunklem Hintergrund abgedunkelt (wie im Sleep-Tracker Wochenansicht)
+  const glassOverlay = isDark ? GLASS_OVERLAY_DARK : GLASS_OVERLAY;
+
   // router wird durch die BackButton-Komponente verwaltet
   const insets = useSafeAreaInsets();
   const { activeBaby, activeBabyId, isReady } = useActiveBaby();
@@ -415,14 +445,15 @@ export default function WeightTrackerScreen() {
     [filteredEntries, selectedSubject]
   );
 
+  const subjectColor = useMemo(() => getSubjectColor(selectedSubject), [selectedSubject, isDark]);
+
   const { data: chartData, meta: chartMeta } = useMemo(
-    () => prepareChartData(chartEntries, selectedRange, subjectLabels[selectedSubject], SUBJECT_COLORS[selectedSubject]),
-    [chartEntries, selectedRange, selectedSubject, subjectLabels]
+    () => prepareChartData(chartEntries, selectedRange, subjectLabels[selectedSubject], subjectColor),
+    [chartEntries, selectedRange, selectedSubject, subjectColor, subjectLabels]
   );
 
   // Rendere die Gewichtskurve
   const renderWeightChart = () => {
-    const subjectColor = SUBJECT_COLORS[selectedSubject];
     const subjectCopyLabel = subjectCopyLabels[selectedSubject];
     const unitLabel = getWeightUnit(selectedSubject);
     const hasSeries =
@@ -442,14 +473,28 @@ export default function WeightTrackerScreen() {
             { id: 'all', label: 'Gesamt' },
           ] as const).map(t => {
             const isActive = selectedRange === t.id;
+            const tabTint = subjectColor;
             return (
               <TouchableOpacity
                 key={t.id}
-                style={[styles.topTab, isActive && [styles.activeTopTab, { borderColor: toRgba(subjectColor, 0.65) }]]}
+                style={[
+                  styles.topTab,
+                  {
+                    borderColor: isDark ? toRgba(tabTint, 0.28) : 'rgba(0,0,0,0.08)',
+                    backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.6)',
+                  },
+                  isActive && [
+                    styles.activeTopTab,
+                    {
+                      borderColor: toRgba(tabTint, 0.65),
+                      backgroundColor: isDark ? toRgba(tabTint, 0.2) : 'rgba(255,255,255,0.9)',
+                    },
+                  ],
+                ]}
                 onPress={() => setSelectedRange(t.id)}
               >
                 <View style={styles.topTabInner}>
-                  <Text style={[styles.topTabText, isActive && [styles.activeTopTabText, { color: subjectColor }]]}>{t.label}</Text>
+                  <Text style={[styles.topTabText, { color: textSecondary }, isActive && [styles.activeTopTabText, { color: subjectColor }]]}>{t.label}</Text>
                 </View>
               </TouchableOpacity>
             );
@@ -457,7 +502,7 @@ export default function WeightTrackerScreen() {
         </View>
 
         {hasSeries ? (
-          <LiquidGlassCard style={styles.chartContainer} intensity={26} overlayColor={GLASS_OVERLAY}>
+          <LiquidGlassCard style={styles.chartContainer} intensity={26} overlayColor={glassOverlay}>
             <View style={styles.chartWrapper}>
               <LineChart
                 data={chartData}
@@ -468,8 +513,8 @@ export default function WeightTrackerScreen() {
                   backgroundGradientFrom: 'transparent',
                   backgroundGradientTo: 'transparent',
                   decimalPlaces: chartMeta.decimalPlaces, // Dynamische Nachkommastellen je nach Wertebereich
-                  color: () => theme.text,
-                  labelColor: () => theme.text,
+                  color: () => textPrimary,
+                  labelColor: () => textSecondary,
                   style: {
                     borderRadius: 22,
                   },
@@ -526,9 +571,9 @@ export default function WeightTrackerScreen() {
             </View>
           </LiquidGlassCard>
         ) : (
-          <LiquidGlassCard style={styles.emptyChartContainer} intensity={26} overlayColor={GLASS_OVERLAY}>
-            <IconSymbol name="chart.line.uptrend.xyaxis" size={40} color={theme.tabIconDefault} />
-            <ThemedText style={styles.emptyChartText} lightColor="#888" darkColor="#E9D8C2">
+          <LiquidGlassCard style={styles.emptyChartContainer} intensity={26} overlayColor={glassOverlay}>
+            <IconSymbol name="chart.line.uptrend.xyaxis" size={40} color={isDark ? adaptiveColors.iconSecondary : theme.tabIconDefault} />
+            <ThemedText style={[styles.emptyChartText, { color: textSecondary }]}>
               Füge mindestens zwei Gewichtseinträge für {subjectCopyLabel} hinzu, um eine Kurve zu sehen.
             </ThemedText>
           </LiquidGlassCard>
@@ -566,12 +611,12 @@ export default function WeightTrackerScreen() {
     const subjectLabel = subjectCopyLabels[selectedSubject];
     if (filteredEntries.length === 0) {
       return (
-        <LiquidGlassCard style={styles.emptyState} intensity={26} overlayColor={GLASS_OVERLAY}>
-          <IconSymbol name="scalemass" size={40} color={theme.tabIconDefault} />
-          <ThemedText style={styles.emptyStateText} lightColor="#5C4033" darkColor="#FFFFFF">
+        <LiquidGlassCard style={styles.emptyState} intensity={26} overlayColor={glassOverlay}>
+          <IconSymbol name="scalemass" size={40} color={isDark ? adaptiveColors.iconSecondary : theme.tabIconDefault} />
+          <ThemedText style={[styles.emptyStateText, { color: textPrimary }]}>
             Noch keine Gewichtseinträge für {subjectLabel}
           </ThemedText>
-          <ThemedText style={styles.emptyStateSubtext} lightColor="#888" darkColor="#E9D8C2">
+          <ThemedText style={[styles.emptyStateSubtext, { color: textSecondary }]}>
             Füge deinen ersten Gewichtseintrag hinzu, um die Kurve für {subjectLabel} zu sehen.
           </ThemedText>
         </LiquidGlassCard>
@@ -584,7 +629,7 @@ export default function WeightTrackerScreen() {
 
     return (
       <View style={styles.timelineSection}>
-        <Text style={[styles.sectionTitleSleepLike]}>Gewichtseinträge für {subjectLabel}</Text>
+        <Text style={[styles.sectionTitleSleepLike, { color: textSecondary }]}>Gewichtseinträge für {subjectLabel}</Text>
         <View style={{ alignSelf: 'center', width: contentWidth }}>
           <View style={[styles.entriesContainer, { paddingHorizontal: TIMELINE_INSET }]}>
             {sortedEntries.map((entry) => (
@@ -603,24 +648,38 @@ export default function WeightTrackerScreen() {
   };
 
   const renderSubjectSwitch = () => (
-    <LiquidGlassCard style={styles.subjectSwitcherCard} intensity={26} overlayColor={GLASS_OVERLAY}>
-      <ThemedText style={styles.subjectSwitcherTitle} lightColor="#5C4033" darkColor="#FFFFFF">
+    <LiquidGlassCard style={styles.subjectSwitcherCard} intensity={26} overlayColor={glassOverlay}>
+      <ThemedText style={[styles.subjectSwitcherTitle, { color: textPrimary }]}>
         Für wen möchtest du tracken?
       </ThemedText>
-      <ThemedText style={styles.subjectSwitcherSubtitle} lightColor="#7D5A50" darkColor="#E9D8C2">
+      <ThemedText style={[styles.subjectSwitcherSubtitle, { color: textSecondary }]}>
         Wechsle zwischen {babyLabel} und dir, um die passenden Einträge zu sehen.
       </ThemedText>
       <View style={styles.subjectPillRow}>
         {SUBJECT_OPTIONS.map((subjectKey) => {
           const isActive = selectedSubject === subjectKey;
+          const pillColor = getSubjectColor(subjectKey);
           return (
             <TouchableOpacity
               key={subjectKey}
-              style={[styles.subjectPill, isActive && [styles.subjectPillActive, { borderColor: toRgba(SUBJECT_COLORS[subjectKey], 0.6) }]]}
+              style={[
+                styles.subjectPill,
+                {
+                  borderColor: isDark ? toRgba(pillColor, 0.35) : 'rgba(255,255,255,0.35)',
+                  backgroundColor: isDark ? toRgba(pillColor, 0.12) : 'rgba(255,255,255,0.6)',
+                },
+                isActive && [
+                  styles.subjectPillActive,
+                  {
+                    borderColor: toRgba(pillColor, 0.6),
+                    backgroundColor: isDark ? toRgba(pillColor, 0.24) : 'rgba(255,255,255,0.95)',
+                  },
+                ],
+              ]}
               onPress={() => setSelectedSubject(subjectKey)}
               activeOpacity={0.85}
             >
-              <Text style={[styles.subjectPillText, isActive && styles.subjectPillTextActive]}>
+              <Text style={[styles.subjectPillText, { color: textSecondary }, isActive && [styles.subjectPillTextActive, { color: textPrimary }]]}>
                 {subjectLabels[subjectKey]}
               </Text>
             </TouchableOpacity>
@@ -652,11 +711,11 @@ export default function WeightTrackerScreen() {
               style={[styles.headerButton, styles.headerButtonGhost]}
               onPress={closeWeightModal}
             >
-              <Text style={styles.closeHeaderButtonText}>✕</Text>
+              <Text style={[styles.closeHeaderButtonText, { color: headerTextColor }]}>✕</Text>
             </TouchableOpacity>
             <View style={styles.headerCenter}>
-              <Text style={styles.modalTitle}>{editingEntry ? 'Gewicht bearbeiten' : 'Gewicht hinzufügen'}</Text>
-              <Text style={styles.modalSubtitle}>Für dich oder {babyLabel}</Text>
+              <Text style={[styles.modalTitle, { color: headerTextColor }]}>{editingEntry ? 'Gewicht bearbeiten' : 'Gewicht hinzufügen'}</Text>
+              <Text style={[styles.modalSubtitle, { color: headerTextColor }]}>Für dich oder {babyLabel}</Text>
             </View>
             <TouchableOpacity
               style={[styles.headerButton, styles.saveHeaderButton, { backgroundColor: PLANNER_PRIMARY }]}
@@ -672,7 +731,7 @@ export default function WeightTrackerScreen() {
             contentContainerStyle={styles.modalScrollContent}
           >
             <View style={styles.section}>
-              <Text style={styles.sectionLabel}>Für wen?</Text>
+              <Text style={[styles.sectionLabel, { color: headerTextColor }]}>Für wen?</Text>
               <View style={styles.typeSwitchRow}>
                 {SUBJECT_OPTIONS.map((subjectKey) => {
                   const isActive = weightModalSubject === subjectKey;
@@ -683,7 +742,7 @@ export default function WeightTrackerScreen() {
                       onPress={() => setWeightModalSubject(subjectKey)}
                       activeOpacity={0.88}
                     >
-                      <Text style={[styles.typeSwitchLabel, isActive && styles.typeSwitchLabelActive]}>
+                      <Text style={[styles.typeSwitchLabel, { color: headerTextColor }, isActive && styles.typeSwitchLabelActive]}>
                         {subjectLabels[subjectKey]}
                       </Text>
                     </TouchableOpacity>
@@ -693,7 +752,7 @@ export default function WeightTrackerScreen() {
             </View>
 
             <View style={styles.section}>
-              <Text style={styles.sectionLabel}>Gewicht ({getWeightUnit(weightModalSubject)})</Text>
+              <Text style={[styles.sectionLabel, { color: headerTextColor }]}>Gewicht ({getWeightUnit(weightModalSubject)})</Text>
               <View style={styles.pickerBlock}>
                 <TouchableOpacity
                   style={styles.inlineField}
@@ -708,8 +767,8 @@ export default function WeightTrackerScreen() {
                       })
                     }
                 >
-                  <Text style={styles.inlineFieldLabel}>Gewicht</Text>
-                  <Text style={weightInput.trim() ? styles.inlineFieldValue : styles.inlineFieldPlaceholder}>
+                  <Text style={[styles.inlineFieldLabel, { color: headerTextColor }]}>Gewicht</Text>
+                  <Text style={[weightInput.trim() ? styles.inlineFieldValue : styles.inlineFieldPlaceholder, { color: weightInput.trim() ? headerTextColor : `${headerTextColor}B3` }]}>
                     {weightInput.trim()
                       ? `${weightInput.trim()} ${getWeightUnit(weightModalSubject)}`
                       : 'Tippe zum Eingeben'}
@@ -719,11 +778,11 @@ export default function WeightTrackerScreen() {
             </View>
 
             <View style={styles.section}>
-              <Text style={styles.sectionLabel}>Datum</Text>
+              <Text style={[styles.sectionLabel, { color: headerTextColor }]}>Datum</Text>
               <View style={styles.pickerBlock}>
                 <TouchableOpacity style={styles.selectorHeader} onPress={() => setShowDatePicker((prev) => !prev)} activeOpacity={0.9}>
-                  <Text style={styles.pickerLabel}>Messdatum</Text>
-                  <Text style={styles.selectorValue}>{formatDisplayDate(weightDate)}</Text>
+                  <Text style={[styles.pickerLabel, { color: headerTextColor }]}>Messdatum</Text>
+                  <Text style={[styles.selectorValue, { color: headerTextColor }]}>{formatDisplayDate(weightDate)}</Text>
                 </TouchableOpacity>
                 {showDatePicker && (
                   <View style={styles.pickerInner}>
@@ -759,7 +818,7 @@ export default function WeightTrackerScreen() {
             </View>
 
             <View style={styles.section}>
-              <Text style={styles.sectionLabel}>Notizen</Text>
+              <Text style={[styles.sectionLabel, { color: headerTextColor }]}>Notizen</Text>
               <View style={styles.pickerBlock}>
                 <TouchableOpacity
                   style={[styles.inlineField, styles.inlineFieldMultiline]}
@@ -773,9 +832,9 @@ export default function WeightTrackerScreen() {
                     })
                   }
                 >
-                  <Text style={styles.inlineFieldLabel}>Details</Text>
+                  <Text style={[styles.inlineFieldLabel, { color: headerTextColor }]}>Details</Text>
                   <Text
-                    style={weightNotes.trim() ? styles.inlineFieldValue : styles.inlineFieldPlaceholder}
+                    style={[weightNotes.trim() ? styles.inlineFieldValue : styles.inlineFieldPlaceholder, { color: weightNotes.trim() ? headerTextColor : `${headerTextColor}B3` }]}
                     numberOfLines={3}
                   >
                     {weightNotes.trim() || 'Tippe zum Hinzufügen'}
@@ -810,9 +869,9 @@ export default function WeightTrackerScreen() {
         animationType="fade"
       >
         <View style={styles.saveViewContainer}>
-          <LiquidGlassCard style={styles.saveView} intensity={26} overlayColor={GLASS_OVERLAY}>
-            <ActivityIndicator size="large" color={theme.accent} />
-            <ThemedText style={styles.saveViewText} lightColor="#5C4033" darkColor="#FFFFFF">
+          <LiquidGlassCard style={styles.saveView} intensity={26} overlayColor={glassOverlay}>
+            <ActivityIndicator size="large" color={isDark ? adaptiveColors.accent : theme.accent} />
+            <ThemedText style={[styles.saveViewText, { color: textPrimary }]}>
               Daten werden gespeichert...
             </ThemedText>
           </LiquidGlassCard>
@@ -847,8 +906,8 @@ export default function WeightTrackerScreen() {
 
             {isLoading ? (
               <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color={theme.accent} />
-                <ThemedText style={styles.loadingText} lightColor="#888" darkColor="#E9D8C2">Daten werden geladen...</ThemedText>
+                <ActivityIndicator size="large" color={isDark ? adaptiveColors.accent : theme.accent} />
+                <ThemedText style={[styles.loadingText, { color: textSecondary }]}>Daten werden geladen...</ThemedText>
               </View>
             ) : (
               <>
@@ -961,7 +1020,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: LAYOUT_PAD,
     fontSize: 18,
     fontWeight: '700',
-    color: '#7D5A50',
+    // color wird dynamisch gesetzt
     textAlign: 'center',
     width: '100%',
     letterSpacing: -0.2,
@@ -1021,11 +1080,10 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.3)',
   },
   topTabInner: { paddingHorizontal: 18, paddingVertical: 6 },
-  activeTopTab: { backgroundColor: 'rgba(255,255,255,0.9)' },
-  topTabText: { fontSize: 13, fontWeight: '700', color: '#7D5A50' },
+  activeTopTab: {},
+  topTabText: { fontSize: 13, fontWeight: '700' }, // color wird dynamisch gesetzt
   activeTopTabText: { fontWeight: '800' },
   // Modal styles (match Planner Capture)
   modalOverlay: {
@@ -1064,7 +1122,7 @@ const styles = StyleSheet.create({
   closeHeaderButtonText: {
     fontSize: 20,
     fontWeight: '700',
-    color: HEADER_TEXT_COLOR,
+    // color wird dynamisch gesetzt
   },
   headerCenter: {
     alignItems: 'center',
@@ -1073,12 +1131,12 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: HEADER_TEXT_COLOR,
+    // color wird dynamisch gesetzt
   },
   modalSubtitle: {
     fontSize: 13,
     marginTop: 2,
-    color: HEADER_TEXT_COLOR,
+    // color wird dynamisch gesetzt
   },
   saveHeaderButton: {
     shadowColor: '#000',
@@ -1099,7 +1157,7 @@ const styles = StyleSheet.create({
   sectionLabel: {
     fontSize: 14,
     fontWeight: '600',
-    color: HEADER_TEXT_COLOR,
+    // color wird dynamisch gesetzt
   },
   typeSwitchRow: {
     flexDirection: 'row',
@@ -1126,7 +1184,7 @@ const styles = StyleSheet.create({
   typeSwitchLabel: {
     fontSize: 13,
     fontWeight: '600',
-    color: HEADER_TEXT_COLOR,
+    // color wird dynamisch gesetzt
   },
   typeSwitchLabelActive: {
     color: '#fff',
@@ -1147,12 +1205,12 @@ const styles = StyleSheet.create({
   pickerLabel: {
     fontSize: 12,
     fontWeight: '500',
-    color: HEADER_TEXT_COLOR,
+    // color wird dynamisch gesetzt
   },
   selectorValue: {
     fontSize: 16,
     fontWeight: '700',
-    color: HEADER_TEXT_COLOR,
+    // color wird dynamisch gesetzt
   },
   pickerInner: {
     borderRadius: 14,
@@ -1196,17 +1254,17 @@ const styles = StyleSheet.create({
   inlineFieldLabel: {
     fontSize: 12,
     fontWeight: '700',
-    color: HEADER_TEXT_COLOR,
+    // color wird dynamisch gesetzt
   },
   inlineFieldValue: {
     fontSize: 16,
     fontWeight: '700',
-    color: HEADER_TEXT_COLOR,
+    // color wird dynamisch gesetzt
   },
   inlineFieldPlaceholder: {
     fontSize: 16,
     fontWeight: '600',
-    color: 'rgba(125,90,80,0.7)',
+    // color wird dynamisch gesetzt
   },
   subjectSwitcherCard: {
     borderRadius: 20,
@@ -1217,12 +1275,12 @@ const styles = StyleSheet.create({
   subjectSwitcherTitle: {
     fontSize: 17,
     fontWeight: '700',
-    color: '#7D5A50',
+    // color wird dynamisch gesetzt
     textAlign: 'center',
   },
   subjectSwitcherSubtitle: {
     fontSize: 13,
-    color: '#7D5A50',
+    // color wird dynamisch gesetzt
     opacity: 0.8,
     textAlign: 'center',
     marginBottom: 6,
@@ -1236,13 +1294,11 @@ const styles = StyleSheet.create({
   subjectPill: {
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.35)',
     paddingVertical: 10,
     paddingHorizontal: 16,
-    backgroundColor: 'rgba(255,255,255,0.6)',
+    backgroundColor: 'transparent',
   },
   subjectPillActive: {
-    backgroundColor: 'rgba(255,255,255,0.95)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
@@ -1252,9 +1308,9 @@ const styles = StyleSheet.create({
   subjectPillText: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#7D5A50',
+    // color wird dynamisch gesetzt
   },
   subjectPillTextActive: {
-    color: '#2D2A32',
+    // color wird dynamisch gesetzt
   },
 });

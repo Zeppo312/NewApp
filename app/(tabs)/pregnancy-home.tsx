@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { StyleSheet, View, SafeAreaView, StatusBar, TouchableOpacity, ScrollView, ActivityIndicator, Alert, RefreshControl, Platform, ToastAndroid, Animated, Easing, Text, Image, StyleProp, ViewStyle } from 'react-native';
 import { Colors } from '@/constants/Colors';
-import { useColorScheme } from '@/hooks/useColorScheme';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedBackground } from '@/components/ThemedBackground';
@@ -269,8 +269,16 @@ const overdueInfo = {
 };
 
 export default function PregnancyHomeScreen() {
-  const colorScheme = useColorScheme() ?? 'light';
+  // Verwende useAdaptiveColors für korrekte Farben basierend auf Hintergrundbild
+  const adaptiveColors = useAdaptiveColors();
+  const colorScheme = adaptiveColors.effectiveScheme;
   const theme = Colors[colorScheme];
+  const isDark = colorScheme === 'dark' || adaptiveColors.isDarkBackground;
+
+  // Dark Mode angepasste Farben (wie in home.tsx)
+  const textPrimary = isDark ? Colors.dark.textPrimary : '#6B4C3B';
+  const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
+  const accentPurple = isDark ? Colors.dark.textAccent : '#5E3DB3';
   const router = useRouter();
   const { user } = useAuth();
   const { isBabyBorn, setIsBabyBorn } = useBabyStatus();
@@ -668,11 +676,11 @@ export default function PregnancyHomeScreen() {
           darkColor="rgba(255, 255, 255, 0.02)"
         >
           <View style={styles.sectionTitleContainer}>
-            <ThemedText style={[styles.sectionTitle, { color: '#7D5A50', fontSize: 22 }]}>
+            <ThemedText adaptive={false} style={[styles.sectionTitle, { color: textSecondary, fontSize: 22 }]}>
               Dein Tag im Überblick
             </ThemedText>
             <View style={styles.liquidGlassChevron}>
-              <IconSymbol name="chevron.right" size={20} color="#7D5A50" />
+              <IconSymbol name="chevron.right" size={20} color={textSecondary} />
             </View>
           </View>
 
@@ -684,13 +692,13 @@ export default function PregnancyHomeScreen() {
               <View style={styles.liquidGlassStatIcon}>
                 <Text style={styles.statEmoji}>📅</Text>
               </View>
-              <ThemedText style={[styles.statValue, styles.liquidGlassStatValue, {
-                color: '#5E3DB3',
+              <ThemedText adaptive={false} style={[styles.statValue, styles.liquidGlassStatValue, {
+                color: accentPurple,
                 textShadowColor: 'rgba(255, 255, 255, 0.8)',
                 textShadowOffset: { width: 0, height: 1 },
                 textShadowRadius: 2,
               }]}>{currentWeek || 0}</ThemedText>
-              <ThemedText style={[styles.statLabel, styles.liquidGlassStatLabel, { color: '#7D5A50' }]}>SSW</ThemedText>
+              <ThemedText adaptive={false} style={[styles.statLabel, styles.liquidGlassStatLabel, { color: textSecondary }]}>SSW</ThemedText>
             </View>
 
             <View style={[styles.statItem, styles.liquidGlassStatItem, {
@@ -700,8 +708,8 @@ export default function PregnancyHomeScreen() {
               <View style={styles.liquidGlassStatIcon}>
                 <Text style={styles.statEmoji}>🔢</Text>
               </View>
-              <ThemedText style={[styles.statValue, styles.liquidGlassStatValue, {
-                color: '#5E3DB3',
+              <ThemedText adaptive={false} style={[styles.statValue, styles.liquidGlassStatValue, {
+                color: accentPurple,
                 textShadowColor: 'rgba(255, 255, 255, 0.8)',
                 textShadowOffset: { width: 0, height: 1 },
                 textShadowRadius: 2,
@@ -712,7 +720,7 @@ export default function PregnancyHomeScreen() {
                     ? "2"
                     : "3"}
               </ThemedText>
-              <ThemedText style={[styles.statLabel, styles.liquidGlassStatLabel, { color: '#7D5A50' }]}>Trimester</ThemedText>
+              <ThemedText adaptive={false} style={[styles.statLabel, styles.liquidGlassStatLabel, { color: textSecondary }]}>Trimester</ThemedText>
             </View>
 
             <View style={[styles.statItem, styles.liquidGlassStatItem, {
@@ -722,8 +730,8 @@ export default function PregnancyHomeScreen() {
               <View style={styles.liquidGlassStatIcon}>
                 <Text style={styles.statEmoji}>📊</Text>
               </View>
-              <ThemedText style={[styles.statValue, styles.liquidGlassStatValue, {
-                color: '#5E3DB3',
+              <ThemedText adaptive={false} style={[styles.statValue, styles.liquidGlassStatValue, {
+                color: accentPurple,
                 textShadowColor: 'rgba(255, 255, 255, 0.8)',
                 textShadowOffset: { width: 0, height: 1 },
                 textShadowRadius: 2,
@@ -732,7 +740,7 @@ export default function PregnancyHomeScreen() {
                   ? Math.min(100, Math.round((currentWeek / 40) * 100))
                   : 0}%
               </ThemedText>
-              <ThemedText style={[styles.statLabel, styles.liquidGlassStatLabel, { color: '#7D5A50' }]}>Fortschritt</ThemedText>
+              <ThemedText adaptive={false} style={[styles.statLabel, styles.liquidGlassStatLabel, { color: textSecondary }]}>Fortschritt</ThemedText>
             </View>
           </View>
         </ThemedView>
@@ -761,7 +769,7 @@ export default function PregnancyHomeScreen() {
             {featuredRecommendation ? (
               <View style={styles.recommendationCard}>
                 <View style={styles.sectionTitleContainer}>
-                  <ThemedText style={[styles.sectionTitle, styles.liquidGlassText, { color: '#6B4C3B', fontSize: 22 }]}>
+                  <ThemedText adaptive={false} style={[styles.sectionTitle, styles.liquidGlassText, { color: textPrimary, fontSize: 22 }]}>
                     Lottis Empfehlungen
                   </ThemedText>
                   <View style={[styles.liquidGlassChevron, styles.recommendationHeaderSpacer]} />
@@ -781,16 +789,16 @@ export default function PregnancyHomeScreen() {
                         />
                       ) : (
                         <View style={styles.recommendationImageFallback}>
-                          <IconSymbol name="bag.fill" size={22} color="#6B4C3B" />
+                          <IconSymbol name="bag.fill" size={22} color={textPrimary} />
                         </View>
                       )}
                     </View>
                     <View style={styles.recommendationContentPane}>
                       <View style={styles.recommendationTextWrap}>
-                        <ThemedText style={styles.recommendationTitle}>
+                        <ThemedText adaptive={false} style={[styles.recommendationTitle, { color: textPrimary }]}>
                           {featuredRecommendation.title}
                         </ThemedText>
-                        <ThemedText style={styles.recommendationDescription}>
+                        <ThemedText adaptive={false} style={[styles.recommendationDescription, { color: isDark ? Colors.dark.textSecondary : 'rgba(125, 90, 80, 0.88)' }]}>
                           {getPreviewText(featuredRecommendation.description, 10)}
                         </ThemedText>
                       </View>
@@ -806,14 +814,14 @@ export default function PregnancyHomeScreen() {
             ) : (
               <View style={styles.recommendationEmptyWrapper}>
                 <View style={styles.sectionTitleContainer}>
-                  <ThemedText style={[styles.sectionTitle, styles.liquidGlassText, { color: '#6B4C3B', fontSize: 22 }]}>
+                  <ThemedText adaptive={false} style={[styles.sectionTitle, styles.liquidGlassText, { color: textPrimary, fontSize: 22 }]}>
                     Lottis Empfehlungen
                   </ThemedText>
                   <View style={[styles.liquidGlassChevron, styles.recommendationHeaderSpacer]} />
                 </View>
                 <View style={styles.recommendationEmpty}>
-                  <IconSymbol name="bag.fill" size={20} color="#7D5A50" />
-                  <ThemedText style={styles.recommendationEmptyText}>
+                  <IconSymbol name="bag.fill" size={20} color={textSecondary} />
+                  <ThemedText adaptive={false} style={[styles.recommendationEmptyText, { color: textSecondary }]}>
                     Noch keine Empfehlungen verfügbar.
                   </ThemedText>
                 </View>
@@ -869,7 +877,8 @@ export default function PregnancyHomeScreen() {
             key={`overview-dot-${index}`}
             style={[
               styles.carouselDot,
-              overviewIndex === index && styles.carouselDotActive,
+              { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.25)' : 'rgba(107, 76, 59, 0.25)' },
+              overviewIndex === index && { backgroundColor: isDark ? Colors.dark.text : '#6B4C3B' },
             ]}
           />
         ))}
@@ -886,8 +895,8 @@ export default function PregnancyHomeScreen() {
         {updateSuccess && (
           <Animated.View style={[styles.updateSuccessContainer, { opacity: fadeAnim }]}>
             <View style={styles.updateSuccessContent}>
-              <IconSymbol name="checkmark.circle.fill" size={32} color="#7D5A50" />
-              <ThemedText style={styles.updateSuccessText}>
+              <IconSymbol name="checkmark.circle.fill" size={32} color={textSecondary} />
+              <ThemedText adaptive={false} style={[styles.updateSuccessText, { color: textSecondary }]}>
                 Daten aktualisiert
               </ThemedText>
             </View>
@@ -902,9 +911,9 @@ export default function PregnancyHomeScreen() {
               refreshing={refreshing}
               onRefresh={onRefresh}
               colors={['#7D5A50']} // Farbe für Android
-              tintColor={colorScheme === 'dark' ? '#F8F0E5' : '#7D5A50'} // Farbe für iOS
+              tintColor={theme.text} // Farbe für iOS
               title={refreshing ? "Aktualisiere..." : "Zum Aktualisieren ziehen"} // Nur auf iOS sichtbar
-              titleColor={colorScheme === 'dark' ? '#F8F0E5' : '#7D5A50'} // Farbe für den Text auf iOS
+              titleColor={theme.text} // Farbe für den Text auf iOS
             />
           }
         >
@@ -932,10 +941,10 @@ export default function PregnancyHomeScreen() {
 
                 <View style={styles.greetingHeader}>
                   <View>
-                    <ThemedText style={[styles.greeting, styles.liquidGlassText, { color: '#6B4C3B' }]}>
+                    <ThemedText adaptive={false} style={[styles.greeting, styles.liquidGlassText, { color: textPrimary }]}>
                       Hallo {userName || 'Mama'}!
                     </ThemedText>
-                    <ThemedText style={[styles.dateText, styles.liquidGlassSecondaryText, { color: '#6B4C3B' }]}>
+                    <ThemedText adaptive={false} style={[styles.dateText, styles.liquidGlassSecondaryText, { color: textPrimary }]}>
                       {formatDate()}
                     </ThemedText>
                   </View>
@@ -962,8 +971,8 @@ export default function PregnancyHomeScreen() {
                       <IconSymbol name="lightbulb.fill" size={18} color="#D6B28C" />
                     </View>
                     <View style={styles.tipContent}>
-                      <ThemedText style={styles.tipLabel}>Tipp des Tages</ThemedText>
-                      <ThemedText style={styles.tipText}>{dailyTip}</ThemedText>
+                      <ThemedText adaptive={false} style={[styles.tipLabel, { color: accentPurple }]}>Tipp des Tages</ThemedText>
+                      <ThemedText adaptive={false} style={[styles.tipText, { color: textPrimary }]}>{dailyTip}</ThemedText>
                     </View>
                   </View>
                 </View>
@@ -1008,7 +1017,7 @@ export default function PregnancyHomeScreen() {
 
           {/* Schnellzugriff-Cards - Liquid Glass Design */}
           <View style={styles.cardsSection}>
-            <ThemedText style={[styles.cardsSectionTitle, { color: '#7D5A50', fontSize: 22 }]}>
+            <ThemedText adaptive={false} style={[styles.cardsSectionTitle, { color: textSecondary, fontSize: 22 }]}>
               Schnellzugriff
             </ThemedText>
 
@@ -1027,8 +1036,8 @@ export default function PregnancyHomeScreen() {
                     <View style={[styles.iconContainer, { backgroundColor: 'rgba(168, 196, 193, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
                       <IconSymbol name="calendar" size={28} color="#FFFFFF" />
                     </View>
-                    <ThemedText style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: '#7D5A50', fontWeight: '700' }]}>Countdown</ThemedText>
-                    <ThemedText style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: '#7D5A50', fontWeight: '500' }]}>Dein Weg zur Geburt</ThemedText>
+                    <ThemedText adaptive={false} style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>Countdown</ThemedText>
+                    <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>Dein Weg zur Geburt</ThemedText>
                   </View>
                 </BlurView>
               </TouchableOpacity>
@@ -1047,8 +1056,8 @@ export default function PregnancyHomeScreen() {
                     <View style={[styles.iconContainer, { backgroundColor: 'rgba(255, 140, 160, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
                       <IconSymbol name="timer" size={28} color="#FFFFFF" />
                     </View>
-                    <ThemedText style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: '#7D5A50', fontWeight: '700' }]}>Wehen-Tracker</ThemedText>
-                    <ThemedText style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: '#7D5A50', fontWeight: '500' }]}>Wehen messen und verfolgen</ThemedText>
+                    <ThemedText adaptive={false} style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>Wehen-Tracker</ThemedText>
+                    <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>Wehen messen und verfolgen</ThemedText>
                   </View>
                 </BlurView>
               </TouchableOpacity>
@@ -1067,8 +1076,8 @@ export default function PregnancyHomeScreen() {
                     <View style={[styles.iconContainer, { backgroundColor: 'rgba(200, 130, 220, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
                       <IconSymbol name="checklist" size={28} color="#FFFFFF" />
                     </View>
-                    <ThemedText style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: '#7D5A50', fontWeight: '700' }]}>Checkliste</ThemedText>
-                    <ThemedText style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: '#7D5A50', fontWeight: '500' }]}>Kliniktasche vorbereiten</ThemedText>
+                    <ThemedText adaptive={false} style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>Checkliste</ThemedText>
+                    <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>Kliniktasche vorbereiten</ThemedText>
                   </View>
                 </BlurView>
               </TouchableOpacity>
@@ -1087,8 +1096,8 @@ export default function PregnancyHomeScreen() {
                     <View style={[styles.iconContainer, { backgroundColor: 'rgba(255, 180, 130, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
                       <IconSymbol name="doc.text.fill" size={28} color="#FFFFFF" />
                     </View>
-                    <ThemedText style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: '#7D5A50', fontWeight: '700' }]}>Geburtsplan</ThemedText>
-                    <ThemedText style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: '#7D5A50', fontWeight: '500' }]}>Wünsche für die Geburt</ThemedText>
+                    <ThemedText adaptive={false} style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>Geburtsplan</ThemedText>
+                    <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>Wünsche für die Geburt</ThemedText>
                   </View>
                 </BlurView>
               </TouchableOpacity>
@@ -1107,8 +1116,8 @@ export default function PregnancyHomeScreen() {
                     <View style={[styles.iconContainer, { backgroundColor: 'rgba(255, 160, 180, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
                       <IconSymbol name="questionmark.circle" size={28} color="#FFFFFF" />
                     </View>
-                    <ThemedText style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: '#7D5A50', fontWeight: '700' }]}>Meine Fragen</ThemedText>
-                    <ThemedText style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: '#7D5A50', fontWeight: '500' }]}>Fragen für den nächsten Termin</ThemedText>
+                    <ThemedText adaptive={false} style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>Meine Fragen</ThemedText>
+                    <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>Fragen für den nächsten Termin</ThemedText>
                   </View>
                 </BlurView>
               </TouchableOpacity>
@@ -1127,8 +1136,8 @@ export default function PregnancyHomeScreen() {
                     <View style={[styles.iconContainer, { backgroundColor: 'rgba(140, 190, 255, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
                       <IconSymbol name="person.text.rectangle" size={28} color="#FFFFFF" />
                     </View>
-                    <ThemedText style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: '#7D5A50', fontWeight: '700' }]}>Babynamen</ThemedText>
-                    <ThemedText style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: '#7D5A50', fontWeight: '500' }]}>Finde den perfekten Namen</ThemedText>
+                    <ThemedText adaptive={false} style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>Babynamen</ThemedText>
+                    <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>Finde den perfekten Namen</ThemedText>
                   </View>
                 </BlurView>
               </TouchableOpacity>
@@ -1147,8 +1156,8 @@ export default function PregnancyHomeScreen() {
                     <View style={[styles.iconContainer, { backgroundColor: 'rgba(130, 210, 130, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
                       <IconSymbol name="chart.line.uptrend.xyaxis" size={28} color="#FFFFFF" />
                     </View>
-                    <ThemedText style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: '#7D5A50', fontWeight: '700' }]}>Gewichtskurve</ThemedText>
-                    <ThemedText style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: '#7D5A50', fontWeight: '500' }]}>Gewicht tracken</ThemedText>
+                    <ThemedText adaptive={false} style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>Gewichtskurve</ThemedText>
+                    <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>Gewicht tracken</ThemedText>
                   </View>
                 </BlurView>
               </TouchableOpacity>

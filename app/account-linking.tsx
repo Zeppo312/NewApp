@@ -15,6 +15,7 @@ import {
 import { BlurView } from 'expo-blur';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { useAuth } from '@/contexts/AuthContext';
 import { useConvex } from '@/contexts/ConvexContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
@@ -24,7 +25,7 @@ import { redeemInvitationCodeFixed } from '@/lib/redeemInvitationCodeFixed';
 import Header from '@/components/Header';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedBackground } from '@/components/ThemedBackground';
-import { LiquidGlassCard, GLASS_OVERLAY, LAYOUT_PAD } from '@/constants/DesignGuide';
+import { LiquidGlassCard, GLASS_OVERLAY, GLASS_OVERLAY_DARK, LAYOUT_PAD } from '@/constants/DesignGuide';
 
 type Invitation = {
   id: string;
@@ -44,10 +45,55 @@ type LinkedUser = {
 const TIMELINE_INSET = 8;            // wie im Sleep-Tracker
 const PRIMARY_TEXT   = '#7D5A50';    // Sleep-Tracker Typo-Farbe
 const ACCENT_PURPLE  = '#8E4EC6';    // Sleep-Tracker Akzent
+const ACCENT_MINT    = '#A8C4C1';
+const ACCENT_ORANGE  = '#FF8C42';
+
+const toRgba = (hex: string, opacity = 1) => {
+  const cleanHex = hex.replace('#', '');
+  const int = parseInt(cleanHex, 16);
+  const r = (int >> 16) & 255;
+  const g = (int >> 8) & 255;
+  const b = int & 255;
+  return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+};
+
+const lightenHex = (hex: string, amount = 0.35) => {
+  const cleanHex = hex.replace('#', '');
+  const int = parseInt(cleanHex, 16);
+  const r = (int >> 16) & 255;
+  const g = (int >> 8) & 255;
+  const b = int & 255;
+
+  const lightenChannel = (channel: number) =>
+    Math.min(255, Math.round(channel + (255 - channel) * amount));
+  const toHex = (channel: number) => channel.toString(16).padStart(2, '0');
+
+  return `#${toHex(lightenChannel(r))}${toHex(lightenChannel(g))}${toHex(lightenChannel(b))}`;
+};
 
 export default function AccountLinkingScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
+  const adaptiveColors = useAdaptiveColors();
+  const isDark = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
+  const textPrimary = isDark ? Colors.dark.textPrimary : '#5C4033';
+  const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
+  const glassOverlay = isDark ? GLASS_OVERLAY_DARK : GLASS_OVERLAY;
+
+  const accentPurple = isDark ? lightenHex(ACCENT_PURPLE) : ACCENT_PURPLE;
+  const accentMint = isDark ? lightenHex(ACCENT_MINT) : ACCENT_MINT;
+  const accentOrange = isDark ? lightenHex(ACCENT_ORANGE) : ACCENT_ORANGE;
+
+  const cardBorderColor = isDark ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.6)';
+  const listItemBorderColor = isDark ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.6)';
+  const listItemBg = isDark ? 'rgba(0,0,0,0.28)' : 'rgba(255,255,255,0.6)';
+  const inputBorderColor = isDark ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.6)';
+  const inputBg = isDark ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.7)';
+  const inputTextColor = isDark ? Colors.dark.textPrimary : '#333';
+  const inputPlaceholderColor = isDark ? 'rgba(240,230,220,0.7)' : '#9BA0A6';
+  const sharePillBg = isDark ? 'rgba(0,0,0,0.35)' : 'rgba(255,255,255,0.9)';
+  const sharePillBorder = isDark ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.6)';
+  const cardBlurTint = isDark ? 'dark' : 'light';
   const { user } = useAuth();
   const { syncUser } = useConvex();
 
@@ -140,23 +186,23 @@ export default function AccountLinkingScreen() {
     new Date(d).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
   return (
-    <ThemedBackground style={styles.background}>
+    <ThemedBackground style={[styles.background, isDark && styles.backgroundDark]}>
       <SafeAreaView style={styles.safeArea}>
         <StatusBar hidden />
         <Header title="Accounts verknüpfen" showBackButton onBackPress={() => router.back()} />
 
         <ScrollView contentContainerStyle={styles.scrollContent}>
           {isLoading ? (
-            <LiquidGlassCard style={[styles.sectionCard, styles.centerCard]} intensity={26} overlayColor={GLASS_OVERLAY}>
-              <ActivityIndicator size="large" color={theme.accent} />
-              <ThemedText style={styles.loadingText}>Lade Daten…</ThemedText>
+            <LiquidGlassCard style={[styles.sectionCard, styles.centerCard]} intensity={26} overlayColor={glassOverlay}>
+              <ActivityIndicator size="large" color={isDark ? adaptiveColors.accent : theme.accent} />
+              <ThemedText style={[styles.loadingText, { color: textSecondary }]}>Lade Daten…</ThemedText>
             </LiquidGlassCard>
           ) : (
             <>
               {/* Abschnitt: Einladung erstellen */}
-              <LiquidGlassCard style={[styles.sectionCard, { marginHorizontal: TIMELINE_INSET }]} intensity={26} overlayColor={GLASS_OVERLAY}>
-                <ThemedText style={styles.sectionTitle}>Einladung erstellen</ThemedText>
-                <ThemedText style={styles.sectionDescription}>
+              <LiquidGlassCard style={[styles.sectionCard, { marginHorizontal: TIMELINE_INSET }]} intensity={26} overlayColor={glassOverlay}>
+                <ThemedText style={[styles.sectionTitle, { color: textPrimary }]}>Einladung erstellen</ThemedText>
+                <ThemedText style={[styles.sectionDescription, { color: textSecondary }]}>
                   Erstelle einen Code und teile ihn mit deinem Partner oder einer Vertrauensperson.
                 </ThemedText>
 
@@ -165,30 +211,50 @@ export default function AccountLinkingScreen() {
                   activeOpacity={0.9}
                   style={styles.fullWidthAction}
                 >
-                  <BlurView intensity={24} tint="light" style={styles.cardBlur}>
-                    <View style={[styles.actionCard, { backgroundColor: 'rgba(220,200,255,0.6)' }]}>
-                      <View style={[styles.actionIcon, { backgroundColor: ACCENT_PURPLE }]}>
+                  <BlurView intensity={24} tint={cardBlurTint} style={styles.cardBlur}>
+                    <View
+                      style={[
+                        styles.actionCard,
+                        {
+                          backgroundColor: isDark ? toRgba(accentPurple, 0.22) : 'rgba(220,200,255,0.6)',
+                          borderColor: cardBorderColor,
+                        },
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.actionIcon,
+                          { backgroundColor: accentPurple, borderColor: cardBorderColor },
+                        ]}
+                      >
                         <IconSymbol name="plus" size={26} color="#FFFFFF" />
                       </View>
-                      <ThemedText style={styles.actionTitle}>Einladungscode erstellen</ThemedText>
-                      <ThemedText style={styles.actionSub}>Sicher teilen & verbinden</ThemedText>
+                      <ThemedText style={[styles.actionTitle, { color: textPrimary }]}>Einladungscode erstellen</ThemedText>
+                      <ThemedText style={[styles.actionSub, { color: textSecondary }]}>Sicher teilen & verbinden</ThemedText>
                     </View>
                   </BlurView>
                 </TouchableOpacity>
               </LiquidGlassCard>
 
               {/* Abschnitt: Einladungscode einlösen */}
-              <LiquidGlassCard style={[styles.sectionCard, { marginHorizontal: TIMELINE_INSET }]} intensity={26} overlayColor={GLASS_OVERLAY}>
-                <ThemedText style={styles.sectionTitle}>Einladungscode einlösen</ThemedText>
-                <ThemedText style={styles.sectionDescription}>
+              <LiquidGlassCard style={[styles.sectionCard, { marginHorizontal: TIMELINE_INSET }]} intensity={26} overlayColor={glassOverlay}>
+                <ThemedText style={[styles.sectionTitle, { color: textPrimary }]}>Einladungscode einlösen</ThemedText>
+                <ThemedText style={[styles.sectionDescription, { color: textSecondary }]}>
                   Du hast einen Code bekommen? Gib ihn hier ein und verknüpfe euren Account.
                 </ThemedText>
 
                 <View style={styles.inputRow}>
                   <TextInput
-                    style={styles.inputGlass}
+                    style={[
+                      styles.inputGlass,
+                      {
+                        borderColor: inputBorderColor,
+                        backgroundColor: inputBg,
+                        color: inputTextColor,
+                      },
+                    ]}
                     placeholder="CODE"
-                    placeholderTextColor="#9BA0A6"
+                    placeholderTextColor={inputPlaceholderColor}
                     value={invitationCode}
                     onChangeText={(t) => setInvitationCode(t.replace(/\s+/g, '').toUpperCase())}
                     autoCapitalize="characters"
@@ -203,17 +269,25 @@ export default function AccountLinkingScreen() {
                   activeOpacity={0.9}
                   style={[styles.fullWidthAction, (isRedeeming || !invitationCode.trim()) && { opacity: 0.7 }]}
                 >
-                  <BlurView intensity={24} tint="light" style={styles.cardBlur}>
-                    <View style={[styles.actionCard, { backgroundColor: 'rgba(168,196,193,0.6)' }]}>
-                      <View style={[styles.actionIcon, { backgroundColor: '#A8C4C1' }]}>
+                  <BlurView intensity={24} tint={cardBlurTint} style={styles.cardBlur}>
+                    <View
+                      style={[
+                        styles.actionCard,
+                        {
+                          backgroundColor: isDark ? toRgba(accentMint, 0.22) : 'rgba(168,196,193,0.6)',
+                          borderColor: cardBorderColor,
+                        },
+                      ]}
+                    >
+                      <View style={[styles.actionIcon, { backgroundColor: accentMint, borderColor: cardBorderColor }]}>
                         {isRedeeming ? (
                           <ActivityIndicator color="#fff" />
                         ) : (
                           <IconSymbol name="checkmark" size={26} color="#FFFFFF" />
                         )}
                       </View>
-                      <ThemedText style={styles.actionTitle}>{isRedeeming ? 'Einlösen…' : 'Code einlösen'}</ThemedText>
-                      <ThemedText style={styles.actionSub}>Schnell & sicher</ThemedText>
+                      <ThemedText style={[styles.actionTitle, { color: textPrimary }]}>{isRedeeming ? 'Einlösen…' : 'Code einlösen'}</ThemedText>
+                      <ThemedText style={[styles.actionSub, { color: textSecondary }]}>Schnell & sicher</ThemedText>
                     </View>
                   </BlurView>
                 </TouchableOpacity>
@@ -221,19 +295,19 @@ export default function AccountLinkingScreen() {
 
               {/* Abschnitt: Verknüpfte Accounts */}
               {linkedUsers.length > 0 && (
-                <LiquidGlassCard style={[styles.sectionCard, { marginHorizontal: TIMELINE_INSET }]} intensity={26} overlayColor={GLASS_OVERLAY}>
-                  <ThemedText style={styles.sectionTitle}>Verknüpfte Accounts</ThemedText>
+                <LiquidGlassCard style={[styles.sectionCard, { marginHorizontal: TIMELINE_INSET }]} intensity={26} overlayColor={glassOverlay}>
+                  <ThemedText style={[styles.sectionTitle, { color: textPrimary }]}>Verknüpfte Accounts</ThemedText>
 
                   <View style={styles.list}>
                     {linkedUsers.map((u) => (
-                      <View key={u.linkId} style={styles.listItem}>
+                      <View key={u.linkId} style={[styles.listItem, { backgroundColor: listItemBg, borderColor: listItemBorderColor }]}>
                         <View style={styles.listItemLeft}>
-                          <View style={[styles.avatar, { backgroundColor: 'rgba(142,78,198,0.2)' }]}>
-                            <IconSymbol name="person.fill" size={18} color={ACCENT_PURPLE} />
+                          <View style={[styles.avatar, { backgroundColor: isDark ? toRgba(accentPurple, 0.2) : 'rgba(142,78,198,0.2)', borderColor: listItemBorderColor }]}>
+                            <IconSymbol name="person.fill" size={18} color={accentPurple} />
                           </View>
                           <View style={{ flex: 1 }}>
-                            <ThemedText style={styles.userName}>{u.firstName} {u.lastName}</ThemedText>
-                            <ThemedText style={styles.userRole}>
+                            <ThemedText style={[styles.userName, { color: textPrimary }]}>{u.firstName} {u.lastName}</ThemedText>
+                            <ThemedText style={[styles.userRole, { color: textSecondary }]}>
                               {u.userRole === 'mama' ? 'Mama' : u.userRole === 'papa' ? 'Papa' : 'Benutzer'}
                             </ThemedText>
                           </View>
@@ -246,22 +320,22 @@ export default function AccountLinkingScreen() {
 
               {/* Abschnitt: Ausstehende Einladungen */}
               {invitations && invitations.filter(i => i.status === 'pending').length > 0 && (
-                <LiquidGlassCard style={[styles.sectionCard, { marginHorizontal: TIMELINE_INSET }]} intensity={26} overlayColor={GLASS_OVERLAY}>
-                  <ThemedText style={styles.sectionTitle}>Ausstehende Einladungen</ThemedText>
+                <LiquidGlassCard style={[styles.sectionCard, { marginHorizontal: TIMELINE_INSET }]} intensity={26} overlayColor={glassOverlay}>
+                  <ThemedText style={[styles.sectionTitle, { color: textPrimary }]}>Ausstehende Einladungen</ThemedText>
 
                   <View style={styles.list}>
                     {invitations
                       .filter(i => i.status === 'pending')
                       .map((inv) => (
-                        <View key={inv.id} style={styles.listItem}>
+                        <View key={inv.id} style={[styles.listItem, { backgroundColor: listItemBg, borderColor: listItemBorderColor }]}>
                           <View style={styles.listItemLeft}>
-                            <View style={[styles.avatar, { backgroundColor: 'rgba(255,140,66,0.18)' }]}>
-                              <IconSymbol name="doc.on.doc" size={18} color="#FF8C42" />
+                            <View style={[styles.avatar, { backgroundColor: isDark ? toRgba(accentOrange, 0.2) : 'rgba(255,140,66,0.18)', borderColor: listItemBorderColor }]}>
+                              <IconSymbol name="doc.on.doc" size={18} color={accentOrange} />
                             </View>
                             <View style={{ flex: 1 }}>
-                              <ThemedText style={styles.invCode}>Code: {inv.invitationCode}</ThemedText>
-                              <ThemedText style={styles.metaText}>Erstellt: {formatDate(inv.createdAt)}</ThemedText>
-                              <ThemedText style={styles.metaText}>Gültig bis: {formatDate(inv.expiresAt)}</ThemedText>
+                              <ThemedText style={[styles.invCode, { color: textPrimary }]}>Code: {inv.invitationCode}</ThemedText>
+                              <ThemedText style={[styles.metaText, { color: textSecondary }]}>Erstellt: {formatDate(inv.createdAt)}</ThemedText>
+                              <ThemedText style={[styles.metaText, { color: textSecondary }]}>Gültig bis: {formatDate(inv.expiresAt)}</ThemedText>
                             </View>
                           </View>
 
@@ -272,9 +346,9 @@ export default function AccountLinkingScreen() {
                                 title: 'Einladung teilen'
                               });
                             }}
-                            style={styles.sharePill}
+                            style={[styles.sharePill, { backgroundColor: sharePillBg, borderColor: sharePillBorder }]}
                           >
-                            <IconSymbol name="square.and.arrow.up" size={18} color={ACCENT_PURPLE} />
+                            <IconSymbol name="square.and.arrow.up" size={18} color={accentPurple} />
                           </TouchableOpacity>
                         </View>
                       ))}
@@ -291,6 +365,7 @@ export default function AccountLinkingScreen() {
 
 const styles = StyleSheet.create({
   background: { flex: 1, width: '100%', backgroundColor: '#f5eee0' }, // wie Sleep-Tracker
+  backgroundDark: { backgroundColor: Colors.dark.background },
   safeArea: { flex: 1, paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0 },
 
   // identischer Scroll-Rhythmus
