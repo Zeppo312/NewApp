@@ -4,6 +4,7 @@ import { ThemedText } from '@/components/ThemedText';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
@@ -16,7 +17,7 @@ import Header from '@/components/Header';
 import { useSmartBack } from '@/contexts/NavigationContext';
 import * as Notifications from 'expo-notifications';
 import { defineMilestoneCheckerTask, saveBabyInfoForBackgroundTask, isTaskRegistered } from '@/tasks/milestoneCheckerTask';
-import { LAYOUT_PAD, TIMELINE_INSET, LiquidGlassCard } from '@/constants/DesignGuide';
+import { LAYOUT_PAD, TIMELINE_INSET, LiquidGlassCard, GLASS_OVERLAY, GLASS_OVERLAY_DARK } from '@/constants/DesignGuide';
 import { useFocusEffect } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
@@ -24,6 +25,18 @@ import * as Haptics from 'expo-haptics';
 export default function BabyScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
+  const adaptiveColors = useAdaptiveColors();
+  const isDark = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
+  const textPrimary = isDark ? Colors.dark.textPrimary : '#5C4033';
+  const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
+  const textTertiary = isDark ? Colors.dark.textTertiary : '#A8978E';
+  const glassOverlay = isDark ? GLASS_OVERLAY_DARK : GLASS_OVERLAY;
+  const photoButtonBackground = isDark ? 'rgba(255,255,255,0.10)' : 'rgba(125, 90, 80, 0.15)';
+  const photoButtonBorder = isDark ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.35)';
+  const accentButtonBackground = isDark ? 'rgba(142, 78, 198, 0.26)' : 'rgba(142, 78, 198, 0.16)';
+  const accentButtonBorder = isDark ? 'rgba(196, 160, 233, 0.55)' : 'rgba(142, 78, 198, 0.35)';
+  const inputBackground = isDark ? 'rgba(18,18,22,0.76)' : 'rgba(255,255,255,0.85)';
+  const inputBorder = isDark ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.35)';
   const { user } = useAuth();
   const { activeBabyId, refreshBabies, isReady } = useActiveBaby();
   const { refreshBabyDetails } = useBabyStatus();
@@ -240,7 +253,7 @@ export default function BabyScreen() {
     <ThemedBackground style={styles.container}>
       <SafeAreaView style={{ flex: 1 }}>
         <Stack.Screen options={{ headerShown: false }} />
-        <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
+        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
         
         <Header
           title="Mein Baby"
@@ -257,43 +270,43 @@ export default function BabyScreen() {
           contentContainerStyle={styles.contentContainer}
           showsVerticalScrollIndicator={false}
         >
-          <LiquidGlassCard style={styles.glassCard} intensity={24}>
+          <LiquidGlassCard style={styles.glassCard} intensity={24} overlayColor={glassOverlay}>
             <View style={styles.glassInner}>
             <View style={styles.photoContainer}>
               {displayPhoto ? (
                 <Image source={{ uri: displayPhoto }} style={styles.babyPhoto} />
               ) : (
-                <View style={[styles.placeholderPhoto, { backgroundColor: colorScheme === 'dark' ? '#555' : '#E0E0E0' }]}>
-                  <IconSymbol name="person.fill" size={60} color={theme.tabIconDefault} />
+                <View style={[styles.placeholderPhoto, { backgroundColor: isDark ? '#555' : '#E0E0E0' }]}>
+                  <IconSymbol name="person.fill" size={60} color={isDark ? adaptiveColors.iconSecondary : theme.tabIconDefault} />
                 </View>
               )}
 
               <View style={styles.photoHintContainer}>
                 {isEditing ? (
                   <>
-                    <ThemedText style={styles.photoHintText}>
+                    <ThemedText style={[styles.photoHintText, { color: textSecondary }]}>
                       {displayPhoto ? 'Babyfoto anpassen' : 'Füge ein Babyfoto hinzu'}
                     </ThemedText>
                     <TouchableOpacity
-                      style={styles.photoHintButton}
+                      style={[styles.photoHintButton, { backgroundColor: photoButtonBackground, borderColor: photoButtonBorder }]}
                       onPress={() => {
                         triggerHaptic();
                         pickBabyPhoto();
                       }}
                     >
-                      <ThemedText style={styles.photoHintButtonText}>
+                      <ThemedText style={[styles.photoHintButtonText, { color: textPrimary }]}>
                         Foto wählen
                       </ThemedText>
                     </TouchableOpacity>
                     {!!displayPhoto && (
                       <TouchableOpacity
-                        style={[styles.photoHintButton, styles.photoRemoveButton]}
+                        style={[styles.photoHintButton, styles.photoRemoveButton, { backgroundColor: photoButtonBackground, borderColor: photoButtonBorder }]}
                         onPress={() => {
                           triggerHaptic();
                           removeBabyPhoto();
                         }}
                       >
-                        <ThemedText style={styles.photoHintButtonText}>
+                        <ThemedText style={[styles.photoHintButtonText, { color: textPrimary }]}>
                           Foto entfernen
                         </ThemedText>
                       </TouchableOpacity>
@@ -301,18 +314,18 @@ export default function BabyScreen() {
                   </>
                 ) : (
                   <>
-                    <ThemedText style={styles.photoHintText}>
+                    <ThemedText style={[styles.photoHintText, { color: textSecondary }]}>
                       Ändere das Babyfoto direkt hier.
                     </ThemedText>
                     <TouchableOpacity
-                      style={styles.photoHintButton}
+                      style={[styles.photoHintButton, { backgroundColor: photoButtonBackground, borderColor: photoButtonBorder }]}
                       onPress={() => {
                         triggerHaptic();
                         setIsEditing(true);
                         pickBabyPhoto();
                       }}
                     >
-                      <ThemedText style={styles.photoHintButtonText}>
+                      <ThemedText style={[styles.photoHintButtonText, { color: textPrimary }]}>
                         Foto ändern
                       </ThemedText>
                     </TouchableOpacity>
@@ -327,29 +340,29 @@ export default function BabyScreen() {
                   <View style={styles.inputRow}>
                     <ThemedText style={styles.label}>Name:</ThemedText>
                     <TextInput
-                      style={styles.glassInput}
+                      style={[styles.glassInput, { color: textPrimary, backgroundColor: inputBackground, borderColor: inputBorder }]}
                       value={babyInfo.name}
                       onChangeText={(text) => setBabyInfo({ ...babyInfo, name: text })}
                       placeholder="Name des Babys"
-                      placeholderTextColor={'#A8978E'}
+                      placeholderTextColor={textTertiary}
                     />
                   </View>
 
                   <View style={styles.inputRow}>
                     <ThemedText style={styles.label}>Geburtsdatum:</ThemedText>
                     <TouchableOpacity
-                      style={styles.glassDateButton}
+                      style={[styles.glassDateButton, { backgroundColor: inputBackground, borderColor: inputBorder }]}
                       onPress={() => {
                         triggerHaptic();
                         setShowDatePicker(true);
                       }}
                     >
-                      <ThemedText style={styles.dateText}>
+                      <ThemedText style={[styles.dateText, { color: textPrimary }]}>
                         {babyInfo.birth_date
                           ? new Date(babyInfo.birth_date).toLocaleDateString('de-DE')
                           : 'Datum wählen'}
                       </ThemedText>
-                      <IconSymbol name="calendar" size={20} color={theme.text} />
+                      <IconSymbol name="calendar" size={20} color={textPrimary} />
                     </TouchableOpacity>
 
                     {showDatePicker && (
@@ -359,7 +372,7 @@ export default function BabyScreen() {
                         display="default"
                         onChange={handleDateChange}
                         maximumDate={new Date()}
-                        textColor={colorScheme === 'dark' ? '#FFFFFF' : undefined}
+                        textColor={isDark ? '#FFFFFF' : undefined}
                       />
                     )}
                   </View>
@@ -367,47 +380,54 @@ export default function BabyScreen() {
                   <View style={styles.inputRow}>
                     <ThemedText style={styles.label}>Gewicht:</ThemedText>
                     <TextInput
-                      style={styles.glassInput}
+                      style={[styles.glassInput, { color: textPrimary, backgroundColor: inputBackground, borderColor: inputBorder }]}
                       value={babyInfo.weight}
                       onChangeText={(text) => setBabyInfo({ ...babyInfo, weight: text })}
                       placeholder="z.B. 3250g"
-                      placeholderTextColor={'#A8978E'}
+                      placeholderTextColor={textTertiary}
                     />
                   </View>
 
                   <View style={styles.inputRow}>
                     <ThemedText style={styles.label}>Größe:</ThemedText>
                     <TextInput
-                      style={styles.glassInput}
+                      style={[styles.glassInput, { color: textPrimary, backgroundColor: inputBackground, borderColor: inputBorder }]}
                       value={babyInfo.height}
                       onChangeText={(text) => setBabyInfo({ ...babyInfo, height: text })}
                       placeholder="z.B. 52cm"
-                      placeholderTextColor={'#A8978E'}
+                      placeholderTextColor={textTertiary}
                     />
                   </View>
 
                   <View style={styles.buttonRow}>
                     <TouchableOpacity
-                      style={[styles.button, styles.cancelButton]}
+                      style={[
+                        styles.button,
+                        styles.cancelButton,
+                        {
+                          backgroundColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.18)',
+                          borderColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.35)',
+                        }
+                      ]}
                       onPress={() => {
                         triggerHaptic();
                         setIsEditing(false);
                         loadBabyInfo(); // Zurücksetzen auf gespeicherte Daten
                       }}
                     >
-                      <ThemedText style={[styles.buttonText, { color: '#7D5A50' }]} lightColor="#7D5A50" darkColor="#7D5A50">
+                      <ThemedText style={[styles.buttonText, { color: textPrimary }]}>
                         Abbrechen
                       </ThemedText>
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                      style={[styles.button, styles.saveButton]}
+                      style={[styles.button, styles.saveButton, { backgroundColor: accentButtonBackground, borderColor: accentButtonBorder }]}
                       onPress={() => {
                         triggerHaptic();
                         handleSave();
                       }}
                     >
-                      <ThemedText style={[styles.buttonText, { color: '#7D5A50' }]} lightColor="#7D5A50" darkColor="#7D5A50">
+                      <ThemedText style={[styles.buttonText, { color: textPrimary }]}>
                         Speichern
                       </ThemedText>
                     </TouchableOpacity>
@@ -446,13 +466,13 @@ export default function BabyScreen() {
                   </View>
 
                   <TouchableOpacity
-                    style={[styles.button, styles.editButton]}
+                    style={[styles.button, styles.editButton, { backgroundColor: accentButtonBackground, borderColor: accentButtonBorder }]}
                     onPress={() => {
                       triggerHaptic();
                       setIsEditing(true);
                     }}
                   >
-                    <ThemedText style={[styles.buttonText, { color: '#7D5A50' }]} lightColor="#7D5A50" darkColor="#7D5A50">
+                    <ThemedText style={[styles.buttonText, { color: textPrimary }]}>
                       Bearbeiten
                     </ThemedText>
                   </TouchableOpacity>
@@ -465,8 +485,8 @@ export default function BabyScreen() {
           <LiquidGlassCard
             style={styles.infoGlassCard}
             intensity={24}
-            overlayColor={'rgba(142, 78, 198, 0.16)'}
-            borderColor={'rgba(142, 78, 198, 0.35)'}
+            overlayColor={accentButtonBackground}
+            borderColor={accentButtonBorder}
             onPress={() => {
               triggerHaptic();
               router.push({ pathname: '/baby-stats' } as any);
@@ -484,7 +504,7 @@ export default function BabyScreen() {
             </View>
           </LiquidGlassCard>
           
-          <LiquidGlassCard style={styles.infoGlassCard} intensity={24}>
+          <LiquidGlassCard style={styles.infoGlassCard} intensity={24} overlayColor={glassOverlay}>
             <View style={styles.infoGlassInner}>
               <ThemedText style={styles.infoTitle}>Die ersten Wochen</ThemedText>
               <ThemedText style={styles.infoText}>
@@ -600,7 +620,6 @@ const styles = StyleSheet.create({
   },
   photoHintText: {
     fontSize: 14,
-    color: '#7D5A50',
     textAlign: 'center',
     marginBottom: 8,
   },
@@ -608,7 +627,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: 'rgba(125, 90, 80, 0.15)',
+    borderWidth: 1,
   },
   photoRemoveButton: {
     marginTop: 8,
@@ -616,7 +635,6 @@ const styles = StyleSheet.create({
   photoHintButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#7D5A50',
   },
   infoContainer: {
     width: '100%',

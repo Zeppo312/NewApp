@@ -272,7 +272,7 @@ export default function LoginScreen() {
                   Lotti Baby
                 </ThemedText>
                 <ThemedText style={styles.appSubtitle}>
-                  Für werdende Eltern
+                  Für Eltern und alle, die es bald werden
                 </ThemedText>
               </View>
 

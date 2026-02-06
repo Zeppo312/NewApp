@@ -5,6 +5,7 @@ import { ThemedView } from '@/components/ThemedView';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import * as Location from 'expo-location';
@@ -13,7 +14,7 @@ import { API_KEYS } from '@/lib/config';
 import { Stack } from 'expo-router';
 import Header from '@/components/Header';
 import { useSmartBack } from '@/contexts/NavigationContext';
-import { LiquidGlassCard, LAYOUT_PAD, TIMELINE_INSET } from '@/constants/DesignGuide';
+import { LiquidGlassCard, LAYOUT_PAD, TIMELINE_INSET, GLASS_OVERLAY_DARK, GLASS_BORDER_DARK } from '@/constants/DesignGuide';
 
 const { width: screenWidth } = Dimensions.get('window');
 const TIMELINE_CONTENT_WIDTH = screenWidth - LAYOUT_PAD;
@@ -359,6 +360,14 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
   heroSubtitle
 }) => {
   const theme = Colors[colorScheme || 'light'];
+  const adaptiveColors = useAdaptiveColors();
+  const isDark = colorScheme === 'dark' || adaptiveColors.isDarkBackground;
+  const textPrimary = isDark ? Colors.dark.textPrimary : '#5C4033';
+  const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
+  const accentColor = isDark ? adaptiveColors.accent : theme.accent;
+  const iconSecondaryColor = isDark ? adaptiveColors.iconSecondary : theme.tabIconDefault;
+  const glassOverlay = isDark ? GLASS_OVERLAY_DARK : BLUE_GLASS_OVERLAY;
+  const glassBorder = isDark ? GLASS_BORDER_DARK : BLUE_GLASS_BORDER;
   const autoFeltTemp = weatherData?.feelsLike ?? weatherData?.temperature;
   
   return (
@@ -367,12 +376,16 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
         style={styles.infoButton}
         onPress={() => setShowBabyInfo(!showBabyInfo)}
       >
-        <IconSymbol name="info.circle" size={22} color={theme.textSecondary} />
+        <IconSymbol name="info.circle" size={22} color={textSecondary} />
       </TouchableOpacity>
 
       {/* Informations-Popup für Baby-Daten */}
       {showBabyInfo && (
-        <ThemedView style={styles.infoCard} lightColor={theme.cardLight} darkColor={theme.cardDark}>
+        <ThemedView
+          style={styles.infoCard}
+          lightColor={isDark ? 'rgba(12,12,16,0.82)' : theme.cardLight}
+          darkColor={isDark ? 'rgba(12,12,16,0.82)' : theme.cardDark}
+        >
           <ThemedText style={styles.infoTitle}>Baby-Daten für Empfehlungen</ThemedText>
           <View style={styles.infoRow}>
             <ThemedText style={styles.infoLabel}>Alter:</ThemedText>
@@ -392,42 +405,72 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
       <LiquidGlassCard
         style={styles.sectionCard}
         intensity={26}
-        overlayColor={BLUE_GLASS_OVERLAY}
-        borderColor={BLUE_GLASS_BORDER}
+        overlayColor={glassOverlay}
+        borderColor={glassBorder}
       >
-        <ThemedText style={styles.sectionTitle}>Standort</ThemedText>
+        <ThemedText style={[styles.sectionTitle, { color: textSecondary }]}>Standort</ThemedText>
         <View style={styles.locationToggle}>
           <TouchableOpacity
             style={[
               styles.locationButton,
-              searchType === 'location' && styles.activeLocationButton
+              {
+                borderColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.3)',
+                backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.12)',
+              },
+              searchType === 'location' && [
+                styles.activeLocationButton,
+                {
+                  borderColor: isDark ? 'rgba(166,205,237,0.58)' : 'rgba(100,150,255,0.75)',
+                  backgroundColor: isDark ? 'rgba(166,205,237,0.18)' : 'rgba(166,205,237,0.35)',
+                },
+              ]
             ]}
             onPress={toggleLocationMode}
           >
-            <IconSymbol name="location.fill" size={20} color={searchType === 'location' ? theme.accent : theme.tabIconDefault} />
-            <ThemedText style={[styles.locationButtonText, searchType === 'location' && styles.activeLocationButtonText]}>Standort</ThemedText>
+            <IconSymbol name="location.fill" size={20} color={searchType === 'location' ? accentColor : iconSecondaryColor} />
+            <ThemedText style={[styles.locationButtonText, { color: textSecondary }, searchType === 'location' && [styles.activeLocationButtonText, { color: textPrimary }]]}>Standort</ThemedText>
           </TouchableOpacity>
           
           <TouchableOpacity
             style={[
               styles.locationButton,
-              searchType === 'zipCode' && styles.activeLocationButton
+              {
+                borderColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.3)',
+                backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.12)',
+              },
+              searchType === 'zipCode' && [
+                styles.activeLocationButton,
+                {
+                  borderColor: isDark ? 'rgba(166,205,237,0.58)' : 'rgba(100,150,255,0.75)',
+                  backgroundColor: isDark ? 'rgba(166,205,237,0.18)' : 'rgba(166,205,237,0.35)',
+                },
+              ]
             ]}
             onPress={switchToZipCodeSearch}
           >
-            <IconSymbol name="number" size={20} color={searchType === 'zipCode' ? theme.accent : theme.tabIconDefault} />
-            <ThemedText style={[styles.locationButtonText, searchType === 'zipCode' && styles.activeLocationButtonText]}>PLZ</ThemedText>
+            <IconSymbol name="number" size={20} color={searchType === 'zipCode' ? accentColor : iconSecondaryColor} />
+            <ThemedText style={[styles.locationButtonText, { color: textSecondary }, searchType === 'zipCode' && [styles.activeLocationButtonText, { color: textPrimary }]]}>PLZ</ThemedText>
           </TouchableOpacity>
           
           <TouchableOpacity
             style={[
               styles.locationButton,
-              searchType === 'cityName' && styles.activeLocationButton
+              {
+                borderColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.3)',
+                backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.12)',
+              },
+              searchType === 'cityName' && [
+                styles.activeLocationButton,
+                {
+                  borderColor: isDark ? 'rgba(166,205,237,0.58)' : 'rgba(100,150,255,0.75)',
+                  backgroundColor: isDark ? 'rgba(166,205,237,0.18)' : 'rgba(166,205,237,0.35)',
+                },
+              ]
             ]}
             onPress={switchToCitySearch}
           >
-            <IconSymbol name="building.2.fill" size={20} color={searchType === 'cityName' ? theme.accent : theme.tabIconDefault} />
-            <ThemedText style={[styles.locationButtonText, searchType === 'cityName' && styles.activeLocationButtonText]}>Stadt</ThemedText>
+            <IconSymbol name="building.2.fill" size={20} color={searchType === 'cityName' ? accentColor : iconSecondaryColor} />
+            <ThemedText style={[styles.locationButtonText, { color: textSecondary }, searchType === 'cityName' && [styles.activeLocationButtonText, { color: textPrimary }]]}>Stadt</ThemedText>
           </TouchableOpacity>
         </View>
 
@@ -436,10 +479,14 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
             <TextInput
               style={[
                 styles.zipCodeInput,
-                { color: theme.text, borderColor: theme.cardLight !== '#FFFFFF' ? theme.cardLight : '#CCCCCC' }
+                {
+                  color: textPrimary,
+                  borderColor: isDark ? 'rgba(255,255,255,0.18)' : (theme.cardLight !== '#FFFFFF' ? theme.cardLight : '#CCCCCC'),
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.18)',
+                }
               ]}
               placeholder="PLZ eingeben (z.B. 10115)"
-              placeholderTextColor={theme.tabIconDefault}
+              placeholderTextColor={iconSecondaryColor}
               value={zipCode}
               onChangeText={handleZipCodeChange}
               keyboardType="numeric"
@@ -450,7 +497,13 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
               disableFullscreenUI={true}
             />
             <TouchableOpacity
-              style={[styles.searchButton, { backgroundColor: theme.accent }]}
+              style={[
+                styles.searchButton,
+                {
+                  backgroundColor: accentColor,
+                  borderColor: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.55)',
+                },
+              ]}
               onPress={handleZipCodeSearch}
             >
               <ThemedText style={styles.searchButtonText}>Suchen</ThemedText>
@@ -463,10 +516,14 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
             <TextInput
               style={[
                 styles.zipCodeInput,
-                { color: theme.text, borderColor: theme.cardLight !== '#FFFFFF' ? theme.cardLight : '#CCCCCC' }
+                {
+                  color: textPrimary,
+                  borderColor: isDark ? 'rgba(255,255,255,0.18)' : (theme.cardLight !== '#FFFFFF' ? theme.cardLight : '#CCCCCC'),
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.18)',
+                }
               ]}
               placeholder="Stadt eingeben (z.B. Berlin)"
-              placeholderTextColor={theme.tabIconDefault}
+              placeholderTextColor={iconSecondaryColor}
               value={cityName}
               onChangeText={handleCityNameChange}
               autoCapitalize="words"
@@ -476,7 +533,13 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
               disableFullscreenUI={true}
             />
             <TouchableOpacity
-              style={[styles.searchButton, { backgroundColor: theme.accent }]}
+              style={[
+                styles.searchButton,
+                {
+                  backgroundColor: accentColor,
+                  borderColor: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.55)',
+                },
+              ]}
               onPress={handleCitySearch}
             >
               <ThemedText style={styles.searchButtonText}>Suchen</ThemedText>
@@ -485,7 +548,7 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
         )}
 
         {weatherData && (
-          <ThemedText style={styles.currentLocation}>
+          <ThemedText style={[styles.currentLocation, { color: textSecondary }]}>
             {weatherData.location || (searchType === 'location' ? 'Aktueller Standort' : searchType === 'zipCode' ? `PLZ ${searchType === 'zipCode' ? zipCode : ''}` : cityName)}
           </ThemedText>
         )}
@@ -493,18 +556,18 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
 
       {isLoading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.accent} />
-          <ThemedText style={styles.loadingText}>Wetterdaten werden geladen...</ThemedText>
+          <ActivityIndicator size="large" color={accentColor} />
+          <ThemedText style={[styles.loadingText, { color: textSecondary }]}>Wetterdaten werden geladen...</ThemedText>
         </View>
       ) : errorMessage ? (
         <LiquidGlassCard
           style={styles.errorContainer}
           intensity={26}
-          overlayColor={BLUE_GLASS_OVERLAY}
-          borderColor={BLUE_GLASS_BORDER}
+          overlayColor={glassOverlay}
+          borderColor={glassBorder}
         >
           <IconSymbol name="exclamationmark.triangle" size={40} color="#FF6B6B" />
-          <ThemedText style={styles.errorText}>{errorMessage}</ThemedText>
+          <ThemedText style={[styles.errorText, { color: textPrimary }]}>{errorMessage}</ThemedText>
         </LiquidGlassCard>
       ) : (
         <>
@@ -512,41 +575,81 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
           <LiquidGlassCard
             style={[styles.sectionCard, styles.weatherCard]}
             intensity={26}
-            overlayColor={BLUE_GLASS_OVERLAY}
-            borderColor={BLUE_GLASS_BORDER}
+            overlayColor={glassOverlay}
+            borderColor={glassBorder}
           >
-            <ThemedText style={[styles.sectionTitle, styles.weatherTitle]}>Aktuelle Wetterlage</ThemedText>
+            <ThemedText style={[styles.sectionTitle, styles.weatherTitle, { color: textSecondary }]}>Aktuelle Wetterlage</ThemedText>
             
             {/* New weather display layout */}
             <View style={styles.weatherDisplayContainer}>
               {/* Main temperature and icon row */}
               <View style={styles.mainWeatherRow}>
-                <View style={styles.temperatureBox}>
-                  <ThemedText style={styles.temperatureValue} numberOfLines={1} ellipsizeMode="clip">{weatherData?.temperature}°C</ThemedText>
-                  <ThemedText style={styles.feelsLikeValue}>Gefühlt: {weatherData?.feelsLike}°C</ThemedText>
+                <View
+                  style={[
+                    styles.temperatureBox,
+                    {
+                      backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.18)',
+                      borderColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.35)',
+                    },
+                  ]}
+                >
+                  <ThemedText style={[styles.temperatureValue, { color: textPrimary }]} numberOfLines={1} ellipsizeMode="clip">{weatherData?.temperature}°C</ThemedText>
+                  <ThemedText style={[styles.feelsLikeValue, { color: textSecondary }]}>Gefühlt: {weatherData?.feelsLike}°C</ThemedText>
                 </View>
                 
-                <View style={styles.weatherIconBox}>
-                  <IconSymbol name={weatherData?.icon || "cloud.sun.fill"} size={54} color={theme.accent} />
+                <View
+                  style={[
+                    styles.weatherIconBox,
+                    {
+                      backgroundColor: isDark ? 'rgba(166,205,237,0.14)' : 'rgba(166,205,237,0.2)',
+                      borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.35)',
+                    },
+                  ]}
+                >
+                  <IconSymbol name={weatherData?.icon || "cloud.sun.fill"} size={54} color={accentColor} />
                 </View>
               </View>
               
               {/* Weather description */}
-              <View style={styles.weatherDescriptionContainer}>
-                <ThemedText style={styles.weatherDescriptionText}>{weatherData?.description}</ThemedText>
-                <ThemedText style={styles.locationText}>{weatherData?.location || (searchType === 'location' ? 'Aktueller Standort' : searchType === 'zipCode' ? `PLZ ${zipCode}` : cityName)}</ThemedText>
+              <View
+                style={[
+                  styles.weatherDescriptionContainer,
+                  {
+                    backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.12)',
+                    borderColor: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.3)',
+                  },
+                ]}
+              >
+                <ThemedText style={[styles.weatherDescriptionText, { color: textPrimary }]}>{weatherData?.description}</ThemedText>
+                <ThemedText style={[styles.locationText, { color: textSecondary }]}>{weatherData?.location || (searchType === 'location' ? 'Aktueller Standort' : searchType === 'zipCode' ? `PLZ ${zipCode}` : cityName)}</ThemedText>
               </View>
               
               {/* Weather details with smaller icons */}
               <View style={styles.weatherDetailsContainer}>
-                <View style={styles.weatherDetailBox}>
-                  <IconSymbol name="arrow.left.and.right" size={18} color={theme.tabIconDefault} />
-                  <ThemedText style={styles.weatherDetailText}>Wind: {weatherData?.windSpeed} km/h</ThemedText>
+                <View
+                  style={[
+                    styles.weatherDetailBox,
+                    {
+                      backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.12)',
+                      borderColor: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.3)',
+                    },
+                  ]}
+                >
+                  <IconSymbol name="arrow.left.and.right" size={18} color={iconSecondaryColor} />
+                  <ThemedText style={[styles.weatherDetailText, { color: textSecondary }]}>Wind: {weatherData?.windSpeed} km/h</ThemedText>
                 </View>
                 
-                <View style={styles.weatherDetailBox}>
-                  <IconSymbol name="drop.fill" size={18} color={theme.tabIconDefault} />
-                  <ThemedText style={styles.weatherDetailText}>Luftfeuchte: {weatherData?.humidity}%</ThemedText>
+                <View
+                  style={[
+                    styles.weatherDetailBox,
+                    {
+                      backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.12)',
+                      borderColor: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.3)',
+                    },
+                  ]}
+                >
+                  <IconSymbol name="drop.fill" size={18} color={iconSecondaryColor} />
+                  <ThemedText style={[styles.weatherDetailText, { color: textSecondary }]}>Luftfeuchte: {weatherData?.humidity}%</ThemedText>
                 </View>
               </View>
             </View>
@@ -556,12 +659,12 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
             <LiquidGlassCard
               style={[styles.sectionCard, styles.heroCard]}
               intensity={26}
-              overlayColor={BLUE_GLASS_OVERLAY}
-              borderColor={BLUE_GLASS_BORDER}
+              overlayColor={glassOverlay}
+              borderColor={glassBorder}
               radius={16}
             >
-              <ThemedText style={[styles.sectionTitle, styles.heroTitle]}>{heroTitle}</ThemedText>
-              <ThemedText style={styles.heroSubtitle}>{heroSubtitle}</ThemedText>
+              <ThemedText style={[styles.sectionTitle, styles.heroTitle, { color: textSecondary }]}>{heroTitle}</ThemedText>
+              <ThemedText style={[styles.heroSubtitle, { color: textPrimary }]}>{heroSubtitle}</ThemedText>
             </LiquidGlassCard>
           )}
 
@@ -569,23 +672,43 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
           <LiquidGlassCard
             style={[styles.sectionCard]}
             intensity={26}
-            overlayColor={BLUE_GLASS_OVERLAY}
-            borderColor={BLUE_GLASS_BORDER}
+            overlayColor={glassOverlay}
+            borderColor={glassBorder}
           >
-            <ThemedText style={styles.sectionTitle}>Situation auswählen</ThemedText>
+            <ThemedText style={[styles.sectionTitle, { color: textSecondary }]}>Situation auswählen</ThemedText>
             <View style={styles.contextButtonsContainer}>
               {(Object.keys(contextDescriptions) as ContextMode[]).map((mode) => (
                 <TouchableOpacity
                   key={mode}
                   style={[
                     styles.contextButtonNew,
-                    selectedMode === mode && styles.selectedContextButtonNew
+                    {
+                      borderColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.3)',
+                      backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.12)',
+                    },
+                    selectedMode === mode && [
+                      styles.selectedContextButtonNew,
+                      {
+                        borderColor: isDark ? 'rgba(166,205,237,0.58)' : 'rgba(100,150,255,0.55)',
+                        backgroundColor: isDark ? 'rgba(166,205,237,0.18)' : 'rgba(166,205,237,0.25)',
+                      },
+                    ]
                   ]}
                   onPress={() => setSelectedMode(mode)}
                 >
                   <View style={[
                     styles.contextImageContainer,
-                    selectedMode === mode && styles.selectedContextImageContainer
+                    {
+                      backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.6)',
+                      borderColor: isDark ? 'rgba(255,255,255,0.24)' : 'rgba(255,255,255,0.35)',
+                    },
+                    selectedMode === mode && [
+                      styles.selectedContextImageContainer,
+                      {
+                        backgroundColor: isDark ? 'rgba(166,205,237,0.35)' : 'rgba(166,205,237,0.9)',
+                        borderColor: isDark ? 'rgba(166,205,237,0.65)' : 'rgba(100,150,255,0.55)',
+                      },
+                    ]
                   ]}>
                     <Image 
                       source={getContextImage(mode)} 
@@ -595,7 +718,8 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
                   <ThemedText
                     style={[
                       styles.contextButtonTextNew,
-                      selectedMode === mode && styles.selectedContextButtonTextNew
+                      { color: textSecondary },
+                      selectedMode === mode && [styles.selectedContextButtonTextNew, { color: textPrimary }]
                     ]}
                   >
                     {contextDescriptions[mode]}
@@ -609,22 +733,33 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
             <LiquidGlassCard
               style={[styles.sectionCard]}
               intensity={26}
-              overlayColor={BLUE_GLASS_OVERLAY}
-              borderColor={BLUE_GLASS_BORDER}
+              overlayColor={glassOverlay}
+              borderColor={glassBorder}
             >
-              <ThemedText style={styles.sectionTitle}>Gefühlte Temperatur wählen</ThemedText>
+              <ThemedText style={[styles.sectionTitle, { color: textSecondary }]}>Gefühlte Temperatur wählen</ThemedText>
               <View style={styles.feltTempOptions}>
                 <TouchableOpacity
                   style={[
                     styles.feltTempButton,
-                    feltTemperature === null && styles.feltTempButtonActive
+                    {
+                      borderColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.3)',
+                      backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.12)',
+                    },
+                    feltTemperature === null && [
+                      styles.feltTempButtonActive,
+                      {
+                        borderColor: isDark ? 'rgba(166,205,237,0.58)' : 'rgba(100,150,255,0.55)',
+                        backgroundColor: isDark ? 'rgba(166,205,237,0.18)' : 'rgba(166,205,237,0.25)',
+                      },
+                    ]
                   ]}
                   onPress={() => setFeltTemperature(null)}
                 >
                   <ThemedText
                     style={[
                       styles.feltTempButtonText,
-                      feltTemperature === null && styles.feltTempButtonTextActive
+                      { color: textSecondary },
+                      feltTemperature === null && [styles.feltTempButtonTextActive, { color: textPrimary }]
                     ]}
                   >
                     Auto
@@ -637,14 +772,25 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
                       key={`felt-${temp}`}
                       style={[
                         styles.feltTempButton,
-                        isSelected && styles.feltTempButtonActive
+                        {
+                          borderColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.3)',
+                          backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.12)',
+                        },
+                        isSelected && [
+                          styles.feltTempButtonActive,
+                          {
+                            borderColor: isDark ? 'rgba(166,205,237,0.58)' : 'rgba(100,150,255,0.55)',
+                            backgroundColor: isDark ? 'rgba(166,205,237,0.18)' : 'rgba(166,205,237,0.25)',
+                          },
+                        ]
                       ]}
                       onPress={() => setFeltTemperature(temp)}
                     >
                       <ThemedText
                         style={[
                           styles.feltTempButtonText,
-                          isSelected && styles.feltTempButtonTextActive
+                          { color: textSecondary },
+                          isSelected && [styles.feltTempButtonTextActive, { color: textPrimary }]
                         ]}
                       >
                         {temp}°C
@@ -654,7 +800,7 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
                 })}
               </View>
               {autoFeltTemp !== undefined && autoFeltTemp !== null && (
-                <ThemedText style={styles.feltTempHint}>
+                <ThemedText style={[styles.feltTempHint, { color: textSecondary }]}>
                   Aktuell (Wetter): {autoFeltTemp}°C
                 </ThemedText>
               )}
@@ -676,6 +822,13 @@ const FELT_TEMPERATURE_OPTIONS = [16, 18, 20, 22, 24, 26];
 export default function BabyWeatherScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
+  const adaptiveColors = useAdaptiveColors();
+  const isDark = colorScheme === 'dark' || adaptiveColors.isDarkBackground;
+  const textPrimary = isDark ? Colors.dark.textPrimary : '#5C4033';
+  const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
+  const iconSecondaryColor = isDark ? adaptiveColors.iconSecondary : theme.tabIconDefault;
+  const glassOverlay = isDark ? GLASS_OVERLAY_DARK : BLUE_GLASS_OVERLAY;
+  const glassBorder = isDark ? GLASS_BORDER_DARK : BLUE_GLASS_BORDER;
   const { isBabyBorn, babyAgeMonths, babyWeightPercentile } = useBabyStatus();
   
   // Set fallback route for smart back navigation
@@ -1323,7 +1476,7 @@ export default function BabyWeatherScreen() {
   };
 
   const renderFooter = () => (
-    <ThemedText style={styles.disclaimer}>
+    <ThemedText style={[styles.disclaimer, { color: textSecondary }]}>
       Hinweis: Die Empfehlungen sind Richtwerte und sollten an die individuellen Bedürfnisse deines Babys angepasst werden.
     </ThemedText>
   );
@@ -1354,7 +1507,15 @@ export default function BabyWeatherScreen() {
 
     return (
       <View style={styles.outfitItem}>
-        <View style={styles.outfitTile}>
+        <View
+          style={[
+            styles.outfitTile,
+            {
+              backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.7)',
+              borderColor: isDark ? 'rgba(255,255,255,0.24)' : 'rgba(255,255,255,0.5)',
+            },
+          ]}
+        >
           {item.image ? (
             <Image source={getClothingImage(item.image)} style={styles.clothingImage} />
           ) : (
@@ -1364,7 +1525,7 @@ export default function BabyWeatherScreen() {
           )}
           {hasAlternatives && (
             <TouchableOpacity
-              style={styles.swapButton}
+              style={[styles.swapButton, { backgroundColor: isDark ? 'rgba(166,205,237,0.75)' : 'rgba(125, 90, 80, 0.85)' }]}
               onPress={() => itemLayer && swapLayerAlternative(itemLayer)}
               accessibilityLabel="Alternative wechseln"
             >
@@ -1372,7 +1533,7 @@ export default function BabyWeatherScreen() {
             </TouchableOpacity>
           )}
         </View>
-        <ThemedText style={styles.outfitName}>{displayName}</ThemedText>
+        <ThemedText style={[styles.outfitName, { color: textSecondary }]}>{displayName}</ThemedText>
       </View>
     );
   };
@@ -1384,10 +1545,10 @@ export default function BabyWeatherScreen() {
       <LiquidGlassCard
         style={[styles.sectionCard, styles.outfitCard, styles.outfitCardWide]}
         intensity={26}
-        overlayColor={BLUE_GLASS_OVERLAY}
-        borderColor={BLUE_GLASS_BORDER}
+        overlayColor={glassOverlay}
+        borderColor={glassBorder}
       >
-        <ThemedText style={styles.sectionTitle}>
+        <ThemedText style={[styles.sectionTitle, { color: textSecondary }]}>
           Kleidung für {contextDescriptions[selectedMode]}
         </ThemedText>
         {recommendedItems.length > 0 ? (
@@ -1400,8 +1561,8 @@ export default function BabyWeatherScreen() {
           </View>
         ) : (
           <View style={styles.noRecommendations}>
-            <IconSymbol name="questionmark.circle" size={32} color={theme.tabIconDefault} />
-            <ThemedText style={styles.noRecommendationsText}>
+            <IconSymbol name="questionmark.circle" size={32} color={iconSecondaryColor} />
+            <ThemedText style={[styles.noRecommendationsText, { color: textSecondary }]}>
               Keine spezifischen Empfehlungen für diese Situation.
             </ThemedText>
           </View>
@@ -1422,26 +1583,26 @@ export default function BabyWeatherScreen() {
       <LiquidGlassCard
         style={[styles.sectionCard, styles.tipCard]}
         intensity={26}
-        overlayColor={BLUE_GLASS_OVERLAY}
-        borderColor={BLUE_GLASS_BORDER}
+        overlayColor={glassOverlay}
+        borderColor={glassBorder}
         radius={18}
       >
         <View style={styles.tipHeader}>
-          <ThemedText style={[styles.sectionTitle, styles.tipTitle]}>{primaryTip.title}</ThemedText>
+          <ThemedText style={[styles.sectionTitle, styles.tipTitle, { color: textSecondary }]}>{primaryTip.title}</ThemedText>
         </View>
-        <ThemedText style={styles.tipContent}>{primaryTip.content}</ThemedText>
+        <ThemedText style={[styles.tipContent, { color: textPrimary }]}>{primaryTip.content}</ThemedText>
         {extraTips.length > 0 && (
           <TouchableOpacity
             style={styles.tipToggle}
             onPress={() => setTipsExpanded(!tipsExpanded)}
           >
-            <ThemedText style={styles.tipToggleText}>
+            <ThemedText style={[styles.tipToggleText, { color: textSecondary }]}>
               {tipsExpanded ? 'Weniger anzeigen' : 'Mehr erfahren'}
             </ThemedText>
             <IconSymbol
               name={tipsExpanded ? 'chevron.up' : 'chevron.down'}
               size={14}
-              color={theme.tabIconDefault}
+              color={iconSecondaryColor}
             />
           </TouchableOpacity>
         )}
@@ -1449,8 +1610,8 @@ export default function BabyWeatherScreen() {
           <View style={styles.tipList}>
             {extraTips.map((tip, index) => (
               <View key={`${tip.title}-${index}`} style={styles.tipListItem}>
-                <IconSymbol name={tip.icon} size={16} color={theme.tabIconDefault} />
-                <ThemedText style={styles.tipListText}>{tip.content}</ThemedText>
+                <IconSymbol name={tip.icon} size={16} color={iconSecondaryColor} />
+                <ThemedText style={[styles.tipListText, { color: textSecondary }]}>{tip.content}</ThemedText>
               </View>
             ))}
           </View>
@@ -1464,7 +1625,7 @@ export default function BabyWeatherScreen() {
       <Stack.Screen options={{ headerShown: false }} />
       <ThemedBackground style={styles.backgroundImage}>
         <SafeAreaView style={styles.container}>
-          <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
+          <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
           
           <Header title="Babywetter" showBackButton />
           

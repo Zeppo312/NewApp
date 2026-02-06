@@ -1,16 +1,16 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { StyleSheet, ScrollView, View, TouchableOpacity, TextInput, Alert, SafeAreaView, StatusBar, Animated, Dimensions, Text } from 'react-native';
-import { useRouter, Stack } from 'expo-router';
+import { Stack } from 'expo-router';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { Colors } from '@/constants/Colors';
-import { useColorScheme } from '@/hooks/useColorScheme';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { useAuth } from '@/contexts/AuthContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { supabase } from '@/lib/supabase';
 import Header from '@/components/Header';
 import { useSmartBack } from '@/contexts/NavigationContext';
-import { LiquidGlassCard, LAYOUT_PAD, TIMELINE_INSET, GlassCard, PRIMARY } from '@/constants/DesignGuide';
+import { LiquidGlassCard, LAYOUT_PAD, TIMELINE_INSET, GlassCard, PRIMARY, GLASS_OVERLAY, GLASS_OVERLAY_DARK } from '@/constants/DesignGuide';
 import * as Haptics from 'expo-haptics';
 import { ProgressCircle } from '@/components/ProgressCircle';
 
@@ -161,13 +161,25 @@ const normalizeDate = (date: Date) => {
 };
 
 export default function SelfcareScreen() {
-  const colorScheme = useColorScheme() ?? 'light';
-  const theme = Colors[colorScheme];
+  const adaptiveColors = useAdaptiveColors();
+  const isDark = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
+  const textPrimary = isDark ? Colors.dark.textPrimary : '#5C4033';
+  const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
+  const glassOverlay = isDark ? GLASS_OVERLAY_DARK : GLASS_OVERLAY;
+  const glassBorder = isDark ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.35)';
+  const actionOverlay = isDark ? 'rgba(142, 78, 198, 0.28)' : 'rgba(142, 78, 198, 0.16)';
+  const actionBorder = isDark ? 'rgba(200, 164, 245, 0.52)' : 'rgba(142, 78, 198, 0.35)';
+  const iconSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
+  const successColor = isDark ? Colors.dark.success : Colors.light.success;
+  const placeholderColor = isDark ? 'rgba(248,240,229,0.6)' : 'rgba(125,90,80,0.5)';
+  const styles = useMemo(
+    () => createStyles({ isDark, textPrimary, textSecondary }),
+    [isDark, textPrimary, textSecondary],
+  );
   const { user } = useAuth();
   
   // Set fallback route for smart back navigation
   useSmartBack('/(tabs)/home');
-  const router = useRouter();
 
   const [userName, setUserName] = useState<string>('');
   const [selectedDate, setSelectedDate] = useState<Date>(() => normalizeDate(new Date()));
@@ -486,7 +498,13 @@ export default function SelfcareScreen() {
   const TopTabs = () => (
     <View style={styles.topTabsContainer}>
       {(['day', 'week', 'month'] as const).map((tab) => (
-        <GlassCard key={tab} style={[styles.topTab, selectedTab === tab && styles.activeTopTab]} intensity={22}>
+        <GlassCard
+          key={tab}
+          style={[styles.topTab, selectedTab === tab && styles.activeTopTab]}
+          intensity={22}
+          overlayColor={glassOverlay}
+          borderColor={glassBorder}
+        >
           <TouchableOpacity
             style={styles.topTabInner}
             onPress={() => setSelectedTab(tab)}
@@ -554,7 +572,7 @@ export default function SelfcareScreen() {
           </TouchableOpacity>
         </View>
 
-        <LiquidGlassCard style={styles.analyticsCard} intensity={26}>
+        <LiquidGlassCard style={styles.analyticsCard} intensity={26} overlayColor={glassOverlay} borderColor={glassBorder}>
           <View style={styles.analyticsInner}>
             <ThemedText style={styles.chartTitle}>Stimmung diese Woche</ThemedText>
             <ThemedText style={styles.chartSubtitle}>Ø pro Tag</ThemedText>
@@ -612,7 +630,7 @@ export default function SelfcareScreen() {
           </View>
         </LiquidGlassCard>
 
-        <LiquidGlassCard style={styles.analyticsCard} intensity={26}>
+        <LiquidGlassCard style={styles.analyticsCard} intensity={26} overlayColor={glassOverlay} borderColor={glassBorder}>
           <View style={styles.analyticsInner}>
             <ThemedText style={styles.chartTitle}>Selfcare-Kennzahlen</ThemedText>
             <View style={styles.summaryStats}>
@@ -707,13 +725,39 @@ export default function SelfcareScreen() {
       });
 
     const getCalendarColors = (mood?: MoodType | null, hasEntry?: boolean) => {
-      if (mood === 'great') return { bg: 'rgba(56,161,105,0.18)', border: 'rgba(56,161,105,0.45)', text: '#2F855A' };
-      if (mood === 'good') return { bg: 'rgba(56,161,105,0.12)', border: 'rgba(56,161,105,0.35)', text: '#2F855A' };
-      if (mood === 'okay') return { bg: 'rgba(245,166,35,0.16)', border: 'rgba(245,166,35,0.4)', text: '#975A16' };
-      if (mood === 'bad') return { bg: 'rgba(229,62,62,0.16)', border: 'rgba(229,62,62,0.4)', text: '#9B2C2C' };
-      if (mood === 'awful') return { bg: 'rgba(229,62,62,0.22)', border: 'rgba(229,62,62,0.5)', text: '#9B2C2C' };
-      if (hasEntry) return { bg: 'rgba(142,78,198,0.12)', border: 'rgba(142,78,198,0.35)', text: '#7D5A50' };
-      return { bg: 'rgba(255,255,255,0.08)', border: 'rgba(255,255,255,0.2)', text: '#7D5A50' };
+      if (mood === 'great') {
+        return isDark
+          ? { bg: 'rgba(56,161,105,0.28)', border: 'rgba(105,219,149,0.58)', text: '#C9F6DD' }
+          : { bg: 'rgba(56,161,105,0.18)', border: 'rgba(56,161,105,0.45)', text: '#2F855A' };
+      }
+      if (mood === 'good') {
+        return isDark
+          ? { bg: 'rgba(56,161,105,0.22)', border: 'rgba(105,219,149,0.48)', text: '#C9F6DD' }
+          : { bg: 'rgba(56,161,105,0.12)', border: 'rgba(56,161,105,0.35)', text: '#2F855A' };
+      }
+      if (mood === 'okay') {
+        return isDark
+          ? { bg: 'rgba(245,166,35,0.24)', border: 'rgba(245,197,120,0.54)', text: '#FFE4B8' }
+          : { bg: 'rgba(245,166,35,0.16)', border: 'rgba(245,166,35,0.4)', text: '#975A16' };
+      }
+      if (mood === 'bad') {
+        return isDark
+          ? { bg: 'rgba(229,62,62,0.24)', border: 'rgba(255,151,151,0.55)', text: '#FFD1D1' }
+          : { bg: 'rgba(229,62,62,0.16)', border: 'rgba(229,62,62,0.4)', text: '#9B2C2C' };
+      }
+      if (mood === 'awful') {
+        return isDark
+          ? { bg: 'rgba(229,62,62,0.32)', border: 'rgba(255,151,151,0.62)', text: '#FFD1D1' }
+          : { bg: 'rgba(229,62,62,0.22)', border: 'rgba(229,62,62,0.5)', text: '#9B2C2C' };
+      }
+      if (hasEntry) {
+        return isDark
+          ? { bg: 'rgba(142,78,198,0.24)', border: 'rgba(193,149,247,0.52)', text: textSecondary }
+          : { bg: 'rgba(142,78,198,0.12)', border: 'rgba(142,78,198,0.35)', text: '#7D5A50' };
+      }
+      return isDark
+        ? { bg: 'rgba(0,0,0,0.28)', border: 'rgba(255,255,255,0.2)', text: textSecondary }
+        : { bg: 'rgba(255,255,255,0.08)', border: 'rgba(255,255,255,0.2)', text: '#7D5A50' };
     };
 
     const monthMoodScore = averageNumber(monthEntries.map((entry) => getMoodScoreFromEntry(entry)));
@@ -746,7 +790,7 @@ export default function SelfcareScreen() {
           </TouchableOpacity>
         </View>
 
-        <LiquidGlassCard style={styles.analyticsCard} intensity={26}>
+        <LiquidGlassCard style={styles.analyticsCard} intensity={26} overlayColor={glassOverlay} borderColor={glassBorder}>
           <View style={styles.analyticsInner}>
             <ThemedText style={styles.chartTitle}>Selfcare-Kalender</ThemedText>
             <View style={{ width: WEEK_CONTENT_WIDTH, alignSelf: 'center', paddingVertical: 12 }}>
@@ -846,7 +890,7 @@ export default function SelfcareScreen() {
           </View>
         </LiquidGlassCard>
 
-        <LiquidGlassCard style={styles.analyticsCard} intensity={26}>
+        <LiquidGlassCard style={styles.analyticsCard} intensity={26} overlayColor={glassOverlay} borderColor={glassBorder}>
           <View style={styles.analyticsInner}>
             <ThemedText style={styles.chartTitle}>Monatsübersicht</ThemedText>
             <View style={styles.summaryStats}>
@@ -936,7 +980,7 @@ export default function SelfcareScreen() {
           {selectedTab === 'day' ? (
             <>
               {/* 1. Persönliche Begrüßung & Daily Check-In */}
-              <LiquidGlassCard style={styles.glassCard} intensity={26}>
+              <LiquidGlassCard style={styles.glassCard} intensity={26} overlayColor={glassOverlay} borderColor={glassBorder}>
                 <View style={styles.glassInner}>
                   <ThemedText style={styles.cardTitle}>{userName ? `Wie geht’s dir, ${userName}?` : 'Wie geht’s dir, Mama?'}</ThemedText>
                   <ThemedText style={styles.cardSubtitle}>Nimm dir kurz einen Moment nur für dich 💭</ThemedText>
@@ -990,7 +1034,7 @@ export default function SelfcareScreen() {
                     value={journalEntry}
                     onChangeText={setJournalEntry}
                     placeholder="Wie geht es dir heute? Was beschäftigt dich?"
-                    placeholderTextColor={'rgba(125,90,80,0.5)'}
+                    placeholderTextColor={placeholderColor}
                     multiline
                     numberOfLines={4}
                   />
@@ -998,7 +1042,7 @@ export default function SelfcareScreen() {
               </LiquidGlassCard>
 
               {/* 2. Selbstfürsorge-Tipps & Anleitungen */}
-              <LiquidGlassCard style={styles.glassCard} intensity={26}>
+              <LiquidGlassCard style={styles.glassCard} intensity={26} overlayColor={glassOverlay} borderColor={glassBorder}>
                 <View style={styles.glassInner}>
                   <ThemedText style={styles.cardTitle}>💡 Tipp des Tages</ThemedText>
 
@@ -1013,14 +1057,14 @@ export default function SelfcareScreen() {
                     style={styles.refreshButton}
                     onPress={refreshTipAnimated}
                   >
-                    <IconSymbol name="arrow.clockwise" size={16} color={theme.text} />
+                    <IconSymbol name="arrow.clockwise" size={16} color={iconSecondary} />
                     <ThemedText style={styles.refreshButtonText}>Neuer Tipp</ThemedText>
                   </TouchableOpacity>
                 </View>
               </LiquidGlassCard>
 
               {/* 3. Gesundheit & Wohlbefinden */}
-              <LiquidGlassCard style={styles.glassCard} intensity={26}>
+              <LiquidGlassCard style={styles.glassCard} intensity={26} overlayColor={glassOverlay} borderColor={glassBorder}>
                 <View style={styles.glassInner}>
                   <ThemedText style={styles.cardTitle}>💧 Gesundheit & Wohlbefinden</ThemedText>
 
@@ -1044,7 +1088,7 @@ export default function SelfcareScreen() {
                           onPress={() => setSleepHours(Math.max(0, sleepHours - 1))}
                           activeOpacity={0.85}
                         >
-                          <IconSymbol name="minus" size={16} color="#7D5A50" />
+                          <IconSymbol name="minus" size={16} color={iconSecondary} />
                         </TouchableOpacity>
                         <ThemedText style={styles.healthControlValue}>{sleepHours} Stunden</ThemedText>
                         <TouchableOpacity
@@ -1052,7 +1096,7 @@ export default function SelfcareScreen() {
                           onPress={() => setSleepHours(Math.min(24, sleepHours + 1))}
                           activeOpacity={0.85}
                         >
-                          <IconSymbol name="plus" size={16} color="#7D5A50" />
+                          <IconSymbol name="plus" size={16} color={iconSecondary} />
                         </TouchableOpacity>
                       </View>
                     </View>
@@ -1089,7 +1133,7 @@ export default function SelfcareScreen() {
                           onPress={() => setWaterIntake(Math.max(0, waterIntake - 1))}
                           activeOpacity={0.85}
                         >
-                          <IconSymbol name="minus" size={16} color="#7D5A50" />
+                          <IconSymbol name="minus" size={16} color={iconSecondary} />
                         </TouchableOpacity>
                         <TouchableOpacity
                           style={styles.controlPrimary}
@@ -1141,7 +1185,7 @@ export default function SelfcareScreen() {
               </LiquidGlassCard>
 
               {/* 4. Rückbildung & Körperpflege */}
-              <LiquidGlassCard style={styles.glassCard} intensity={26}>
+              <LiquidGlassCard style={styles.glassCard} intensity={26} overlayColor={glassOverlay} borderColor={glassBorder}>
                 <View style={styles.glassInner}>
                   <ThemedText style={styles.cardTitle}>Rückbildung & Körperpflege</ThemedText>
 
@@ -1166,11 +1210,11 @@ export default function SelfcareScreen() {
                       progress={(checkedActivities.length / selfcareActivities.length) * 100}
                       size={58}
                       strokeWidth={6}
-                      progressColor={'#8E4EC6'}
-                      backgroundColor={'rgba(255,255,255,0.25)'}
+                      progressColor={isDark ? '#B892F5' : '#8E4EC6'}
+                      backgroundColor={isDark ? 'rgba(0,0,0,0.28)' : 'rgba(255,255,255,0.25)'}
                       textColor={'transparent'}
                     />
-                    <ThemedText style={{ marginTop: 6, color: '#7D5A50', fontWeight: '700' }}>{checkedActivities.length}/{selfcareActivities.length} erledigt</ThemedText>
+                    <ThemedText style={{ marginTop: 6, color: textSecondary, fontWeight: '700' }}>{checkedActivities.length}/{selfcareActivities.length} erledigt</ThemedText>
                   </View>
                   {selfcareActivities.map(activity => (
                     <TouchableOpacity
@@ -1181,7 +1225,7 @@ export default function SelfcareScreen() {
                       <IconSymbol
                         name={checkedActivities.includes(activity.id) ? "checkmark.square.fill" : "square"}
                         size={24}
-                        color={checkedActivities.includes(activity.id) ? Colors.light.success : theme.text}
+                        color={checkedActivities.includes(activity.id) ? successColor : iconSecondary}
                       />
                       <ThemedText
                         style={[
@@ -1212,8 +1256,8 @@ export default function SelfcareScreen() {
               style={styles.stickyCtaCard} 
               onPress={saveEntry}
               intensity={26}
-              overlayColor="rgba(142, 78, 198, 0.16)"
-              borderColor="rgba(142, 78, 198, 0.35)"
+              overlayColor={actionOverlay}
+              borderColor={actionBorder}
             >
               <View style={styles.saveButtonInner}>
                 <ThemedText style={styles.saveButtonText}>💜 Speichern & Weitermachen</ThemedText>
@@ -1226,583 +1270,606 @@ export default function SelfcareScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  contentContainer: {
-    paddingHorizontal: LAYOUT_PAD,
-    paddingTop: 0,
-    paddingBottom: 160,
-  },
-  topTabsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 10,
-    marginTop: 6,
-    marginBottom: 12,
-  },
-  dayNavigationContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-    marginTop: 0,
-  },
-  topTab: {
-    borderRadius: 20,
-    overflow: 'hidden',
-    borderWidth: 1,
-  },
-  activeTopTab: {
-    borderColor: 'rgba(94,61,179,0.65)',
-  },
-  topTabInner: {
-    paddingHorizontal: 18,
-    paddingVertical: 6,
-  },
-  topTabText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#7D5A50',
-  },
-  activeTopTabText: {
-    color: PRIMARY,
-  },
-  weekViewContainer: {
-    gap: 18,
-    paddingBottom: 100,
-  },
-  weekNavigationContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  weekNavButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.3,
-    borderColor: 'rgba(255,255,255,0.35)',
-    backgroundColor: 'rgba(255,255,255,0.12)',
-  },
-  weekNavButtonText: {
-    fontSize: 22,
-    color: '#7D5A50',
-    fontWeight: '700',
-  },
-  weekHeaderCenter: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  weekHeaderTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#7D5A50',
-  },
-  weekHeaderSubtitle: {
-    fontSize: 13,
-    color: '#7D5A50',
-    opacity: 0.75,
-  },
-  analyticsCard: {
-    marginBottom: 18,
-  },
-  analyticsInner: {
-    padding: 20,
-  },
-  chartTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#7D5A50',
-  },
-  chartSubtitle: {
-    fontSize: 13,
-    color: '#7D5A50',
-    opacity: 0.7,
-    marginTop: 4,
-  },
-  chartArea: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 16,
-  },
-  chartBarContainer: {
-    height: MAX_BAR_HEIGHT,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    paddingBottom: 4,
-  },
-  selectedChartBarContainer: {
-    borderWidth: 1,
-    borderColor: 'rgba(142,78,198,0.45)',
-    backgroundColor: 'rgba(142,78,198,0.16)',
-  },
-  chartBar: {
-    backgroundColor: 'rgba(142,78,198,0.85)',
-    borderRadius: 12,
-  },
-  chartLabelContainer: {
-    alignItems: 'center',
-    marginTop: 6,
-  },
-  chartLabel: {
-    fontSize: 12,
-    color: '#7D5A50',
-    fontWeight: '600',
-  },
-  selectedChartLabel: {
-    color: PRIMARY,
-  },
-  chartValue: {
-    fontSize: 13,
-    color: '#5D4A40',
-    fontWeight: '700',
-  },
-  selectedChartValue: {
-    color: PRIMARY,
-  },
-  loadingText: {
-    textAlign: 'center',
-    marginTop: 12,
-    color: '#7D5A50',
-    opacity: 0.7,
-  },
-  emptyHint: {
-    textAlign: 'center',
-    marginTop: 12,
-    color: '#7D5A50',
-    opacity: 0.7,
-  },
-  summaryStats: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-    marginTop: 16,
-  },
-  statItem: {
-    flex: 1,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderRadius: 18,
-    borderColor: 'rgba(255,255,255,0.3)',
-    paddingVertical: 12,
-  },
-  statEmoji: {
-    fontSize: 20,
-    marginBottom: 4,
-  },
-  statValue: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#5D4A40',
-  },
-  statLabel: {
-    fontSize: 12,
-    color: '#7D5A50',
-    opacity: 0.7,
-    marginTop: 2,
-    textAlign: 'center',
-  },
-  monthViewContainer: {
-    gap: 18,
-    paddingBottom: 100,
-  },
-  monthNavigationContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  monthNavButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 1.3,
-    borderColor: 'rgba(255,255,255,0.35)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.12)',
-  },
-  disabledNavButton: {
-    opacity: 0.35,
-  },
-  monthHeaderCenter: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  monthHeaderTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#7D5A50',
-  },
-  monthHeaderSubtitle: {
-    fontSize: 13,
-    color: '#7D5A50',
-    opacity: 0.75,
-  },
-  weekdayHeader: {
-    flexDirection: 'row',
-    marginBottom: 8,
-  },
-  weekdayLabel: {
-    fontSize: 12,
-    color: '#7D5A50',
-    fontWeight: '700',
-  },
-  calendarWeek: {
-    flexDirection: 'row',
-    marginBottom: 6,
-  },
-  calendarDayButton: {
-    height: 72,
-    borderRadius: 18,
-    borderWidth: 1.2,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-  },
-  selectedCalendarDayButton: {
-    borderColor: 'rgba(142,78,198,0.6)',
-    backgroundColor: 'rgba(142,78,198,0.15)',
-  },
-  calendarDayNumber: {
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  selectedCalendarDayText: {
-    color: PRIMARY,
-  },
-  calendarMoodEmoji: {
-    fontSize: 18,
-  },
-  calendarProgressText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  calendarDayEmpty: {
-    height: 72,
-  },
-  // Liquid Glass card wrappers
-  glassCard: {
-    marginBottom: 20,
-    borderRadius: 22,
-    overflow: 'hidden',
-  },
-  glassInner: {
-    padding: 20,
-  },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#7D5A50',
-    marginBottom: 15,
-    textAlign: 'center',
-  },
-  cardSubtitle: {
-    fontSize: 13,
-    color: '#7D5A50',
-    opacity: 0.85,
-    textAlign: 'center',
-    marginTop: -8,
-    marginBottom: 10,
-  },
-  moodContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 15,
-  },
-  moodButton: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.35)',
-  },
-  selectedMoodButton: {
-    backgroundColor: 'rgba(142, 78, 198, 0.18)',
-    borderWidth: 1,
-    borderColor: 'rgba(142, 78, 198, 0.45)',
-  },
-  moodEmoji: {
-    fontSize: 24,
-  },
-  moodFeedback: {
-    textAlign: 'center',
-    marginBottom: 15,
-    fontStyle: 'italic',
-    color: '#7D5A50',
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#7D5A50',
-    marginTop: 10,
-    marginBottom: 10,
-    textAlign: 'center',
-  },
-  glassInput: {
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.35)',
-    borderRadius: 16,
-    padding: 16,
-    fontSize: 15,
-    minHeight: 100,
-    textAlignVertical: 'top',
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    color: '#7D5A50',
-    fontWeight: '500',
-  },
-  tipContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    padding: 12,
-    borderRadius: 14,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.35)'
-  },
-  tipText: {
-    fontSize: 16,
-    marginLeft: 10,
-    flex: 1,
-    color: '#7D5A50',
-  },
-  refreshButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-end',
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.35)',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 14,
-  },
-  refreshButtonText: {
-    fontSize: 14,
-    marginLeft: 5,
-    fontWeight: '700',
-    color: '#7D5A50',
-  },
-  healthStack: {
-    flexDirection: 'column',
-    gap: 16,
-  },
-  healthCard: {
-    borderRadius: 24,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.3)',
-    backgroundColor: 'rgba(255,255,255,0.14)',
-    paddingVertical: 18,
-    paddingHorizontal: 18,
-  },
-  healthHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 14,
-  },
-  healthIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.45)',
-  },
-  healthTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#7D5A50',
-  },
-  healthSubtitle: {
-    fontSize: 12,
-    color: '#7D5A50',
-    opacity: 0.75,
-    marginTop: 2,
-  },
-  healthValueBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderWidth: 1.2,
-    borderColor: 'rgba(255,255,255,0.45)',
-  },
-  healthValueText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#7D5A50',
-  },
-  healthControlsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 14,
-  },
-  controlCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.35)',
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  controlPrimary: {
-    flex: 1,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: 'rgba(142,78,198,0.78)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.55)',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  controlPrimaryText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  healthControlValue: {
-    flex: 1,
-    textAlign: 'center',
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#7D5A50',
-  },
-  waterMeterWrapper: {
-    marginBottom: 12,
-  },
-  waterMeterTrack: {
-    height: 12,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255,255,255,0.22)',
-    overflow: 'hidden',
-  },
-  waterMeterFill: {
-    height: '100%',
-    backgroundColor: '#8E4EC6',
-    borderRadius: 8,
-  },
-  waterHint: {
-    marginTop: 6,
-    fontSize: 12,
-    textAlign: 'center',
-    color: '#7D5A50',
-    opacity: 0.75,
-  },
-  segmentRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  segmentButton: {
-    flex: 1,
-    borderRadius: 18,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.3)',
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    gap: 6,
-  },
-  segmentButtonActive: {
-    borderColor: 'rgba(142,78,198,0.55)',
-    backgroundColor: 'rgba(142,78,198,0.16)',
-  },
-  segmentEmoji: {
-    fontSize: 20,
-  },
-  segmentLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#7D5A50',
-  },
-  segmentLabelActive: {
-    color: '#5D4A40',
-  },
-  exerciseCard: {
-    marginBottom: 18,
-    borderRadius: 22,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.3)',
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    padding: 18,
-    gap: 6,
-  },
-  exerciseTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#7D5A50',
-  },
-  exerciseDescription: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: '#7D5A50',
-  },
-  checklistItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  checklistText: {
-    fontSize: 16,
-    marginLeft: 10,
-    color: '#7D5A50',
-  },
-  checklistTextDone: {
-    textDecorationLine: 'line-through',
-    opacity: 0.7,
-  },
-  saveButtonCard: {
-    marginHorizontal: TIMELINE_INSET,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: 'rgba(142, 78, 198, 0.35)',
-    backgroundColor: 'rgba(142, 78, 198, 0.16)',
-    marginBottom: 24,
-  },
-  stickyCtaContainer: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 100,
-    paddingHorizontal: LAYOUT_PAD,
-    alignItems: 'center',
-  },
-  stickyCtaCard: {
-    alignSelf: 'stretch',
-    borderRadius: 22,
-    overflow: 'hidden',
-  },
-  saveButtonInner: {
-    paddingVertical: 18,
-    paddingHorizontal: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  saveButtonText: {
-    fontSize: 17,
-    fontWeight: '800',
-    color: '#7D5A50',
-    letterSpacing: 0.3,
-  },
-});
+type SelfcareStyleConfig = {
+  isDark: boolean;
+  textPrimary: string;
+  textSecondary: string;
+};
+
+const createStyles = ({ isDark, textPrimary, textSecondary }: SelfcareStyleConfig) => {
+  const textAccent = isDark ? '#E7D8FA' : PRIMARY;
+  const glassBorder = isDark ? 'rgba(255,255,255,0.24)' : 'rgba(255,255,255,0.35)';
+  const glassBorderStrong = isDark ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.45)';
+  const glassSurface = isDark ? 'rgba(0,0,0,0.28)' : 'rgba(255,255,255,0.12)';
+  const glassSurfaceStrong = isDark ? 'rgba(0,0,0,0.34)' : 'rgba(255,255,255,0.18)';
+  const glassSurfaceBadge = isDark ? 'rgba(0,0,0,0.4)' : 'rgba(255,255,255,0.2)';
+  const accentSoft = isDark ? 'rgba(142,78,198,0.28)' : 'rgba(142,78,198,0.16)';
+  const accentBorder = isDark ? 'rgba(193,149,247,0.58)' : 'rgba(142,78,198,0.45)';
+  const accentFill = isDark ? 'rgba(193,149,247,0.92)' : 'rgba(142,78,198,0.85)';
+  const primaryButton = isDark ? 'rgba(169,122,236,0.84)' : 'rgba(142,78,198,0.78)';
+  const primaryButtonBorder = isDark ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.55)';
+  const meterTrack = isDark ? 'rgba(0,0,0,0.32)' : 'rgba(255,255,255,0.22)';
+  const meterFill = isDark ? '#BC95F3' : '#8E4EC6';
+  const ctaBg = isDark ? 'rgba(142, 78, 198, 0.28)' : 'rgba(142, 78, 198, 0.16)';
+  const ctaBorder = isDark ? 'rgba(200, 164, 245, 0.52)' : 'rgba(142, 78, 198, 0.35)';
+
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+    },
+    scrollView: {
+      flex: 1,
+    },
+    contentContainer: {
+      paddingHorizontal: LAYOUT_PAD,
+      paddingTop: 0,
+      paddingBottom: 160,
+    },
+    topTabsContainer: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      gap: 10,
+      marginTop: 6,
+      marginBottom: 12,
+    },
+    dayNavigationContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 16,
+      marginTop: 0,
+    },
+    topTab: {
+      borderRadius: 20,
+      overflow: 'hidden',
+      borderWidth: 1,
+    },
+    activeTopTab: {
+      borderColor: isDark ? 'rgba(193,149,247,0.68)' : 'rgba(94,61,179,0.65)',
+    },
+    topTabInner: {
+      paddingHorizontal: 18,
+      paddingVertical: 6,
+    },
+    topTabText: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: textSecondary,
+    },
+    activeTopTabText: {
+      color: textAccent,
+    },
+    weekViewContainer: {
+      gap: 18,
+      paddingBottom: 100,
+    },
+    weekNavigationContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 16,
+    },
+    weekNavButton: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1.3,
+      borderColor: glassBorder,
+      backgroundColor: glassSurface,
+    },
+    weekNavButtonText: {
+      fontSize: 22,
+      color: textSecondary,
+      fontWeight: '700',
+    },
+    weekHeaderCenter: {
+      alignItems: 'center',
+      flex: 1,
+    },
+    weekHeaderTitle: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: textSecondary,
+    },
+    weekHeaderSubtitle: {
+      fontSize: 13,
+      color: textSecondary,
+      opacity: 0.75,
+    },
+    analyticsCard: {
+      marginBottom: 18,
+    },
+    analyticsInner: {
+      padding: 20,
+    },
+    chartTitle: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: textSecondary,
+    },
+    chartSubtitle: {
+      fontSize: 13,
+      color: textSecondary,
+      opacity: 0.7,
+      marginTop: 4,
+    },
+    chartArea: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      marginTop: 16,
+    },
+    chartBarContainer: {
+      height: MAX_BAR_HEIGHT,
+      borderRadius: 16,
+      backgroundColor: glassSurface,
+      alignItems: 'center',
+      justifyContent: 'flex-end',
+      paddingBottom: 4,
+    },
+    selectedChartBarContainer: {
+      borderWidth: 1,
+      borderColor: accentBorder,
+      backgroundColor: accentSoft,
+    },
+    chartBar: {
+      backgroundColor: accentFill,
+      borderRadius: 12,
+    },
+    chartLabelContainer: {
+      alignItems: 'center',
+      marginTop: 6,
+    },
+    chartLabel: {
+      fontSize: 12,
+      color: textSecondary,
+      fontWeight: '600',
+    },
+    selectedChartLabel: {
+      color: textAccent,
+    },
+    chartValue: {
+      fontSize: 13,
+      color: textPrimary,
+      fontWeight: '700',
+    },
+    selectedChartValue: {
+      color: textAccent,
+    },
+    loadingText: {
+      textAlign: 'center',
+      marginTop: 12,
+      color: textSecondary,
+      opacity: 0.7,
+    },
+    emptyHint: {
+      textAlign: 'center',
+      marginTop: 12,
+      color: textSecondary,
+      opacity: 0.7,
+    },
+    summaryStats: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      gap: 12,
+      marginTop: 16,
+    },
+    statItem: {
+      flex: 1,
+      alignItems: 'center',
+      borderWidth: 1,
+      borderRadius: 18,
+      borderColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.3)',
+      paddingVertical: 12,
+    },
+    statEmoji: {
+      fontSize: 20,
+      marginBottom: 4,
+    },
+    statValue: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: textPrimary,
+    },
+    statLabel: {
+      fontSize: 12,
+      color: textSecondary,
+      opacity: 0.7,
+      marginTop: 2,
+      textAlign: 'center',
+    },
+    monthViewContainer: {
+      gap: 18,
+      paddingBottom: 100,
+    },
+    monthNavigationContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 16,
+    },
+    monthNavButton: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      borderWidth: 1.3,
+      borderColor: glassBorder,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: glassSurface,
+    },
+    disabledNavButton: {
+      opacity: 0.35,
+    },
+    monthHeaderCenter: {
+      flex: 1,
+      alignItems: 'center',
+    },
+    monthHeaderTitle: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: textSecondary,
+    },
+    monthHeaderSubtitle: {
+      fontSize: 13,
+      color: textSecondary,
+      opacity: 0.75,
+    },
+    weekdayHeader: {
+      flexDirection: 'row',
+      marginBottom: 8,
+    },
+    weekdayLabel: {
+      fontSize: 12,
+      color: textSecondary,
+      fontWeight: '700',
+    },
+    calendarWeek: {
+      flexDirection: 'row',
+      marginBottom: 6,
+    },
+    calendarDayButton: {
+      height: 72,
+      borderRadius: 18,
+      borderWidth: 1.2,
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 4,
+    },
+    selectedCalendarDayButton: {
+      borderColor: accentBorder,
+      backgroundColor: accentSoft,
+    },
+    calendarDayNumber: {
+      fontSize: 14,
+      fontWeight: '700',
+    },
+    selectedCalendarDayText: {
+      color: textAccent,
+    },
+    calendarMoodEmoji: {
+      fontSize: 18,
+    },
+    calendarProgressText: {
+      fontSize: 12,
+      fontWeight: '600',
+    },
+    calendarDayEmpty: {
+      height: 72,
+    },
+    glassCard: {
+      marginBottom: 20,
+      borderRadius: 22,
+      overflow: 'hidden',
+    },
+    glassInner: {
+      padding: 20,
+    },
+    cardTitle: {
+      fontSize: 18,
+      fontWeight: '700',
+      color: textPrimary,
+      marginBottom: 15,
+      textAlign: 'center',
+    },
+    cardSubtitle: {
+      fontSize: 13,
+      color: textSecondary,
+      opacity: 0.85,
+      textAlign: 'center',
+      marginTop: -8,
+      marginBottom: 10,
+    },
+    moodContainer: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      marginBottom: 15,
+    },
+    moodButton: {
+      width: 50,
+      height: 50,
+      borderRadius: 25,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: glassSurfaceStrong,
+      borderWidth: 1,
+      borderColor: glassBorder,
+    },
+    selectedMoodButton: {
+      backgroundColor: accentSoft,
+      borderWidth: 1,
+      borderColor: accentBorder,
+    },
+    moodEmoji: {
+      fontSize: 24,
+    },
+    moodFeedback: {
+      textAlign: 'center',
+      marginBottom: 15,
+      fontStyle: 'italic',
+      color: textSecondary,
+    },
+    sectionTitle: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: textSecondary,
+      marginTop: 10,
+      marginBottom: 10,
+      textAlign: 'center',
+    },
+    glassInput: {
+      borderWidth: 1.5,
+      borderColor: glassBorder,
+      borderRadius: 16,
+      padding: 16,
+      fontSize: 15,
+      minHeight: 100,
+      textAlignVertical: 'top',
+      backgroundColor: glassSurfaceStrong,
+      color: textPrimary,
+      fontWeight: '500',
+    },
+    tipContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: glassSurfaceStrong,
+      padding: 12,
+      borderRadius: 14,
+      marginBottom: 12,
+      borderWidth: 1,
+      borderColor: glassBorder,
+    },
+    tipText: {
+      fontSize: 16,
+      marginLeft: 10,
+      flex: 1,
+      color: textSecondary,
+    },
+    refreshButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      alignSelf: 'flex-end',
+      backgroundColor: glassSurfaceStrong,
+      borderWidth: 1,
+      borderColor: glassBorder,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 14,
+    },
+    refreshButtonText: {
+      fontSize: 14,
+      marginLeft: 5,
+      fontWeight: '700',
+      color: textSecondary,
+    },
+    healthStack: {
+      flexDirection: 'column',
+      gap: 16,
+    },
+    healthCard: {
+      borderRadius: 24,
+      borderWidth: 1.5,
+      borderColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.3)',
+      backgroundColor: isDark ? 'rgba(0,0,0,0.26)' : 'rgba(255,255,255,0.14)',
+      paddingVertical: 18,
+      paddingHorizontal: 18,
+    },
+    healthHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 14,
+    },
+    healthIcon: {
+      width: 38,
+      height: 38,
+      borderRadius: 19,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginRight: 12,
+      borderWidth: 1.5,
+      borderColor: glassBorderStrong,
+    },
+    healthTitle: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: textPrimary,
+    },
+    healthSubtitle: {
+      fontSize: 12,
+      color: textSecondary,
+      opacity: 0.75,
+      marginTop: 2,
+    },
+    healthValueBadge: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 16,
+      backgroundColor: glassSurfaceBadge,
+      borderWidth: 1.2,
+      borderColor: glassBorderStrong,
+    },
+    healthValueText: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: textPrimary,
+    },
+    healthControlsRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 14,
+    },
+    controlCircle: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      borderWidth: 1.5,
+      borderColor: glassBorder,
+      backgroundColor: glassSurfaceStrong,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    controlPrimary: {
+      flex: 1,
+      height: 46,
+      borderRadius: 23,
+      backgroundColor: primaryButton,
+      borderWidth: 1.5,
+      borderColor: primaryButtonBorder,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+    },
+    controlPrimaryText: {
+      color: '#FFFFFF',
+      fontSize: 14,
+      fontWeight: '700',
+    },
+    healthControlValue: {
+      flex: 1,
+      textAlign: 'center',
+      fontSize: 16,
+      fontWeight: '700',
+      color: textPrimary,
+    },
+    waterMeterWrapper: {
+      marginBottom: 12,
+    },
+    waterMeterTrack: {
+      height: 12,
+      borderRadius: 8,
+      backgroundColor: meterTrack,
+      overflow: 'hidden',
+    },
+    waterMeterFill: {
+      height: '100%',
+      backgroundColor: meterFill,
+      borderRadius: 8,
+    },
+    waterHint: {
+      marginTop: 6,
+      fontSize: 12,
+      textAlign: 'center',
+      color: textSecondary,
+      opacity: 0.75,
+    },
+    segmentRow: {
+      flexDirection: 'row',
+      gap: 10,
+    },
+    segmentButton: {
+      flex: 1,
+      borderRadius: 18,
+      borderWidth: 1.5,
+      borderColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.3)',
+      backgroundColor: glassSurface,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 12,
+      gap: 6,
+    },
+    segmentButtonActive: {
+      borderColor: accentBorder,
+      backgroundColor: accentSoft,
+    },
+    segmentEmoji: {
+      fontSize: 20,
+    },
+    segmentLabel: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: textSecondary,
+    },
+    segmentLabelActive: {
+      color: textPrimary,
+    },
+    exerciseCard: {
+      marginBottom: 18,
+      borderRadius: 22,
+      borderWidth: 1.5,
+      borderColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.3)',
+      backgroundColor: glassSurface,
+      padding: 18,
+      gap: 6,
+    },
+    exerciseTitle: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: textPrimary,
+    },
+    exerciseDescription: {
+      fontSize: 14,
+      lineHeight: 20,
+      color: textSecondary,
+    },
+    checklistItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 10,
+    },
+    checklistText: {
+      fontSize: 16,
+      marginLeft: 10,
+      color: textSecondary,
+    },
+    checklistTextDone: {
+      textDecorationLine: 'line-through',
+      opacity: 0.7,
+    },
+    saveButtonCard: {
+      marginHorizontal: TIMELINE_INSET,
+      borderRadius: 22,
+      borderWidth: 1,
+      borderColor: ctaBorder,
+      backgroundColor: ctaBg,
+      marginBottom: 24,
+    },
+    stickyCtaContainer: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      bottom: 100,
+      paddingHorizontal: LAYOUT_PAD,
+      alignItems: 'center',
+    },
+    stickyCtaCard: {
+      alignSelf: 'stretch',
+      borderRadius: 22,
+      overflow: 'hidden',
+    },
+    saveButtonInner: {
+      paddingVertical: 18,
+      paddingHorizontal: 20,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    saveButtonText: {
+      fontSize: 17,
+      fontWeight: '800',
+      color: textPrimary,
+      letterSpacing: 0.3,
+    },
+  });
+};

@@ -34,6 +34,7 @@ interface ActivityInputModalProps {
   activityType: ActivityType;
   initialSubType?: string | null;
   date?: Date;
+  forceDarkMode?: boolean;
   onClose: () => void;
   onSave: (data: any, options?: { startTimer?: boolean }) => void; // data ist DB-ready für baby_care_entries
   onDelete?: (id: string) => void; // Optional: Nur wenn ein Eintrag bearbeitet wird
@@ -60,13 +61,14 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   activityType,
   initialSubType,
   date,
+  forceDarkMode,
   onClose,
   onSave,
   onDelete,
   initialData,
 }) => {
   const colorScheme = useColorScheme() ?? 'light';
-  const isDark = colorScheme === 'dark';
+  const isDark = forceDarkMode ?? (colorScheme === 'dark');
 
   // Theme und Farben - angepasst für Dark Mode
   const theme = isDark ? {
@@ -269,15 +271,33 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
       </Text>
 
       <View style={styles.timeRow}> 
-        <TouchableOpacity style={styles.timeButton} onPress={() => setShowStartPicker(true)}>
-          <Text style={styles.timeLabel}>Start</Text>
-          <Text style={styles.timeValue}>
+        <TouchableOpacity
+          style={[
+            styles.timeButton,
+            isDark && {
+              backgroundColor: 'rgba(24, 24, 28, 0.92)',
+              borderWidth: 1,
+              borderColor: 'rgba(255,255,255,0.14)',
+            },
+          ]}
+          onPress={() => setShowStartPicker(true)}
+        >
+          <Text style={[styles.timeLabel, { color: theme.textSecondary }]}>Start</Text>
+          <Text style={[styles.timeValue, { color: theme.text }]}>
             {startTime.toLocaleString('de-DE', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.timeButton, startTimer && styles.timeButtonDisabled]}
+          style={[
+            styles.timeButton,
+            isDark && {
+              backgroundColor: 'rgba(24, 24, 28, 0.92)',
+              borderWidth: 1,
+              borderColor: 'rgba(255,255,255,0.14)',
+            },
+            startTimer && styles.timeButtonDisabled,
+          ]}
           onPress={() => {
             if (startTimer) return;
             setEndTimeVisible(true);
@@ -285,20 +305,34 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
           }}
           activeOpacity={startTimer ? 1 : 0.7}
         >
-          <Text style={styles.timeLabel}>Ende</Text>
-          <Text style={[styles.timeValue, startTimer && styles.timeDisabledText]}>
+          <Text style={[styles.timeLabel, { color: theme.textSecondary }]}>Ende</Text>
+          <Text
+            style={[
+              styles.timeValue,
+              startTimer ? [styles.timeDisabledText, { color: theme.textSecondary }] : { color: theme.text },
+            ]}
+          >
             {startTimer
               ? 'Timer läuft'
               : endTime
               ? endTime.toLocaleString('de-DE', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })
               : 'Offen'}
           </Text>
-          {startTimer && <Text style={styles.timeHint}>Stoppe später, Ende wird gesetzt</Text>}
+          {startTimer && <Text style={[styles.timeHint, { color: theme.textSecondary }]}>Stoppe später, Ende wird gesetzt</Text>}
         </TouchableOpacity>
       </View>
 
       {showStartPicker && (
-        <View style={styles.datePickerContainer}>
+        <View
+          style={[
+            styles.datePickerContainer,
+            isDark && {
+              backgroundColor: 'rgba(20, 20, 24, 0.95)',
+              borderWidth: 1,
+              borderColor: 'rgba(255,255,255,0.14)',
+            },
+          ]}
+        >
           <DateTimePicker
             value={startTime}
             mode="datetime"
@@ -315,7 +349,16 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
       )}
 
       {showEndPicker && (
-        <View style={styles.datePickerContainer}>
+        <View
+          style={[
+            styles.datePickerContainer,
+            isDark && {
+              backgroundColor: 'rgba(20, 20, 24, 0.95)',
+              borderWidth: 1,
+              borderColor: 'rgba(255,255,255,0.14)',
+            },
+          ]}
+        >
           <DateTimePicker
             value={endTime || new Date()}
             mode="datetime"
@@ -333,7 +376,14 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
 
       {(activityType === 'feeding' || activityType === 'diaper') && (
         <TouchableOpacity
-          style={[styles.timerToggle, startTimer && styles.timerToggleActive]}
+          style={[
+            styles.timerToggle,
+            isDark && {
+              backgroundColor: 'rgba(24, 24, 28, 0.92)',
+              borderColor: 'rgba(255,255,255,0.14)',
+            },
+            startTimer && styles.timerToggleActive,
+          ]}
           onPress={() => {
             setStartTimer((prev) => {
               const next = !prev;
@@ -346,7 +396,13 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
           }}
           activeOpacity={0.85}
         >
-          <View style={[styles.timerTogglePill, startTimer && styles.timerTogglePillActive]}>
+          <View
+            style={[
+              styles.timerTogglePill,
+              isDark && { backgroundColor: 'rgba(255,255,255,0.22)' },
+              startTimer && styles.timerTogglePillActive,
+            ]}
+          >
             <View style={[styles.timerToggleKnob, startTimer && styles.timerToggleKnobActive]} />
           </View>
           <View style={{ flex: 1 }}>
@@ -429,16 +485,37 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
           <FixedEmojiText style={styles.sectionTitleEmoji}>🥛</FixedEmojiText>{' '}
           Menge (ml)
         </Text>
-        <View style={styles.volumeStepperContainer}>
-          <TouchableOpacity style={styles.stepperButton} onPress={() => setVolumeMl(v => Math.max(0, v - 10))}>
-            <Text style={styles.stepperButtonText}>-</Text>
+        <View
+          style={[
+            styles.volumeStepperContainer,
+            isDark && {
+              backgroundColor: 'rgba(24, 24, 28, 0.92)',
+              borderWidth: 1,
+              borderColor: 'rgba(255,255,255,0.14)',
+            },
+          ]}
+        >
+          <TouchableOpacity
+            style={[
+              styles.stepperButton,
+              isDark && { backgroundColor: 'rgba(255,255,255,0.14)' },
+            ]}
+            onPress={() => setVolumeMl(v => Math.max(0, v - 10))}
+          >
+            <Text style={[styles.stepperButtonText, { color: theme.text }]}>-</Text>
           </TouchableOpacity>
           <View style={styles.volumeDisplay}>
             <Text style={[styles.volumeText, { color: theme.text }]}>{volumeMl}</Text>
             <Text style={[styles.volumeUnit, { color: theme.textSecondary }]}> ml</Text>
           </View>
-          <TouchableOpacity style={styles.stepperButton} onPress={() => setVolumeMl(v => v + 10)}>
-            <Text style={styles.stepperButtonText}>+</Text>
+          <TouchableOpacity
+            style={[
+              styles.stepperButton,
+              isDark && { backgroundColor: 'rgba(255,255,255,0.14)' },
+            ]}
+            onPress={() => setVolumeMl(v => v + 10)}
+          >
+            <Text style={[styles.stepperButtonText, { color: theme.text }]}>+</Text>
           </TouchableOpacity>
         </View>
         <View style={styles.quickVolumeGrid}>
@@ -496,7 +573,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
               Seite
             </Text>
             {renderBreastSideSelector()}
-            <Text style={[styles.infoText, {marginTop: 20}]}>Wähle die Seite, auf der gestillt wurde.</Text>
+            <Text style={[styles.infoText, { marginTop: 20, color: theme.textSecondary }]}>Wähle die Seite, auf der gestillt wurde.</Text>
           </View>
         )}
         {feedingType === 'solids' && (
@@ -506,7 +583,13 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
               BLW-Rezepte
             </Text>
             <TouchableOpacity
-              style={styles.recipeDropdown}
+              style={[
+                styles.recipeDropdown,
+                isDark && {
+                  backgroundColor: 'rgba(24, 24, 28, 0.92)',
+                  borderColor: 'rgba(255,255,255,0.14)',
+                },
+              ]}
               onPress={() => setRecipeDropdownOpen((v) => !v)}
               activeOpacity={0.9}
             >
@@ -517,18 +600,26 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
                   ? 'Lade Rezepte...'
                   : 'Rezept auswählen (optional)'}
               </Text>
-              <Text style={styles.recipeDropdownCaret}>{recipeDropdownOpen ? '▲' : '▼'}</Text>
+              <Text style={[styles.recipeDropdownCaret, { color: theme.textSecondary }]}>{recipeDropdownOpen ? '▲' : '▼'}</Text>
             </TouchableOpacity>
 
             {recipeDropdownOpen && (
-              <View style={styles.recipeList}>
+              <View
+                style={[
+                  styles.recipeList,
+                  isDark && {
+                    backgroundColor: 'rgba(20, 20, 24, 0.95)',
+                    borderColor: 'rgba(255,255,255,0.14)',
+                  },
+                ]}
+              >
                 {isLoadingRecipes ? (
                   <View style={styles.recipeLoadingRow}>
-                    <Text style={styles.recipeRowTitle}>Lade Rezepte ...</Text>
+                    <Text style={[styles.recipeRowTitle, { color: theme.text }]}>Lade Rezepte ...</Text>
                   </View>
                 ) : recipeOptions.length === 0 ? (
                   <View style={styles.recipeLoadingRow}>
-                    <Text style={styles.recipeRowTitle}>Keine Rezepte gefunden</Text>
+                    <Text style={[styles.recipeRowTitle, { color: theme.text }]}>Keine Rezepte gefunden</Text>
                   </View>
                 ) : recipeOptions.map((recipe) => {
                   const isSelected = selectedRecipeId === recipe.id;
@@ -552,9 +643,9 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
                           </View>
                         )}
                         <View style={styles.recipeRowText}>
-                        <Text numberOfLines={2} style={styles.recipeRowTitle}>{displayTitle}</Text>
+                        <Text numberOfLines={2} style={[styles.recipeRowTitle, { color: theme.text }]}>{displayTitle}</Text>
                         {subtitle.length > 0 && (
-                          <Text style={styles.recipeRowSub}>{subtitle}</Text>
+                          <Text style={[styles.recipeRowSub, { color: theme.textSecondary }]}>{subtitle}</Text>
                         )}
                         </View>
                         <View style={[styles.recipeCheckbox, isSelected && styles.recipeCheckboxActive]}>
@@ -566,7 +657,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
               </View>
             )}
 
-            <Text style={[styles.infoText, {marginTop: 12}]}>
+            <Text style={[styles.infoText, { marginTop: 12, color: theme.textSecondary }]}>
               Der gewählte Rezepttitel erscheint als Hinweis in der Timeline.
             </Text>
           </View>
@@ -606,7 +697,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
           </TouchableOpacity>
         ))}
       </View>
-      <Text style={[styles.infoText, {marginTop: 20}]}>Wähle aus, was auf die Windel zutrifft.</Text>
+      <Text style={[styles.infoText, { marginTop: 20, color: theme.textSecondary }]}>Wähle aus, was auf die Windel zutrifft.</Text>
     </View>
   );
 
@@ -646,7 +737,13 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
          </TouchableOpacity>
          {isNotesVisible && (
             <TouchableOpacity
-              style={[styles.notesInput, { backgroundColor: theme.lightGray }]}
+              style={[
+                styles.notesInput,
+                {
+                  backgroundColor: isDark ? 'rgba(24, 24, 28, 0.92)' : theme.lightGray,
+                  borderColor: isDark ? 'rgba(255,255,255,0.14)' : '#E0E0E0',
+                },
+              ]}
               activeOpacity={0.9}
               onPress={openNotesEditor}
             >
@@ -663,15 +760,27 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
 
   return (
     <Modal visible={visible} transparent={true} animationType="slide" onRequestClose={onClose}>
-      <View style={styles.modalOverlay}>
+      <View
+        style={[
+          styles.modalOverlay,
+          { backgroundColor: isDark ? 'rgba(0, 0, 0, 0.62)' : 'rgba(0, 0, 0, 0.4)' },
+        ]}
+      >
         {/* This empty view allows closing the modal by tapping the background */}
         <TouchableWithoutFeedback onPress={onClose}>
             <View style={StyleSheet.absoluteFill} />
         </TouchableWithoutFeedback>
 
         <BlurView
-            style={styles.modalContent}
-            tint="extraLight" // Use a brighter tint
+            style={[
+              styles.modalContent,
+              {
+                backgroundColor: theme.modalBackground,
+                borderTopWidth: isDark ? 1 : 0,
+                borderTopColor: isDark ? 'rgba(255,255,255,0.08)' : 'transparent',
+              },
+            ]}
+            tint={isDark ? 'dark' : 'extraLight'}
             intensity={80} // Slightly less intense blur
         >
             {renderHeader()}

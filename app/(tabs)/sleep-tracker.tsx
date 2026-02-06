@@ -1697,6 +1697,8 @@ export default function SleepTrackerScreen() {
         <GlassCard key={tab} style={[styles.topTab, selectedTab === tab && styles.activeTopTab]} intensity={22}>
           <TouchableOpacity
             style={styles.topTabInner}
+            hitSlop={{ top: 12, bottom: 12, left: 10, right: 10 }}
+            pressRetentionOffset={{ top: 16, bottom: 16, left: 12, right: 12 }}
             onPress={() => {
               triggerHaptic();
               setSelectedTab(tab);
@@ -2220,6 +2222,21 @@ export default function SleepTrackerScreen() {
     type DayScore = 'excellent' | 'good' | 'okay' | 'poor' | 'none';
 
     const getDayColors = (score: DayScore) => {
+      if (isDark) {
+        switch (score) {
+          case 'excellent': // 8h+
+            return { bg: 'rgba(34,197,94,0.46)', text: '#FFFFFF', border: 'rgba(74,222,128,0.95)' };
+          case 'good': // 6h+
+            return { bg: 'rgba(16,185,129,0.38)', text: '#FFFFFF', border: 'rgba(45,212,191,0.88)' };
+          case 'okay': // 4h+
+            return { bg: 'rgba(245,158,11,0.42)', text: '#FFFFFF', border: 'rgba(251,191,36,0.95)' };
+          case 'poor': // <4h
+            return { bg: 'rgba(239,68,68,0.42)', text: '#FFFFFF', border: 'rgba(248,113,113,0.9)' };
+          default:
+            return { bg: 'rgba(255,255,255,0.08)', text: textSecondary, border: 'rgba(255,255,255,0.22)' };
+        }
+      }
+
       switch (score) {
         case 'excellent': // 8h+
           return { bg: 'rgba(56,161,105,0.22)', text: '#2F855A', border: 'rgba(255,255,255,0.65)' }; // grün
@@ -2313,7 +2330,15 @@ export default function SleepTrackerScreen() {
                           <TouchableOpacity
                             style={[
                               styles.calendarDayButton,
-                              { backgroundColor: c.bg, borderColor: c.border }
+                              { backgroundColor: c.bg, borderColor: c.border },
+                              isDark &&
+                                score !== 'none' && {
+                                  shadowColor: c.border,
+                                  shadowOffset: { width: 0, height: 1 },
+                                  shadowOpacity: 0.24,
+                                  shadowRadius: 4,
+                                  elevation: 2,
+                                },
                             ]}
                             onPress={() => {
                               triggerHaptic();
@@ -2343,22 +2368,22 @@ export default function SleepTrackerScreen() {
         {/* Monatsstatistiken - Design Guide konform */}
         <LiquidGlassCard style={styles.monthSummaryCard}>
           <View style={styles.summaryInner}>
-            <Text style={styles.summaryTitle}>Monatsübersicht</Text>
+            <Text style={[styles.summaryTitle, isDark && { color: '#FFFFFF' }]}>Monatsübersicht</Text>
             <View style={styles.summaryStats}>
               <View style={styles.statItem}>
                 <Text style={styles.statEmoji}>📊</Text>
-                <Text style={styles.statValue}>{sleepEntries.length}</Text>
-                <Text style={styles.statLabel}>Einträge</Text>
+                <Text style={[styles.statValue, isDark && { color: '#FFFFFF' }]}>{sleepEntries.length}</Text>
+                <Text style={[styles.statLabel, isDark && { color: '#FFFFFF' }]}>Einträge</Text>
               </View>
               <View style={styles.statItem}>
                 <Text style={styles.statEmoji}>⏰</Text>
-                <Text style={styles.statValue}>{sleepEntries.length > 0 ? Math.round(sleepEntries.reduce((sum, e) => sum + (e.duration_minutes || 0), 0) / sleepEntries.length / 60) : 0}h</Text>
-                <Text style={styles.statLabel}>Ø pro Tag</Text>
+                <Text style={[styles.statValue, isDark && { color: '#FFFFFF' }]}>{sleepEntries.length > 0 ? Math.round(sleepEntries.reduce((sum, e) => sum + (e.duration_minutes || 0), 0) / sleepEntries.length / 60) : 0}h</Text>
+                <Text style={[styles.statLabel, isDark && { color: '#FFFFFF' }]}>Ø pro Tag</Text>
               </View>
               <View style={styles.statItem}>
                 <Text style={styles.statEmoji}>🏆</Text>
-                <Text style={styles.statValue}>{sleepEntries.length > 0 ? Math.round(Math.max(...sleepEntries.map(e => e.duration_minutes || 0)) / 60) : 0}h</Text>
-                <Text style={styles.statLabel}>Längster Schlaf</Text>
+                <Text style={[styles.statValue, isDark && { color: '#FFFFFF' }]}>{sleepEntries.length > 0 ? Math.round(Math.max(...sleepEntries.map(e => e.duration_minutes || 0)) / 60) : 0}h</Text>
+                <Text style={[styles.statLabel, isDark && { color: '#FFFFFF' }]}>Längster Schlaf</Text>
               </View>
             </View>
           </View>

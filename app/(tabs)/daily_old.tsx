@@ -804,6 +804,8 @@ export default function DailyScreen() {
         <GlassCard key={tab} style={[s.topTab, selectedTab === tab && s.activeTopTab]} intensity={22}>
           <TouchableOpacity
             style={s.topTabInner}
+            hitSlop={{ top: 12, bottom: 12, left: 10, right: 10 }}
+            pressRetentionOffset={{ top: 16, bottom: 16, left: 12, right: 12 }}
             onPress={() => {
               setSelectedTab(tab);
               if (tab === 'day') {
@@ -1116,6 +1118,21 @@ export default function DailyScreen() {
     type DayScore = 'excellent' | 'good' | 'okay' | 'poor' | 'none';
 
     const getDayColors = (score: DayScore) => {
+      if (isDark) {
+        switch (score) {
+          case 'excellent':
+            return { bg: 'rgba(34,197,94,0.46)', text: '#FFFFFF', border: 'rgba(74,222,128,0.95)' };
+          case 'good':
+            return { bg: 'rgba(16,185,129,0.38)', text: '#FFFFFF', border: 'rgba(45,212,191,0.88)' };
+          case 'okay':
+            return { bg: 'rgba(245,158,11,0.42)', text: '#FFFFFF', border: 'rgba(251,191,36,0.95)' };
+          case 'poor':
+            return { bg: 'rgba(239,68,68,0.42)', text: '#FFFFFF', border: 'rgba(248,113,113,0.9)' };
+          default:
+            return { bg: 'rgba(255,255,255,0.08)', text: textSecondary, border: 'rgba(255,255,255,0.22)' };
+        }
+      }
+
       switch (score) {
         case 'excellent':
           return { bg: 'rgba(56,161,105,0.22)', text: '#2F855A', border: 'rgba(255,255,255,0.65)' };
@@ -1200,7 +1217,15 @@ export default function DailyScreen() {
                           <TouchableOpacity
                             style={[
                               s.calendarDayButton,
-                              { backgroundColor: c.bg, borderColor: c.border }
+                              { backgroundColor: c.bg, borderColor: c.border },
+                              isDark &&
+                                score !== 'none' && {
+                                  shadowColor: c.border,
+                                  shadowOffset: { width: 0, height: 1 },
+                                  shadowOpacity: 0.24,
+                                  shadowRadius: 4,
+                                  elevation: 2,
+                                },
                             ]}
                           >
                             <Text style={[s.calendarDayNumber, { color: c.text }]}>{date.getDate()}</Text>
@@ -1415,6 +1440,7 @@ export default function DailyScreen() {
           visible={showInputModal}
           activityType={selectedActivityType}
           initialSubType={selectedSubType}
+          forceDarkMode={isDark}
           date={selectedDate}
           onClose={() => { setShowInputModal(false); setEditingEntry(null); }}
           onSave={handleSaveEntry}

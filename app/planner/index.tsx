@@ -1,27 +1,63 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { SafeAreaView, ScrollView, StyleSheet, TouchableOpacity, View, Text, Dimensions, Alert } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import {
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  View,
+  Text,
+  Dimensions,
+  Alert,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import Header from '@/components/Header';
-import { ThemedBackground } from '@/components/ThemedBackground';
-import { ThemedText } from '@/components/ThemedText';
-import { IconSymbol } from '@/components/ui/IconSymbol';
-import GreetingCard from '@/components/planner/GreetingCard';
-import TodayOverviewCard from '@/components/planner/TodayOverviewCard';
-import { FloatingAddButton } from '@/components/planner/FloatingAddButton';
-import StructuredTimeline from '@/components/planner/StructuredTimeline';
-import { SwipeableListItem } from '@/components/planner/SwipeableListItem';
-import PlannerCaptureModal, { PlannerCapturePayload, PlannerCaptureType } from '@/components/planner/PlannerCaptureModal';
-import { PlannerEvent, PlannerTodo, usePlannerDay } from '@/services/planner';
-import { PRIMARY, BACKGROUND, LAYOUT_PAD, SECTION_GAP_BOTTOM, SECTION_GAP_TOP, TEXT_PRIMARY } from '@/constants/PlannerDesign';
-import * as Haptics from 'expo-haptics';
-import { useAuth } from '@/contexts/AuthContext';
-import { getLinkedUsers, supabase } from '@/lib/supabase';
-import { GlassCard, LiquidGlassCard } from '@/constants/DesignGuide';
-import { BabyInfo, listBabies } from '@/lib/baby';
+import Header from "@/components/Header";
+import { ThemedBackground } from "@/components/ThemedBackground";
+import { ThemedText } from "@/components/ThemedText";
+import { IconSymbol } from "@/components/ui/IconSymbol";
+import GreetingCard from "@/components/planner/GreetingCard";
+import TodayOverviewCard from "@/components/planner/TodayOverviewCard";
+import { FloatingAddButton } from "@/components/planner/FloatingAddButton";
+import StructuredTimeline from "@/components/planner/StructuredTimeline";
+import { SwipeableListItem } from "@/components/planner/SwipeableListItem";
+import PlannerCaptureModal, {
+  PlannerCapturePayload,
+  PlannerCaptureType,
+} from "@/components/planner/PlannerCaptureModal";
+import { PlannerEvent, PlannerTodo, usePlannerDay } from "@/services/planner";
+import {
+  PRIMARY,
+  BACKGROUND,
+  LAYOUT_PAD,
+  SECTION_GAP_BOTTOM,
+  SECTION_GAP_TOP,
+  TEXT_PRIMARY,
+} from "@/constants/PlannerDesign";
+import { Colors } from "@/constants/Colors";
+import * as Haptics from "expo-haptics";
+import { useAuth } from "@/contexts/AuthContext";
+import { getLinkedUsers, supabase } from "@/lib/supabase";
+import {
+  GlassCard,
+  LiquidGlassCard,
+  GLASS_OVERLAY,
+  GLASS_OVERLAY_DARK,
+} from "@/constants/DesignGuide";
+import { BabyInfo, listBabies } from "@/lib/baby";
+import { useAdaptiveColors } from "@/hooks/useAdaptiveColors";
 
 function formatDateHeader(d: Date) {
-  return new Intl.DateTimeFormat('de-DE', { weekday: 'long', day: '2-digit', month: 'short' }).format(d);
+  return new Intl.DateTimeFormat("de-DE", {
+    weekday: "long",
+    day: "2-digit",
+    month: "short",
+  }).format(d);
 }
 
 function startOfWeek(date: Date) {
@@ -36,12 +72,18 @@ function formatWeekRangeHeader(d: Date) {
   const start = startOfWeek(d);
   const end = new Date(start);
   end.setDate(start.getDate() + 6);
-  const formatter = new Intl.DateTimeFormat('de-DE', { day: '2-digit', month: 'short' });
+  const formatter = new Intl.DateTimeFormat("de-DE", {
+    day: "2-digit",
+    month: "short",
+  });
   return `${formatter.format(start)} – ${formatter.format(end)}`;
 }
 
 function formatMonthHeader(d: Date) {
-  return new Intl.DateTimeFormat('de-DE', { month: 'long', year: 'numeric' }).format(d);
+  return new Intl.DateTimeFormat("de-DE", {
+    month: "long",
+    year: "numeric",
+  }).format(d);
 }
 
 function buildMonthGrid(date: Date) {
@@ -59,11 +101,34 @@ function buildMonthGrid(date: Date) {
 }
 
 const WEEK_BLOCKS = [
-  { key: 'morning', label: 'Morgen', start: 5, end: 12 },
-  { key: 'midday', label: 'Mittag', start: 12, end: 15 },
-  { key: 'afternoon', label: 'Nachmittag', start: 15, end: 18 },
-  { key: 'evening', label: 'Abend', start: 18, end: 23.99 },
+  { key: "morning", label: "Morgen", start: 5, end: 12 },
+  { key: "midday", label: "Mittag", start: 12, end: 15 },
+  { key: "afternoon", label: "Nachmittag", start: 15, end: 18 },
+  { key: "evening", label: "Abend", start: 18, end: 23.99 },
 ];
+
+const toRgba = (hex: string, opacity = 1) => {
+  const cleanHex = hex.replace("#", "");
+  const int = parseInt(cleanHex, 16);
+  const r = (int >> 16) & 255;
+  const g = (int >> 8) & 255;
+  const b = int & 255;
+  return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+};
+
+const lightenHex = (hex: string, amount = 0.25) => {
+  const cleanHex = hex.replace("#", "");
+  const int = parseInt(cleanHex, 16);
+  const r = (int >> 16) & 255;
+  const g = (int >> 8) & 255;
+  const b = int & 255;
+
+  const lightenChannel = (channel: number) =>
+    Math.min(255, Math.round(channel + (255 - channel) * amount));
+  const toHex = (channel: number) => channel.toString(16).padStart(2, "0");
+
+  return `#${toHex(lightenChannel(r))}${toHex(lightenChannel(g))}${toHex(lightenChannel(b))}`;
+};
 
 type LinkedUser = {
   userId: string;
@@ -87,13 +152,29 @@ function displayNameForLinkedUser(linkedUser: LinkedUser, index: number) {
 export default function PlannerScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { width: screenWidth } = Dimensions.get('window');
+  const adaptiveColors = useAdaptiveColors();
+  const isDark =
+    adaptiveColors.effectiveScheme === "dark" ||
+    adaptiveColors.isDarkBackground;
+  const textPrimary = isDark ? Colors.dark.textPrimary : "#5C4033";
+  const textSecondary = isDark ? Colors.dark.textSecondary : "#7D5A50";
+  const textMuted = isDark ? "rgba(248,240,229,0.72)" : "rgba(92,64,51,0.72)";
+  const accentColor = isDark ? lightenHex(PRIMARY, 0.26) : PRIMARY;
+  const accentEventColor = isDark ? lightenHex("#6E4DBD", 0.26) : "#6E4DBD";
+  const glassOverlay = isDark ? GLASS_OVERLAY_DARK : GLASS_OVERLAY;
+  const glassBorder = isDark
+    ? "rgba(255,255,255,0.22)"
+    : "rgba(255,255,255,0.5)";
+  const backgroundFallback = isDark ? "#1F1A18" : BACKGROUND;
+  const { width: screenWidth } = Dimensions.get("window");
   const [selectedDate, setSelectedDate] = useState(() => {
     const d = new Date();
     d.setHours(0, 0, 0, 0);
     return d;
   });
-  const [selectedTab, setSelectedTab] = useState<'day' | 'week' | 'month'>('day');
+  const [selectedTab, setSelectedTab] = useState<"day" | "week" | "month">(
+    "day",
+  );
   const [linkedUsers, setLinkedUsers] = useState<LinkedUser[]>([]);
   const [babies, setBabies] = useState<BabyInfo[]>([]);
 
@@ -112,19 +193,25 @@ export default function PlannerScreen() {
   } = usePlannerDay(selectedDate);
 
   const [captureVisible, setCaptureVisible] = useState(false);
-  const [captureType, setCaptureType] = useState<PlannerCaptureType>('todo');
-  const [editingItem, setEditingItem] = useState<{ type: 'todo' | 'event'; item: PlannerTodo | PlannerEvent } | null>(null);
-  const [profileName, setProfileName] = useState<string>('Lotti');
+  const [captureType, setCaptureType] = useState<PlannerCaptureType>("todo");
+  const [editingItem, setEditingItem] = useState<{
+    type: "todo" | "event";
+    item: PlannerTodo | PlannerEvent;
+  } | null>(null);
+  const [profileName, setProfileName] = useState<string>("Lotti");
   const [profileAvatarUrl, setProfileAvatarUrl] = useState<string | null>(null);
   const contentTopPadding = Math.max(SECTION_GAP_TOP - 24, 0);
   const [weekAgenda, setWeekAgenda] = useState<Record<string, any>>({});
-  const [monthSummary, setMonthSummary] = useState<Record<string, { tasks: number; events: number }>>({});
-  const [showCompletedFloatingTodos, setShowCompletedFloatingTodos] = useState(false);
+  const [monthSummary, setMonthSummary] = useState<
+    Record<string, { tasks: number; events: number }>
+  >({});
+  const [showCompletedFloatingTodos, setShowCompletedFloatingTodos] =
+    useState(false);
 
   const ownerOptions = useMemo(() => {
     if (!user?.id) return [];
     const options = [
-      { id: user.id, label: 'Ich' },
+      { id: user.id, label: "Ich" },
       ...linkedUsers.map((linkedUser, idx) => ({
         id: linkedUser.userId,
         label: displayNameForLinkedUser(linkedUser, idx),
@@ -147,16 +234,18 @@ export default function PlannerScreen() {
   }, [ownerOptions]);
 
   const babyOptions = useMemo(() => {
-    return babies.map((baby) => ({
-      id: baby.id ?? '',
-      label: baby.name ?? 'Baby',
-    })).filter((opt) => opt.id.length > 0);
+    return babies
+      .map((baby) => ({
+        id: baby.id ?? "",
+        label: baby.name ?? "Baby",
+      }))
+      .filter((opt) => opt.id.length > 0);
   }, [babies]);
 
   const getOwnerLabel = useCallback(
     (ownerId?: string) => {
       if (!ownerId) return undefined;
-      return ownerLabelById[ownerId] ?? 'Partner';
+      return ownerLabelById[ownerId] ?? "Partner";
     },
     [ownerLabelById],
   );
@@ -165,29 +254,29 @@ export default function PlannerScreen() {
     (assignee?: string, babyId?: string, ownerId?: string) => {
       if (!assignee) return undefined;
 
-      if (assignee === 'me') {
-        return 'Ich';
+      if (assignee === "me") {
+        return "Ich";
       }
 
-      if (assignee === 'partner') {
+      if (assignee === "partner") {
         const partnerUser = linkedUsers.find((u) => u.userId !== user?.id);
         if (partnerUser) {
           return displayNameForLinkedUser(partnerUser, 0);
         }
-        return 'Partner';
+        return "Partner";
       }
 
-      if (assignee === 'child' && babyId) {
+      if (assignee === "child" && babyId) {
         const baby = babies.find((b) => b.id === babyId);
-        return baby?.name ?? 'Kind';
+        return baby?.name ?? "Kind";
       }
 
-      if (assignee === 'child') {
-        return 'Kind';
+      if (assignee === "child") {
+        return "Kind";
       }
 
-      if (assignee === 'family') {
-        return 'Familie';
+      if (assignee === "family") {
+        return "Familie";
       }
 
       return undefined;
@@ -198,9 +287,9 @@ export default function PlannerScreen() {
   const getDisplayAssigneeLabel = useCallback(
     (assignee?: string, babyId?: string, ownerId?: string) => {
       const assigneeLabel = getAssigneeLabel(assignee, babyId, ownerId);
-      if (assigneeLabel && assigneeLabel !== 'Ich') return assigneeLabel;
+      if (assigneeLabel && assigneeLabel !== "Ich") return assigneeLabel;
       const ownerLabel = getOwnerLabel(ownerId);
-      if (ownerLabel && ownerLabel !== 'Ich') return ownerLabel;
+      if (ownerLabel && ownerLabel !== "Ich") return ownerLabel;
       return undefined;
     },
     [getAssigneeLabel, getOwnerLabel],
@@ -230,13 +319,16 @@ export default function PlannerScreen() {
               userRole: entry?.userRole ?? null,
               relationshipType: entry?.relationshipType ?? null,
             }))
-            .filter((entry: any): entry is LinkedUser => typeof entry.userId === 'string' && entry.userId.length > 0);
+            .filter(
+              (entry: any): entry is LinkedUser =>
+                typeof entry.userId === "string" && entry.userId.length > 0,
+            );
           setLinkedUsers(next);
         } else {
           setLinkedUsers([]);
         }
       } catch (err) {
-        console.error('Planner: failed to load linked users', err);
+        console.error("Planner: failed to load linked users", err);
         if (active) setLinkedUsers([]);
       }
     })();
@@ -261,7 +353,7 @@ export default function PlannerScreen() {
           setBabies([]);
         }
       } catch (err) {
-        console.error('Planner: failed to load babies', err);
+        console.error("Planner: failed to load babies", err);
         if (active) setBabies([]);
       }
     })();
@@ -271,15 +363,15 @@ export default function PlannerScreen() {
   }, [user?.id]);
 
   const headerTitle = useMemo(() => {
-    if (selectedTab === 'week') return formatWeekRangeHeader(selectedDate);
-    if (selectedTab === 'month') return formatMonthHeader(selectedDate);
+    if (selectedTab === "week") return formatWeekRangeHeader(selectedDate);
+    if (selectedTab === "month") return formatMonthHeader(selectedDate);
     return formatDateHeader(selectedDate);
   }, [selectedDate, selectedTab]);
 
   const navTitle = useMemo(() => {
-    if (selectedTab === 'week') return 'Wochenübersicht';
-    if (selectedTab === 'month') return 'Monatsübersicht';
-    return 'Tagesübersicht';
+    if (selectedTab === "week") return "Wochenübersicht";
+    if (selectedTab === "month") return "Monatsübersicht";
+    return "Tagesübersicht";
   }, [selectedTab]);
 
   const weekDays = useMemo(() => {
@@ -292,29 +384,32 @@ export default function PlannerScreen() {
   }, [selectedDate]);
 
   const monthDays = useMemo(() => buildMonthGrid(selectedDate), [selectedDate]);
-  const weekDayWidth = useMemo(() => Math.max(110, (screenWidth - LAYOUT_PAD * 2 - 16) / 3), [screenWidth]);
+  const weekDayWidth = useMemo(
+    () => Math.max(110, (screenWidth - LAYOUT_PAD * 2 - 16) / 3),
+    [screenWidth],
+  );
   const weekScrollRef = useRef<ScrollView | null>(null);
 
   useEffect(() => {
     let active = true;
     const loadProfileName = async () => {
       if (!user?.id) {
-        if (active) setProfileName('Lotti');
+        if (active) setProfileName("Lotti");
         if (active) setProfileAvatarUrl(null);
         return;
       }
       const { data, error } = await supabase
-        .from('profiles')
-        .select('first_name, avatar_url')
-        .eq('id', user.id)
+        .from("profiles")
+        .select("first_name, avatar_url")
+        .eq("id", user.id)
         .maybeSingle();
       if (!active) return;
       if (error) {
-        console.warn('Planner: Profilname konnte nicht geladen werden', error);
+        console.warn("Planner: Profilname konnte nicht geladen werden", error);
       }
       const raw = data?.first_name?.trim();
-      const fallback = user.email ? user.email.split('@')[0] : '';
-      setProfileName(raw && raw.length > 0 ? raw : (fallback || 'Lotti'));
+      const fallback = user.email ? user.email.split("@")[0] : "";
+      setProfileName(raw && raw.length > 0 ? raw : fallback || "Lotti");
       setProfileAvatarUrl(data?.avatar_url ?? null);
     };
     loadProfileName();
@@ -326,25 +421,26 @@ export default function PlannerScreen() {
   const greeting = useMemo(() => {
     const now = new Date();
     const hour = now.getHours();
-    let base = 'Hallo';
-    let sub = 'Schön, dass du da bist.';
+    let base = "Hallo";
+    let sub = "Schön, dass du da bist.";
 
     if (hour >= 5 && hour < 11) {
-      base = 'Guten Morgen';
-      sub = 'Bereit für einen neuen Tag?';
+      base = "Guten Morgen";
+      sub = "Bereit für einen neuen Tag?";
     } else if (hour >= 11 && hour < 17) {
-      base = 'Guten Tag';
-      sub = 'Was steht heute noch an?';
+      base = "Guten Tag";
+      sub = "Was steht heute noch an?";
     } else if (hour >= 17 && hour < 22) {
-      base = 'Guten Abend';
-      sub = 'Lass den Tag entspannt ausklingen.';
+      base = "Guten Abend";
+      sub = "Lass den Tag entspannt ausklingen.";
     } else {
-      base = 'Gute Nacht';
-      sub = 'Zeit zum Abschalten und Ausruhen.';
+      base = "Gute Nacht";
+      sub = "Zeit zum Abschalten und Ausruhen.";
     }
 
-    const safeName = profileName?.trim().length ? profileName.trim() : 'du';
-    const nameCapitalized = safeName.charAt(0).toUpperCase() + safeName.slice(1);
+    const safeName = profileName?.trim().length ? profileName.trim() : "du";
+    const nameCapitalized =
+      safeName.charAt(0).toUpperCase() + safeName.slice(1);
 
     return {
       title: `${base}, ${nameCapitalized}`,
@@ -361,7 +457,7 @@ export default function PlannerScreen() {
     const loadRange = async () => {
       try {
         const start =
-          selectedTab === 'month'
+          selectedTab === "month"
             ? (() => {
                 const d = new Date(selectedDate);
                 d.setDate(1);
@@ -370,74 +466,93 @@ export default function PlannerScreen() {
               })()
             : startOfWeek(selectedDate);
         const end = new Date(start);
-        end.setDate(start.getDate() + (selectedTab === 'month' ? 41 : 6));
+        end.setDate(start.getDate() + (selectedTab === "month" ? 41 : 6));
 
         const startIso = toDateKey(start);
         const endIso = toDateKey(end);
-        const ownerIds = Array.from(new Set([user.id, ...linkedUsers.map((linkedUser) => linkedUser.userId)]));
+        const ownerIds = Array.from(
+          new Set([
+            user.id,
+            ...linkedUsers.map((linkedUser) => linkedUser.userId),
+          ]),
+        );
 
         const { data: itemRows, error: itemError } = await supabase
-          .from('planner_items')
+          .from("planner_items")
           .select(
-            'id,user_id,day_id,entry_type,title,completed,assignee,baby_id,notes,location,due_at,start_at,end_at,is_all_day,created_at,updated_at,planner_days!inner(day)',
+            "id,user_id,day_id,entry_type,title,completed,assignee,baby_id,notes,location,due_at,start_at,end_at,is_all_day,created_at,updated_at,planner_days!inner(day)",
           )
-          .in('user_id', ownerIds)
-          .gte('planner_days.day', startIso)
-          .lte('planner_days.day', endIso);
+          .in("user_id", ownerIds)
+          .gte("planner_days.day", startIso)
+          .lte("planner_days.day", endIso);
         if (itemError) throw itemError;
 
         const agenda: Record<string, any> = {};
         const monthAgg: Record<string, { tasks: number; events: number }> = {};
 
-        const assignBlock = (dateIso: string, item: any, type: 'event' | 'todo') => {
+        const assignBlock = (
+          dateIso: string,
+          item: any,
+          type: "event" | "todo",
+        ) => {
           if (!agenda[dateIso]) {
             agenda[dateIso] = {
               dateIso,
-              blocks: WEEK_BLOCKS.reduce((acc, b) => ({ ...acc, [b.key]: { todos: [], events: [] } }), {}),
+              blocks: WEEK_BLOCKS.reduce(
+                (acc, b) => ({ ...acc, [b.key]: { todos: [], events: [] } }),
+                {},
+              ),
             };
           }
           const timeStr = item.start_at ?? item.due_at;
           const time = timeStr ? new Date(timeStr) : null;
           const hour = time ? time.getHours() + time.getMinutes() / 60 : 12;
           const blockKey =
-            WEEK_BLOCKS.find((b) => hour >= b.start && hour < b.end)?.key ?? WEEK_BLOCKS[0].key;
-          if (type === 'event') {
+            WEEK_BLOCKS.find((b) => hour >= b.start && hour < b.end)?.key ??
+            WEEK_BLOCKS[0].key;
+          if (type === "event") {
             agenda[dateIso].blocks[blockKey].events.push(item);
           } else {
             agenda[dateIso].blocks[blockKey].todos.push(item);
           }
         };
 
-        (itemRows ?? []).forEach((item) => {
-          const dayIso = Array.isArray(item?.planner_days) ? item.planner_days[0]?.day : item?.planner_days?.day;
+        ((itemRows ?? []) as any[]).forEach((item) => {
+          const plannerDay = item?.planner_days as
+            | { day?: string }
+            | Array<{ day?: string }>
+            | undefined;
+          const dayIso = Array.isArray(plannerDay)
+            ? plannerDay[0]?.day
+            : plannerDay?.day;
           if (!dayIso) return;
           if (!monthAgg[dayIso]) monthAgg[dayIso] = { tasks: 0, events: 0 };
-          if (item.entry_type === 'event') monthAgg[dayIso].events += 1;
+          if (item.entry_type === "event") monthAgg[dayIso].events += 1;
           else monthAgg[dayIso].tasks += 1;
 
-          if (item.entry_type === 'event') {
-            assignBlock(dayIso, item, 'event');
-          } else if (item.entry_type === 'todo') {
-            assignBlock(dayIso, item, 'todo');
+          if (item.entry_type === "event") {
+            assignBlock(dayIso, item, "event");
+          } else if (item.entry_type === "todo") {
+            assignBlock(dayIso, item, "todo");
           }
         });
 
         setWeekAgenda(agenda);
         setMonthSummary(monthAgg);
       } catch (err) {
-        console.error('Planner: failed to load range', err);
+        console.error("Planner: failed to load range", err);
         setWeekAgenda({});
         setMonthSummary({});
       }
     };
 
-    if (selectedTab === 'week' || selectedTab === 'month') {
+    if (selectedTab === "week" || selectedTab === "month") {
       loadRange();
     }
   }, [selectedTab, selectedDate, user?.id, linkedUsers]);
 
   useEffect(() => {
-    if (selectedTab !== 'week') return;
+    if (selectedTab !== "week") return;
     const todayIso = toDateKey(new Date());
     const selectedIso = toDateKey(selectedDate);
     const idxToday = weekDays.findIndex((d) => toDateKey(d) === todayIso);
@@ -465,13 +580,13 @@ export default function PlannerScreen() {
   };
 
   const shiftDateByTab = (direction: -1 | 1) => {
-    if (selectedTab === 'day') {
+    if (selectedTab === "day") {
       const next = new Date(selectedDate);
       next.setDate(selectedDate.getDate() + direction);
       handleSelectDate(next);
       return;
     }
-    if (selectedTab === 'week') {
+    if (selectedTab === "week") {
       shiftWeek(direction);
       return;
     }
@@ -483,7 +598,7 @@ export default function PlannerScreen() {
 
   const openCapture = (
     type: PlannerCaptureType,
-    existing?: { type: 'todo' | 'event'; item: PlannerTodo | PlannerEvent }
+    existing?: { type: "todo" | "event"; item: PlannerTodo | PlannerEvent },
   ) => {
     setCaptureType(type);
     setEditingItem(existing ?? null);
@@ -500,34 +615,36 @@ export default function PlannerScreen() {
 
     try {
       const { error } = await supabase
-        .from('planner_items')
+        .from("planner_items")
         .delete()
-        .eq('id', id)
-        .eq('user_id', user.id);
+        .eq("id", id)
+        .eq("user_id", user.id);
 
       if (error) {
-        console.error('Planner: failed to delete item', error);
-        Alert.alert('Fehler', 'Der Eintrag konnte nicht gelöscht werden.');
+        console.error("Planner: failed to delete item", error);
+        Alert.alert("Fehler", "Der Eintrag konnte nicht gelöscht werden.");
       } else {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
     } catch (err) {
-      console.error('Planner: delete error', err);
-      Alert.alert('Fehler', 'Ein Fehler ist aufgetreten.');
+      console.error("Planner: delete error", err);
+      Alert.alert("Fehler", "Ein Fehler ist aufgetreten.");
     }
   };
 
   const findTodoById = (id: string) => {
     for (const block of blocks) {
       for (const item of block.items) {
-        if ('completed' in item && item.id === id) {
+        if ("completed" in item && item.id === id) {
           return item as PlannerTodo;
         }
       }
     }
     const floating = floatingTodos.find((todo) => todo.id === id);
     if (floating) return floating;
-    const completedFloating = completedFloatingTodos.find((todo) => todo.id === id);
+    const completedFloating = completedFloatingTodos.find(
+      (todo) => todo.id === id,
+    );
     if (completedFloating) return completedFloating;
     return undefined;
   };
@@ -535,7 +652,7 @@ export default function PlannerScreen() {
   const findEventById = (id: string) => {
     for (const block of blocks) {
       for (const item of block.items) {
-        if ('start' in item && 'end' in item && item.id === id) {
+        if ("start" in item && "end" in item && item.id === id) {
           return item as PlannerEvent;
         }
       }
@@ -546,29 +663,37 @@ export default function PlannerScreen() {
   const handleEditTodo = (id: string) => {
     const todo = findTodoById(id);
     if (!todo) return;
-    openCapture('todo', { type: 'todo', item: { ...todo } });
+    openCapture("todo", { type: "todo", item: { ...todo } });
   };
 
   const handleEditEvent = (id: string) => {
     const event = findEventById(id);
     if (!event) return;
-    openCapture('event', { type: 'event', item: { ...event } });
+    openCapture("event", { type: "event", item: { ...event } });
   };
 
   const selectedDayTimeline = useMemo(() => {
-    const allItems = blocks.flatMap((block) => block.items.map((item) => ({ ...item })));
-    const todos = allItems.filter((it: any): it is PlannerTodo => 'completed' in it && it.dueAt != null);
-    const events = allItems.filter((it: any): it is PlannerEvent => 'start' in it && 'end' in it);
+    const allItems = blocks.flatMap((block) =>
+      block.items.map((item) => ({ ...item })),
+    );
+    const todos = allItems.filter(
+      (it: any): it is PlannerTodo => "completed" in it && it.dueAt != null,
+    );
+    const events = allItems.filter(
+      (it: any): it is PlannerEvent => "start" in it && "end" in it,
+    );
     return { todos, events };
   }, [blocks]);
 
   const handleCaptureSave = (payload: PlannerCapturePayload) => {
     try {
       if (payload.id && editingItem && editingItem.type !== payload.type) {
-        if (payload.type === 'event' && payload.start) {
+        if (payload.type === "event" && payload.start) {
           const startIso = payload.start.toISOString();
-          const endIso = (payload.end ?? new Date(payload.start.getTime() + 30 * 60000)).toISOString();
-          convertPlannerItem(payload.id, 'event', {
+          const endIso = (
+            payload.end ?? new Date(payload.start.getTime() + 30 * 60000)
+          ).toISOString();
+          convertPlannerItem(payload.id, "event", {
             title: payload.title,
             start: startIso,
             end: endIso,
@@ -576,8 +701,13 @@ export default function PlannerScreen() {
             notes: payload.notes,
             assignee: payload.assignee,
           });
-        } else if (payload.type === 'todo') {
-          const dueIso = payload.dueAt === null ? null : payload.dueAt ? payload.dueAt.toISOString() : undefined;
+        } else if (payload.type === "todo") {
+          const dueIso =
+            payload.dueAt === null
+              ? null
+              : payload.dueAt
+                ? payload.dueAt.toISOString()
+                : undefined;
           convertPlannerItem(payload.id, payload.type, {
             title: payload.title,
             dueAt: dueIso,
@@ -585,9 +715,11 @@ export default function PlannerScreen() {
             assignee: payload.assignee,
           });
         }
-      } else if (payload.type === 'event' && payload.start) {
+      } else if (payload.type === "event" && payload.start) {
         const startIso = payload.start.toISOString();
-        const endIso = (payload.end ?? new Date(payload.start.getTime() + 30 * 60000)).toISOString();
+        const endIso = (
+          payload.end ?? new Date(payload.start.getTime() + 30 * 60000)
+        ).toISOString();
         if (payload.id) {
           updateEvent(payload.id, {
             title: payload.title,
@@ -599,10 +731,25 @@ export default function PlannerScreen() {
             isAllDay: payload.isAllDay,
           });
         } else {
-          addEvent(payload.title, startIso, endIso, payload.location, payload.assignee ?? 'me', payload.babyId, undefined, payload.ownerId, payload.isAllDay);
+          addEvent(
+            payload.title,
+            startIso,
+            endIso,
+            payload.location,
+            payload.assignee ?? "me",
+            payload.babyId,
+            undefined,
+            payload.ownerId,
+            payload.isAllDay,
+          );
         }
-      } else if (payload.type === 'todo') {
-        const dueIso = payload.dueAt === null ? null : payload.dueAt ? payload.dueAt.toISOString() : undefined;
+      } else if (payload.type === "todo") {
+        const dueIso =
+          payload.dueAt === null
+            ? null
+            : payload.dueAt
+              ? payload.dueAt.toISOString()
+              : undefined;
         if (payload.id) {
           updateTodo(payload.id, {
             title: payload.title,
@@ -612,7 +759,15 @@ export default function PlannerScreen() {
             babyId: payload.babyId,
           });
         } else {
-          addTodo(payload.title, undefined, dueIso, payload.notes, payload.assignee, payload.babyId, payload.ownerId);
+          addTodo(
+            payload.title,
+            undefined,
+            dueIso,
+            payload.notes,
+            payload.assignee,
+            payload.babyId,
+            payload.ownerId,
+          );
         }
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -623,66 +778,162 @@ export default function PlannerScreen() {
   };
 
   return (
-    <ThemedBackground style={{ flex: 1, backgroundColor: BACKGROUND }}>
+    <ThemedBackground style={{ flex: 1, backgroundColor: backgroundFallback }}>
       <SafeAreaView style={{ flex: 1 }}>
         <Header title={headerTitle} subtitle={navTitle} showBackButton />
 
         <View style={{ paddingHorizontal: LAYOUT_PAD, paddingTop: 0 }}>
           <View style={styles.topTabsContainer}>
-            {(['day', 'week', 'month'] as const).map((tab) => (
-              <GlassCard key={tab} style={[styles.topTab, selectedTab === tab && styles.activeTopTab]} intensity={22}>
-                <TouchableOpacity
-                  style={styles.topTabInner}
-                  onPress={() => setSelectedTab(tab)}
-                  activeOpacity={0.85}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: selectedTab === tab }}
+            {(["day", "week", "month"] as const).map((tab) => {
+              const isActive = selectedTab === tab;
+              return (
+                <GlassCard
+                  key={tab}
+                  style={[
+                    styles.topTab,
+                    isActive && {
+                      borderColor: toRgba(accentColor, 0.66),
+                      backgroundColor: isDark
+                        ? toRgba(accentColor, 0.16)
+                        : "rgba(255,255,255,0.86)",
+                    },
+                  ]}
+                  intensity={22}
+                  overlayColor={
+                    isDark ? "rgba(0,0,0,0.3)" : "rgba(255,255,255,0.14)"
+                  }
+                  borderColor={
+                    isActive ? toRgba(accentColor, 0.66) : glassBorder
+                  }
                 >
-                  <Text style={[styles.topTabText, selectedTab === tab && styles.activeTopTabText]}>
-                    {tab === 'day' ? 'Tag' : tab === 'week' ? 'Woche' : 'Monat'}
-                  </Text>
-                </TouchableOpacity>
-              </GlassCard>
-            ))}
+                  <TouchableOpacity
+                    style={styles.topTabInner}
+                    onPress={() => setSelectedTab(tab)}
+                    activeOpacity={0.85}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: isActive }}
+                  >
+                    <Text
+                      style={[
+                        styles.topTabText,
+                        { color: isActive ? accentColor : textSecondary },
+                      ]}
+                    >
+                      {tab === "day"
+                        ? "Tag"
+                        : tab === "week"
+                          ? "Woche"
+                          : "Monat"}
+                    </Text>
+                  </TouchableOpacity>
+                </GlassCard>
+              );
+            })}
           </View>
 
           <View style={styles.dayNavigationContainer}>
             <TouchableOpacity
-              style={styles.weekNavButton}
+              style={[
+                styles.weekNavButton,
+                {
+                  borderColor: isDark
+                    ? "rgba(255,255,255,0.24)"
+                    : "rgba(255,255,255,0.35)",
+                  backgroundColor: isDark
+                    ? "rgba(255,255,255,0.06)"
+                    : "rgba(255,255,255,0.12)",
+                },
+              ]}
               onPress={() => shiftDateByTab(-1)}
               accessibilityRole="button"
-              accessibilityLabel={selectedTab === 'day' ? 'Vorheriger Tag' : selectedTab === 'week' ? 'Vorherige Woche' : 'Vorheriger Monat'}
+              accessibilityLabel={
+                selectedTab === "day"
+                  ? "Vorheriger Tag"
+                  : selectedTab === "week"
+                    ? "Vorherige Woche"
+                    : "Vorheriger Monat"
+              }
             >
-              <ThemedText style={styles.weekNavButtonText}>‹</ThemedText>
+              <ThemedText
+                style={[styles.weekNavButtonText, { color: textPrimary }]}
+              >
+                ‹
+              </ThemedText>
             </TouchableOpacity>
 
             <View style={styles.weekHeaderCenter}>
-              <ThemedText style={styles.weekHeaderTitle}>{navTitle}</ThemedText>
-              <ThemedText style={styles.weekHeaderSubtitle}>{headerTitle}</ThemedText>
+              <ThemedText
+                style={[styles.weekHeaderTitle, { color: textPrimary }]}
+              >
+                {navTitle}
+              </ThemedText>
+              <ThemedText
+                style={[styles.weekHeaderSubtitle, { color: textSecondary }]}
+              >
+                {headerTitle}
+              </ThemedText>
             </View>
 
             <TouchableOpacity
-              style={styles.weekNavButton}
+              style={[
+                styles.weekNavButton,
+                {
+                  borderColor: isDark
+                    ? "rgba(255,255,255,0.24)"
+                    : "rgba(255,255,255,0.35)",
+                  backgroundColor: isDark
+                    ? "rgba(255,255,255,0.06)"
+                    : "rgba(255,255,255,0.12)",
+                },
+              ]}
               onPress={() => shiftDateByTab(1)}
               accessibilityRole="button"
-              accessibilityLabel={selectedTab === 'day' ? 'Nächster Tag' : selectedTab === 'week' ? 'Nächste Woche' : 'Nächster Monat'}
+              accessibilityLabel={
+                selectedTab === "day"
+                  ? "Nächster Tag"
+                  : selectedTab === "week"
+                    ? "Nächste Woche"
+                    : "Nächster Monat"
+              }
             >
-              <ThemedText style={styles.weekNavButtonText}>›</ThemedText>
+              <ThemedText
+                style={[styles.weekNavButtonText, { color: textPrimary }]}
+              >
+                ›
+              </ThemedText>
             </TouchableOpacity>
           </View>
         </View>
 
-        <ScrollView contentContainerStyle={{ paddingHorizontal: 0, paddingTop: contentTopPadding, paddingBottom: SECTION_GAP_BOTTOM + 54 }} showsVerticalScrollIndicator={false}>
-          {selectedTab === 'day' ? (
+        <ScrollView
+          contentContainerStyle={{
+            paddingHorizontal: 0,
+            paddingTop: contentTopPadding,
+            paddingBottom: SECTION_GAP_BOTTOM + 54,
+          }}
+          showsVerticalScrollIndicator={false}
+        >
+          {selectedTab === "day" ? (
             <>
               <View style={{ paddingHorizontal: LAYOUT_PAD }}>
                 <View style={{ marginHorizontal: -LAYOUT_PAD }}>
-                  <GreetingCard title={greeting.title} subline={greeting.subline} avatarUrl={profileAvatarUrl} />
+                  <GreetingCard
+                    title={greeting.title}
+                    subline={greeting.subline}
+                    avatarUrl={profileAvatarUrl}
+                  />
                 </View>
                 <View style={{ height: 2 }} />
                 <TodayOverviewCard summary={summary} />
                 <View style={{ height: 2 }} />
-                <ThemedText style={[styles.sectionTitle, { paddingHorizontal: 4 }]}>Heute</ThemedText>
+                <ThemedText
+                  style={[
+                    styles.sectionTitle,
+                    { paddingHorizontal: 4, color: textSecondary },
+                  ]}
+                >
+                  Heute
+                </ThemedText>
               </View>
 
               <StructuredTimeline
@@ -699,102 +950,232 @@ export default function PlannerScreen() {
               />
 
               <View style={{ paddingHorizontal: LAYOUT_PAD, marginTop: 10 }}>
-                <LiquidGlassCard style={styles.floatingCard} intensity={20} overlayColor="rgba(255,255,255,0.12)">
+                <LiquidGlassCard
+                  style={styles.floatingCard}
+                  intensity={20}
+                  overlayColor={glassOverlay}
+                  borderColor={glassBorder}
+                >
                   <View style={styles.timelineHeaderRow}>
-                    <ThemedText style={[styles.sectionTitle, styles.timelineTitleLabel]}>Aufgaben</ThemedText>
-                    <View style={styles.timelineBadge}>
-                      <Text style={styles.timelineBadgeText}>{floatingTodos.length} offen</Text>
+                    <ThemedText
+                      style={[
+                        styles.sectionTitle,
+                        styles.timelineTitleLabel,
+                        { color: textSecondary },
+                      ]}
+                    >
+                      Aufgaben
+                    </ThemedText>
+                    <View
+                      style={[
+                        styles.timelineBadge,
+                        {
+                          backgroundColor: isDark
+                            ? "rgba(255,255,255,0.08)"
+                            : "rgba(255,255,255,0.28)",
+                          borderColor: isDark
+                            ? "rgba(255,255,255,0.18)"
+                            : "rgba(255,255,255,0.5)",
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.timelineBadgeText,
+                          { color: textPrimary },
+                        ]}
+                      >
+                        {floatingTodos.length} offen
+                      </Text>
                     </View>
-	                  </View>
-	                  <View style={styles.floatingList}>
+                  </View>
+                  <View style={styles.floatingList}>
                     {floatingTodos.map((todo, idx) => {
-                      const displayLabel = getDisplayAssigneeLabel(todo.assignee, todo.babyId, todo.userId);
-                      const subtitle = displayLabel ? `Flexibel · ${displayLabel}` : 'Flexibel';
+                      const displayLabel = getDisplayAssigneeLabel(
+                        todo.assignee,
+                        todo.babyId,
+                        todo.userId,
+                      );
+                      const subtitle = displayLabel
+                        ? `Flexibel · ${displayLabel}`
+                        : "Flexibel";
 
                       return (
                         <View key={todo.id}>
-	                          <SwipeableListItem
-	                            id={todo.id}
-	                            title={todo.title}
-	                            type="todo"
-	                            completed={todo.completed}
-	                            onComplete={() => {
-	                              setShowCompletedFloatingTodos(true);
-	                              toggleTodo(todo.id);
-	                            }}
-	                            onMoveTomorrow={() => moveToTomorrow(todo.id)}
-	                            onDelete={handleDeleteItem}
-	                            onPress={() => handleEditTodo(todo.id)}
-	                            showLeadingCheckbox={false}
-	                            trailingCheckbox
-	                            style={styles.floatingItem}
+                          <SwipeableListItem
+                            id={todo.id}
+                            title={todo.title}
+                            type="todo"
+                            completed={todo.completed}
+                            onComplete={() => {
+                              setShowCompletedFloatingTodos(true);
+                              toggleTodo(todo.id);
+                            }}
+                            onMoveTomorrow={() => moveToTomorrow(todo.id)}
+                            onDelete={handleDeleteItem}
+                            onPress={() => handleEditTodo(todo.id)}
+                            showLeadingCheckbox={false}
+                            trailingCheckbox
+                            style={styles.floatingItem}
                             subtitle={subtitle}
                           />
-                          {idx < floatingTodos.length - 1 && <View style={styles.floatingDivider} />}
+                          {idx < floatingTodos.length - 1 && (
+                            <View
+                              style={[
+                                styles.floatingDivider,
+                                {
+                                  backgroundColor: isDark
+                                    ? "rgba(255,255,255,0.14)"
+                                    : "rgba(255,255,255,0.5)",
+                                },
+                              ]}
+                            />
+                          )}
                         </View>
                       );
                     })}
-	                    {floatingTodos.length === 0 && (
-	                      <View style={styles.emptyFloating}>
-	                        <Text style={styles.emptyFloatingText}>Keine offenen Aufgaben ohne Datum</Text>
-	                      </View>
-	                    )}
-	                  </View>
-	                  {completedFloatingTodos.length > 0 && (
-	                    <>
-	                      <View style={styles.sectionDivider} />
-	                      <TouchableOpacity
-	                        style={styles.completedToggleRow}
-	                        activeOpacity={0.85}
-	                        onPress={() => setShowCompletedFloatingTodos((prev) => !prev)}
-	                        accessibilityRole="button"
-	                        accessibilityLabel={showCompletedFloatingTodos ? 'Erledigte Aufgaben ausblenden' : 'Erledigte Aufgaben anzeigen'}
-	                      >
-	                        <ThemedText style={styles.completedToggleLabel}>Erledigt</ThemedText>
-	                        <View style={styles.completedToggleRight}>
-	                          <View style={styles.timelineBadge}>
-	                            <Text style={styles.timelineBadgeText}>{completedFloatingTodos.length}</Text>
-	                          </View>
-	                          <Text style={styles.completedChevron}>{showCompletedFloatingTodos ? '˄' : '˅'}</Text>
-	                        </View>
-	                      </TouchableOpacity>
-	                      {showCompletedFloatingTodos && (
-	                        <View style={styles.completedList}>
+                    {floatingTodos.length === 0 && (
+                      <View style={styles.emptyFloating}>
+                        <Text
+                          style={[
+                            styles.emptyFloatingText,
+                            { color: textMuted },
+                          ]}
+                        >
+                          Keine offenen Aufgaben ohne Datum
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                  {completedFloatingTodos.length > 0 && (
+                    <>
+                      <View
+                        style={[
+                          styles.sectionDivider,
+                          {
+                            backgroundColor: isDark
+                              ? "rgba(255,255,255,0.14)"
+                              : "rgba(255,255,255,0.5)",
+                          },
+                        ]}
+                      />
+                      <TouchableOpacity
+                        style={styles.completedToggleRow}
+                        activeOpacity={0.85}
+                        onPress={() =>
+                          setShowCompletedFloatingTodos((prev) => !prev)
+                        }
+                        accessibilityRole="button"
+                        accessibilityLabel={
+                          showCompletedFloatingTodos
+                            ? "Erledigte Aufgaben ausblenden"
+                            : "Erledigte Aufgaben anzeigen"
+                        }
+                      >
+                        <ThemedText
+                          style={[
+                            styles.completedToggleLabel,
+                            { color: textPrimary },
+                          ]}
+                        >
+                          Erledigt
+                        </ThemedText>
+                        <View style={styles.completedToggleRight}>
+                          <View
+                            style={[
+                              styles.timelineBadge,
+                              {
+                                backgroundColor: isDark
+                                  ? "rgba(255,255,255,0.08)"
+                                  : "rgba(255,255,255,0.28)",
+                                borderColor: isDark
+                                  ? "rgba(255,255,255,0.18)"
+                                  : "rgba(255,255,255,0.5)",
+                              },
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.timelineBadgeText,
+                                { color: textPrimary },
+                              ]}
+                            >
+                              {completedFloatingTodos.length}
+                            </Text>
+                          </View>
+                          <Text
+                            style={[
+                              styles.completedChevron,
+                              { color: textSecondary },
+                            ]}
+                          >
+                            {showCompletedFloatingTodos ? "˄" : "˅"}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                      {showCompletedFloatingTodos && (
+                        <View style={styles.completedList}>
                           {completedFloatingTodos.map((todo, idx) => {
-                            const displayLabel = getDisplayAssigneeLabel(todo.assignee, todo.babyId, todo.userId);
-                            const subtitle = displayLabel ? `Flexibel · ${displayLabel}` : 'Flexibel';
+                            const displayLabel = getDisplayAssigneeLabel(
+                              todo.assignee,
+                              todo.babyId,
+                              todo.userId,
+                            );
+                            const subtitle = displayLabel
+                              ? `Flexibel · ${displayLabel}`
+                              : "Flexibel";
 
-	                            return (
-	                              <View key={todo.id}>
-	                                <SwipeableListItem
-	                                  id={todo.id}
-	                                  title={todo.title}
-	                                  type="todo"
-	                                  completed={todo.completed}
-	                                  onComplete={() => toggleTodo(todo.id)}
-	                                  onMoveTomorrow={() => moveToTomorrow(todo.id)}
-	                                  onDelete={handleDeleteItem}
-	                                  onPress={() => handleEditTodo(todo.id)}
-	                                  showLeadingCheckbox={false}
-	                                  trailingCheckbox
-	                                  style={styles.floatingItem}
-	                                  subtitle={subtitle}
-	                                />
-	                                {idx < completedFloatingTodos.length - 1 && <View style={styles.floatingDivider} />}
-	                              </View>
-	                            );
-	                          })}
-	                        </View>
-	                      )}
-	                    </>
-	                  )}
-	                </LiquidGlassCard>
-	              </View>
-	            </>
-	          ) : selectedTab === 'week' ? (
+                            return (
+                              <View key={todo.id}>
+                                <SwipeableListItem
+                                  id={todo.id}
+                                  title={todo.title}
+                                  type="todo"
+                                  completed={todo.completed}
+                                  onComplete={() => toggleTodo(todo.id)}
+                                  onMoveTomorrow={() => moveToTomorrow(todo.id)}
+                                  onDelete={handleDeleteItem}
+                                  onPress={() => handleEditTodo(todo.id)}
+                                  showLeadingCheckbox={false}
+                                  trailingCheckbox
+                                  style={styles.floatingItem}
+                                  subtitle={subtitle}
+                                />
+                                {idx < completedFloatingTodos.length - 1 && (
+                                  <View
+                                    style={[
+                                      styles.floatingDivider,
+                                      {
+                                        backgroundColor: isDark
+                                          ? "rgba(255,255,255,0.14)"
+                                          : "rgba(255,255,255,0.5)",
+                                      },
+                                    ]}
+                                  />
+                                )}
+                              </View>
+                            );
+                          })}
+                        </View>
+                      )}
+                    </>
+                  )}
+                </LiquidGlassCard>
+              </View>
+            </>
+          ) : selectedTab === "week" ? (
             <View style={{ paddingHorizontal: LAYOUT_PAD }}>
-              <LiquidGlassCard style={styles.calendarCard} intensity={24}>
-                <ThemedText style={styles.calendarTitle}>Wochenplan</ThemedText>
+              <LiquidGlassCard
+                style={styles.calendarCard}
+                intensity={24}
+                overlayColor={glassOverlay}
+                borderColor={glassBorder}
+              >
+                <ThemedText
+                  style={[styles.calendarTitle, { color: textSecondary }]}
+                >
+                  Wochenplan
+                </ThemedText>
 
                 <ScrollView
                   ref={weekScrollRef}
@@ -808,8 +1189,12 @@ export default function PlannerScreen() {
                     const iso = toDateKey(date);
                     const dayAgenda = weekAgenda[iso];
                     const blocks = dayAgenda?.blocks ?? {};
-                    const events = Object.values(blocks).flatMap((b: any) => b?.events ?? []);
-                    const todos = Object.values(blocks).flatMap((b: any) => b?.todos ?? []);
+                    const events = Object.values(blocks).flatMap(
+                      (b: any) => b?.events ?? [],
+                    );
+                    const todos = Object.values(blocks).flatMap(
+                      (b: any) => b?.todos ?? [],
+                    );
                     const hasItems = events.length + todos.length > 0;
                     const isToday = iso === toDateKey(new Date());
                     const combined = [
@@ -821,7 +1206,7 @@ export default function PlannerScreen() {
                         assignee: ev.assignee,
                         babyId: ev.baby_id,
                         isAllDay: !!ev.is_all_day,
-                        type: 'event' as const,
+                        type: "event" as const,
                       })),
                       ...todos.map((todo: any) => ({
                         id: todo.id,
@@ -830,11 +1215,17 @@ export default function PlannerScreen() {
                         ownerId: todo.user_id,
                         assignee: todo.assignee,
                         babyId: todo.baby_id,
-                        type: 'todo' as const,
+                        type: "todo" as const,
                       })),
                     ].sort((a, b) => {
-                      const timeA = a.time ? new Date(a.time).getHours() * 60 + new Date(a.time).getMinutes() : 12 * 60;
-                      const timeB = b.time ? new Date(b.time).getHours() * 60 + new Date(b.time).getMinutes() : 12 * 60;
+                      const timeA = a.time
+                        ? new Date(a.time).getHours() * 60 +
+                          new Date(a.time).getMinutes()
+                        : 12 * 60;
+                      const timeB = b.time
+                        ? new Date(b.time).getHours() * 60 +
+                          new Date(b.time).getMinutes()
+                        : 12 * 60;
                       return timeA - timeB;
                     });
 
@@ -843,33 +1234,64 @@ export default function PlannerScreen() {
                         key={iso}
                         style={[
                           styles.weekDayCard,
+                          {
+                            backgroundColor: isDark
+                              ? "rgba(255,255,255,0.06)"
+                              : "rgba(255,255,255,0.3)",
+                            borderColor: isDark
+                              ? "rgba(255,255,255,0.2)"
+                              : "rgba(255,255,255,0.5)",
+                          },
                           isToday && styles.weekDayCardToday,
+                          isToday && {
+                            borderColor: accentColor,
+                            backgroundColor: isDark
+                              ? toRgba(accentColor, 0.18)
+                              : "rgba(94,61,179,0.12)",
+                          },
                           { width: weekDayWidth },
                         ]}
                         activeOpacity={0.9}
                         onPress={() => {
                           handleSelectDate(date);
-                          setSelectedTab('day');
+                          setSelectedTab("day");
                         }}
                       >
                         <View style={styles.weekDayHeader}>
                           <ThemedText
                             style={[
                               styles.weekCellWeekday,
+                              { color: textSecondary },
                               isToday && styles.weekCellWeekdayActive,
+                              isToday && { color: accentColor },
                             ]}
                           >
-                            {new Intl.DateTimeFormat('de-DE', { weekday: 'short' }).format(date)}
+                            {new Intl.DateTimeFormat("de-DE", {
+                              weekday: "short",
+                            }).format(date)}
                           </ThemedText>
                           <View
                             style={[
                               styles.weekHeaderBadgeSmall,
+                              {
+                                backgroundColor: isDark
+                                  ? "rgba(255,255,255,0.1)"
+                                  : "rgba(255,255,255,0.24)",
+                                borderColor: isDark
+                                  ? "rgba(255,255,255,0.2)"
+                                  : "rgba(255,255,255,0.5)",
+                              },
                               isToday && styles.weekHeaderBadgeToday,
+                              isToday && {
+                                backgroundColor: accentColor,
+                                borderColor: accentColor,
+                              },
                             ]}
                           >
                             <ThemedText
                               style={[
                                 styles.weekHeaderBadgeText,
+                                { color: textPrimary },
                                 isToday && styles.weekHeaderBadgeTextToday,
                               ]}
                             >
@@ -877,57 +1299,150 @@ export default function PlannerScreen() {
                             </ThemedText>
                           </View>
                         </View>
-                        <ThemedText style={styles.weekDateLabel}>
-                          {new Intl.DateTimeFormat('de-DE', { month: 'short', day: '2-digit' }).format(date)}
+                        <ThemedText
+                          style={[styles.weekDateLabel, { color: textMuted }]}
+                        >
+                          {new Intl.DateTimeFormat("de-DE", {
+                            month: "short",
+                            day: "2-digit",
+                          }).format(date)}
                         </ThemedText>
 
                         <View style={styles.weekItems}>
-                          <View style={styles.weekTimelineLine} />
+                          <View
+                            style={[
+                              styles.weekTimelineLine,
+                              {
+                                backgroundColor: isDark
+                                  ? "rgba(255,255,255,0.2)"
+                                  : "rgba(125,90,80,0.25)",
+                              },
+                            ]}
+                          />
                           {combined.map((item) => {
-                            const isAllDayEvent = item.type === 'event' && item.isAllDay;
+                            const isAllDayEvent =
+                              item.type === "event" && item.isAllDay;
                             const timeLabel = item.time
-                              ? new Intl.DateTimeFormat('de-DE', {
-                                  hour: '2-digit',
-                                  minute: '2-digit',
+                              ? new Intl.DateTimeFormat("de-DE", {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
                                 }).format(new Date(item.time))
-                              : '—';
-                            const displayLabel = getDisplayAssigneeLabel(item.assignee, item.babyId, item.ownerId);
+                              : "—";
+                            const displayLabel = getDisplayAssigneeLabel(
+                              item.assignee,
+                              item.babyId,
+                              item.ownerId,
+                            );
                             const showDisplayLabel = !!displayLabel;
                             return (
                               <View key={item.id} style={styles.timelineRow}>
                                 <View
                                   style={[
                                     styles.timelineDot,
-                                    item.type === 'event' && styles.timelineDotEvent,
+                                    {
+                                      backgroundColor:
+                                        item.type === "event"
+                                          ? accentEventColor
+                                          : accentColor,
+                                    },
                                   ]}
                                 />
                                 <View style={styles.timelineContent}>
                                   {isAllDayEvent ? (
                                     <>
                                       <View style={styles.timelineTitleRow}>
-                                        <IconSymbol name="calendar" size={12} color={PRIMARY as any} />
-                                        <Text numberOfLines={2} style={[styles.timelineTitle, styles.timelineTitleRowText]}>
+                                        <IconSymbol
+                                          name="calendar"
+                                          size={12}
+                                          color={accentColor as any}
+                                        />
+                                        <Text
+                                          numberOfLines={2}
+                                          style={[
+                                            styles.timelineTitle,
+                                            styles.timelineTitleRowText,
+                                            { color: textPrimary },
+                                          ]}
+                                        >
                                           {item.title}
                                         </Text>
                                         {showDisplayLabel && (
-                                          <View style={styles.ownerPill}>
-                                            <Text style={styles.ownerPillText}>{displayLabel}</Text>
+                                          <View
+                                            style={[
+                                              styles.ownerPill,
+                                              {
+                                                backgroundColor: isDark
+                                                  ? "rgba(255,255,255,0.08)"
+                                                  : "rgba(255,255,255,0.24)",
+                                                borderColor: isDark
+                                                  ? "rgba(255,255,255,0.18)"
+                                                  : "rgba(255,255,255,0.5)",
+                                              },
+                                            ]}
+                                          >
+                                            <Text
+                                              style={[
+                                                styles.ownerPillText,
+                                                { color: textSecondary },
+                                              ]}
+                                            >
+                                              {displayLabel}
+                                            </Text>
                                           </View>
                                         )}
                                       </View>
-                                      <Text style={styles.timelineAllDayLabel}>Ganztägig</Text>
+                                      <Text
+                                        style={[
+                                          styles.timelineAllDayLabel,
+                                          { color: textMuted },
+                                        ]}
+                                      >
+                                        Ganztägig
+                                      </Text>
                                     </>
                                   ) : (
                                     <>
                                       <View style={styles.timelineMetaRow}>
-                                        <Text style={styles.timelineTime}>{timeLabel}</Text>
+                                        <Text
+                                          style={[
+                                            styles.timelineTime,
+                                            { color: textMuted },
+                                          ]}
+                                        >
+                                          {timeLabel}
+                                        </Text>
                                         {showDisplayLabel && (
-                                          <View style={styles.ownerPill}>
-                                            <Text style={styles.ownerPillText}>{displayLabel}</Text>
+                                          <View
+                                            style={[
+                                              styles.ownerPill,
+                                              {
+                                                backgroundColor: isDark
+                                                  ? "rgba(255,255,255,0.08)"
+                                                  : "rgba(255,255,255,0.24)",
+                                                borderColor: isDark
+                                                  ? "rgba(255,255,255,0.18)"
+                                                  : "rgba(255,255,255,0.5)",
+                                              },
+                                            ]}
+                                          >
+                                            <Text
+                                              style={[
+                                                styles.ownerPillText,
+                                                { color: textSecondary },
+                                              ]}
+                                            >
+                                              {displayLabel}
+                                            </Text>
                                           </View>
                                         )}
                                       </View>
-                                      <Text numberOfLines={2} style={styles.timelineTitle}>
+                                      <Text
+                                        numberOfLines={2}
+                                        style={[
+                                          styles.timelineTitle,
+                                          { color: textPrimary },
+                                        ]}
+                                      >
                                         {item.title}
                                       </Text>
                                     </>
@@ -936,7 +1451,16 @@ export default function PlannerScreen() {
                               </View>
                             );
                           })}
-                          {!hasItems && <Text style={styles.emptyTextSmall}>–</Text>}
+                          {!hasItems && (
+                            <Text
+                              style={[
+                                styles.emptyTextSmall,
+                                { color: textMuted },
+                              ]}
+                            >
+                              –
+                            </Text>
+                          )}
                         </View>
                       </TouchableOpacity>
                     );
@@ -947,36 +1471,75 @@ export default function PlannerScreen() {
           ) : (
             <>
               <View style={{ paddingHorizontal: LAYOUT_PAD }}>
-                <LiquidGlassCard style={styles.calendarCard} intensity={24}>
-                  <ThemedText style={styles.calendarTitle}>Monatskalender</ThemedText>
+                <LiquidGlassCard
+                  style={styles.calendarCard}
+                  intensity={24}
+                  overlayColor={glassOverlay}
+                  borderColor={glassBorder}
+                >
+                  <ThemedText
+                    style={[styles.calendarTitle, { color: textSecondary }]}
+                  >
+                    Monatskalender
+                  </ThemedText>
                   <View style={styles.monthHeaderRow}>
-                    {['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map((d) => (
-                      <ThemedText key={d} style={styles.monthHeaderLabel}>
+                    {["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"].map((d) => (
+                      <ThemedText
+                        key={d}
+                        style={[styles.monthHeaderLabel, { color: textMuted }]}
+                      >
                         {d}
                       </ThemedText>
                     ))}
                   </View>
                   <View style={styles.monthGrid}>
                     {monthDays.map((date) => {
-                      const isSelected = toDateKey(date) === toDateKey(selectedDate);
-                      const isCurrentMonth = date.getMonth() === selectedDate.getMonth();
+                      const isSelected =
+                        toDateKey(date) === toDateKey(selectedDate);
+                      const isCurrentMonth =
+                        date.getMonth() === selectedDate.getMonth();
                       const isToday = toDateKey(date) === toDateKey(new Date());
-                      const stats = monthSummary[toDateKey(date)] ?? { tasks: 0, events: 0 };
+                      const stats = monthSummary[toDateKey(date)] ?? {
+                        tasks: 0,
+                        events: 0,
+                      };
                       const hasData = stats.tasks > 0 || stats.events > 0;
                       return (
                         <TouchableOpacity
                           key={date.toISOString()}
-                          style={[styles.monthCell, isSelected && styles.monthCellActive]}
+                          style={[
+                            styles.monthCell,
+                            isSelected && styles.monthCellActive,
+                          ]}
                           onPress={() => {
                             handleSelectDate(date);
                           }}
                           accessibilityRole="button"
                           accessibilityState={{ selected: isSelected }}
                         >
-                          <View style={[styles.monthCircle, isSelected && styles.monthCircleActive, !isCurrentMonth && styles.monthCircleFaded]}>
+                          <View
+                            style={[
+                              styles.monthCircle,
+                              {
+                                backgroundColor: isDark
+                                  ? "rgba(255,255,255,0.08)"
+                                  : "rgba(255,255,255,0.38)",
+                                borderColor: isDark
+                                  ? "rgba(255,255,255,0.2)"
+                                  : "rgba(255,255,255,0.55)",
+                              },
+                              isSelected && styles.monthCircleActive,
+                              isSelected && {
+                                backgroundColor: accentColor,
+                                borderColor: accentColor,
+                              },
+                              !isCurrentMonth && styles.monthCircleFaded,
+                            ]}
+                          >
                             <ThemedText
                               style={[
                                 styles.monthNumber,
+                                { color: textPrimary },
                                 !isCurrentMonth && styles.monthNumberFaded,
                                 isSelected && styles.monthNumberActive,
                               ]}
@@ -985,12 +1548,28 @@ export default function PlannerScreen() {
                             </ThemedText>
                           </View>
                           <View style={styles.monthDotRow}>
-                            {isToday && <View style={[styles.todayDotSmall, { marginRight: 3 }]} />}
+                            {isToday && (
+                              <View
+                                style={[
+                                  styles.todayDotSmall,
+                                  {
+                                    marginRight: 3,
+                                    backgroundColor: accentColor,
+                                  },
+                                ]}
+                              />
+                            )}
                             {isCurrentMonth && (
                               <View
                                 style={[
                                   styles.dataDot,
+                                  {
+                                    backgroundColor: isDark
+                                      ? "rgba(255,255,255,0.28)"
+                                      : "rgba(125,90,80,0.35)",
+                                  },
                                   hasData && styles.dataDotActive,
+                                  hasData && { backgroundColor: accentColor },
                                 ]}
                               />
                             )}
@@ -1003,7 +1582,12 @@ export default function PlannerScreen() {
               </View>
 
               <View style={{ paddingHorizontal: LAYOUT_PAD, marginTop: 12 }}>
-                <ThemedText style={[styles.sectionTitle, { paddingHorizontal: 4 }]}>
+                <ThemedText
+                  style={[
+                    styles.sectionTitle,
+                    { paddingHorizontal: 4, color: textSecondary },
+                  ]}
+                >
                   {formatDateHeader(selectedDate)}
                 </ThemedText>
               </View>
@@ -1025,7 +1609,11 @@ export default function PlannerScreen() {
         </ScrollView>
 
         {user?.id && (
-          <FloatingAddButton onPress={() => openCapture('todo')} bottomInset={insets.bottom + 16} rightInset={16} />
+          <FloatingAddButton
+            onPress={() => openCapture("todo")}
+            bottomInset={insets.bottom + 16}
+            rightInset={16}
+          />
         )}
       </SafeAreaView>
 
@@ -1048,14 +1636,14 @@ export default function PlannerScreen() {
 const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: "700",
     color: TEXT_PRIMARY,
     opacity: 0.9,
   },
   timelineHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: LAYOUT_PAD,
     paddingTop: 6,
   },
@@ -1066,13 +1654,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.28)',
+    backgroundColor: "rgba(255,255,255,0.28)",
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.5)',
+    borderColor: "rgba(255,255,255,0.5)",
   },
   timelineBadgeText: {
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: "700",
     color: TEXT_PRIMARY,
   },
   floatingCard: {
@@ -1089,7 +1677,7 @@ const styles = StyleSheet.create({
   },
   floatingDivider: {
     height: 1,
-    backgroundColor: 'rgba(255,255,255,0.5)',
+    backgroundColor: "rgba(255,255,255,0.5)",
     marginVertical: 6,
   },
   emptyFloating: {
@@ -1102,32 +1690,32 @@ const styles = StyleSheet.create({
   },
   sectionDivider: {
     height: 1,
-    backgroundColor: 'rgba(255,255,255,0.5)',
+    backgroundColor: "rgba(255,255,255,0.5)",
     marginTop: 10,
     marginBottom: 6,
     marginHorizontal: LAYOUT_PAD,
   },
   completedToggleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: LAYOUT_PAD,
     paddingVertical: 8,
   },
   completedToggleLabel: {
     fontSize: 13,
-    fontWeight: '800',
+    fontWeight: "800",
     color: TEXT_PRIMARY,
     opacity: 0.85,
   },
   completedToggleRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
   },
   completedChevron: {
     fontSize: 16,
-    fontWeight: '900',
+    fontWeight: "900",
     color: TEXT_PRIMARY,
     opacity: 0.75,
     paddingHorizontal: 4,
@@ -1137,25 +1725,25 @@ const styles = StyleSheet.create({
     paddingBottom: 6,
   },
   topTabsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
+    flexDirection: "row",
+    justifyContent: "center",
     gap: 10,
     marginTop: 0,
     marginBottom: 6,
   },
   topTab: {
     borderRadius: 20,
-    overflow: 'hidden',
+    overflow: "hidden",
     borderWidth: 1,
   },
   topTabInner: { paddingHorizontal: 18, paddingVertical: 6 },
-  activeTopTab: { borderColor: 'rgba(94,61,179,0.65)' },
-  topTabText: { fontSize: 13, fontWeight: '700', color: TEXT_PRIMARY },
+  activeTopTab: { borderColor: "rgba(94,61,179,0.65)" },
+  topTabText: { fontSize: 13, fontWeight: "700", color: TEXT_PRIMARY },
   activeTopTabText: { color: PRIMARY },
   dayNavigationContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     marginBottom: 6,
     marginTop: 0,
   },
@@ -1163,24 +1751,24 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     borderWidth: 1.3,
-    borderColor: 'rgba(255,255,255,0.35)',
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderColor: "rgba(255,255,255,0.35)",
+    backgroundColor: "rgba(255,255,255,0.12)",
   },
   weekNavButtonText: {
     fontSize: 22,
     color: TEXT_PRIMARY,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   weekHeaderCenter: {
-    alignItems: 'center',
+    alignItems: "center",
     flex: 1,
   },
   weekHeaderTitle: {
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: "700",
     color: TEXT_PRIMARY,
   },
   weekHeaderSubtitle: {
@@ -1194,66 +1782,66 @@ const styles = StyleSheet.create({
   },
   calendarTitle: {
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: "700",
     color: TEXT_PRIMARY,
     marginBottom: 10,
-    textAlign: 'center',
+    textAlign: "center",
   },
   weekDaysScroll: { paddingRight: 16, gap: 8 },
   weekDayCard: {
     padding: 14,
     borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.3)',
+    backgroundColor: "rgba(255,255,255,0.3)",
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.5)',
+    borderColor: "rgba(255,255,255,0.5)",
     marginRight: 8,
     gap: 8,
     minHeight: 420,
   },
   weekDayCardToday: {
     borderColor: PRIMARY,
-    backgroundColor: 'rgba(94,61,179,0.12)',
+    backgroundColor: "rgba(94,61,179,0.12)",
   },
   weekDayHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
   },
   weekHeaderBadgeSmall: {
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.24)',
+    backgroundColor: "rgba(255,255,255,0.24)",
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.5)',
+    borderColor: "rgba(255,255,255,0.5)",
   },
   weekHeaderBadgeToday: {
     backgroundColor: PRIMARY,
     borderColor: PRIMARY,
   },
-  weekHeaderBadgeText: { color: TEXT_PRIMARY, fontWeight: '700' },
-  weekHeaderBadgeTextToday: { color: '#fff' },
+  weekHeaderBadgeText: { color: TEXT_PRIMARY, fontWeight: "700" },
+  weekHeaderBadgeTextToday: { color: "#fff" },
   weekDateLabel: { fontSize: 12, color: TEXT_PRIMARY, opacity: 0.75 },
   weekItems: {
     gap: 8,
     marginTop: 6,
-    position: 'relative',
+    position: "relative",
     paddingLeft: 12,
     paddingBottom: 16,
     minHeight: 320,
-    justifyContent: 'flex-start',
+    justifyContent: "flex-start",
   },
   weekTimelineLine: {
-    position: 'absolute',
+    position: "absolute",
     left: 5,
     top: 0,
     bottom: 0,
     width: 2,
-    backgroundColor: 'rgba(125,90,80,0.25)',
+    backgroundColor: "rgba(125,90,80,0.25)",
   },
   timelineRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+    flexDirection: "row",
+    alignItems: "flex-start",
     gap: 10,
   },
   timelineDot: {
@@ -1264,21 +1852,21 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
   timelineDotEvent: {
-    backgroundColor: '#6e4dbd',
+    backgroundColor: "#6e4dbd",
   },
   timelineContent: {
     flex: 1,
     gap: 2,
   },
   timelineMetaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     gap: 8,
   },
   timelineTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
   },
   timelineTime: {
@@ -1295,50 +1883,50 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.24)',
+    backgroundColor: "rgba(255,255,255,0.24)",
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.5)',
+    borderColor: "rgba(255,255,255,0.5)",
   },
   ownerPillText: {
     fontSize: 10,
-    fontWeight: '800',
+    fontWeight: "800",
     color: TEXT_PRIMARY,
     opacity: 0.85,
   },
   timelineTitle: {
     fontSize: 12,
     color: TEXT_PRIMARY,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   timelineTitleRowText: {
     flex: 1,
   },
   weekCellWeekday: { fontSize: 12, color: TEXT_PRIMARY, opacity: 0.8 },
-  weekCellWeekdayActive: { color: PRIMARY, fontWeight: '700', opacity: 1 },
+  weekCellWeekdayActive: { color: PRIMARY, fontWeight: "700", opacity: 1 },
   eventIcon: { fontSize: 14 },
-  eventText: { color: TEXT_PRIMARY, fontSize: 13, fontWeight: '600', flex: 1 },
+  eventText: { color: TEXT_PRIMARY, fontSize: 13, fontWeight: "600", flex: 1 },
   emptyText: { fontSize: 12, color: TEXT_PRIMARY, opacity: 0.65 },
   monthHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
     marginBottom: 8,
   },
   monthHeaderLabel: {
     flex: 1,
-    textAlign: 'center',
+    textAlign: "center",
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: "700",
     color: TEXT_PRIMARY,
     opacity: 0.7,
   },
   monthGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     rowGap: 10,
   },
   monthCell: {
     width: `${100 / 7}%`,
-    alignItems: 'center',
+    alignItems: "center",
     paddingVertical: 4,
   },
   monthCellActive: {},
@@ -1346,11 +1934,11 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.38)',
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.38)",
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.55)',
+    borderColor: "rgba(255,255,255,0.55)",
   },
   monthCircleActive: {
     backgroundColor: PRIMARY,
@@ -1361,11 +1949,11 @@ const styles = StyleSheet.create({
   },
   monthNumber: {
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: "700",
     color: TEXT_PRIMARY,
   },
   monthNumberFaded: { opacity: 0.6 },
-  monthNumberActive: { color: '#fff' },
+  monthNumberActive: { color: "#fff" },
   todayDotSmall: {
     marginTop: 2,
     width: 5,
@@ -1374,9 +1962,9 @@ const styles = StyleSheet.create({
     backgroundColor: PRIMARY,
   },
   monthDotRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     marginTop: 4,
     gap: 2,
   },
@@ -1384,19 +1972,19 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: 'rgba(125,90,80,0.35)',
+    backgroundColor: "rgba(125,90,80,0.35)",
   },
   dataDotActive: {
     backgroundColor: PRIMARY,
   },
   eventPillSmall: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     borderRadius: 10,
     paddingHorizontal: 6,
     paddingVertical: 3,
     marginBottom: 3,
-    backgroundColor: 'rgba(94,61,179,0.1)',
+    backgroundColor: "rgba(94,61,179,0.1)",
   },
   eventTextSmall: {
     fontSize: 11,
@@ -1404,8 +1992,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   todoRowSmall: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: 2,
   },
   todoDotSmall: {
@@ -1424,7 +2012,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: TEXT_PRIMARY,
     opacity: 0.4,
-    textAlign: 'center',
+    textAlign: "center",
     marginTop: 8,
   },
 });
@@ -1432,5 +2020,5 @@ const styles = StyleSheet.create({
 function toDateKey(d: Date) {
   const copy = new Date(d);
   copy.setHours(0, 0, 0, 0);
-  return `${copy.getFullYear()}-${String(copy.getMonth() + 1).padStart(2, '0')}-${String(copy.getDate()).padStart(2, '0')}`;
+  return `${copy.getFullYear()}-${String(copy.getMonth() + 1).padStart(2, "0")}-${String(copy.getDate()).padStart(2, "0")}`;
 }

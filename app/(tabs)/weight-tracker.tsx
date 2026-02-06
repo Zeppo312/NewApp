@@ -26,6 +26,10 @@ const SUBJECT_COLORS: Record<WeightSubject, string> = {
   mom: '#5E3DB3',
   baby: '#2D9CDB',
 };
+const DARK_CHART_COLORS: Partial<Record<WeightSubject, string>> = {
+  // Kräftigeres Lila für bessere Sichtbarkeit der Gewichtskurve auf dunklem Hintergrund
+  mom: '#EE4BFF',
+};
 
 const SUBJECT_OPTIONS: WeightSubject[] = ['mom', 'baby'];
 const BABY_WEIGHT_FACTOR = 1000;
@@ -82,6 +86,11 @@ export default function WeightTrackerScreen() {
 
   const getSubjectColor = (subject: WeightSubject) =>
     isDark ? lightenHex(SUBJECT_COLORS[subject]) : SUBJECT_COLORS[subject];
+
+  const getChartColor = (subject: WeightSubject) => {
+    if (!isDark) return SUBJECT_COLORS[subject];
+    return DARK_CHART_COLORS[subject] ?? getSubjectColor(subject);
+  };
 
   // Dark Mode angepasste Farben (wie in sleep-tracker.tsx)
   const textPrimary = isDark ? Colors.dark.textPrimary : '#5C4033';
@@ -342,7 +351,8 @@ export default function WeightTrackerScreen() {
     entries: WeightEntry[],
     range: 'week' | 'month' | 'year' | 'all',
     legendLabel: string,
-    colorHex: string
+    colorHex: string,
+    lineStrokeWidth = 3
   ) => {
     const sortedEntries = [...entries].sort((a, b) =>
       new Date(a.date).getTime() - new Date(b.date).getTime()
@@ -353,7 +363,7 @@ export default function WeightTrackerScreen() {
       return {
         data: {
           labels: [],
-          datasets: [{ data: [] as number[], color: colorFn, strokeWidth: 3 }],
+          datasets: [{ data: [] as number[], color: colorFn, strokeWidth: lineStrokeWidth }],
           legend: [`Gewicht ${legendLabel}`],
         },
         meta: { segments: 5, decimalPlaces: 1 },
@@ -387,7 +397,7 @@ export default function WeightTrackerScreen() {
       return {
         data: {
           labels: [],
-          datasets: [{ data: [] as number[], color: colorFn, strokeWidth: 3 }],
+          datasets: [{ data: [] as number[], color: colorFn, strokeWidth: lineStrokeWidth }],
           legend: [`Gewicht ${legendLabel}`],
         },
         meta: { segments: 5, decimalPlaces: 1 },
@@ -424,7 +434,7 @@ export default function WeightTrackerScreen() {
     return {
       data: {
         labels,
-        datasets: [{ data: dataPoints, color: colorFn, strokeWidth: 3 }],
+        datasets: [{ data: dataPoints, color: colorFn, strokeWidth: lineStrokeWidth }],
         legend: [`Gewicht ${legendLabel}`],
       },
       meta: { segments, decimalPlaces },
@@ -446,16 +456,29 @@ export default function WeightTrackerScreen() {
   );
 
   const subjectColor = useMemo(() => getSubjectColor(selectedSubject), [selectedSubject, isDark]);
+  const chartColor = useMemo(() => getChartColor(selectedSubject), [selectedSubject, isDark]);
+  const chartLineStrokeWidth = isDark && selectedSubject === 'mom' ? 4 : 3;
 
   const { data: chartData, meta: chartMeta } = useMemo(
-    () => prepareChartData(chartEntries, selectedRange, subjectLabels[selectedSubject], subjectColor),
-    [chartEntries, selectedRange, selectedSubject, subjectColor, subjectLabels]
+    () =>
+      prepareChartData(
+        chartEntries,
+        selectedRange,
+        subjectLabels[selectedSubject],
+        chartColor,
+        chartLineStrokeWidth
+      ),
+    [chartEntries, selectedRange, selectedSubject, chartColor, chartLineStrokeWidth, subjectLabels]
   );
 
   // Rendere die Gewichtskurve
   const renderWeightChart = () => {
     const subjectCopyLabel = subjectCopyLabels[selectedSubject];
     const unitLabel = getWeightUnit(selectedSubject);
+    const isNeonMomChart = isDark && selectedSubject === 'mom';
+    const chartFillFromOpacity = isNeonMomChart ? 0.3 : 0.15;
+    const chartFillToOpacity = isNeonMomChart ? 0.08 : 0.02;
+    const chartDotStrokeWidth = isNeonMomChart ? '3' : '2';
     const hasSeries =
       !!chartData &&
       !!chartData.datasets &&
@@ -520,9 +543,9 @@ export default function WeightTrackerScreen() {
                   },
                   propsForDots: {
                     r: '5',
-                    strokeWidth: '2',
-                    stroke: subjectColor,
-                    fill: subjectColor,
+                    strokeWidth: chartDotStrokeWidth,
+                    stroke: chartColor,
+                    fill: chartColor,
                   },
                   // Formatierung der Y-Achsen-Labels (kg-Anzeige)
                   formatYLabel: (value) => `${value} ${unitLabel}`, // Einheit je nach Subjekt
@@ -548,10 +571,10 @@ export default function WeightTrackerScreen() {
                     dy: -2,
                     rotation: 0,
                   },
-                  fillShadowGradientFrom: subjectColor,
-                  fillShadowGradientFromOpacity: 0.15,
-                  fillShadowGradientTo: subjectColor,
-                  fillShadowGradientToOpacity: 0.02,
+                  fillShadowGradientFrom: chartColor,
+                  fillShadowGradientFromOpacity: chartFillFromOpacity,
+                  fillShadowGradientTo: chartColor,
+                  fillShadowGradientToOpacity: chartFillToOpacity,
                 }}
                 transparent
                 bezier
@@ -696,19 +719,31 @@ export default function WeightTrackerScreen() {
       animationType="slide"
       onRequestClose={closeWeightModal}
     >
-      <View style={styles.modalOverlay}>
+      <View style={[styles.modalOverlay, { backgroundColor: isDark ? 'rgba(0,0,0,0.58)' : 'rgba(0,0,0,0.35)' }]}>
         <TouchableWithoutFeedback onPress={closeWeightModal}>
           <View style={StyleSheet.absoluteFill} />
         </TouchableWithoutFeedback>
 
         <BlurView
           intensity={80}
-          tint="extraLight"
-          style={[styles.modalContent, { paddingBottom: Math.max(28, insets.bottom + 16) }]}
+          tint={isDark ? 'dark' : 'extraLight'}
+          style={[
+            styles.modalContent,
+            {
+              backgroundColor: isDark ? 'rgba(10,10,12,0.86)' : 'transparent',
+              borderTopWidth: isDark ? 1 : 0,
+              borderTopColor: isDark ? 'rgba(255,255,255,0.08)' : 'transparent',
+              paddingBottom: Math.max(28, insets.bottom + 16),
+            },
+          ]}
         >
           <View style={styles.header}>
             <TouchableOpacity
-              style={[styles.headerButton, styles.headerButtonGhost]}
+              style={[
+                styles.headerButton,
+                styles.headerButtonGhost,
+                { backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)' },
+              ]}
               onPress={closeWeightModal}
             >
               <Text style={[styles.closeHeaderButtonText, { color: headerTextColor }]}>✕</Text>
@@ -738,7 +773,14 @@ export default function WeightTrackerScreen() {
                   return (
                     <TouchableOpacity
                       key={subjectKey}
-                      style={[styles.typeSwitchButton, isActive && styles.typeSwitchButtonActive]}
+                      style={[
+                        styles.typeSwitchButton,
+                        {
+                          backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.6)',
+                          borderColor: isDark ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.05)',
+                        },
+                        isActive && styles.typeSwitchButtonActive,
+                      ]}
                       onPress={() => setWeightModalSubject(subjectKey)}
                       activeOpacity={0.88}
                     >
@@ -753,9 +795,23 @@ export default function WeightTrackerScreen() {
 
             <View style={styles.section}>
               <Text style={[styles.sectionLabel, { color: headerTextColor }]}>Gewicht ({getWeightUnit(weightModalSubject)})</Text>
-              <View style={styles.pickerBlock}>
+              <View
+                style={[
+                  styles.pickerBlock,
+                  {
+                    backgroundColor: isDark ? 'rgba(18,18,22,0.76)' : 'rgba(255,255,255,0.85)',
+                    borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.05)',
+                  },
+                ]}
+              >
                 <TouchableOpacity
-                  style={styles.inlineField}
+                  style={[
+                    styles.inlineField,
+                    {
+                      backgroundColor: isDark ? 'rgba(24,24,28,0.92)' : 'rgba(255,255,255,0.92)',
+                      borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.05)',
+                    },
+                  ]}
                   activeOpacity={0.9}
                     onPress={() =>
                       openFocusEditor({
@@ -779,13 +835,28 @@ export default function WeightTrackerScreen() {
 
             <View style={styles.section}>
               <Text style={[styles.sectionLabel, { color: headerTextColor }]}>Datum</Text>
-              <View style={styles.pickerBlock}>
+              <View
+                style={[
+                  styles.pickerBlock,
+                  {
+                    backgroundColor: isDark ? 'rgba(18,18,22,0.76)' : 'rgba(255,255,255,0.85)',
+                    borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.05)',
+                  },
+                ]}
+              >
                 <TouchableOpacity style={styles.selectorHeader} onPress={() => setShowDatePicker((prev) => !prev)} activeOpacity={0.9}>
                   <Text style={[styles.pickerLabel, { color: headerTextColor }]}>Messdatum</Text>
                   <Text style={[styles.selectorValue, { color: headerTextColor }]}>{formatDisplayDate(weightDate)}</Text>
                 </TouchableOpacity>
                 {showDatePicker && (
-                  <View style={styles.pickerInner}>
+                  <View
+                    style={[
+                      styles.pickerInner,
+                      {
+                        backgroundColor: isDark ? 'rgba(22,22,26,0.95)' : 'rgba(255,255,255,0.95)',
+                      },
+                    ]}
+                  >
                     <DateTimePicker
                       value={weightDate}
                       mode="date"
@@ -819,9 +890,24 @@ export default function WeightTrackerScreen() {
 
             <View style={styles.section}>
               <Text style={[styles.sectionLabel, { color: headerTextColor }]}>Notizen</Text>
-              <View style={styles.pickerBlock}>
+              <View
+                style={[
+                  styles.pickerBlock,
+                  {
+                    backgroundColor: isDark ? 'rgba(18,18,22,0.76)' : 'rgba(255,255,255,0.85)',
+                    borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.05)',
+                  },
+                ]}
+              >
                 <TouchableOpacity
-                  style={[styles.inlineField, styles.inlineFieldMultiline]}
+                  style={[
+                    styles.inlineField,
+                    styles.inlineFieldMultiline,
+                    {
+                      backgroundColor: isDark ? 'rgba(24,24,28,0.92)' : 'rgba(255,255,255,0.92)',
+                      borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.05)',
+                    },
+                  ]}
                   activeOpacity={0.9}
                   onPress={() =>
                     openFocusEditor({

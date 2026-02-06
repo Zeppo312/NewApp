@@ -5,13 +5,22 @@ import { ThemedText } from '@/components/ThemedText';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { useAuth } from '@/contexts/AuthContext';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { getBabyInfo, BabyInfo } from '@/lib/baby';
 import { Stack } from 'expo-router';
 import Header from '@/components/Header';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { LiquidGlassCard, LAYOUT_PAD, TIMELINE_INSET, TEXT_PRIMARY, GLASS_BORDER } from '@/constants/DesignGuide';
+import {
+  LiquidGlassCard,
+  LAYOUT_PAD,
+  TIMELINE_INSET,
+  GLASS_BORDER,
+  GLASS_BORDER_DARK,
+  GLASS_OVERLAY,
+  GLASS_OVERLAY_DARK
+} from '@/constants/DesignGuide';
 import { useNavigation } from '@/contexts/NavigationContext';
 import * as Haptics from 'expo-haptics';
 import {
@@ -33,9 +42,9 @@ const initialStats = {
   milestones: [] as { name: string; reached: boolean; date?: Date }[]
 };
 
-const HEADER_TEXT_COLOR = TEXT_PRIMARY;
+const HEADER_TEXT_COLOR = '#7D5A50';
 
-const pastelPalette = {
+const pastelPaletteLight = {
   peach: 'rgba(255, 223, 209, 0.85)',
   rose: 'rgba(255, 210, 224, 0.8)',
   honey: 'rgba(255, 239, 214, 0.85)',
@@ -45,27 +54,62 @@ const pastelPalette = {
   blush: 'rgba(255, 218, 230, 0.8)',
 };
 
+const pastelPaletteDark = {
+  peach: 'rgba(255, 177, 138, 0.25)',
+  rose: 'rgba(255, 133, 170, 0.25)',
+  honey: 'rgba(255, 210, 137, 0.23)',
+  sage: 'rgba(150, 210, 178, 0.22)',
+  lavender: 'rgba(190, 156, 255, 0.24)',
+  sky: 'rgba(134, 186, 255, 0.24)',
+  blush: 'rgba(255, 160, 188, 0.24)',
+};
+
 const GlassLayer = ({
   tint = 'rgba(255,255,255,0.22)',
   sheenOpacity = 0.35,
+  isDark = false,
 }: {
   tint?: string;
   sheenOpacity?: number;
+  isDark?: boolean;
 }) => (
   <>
     <LinearGradient
-      colors={[tint, 'rgba(255,255,255,0.06)']}
+      colors={[tint, isDark ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.06)']}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
       style={styles.glassLayerGradient}
     />
-    <View style={[styles.glassSheen, { opacity: sheenOpacity }]} />
+    <View
+      style={[
+        styles.glassSheen,
+        {
+          opacity: sheenOpacity,
+          backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.25)',
+        },
+      ]}
+    />
   </>
 );
 
 export default function BabyStatsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
+  const adaptiveColors = useAdaptiveColors();
+  const isDark = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
+  const textPrimary = isDark ? Colors.dark.textPrimary : '#5C4033';
+  const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
+  const glassOverlay = isDark ? GLASS_OVERLAY_DARK : GLASS_OVERLAY;
+  const glassBorderColor = isDark ? GLASS_BORDER_DARK : GLASS_BORDER;
+  const glassSurfaceStyle = {
+    borderColor: glassBorderColor,
+    backgroundColor: isDark ? 'rgba(0,0,0,0.35)' : 'rgba(255,255,255,0.15)',
+    shadowOpacity: isDark ? 0.18 : 0.06,
+  } as const;
+  const iconBubbleBackground = isDark ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.82)';
+  const pastelPalette = isDark ? pastelPaletteDark : pastelPaletteLight;
+  const milestoneReachedIconColor = isDark ? '#FFB08D' : '#E88368';
+  const milestoneUpcomingIconColor = isDark ? '#D8CCC2' : '#9E8F86';
   const { user } = useAuth();
   const { activeBabyId } = useActiveBaby();
   const navigation = useNavigation();
@@ -203,28 +247,35 @@ export default function BabyStatsScreen() {
   const renderMilestoneStatus = (milestone: { name: string; reached: boolean; date?: Date }) => {
     const reached = milestone.reached;
 
-    const tint = reached ? 'rgba(213,245,231,0.75)' : 'rgba(244,236,230,0.78)';
+    const tint = reached
+      ? (isDark ? 'rgba(150,210,178,0.22)' : 'rgba(213,245,231,0.75)')
+      : (isDark ? 'rgba(209,170,145,0.2)' : 'rgba(244,236,230,0.78)');
 
     return (
       <View
-        style={[styles.milestoneRow, styles.glassSurface]}
+        style={[styles.milestoneRow, styles.glassSurface, glassSurfaceStyle]}
       >
-        <GlassLayer tint={tint} sheenOpacity={reached ? 0.22 : 0.16} />
+        <GlassLayer tint={tint} sheenOpacity={reached ? 0.22 : 0.16} isDark={isDark} />
         <View
           style={[
             styles.milestoneIcon,
-            reached ? styles.milestoneIconReached : styles.milestoneIconUpcoming
+            reached ? styles.milestoneIconReached : styles.milestoneIconUpcoming,
+            {
+              backgroundColor: reached
+                ? (isDark ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.85)')
+                : (isDark ? 'rgba(255,255,255,0.11)' : 'rgba(255,255,255,0.75)'),
+            },
           ]}
         >
           <IconSymbol
             name={reached ? 'star.fill' : 'calendar.badge.exclamationmark'}
             size={18}
-            color={reached ? '#E88368' : '#9E8F86'}
+            color={reached ? milestoneReachedIconColor : milestoneUpcomingIconColor}
           />
         </View>
         <View style={styles.milestoneInfo}>
-          <ThemedText style={styles.milestoneName}>{milestone.name}</ThemedText>
-          <ThemedText style={styles.milestoneDate}>
+          <ThemedText style={[styles.milestoneName, { color: textPrimary }]}>{milestone.name}</ThemedText>
+          <ThemedText style={[styles.milestoneDate, { color: textSecondary }]}>
             {reached && milestone.date ? `Erreicht am ${formatDate(milestone.date)}` : 'Noch nicht erreicht'}
           </ThemedText>
         </View>
@@ -249,8 +300,8 @@ export default function BabyStatsScreen() {
         caption: 'geschätzt',
         icon: 'heart.fill' as const,
         accent: pastelPalette.rose,
-        iconColor: '#D06262',
-        iconBg: 'rgba(255,255,255,0.8)',
+        iconColor: isDark ? '#FFB8C8' : '#D06262',
+        iconBg: iconBubbleBackground,
       },
       {
         key: 'breath',
@@ -259,8 +310,8 @@ export default function BabyStatsScreen() {
         caption: 'seit Geburt',
         icon: 'wind' as const,
         accent: pastelPalette.sage,
-        iconColor: '#5A8F80',
-        iconBg: 'rgba(255,255,255,0.8)',
+        iconColor: isDark ? '#9BE0CB' : '#5A8F80',
+        iconBg: iconBubbleBackground,
       },
       {
         key: 'diapers',
@@ -269,8 +320,8 @@ export default function BabyStatsScreen() {
         caption: 'insgesamt',
         icon: 'drop.fill' as const,
         accent: pastelPalette.honey,
-        iconColor: '#B98160',
-        iconBg: 'rgba(255,255,255,0.85)',
+        iconColor: isDark ? '#FFCA9E' : '#B98160',
+        iconBg: iconBubbleBackground,
       },
       {
         key: 'sleep',
@@ -279,25 +330,30 @@ export default function BabyStatsScreen() {
         caption: 'seit Geburt',
         icon: 'moon.stars.fill' as const,
         accent: pastelPalette.sky,
-        iconColor: '#7A6FD1',
-        iconBg: 'rgba(255,255,255,0.85)',
+        iconColor: isDark ? '#C3B8FF' : '#7A6FD1',
+        iconBg: iconBubbleBackground,
       },
     ];
     
     return (
-      <LiquidGlassCard style={styles.glassCard}>
+      <LiquidGlassCard
+        style={styles.glassCard}
+        intensity={26}
+        overlayColor={glassOverlay}
+        borderColor={glassBorderColor}
+      >
         <View style={styles.glassInner}>
-          <ThemedText style={styles.sectionTitle}>Interessante Fakten</ThemedText>
+          <ThemedText style={[styles.sectionTitle, { color: textSecondary }]}>Interessante Fakten</ThemedText>
           <View style={styles.factGrid}>
             {factItems.map((fact) => (
-              <View key={fact.key} style={[styles.factTile, styles.glassSurface]}>
-                <GlassLayer tint={fact.accent} sheenOpacity={0.18} />
+              <View key={fact.key} style={[styles.factTile, styles.glassSurface, glassSurfaceStyle]}>
+                <GlassLayer tint={fact.accent} sheenOpacity={0.18} isDark={isDark} />
                 <View style={[styles.factIcon, { backgroundColor: fact.iconBg }]}>
                   <IconSymbol name={fact.icon} size={18} color={fact.iconColor} />
                 </View>
-                <ThemedText style={styles.factLabel}>{fact.label}</ThemedText>
-                <ThemedText style={styles.factValue}>{fact.value}</ThemedText>
-                <ThemedText style={styles.factCaption}>{fact.caption}</ThemedText>
+                <ThemedText style={[styles.factLabel, { color: textSecondary }]}>{fact.label}</ThemedText>
+                <ThemedText style={[styles.factValue, { color: textPrimary }]}>{fact.value}</ThemedText>
+                <ThemedText style={[styles.factCaption, { color: textSecondary }]}>{fact.caption}</ThemedText>
               </View>
             ))}
           </View>
@@ -313,9 +369,30 @@ export default function BabyStatsScreen() {
   ];
 
   const statChips = [
-    { key: 'total-days', label: 'Tage gesamt', value: stats.totalDays.toLocaleString('de-DE'), icon: 'calendar' as const, accent: pastelPalette.peach, iconColor: '#C17055' },
-    { key: 'total-weeks', label: 'Wochen', value: stats.totalWeeks.toLocaleString('de-DE'), icon: 'clock' as const, accent: pastelPalette.lavender, iconColor: '#7A6FD1' },
-    { key: 'total-months', label: 'Monate', value: stats.totalMonths.toLocaleString('de-DE'), icon: 'moon.stars.fill' as const, accent: pastelPalette.blush, iconColor: '#CF6F8B' },
+    {
+      key: 'total-days',
+      label: 'Tage gesamt',
+      value: stats.totalDays.toLocaleString('de-DE'),
+      icon: 'calendar' as const,
+      accent: pastelPalette.peach,
+      iconColor: isDark ? '#FFC5A7' : '#C17055'
+    },
+    {
+      key: 'total-weeks',
+      label: 'Wochen',
+      value: stats.totalWeeks.toLocaleString('de-DE'),
+      icon: 'clock' as const,
+      accent: pastelPalette.lavender,
+      iconColor: isDark ? '#C2B7FF' : '#7A6FD1'
+    },
+    {
+      key: 'total-months',
+      label: 'Monate',
+      value: stats.totalMonths.toLocaleString('de-DE'),
+      icon: 'moon.stars.fill' as const,
+      accent: pastelPalette.blush,
+      iconColor: isDark ? '#FFB6D1' : '#CF6F8B'
+    },
   ];
 
   const bodyMetrics = [
@@ -325,7 +402,7 @@ export default function BabyStatsScreen() {
       value: babyInfo.height ? `${babyInfo.height} cm` : 'Nicht angegeben',
       icon: 'person.fill' as const,
       accent: pastelPalette.sky,
-      iconColor: '#6C87C1',
+      iconColor: isDark ? '#B6CEFF' : '#6C87C1',
     },
     {
       key: 'weight',
@@ -333,7 +410,7 @@ export default function BabyStatsScreen() {
       value: babyInfo.weight ? `${babyInfo.weight} kg` : 'Nicht angegeben',
       icon: 'chart.bar.fill' as const,
       accent: pastelPalette.honey,
-      iconColor: '#B7745D',
+      iconColor: isDark ? '#FFCAA2' : '#B7745D',
     },
     {
       key: 'gender',
@@ -341,7 +418,7 @@ export default function BabyStatsScreen() {
       value: genderLabels[babyInfo.baby_gender as keyof typeof genderLabels] || genderLabels.unknown,
       icon: 'person.2.fill' as const,
       accent: pastelPalette.lavender,
-      iconColor: '#8C6AC3',
+      iconColor: isDark ? '#D1BDFF' : '#8C6AC3',
     },
   ];
 
@@ -368,7 +445,7 @@ export default function BabyStatsScreen() {
         
         {isLoading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={theme.primary} />
+            <ActivityIndicator size="large" color={isDark ? adaptiveColors.accent : theme.primary} />
           </View>
         ) : (
           <ScrollView
@@ -377,59 +454,73 @@ export default function BabyStatsScreen() {
           >
             {babyInfo.birth_date ? (
               <>
-                <LiquidGlassCard style={[styles.glassCard, styles.firstGlassCard]}>
+                <LiquidGlassCard
+                  style={[styles.glassCard, styles.firstGlassCard]}
+                  intensity={26}
+                  overlayColor={glassOverlay}
+                  borderColor={glassBorderColor}
+                >
                   <View style={styles.glassInner}>
-                    <ThemedText style={styles.sectionTitle}>Alter</ThemedText>
+                    <ThemedText style={[styles.sectionTitle, { color: textSecondary }]}>Alter</ThemedText>
 
-                    <View style={[styles.ageHighlight, styles.glassSurface]}>
-                      <GlassLayer tint="rgba(255,232,220,0.75)" sheenOpacity={0.22} />
-                      <View style={styles.ageHighlightIcon}>
-                        <IconSymbol name="clock" size={18} color="#E88368" />
+                    <View style={[styles.ageHighlight, styles.glassSurface, glassSurfaceStyle]}>
+                      <GlassLayer
+                        tint={isDark ? 'rgba(255, 177, 138, 0.24)' : 'rgba(255,232,220,0.75)'}
+                        sheenOpacity={0.22}
+                        isDark={isDark}
+                      />
+                      <View style={[styles.ageHighlightIcon, { backgroundColor: iconBubbleBackground }]}>
+                        <IconSymbol name="clock" size={18} color={milestoneReachedIconColor} />
                       </View>
                       <View style={styles.ageHighlightText}>
-                        <ThemedText style={styles.ageValue}>{renderAgeDescription()}</ThemedText>
-                        <ThemedText style={styles.ageSubline}>Stand heute</ThemedText>
+                        <ThemedText style={[styles.ageValue, { color: textPrimary }]}>{renderAgeDescription()}</ThemedText>
+                        <ThemedText style={[styles.ageSubline, { color: textSecondary }]}>Stand heute</ThemedText>
                       </View>
                     </View>
 
                     <View style={styles.ageChipRow}>
                       {ageChips.map((chip) => (
-                        <View key={chip.key} style={[styles.ageChip, styles.glassSurface]}>
-                          <GlassLayer tint={chip.accent} sheenOpacity={0.25} />
-                          <ThemedText style={styles.ageChipValue}>{chip.value}</ThemedText>
-                          <ThemedText style={styles.ageChipLabel}>{chip.label}</ThemedText>
+                        <View key={chip.key} style={[styles.ageChip, styles.glassSurface, glassSurfaceStyle]}>
+                          <GlassLayer tint={chip.accent} sheenOpacity={0.25} isDark={isDark} />
+                          <ThemedText style={[styles.ageChipValue, { color: textPrimary }]}>{chip.value}</ThemedText>
+                          <ThemedText style={[styles.ageChipLabel, { color: textSecondary }]}>{chip.label}</ThemedText>
                         </View>
                       ))}
                     </View>
                   
                     <View style={styles.statRow}>
                       {statChips.map((stat) => (
-                        <View key={stat.key} style={[styles.statItem, styles.glassSurface]}>
-                          <GlassLayer tint={stat.accent} sheenOpacity={0.2} />
-                          <View style={styles.statIcon}>
+                        <View key={stat.key} style={[styles.statItem, styles.glassSurface, glassSurfaceStyle]}>
+                          <GlassLayer tint={stat.accent} sheenOpacity={0.2} isDark={isDark} />
+                          <View style={[styles.statIcon, { backgroundColor: iconBubbleBackground }]}>
                             <IconSymbol name={stat.icon} size={16} color={stat.iconColor} />
                           </View>
-                          <ThemedText style={styles.statValue}>{stat.value}</ThemedText>
-                          <ThemedText style={styles.statLabel}>{stat.label}</ThemedText>
+                          <ThemedText style={[styles.statValue, { color: textPrimary }]}>{stat.value}</ThemedText>
+                          <ThemedText style={[styles.statLabel, { color: textSecondary }]}>{stat.label}</ThemedText>
                         </View>
                       ))}
                     </View>
                   </View>
                 </LiquidGlassCard>
                 
-                <LiquidGlassCard style={styles.glassCard}>
+                <LiquidGlassCard
+                  style={styles.glassCard}
+                  intensity={26}
+                  overlayColor={glassOverlay}
+                  borderColor={glassBorderColor}
+                >
                   <View style={styles.glassInner}>
-                    <ThemedText style={styles.sectionTitle}>Geburtsdaten</ThemedText>
+                    <ThemedText style={[styles.sectionTitle, { color: textSecondary }]}>Geburtsdaten</ThemedText>
                     <View style={styles.bodyGrid}>
                       {bodyMetrics.map((metric) => (
-                        <View key={metric.key} style={[styles.bodyBadge, styles.glassSurface]}>
-                          <GlassLayer tint={metric.accent} sheenOpacity={0.18} />
-                          <View style={styles.bodyIcon}>
+                        <View key={metric.key} style={[styles.bodyBadge, styles.glassSurface, glassSurfaceStyle]}>
+                          <GlassLayer tint={metric.accent} sheenOpacity={0.18} isDark={isDark} />
+                          <View style={[styles.bodyIcon, { backgroundColor: iconBubbleBackground }]}>
                             <IconSymbol name={metric.icon} size={18} color={metric.iconColor} />
                           </View>
                           <View style={styles.bodyCopy}>
-                            <ThemedText style={styles.bodyValue}>{metric.value}</ThemedText>
-                            <ThemedText style={styles.bodyLabel}>{metric.label}</ThemedText>
+                            <ThemedText style={[styles.bodyValue, { color: textPrimary }]}>{metric.value}</ThemedText>
+                            <ThemedText style={[styles.bodyLabel, { color: textSecondary }]}>{metric.label}</ThemedText>
                           </View>
                         </View>
                       ))}
@@ -439,9 +530,14 @@ export default function BabyStatsScreen() {
                 
                 {renderInterestingFacts()}
                 
-                <LiquidGlassCard style={styles.glassCard}>
+                <LiquidGlassCard
+                  style={styles.glassCard}
+                  intensity={26}
+                  overlayColor={glassOverlay}
+                  borderColor={glassBorderColor}
+                >
                   <View style={styles.glassInner}>
-                    <ThemedText style={styles.sectionTitle}>Meilensteine</ThemedText>
+                    <ThemedText style={[styles.sectionTitle, { color: textSecondary }]}>Meilensteine</ThemedText>
                     <View style={styles.milestoneContainer}>
                       {stats.milestones.map((milestone, index) => (
                         <View key={index}>
@@ -453,9 +549,14 @@ export default function BabyStatsScreen() {
                 </LiquidGlassCard>
               </>
             ) : (
-              <LiquidGlassCard style={styles.glassCard}>
+              <LiquidGlassCard
+                style={styles.glassCard}
+                intensity={26}
+                overlayColor={glassOverlay}
+                borderColor={glassBorderColor}
+              >
                 <View style={styles.glassInner}>
-                  <ThemedText style={styles.noDataText}>
+                  <ThemedText style={[styles.noDataText, { color: textSecondary }]}>
                     Kein Geburtsdatum verfügbar. Bitte füge das Geburtsdatum deines Babys hinzu, um Statistiken anzuzeigen.
                   </ThemedText>
                 </View>
