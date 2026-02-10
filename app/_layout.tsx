@@ -3,7 +3,7 @@ import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { View, ActivityIndicator, Text } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
@@ -16,17 +16,23 @@ import { BabyStatusProvider } from '@/contexts/BabyStatusContext';
 import { ActiveBabyProvider, useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { ThemeProvider as AppThemeProvider } from '@/contexts/ThemeContext';
 import { NavigationProvider } from '@/contexts/NavigationContext';
-import { ConvexProvider } from '@/contexts/ConvexContext';
-import { BackendProvider } from '@/contexts/BackendContext';
+import { ConvexProvider, useConvex } from '@/contexts/ConvexContext';
+import { BackendProvider, useBackend } from '@/contexts/BackendContext';
 import { BackgroundProvider } from '@/contexts/BackgroundContext';
 import { checkForNewNotifications, registerBackgroundNotificationTask, BACKGROUND_NOTIFICATION_TASK } from '@/lib/notificationService';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useSleepWindowNotifications } from '@/hooks/useSleepWindowNotifications';
-import { predictNextSleepWindow, type SleepWindowPrediction } from '@/lib/sleep-window';
+import { useFeedingReminderNotifications } from '@/hooks/useFeedingReminderNotifications';
+import { useNotificationPreferences } from '@/hooks/useNotificationPreferences';
+import { initializePersonalization, predictNextSleepWindow, type SleepWindowPrediction } from '@/lib/sleep-window';
+import { predictNextFeedingTime, type FeedingPrediction } from '@/lib/feeding-interval';
 import { getBabyInfo } from '@/lib/baby';
-import { supabase, invalidateUserCache } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
 import type { SleepEntry } from '@/lib/sleepData';
-import { preloadAppData, invalidateAllCaches } from '@/lib/appCache';
+import type { BabyCareEntry } from '@/lib/supabase';
+import { preloadAppData } from '@/lib/appCache';
+import { SleepEntriesService } from '@/lib/services/SleepEntriesService';
+import { normalizeBedtimeAnchor } from '@/lib/bedtime';
 
 // Importieren der Meilenstein-Task-Definition
 import { defineMilestoneCheckerTask } from '@/tasks/milestoneCheckerTask';
@@ -82,14 +88,30 @@ SplashScreen.preventAutoHideAsync();
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
   const { loading, user } = useAuth();
+  const userId = user?.id ?? null;
   const [initialRoute, setInitialRoute] = useState<string | null>(null);
-  const { requestPermissions } = useNotifications();
+  const { requestPermissions, expoPushToken } = useNotifications();
   const { activeBabyId } = useActiveBaby();
+  const { activeBackend } = useBackend();
+  const { convexClient } = useConvex();
   const [sleepPrediction, setSleepPrediction] = useState<SleepWindowPrediction | null>(null);
+  const [feedingPrediction, setFeedingPrediction] = useState<FeedingPrediction | null>(null);
+  const { preferences: notifPrefs } = useNotificationPreferences();
+  const sleepEntriesService = useMemo(() => {
+    if (!userId) return null;
+    return new SleepEntriesService(activeBackend, convexClient, userId);
+  }, [activeBackend, convexClient, userId]);
+
+  useEffect(() => {
+    if (!userId) return;
+    initializePersonalization(activeBabyId ?? undefined).catch((error) => {
+      console.error('Fehler beim Initialisieren der Sleep-Personalisierung:', error);
+    });
+  }, [userId, activeBabyId]);
 
   // Registriere Push-Notifications und Hintergrundtask, wenn der Benutzer angemeldet ist
   useEffect(() => {
-    if (user) {
+    if (userId) {
       // Push-Token registrieren für Remote-Notifications
       requestPermissions().catch(error => {
         console.error('Fehler beim Registrieren von Push-Notifications:', error);
@@ -100,11 +122,11 @@ function RootLayoutNav() {
         console.error('Fehler beim Registrieren des Benachrichtigungs-Hintergrundtasks:', error);
       });
     }
-  }, [user, requestPermissions]);
+  }, [userId, requestPermissions]);
 
   // Sleep Window Prediction für Benachrichtigungen berechnen
   useEffect(() => {
-    if (!user || !activeBabyId) {
+    if (!userId || !activeBabyId || !sleepEntriesService) {
       setSleepPrediction(null);
       return;
     }
@@ -113,21 +135,13 @@ function RootLayoutNav() {
       try {
         // Baby-Info laden
         const { data: babyInfo, error: babyError } = await getBabyInfo(activeBabyId);
-        if (babyError || !babyInfo?.birthdate) {
+        if (babyError || !babyInfo?.birth_date) {
           setSleepPrediction(null);
           return;
         }
 
-        // Schlafeinträge der letzten 30 Tage laden
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-        const { data: entries, error } = await supabase
-          .from('sleep_entries')
-          .select('*')
-          .eq('baby_id', activeBabyId)
-          .gte('start_time', thirtyDaysAgo.toISOString())
-          .order('start_time', { ascending: false });
+        // Sichtbare Einträge (inkl. Partner) über denselben Service wie im Sleep Tracker laden
+        const { data: entries, error } = await sleepEntriesService.getEntries(activeBabyId ?? undefined);
 
         if (error) {
           console.error('Fehler beim Laden der Schlafeinträge für Prediction:', error);
@@ -136,25 +150,21 @@ function RootLayoutNav() {
         }
 
         // Prediction berechnen
+        const anchorBedtime = normalizeBedtimeAnchor(
+          (babyInfo as { preferred_bedtime?: string | null }).preferred_bedtime
+        );
         const prediction = await predictNextSleepWindow({
-          userId: user.id,
-          birthdate: babyInfo.birthdate,
+          userId,
+          babyId: activeBabyId ?? undefined,
+          birthdate: babyInfo.birth_date,
           entries: (entries || []) as SleepEntry[],
-          anchorBedtime: '19:30',
+          anchorBedtime,
         });
 
-        // Nur setzen, wenn Confidence ausreichend ist (mindestens 5 historische Samples)
-        // Diese Logik entspricht der im Hook verwendeten confidence >= 0.6 Prüfung
-        if (prediction && prediction.debug) {
-          const historicalSamples = (prediction.debug.historicalSampleCount as number) ?? 0;
-          const personalizationSamples = (prediction.debug.personalizationSampleCount as number) ?? 0;
-          const hasGoodConfidence = historicalSamples >= 5 || (historicalSamples + personalizationSamples) >= 6;
-
-          if (hasGoodConfidence) {
-            setSleepPrediction(prediction);
-          } else {
-            setSleepPrediction(null);
-          }
+        // Nur setzen, wenn Confidence ausreichend ist
+        // Der Hook prüft confidence >= 0.6, gleiche Schwelle hier
+        if (prediction && prediction.confidence >= 0.6) {
+          setSleepPrediction(prediction);
         } else {
           setSleepPrediction(null);
         }
@@ -169,10 +179,78 @@ function RootLayoutNav() {
     // Alle 5 Minuten aktualisieren
     const interval = setInterval(loadSleepPrediction, 5 * 60 * 1000);
     return () => clearInterval(interval);
-  }, [user, activeBabyId]);
+  }, [userId, activeBabyId, sleepEntriesService]);
+
+  // Feeding Prediction für Benachrichtigungen berechnen
+  useEffect(() => {
+    if (!userId || !activeBabyId) {
+      setFeedingPrediction(null);
+      return;
+    }
+
+    const loadFeedingPrediction = async () => {
+      try {
+        // Baby-Info laden
+        const { data: babyInfo, error: babyError } = await getBabyInfo(activeBabyId);
+        if (babyError || !babyInfo?.birth_date) {
+          setFeedingPrediction(null);
+          return;
+        }
+
+        // Fütterungseinträge der letzten 7 Tage laden
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+        const { data: entries, error } = await supabase
+          .from('baby_care_entries')
+          .select('*')
+          .eq('baby_id', activeBabyId)
+          .eq('entry_type', 'feeding')
+          .gte('start_time', sevenDaysAgo.toISOString())
+          .order('start_time', { ascending: false });
+
+        if (error) {
+          console.error('Fehler beim Laden der Feeding-Einträge für Prediction:', error);
+          setFeedingPrediction(null);
+          return;
+        }
+
+        const prediction = predictNextFeedingTime({
+          babyBirthDate: babyInfo.birth_date,
+          recentFeedings: (entries || []) as BabyCareEntry[],
+        });
+
+        setFeedingPrediction(prediction);
+      } catch (error) {
+        console.error('Fehler beim Berechnen der Feeding Prediction:', error);
+        setFeedingPrediction(null);
+      }
+    };
+
+    loadFeedingPrediction();
+
+    // Alle 5 Minuten aktualisieren
+    const interval = setInterval(loadFeedingPrediction, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [userId, activeBabyId]);
 
   // Sleep Window Notifications Hook (läuft unabhängig vom Screen)
-  useSleepWindowNotifications(sleepPrediction);
+  useSleepWindowNotifications(
+    sleepPrediction,
+    notifPrefs.sleepWindowReminder,
+    userId,
+    activeBabyId,
+    expoPushToken
+  );
+
+  // Feeding Reminder Notifications Hook
+  useFeedingReminderNotifications(
+    feedingPrediction,
+    notifPrefs.feedingReminder,
+    userId,
+    activeBabyId,
+    expoPushToken
+  );
 
   // Wir verwenden jetzt die index.tsx Datei als Einstiegspunkt, die die Weiterleitung basierend auf dem Auth-Status übernimmt
   useEffect(() => {

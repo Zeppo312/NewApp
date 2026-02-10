@@ -184,6 +184,10 @@ export function useNotifications() {
           router.push('/(tabs)/sleep-tracker' as any);
           break;
 
+        case 'feeding_reminder':
+          router.push('/(tabs)/home' as any);
+          break;
+
         case 'partner_sleep':
           router.push({
             pathname: '/(tabs)/sleep-tracker',

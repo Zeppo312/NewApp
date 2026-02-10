@@ -1,28 +1,22 @@
 import { useCallback, useEffect, useRef } from 'react';
 import * as Notifications from 'expo-notifications';
-import type { SleepWindowPrediction } from '@/lib/sleep-window';
+import type { FeedingPrediction } from '@/lib/feeding-interval';
 import {
   cancelBabyReminderNotification,
   upsertBabyReminderNotification,
 } from '@/lib/babyReminderNotifications';
 
-const NOTIFICATION_IDENTIFIER = 'sleep-window-reminder';
-const NOTIFICATION_TYPE = 'sleep_window_reminder';
+const NOTIFICATION_IDENTIFIER = 'feeding-reminder';
+const NOTIFICATION_TYPE = 'feeding_reminder';
 
 /**
- * Hook for managing sleep window reminder notifications
+ * Hook für Fütterungs-Erinnerungen
  *
- * Automatically schedules a notification 15 minutes before the predicted sleep window
- * Cancels previous notifications when prediction updates
- * Only schedules if prediction confidence is above 0.6
- *
- * Usage:
- * ```typescript
- * const { scheduleSleepReminder, cancelSleepReminder } = useSleepWindowNotifications(sleepPrediction);
- * ```
+ * Scheduled eine Notification 10 Minuten vor dem berechneten Fütterungszeitpunkt.
+ * Cancelt vorherige Notifications wenn sich die Prediction ändert.
  */
-export function useSleepWindowNotifications(
-  sleepPrediction: SleepWindowPrediction | null,
+export function useFeedingReminderNotifications(
+  prediction: FeedingPrediction | null,
   enabled: boolean = true,
   userId?: string | null,
   babyId?: string | null,
@@ -52,14 +46,14 @@ export function useSleepWindowNotifications(
         }
       }
     } catch (error) {
-      console.error('Failed to load scheduled sleep window reminders:', error);
+      console.error('Failed to load scheduled feeding reminders:', error);
     }
 
     for (const id of idsToCancel) {
       try {
         await Notifications.cancelScheduledNotificationAsync(id);
       } catch (error) {
-        console.error('Failed to cancel sleep window reminder:', error);
+        console.error('Failed to cancel feeding reminder:', error);
       }
     }
 
@@ -72,33 +66,34 @@ export function useSleepWindowNotifications(
       await cancelBabyReminderNotification({
         userId,
         babyId,
-        reminderType: 'sleep_window',
+        reminderType: 'feeding',
       });
     } catch (error) {
-      console.error('Failed to cancel remote sleep reminder:', error);
+      console.error('Failed to cancel remote feeding reminder:', error);
     }
   }, [userId, babyId]);
 
   const syncRemoteReminder = useCallback(
-    async (scheduledFor: Date, scheduleKey: string, body: string) => {
+    async (scheduledFor: Date, scheduleKey: string, body: string, intervalMinutes: number) => {
       if (!userId || !babyId) return;
       try {
         await upsertBabyReminderNotification({
           userId,
           babyId,
-          reminderType: 'sleep_window',
+          reminderType: 'feeding',
           scheduledFor,
-          title: '💤 Schlaffenster beginnt bald',
+          title: '🍼 Bald Zeit zum Füttern',
           body,
           scheduleKey,
           payload: {
-            type: 'sleep_window_reminder',
-            recommendedStart: scheduleKey,
+            type: 'feeding_reminder',
+            nextFeedingTime: scheduleKey,
+            intervalMinutes,
             excludeToken: currentDevicePushToken,
           },
         });
       } catch (error) {
-        console.error('Failed to sync remote sleep reminder:', error);
+        console.error('Failed to sync remote feeding reminder:', error);
       }
     },
     [userId, babyId, currentDevicePushToken]
@@ -108,8 +103,8 @@ export function useSleepWindowNotifications(
     let isMounted = true;
 
     const syncNotification = async () => {
-      // Cancel if disabled, no prediction, or low confidence
-      if (!enabled || !sleepPrediction || sleepPrediction.confidence < 0.6) {
+      // Cancel wenn deaktiviert oder keine Prediction
+      if (!enabled || !prediction) {
         await Promise.all([
           cancelCurrentScheduledNotification(),
           cancelRemoteReminder(),
@@ -118,41 +113,40 @@ export function useSleepWindowNotifications(
         return;
       }
 
-      const recommendedStart = new Date(sleepPrediction.recommendedStart);
-      const fifteenMinBefore = new Date(recommendedStart.getTime() - 15 * 60 * 1000);
+      const nextFeeding = new Date(prediction.nextFeedingTime);
+      const tenMinBefore = new Date(nextFeeding.getTime() - 10 * 60 * 1000);
       const now = new Date();
-      const scheduleKey = recommendedStart.toISOString();
+      const scheduleKey = nextFeeding.toISOString();
 
-      // Check if we already scheduled for this time
+      // Prüfe ob bereits für diesen Zeitpunkt geplant
       if (lastScheduledRef.current === scheduleKey) {
-        console.log('⏰ Sleep window reminder already scheduled for this time');
         return;
       }
 
-      // Trigger time is already past: cancel stale reminders and optionally notify immediately
-      if (fifteenMinBefore <= now) {
+      // Trigger-Zeitpunkt ist vorbei: alte Reminder entfernen und ggf. sofort erinnern
+      if (tenMinBefore <= now) {
         await Promise.all([
           cancelCurrentScheduledNotification(),
           cancelRemoteReminder(),
         ]);
 
-        const msUntilStart = recommendedStart.getTime() - now.getTime();
-        const shouldSendImmediate = msUntilStart > 0 && msUntilStart <= 15 * 60 * 1000;
+        const msUntilFeeding = nextFeeding.getTime() - now.getTime();
+        const shouldSendImmediate = msUntilFeeding > 0 && msUntilFeeding <= 10 * 60 * 1000;
 
         if (shouldSendImmediate) {
-          const minutesUntilStart = Math.max(1, Math.round(msUntilStart / 60000));
-          const immediateBody = `Das vorhergesagte Schlaffenster startet in ca. ${minutesUntilStart} Minuten`;
+          const minutesUntilFeeding = Math.max(1, Math.round(msUntilFeeding / 60000));
+          const immediateBody = `Das vorhergesagte Feeding ist in ca. ${minutesUntilFeeding} Minuten`;
 
           const immediateId = await Notifications.scheduleNotificationAsync({
             content: {
-              title: '💤 Schlaffenster beginnt bald',
+              title: '🍼 Bald Zeit zum Füttern',
               body: immediateBody,
               sound: true,
               priority: Notifications.AndroidNotificationPriority.HIGH,
               data: {
-                type: 'sleep_window_reminder',
-                recommendedStart: recommendedStart.toISOString(),
-                confidence: sleepPrediction.confidence,
+                type: 'feeding_reminder',
+                nextFeedingTime: nextFeeding.toISOString(),
+                intervalMinutes: prediction.intervalMinutes,
               },
             },
             identifier: NOTIFICATION_IDENTIFIER,
@@ -167,46 +161,44 @@ export function useSleepWindowNotifications(
           scheduledNotificationIdRef.current = immediateId;
 
           if (hasRemoteChannel) {
-            await syncRemoteReminder(new Date(), scheduleKey, immediateBody);
+            await syncRemoteReminder(new Date(), scheduleKey, immediateBody, prediction.intervalMinutes);
           }
 
           lastScheduledRef.current = scheduleKey;
-          console.log('⚡ Sleep window reminder sent immediately');
           return;
         }
 
         lastScheduledRef.current = scheduleKey;
-        console.log('⏰ Sleep window reminder skipped (window already started)');
         return;
       }
 
-      // Cancel previous notification
+      // Vorherige Notification canceln
       await cancelCurrentScheduledNotification();
 
-      // Format time for notification body
-      const timeString = recommendedStart.toLocaleTimeString('de-DE', {
+      // Uhrzeit formatieren
+      const timeString = nextFeeding.toLocaleTimeString('de-DE', {
         hour: '2-digit',
-        minute: '2-digit'
+        minute: '2-digit',
       });
-      const body = `In 15 Minuten beginnt das vorhergesagte Schlaffenster (${timeString})`;
+      const body = `In ca. 10 Minuten könnte dein Baby wieder Hunger haben (ca. ${timeString})`;
 
       // Schedule local reminder as primary channel.
       const scheduledId = await Notifications.scheduleNotificationAsync({
         content: {
-          title: '💤 Schlaffenster beginnt bald',
+          title: '🍼 Bald Zeit zum Füttern',
           body,
           sound: true,
           priority: Notifications.AndroidNotificationPriority.HIGH,
           data: {
-            type: 'sleep_window_reminder',
-            recommendedStart: recommendedStart.toISOString(),
-            confidence: sleepPrediction.confidence,
+            type: 'feeding_reminder',
+            nextFeedingTime: nextFeeding.toISOString(),
+            intervalMinutes: prediction.intervalMinutes,
           },
         },
         identifier: NOTIFICATION_IDENTIFIER,
         trigger: {
           type: Notifications.SchedulableTriggerInputTypes.DATE,
-          date: fifteenMinBefore,
+          date: tenMinBefore,
         },
       });
 
@@ -219,61 +211,30 @@ export function useSleepWindowNotifications(
 
       // Optional remote sync for secondary devices only.
       if (hasRemoteChannel) {
-        await syncRemoteReminder(fifteenMinBefore, scheduleKey, body);
+        await syncRemoteReminder(tenMinBefore, scheduleKey, body, prediction.intervalMinutes);
       } else if (userId && babyId) {
         await cancelRemoteReminder();
       }
 
       lastScheduledRef.current = scheduleKey;
-      console.log('✅ Sleep window reminder scheduled locally for', fifteenMinBefore.toLocaleTimeString('de-DE'));
-      console.log('   Sleep window starts at:', timeString);
-      console.log('   Confidence:', sleepPrediction.confidence);
+      console.log('✅ Feeding reminder scheduled locally for', tenMinBefore.toLocaleTimeString('de-DE'));
+      console.log('   Next feeding at:', timeString);
+      console.log('   Interval:', prediction.intervalMinutes, 'min');
     };
 
     syncNotification().catch((error) => {
-      console.error('Failed to schedule sleep window reminder:', error);
+      console.error('Failed to schedule feeding reminder:', error);
     });
 
     return () => {
       isMounted = false;
     };
   }, [
-    sleepPrediction,
+    prediction,
     enabled,
     cancelCurrentScheduledNotification,
     cancelRemoteReminder,
     hasRemoteChannel,
     syncRemoteReminder,
   ]);
-
-  /**
-   * Manually schedule a sleep reminder
-   * (Usually not needed as the hook schedules automatically)
-   */
-  const scheduleSleepReminder = () => {
-    // Trigger effect by updating ref
-    lastScheduledRef.current = null;
-  };
-
-  /**
-   * Cancel the sleep reminder
-   */
-  const cancelSleepReminder = () => {
-    Promise.all([
-      cancelCurrentScheduledNotification(),
-      cancelRemoteReminder(),
-    ])
-      .then(() => {
-        lastScheduledRef.current = null;
-        console.log('✅ Sleep window reminder cancelled');
-      })
-      .catch((error) => {
-        console.error('Failed to cancel sleep window reminder:', error);
-      });
-  };
-
-  return {
-    scheduleSleepReminder,
-    cancelSleepReminder,
-  };
 }

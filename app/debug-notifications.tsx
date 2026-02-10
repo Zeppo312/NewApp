@@ -1,13 +1,26 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView } from 'react-native';
+import * as Notifications from 'expo-notifications';
 import { usePartnerNotifications } from '@/hooks/usePartnerNotifications';
 import { pollPartnerActivities, getUnreadPartnerNotificationCount } from '@/lib/partnerNotificationService';
 import { getPartnerId } from '@/lib/accountLinks';
 import { supabase, getCachedUser } from '@/lib/supabase';
+import { useActiveBaby } from '@/contexts/ActiveBabyContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { getBabyInfo } from '@/lib/baby';
+import { predictNextFeedingTime } from '@/lib/feeding-interval';
+import { predictNextSleepWindow } from '@/lib/sleep-window';
+import { normalizeBedtimeAnchor } from '@/lib/bedtime';
+import { useNotificationPreferences } from '@/hooks/useNotificationPreferences';
+import type { BabyCareEntry } from '@/lib/supabase';
+import type { SleepEntry } from '@/lib/sleepData';
 
 export default function DebugNotificationsScreen() {
   const [logs, setLogs] = useState<string[]>([]);
   const { isPartnerLinked, partnerId, triggerPoll } = usePartnerNotifications();
+  const { activeBabyId } = useActiveBaby();
+  const { user } = useAuth();
+  const { preferences: notifPrefs } = useNotificationPreferences();
 
   const addLog = (message: string) => {
     const timestamp = new Date().toLocaleTimeString();
@@ -479,6 +492,216 @@ export default function DebugNotificationsScreen() {
     addLog('- Check app notification permissions');
   };
 
+  const testFeedingPrediction = async () => {
+    addLog('🍼 FEEDING PREDICTION DEBUG');
+    addLog('================================================');
+
+    if (!activeBabyId) {
+      addLog('❌ Kein aktives Baby ausgewählt');
+      return;
+    }
+
+    addLog(`Baby ID: ${activeBabyId.substring(0, 8)}...`);
+
+    // Baby-Info laden
+    const { data: babyInfo, error: babyError } = await getBabyInfo(activeBabyId);
+    if (babyError || !babyInfo?.birth_date) {
+      addLog(`❌ Baby-Info Fehler: ${babyError?.message || 'Kein Geburtsdatum'}`);
+      return;
+    }
+
+    const birthDate = new Date(babyInfo.birth_date);
+    const ageMonths = Math.floor((Date.now() - birthDate.getTime()) / (1000 * 60 * 60 * 24 * 30.44));
+    addLog(`Geburtsdatum: ${birthDate.toLocaleDateString('de-DE')}`);
+    addLog(`Alter: ~${ageMonths} Monate`);
+
+    // Feedings laden
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    const { data: entries, error } = await supabase
+      .from('baby_care_entries')
+      .select('*')
+      .eq('baby_id', activeBabyId)
+      .eq('entry_type', 'feeding')
+      .gte('start_time', sevenDaysAgo.toISOString())
+      .order('start_time', { ascending: false });
+
+    if (error) {
+      addLog(`❌ Fehler beim Laden: ${error.message}`);
+      return;
+    }
+
+    addLog(`Feedings (letzte 7 Tage): ${entries?.length || 0}`);
+
+    if (entries && entries.length > 0) {
+      const lastFeeding = new Date(entries[0].start_time);
+      const minutesAgo = Math.round((Date.now() - lastFeeding.getTime()) / 60000);
+      addLog(`Letztes Feeding: ${lastFeeding.toLocaleTimeString('de-DE')} (vor ${minutesAgo} Min)`);
+    }
+
+    // Prediction berechnen
+    const prediction = predictNextFeedingTime({
+      babyBirthDate: babyInfo.birth_date,
+      recentFeedings: (entries || []) as BabyCareEntry[],
+    });
+
+    if (!prediction) {
+      addLog('❌ Keine Prediction möglich (zu wenig Daten oder Zeitpunkt in Vergangenheit)');
+    } else {
+      addLog('');
+      addLog('📊 PREDICTION:');
+      addLog(`  Nächstes Feeding: ${prediction.nextFeedingTime.toLocaleTimeString('de-DE')}`);
+      addLog(`  Intervall: ${prediction.intervalMinutes} Min (~${(prediction.intervalMinutes / 60).toFixed(1)}h)`);
+      addLog(`  Personalisiert: ${prediction.isPersonalized ? '✅ Ja' : '❌ Nein (Altersdefault)'}`);
+      addLog(`  Confidence: ${(prediction.confidence * 100).toFixed(0)}%`);
+
+      const notifTime = new Date(prediction.nextFeedingTime.getTime() - 10 * 60 * 1000);
+      const minutesUntilNotif = Math.round((notifTime.getTime() - Date.now()) / 60000);
+      addLog(`  Notification um: ${notifTime.toLocaleTimeString('de-DE')} (in ${minutesUntilNotif} Min)`);
+    }
+
+    // Notification-Preferences
+    addLog('');
+    addLog('⚙️ PREFERENCES:');
+    addLog(`  Feeding-Erinnerung: ${notifPrefs.feedingReminder ? '✅ An' : '❌ Aus'}`);
+    addLog(`  Schlaffenster-Erinnerung: ${notifPrefs.sleepWindowReminder ? '✅ An' : '❌ Aus'}`);
+
+    // Geplante Notifications checken
+    const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+    const feedingNotif = scheduled.find(n => n.identifier === 'feeding-reminder');
+    const sleepNotif = scheduled.find(n => n.identifier === 'sleep-window-reminder');
+
+    addLog('');
+    addLog('📬 GEPLANTE NOTIFICATIONS:');
+    addLog(`  Feeding-Reminder: ${feedingNotif ? '✅ Geplant' : '❌ Nicht geplant'}`);
+    if (feedingNotif) {
+      addLog(`    Titel: ${feedingNotif.content.title}`);
+      addLog(`    Body: ${feedingNotif.content.body}`);
+    }
+    addLog(`  Sleep-Window: ${sleepNotif ? '✅ Geplant' : '❌ Nicht geplant'}`);
+    addLog(`  Gesamt geplant: ${scheduled.length}`);
+  };
+
+  const testSleepPrediction = async () => {
+    addLog('💤 SLEEP WINDOW PREDICTION DEBUG');
+    addLog('================================================');
+
+    if (!activeBabyId || !user) {
+      addLog(`❌ ${!user ? 'Nicht eingeloggt' : 'Kein aktives Baby'}`);
+      return;
+    }
+
+    // Baby-Info laden
+    const { data: babyInfo, error: babyError } = await getBabyInfo(activeBabyId);
+    if (babyError || !babyInfo?.birth_date) {
+      addLog(`❌ Baby-Info Fehler: ${babyError?.message || 'Kein Geburtsdatum'}`);
+      return;
+    }
+
+    addLog(`Baby: ${babyInfo.name || 'unbekannt'}`);
+    addLog(`Geburtsdatum: ${new Date(babyInfo.birth_date).toLocaleDateString('de-DE')}`);
+
+    // Sleep-Einträge laden
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const { data: entries, error } = await supabase
+      .from('sleep_entries')
+      .select('*')
+      .eq('baby_id', activeBabyId)
+      .gte('start_time', thirtyDaysAgo.toISOString())
+      .order('start_time', { ascending: false });
+
+    if (error) {
+      addLog(`❌ Fehler beim Laden: ${error.message}`);
+      return;
+    }
+
+    addLog(`Sleep-Einträge (letzte 30 Tage): ${entries?.length || 0}`);
+
+    if (entries && entries.length > 0) {
+      const lastSleep = new Date(entries[0].start_time);
+      addLog(`Letzter Schlaf: ${lastSleep.toLocaleString('de-DE')}`);
+      // Zeige die letzten 5 Einträge
+      addLog('');
+      addLog('Letzte Einträge:');
+      entries.slice(0, 5).forEach((e: any) => {
+        const start = new Date(e.start_time).toLocaleString('de-DE');
+        const end = e.end_time ? new Date(e.end_time).toLocaleString('de-DE') : 'läuft';
+        const dur = e.end_time
+          ? `${Math.round((new Date(e.end_time).getTime() - new Date(e.start_time).getTime()) / 60000)} Min`
+          : '-';
+        addLog(`  ${start} → ${end} (${dur})`);
+      });
+    }
+
+    if (!entries || entries.length === 0) {
+      addLog('❌ Keine Sleep-Einträge → keine Prediction möglich');
+      return;
+    }
+
+    // Prediction berechnen
+    addLog('');
+    addLog('Berechne Prediction...');
+    try {
+      const prediction = await predictNextSleepWindow({
+        userId: user.id,
+        babyId: activeBabyId ?? undefined,
+        birthdate: babyInfo.birth_date,
+        entries: (entries || []) as SleepEntry[],
+        anchorBedtime: normalizeBedtimeAnchor((babyInfo as any).preferred_bedtime),
+      });
+
+      if (!prediction) {
+        addLog('❌ predictNextSleepWindow returned null');
+        return;
+      }
+
+      addLog('');
+      addLog('📊 PREDICTION RESULT:');
+      addLog(`  recommendedStart: ${prediction.recommendedStart.toLocaleTimeString('de-DE')}`);
+      addLog(`  earliest: ${prediction.earliest.toLocaleTimeString('de-DE')}`);
+      addLog(`  latest: ${prediction.latest.toLocaleTimeString('de-DE')}`);
+      addLog(`  windowMinutes: ${prediction.windowMinutes}`);
+      addLog(`  napIndexToday: ${prediction.napIndexToday}`);
+      addLog(`  timeOfDayBucket: ${prediction.timeOfDayBucket}`);
+      addLog(`  confidence: ${prediction.confidence}`);
+
+      // Debug-Infos
+      if (prediction.debug) {
+        addLog('');
+        addLog('🔍 DEBUG INFO:');
+        const d = prediction.debug;
+        addLog(`  historicalSampleCount: ${d.historicalSampleCount ?? 'N/A'}`);
+        addLog(`  personalizationSampleCount: ${d.personalizationSampleCount ?? 'N/A'}`);
+        const histSamples = (d.historicalSampleCount as number) ?? 0;
+        const persSamples = (d.personalizationSampleCount as number) ?? 0;
+        const hasGood = histSamples >= 5 || (histSamples + persSamples) >= 6;
+        addLog(`  Confidence-Check bestanden: ${hasGood ? '✅ Ja' : '❌ Nein'}`);
+        addLog(`    (braucht >=5 hist ODER >=6 kombiniert, hat ${histSamples} hist + ${persSamples} pers = ${histSamples + persSamples})`);
+
+        // Alle Debug-Keys ausgeben
+        Object.entries(d).forEach(([key, val]) => {
+          if (key !== 'historicalSampleCount' && key !== 'personalizationSampleCount') {
+            addLog(`  ${key}: ${JSON.stringify(val)}`);
+          }
+        });
+      }
+
+      // Notification-Check
+      addLog('');
+      const hookConfCheck = prediction.confidence >= 0.6;
+      addLog(`  Hook confidence >= 0.6: ${hookConfCheck ? '✅ Ja' : '❌ Nein'} (${prediction.confidence})`);
+      const recStart = new Date(prediction.recommendedStart);
+      const fifteenBefore = new Date(recStart.getTime() - 15 * 60 * 1000);
+      const inFuture = fifteenBefore > new Date();
+      addLog(`  15min-Vorlauf in Zukunft: ${inFuture ? '✅ Ja' : '❌ Nein'} (${fifteenBefore.toLocaleTimeString('de-DE')})`);
+    } catch (err: any) {
+      addLog(`❌ Prediction-Fehler: ${err?.message || err}`);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView style={styles.content}>
@@ -494,6 +717,20 @@ export default function DebugNotificationsScreen() {
         </View>
 
         <View style={styles.buttons}>
+          <TouchableOpacity
+            style={[styles.button, styles.feedingButton]}
+            onPress={testFeedingPrediction}
+          >
+            <Text style={styles.buttonText}>🍼 Feeding Prediction Debug</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.button, styles.sleepButton]}
+            onPress={testSleepPrediction}
+          >
+            <Text style={styles.buttonText}>💤 Sleep Window Debug</Text>
+          </TouchableOpacity>
+
           <TouchableOpacity
             style={[styles.button, styles.primaryButton]}
             onPress={testPushNotificationChain}
@@ -579,6 +816,14 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     backgroundColor: '#E94560',
+    marginBottom: 16,
+  },
+  feedingButton: {
+    backgroundColor: '#E8963E',
+    marginBottom: 8,
+  },
+  sleepButton: {
+    backgroundColor: '#6B5CE7',
     marginBottom: 16,
   },
   clearButton: {

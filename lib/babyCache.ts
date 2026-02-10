@@ -46,6 +46,7 @@ export async function loadBabyInfoWithCache(
         id: data.id,
         name: data.name || '',
         birth_date: data.birth_date || null,
+        preferred_bedtime: data.preferred_bedtime || null,
         weight: data.weight || '',
         height: data.height || '',
         photo_url: data.photo_url || null,

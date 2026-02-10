@@ -16,6 +16,7 @@ export interface BabyInfo {
   user_id: string;
   name?: string | null;
   birth_date?: string | null;
+  preferred_bedtime?: string | null;
   weight?: string | null;
   height?: string | null;
   photo_url?: string | null;
@@ -28,6 +29,7 @@ export interface CreateBabyInput {
   user_id: string;
   name?: string;
   birth_date?: string;
+  preferred_bedtime?: string;
   weight?: string;
   height?: string;
   photo_url?: string;
@@ -37,6 +39,7 @@ export interface CreateBabyInput {
 export interface UpdateBabyInput {
   name?: string | null;
   birth_date?: string | null;
+  preferred_bedtime?: string | null;
   weight?: string | null;
   height?: string | null;
   photo_url?: string | null;
@@ -105,6 +108,7 @@ export class BabyService extends BaseDataService {
           user_id: baby.user_id,
           name: baby.name || null,
           birth_date: baby.birth_date || null,
+          preferred_bedtime: baby.preferred_bedtime || null,
           weight: baby.weight || null,
           height: baby.height || null,
           photo_url: baby.photo_url || null,
@@ -156,6 +160,7 @@ export class BabyService extends BaseDataService {
           user_id: data.user_id,
           name: data.name || null,
           birth_date: data.birth_date || null,
+          preferred_bedtime: (data as any).preferred_bedtime || null,
           weight: data.weight || null,
           height: data.height || null,
           photo_url: data.photo_url || null,
@@ -186,6 +191,7 @@ export class BabyService extends BaseDataService {
           user_id: input.user_id,
           name: input.name,
           birth_date: input.birth_date,
+          preferred_bedtime: input.preferred_bedtime,
           weight: input.weight,
           height: input.height,
           photo_url: input.photo_url,
@@ -240,6 +246,7 @@ export class BabyService extends BaseDataService {
           user_id: convexData.user_id,
           name: convexData.name || null,
           birth_date: convexData.birth_date || null,
+          preferred_bedtime: (convexData as any).preferred_bedtime || null,
           weight: convexData.weight || null,
           height: convexData.height || null,
           photo_url: convexData.photo_url || null,
@@ -325,6 +332,7 @@ export class BabyService extends BaseDataService {
           user_id: convexData.user_id,
           name: convexData.name || null,
           birth_date: convexData.birth_date || null,
+          preferred_bedtime: (convexData as any).preferred_bedtime || null,
           weight: convexData.weight || null,
           height: convexData.height || null,
           photo_url: convexData.photo_url || null,

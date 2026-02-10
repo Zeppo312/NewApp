@@ -21,6 +21,12 @@ import { LAYOUT_PAD, LiquidGlassCard, GLASS_OVERLAY, GLASS_OVERLAY_DARK } from '
 import { useFocusEffect } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
+import {
+  bedtimeAnchorToDate,
+  dateToBedtimeAnchor,
+  DEFAULT_BEDTIME_ANCHOR,
+  normalizeBedtimeAnchor,
+} from '@/lib/bedtime';
 
 export default function BabyScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -47,6 +53,7 @@ export default function BabyScreen() {
 
   const [babyInfo, setBabyInfo] = useState<BabyInfo>({});
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showBedtimePicker, setShowBedtimePicker] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [backgroundTaskStatus, setBackgroundTaskStatus] = useState<{status: string, isRegistered: boolean} | null>(null);
@@ -99,14 +106,24 @@ export default function BabyScreen() {
 
       // Show cached data immediately
       if (data) {
-        setBabyInfo(data);
+        setBabyInfo({
+          ...data,
+          preferred_bedtime: data.preferred_bedtime
+            ? normalizeBedtimeAnchor(data.preferred_bedtime)
+            : null,
+        });
         setIsLoading(false);
       }
 
       // Refresh in background if stale
       if (isStale) {
         const freshData = await refresh();
-        setBabyInfo(freshData);
+        setBabyInfo({
+          ...freshData,
+          preferred_bedtime: freshData.preferred_bedtime
+            ? normalizeBedtimeAnchor(freshData.preferred_bedtime)
+            : null,
+        });
       }
 
       // If no cache, data is already fresh
@@ -249,6 +266,16 @@ export default function BabyScreen() {
     }
   };
 
+  const handleBedtimeChange = (_event: any, selectedTime?: Date) => {
+    setShowBedtimePicker(Platform.OS === 'ios');
+    if (selectedTime) {
+      setBabyInfo({
+        ...babyInfo,
+        preferred_bedtime: dateToBedtimeAnchor(selectedTime),
+      });
+    }
+  };
+
   return (
     <ThemedBackground style={styles.container}>
       <SafeAreaView style={{ flex: 1 }}>
@@ -378,6 +405,37 @@ export default function BabyScreen() {
                   </View>
 
                   <View style={styles.inputRow}>
+                    <ThemedText style={styles.label}>Schlafenszeit (Nacht):</ThemedText>
+                    <TouchableOpacity
+                      style={[styles.glassDateButton, { backgroundColor: inputBackground, borderColor: inputBorder }]}
+                      onPress={() => {
+                        triggerHaptic();
+                        setShowBedtimePicker(true);
+                      }}
+                    >
+                      <ThemedText style={[styles.dateText, { color: textPrimary }]}>
+                        {normalizeBedtimeAnchor(babyInfo.preferred_bedtime)}
+                      </ThemedText>
+                      <IconSymbol name="moon.zzz" size={20} color={textPrimary} />
+                    </TouchableOpacity>
+
+                    <ThemedText style={[styles.photoHintText, { color: textSecondary, textAlign: 'left', marginTop: 8, marginBottom: 0 }]}>
+                      Diese Uhrzeit wird für die Schlafvorhersage und Schlaffenster-Erinnerungen genutzt.
+                    </ThemedText>
+
+                    {showBedtimePicker && (
+                      <DateTimePicker
+                        value={bedtimeAnchorToDate(babyInfo.preferred_bedtime)}
+                        mode="time"
+                        display="default"
+                        is24Hour
+                        onChange={handleBedtimeChange}
+                        textColor={isDark ? '#FFFFFF' : undefined}
+                      />
+                    )}
+                  </View>
+
+                  <View style={styles.inputRow}>
                     <ThemedText style={styles.label}>Gewicht:</ThemedText>
                     <TextInput
                       style={[styles.glassInput, { color: textPrimary, backgroundColor: inputBackground, borderColor: inputBorder }]}
@@ -448,6 +506,15 @@ export default function BabyScreen() {
                       {babyInfo.birth_date
                         ? new Date(babyInfo.birth_date).toLocaleDateString('de-DE')
                         : 'Noch nicht festgelegt'}
+                    </ThemedText>
+                  </View>
+
+                  <View style={styles.infoRow}>
+                    <ThemedText style={styles.infoLabel}>Schlafenszeit:</ThemedText>
+                    <ThemedText style={styles.infoValue}>
+                      {babyInfo.preferred_bedtime
+                        ? normalizeBedtimeAnchor(babyInfo.preferred_bedtime)
+                        : `${DEFAULT_BEDTIME_ANCHOR} (Standard)`}
                     </ThemedText>
                   </View>
 

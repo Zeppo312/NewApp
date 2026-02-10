@@ -76,6 +76,7 @@ const MIN_WINDOW_MINUTES = 30;
 const MAX_WINDOW_MINUTES = 300;
 const EARLY_FLEX_MINUTES = 15;
 const LATE_FLEX_MINUTES = 20;
+const MIN_WINDOW_SPAN_MINUTES = 10;
 const PERSONALIZATION_ALPHA = 0.3;
 const PERSONALIZATION_CLAMP = 60;
 const AWAKE_OVERRUN_GRACE_MINUTES = 15;
@@ -558,8 +559,6 @@ export async function predictNextSleepWindow({
     }
   }
 
-  earliest = new Date(Math.max(earliest.getTime(), now.getTime()));
-
   // 🆕 Dynamischer Bedtime-Gap basierend auf Alter
   let anchorConstraintApplied = false;
   let dynamicBedtimeGap = 0;
@@ -583,26 +582,21 @@ export async function predictNextSleepWindow({
     }
   }
 
-  if (awakeOverrideApplied) {
-    earliest = new Date(Math.max(earliest.getTime(), now.getTime()));
-    if (recommendedStart.getTime() < earliest.getTime()) {
-      recommendedStart = earliest;
+  const windowAlreadyPassed = latest.getTime() < now.getTime();
+  if (!windowAlreadyPassed && earliest.getTime() < now.getTime()) {
+    earliest = new Date(now);
+  }
+  if (earliest.getTime() >= latest.getTime()) {
+    const expandedEarliest = addMinutes(latest, -MIN_WINDOW_SPAN_MINUTES);
+    if (!windowAlreadyPassed && expandedEarliest.getTime() < now.getTime()) {
+      earliest = new Date(now);
+    } else {
+      earliest = expandedEarliest;
     }
-  }
 
-  if (awakeOverrideApplied && recommendedStart.getTime() > latest.getTime()) {
-    recommendedStart = new Date(latest);
-  }
-
-  const minStart = now;
-  if (latest.getTime() < minStart.getTime()) {
-    latest = new Date(minStart);
-  }
-  if (earliest.getTime() < minStart.getTime()) {
-    earliest = new Date(minStart);
-  }
-  if (earliest.getTime() > latest.getTime()) {
-    earliest = new Date(latest);
+    if (earliest.getTime() > latest.getTime()) {
+      earliest = new Date(latest);
+    }
   }
   if (recommendedStart.getTime() > latest.getTime()) {
     recommendedStart = new Date(latest);

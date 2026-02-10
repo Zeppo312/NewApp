@@ -48,6 +48,7 @@ import { GlassCard, LiquidGlassCard, LAYOUT_PAD, SECTION_GAP_TOP, SECTION_GAP_BO
 import { getBabyInfo } from '@/lib/baby';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { predictNextSleepWindow, updatePersonalizationAfterNap, initializePersonalization, type SleepWindowPrediction } from '@/lib/sleep-window';
+import { normalizeBedtimeAnchor } from '@/lib/bedtime';
 import { markPaywallShown, shouldShowPaywall } from '@/lib/paywall';
 import { useNotifications } from '@/hooks/useNotifications';
 import { usePartnerNotifications } from '@/hooks/usePartnerNotifications';
@@ -369,8 +370,11 @@ const StatusMetricsBar = ({
 
   const getReasoningText = (): string => {
     if (activeSleepEntry) {
+      const currentHour = new Date().getHours();
+      const isNightNow = currentHour >= 20 || currentHour < 6;
+
       // Nachtschlaf: keine Nap-Zielzeit anzeigen
-      if (activeSleepEntry.period === 'night') {
+      if (activeSleepEntry.period === 'night' || isNightNow) {
         return 'Gute Nacht 🌙';
       }
       // Tagschlaf: verbleibende ideale Schlafdauer
@@ -887,6 +891,7 @@ export default function SleepTrackerScreen() {
   const [monthOffset, setMonthOffset] = useState(0); // 0 = dieser Monat, -1 = vorheriger, +1 = nächster
   const [isLiveStatusLoaded, setIsLiveStatusLoaded] = useState(false);
   const [babyBirthdate, setBabyBirthdate] = useState<Date | null>(null);
+  const [babyBedtime, setBabyBedtime] = useState<string>('19:30');
   const [sleepPrediction, setSleepPrediction] = useState<SleepWindowPrediction | null>(null);
   const [predictionLoading, setPredictionLoading] = useState(false);
   const [predictionError, setPredictionError] = useState<string | null>(null);
@@ -1080,10 +1085,11 @@ export default function SleepTrackerScreen() {
   }, [refreshPartnerId]);
 
   useEffect(() => {
-    if (!user?.id) {
-      setBabyBirthdate(null);
-      return;
-    }
+      if (!user?.id) {
+        setBabyBirthdate(null);
+        setBabyBedtime('19:30');
+        return;
+      }
 
     let isMounted = true;
 
@@ -1098,9 +1104,11 @@ export default function SleepTrackerScreen() {
         } else {
           setBabyBirthdate(null);
         }
+        setBabyBedtime(normalizeBedtimeAnchor(data?.preferred_bedtime ?? null));
       } catch (error) {
         if (isMounted) {
           console.error('Failed to load baby info for sleep prediction:', error);
+          setBabyBedtime('19:30');
         }
       }
     };
@@ -1110,7 +1118,7 @@ export default function SleepTrackerScreen() {
     return () => {
       isMounted = false;
     };
-  }, [user?.id]);
+  }, [user?.id, activeBabyId]);
 
   useEffect(() => {
     Animated.timing(appearAnim, {
@@ -1164,7 +1172,7 @@ export default function SleepTrackerScreen() {
           babyId: activeBabyId ?? undefined, // Gemeinsame Personalization für Partner
           birthdate: babyBirthdate ?? undefined,
           entries,
-          anchorBedtime: '19:30',
+          anchorBedtime: babyBedtime,
         });
         setSleepPrediction(prediction);
         predictionRef.current = prediction;
@@ -1178,11 +1186,20 @@ export default function SleepTrackerScreen() {
         setPredictionLoading(false);
       }
     },
-    [user?.id, babyBirthdate]
+    [user?.id, activeBabyId, babyBirthdate, babyBedtime]
   );
 
   useEffect(() => {
     updateSleepPrediction(sleepEntries);
+  }, [sleepEntries, updateSleepPrediction]);
+
+  // Keep prediction in sync with notification engine (which refreshes every 5 minutes in _layout)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      updateSleepPrediction(sleepEntries);
+    }, 5 * 60 * 1000);
+
+    return () => clearInterval(interval);
   }, [sleepEntries, updateSleepPrediction]);
 
   // Classify sleep entry by time period

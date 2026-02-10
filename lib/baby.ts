@@ -11,6 +11,7 @@ export interface BabyInfo {
   id?: string;
   name?: string;
   birth_date?: string | null;
+  preferred_bedtime?: string | null;
   weight?: string;
   height?: string;
   photo_url?: string | null;

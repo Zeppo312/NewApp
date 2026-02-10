@@ -14,6 +14,7 @@ import { exportUserData } from '@/lib/dataExport';
 import { deleteUserAccount, deleteUserData } from '@/lib/profile';
 import Header from '@/components/Header';
 import { LiquidGlassCard, GLASS_OVERLAY, LAYOUT_PAD } from '@/constants/DesignGuide';
+import { useNotificationPreferences } from '@/hooks/useNotificationPreferences';
 
 // Admin emails - nur diese User sehen Debug Tools
 const ADMIN_EMAILS = [
@@ -39,6 +40,9 @@ export default function AppSettingsScreen() {
 
   // Background context
   const { customUri, hasCustomBackground, isDarkBackground, pickAndSaveBackground, setBackgroundMode, resetToDefault } = useBackground();
+
+  // Notification sub-preferences
+  const { preferences: notifPrefs, updatePreference: updateNotifPref } = useNotificationPreferences();
 
   // Check if current user is admin
   const isAdmin = user?.email ? ADMIN_EMAILS.includes(user.email) : false;
@@ -319,6 +323,66 @@ export default function AppSettingsScreen() {
                         />
                       </View>
                     </View>
+
+                    {settings.notifications_enabled && (
+                      <>
+                        <View style={styles.rowItem}>
+                          <View style={styles.rowIcon}>
+                            <IconSymbol name="moon.zzz" size={22} color={theme.accent} />
+                          </View>
+                          <View style={styles.rowContent}>
+                            <ThemedText style={styles.rowTitle}>Schlaffenster-Erinnerung</ThemedText>
+                            <ThemedText style={styles.rowDescription}>Benachrichtigung vor dem nächsten Schlaffenster</ThemedText>
+                          </View>
+                          <View style={styles.trailing}>
+                            <Switch
+                              value={notifPrefs.sleepWindowReminder}
+                              onValueChange={(v) => updateNotifPref('sleepWindowReminder', v)}
+                              trackColor={{ false: '#D1D1D6', true: '#9DBEBB' }}
+                              thumbColor={notifPrefs.sleepWindowReminder ? '#FFFFFF' : '#F4F4F4'}
+                              ios_backgroundColor="#D1D1D6"
+                            />
+                          </View>
+                        </View>
+
+                        <View style={styles.rowItem}>
+                          <View style={styles.rowIcon}>
+                            <ThemedText style={{ fontSize: 22 }}>🍼</ThemedText>
+                          </View>
+                          <View style={styles.rowContent}>
+                            <ThemedText style={styles.rowTitle}>Fütterungs-Erinnerung</ThemedText>
+                            <ThemedText style={styles.rowDescription}>Benachrichtigung wenn es Zeit zum Füttern wird</ThemedText>
+                          </View>
+                          <View style={styles.trailing}>
+                            <Switch
+                              value={notifPrefs.feedingReminder}
+                              onValueChange={(v) => updateNotifPref('feedingReminder', v)}
+                              trackColor={{ false: '#D1D1D6', true: '#9DBEBB' }}
+                              thumbColor={notifPrefs.feedingReminder ? '#FFFFFF' : '#F4F4F4'}
+                              ios_backgroundColor="#D1D1D6"
+                            />
+                          </View>
+                        </View>
+                      </>
+                    )}
+
+                    <TouchableOpacity
+                      style={styles.rowItem}
+                      onPress={() => router.push('/(tabs)/baby' as any)}
+                    >
+                      <View style={styles.rowIcon}>
+                        <IconSymbol name="moon.zzz" size={22} color={theme.accent} />
+                      </View>
+                      <View style={styles.rowContent}>
+                        <ThemedText style={styles.rowTitle}>Schlafenszeit einstellen</ThemedText>
+                        <ThemedText style={styles.rowDescription}>
+                          Die Schlafvorhersage nutzt die Schlafenszeit aus „Mein Baby“.
+                        </ThemedText>
+                      </View>
+                      <View style={styles.trailing}>
+                        <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
+                      </View>
+                    </TouchableOpacity>
                   </LiquidGlassCard>
 
                   {/* Hintergrundbild */}
