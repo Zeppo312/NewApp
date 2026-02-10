@@ -13,9 +13,10 @@ import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { createBaby } from '@/lib/baby';
+import { createBaby, saveBabyInfo } from '@/lib/baby';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { useAuth } from '@/contexts/AuthContext';
+import * as ImagePicker from 'expo-image-picker';
 
 type BabySwitcherButtonProps = {
   size?: number;
@@ -43,6 +44,7 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({ size = 36 }) =>
   const [isOpen, setIsOpen] = useState(false);
   const [newBabyName, setNewBabyName] = useState('');
   const [isCreating, setIsCreating] = useState(false);
+  const [isChangingPhoto, setIsChangingPhoto] = useState(false);
 
   const displayInitial = useMemo(() => {
     const name = activeBaby?.name?.trim();
@@ -84,6 +86,72 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({ size = 36 }) =>
     setNewBabyName('');
     setIsCreating(false);
     setIsOpen(false);
+  };
+
+  const handleChangePhoto = async () => {
+    if (!activeBabyId || isChangingPhoto) return;
+
+    setIsChangingPhoto(true);
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Berechtigung erforderlich', 'Bitte erlaube den Zugriff auf deine Fotos.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.7,
+        base64: true,
+      });
+
+      if (result.canceled || !result.assets?.length) {
+        return;
+      }
+
+      const asset = result.assets[0];
+      let base64Data: string | null = null;
+
+      if (asset.base64) {
+        base64Data = `data:image/jpeg;base64,${asset.base64}`;
+      } else if (asset.uri) {
+        try {
+          const response = await fetch(asset.uri);
+          const blob = await response.blob();
+          const reader = new FileReader();
+          base64Data = await new Promise((resolve, reject) => {
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          });
+        } catch (error) {
+          console.error('Error converting baby photo:', error);
+          Alert.alert('Fehler', 'Das Bild konnte nicht verarbeitet werden.');
+          return;
+        }
+      }
+
+      if (!base64Data) {
+        Alert.alert('Fehler', 'Das Bild konnte nicht verarbeitet werden.');
+        return;
+      }
+
+      const { error } = await saveBabyInfo({ photo_url: base64Data }, activeBabyId);
+      if (error) {
+        console.error('Error updating baby photo:', error);
+        Alert.alert('Fehler', 'Das Babybild konnte nicht gespeichert werden.');
+        return;
+      }
+
+      await refreshBabies();
+    } catch (error) {
+      console.error('Error changing baby photo:', error);
+      Alert.alert('Fehler', 'Das Babybild konnte nicht geändert werden.');
+    } finally {
+      setIsChangingPhoto(false);
+    }
   };
 
   return (
@@ -179,6 +247,19 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({ size = 36 }) =>
                   </TouchableOpacity>
                 );
               })}
+            </View>
+
+            <View style={[styles.photoSection, isDark && { borderTopColor: Colors.dark.border }]}>
+              <ThemedText style={[styles.photoSectionTitle, { color: textColor }]}>Aktives Kind</ThemedText>
+              <TouchableOpacity
+                style={[styles.photoButton, isChangingPhoto && styles.createButtonDisabled]}
+                onPress={handleChangePhoto}
+                disabled={!activeBabyId || isChangingPhoto}
+              >
+                <ThemedText style={[styles.photoButtonText, { color: textColor }]}>
+                  {isChangingPhoto ? 'Bild wird aktualisiert...' : 'Bild ändern'}
+                </ThemedText>
+              </TouchableOpacity>
             </View>
 
             <View style={[styles.newBabySection, isDark && { borderTopColor: Colors.dark.border }]}>
@@ -318,6 +399,27 @@ const styles = StyleSheet.create({
     fontSize: 12,
     // color wird dynamisch gesetzt
     marginTop: 2,
+  },
+  photoSection: {
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(125, 90, 80, 0.1)',
+    paddingTop: 12,
+    marginBottom: 12,
+  },
+  photoSectionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  photoButton: {
+    backgroundColor: '#E9C9B6',
+    borderRadius: 12,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  photoButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
   },
   newBabySection: {
     borderTopWidth: 1,

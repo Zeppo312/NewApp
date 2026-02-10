@@ -82,7 +82,7 @@ const AWAKE_OVERRUN_GRACE_MINUTES = 15;
 const JUNIOR_AWAKE_IMMEDIATE_MINUTES = 5;
 
 // 🆕 Dynamischer Bedtime-Gap (statt fixem BEDTIME_BUFFER_MINUTES)
-const MIN_HISTORICAL_SAMPLES = 5;
+const MIN_HISTORICAL_SAMPLES = 3;
 
 const AGE_PROFILES: AgeProfile[] = [
   {
@@ -365,8 +365,13 @@ function collectHistoricalWakeWindows(
     dayGroups.get(dayKey)!.push(entry);
   }
 
+  // Sortiere alle Tages-Keys chronologisch für Vortags-Lookup
+  const sortedDayKeys = [...dayGroups.keys()].sort();
+
   // Für jeden Tag: finde den Nap an Position napIndex
-  for (const [_dayKey, dayEntries] of dayGroups.entries()) {
+  for (let dayIdx = 0; dayIdx < sortedDayKeys.length; dayIdx++) {
+    const dayKey = sortedDayKeys[dayIdx];
+    const dayEntries = dayGroups.get(dayKey)!;
     const sortedDay = dayEntries
       .filter((e) => e.end !== null)
       .sort((a, b) => a.end!.getTime() - b.end!.getTime());
@@ -374,20 +379,38 @@ function collectHistoricalWakeWindows(
     if (sortedDay.length < napIndex) continue;
 
     const targetNapIndex = napIndex - 1; // 0-basiert
-    const previousNap = sortedDay[targetNapIndex - 1];
     const currentNap = sortedDay[targetNapIndex];
+    let previousNapEnd: Date | null = null;
 
-    if (!previousNap || !currentNap || !previousNap.end || !currentNap.start) continue;
-
-    // 🆕 Optional: Filtere nach timeOfDayBucket für noch präzisere Patterns
-    if (targetTimeOfDayBucket && previousNap.end) {
-      const previousNapBucket = getTimeOfDayBucket(previousNap.end);
-      if (previousNapBucket !== targetTimeOfDayBucket) {
-        continue; // Skip: anderer Tageszeit-Bucket
+    if (targetNapIndex > 0) {
+      // 2.+ Nap: vorheriger Nap desselben Tages
+      const previousNap = sortedDay[targetNapIndex - 1];
+      previousNapEnd = previousNap?.end ?? null;
+    } else {
+      // 1. Nap: letzter Nap des Vortages als Referenz
+      for (let prev = dayIdx - 1; prev >= 0; prev--) {
+        const prevDayEntries = dayGroups.get(sortedDayKeys[prev])!;
+        const sortedPrevDay = prevDayEntries
+          .filter((e) => e.end !== null)
+          .sort((a, b) => a.end!.getTime() - b.end!.getTime());
+        if (sortedPrevDay.length > 0) {
+          previousNapEnd = sortedPrevDay[sortedPrevDay.length - 1].end;
+          break;
+        }
       }
     }
 
-    const wakeWindow = minutesBetween(currentNap.start, previousNap.end);
+    if (!currentNap || !previousNapEnd || !currentNap.start) continue;
+
+    // Optional: Filtere nach timeOfDayBucket für noch präzisere Patterns
+    if (targetTimeOfDayBucket) {
+      const prevBucket = getTimeOfDayBucket(previousNapEnd);
+      if (prevBucket !== targetTimeOfDayBucket) {
+        continue;
+      }
+    }
+
+    const wakeWindow = minutesBetween(currentNap.start, previousNapEnd);
 
     // Validierung: Wake-Window sollte zwischen 30 und 360 Minuten sein
     if (wakeWindow >= 30 && wakeWindow <= 360) {
@@ -471,15 +494,25 @@ export async function predictNextSleepWindow({
   }
 
   // 5. 🆕 Historischer Faktor (7-14 Tage Pattern)
-  // Optional: Filtere auch nach timeOfDayBucket für noch präzisere Vorhersagen
+  // Erst mit Bucket-Filter versuchen, dann Fallback ohne
   let historicalFactor = 1.0;
   let historicalSampleCount = 0;
-  const historicalWindows = collectHistoricalWakeWindows(
+  let historicalWindows = collectHistoricalWakeWindows(
     completedEntries,
     napIndexToday,
     now,
-    baseline.timeOfDayBucket // 🆕 Filtere auch nach Tageszeit-Bucket
+    baseline.timeOfDayBucket
   );
+
+  // Fallback: ohne Bucket-Filter wenn nicht genug Samples
+  if (historicalWindows.length < MIN_HISTORICAL_SAMPLES) {
+    historicalWindows = collectHistoricalWakeWindows(
+      completedEntries,
+      napIndexToday,
+      now,
+      undefined
+    );
+  }
 
   if (historicalWindows.length >= MIN_HISTORICAL_SAMPLES) {
     const historicalWindow = trimmedMean(historicalWindows);
@@ -588,11 +621,11 @@ export async function predictNextSleepWindow({
   const personalizationSampleCount = personalizationData?.sampleCount ?? 0;
   const totalSamples = historicalSampleCount + personalizationSampleCount;
   let confidence = 0.0;
-  if (totalSamples >= 12 || historicalSampleCount >= 10) {
+  if (totalSamples >= 8 || historicalSampleCount >= 7) {
     confidence = 0.9;
-  } else if (totalSamples >= 6 || historicalSampleCount >= 5) {
+  } else if (totalSamples >= 4 || historicalSampleCount >= 3) {
     confidence = 0.7;
-  } else if (totalSamples >= 3) {
+  } else if (totalSamples >= 2) {
     confidence = 0.5;
   } else {
     confidence = Math.min(0.4, totalSamples * 0.1);

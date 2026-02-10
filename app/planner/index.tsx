@@ -698,6 +698,7 @@ export default function PlannerScreen() {
             start: startIso,
             end: endIso,
             location: payload.location,
+            reminderMinutes: payload.reminderMinutes,
             notes: payload.notes,
             assignee: payload.assignee,
           });
@@ -729,6 +730,7 @@ export default function PlannerScreen() {
             assignee: payload.assignee,
             babyId: payload.babyId,
             isAllDay: payload.isAllDay,
+            reminderMinutes: payload.reminderMinutes,
           });
         } else {
           addEvent(
@@ -741,6 +743,7 @@ export default function PlannerScreen() {
             undefined,
             payload.ownerId,
             payload.isAllDay,
+            payload.reminderMinutes,
           );
         }
       } else if (payload.type === "todo") {

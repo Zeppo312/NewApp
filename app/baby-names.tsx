@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { StyleSheet, ScrollView, View, TouchableOpacity, TextInput, SafeAreaView, StatusBar, FlatList, ActivityIndicator, Alert, Modal, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { IconSymbol } from '@/components/ui/IconSymbol';
@@ -10,7 +9,8 @@ import { useRouter, Stack } from 'expo-router';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import TextInputOverlay from '@/components/modals/TextInputOverlay';
 import Header from '@/components/Header';
-import { LiquidGlassCard, GLASS_OVERLAY, LAYOUT_PAD, TIMELINE_INSET, TEXT_PRIMARY } from '@/constants/DesignGuide';
+import { LiquidGlassCard, GLASS_OVERLAY, GLASS_OVERLAY_DARK, LAYOUT_PAD } from '@/constants/DesignGuide';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { isUserAdmin } from '@/lib/supabase/recommendations';
@@ -80,6 +80,23 @@ type FocusConfig = {
 export default function BabyNamesScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
+  const adaptiveColors = useAdaptiveColors();
+  const isDark = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
+  const textPrimary = isDark ? adaptiveColors.textPrimary : '#5C4033';
+  const textSecondary = isDark ? adaptiveColors.textSecondary : '#7D5A50';
+  const glassOverlay = isDark ? GLASS_OVERLAY_DARK : GLASS_OVERLAY;
+  const accentColor = isDark ? adaptiveColors.accent : theme.accent;
+  const iconMutedColor = isDark ? adaptiveColors.iconSecondary : theme.tabIconDefault;
+  const inputTextColor = isDark ? adaptiveColors.textPrimary : theme.text;
+  const inputPlaceholderColor = isDark ? adaptiveColors.textTertiary : theme.tabIconDefault;
+  const chipBackground = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.8)';
+  const chipBorderColor = isDark ? 'rgba(255,255,255,0.24)' : 'rgba(255,255,255,0.45)';
+  const chipActiveBackground = isDark ? 'rgba(233,201,182,0.28)' : `${theme.accent}30`;
+  const cardBorderColor = isDark ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.7)';
+  const actionButtonBackground = isDark ? 'rgba(10,10,12,0.6)' : 'rgba(255,255,255,0.9)';
+  const modalAccent = isDark ? adaptiveColors.accent : BABY_LILA;
+  const modalInputBackground = isDark ? 'rgba(10,10,12,0.62)' : 'rgba(255,255,255,0.96)';
+  const modalInputBorderColor = isDark ? 'rgba(255,255,255,0.24)' : 'rgba(142,78,198,0.25)';
   const router = useRouter();
   const { user } = useAuth();
 
@@ -361,14 +378,18 @@ export default function BabyNamesScreen() {
     multiline = false
   ) => (
     <TouchableOpacity
-      style={[styles.modalInput, multiline && styles.modalInputMultiline]}
+      style={[
+        styles.modalInput,
+        multiline && styles.modalInputMultiline,
+        { backgroundColor: modalInputBackground, borderColor: modalInputBorderColor },
+      ]}
       onPress={onPress}
       activeOpacity={0.9}
     >
       <ThemedText
         style={[
           value ? styles.modalInputText : styles.modalInputPlaceholder,
-          { color: value ? theme.text : theme.tabIconDefault },
+          { color: value ? inputTextColor : inputPlaceholderColor },
         ]}
         numberOfLines={multiline ? 3 : 1}
       >
@@ -921,21 +942,28 @@ export default function BabyNamesScreen() {
       <View
         style={[
           styles.bulkEntryCard,
+          {
+            backgroundColor: isDark ? 'rgba(10,10,12,0.65)' : 'rgba(255,255,255,0.92)',
+            borderColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(142,78,198,0.2)',
+          },
           hasError && styles.bulkEntryCardError,
           bulkErrorIndex === index && styles.bulkEntryCardFocus,
         ]}
       >
         <View style={styles.bulkEntryHeader}>
-          <ThemedText style={[styles.bulkEntryTitle, hasError && styles.bulkEntryTitleError]}>
+          <ThemedText style={[styles.bulkEntryTitle, { color: textPrimary }, hasError && styles.bulkEntryTitleError]}>
             {index + 1}. {item.name || 'Unbenannt'}
           </ThemedText>
-          <TouchableOpacity onPress={() => handleRemoveBulkEntry(index)} style={styles.bulkEntryRemove}>
+          <TouchableOpacity
+            onPress={() => handleRemoveBulkEntry(index)}
+            style={[styles.bulkEntryRemove, { backgroundColor: actionButtonBackground }]}
+          >
             <IconSymbol name="trash" size={16} color="#C94A4A" />
           </TouchableOpacity>
         </View>
         {hasError && <ThemedText style={styles.bulkEntryErrorText}>{item.error}</ThemedText>}
         <View style={styles.bulkField}>
-          <ThemedText style={styles.bulkFieldLabel}>Name</ThemedText>
+          <ThemedText style={[styles.bulkFieldLabel, { color: textSecondary }]}>Name</ThemedText>
           {renderInlineField(
             item.name,
             'z.B. Mila',
@@ -953,7 +981,7 @@ export default function BabyNamesScreen() {
           )}
         </View>
         <View style={styles.bulkField}>
-          <ThemedText style={styles.bulkFieldLabel}>Bedeutung</ThemedText>
+          <ThemedText style={[styles.bulkFieldLabel, { color: textSecondary }]}>Bedeutung</ThemedText>
           {renderInlineField(
             item.meaning,
             'z.B. Wunder, Hoffnung',
@@ -973,7 +1001,7 @@ export default function BabyNamesScreen() {
           )}
         </View>
         <View style={styles.bulkField}>
-          <ThemedText style={styles.bulkFieldLabel}>Herkunft</ThemedText>
+          <ThemedText style={[styles.bulkFieldLabel, { color: textSecondary }]}>Herkunft</ThemedText>
           {renderInlineField(
             item.origin,
             'z.B. Hebräisch',
@@ -991,7 +1019,7 @@ export default function BabyNamesScreen() {
           )}
         </View>
         <View style={styles.bulkField}>
-          <ThemedText style={styles.bulkFieldLabel}>Geschlecht</ThemedText>
+          <ThemedText style={[styles.bulkFieldLabel, { color: textSecondary }]}>Geschlecht</ThemedText>
           {renderInlineField(
             item.gender,
             'female, male, unisex',
@@ -1012,24 +1040,30 @@ export default function BabyNamesScreen() {
     );
   };
 
-  const renderCategoryItem = ({ item }: { item: typeof CATEGORIES[0] }) => (
-    <TouchableOpacity
-      style={[
-        styles.categoryItem,
-        selectedCategory === item.id && { backgroundColor: theme.accent + '30' }
-      ]}
-      onPress={() => setSelectedCategory(item.id)}
-    >
-      <ThemedView
-        style={styles.categoryItemInner}
-        lightColor="rgba(255, 255, 255, 0.8)"
-        darkColor="rgba(50, 50, 50, 0.8)"
+  const renderCategoryItem = ({ item }: { item: typeof CATEGORIES[0] }) => {
+    const isActive = selectedCategory === item.id;
+    return (
+      <TouchableOpacity
+        style={[
+          styles.categoryItem,
+          isActive && { backgroundColor: chipActiveBackground },
+        ]}
+        onPress={() => setSelectedCategory(item.id)}
       >
-        <IconSymbol name={item.icon as any} size={20} color={theme.accent} />
-        <ThemedText style={styles.categoryText}>{item.name}</ThemedText>
-      </ThemedView>
-    </TouchableOpacity>
-  );
+        <View
+          style={[
+            styles.categoryItemInner,
+            { backgroundColor: chipBackground, borderColor: chipBorderColor, borderWidth: 1 },
+          ]}
+        >
+          <IconSymbol name={item.icon as any} size={20} color={isActive ? accentColor : iconMutedColor} />
+          <ThemedText style={[styles.categoryText, { color: isActive ? accentColor : textPrimary }]}>
+            {item.name}
+          </ThemedText>
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   const renderLetterItem = ({ item }: { item: string }) => {
     const isActive = letterFilter === item;
@@ -1037,27 +1071,28 @@ export default function BabyNamesScreen() {
       <TouchableOpacity
         style={[
           styles.letterItem,
-          isActive && { backgroundColor: theme.accent + '30' },
+          isActive && { backgroundColor: chipActiveBackground },
         ]}
         onPress={() => setLetterFilter(item)}
       >
-        <ThemedView
-          style={styles.letterItemInner}
-          lightColor="rgba(255, 255, 255, 0.8)"
-          darkColor="rgba(50, 50, 50, 0.8)"
+        <View
+          style={[
+            styles.letterItemInner,
+            { backgroundColor: chipBackground, borderColor: chipBorderColor, borderWidth: 1 },
+          ]}
         >
-          <ThemedText style={[styles.letterText, isActive && { color: theme.accent }]}>
+          <ThemedText style={[styles.letterText, { color: textSecondary }, isActive && { color: accentColor }]}>
             {item === 'all' ? 'Alle' : item}
           </ThemedText>
-        </ThemedView>
+        </View>
       </TouchableOpacity>
     );
   };
 
   const genderOverlay = (gender?: string) => {
-    if (gender === 'male') return 'rgba(135,206,235,0.32)'; // Baby blue
-    if (gender === 'female') return 'rgba(142,78,198,0.32)'; // Lila
-    return 'rgba(168,196,193,0.32)'; // Neutral grünlich
+    if (gender === 'male') return isDark ? 'rgba(135,206,235,0.18)' : 'rgba(135,206,235,0.32)';
+    if (gender === 'female') return isDark ? 'rgba(142,78,198,0.18)' : 'rgba(142,78,198,0.32)';
+    return isDark ? 'rgba(168,196,193,0.18)' : 'rgba(168,196,193,0.32)';
   };
 
   const renderNameItem = ({ item }: { item: Name }) => {
@@ -1068,18 +1103,18 @@ export default function BabyNamesScreen() {
         style={[styles.fullWidthCard, styles.glassCard]}
         intensity={26}
         overlayColor={genderOverlay(item.gender ?? undefined)}
-        borderColor={'rgba(255,255,255,0.7)'}
+        borderColor={cardBorderColor}
       >
         <View style={styles.nameItemInner}>
           <View style={styles.nameHeader}>
-            <ThemedText style={styles.nameTitle}>{item.name}</ThemedText>
+            <ThemedText style={[styles.nameTitle, { color: textPrimary }]}>{item.name}</ThemedText>
             <View style={styles.nameActions}>
               {isAdmin && item.id && (
                 <>
-                  <TouchableOpacity style={styles.iconButton} onPress={() => handleEditName(item)}>
-                    <IconSymbol name="pencil" size={18} color={theme.text} />
+                  <TouchableOpacity style={[styles.iconButton, { backgroundColor: actionButtonBackground }]} onPress={() => handleEditName(item)}>
+                    <IconSymbol name="pencil" size={18} color={inputTextColor} />
                   </TouchableOpacity>
-                  <TouchableOpacity style={[styles.iconButton, { marginLeft: 6 }]} onPress={() => handleDeleteName(item)}>
+                  <TouchableOpacity style={[styles.iconButton, { marginLeft: 6, backgroundColor: actionButtonBackground }]} onPress={() => handleDeleteName(item)}>
                     <IconSymbol name="trash" size={18} color="#C94A4A" />
                   </TouchableOpacity>
                 </>
@@ -1090,19 +1125,19 @@ export default function BabyNamesScreen() {
                 disabled={isSaving}
               >
                 {isSaving && favorites.includes(item.name) === item.isFavorite ? (
-                  <ActivityIndicator size="small" color={theme.accent} />
+                  <ActivityIndicator size="small" color={accentColor} />
                 ) : (
                   <IconSymbol
                     name={item.isFavorite ? 'heart.fill' : 'heart'}
                     size={20}
-                    color={item.isFavorite ? theme.accent : theme.tabIconDefault}
+                    color={item.isFavorite ? accentColor : iconMutedColor}
                   />
                 )}
               </TouchableOpacity>
             </View>
           </View>
-          <ThemedText style={[styles.nameOrigin, { color: TEXT_PRIMARY }]}>{originText}</ThemedText>
-          <ThemedText style={[styles.nameMeaning, { color: TEXT_PRIMARY }]}>{meaningText}</ThemedText>
+          <ThemedText style={[styles.nameOrigin, { color: textPrimary }]}>{originText}</ThemedText>
+          <ThemedText style={[styles.nameMeaning, { color: textPrimary }]}>{meaningText}</ThemedText>
         </View>
       </LiquidGlassCard>
     );
@@ -1113,7 +1148,7 @@ export default function BabyNamesScreen() {
       <Stack.Screen options={{ headerShown: false }} />
       <ThemedBackground style={styles.backgroundImage}>
         <SafeAreaView style={styles.container}>
-          <StatusBar hidden={true} />
+          <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
           <Header 
             title="Babynamen" 
             subtitle="Finde den perfekten Namen für dein Baby"
@@ -1136,26 +1171,26 @@ export default function BabyNamesScreen() {
             ListHeaderComponent={
               <View>
                 {/* Suchleiste */}
-                <LiquidGlassCard style={[styles.fullWidthCard, styles.glassCard]} intensity={26} overlayColor={GLASS_OVERLAY}>
+                <LiquidGlassCard style={[styles.fullWidthCard, styles.glassCard]} intensity={26} overlayColor={glassOverlay}>
                   <View style={styles.searchInputContainer}>
-                    <IconSymbol name="magnifyingglass" size={20} color={theme.tabIconDefault} />
+                    <IconSymbol name="magnifyingglass" size={20} color={iconMutedColor} />
                     <TextInput
-                      style={[styles.searchInput, { color: theme.text }]}
+                      style={[styles.searchInput, { color: inputTextColor }]}
                       placeholder="Suche nach Namen..."
-                      placeholderTextColor={theme.tabIconDefault}
+                      placeholderTextColor={inputPlaceholderColor}
                       value={searchQuery}
                       onChangeText={setSearchQuery}
                     />
                     {searchQuery.length > 0 && (
                       <TouchableOpacity onPress={() => setSearchQuery('')}>
-                        <IconSymbol name="xmark.circle.fill" size={20} color={theme.tabIconDefault} />
+                        <IconSymbol name="xmark.circle.fill" size={20} color={iconMutedColor} />
                       </TouchableOpacity>
                     )}
                   </View>
                 </LiquidGlassCard>
 
                 {/* Kategorien */}
-                <LiquidGlassCard style={[styles.fullWidthCard, styles.glassCard]} intensity={26} overlayColor={GLASS_OVERLAY}>
+                <LiquidGlassCard style={[styles.fullWidthCard, styles.glassCard]} intensity={26} overlayColor={glassOverlay}>
                   <View style={styles.categoriesContainer}>
                     <FlatList
                       data={CATEGORIES}
@@ -1168,7 +1203,7 @@ export default function BabyNamesScreen() {
                 </LiquidGlassCard>
 
                 {/* Buchstabenfilter */}
-                <LiquidGlassCard style={[styles.fullWidthCard, styles.glassCard]} intensity={26} overlayColor={GLASS_OVERLAY}>
+                <LiquidGlassCard style={[styles.fullWidthCard, styles.glassCard]} intensity={26} overlayColor={glassOverlay}>
                   <View style={styles.lettersContainer}>
                     <FlatList
                       data={LETTER_FILTERS}
@@ -1183,17 +1218,17 @@ export default function BabyNamesScreen() {
             }
             ListEmptyComponent={
               isLoading ? (
-                <LiquidGlassCard style={[styles.fullWidthCard, styles.glassCard]} intensity={26} overlayColor={GLASS_OVERLAY}>
+                <LiquidGlassCard style={[styles.fullWidthCard, styles.glassCard]} intensity={26} overlayColor={glassOverlay}>
                   <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color={theme.accent} />
-                    <ThemedText style={[styles.loadingText, { color: TEXT_PRIMARY }]}>Lade Namen...</ThemedText>
+                    <ActivityIndicator size="large" color={accentColor} />
+                    <ThemedText style={[styles.loadingText, { color: textPrimary }]}>Lade Namen...</ThemedText>
                   </View>
                 </LiquidGlassCard>
               ) : (
-                <LiquidGlassCard style={[styles.fullWidthCard, styles.glassCard]} intensity={26} overlayColor={GLASS_OVERLAY}>
+                <LiquidGlassCard style={[styles.fullWidthCard, styles.glassCard]} intensity={26} overlayColor={glassOverlay}>
                   <View style={styles.emptyContainer}>
-                    <IconSymbol name="magnifyingglass" size={40} color={theme.tabIconDefault} />
-                    <ThemedText style={[styles.emptyText, { color: TEXT_PRIMARY }]}>
+                    <IconSymbol name="magnifyingglass" size={40} color={iconMutedColor} />
+                    <ThemedText style={[styles.emptyText, { color: textPrimary }]}>
                       {selectedCategory === 'favorites'
                         ? 'Du hast noch keine Favoriten gespeichert.'
                         : 'Keine Namen gefunden.'}
@@ -1213,7 +1248,7 @@ export default function BabyNamesScreen() {
             ListFooterComponent={
               isLoadingMore ? (
                 <View style={styles.loadMoreContainer}>
-                  <ActivityIndicator size="small" color={theme.accent} />
+                  <ActivityIndicator size="small" color={accentColor} />
                 </View>
               ) : null
             }
@@ -1221,7 +1256,7 @@ export default function BabyNamesScreen() {
 
           {isAdmin && (
             <TouchableOpacity
-              style={[styles.adminFab, { backgroundColor: theme.accent }]}
+              style={[styles.adminFab, { backgroundColor: accentColor }]}
               onPress={handleOpenCreateModal}
               activeOpacity={0.9}
             >
@@ -1249,21 +1284,34 @@ export default function BabyNamesScreen() {
                   <View style={StyleSheet.absoluteFill} />
                 </TouchableWithoutFeedback>
 
-                <BlurView style={styles.dailyModalContent} tint="extraLight" intensity={82}>
+                <BlurView
+                  style={[
+                    styles.dailyModalContent,
+                    {
+                      backgroundColor: isDark ? 'rgba(12,12,16,0.78)' : 'rgba(142,78,198,0.08)',
+                      borderColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(142,78,198,0.2)',
+                    },
+                  ]}
+                  tint={isDark ? "dark" : "extraLight"}
+                  intensity={82}
+                >
                   <View style={styles.modalHeaderRow}>
                     <View style={styles.headerLeft}>
-                      <TouchableOpacity onPress={() => setShowCreateModal(false)} style={styles.headerCircleButton}>
-                        <IconSymbol name="xmark" size={18} color={BABY_LILA} />
+                      <TouchableOpacity
+                        onPress={() => setShowCreateModal(false)}
+                        style={[styles.headerCircleButton, { backgroundColor: actionButtonBackground }]}
+                      >
+                        <IconSymbol name="xmark" size={18} color={modalAccent} />
                       </TouchableOpacity>
                     </View>
                     <View style={styles.headerCenter}>
-                      <ThemedText style={[styles.modalTitle, { color: BABY_LILA }]}>
+                      <ThemedText style={[styles.modalTitle, { color: modalAccent }]}>
                         {editingNameId ? 'Name bearbeiten' : 'Neuen Namen hinzufügen'}
                       </ThemedText>
                     </View>
                     <View style={styles.headerRight}>
                       <TouchableOpacity
-                        style={[styles.headerCircleButton, { backgroundColor: BABY_LILA }]}
+                        style={[styles.headerCircleButton, { backgroundColor: modalAccent }]}
                         onPress={handleCreateName}
                         disabled={isCreatingName}
                       >
@@ -1280,7 +1328,15 @@ export default function BabyNamesScreen() {
                     <TouchableOpacity
                       style={[
                         styles.adminModeButton,
+                        {
+                          backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.9)',
+                          borderColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(142,78,198,0.2)',
+                        },
                         createMode === 'single' && styles.adminModeButtonActive,
+                        createMode === 'single' && {
+                          backgroundColor: isDark ? 'rgba(233,201,182,0.28)' : 'rgba(142,78,198,0.18)',
+                          borderColor: isDark ? 'rgba(233,201,182,0.55)' : 'rgba(142,78,198,0.5)',
+                        },
                       ]}
                       onPress={() => {
                         setCreateMode('single');
@@ -1291,7 +1347,9 @@ export default function BabyNamesScreen() {
                       <ThemedText
                         style={[
                           styles.adminModeButtonText,
+                          { color: textSecondary },
                           createMode === 'single' && styles.adminModeButtonTextActive,
+                          createMode === 'single' && { color: modalAccent },
                         ]}
                       >
                         Einzeln
@@ -1300,7 +1358,15 @@ export default function BabyNamesScreen() {
                     <TouchableOpacity
                       style={[
                         styles.adminModeButton,
+                        {
+                          backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.9)',
+                          borderColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(142,78,198,0.2)',
+                        },
                         createMode === 'bulk' && styles.adminModeButtonActive,
+                        createMode === 'bulk' && {
+                          backgroundColor: isDark ? 'rgba(233,201,182,0.28)' : 'rgba(142,78,198,0.18)',
+                          borderColor: isDark ? 'rgba(233,201,182,0.55)' : 'rgba(142,78,198,0.5)',
+                        },
                         editingNameId && styles.adminModeButtonDisabled,
                       ]}
                       onPress={() => {
@@ -1314,7 +1380,9 @@ export default function BabyNamesScreen() {
                       <ThemedText
                         style={[
                           styles.adminModeButtonText,
+                          { color: textSecondary },
                           createMode === 'bulk' && styles.adminModeButtonTextActive,
+                          createMode === 'bulk' && { color: modalAccent },
                         ]}
                       >
                         SQL-Import
@@ -1331,7 +1399,7 @@ export default function BabyNamesScreen() {
                       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
                         <View>
                           <View style={styles.modalField}>
-                            <ThemedText style={[styles.modalLabel, { color: BABY_LILA }]}>Name</ThemedText>
+                            <ThemedText style={[styles.modalLabel, { color: modalAccent }]}>Name</ThemedText>
                             {renderInlineField(
                               newName,
                               'z.B. Mila',
@@ -1349,7 +1417,7 @@ export default function BabyNamesScreen() {
                           </View>
 
                           <View style={styles.modalField}>
-                            <ThemedText style={[styles.modalLabel, { color: BABY_LILA }]}>Bedeutung</ThemedText>
+                            <ThemedText style={[styles.modalLabel, { color: modalAccent }]}>Bedeutung</ThemedText>
                             {renderInlineField(
                               persistedMeaning,
                               'z.B. Wunder, Hoffnung',
@@ -1369,7 +1437,7 @@ export default function BabyNamesScreen() {
                           </View>
 
                           <View style={styles.modalField}>
-                            <ThemedText style={[styles.modalLabel, { color: BABY_LILA }]}>Herkunft</ThemedText>
+                            <ThemedText style={[styles.modalLabel, { color: modalAccent }]}>Herkunft</ThemedText>
                             {renderInlineField(
                               persistedOrigin,
                               'z.B. Hebräisch',
@@ -1406,11 +1474,19 @@ export default function BabyNamesScreen() {
                       ListHeaderComponent={
                         <View>
                           <View style={styles.modalField}>
-                            <ThemedText style={[styles.modalLabel, { color: BABY_LILA }]}>
+                            <ThemedText style={[styles.modalLabel, { color: modalAccent }]}>
                               SQL-Skript
                             </ThemedText>
                             <TextInput
-                              style={[styles.modalInput, styles.bulkSqlInput, { color: theme.text }]}
+                              style={[
+                                styles.modalInput,
+                                styles.bulkSqlInput,
+                                {
+                                  color: inputTextColor,
+                                  backgroundColor: modalInputBackground,
+                                  borderColor: modalInputBorderColor,
+                                },
+                              ]}
                               value={bulkSql}
                               onChangeText={(text) => {
                                 setBulkSql(text);
@@ -1420,24 +1496,30 @@ export default function BabyNamesScreen() {
                                 setBulkSqlSnapshot(null);
                               }}
                               placeholder="insert into public.baby_names (id, name, meaning, origin, gender, created_at) values ..."
-                              placeholderTextColor={theme.tabIconDefault}
+                              placeholderTextColor={inputPlaceholderColor}
                               multiline
                               textAlignVertical="top"
                             />
                           </View>
                           <View style={styles.bulkActionsRow}>
                             <TouchableOpacity
-                              style={styles.bulkActionButton}
+                              style={[
+                                styles.bulkActionButton,
+                                {
+                                  backgroundColor: isDark ? 'rgba(233,201,182,0.24)' : 'rgba(142,78,198,0.18)',
+                                  borderColor: isDark ? 'rgba(233,201,182,0.5)' : 'rgba(142,78,198,0.35)',
+                                },
+                              ]}
                               onPress={handleParseBulkSql}
                             >
-                              <ThemedText style={styles.bulkActionButtonText}>SQL prüfen</ThemedText>
+                              <ThemedText style={[styles.bulkActionButtonText, { color: modalAccent }]}>SQL prüfen</ThemedText>
                             </TouchableOpacity>
                           </View>
                           {bulkError && (
                             <ThemedText style={styles.bulkErrorText}>{bulkError}</ThemedText>
                           )}
                           {bulkEntries.length > 0 && (
-                            <ThemedText style={styles.bulkHintText}>
+                            <ThemedText style={[styles.bulkHintText, { color: textSecondary }]}>
                               Prüfe die Einträge, passe sie an und speichere.
                             </ThemedText>
                           )}
@@ -1457,7 +1539,7 @@ export default function BabyNamesScreen() {
             value={focusValue}
             placeholder={focusConfig?.placeholder}
             multiline={!!focusConfig?.multiline}
-            accentColor={BABY_LILA}
+            accentColor={modalAccent}
             onClose={closeFocusEditor}
             onSubmit={(next) => saveFocusEditor(next)}
           />
@@ -1486,7 +1568,6 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   fullWidthCard: {
-    marginHorizontal: TIMELINE_INSET,
   },
   glassCard: {
     borderRadius: 22,

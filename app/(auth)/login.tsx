@@ -10,7 +10,6 @@ import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { Colors } from '@/constants/Colors';
-import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 
@@ -22,8 +21,9 @@ export default function LoginScreen() {
   const [isRegistering, setIsRegistering] = useState(false);
   const [invitationCode, setInvitationCode] = useState('');
   const [showInvitationField, setShowInvitationField] = useState(false);
-  const colorScheme = useColorScheme() ?? 'light';
-  const theme = Colors[colorScheme];
+  const accentColor = Colors.light.accent;
+  const primaryTextColor = Colors.light.textPrimary;
+  const secondaryTextColor = Colors.light.textSecondary;
   const { signInWithEmail, signUpWithEmail, signInWithApple } = useAuth();
 
   const handleForgotPassword = async () => {
@@ -268,10 +268,10 @@ export default function LoginScreen() {
             <StatusBar hidden={true} />
             <ScrollView contentContainerStyle={styles.scrollContent}>
               <View style={styles.logoContainer}>
-                <ThemedText type="title" style={styles.appTitle}>
+                <ThemedText type="title" style={styles.appTitle} lightColor={primaryTextColor} darkColor={primaryTextColor}>
                   Lotti Baby
                 </ThemedText>
-                <ThemedText style={styles.appSubtitle}>
+                <ThemedText style={styles.appSubtitle} lightColor={secondaryTextColor} darkColor={secondaryTextColor}>
                   Für Eltern und alle, die es bald werden
                 </ThemedText>
               </View>
@@ -283,7 +283,7 @@ export default function LoginScreen() {
                   style={StyleSheet.absoluteFill}
                 />
                 <View style={styles.formContent}>
-                  <ThemedText type="subtitle" style={styles.formTitle}>
+                  <ThemedText type="subtitle" style={styles.formTitle} lightColor={primaryTextColor} darkColor={primaryTextColor}>
                     {isRegistering ? 'Registrieren' : 'Anmelden'}
                   </ThemedText>
 
@@ -291,14 +291,14 @@ export default function LoginScreen() {
                     <View style={styles.errorContainer}>
                       <BlurView intensity={15} tint="light" style={StyleSheet.absoluteFill} />
                       <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(244,67,54,0.15)' }]} />
-                      <ThemedText style={styles.errorText} lightColor="#B71C1C" darkColor="#FFCDD2">
+                      <ThemedText style={styles.errorText} lightColor="#B71C1C" darkColor="#B71C1C">
                         {error}
                       </ThemedText>
                     </View>
                   ) : null}
 
                 <View style={styles.inputContainer}>
-                  <ThemedText style={styles.inputLabel}>
+                  <ThemedText style={styles.inputLabel} lightColor={secondaryTextColor} darkColor={secondaryTextColor}>
                     E-Mail
                   </ThemedText>
                   <View style={styles.inputWrapper}>
@@ -317,7 +317,7 @@ export default function LoginScreen() {
                 </View>
 
                 <View style={styles.inputContainer}>
-                  <ThemedText style={styles.inputLabel}>
+                  <ThemedText style={styles.inputLabel} lightColor={secondaryTextColor} darkColor={secondaryTextColor}>
                     Passwort
                   </ThemedText>
                   <View style={styles.inputWrapper}>
@@ -340,7 +340,7 @@ export default function LoginScreen() {
                     onPress={handleForgotPassword}
                     disabled={isLoading}
                   >
-                    <ThemedText style={styles.forgotPasswordText} lightColor={theme.accent} darkColor={theme.accent}>
+                    <ThemedText style={styles.forgotPasswordText} lightColor={accentColor} darkColor={accentColor}>
                       Passwort vergessen?
                     </ThemedText>
                   </TouchableOpacity>
@@ -390,14 +390,14 @@ export default function LoginScreen() {
                       onPress={() => setShowInvitationField(!showInvitationField)}
                       disabled={isLoading}
                     >
-                      <ThemedText style={styles.invitationToggleText} lightColor={theme.accent} darkColor={theme.accent}>
+                      <ThemedText style={styles.invitationToggleText} lightColor={accentColor} darkColor={accentColor}>
                         {showInvitationField ? 'Ohne Einladungscode fortfahren' : 'Ich habe einen Einladungscode'}
                       </ThemedText>
                     </TouchableOpacity>
 
                     {showInvitationField && (
                       <>
-                        <ThemedText style={styles.inputLabel}>
+                        <ThemedText style={styles.inputLabel} lightColor={secondaryTextColor} darkColor={secondaryTextColor}>
                           Einladungscode (optional)
                         </ThemedText>
                         <View style={styles.inputWrapper}>
@@ -426,7 +426,7 @@ export default function LoginScreen() {
                   }}
                   disabled={isLoading}
                 >
-                  <ThemedText style={styles.switchModeText} lightColor={theme.accent} darkColor={theme.accent}>
+                  <ThemedText style={styles.switchModeText} lightColor={accentColor} darkColor={accentColor}>
                     {isRegistering ? 'Bereits ein Konto? Anmelden' : 'Noch kein Konto? Registrieren'}
                   </ThemedText>
                 </TouchableOpacity>

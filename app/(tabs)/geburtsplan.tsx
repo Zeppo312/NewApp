@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedBackground } from '@/components/ThemedBackground';
-import { LiquidGlassCard, GLASS_OVERLAY, GLASS_OVERLAY_DARK, LAYOUT_PAD, TIMELINE_INSET } from '@/constants/DesignGuide';
+import { LiquidGlassCard, GLASS_OVERLAY, GLASS_OVERLAY_DARK, LAYOUT_PAD } from '@/constants/DesignGuide';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
@@ -477,14 +477,11 @@ const createStyles = ({
   },
   contentContainer: { paddingHorizontal: LAYOUT_PAD, paddingBottom: 40, paddingTop: 10 },
   fullWidthCard: {
-    marginHorizontal: TIMELINE_INSET, // identisch zur Timeline
   },
   sectionCard: {
     marginBottom: 16,
     borderRadius: 22,
     overflow: 'hidden',
-    // gleiche Innenbreite wie Timeline:
-    marginHorizontal: TIMELINE_INSET,
   },
   sectionTitle: {
     fontSize: 18,
@@ -515,8 +512,6 @@ const createStyles = ({
   textAreaGlass: {
     borderRadius: 22,
     overflow: 'hidden',
-    // gleiche Innenbreite wie Timeline:
-    marginHorizontal: TIMELINE_INSET,
     padding: 12,
     marginBottom: 16
   },
@@ -529,9 +524,7 @@ const createStyles = ({
   // Action cards row
   cardsRow: {
     flexDirection: 'row',
-    // gleiche Innenbreite wie Timeline:
     alignSelf: 'stretch',
-    marginHorizontal: TIMELINE_INSET,
     justifyContent: 'center',
     marginBottom: 16
   },

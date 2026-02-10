@@ -17,7 +17,7 @@ import Header from '@/components/Header';
 import { useSmartBack } from '@/contexts/NavigationContext';
 import * as Notifications from 'expo-notifications';
 import { defineMilestoneCheckerTask, saveBabyInfoForBackgroundTask, isTaskRegistered } from '@/tasks/milestoneCheckerTask';
-import { LAYOUT_PAD, TIMELINE_INSET, LiquidGlassCard, GLASS_OVERLAY, GLASS_OVERLAY_DARK } from '@/constants/DesignGuide';
+import { LAYOUT_PAD, LiquidGlassCard, GLASS_OVERLAY, GLASS_OVERLAY_DARK } from '@/constants/DesignGuide';
 import { useFocusEffect } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
@@ -590,7 +590,6 @@ const styles = StyleSheet.create({
   },
   // Liquid Glass wrappers (Sleep-Tracker look)
   glassCard: {
-    marginHorizontal: TIMELINE_INSET,
     marginBottom: 20,
     borderRadius: 22,
   },
@@ -726,7 +725,6 @@ const styles = StyleSheet.create({
   },
   // Info cards (Liquid Glass)
   infoGlassCard: {
-    marginHorizontal: TIMELINE_INSET,
     marginBottom: 20,
     borderRadius: 22,
   },

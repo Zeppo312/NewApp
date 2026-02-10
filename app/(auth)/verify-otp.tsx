@@ -11,9 +11,11 @@ import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { verifyOTPToken, resendOTPToken } from '@/lib/supabase';
 
+const OTP_LENGTH = 6;
+
 export default function VerifyOTPScreen() {
   const { email, invitationCode } = useLocalSearchParams<{ email: string, invitationCode?: string }>();
-  const [otp, setOTP] = useState(['', '', '', '', '', '']);
+  const [otp, setOTP] = useState(Array.from({ length: OTP_LENGTH }, () => ''));
   const [isLoading, setIsLoading] = useState(false);
   const [canResend, setCanResend] = useState(true);
   const [countdown, setCountdown] = useState(0);
@@ -40,16 +42,52 @@ export default function VerifyOTPScreen() {
     return () => clearInterval(interval);
   }, [countdown]);
 
+  const applyOTPDigits = (input: string, startIndex = 0) => {
+    const digits = input.replace(/\D/g, '');
+    if (!digits) return;
+
+    const nextOTP = [...otp];
+    let targetIndex = startIndex;
+
+    for (const digit of digits) {
+      if (targetIndex >= OTP_LENGTH) break;
+      nextOTP[targetIndex] = digit;
+      targetIndex += 1;
+    }
+
+    setOTP(nextOTP);
+
+    if (nextOTP.every((digit) => digit !== '') && !isLoading) {
+      Keyboard.dismiss();
+      handleVerifyOTP(nextOTP.join(''));
+      return;
+    }
+
+    if (targetIndex < OTP_LENGTH) {
+      inputRefs.current[targetIndex]?.focus();
+    } else {
+      inputRefs.current[OTP_LENGTH - 1]?.focus();
+    }
+  };
+
   const handleOTPChange = (value: string, index: number) => {
+    const digitsOnly = value.replace(/\D/g, '');
+
+    // Mehrstellige Eingabe (Paste/AutoFill) auf alle Felder verteilen
+    if (digitsOnly.length > 1) {
+      applyOTPDigits(digitsOnly, index);
+      return;
+    }
+
     // Nur Zahlen erlauben
-    if (!/^\d*$/.test(value)) return;
+    if (!/^\d*$/.test(digitsOnly)) return;
 
     const newOTP = [...otp];
-    newOTP[index] = value;
+    newOTP[index] = digitsOnly;
     setOTP(newOTP);
 
     // Automatisch zum nächsten Feld springen
-    if (value && index < 5) {
+    if (digitsOnly && index < OTP_LENGTH - 1) {
       inputRefs.current[index + 1]?.focus();
     }
 
@@ -69,8 +107,8 @@ export default function VerifyOTPScreen() {
   const handleVerifyOTP = async (otpCode?: string) => {
     const code = otpCode || otp.join('');
     
-    if (code.length !== 6) {
-      Alert.alert('Ungültiger Code', 'Bitte gib einen 6-stelligen Code ein');
+    if (code.length !== OTP_LENGTH) {
+      Alert.alert('Ungültiger Code', `Bitte gib einen ${OTP_LENGTH}-stelligen Code ein`);
       return;
     }
 
@@ -91,7 +129,7 @@ export default function VerifyOTPScreen() {
         // Spezifische Fehlermeldungen
         if (error.message?.includes('invalid') || error.message?.includes('expired')) {
           Alert.alert('Ungültiger Code', 'Der eingegebene Code ist ungültig oder abgelaufen');
-          setOTP(['', '', '', '', '', '']);
+          setOTP(Array.from({ length: OTP_LENGTH }, () => ''));
           inputRefs.current[0]?.focus();
         } else if (error.message?.toLowerCase().includes('rate limit')) {
           Alert.alert('Zu viele Versuche', 'Bitte warte kurz, bevor du einen neuen Code anforderst oder erneut prüfst.');
@@ -152,10 +190,10 @@ export default function VerifyOTPScreen() {
       } else {
         Alert.alert(
           'Code gesendet',
-          'Wir haben dir einen neuen 6-stelligen Code gesendet. Bitte prüfe deinen Posteingang.'
+          `Wir haben dir einen neuen ${OTP_LENGTH}-stelligen Code gesendet. Bitte prüfe deinen Posteingang.`
         );
         setCountdown(60); // 60 Sekunden warten
-        setOTP(['', '', '', '', '', '']);
+        setOTP(Array.from({ length: OTP_LENGTH }, () => ''));
         inputRefs.current[0]?.focus();
       }
     } catch (err) {
@@ -201,7 +239,7 @@ export default function VerifyOTPScreen() {
                   Code eingeben
                 </ThemedText>
                 <ThemedText style={styles.description}>
-                  Wir haben dir einen 6-stelligen Code an{'\n'}
+                  Wir haben dir einen {OTP_LENGTH}-stelligen Code an{'\n'}
                   <ThemedText style={styles.emailText}>{email}</ThemedText>{'\n'}
                   gesendet.
                 </ThemedText>
@@ -229,9 +267,10 @@ export default function VerifyOTPScreen() {
                       onChangeText={(value) => handleOTPChange(value, index)}
                       onKeyPress={({ nativeEvent }) => handleKeyPress(nativeEvent.key, index)}
                       keyboardType="numeric"
-                      maxLength={1}
+                      maxLength={OTP_LENGTH}
                       textAlign="center"
                       autoFocus={index === 0}
+                      selectTextOnFocus
                       editable={!isLoading}
                     />
                   ))}
@@ -241,10 +280,10 @@ export default function VerifyOTPScreen() {
                   style={[
                     styles.button, 
                     styles.verifyButton,
-                    (isLoading || otp.join('').length !== 6) && styles.buttonDisabled
+                    (isLoading || otp.join('').length !== OTP_LENGTH) && styles.buttonDisabled
                   ]}
                   onPress={() => handleVerifyOTP()}
-                  disabled={isLoading || otp.join('').length !== 6}
+                  disabled={isLoading || otp.join('').length !== OTP_LENGTH}
                 >
                   <ThemedText style={styles.buttonText}>
                     {isLoading ? 'Überprüfe...' : 'Code bestätigen'}

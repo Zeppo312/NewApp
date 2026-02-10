@@ -11,8 +11,8 @@ import { AddChecklistItem } from '@/components/AddChecklistItem';
 import { ProgressCircle } from '@/components/ProgressCircle';
 
 import { ChecklistItem, getHospitalChecklist, addChecklistItem, toggleChecklistItem, deleteChecklistItem, supabaseUrl } from '@/lib/supabase';
-import { LiquidGlassCard, LAYOUT_PAD, SECTION_GAP_TOP, PRIMARY, TEXT_PRIMARY } from '@/constants/DesignGuide';
-import { useColorScheme } from '@/hooks/useColorScheme';
+import { LiquidGlassCard, LAYOUT_PAD, SECTION_GAP_TOP, PRIMARY, TEXT_PRIMARY, GLASS_OVERLAY, GLASS_OVERLAY_DARK } from '@/constants/DesignGuide';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 
 const ACCENT_PURPLE = '#A47AD4';
 const DEEP_TEXT = '#5C4033';
@@ -35,7 +35,21 @@ const deduplicateChecklist = (items: ChecklistItem[]) => {
 };
 
 export default function TabTwoScreen() {
-  const colorScheme = useColorScheme() ?? 'light';
+  const adaptiveColors = useAdaptiveColors();
+  const isDark = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
+  const textPrimary = isDark ? adaptiveColors.textPrimary : '#5C4033';
+  const textSecondary = isDark ? adaptiveColors.textSecondary : '#7D5A50';
+  const glassOverlay = isDark ? GLASS_OVERLAY_DARK : GLASS_OVERLAY;
+  const softCardBg = isDark ? 'rgba(0,0,0,0.35)' : SOFT_CARD_BG;
+  const softBorder = isDark ? 'rgba(255,255,255,0.18)' : SOFT_BORDER;
+  const deepText = isDark ? adaptiveColors.textPrimary : DEEP_TEXT;
+  const softText = isDark ? adaptiveColors.textSecondary : 'rgba(92,64,51,0.8)';
+  const badgeAccent = isDark ? adaptiveColors.accent : PRIMARY;
+  const tipIconColor = isDark ? adaptiveColors.accent : TIP_ICON;
+  const errorBorderColor = isDark ? 'rgba(255,122,122,0.55)' : '#EFB0B6';
+  const errorTextColor = isDark ? '#FFB4B4' : '#A8464C';
+  const retryButtonBg = isDark ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.75)';
+  const retryButtonBorder = isDark ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.5)';
 
   // State für die Checkliste
   const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
@@ -281,7 +295,7 @@ export default function TabTwoScreen() {
   return (
     <ThemedBackground>
       <SafeAreaView style={styles.safeArea}>
-        <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
+        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
         <Header
           title="Krankenhaus-Checkliste"
           subtitle="Alles was du für die Klinik brauchst"
@@ -293,67 +307,59 @@ export default function TabTwoScreen() {
           showsVerticalScrollIndicator={false}
         >
 
-          <LiquidGlassCard style={[styles.cardBase, styles.summaryCard, { backgroundColor: SOFT_CARD_BG, borderColor: SOFT_BORDER }]}>
+          <LiquidGlassCard style={[styles.cardBase, styles.summaryCard, { backgroundColor: softCardBg, borderColor: softBorder }]}>
             <View style={styles.summaryHeader}>
               <ProgressCircle
                 progress={totalProgress}
                 size={70}
-                progressColor={ACCENT_PURPLE}
-                backgroundColor="rgba(255,255,255,0.3)"
-                textColor={DEEP_TEXT}
+                progressColor={isDark ? adaptiveColors.accent : ACCENT_PURPLE}
+                backgroundColor={isDark ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.3)'}
+                textColor={deepText}
               />
               <View style={styles.summaryTextBlock}>
-                <ThemedText style={styles.summaryTitle} lightColor={DEEP_TEXT}>
+                <ThemedText style={[styles.summaryTitle, { color: deepText }]}>
                   Bereit für den großen Tag
                 </ThemedText>
-                <ThemedText style={styles.summaryLead} lightColor="rgba(92,64,51,0.8)">
+                <ThemedText style={[styles.summaryLead, { color: softText }]}>
                   Deine Liste wächst mit dir – hake ab, ergänze und bleib entspannt.
                 </ThemedText>
                 <View style={styles.summaryBadges}>
-                  <View style={[styles.summaryBadge, { backgroundColor: BADGE_TINT, borderColor: BADGE_BORDER }]}>
-                    <IconSymbol name="doc.text" size={16} color={PRIMARY} />
-                    <ThemedText
-                      style={styles.summaryBadgeText}
-                      lightColor={PRIMARY}
-                      darkColor={PRIMARY}
-                    >
+                  <View style={[styles.summaryBadge, { backgroundColor: isDark ? 'rgba(142,78,198,0.22)' : BADGE_TINT, borderColor: BADGE_BORDER }]}>
+                    <IconSymbol name="doc.text" size={16} color={badgeAccent} />
+                    <ThemedText style={[styles.summaryBadgeText, { color: badgeAccent }]}>
                       {totalCategories} Kategorien
                     </ThemedText>
                   </View>
-                  <View style={[styles.summaryBadge, { backgroundColor: BADGE_TINT, borderColor: BADGE_BORDER }]}>
-                    <IconSymbol name="checkmark.seal.fill" size={16} color={PRIMARY} />
-                    <ThemedText
-                      style={styles.summaryBadgeText}
-                      lightColor={PRIMARY}
-                      darkColor={PRIMARY}
-                    >
+                  <View style={[styles.summaryBadge, { backgroundColor: isDark ? 'rgba(142,78,198,0.22)' : BADGE_TINT, borderColor: BADGE_BORDER }]}>
+                    <IconSymbol name="checkmark.seal.fill" size={16} color={badgeAccent} />
+                    <ThemedText style={[styles.summaryBadgeText, { color: badgeAccent }]}>
                       {checkedItems}/{totalItems || 0} erledigt
                     </ThemedText>
                   </View>
                 </View>
               </View>
             </View>
-            <View style={styles.summaryFooter}>
-              <ThemedText style={styles.summaryFooterText} lightColor="rgba(92,64,51,0.85)">
+            <View style={[styles.summaryFooter, isDark && { borderTopColor: 'rgba(255,255,255,0.15)' }]}>
+              <ThemedText style={[styles.summaryFooterText, { color: softText }]}>
                 {progressNote}
               </ThemedText>
             </View>
           </LiquidGlassCard>
 
           {loading ? (
-            <LiquidGlassCard style={[styles.cardBase, styles.stateCard, { backgroundColor: SOFT_CARD_BG, borderColor: SOFT_BORDER }]}>
+            <LiquidGlassCard style={[styles.cardBase, styles.stateCard, { backgroundColor: softCardBg, borderColor: softBorder }]}>
               <ActivityIndicator size="small" color={ACCENT_PURPLE} />
-              <ThemedText style={styles.stateText} lightColor={DEEP_TEXT}>
+              <ThemedText style={[styles.stateText, { color: deepText }]}>
                 Checkliste wird geladen...
               </ThemedText>
             </LiquidGlassCard>
           ) : error ? (
-            <LiquidGlassCard style={[styles.cardBase, styles.stateCard, styles.errorCard, { backgroundColor: SOFT_CARD_BG, borderColor: '#EFB0B6' }]}>
-              <ThemedText style={[styles.stateText, styles.errorText]} lightColor="#A8464C">
+            <LiquidGlassCard style={[styles.cardBase, styles.stateCard, styles.errorCard, { backgroundColor: softCardBg, borderColor: errorBorderColor }]}>
+              <ThemedText style={[styles.stateText, styles.errorText, { color: errorTextColor }]}>
                 {error}
               </ThemedText>
-              <TouchableOpacity style={styles.retryButton} onPress={loadChecklist}>
-                <ThemedText style={styles.retryText} lightColor={DEEP_TEXT}>
+              <TouchableOpacity style={[styles.retryButton, { backgroundColor: retryButtonBg, borderColor: retryButtonBorder }]} onPress={loadChecklist}>
+                <ThemedText style={[styles.retryText, { color: deepText }]}>
                   Erneut versuchen
                 </ThemedText>
               </TouchableOpacity>
@@ -363,8 +369,8 @@ export default function TabTwoScreen() {
               <AddChecklistItem onAdd={handleAddItem} categories={categories} />
 
               {Object.keys(groupedItems).length === 0 ? (
-                <LiquidGlassCard style={[styles.cardBase, styles.stateCard, { backgroundColor: SOFT_CARD_BG, borderColor: SOFT_BORDER }]}>
-                  <ThemedText style={styles.stateText} lightColor={DEEP_TEXT}>
+                <LiquidGlassCard style={[styles.cardBase, styles.stateCard, { backgroundColor: softCardBg, borderColor: softBorder }]}>
+                  <ThemedText style={[styles.stateText, { color: deepText }]}>
                     Deine Checkliste ist noch leer. Füge unten neue Einträge hinzu.
                   </ThemedText>
                 </LiquidGlassCard>
@@ -382,10 +388,10 @@ export default function TabTwoScreen() {
             </>
           )}
 
-          <LiquidGlassCard style={[styles.cardBase, styles.tipCard, { backgroundColor: SOFT_CARD_BG, borderColor: SOFT_BORDER }]}>
+          <LiquidGlassCard style={[styles.cardBase, styles.tipCard, { backgroundColor: softCardBg, borderColor: softBorder }]}>
             <View style={styles.tipContent}>
-              <IconSymbol name="sparkles" size={20} color={TIP_ICON} />
-              <ThemedText style={styles.tipText} lightColor={DEEP_TEXT}>
+              <IconSymbol name="sparkles" size={20} color={tipIconColor} />
+              <ThemedText style={[styles.tipText, { color: deepText }]}>
                 Tipp: Überprüfe am Abend vor der Abreise alles noch einmal gemeinsam mit deiner Begleitung.
               </ThemedText>
             </View>

@@ -245,6 +245,7 @@ CREATE TABLE IF NOT EXISTS public.planner_items (
   due_at TIMESTAMPTZ,
   start_at TIMESTAMPTZ,
   end_at TIMESTAMPTZ,
+  reminder_minutes INTEGER,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CONSTRAINT planner_items_event_times CHECK (

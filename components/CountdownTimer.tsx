@@ -3,13 +3,13 @@ import { View, StyleSheet, Dimensions, AppState, AppStateStatus, TouchableOpacit
 import { ThemedText } from './ThemedText';
 import { ThemedView } from './ThemedView';
 import { Colors } from '@/constants/Colors';
-import { pregnancyWeekInfo, pregnancyWeekCircleInfo } from '@/constants/PregnancyWeekInfo';
+import { pregnancyWeekCircleInfo } from '@/constants/PregnancyWeekInfo';
 import { babySizeComparison } from '@/constants/BabySizeComparison';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { router } from 'expo-router';
 import Svg, { Circle, G, Text as SvgText, Defs, LinearGradient, Stop } from 'react-native-svg';
-import { PRIMARY, TEXT_PRIMARY, GLASS_BORDER, FONT_SM, FONT_MD, FONT_LG, RADIUS } from '@/constants/DesignGuide';
+import { PRIMARY, TEXT_PRIMARY, FONT_SM, FONT_MD, FONT_LG, RADIUS } from '@/constants/DesignGuide';
 
 // Hilfsfunktion zum Aufteilen von Text in mehrere Zeilen
 const splitTextIntoLines = (text: string, maxCharsPerLine: number): string[] => {
@@ -62,6 +62,7 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({
   const adaptiveColors = useAdaptiveColors();
   const isDark = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
   const textPrimary = isDark ? adaptiveColors.textPrimary : TEXT_PRIMARY;
+  const accentColor = isDark ? adaptiveColors.accent : PRIMARY;
   const [daysLeft, setDaysLeft] = useState<number | null>(null);
   const [currentWeek, setCurrentWeek] = useState<number | null>(null);
   const [currentDay, setCurrentDay] = useState<number | null>(null);
@@ -194,7 +195,6 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({
   const circumference = radius * 2 * Math.PI;
   const strokeDashoffset = circumference * (1 - progress);
   const WARN = '#E57373';
-  const bgStroke = isDark ? 'rgba(255,255,255,0.22)' : GLASS_BORDER;
   const bgStrokeGlass = isDark ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.55)';
 
   return (
@@ -218,7 +218,7 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({
             <LinearGradient id="progressGradient" x1="0" y1="0" x2={String(size)} y2={String(size)} gradientUnits="userSpaceOnUse">
               <Stop offset="0%" stopColor={isDark ? '#C9B3E8' : '#E6D8F7'} stopOpacity={1} />
               <Stop offset="55%" stopColor={isDark ? '#A677D8' : '#B88CE8'} stopOpacity={1} />
-              <Stop offset="100%" stopColor={PRIMARY} stopOpacity={1} />
+              <Stop offset="100%" stopColor={accentColor} stopOpacity={1} />
             </LinearGradient>
             {/* Gradient für Überfälligkeit (warme Glas-Töne) */}
             <LinearGradient id="overdueGradient" x1="0" y1="0" x2={String(size)} y2={String(size)} gradientUnits="userSpaceOnUse">
@@ -292,7 +292,7 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({
               textAnchor="middle"
               fontSize="22"
               fontWeight="bold"
-              fill={isOverdue ? WARN : PRIMARY}
+              fill={isOverdue ? WARN : accentColor}
             >
               {isOverdue 
                 ? 'Überfällig' 
@@ -376,7 +376,7 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({
             <ThemedText 
               style={[
                 styles.detailValue,
-                { color: isOverdue ? WARN : PRIMARY }
+                { color: isOverdue ? WARN : accentColor }
               ]}
             >
               {daysLeft !== null ? (
@@ -397,7 +397,7 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({
           
           <View style={styles.detailRow}>
             <ThemedText style={[styles.detailLabel, { color: textPrimary }]}>Geschafft:</ThemedText>
-            <ThemedText style={[styles.detailValue, { color: PRIMARY }]}>
+            <ThemedText style={[styles.detailValue, { color: accentColor }]}>
               {progress ? `${Math.round(progress * 100)}%` : '0%'}
             </ThemedText>
           </View>
@@ -413,7 +413,7 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({
         >
           <ThemedView style={styles.babySizeInnerContainer} lightColor={'transparent'} darkColor={'transparent'}>
             <ThemedText style={[styles.babySizeLabel, { color: textPrimary }]}>Babygröße:</ThemedText>
-            <ThemedText style={[styles.babySizeValue, { color: PRIMARY }]}>
+            <ThemedText style={[styles.babySizeValue, { color: accentColor }]}>
               {babySizeComparison[currentWeek] || "Noch nicht berechenbar"}
             </ThemedText>
             <ThemedText style={styles.babySizeTapHint}>Tippen für mehr Details</ThemedText>

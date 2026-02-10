@@ -3,9 +3,8 @@ import { StyleSheet, TouchableOpacity, View } from 'react-native';
 import { ThemedText } from './ThemedText';
 import { ChecklistItem as ChecklistItemType } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors } from '@/constants/Colors';
-import { useColorScheme } from '@/hooks/useColorScheme';
 import { TEXT_PRIMARY } from '@/constants/DesignGuide';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 
 const CHECK_ACCENT = '#9D7BD8';
 
@@ -16,11 +15,13 @@ interface ChecklistItemProps {
 }
 
 export const ChecklistItem: React.FC<ChecklistItemProps> = ({ item, onToggle, onDelete }) => {
-  const colorScheme = useColorScheme() ?? 'light';
-  const theme = Colors[colorScheme];
-  const baseBackground = colorScheme === 'dark' ? 'rgba(22,16,14,0.75)' : 'rgba(255,255,255,0.85)';
-  const borderColor = colorScheme === 'dark' ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.55)';
-  const textColor = colorScheme === 'dark' ? theme.text : TEXT_PRIMARY;
+  const adaptiveColors = useAdaptiveColors();
+  const isDark = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
+  const baseBackground = isDark ? 'rgba(18,14,12,0.72)' : 'rgba(255,255,255,0.85)';
+  const borderColor = isDark ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.55)';
+  const textColor = isDark ? adaptiveColors.textPrimary : TEXT_PRIMARY;
+  const notesColor = isDark ? adaptiveColors.textSecondary : `${textColor}CC`;
+  const deleteBg = isDark ? 'rgba(157,123,216,0.3)' : 'rgba(157,123,216,0.2)';
 
   return (
     <View style={[styles.container, { backgroundColor: baseBackground, borderColor }]}>
@@ -54,14 +55,14 @@ export const ChecklistItem: React.FC<ChecklistItemProps> = ({ item, onToggle, on
         </ThemedText>
 
         {item.notes && (
-          <ThemedText style={[styles.notes, { color: `${textColor}CC` }]}>
+          <ThemedText style={[styles.notes, { color: notesColor }]}>
             {item.notes}
           </ThemedText>
         )}
       </View>
 
       <TouchableOpacity
-        style={styles.deleteButton}
+        style={[styles.deleteButton, { backgroundColor: deleteBg }]}
         onPress={() => onDelete(item.id)}
       >
         <Ionicons name="trash-outline" size={20} color={CHECK_ACCENT} />

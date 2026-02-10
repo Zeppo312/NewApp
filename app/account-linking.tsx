@@ -42,7 +42,6 @@ type LinkedUser = {
   userRole: 'mama' | 'papa' | string;
 };
 
-const TIMELINE_INSET = 8;            // wie im Sleep-Tracker
 const PRIMARY_TEXT   = '#7D5A50';    // Sleep-Tracker Typo-Farbe
 const ACCENT_PURPLE  = '#8E4EC6';    // Sleep-Tracker Akzent
 const ACCENT_MINT    = '#A8C4C1';
@@ -240,7 +239,7 @@ export default function AccountLinkingScreen() {
           ) : (
             <>
               {/* Abschnitt: Einladung erstellen */}
-              <LiquidGlassCard style={[styles.sectionCard, { marginHorizontal: TIMELINE_INSET }]} intensity={26} overlayColor={glassOverlay}>
+              <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={glassOverlay}>
                 <ThemedText style={[styles.sectionTitle, { color: textPrimary }]}>Einladung erstellen</ThemedText>
                 <ThemedText style={[styles.sectionDescription, { color: textSecondary }]}>
                   Erstelle einen Code und teile ihn mit deinem Partner oder einer Vertrauensperson.
@@ -277,7 +276,7 @@ export default function AccountLinkingScreen() {
               </LiquidGlassCard>
 
               {/* Abschnitt: Einladungscode einlösen */}
-              <LiquidGlassCard style={[styles.sectionCard, { marginHorizontal: TIMELINE_INSET }]} intensity={26} overlayColor={glassOverlay}>
+              <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={glassOverlay}>
                 <ThemedText style={[styles.sectionTitle, { color: textPrimary }]}>Einladungscode einlösen</ThemedText>
                 <ThemedText style={[styles.sectionDescription, { color: textSecondary }]}>
                   Du hast einen Code bekommen? Gib ihn hier ein und verknüpfe euren Account.
@@ -335,7 +334,7 @@ export default function AccountLinkingScreen() {
 
               {/* Abschnitt: Verknüpfte Accounts */}
               {linkedUsers.length > 0 && (
-                <LiquidGlassCard style={[styles.sectionCard, { marginHorizontal: TIMELINE_INSET }]} intensity={26} overlayColor={glassOverlay}>
+                <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={glassOverlay}>
                   <ThemedText style={[styles.sectionTitle, { color: textPrimary }]}>Verknüpfte Accounts</ThemedText>
 
                   <View style={styles.list}>
@@ -380,7 +379,7 @@ export default function AccountLinkingScreen() {
 
               {/* Abschnitt: Ausstehende Einladungen */}
               {invitations && invitations.filter(i => i.status === 'pending').length > 0 && (
-                <LiquidGlassCard style={[styles.sectionCard, { marginHorizontal: TIMELINE_INSET }]} intensity={26} overlayColor={glassOverlay}>
+                <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={glassOverlay}>
                   <ThemedText style={[styles.sectionTitle, { color: textPrimary }]}>Ausstehende Einladungen</ThemedText>
 
                   <View style={styles.list}>

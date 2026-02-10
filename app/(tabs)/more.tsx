@@ -13,7 +13,6 @@ import Header from '@/components/Header';
 import { GlassCard, LiquidGlassCard, GLASS_OVERLAY, LAYOUT_PAD } from '@/constants/DesignGuide';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 
-const TIMELINE_INSET = 8; // wie im Sleep-Tracker
 
 export default function MoreScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -403,8 +402,6 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderRadius: 22,
     overflow: 'hidden',
-    // gleiche Innenbreite wie Timeline:
-    marginHorizontal: TIMELINE_INSET,
   },
   sectionTitle: {
     fontSize: 18,

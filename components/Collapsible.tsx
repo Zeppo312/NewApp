@@ -3,9 +3,8 @@ import { StyleSheet, TouchableOpacity, View } from 'react-native';
 
 import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { Colors } from '@/constants/Colors';
 import { LiquidGlassCard, TEXT_PRIMARY } from '@/constants/DesignGuide';
-import { useColorScheme } from '@/hooks/useColorScheme';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 
 export function Collapsible({
   children,
@@ -20,11 +19,16 @@ export function Collapsible({
   leftComponent?: React.ReactNode
 }) {
   const [isOpen, setIsOpen] = useState(initiallyExpanded);
-  const theme = useColorScheme() ?? 'light';
-  const iconColor = theme === 'dark' ? Colors.dark.text : TEXT_PRIMARY;
+  const adaptiveColors = useAdaptiveColors();
+  const isDark = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
+  const titleColor = isDark ? adaptiveColors.textPrimary : TEXT_PRIMARY;
+  const subtitleColor = isDark ? adaptiveColors.textSecondary : 'rgba(125,90,80,0.75)';
+  const iconColor = isDark ? adaptiveColors.icon : titleColor;
+  const borderColor = isDark ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.35)';
+  const overlayColor = isDark ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.15)';
 
   return (
-    <LiquidGlassCard style={styles.card}>
+    <LiquidGlassCard style={styles.card} borderColor={borderColor} overlayColor={overlayColor}>
       <View>
         <TouchableOpacity
           style={styles.heading}
@@ -36,11 +40,11 @@ export function Collapsible({
             </View>
           )}
           <View style={styles.titleContainer}>
-            <ThemedText style={styles.title} lightColor={TEXT_PRIMARY}>
+            <ThemedText style={[styles.title, { color: titleColor }]}>
               {title}
             </ThemedText>
             {subtitle && (
-              <ThemedText style={styles.subtitle} lightColor="rgba(125,90,80,0.75)">
+              <ThemedText style={[styles.subtitle, { color: subtitleColor }]}>
                 {subtitle}
               </ThemedText>
             )}
@@ -54,7 +58,7 @@ export function Collapsible({
           />
         </TouchableOpacity>
         {isOpen && (
-          <View style={styles.content}>
+          <View style={[styles.content, { borderTopColor: borderColor }]}>
             {children}
           </View>
         )}

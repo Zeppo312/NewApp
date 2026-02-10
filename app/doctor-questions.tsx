@@ -25,16 +25,22 @@ import {
   LiquidGlassCard,
   GlassCard,
   GLASS_OVERLAY,
+  GLASS_OVERLAY_DARK,
   LAYOUT_PAD,
-  TIMELINE_INSET,
   TEXT_PRIMARY,
   RADIUS,
   PRIMARY,
 } from '@/constants/DesignGuide';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 
 export default function DoctorQuestionsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
+  const adaptiveColors = useAdaptiveColors();
+  const isDark = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
+  const textPrimary = isDark ? Colors.dark.textPrimary : '#5C4033';
+  const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
+  const glassOverlay = isDark ? GLASS_OVERLAY_DARK : GLASS_OVERLAY;
   const { user } = useAuth();
   const service = useDoctorQuestionsService();
 
@@ -287,7 +293,7 @@ export default function DoctorQuestionsScreen() {
               </ThemedText>
             </View>
             <ThemedText
-              style={[styles.questionText, question.is_answered && styles.questionTextAnswered]}
+              style={[styles.questionText, { color: textPrimary }, question.is_answered && styles.questionTextAnswered]}
               numberOfLines={isExpanded ? undefined : 2}
             >
               {question.question}
@@ -331,7 +337,7 @@ export default function DoctorQuestionsScreen() {
                   color={theme.accent}
                   style={styles.answerHeaderIcon}
                 />
-                <ThemedText style={styles.answerHeaderText}>Antwort vom Arzt</ThemedText>
+                <ThemedText style={[styles.answerHeaderText, { color: textPrimary }]}>Antwort vom Arzt</ThemedText>
               </View>
 
               {editingAnswer === question.id ? (
@@ -383,7 +389,7 @@ export default function DoctorQuestionsScreen() {
                 >
                   <GlassCard style={styles.answerDisplay}>
                     <ThemedText
-                      style={question.answer ? styles.answerText : styles.answerPlaceholder}
+                      style={[question.answer ? styles.answerText : styles.answerPlaceholder, { color: question.answer ? textPrimary : textSecondary }]}
                     >
                       {question.answer ||
                         'Tippe, um eine Antwort zu hinterlegen oder Notizen zu ergänzen.'}
@@ -412,7 +418,7 @@ export default function DoctorQuestionsScreen() {
       <Stack.Screen options={{ headerShown: false }} />
       <ThemedBackground style={styles.backgroundImage}>
         <SafeAreaView style={styles.safeArea}>
-          <StatusBar hidden />
+          <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
           <Header
             title="Fragen für den Frauenarzt"
             subtitle="Alles Wichtige für den nächsten Termin"
@@ -420,8 +426,8 @@ export default function DoctorQuestionsScreen() {
           />
           <ScrollView contentContainerStyle={styles.scrollContent}>
             <GlassCard style={[styles.fullWidthCard, styles.heroCard]}>
-              <ThemedText style={styles.heroTitle}>Alles parat für den nächsten Besuch</ThemedText>
-              <ThemedText style={styles.heroSubtitle}>
+              <ThemedText style={[styles.heroTitle, { color: textPrimary }]}>Alles parat für den nächsten Besuch</ThemedText>
+              <ThemedText style={[styles.heroSubtitle, { color: textSecondary }]}>
                 Sammle Fragen, halte Antworten fest und geh entspannt in deinen Termin.
               </ThemedText>
             </GlassCard>
@@ -441,8 +447,8 @@ export default function DoctorQuestionsScreen() {
                     style={styles.statIcon}
                   />
                   <View>
-                    <ThemedText style={styles.statValue}>{openCount}</ThemedText>
-                    <ThemedText style={styles.statLabel}>Offene Fragen</ThemedText>
+                    <ThemedText style={[styles.statValue, { color: textPrimary }]}>{openCount}</ThemedText>
+                    <ThemedText style={[styles.statLabel, { color: textSecondary }]}>Offene Fragen</ThemedText>
                   </View>
                 </View>
               </LiquidGlassCard>
@@ -460,8 +466,8 @@ export default function DoctorQuestionsScreen() {
                     style={styles.statIcon}
                   />
                   <View>
-                    <ThemedText style={styles.statValue}>{answeredCount}</ThemedText>
-                    <ThemedText style={styles.statLabel}>Beantwortet</ThemedText>
+                    <ThemedText style={[styles.statValue, { color: textPrimary }]}>{answeredCount}</ThemedText>
+                    <ThemedText style={[styles.statLabel, { color: textSecondary }]}>Beantwortet</ThemedText>
                   </View>
                 </View>
               </LiquidGlassCard>
@@ -475,9 +481,9 @@ export default function DoctorQuestionsScreen() {
                   color={PRIMARY}
                   style={styles.newQuestionHeaderIcon}
                 />
-                <ThemedText style={styles.cardTitle}>Neue Frage notieren</ThemedText>
+                <ThemedText style={[styles.cardTitle, { color: textPrimary }]}>Neue Frage notieren</ThemedText>
               </View>
-              <ThemedText style={styles.cardSubtitle}>
+              <ThemedText style={[styles.cardSubtitle, { color: textSecondary }]}>
                 Formuliere kurz und klar, damit du beim Termin nichts vergisst.
               </ThemedText>
               <View style={styles.inputWrapper}>
@@ -520,12 +526,12 @@ export default function DoctorQuestionsScreen() {
               <LiquidGlassCard
                 style={[styles.fullWidthCard, styles.loadingCard]}
                 intensity={26}
-                overlayColor={GLASS_OVERLAY}
+                overlayColor={glassOverlay}
                 borderColor="rgba(255,255,255,0.35)"
               >
                 <View style={styles.loadingContainer}>
                   <ActivityIndicator size="large" color={theme.accent} />
-                  <ThemedText style={[styles.loadingText, { color: TEXT_PRIMARY }]}>
+                  <ThemedText style={[styles.loadingText, { color: textPrimary }]}>
                     Fragen werden geladen...
                   </ThemedText>
                 </View>
@@ -534,7 +540,7 @@ export default function DoctorQuestionsScreen() {
               <LiquidGlassCard
                 style={[styles.fullWidthCard, styles.emptyCard]}
                 intensity={26}
-                overlayColor={GLASS_OVERLAY}
+                overlayColor={glassOverlay}
                 borderColor="rgba(255,255,255,0.35)"
               >
                 <View style={styles.emptyState}>
@@ -544,8 +550,8 @@ export default function DoctorQuestionsScreen() {
                     color={theme.tabIconDefault}
                     style={styles.emptyIcon}
                   />
-                  <ThemedText style={styles.emptyTitle}>Noch keine Fragen gespeichert</ThemedText>
-                  <ThemedText style={styles.emptySubtitle}>
+                  <ThemedText style={[styles.emptyTitle, { color: textPrimary }]}>Noch keine Fragen gespeichert</ThemedText>
+                  <ThemedText style={[styles.emptySubtitle, { color: textSecondary }]}>
                     Notiere spontan auftauchende Gedanken direkt hier, damit nichts verloren geht.
                   </ThemedText>
                 </View>
@@ -568,8 +574,8 @@ export default function DoctorQuestionsScreen() {
                           style={styles.sectionInfoIcon}
                         />
                         <View>
-                          <ThemedText style={styles.sectionInfoTitle}>Offene Fragen</ThemedText>
-                          <ThemedText style={styles.sectionInfoCaption}>
+                          <ThemedText style={[styles.sectionInfoTitle, { color: textPrimary }]}>Offene Fragen</ThemedText>
+                          <ThemedText style={[styles.sectionInfoCaption, { color: textSecondary }]}>
                             Kläre diese Punkte beim nächsten Termin.
                           </ThemedText>
                         </View>
@@ -595,8 +601,8 @@ export default function DoctorQuestionsScreen() {
                           style={styles.sectionInfoIcon}
                         />
                         <View>
-                          <ThemedText style={styles.sectionInfoTitle}>Bereits beantwortet</ThemedText>
-                          <ThemedText style={styles.sectionInfoCaption}>
+                          <ThemedText style={[styles.sectionInfoTitle, { color: textPrimary }]}>Bereits beantwortet</ThemedText>
+                          <ThemedText style={[styles.sectionInfoCaption, { color: textSecondary }]}>
                             Ergänze Notizen oder markiere erneut als offen.
                           </ThemedText>
                         </View>
@@ -630,7 +636,6 @@ const styles = StyleSheet.create({
     paddingBottom: 56,
   },
   fullWidthCard: {
-    marginHorizontal: TIMELINE_INSET,
   },
   heroCard: {
     paddingVertical: 22,

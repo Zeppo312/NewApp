@@ -41,7 +41,6 @@ import { uploadProfileAvatar, deleteProfileAvatar, deleteUserAccount } from '@/l
 import { compressImage } from '@/lib/imageCompression';
 
 const { width: screenWidth } = Dimensions.get('window');
-const TIMELINE_INSET = 8; // wie im Sleep-Tracker
 const PRIMARY_TEXT = '#7D5A50';
 const ACCENT_PURPLE = '#8E4EC6'; // Sleep-Tracker Akzent
 const BABY_BLUE = '#87CEEB';
@@ -660,7 +659,6 @@ export default function ProfilScreen() {
                 <LiquidGlassCard
                   style={[
                     styles.sectionCard,
-                    { marginHorizontal: TIMELINE_INSET },
                     isDark && { backgroundColor: 'rgba(0,0,0,0.35)' },
                   ]}
                   intensity={26}
@@ -840,7 +838,6 @@ export default function ProfilScreen() {
                 <LiquidGlassCard
                   style={[
                     styles.sectionCard,
-                    { marginHorizontal: TIMELINE_INSET },
                     isDark && { backgroundColor: 'rgba(0,0,0,0.35)' },
                   ]}
                   intensity={26}
@@ -1054,7 +1051,7 @@ export default function ProfilScreen() {
                 </LiquidGlassCard>
 
                 {/* Speichern – im Action-Card Look */}
-                <View style={{ marginHorizontal: TIMELINE_INSET }}>
+                <View>
                   <TouchableOpacity
                     onPress={saveUserData}
                     activeOpacity={0.9}
@@ -1085,7 +1082,7 @@ export default function ProfilScreen() {
                 </View>
 
                 {/* Sicherheit */}
-                <View style={{ marginHorizontal: TIMELINE_INSET }}>
+                <View>
                   <TouchableOpacity
                     onPress={handlePasswordChangePress}
                     activeOpacity={0.9}

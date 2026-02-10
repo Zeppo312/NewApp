@@ -115,6 +115,7 @@ type StatusMetricsBarProps = {
   selectedDate: Date;
   sleepPrediction: SleepWindowPrediction | null;
   activeSleepEntry: ClassifiedSleepEntry | null;
+  hasSleepData: boolean;
   statsPage: number;
   onPageChange: (page: number) => void;
 };
@@ -147,11 +148,171 @@ const toOptionalNumber = (value: unknown): number | null => {
   return null;
 };
 
+const formatClockTime = (date: Date) =>
+  date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+
+const formatDurationSeconds = (seconds: number) => {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = seconds % 60;
+  if (hours > 0) {
+    return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  }
+  return `${minutes}:${secs.toString().padStart(2, '0')}`;
+};
+
+type CentralTimerProps = {
+  activeSleepEntry: ClassifiedSleepEntry | null;
+  isStartingSleep: boolean;
+  isStoppingSleep: boolean;
+  predictionLoading: boolean;
+  sleepPrediction: SleepWindowPrediction | null;
+  predictionError: string | null;
+  hasSleepData: boolean;
+  textPrimary: string;
+  textSecondary: string;
+  pulseAnim: Animated.Value;
+};
+
+const CentralTimer = React.memo(({
+  activeSleepEntry,
+  isStartingSleep,
+  isStoppingSleep,
+  predictionLoading,
+  sleepPrediction,
+  predictionError,
+  hasSleepData,
+  textPrimary,
+  textSecondary,
+  pulseAnim,
+}: CentralTimerProps) => {
+  const [elapsedTime, setElapsedTime] = useState(0);
+  const [currentTime, setCurrentTime] = useState(() => new Date());
+  const ringSize = screenWidth * 0.75;
+  const circleSize = ringSize * 0.8;
+
+  useEffect(() => {
+    if (!activeSleepEntry) {
+      setElapsedTime(0);
+      return;
+    }
+
+    const updateElapsed = () => {
+      const now = Date.now();
+      const start = new Date(activeSleepEntry.start_time).getTime();
+      setElapsedTime(Math.max(0, Math.floor((now - start) / 1000)));
+    };
+
+    updateElapsed();
+    const interval = setInterval(updateElapsed, 1000);
+    return () => clearInterval(interval);
+  }, [activeSleepEntry?.start_time]);
+
+  useEffect(() => {
+    if (activeSleepEntry) return;
+    setCurrentTime(new Date());
+    const interval = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [activeSleepEntry]);
+
+  const progress = activeSleepEntry ? (elapsedTime / (8 * 60 * 60)) * 100 : 0;
+
+  return (
+    <View style={styles.centralTimerContainer}>
+      <Animated.View pointerEvents="none" style={[styles.centralContainer, { transform: [{ scale: pulseAnim }] }]}>
+        <View
+          style={[
+            styles.circleArea,
+            { width: circleSize, height: circleSize, borderRadius: circleSize / 2 }
+          ]}
+        >
+          <View style={[styles.glassCircle, {
+            width: circleSize,
+            height: circleSize,
+            borderRadius: circleSize / 2,
+          }]}>
+            <BlurView intensity={18} tint="light" style={[styles.glassCircleBlur, { borderRadius: circleSize / 2 }]}>
+              <View style={[styles.glassCircleOverlay, { borderRadius: circleSize / 2 }]} />
+            </BlurView>
+          </View>
+
+          <View style={[styles.progressAbsolute, { width: circleSize, height: circleSize }]}>
+            <ProgressCircle
+              progress={progress}
+              size={circleSize}
+              strokeWidth={8}
+              progressColor={activeSleepEntry ? '#87CEEB' : 'rgba(135, 206, 235, 0.4)'}
+              backgroundColor="rgba(135, 206, 235, 0.2)"
+              textColor="transparent"
+            />
+          </View>
+
+          <View pointerEvents="none" style={styles.centerOverlay}>
+            <Text
+              style={[
+                styles.centralTime,
+                { color: textPrimary, fontWeight: '800' },
+              ]}
+            >
+              {activeSleepEntry
+                ? isStoppingSleep
+                  ? 'Stoppe...'
+                  : formatDurationSeconds(elapsedTime)
+                : isStartingSleep
+                  ? 'Starte...'
+                  : currentTime.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
+            </Text>
+          </View>
+
+          <View pointerEvents="none" style={styles.upperContent}>
+            <View style={[styles.centralIcon, { backgroundColor: activeSleepEntry ? 'rgba(135, 206, 235, 0.9)' : 'rgba(255, 140, 66, 0.9)', borderRadius: 30, padding: 8, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.6)', shadowColor: 'rgba(255, 255, 255, 0.3)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.12, shadowRadius: 2, elevation: 4 }]}>
+              <IconSymbol name={activeSleepEntry ? 'moon.fill' : 'sun.max.fill'} size={28} color="#FFFFFF" />
+            </View>
+          </View>
+
+          <View pointerEvents="none" style={styles.lowerContent}>
+            {activeSleepEntry && (
+              <Text style={[styles.centralStatus, { color: textPrimary, fontWeight: '700' }]}>
+                Schläft
+              </Text>
+            )}
+            {activeSleepEntry ? (
+              <Text style={[styles.centralHint, { color: textSecondary, fontWeight: '500' }]}>
+                Seit {new Date(activeSleepEntry.start_time).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
+              </Text>
+            ) : predictionLoading ? (
+              <Text style={[styles.centralHint, { color: textSecondary, fontWeight: '500' }]}>
+                Schlaffenster wird berechnet...
+              </Text>
+            ) : sleepPrediction && hasSleepData ? (
+              <Text style={[styles.centralHintPrimary, { color: textPrimary }]}>
+                Nächstes Schlaffenster{'\n'}
+                {formatClockTime(sleepPrediction.earliest)} – {formatClockTime(sleepPrediction.latest)}
+              </Text>
+            ) : !hasSleepData ? (
+              <Text style={[styles.centralHint, { color: textSecondary, fontWeight: '500', textAlign: 'center' }]}>
+                🔮 Lernphase{'\n'}Trage den ersten Schlaf ein
+              </Text>
+            ) : (
+              <Text style={[styles.centralHint, { color: textSecondary, fontWeight: '500' }]}>
+                {predictionError || 'Bereit für den nächsten Schlaf'}
+              </Text>
+            )}
+          </View>
+        </View>
+      </Animated.View>
+    </View>
+  );
+});
+
 const StatusMetricsBar = ({
   stats,
   selectedDate,
   sleepPrediction,
   activeSleepEntry,
+  hasSleepData,
   statsPage,
   onPageChange,
 }: StatusMetricsBarProps) => {
@@ -171,38 +332,62 @@ const StatusMetricsBar = ({
     const historicalSamples = toNumber(sleepPrediction.debug.historicalSampleCount, 0);
     const personalizationSamples = toNumber(sleepPrediction.debug.personalizationSampleCount, 0);
     const totalSamples = historicalSamples + personalizationSamples;
-    if (historicalSamples >= 10 || totalSamples >= 12) return 'high';
-    if (historicalSamples >= 5 || totalSamples >= 6) return 'medium';
+    if (historicalSamples >= 7 || totalSamples >= 8) return 'high';
+    if (historicalSamples >= 3 || totalSamples >= 4) return 'medium';
     return 'low';
   };
 
   const getTirednessLevel = (): { emoji: string; label: string; color: string } => {
-    if (!sleepPrediction || !sleepPrediction.debug.lastNapEnd || activeSleepEntry) {
-      return { emoji: '😌', label: 'entspannt', color: '#A8C4A2' };
+    if (activeSleepEntry) {
+      return { emoji: '💤', label: 'schläft', color: '#87CEEB' };
     }
 
-    const windowMinutes = sleepPrediction.windowMinutes;
-    const awakeSinceLastNap = toOptionalNumber(sleepPrediction.debug.awakeSinceLastNap);
-    const minutesUntilWindow =
-      awakeSinceLastNap !== null ? windowMinutes - awakeSinceLastNap : windowMinutes;
+    if (!sleepPrediction || !hasSleepData) {
+      return { emoji: '🔮', label: 'lernt noch', color: '#B0B0B0' };
+    }
+
+    // Echtzeit-Berechnung: Minuten bis zum empfohlenen Schlafzeitpunkt
+    const now = new Date();
+    const minutesUntilWindow = Math.round(
+      (sleepPrediction.recommendedStart.getTime() - now.getTime()) / 60000
+    );
 
     if (minutesUntilWindow > 20) {
-      return { emoji: '😌', label: 'entspannt', color: '#A8C4A2' };
+      return { emoji: '😊', label: 'ausgeruht', color: '#A8C4A2' };
     }
 
     if (minutesUntilWindow > 10) {
-      return { emoji: '🙂', label: 'wird müde', color: '#FF8C42' };
+      return { emoji: '🥱', label: 'bald müde', color: '#FF8C42' };
     }
 
     if (minutesUntilWindow >= -5 && minutesUntilWindow <= 10) {
-      return { emoji: '😴', label: 'optimal', color: '#8E4EC6' };
+      return { emoji: '😴', label: 'jetzt hinlegen', color: '#8E4EC6' };
     }
 
-    return { emoji: '😵', label: 'übermüdet', color: '#E53E3E' };
+    return { emoji: '😫', label: 'übermüdet', color: '#E53E3E' };
   };
 
   const getReasoningText = (): string => {
+    if (activeSleepEntry) {
+      // Nachtschlaf: keine Nap-Zielzeit anzeigen
+      if (activeSleepEntry.period === 'night') {
+        return 'Gute Nacht 🌙';
+      }
+      // Tagschlaf: verbleibende ideale Schlafdauer
+      const target = toOptionalNumber(sleepPrediction?.debug?.targetNapDuration);
+      if (target !== null) {
+        const elapsed = (Date.now() - new Date(activeSleepEntry.start_time).getTime()) / 60000;
+        const remaining = Math.round(target - elapsed);
+        if (remaining > 0) {
+          return `Noch ca. ${remaining} Min Schlaf ideal`;
+        }
+        return 'Könnte bald aufwachen';
+      }
+      return 'Schläft gerade';
+    }
+
     if (!sleepPrediction || !sleepPrediction.debug) return 'Keine Vorhersage verfügbar';
+    if (!hasSleepData) return 'Noch keine Schlafdaten';
 
     const lastNapDuration = toOptionalNumber(sleepPrediction.debug.lastNapDuration);
     const targetNapDuration = toOptionalNumber(sleepPrediction.debug.targetNapDuration);
@@ -214,36 +399,36 @@ const StatusMetricsBar = ({
     const reasons: string[] = [];
 
     if (lastNapDuration !== null && targetNapDuration !== null && Math.abs(napDurationAdjustment) > 5) {
-      if (napDurationAdjustment < -5) {
-        reasons.push('Letzter Nap war kurz');
-      } else if (napDurationAdjustment > 5) {
-        reasons.push('Letzter Nap war lang');
+      if (napDurationAdjustment > 5) {
+        reasons.push('Kurzer Nap → früher müde');
+      } else if (napDurationAdjustment < -5) {
+        reasons.push('Langer Nap → später müde');
       }
     }
 
     if (Math.abs(sleepDebt) > 30) {
       if (sleepDebtAdjustment < -5) {
-        reasons.push('Heute schon viel wach gewesen');
+        reasons.push('Viel wach → früher müde');
       } else if (sleepDebtAdjustment > 5) {
-        reasons.push('Heute schon viel geschlafen');
+        reasons.push('Viel geschlafen → später müde');
       }
     }
 
     if (circadianHour !== null && circadianHour >= 16) {
-      reasons.push('Nachmittags werden Babys schneller müde');
+      reasons.push('Nachmittags schneller müde');
     }
 
     if (reasons.length === 0) {
-      return 'Normale Schlafzeit für dieses Alter';
+      return 'Normaler Rhythmus für dieses Alter';
     }
 
     return reasons[0];
   };
 
   const getCountdownText = (): string => {
-    if (!sleepPrediction || activeSleepEntry) {
-      return activeSleepEntry ? 'Schläft gerade' : 'Keine Vorhersage';
-    }
+    if (activeSleepEntry) return 'Schläft gerade';
+    if (!sleepPrediction) return 'Keine Vorhersage';
+    if (!hasSleepData) return 'Wird noch gelernt';
 
     const now = new Date();
     const minutesUntil = Math.round((sleepPrediction.recommendedStart.getTime() - now.getTime()) / 60000);
@@ -423,22 +608,19 @@ const StatusMetricsBar = ({
               <View style={styles.kpiHeaderRow}>
                 <IconSymbol name="clock.badge" size={12} color="#8E4EC6" />
                 <Text style={[styles.kpiTitle, { color: textSecondary }]}>Nächstes Fenster</Text>
-                {(hasPersonalization || confidenceLevel) && (
+                {confidenceLevel && (
                   <View style={styles.predictionMetaInline}>
-                    {hasPersonalization && (
-                      <View style={styles.predictionBadge}>
-                        <Text style={[styles.predictionBadgeText, { color: textSecondary }]}>✨ abgestimmt</Text>
-                      </View>
-                    )}
-                    {confidenceLevel && (
-                      <View style={styles.predictionBadge}>
-                        <Text style={[styles.predictionBadgeText, { color: textSecondary }]}>{confidenceDot} {confidenceLabel}</Text>
-                      </View>
-                    )}
+                    <View style={styles.predictionBadge}>
+                      <Text style={[styles.predictionBadgeText, { color: textSecondary }]}>
+                        {hasPersonalization && confidenceLevel === 'high'
+                          ? '✨ abgestimmt'
+                          : `${confidenceDot} ${confidenceLabel}`}
+                      </Text>
+                    </View>
                   </View>
                 )}
               </View>
-              {sleepPrediction && !activeSleepEntry ? (
+              {sleepPrediction && !activeSleepEntry && hasSleepData ? (
                 <>
                   <Text style={[styles.kpiValue, styles.kpiValueCentered, { fontSize: 16, color: textPrimary }]}>
                     {sleepPrediction.earliest.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
@@ -449,7 +631,7 @@ const StatusMetricsBar = ({
                 </>
               ) : (
                 <Text style={[styles.kpiValue, styles.kpiValueCentered, { color: textPrimary }]}>
-                  {activeSleepEntry ? '💤' : '—'}
+                  {activeSleepEntry ? '💤' : countdownText}
                 </Text>
               )}
             </GlassCard>
@@ -665,6 +847,16 @@ export default function SleepTrackerScreen() {
   // Dark Mode angepasste Farben
   const textPrimary = isDark ? Colors.dark.textPrimary : '#6B4C3B';
   const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
+  const modalSubtitleColor = isDark ? Colors.dark.textSecondary : '#A8978E';
+  const modalOverlayColor = isDark ? 'rgba(0,0,0,0.58)' : 'rgba(0,0,0,0.35)';
+  const modalPanelColor = isDark ? 'rgba(10,10,12,0.86)' : 'transparent';
+  const modalPanelBorderColor = isDark ? 'rgba(255,255,255,0.08)' : 'transparent';
+  const modalGhostButtonColor = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)';
+  const modalFieldColor = isDark ? 'rgba(18,18,22,0.76)' : 'rgba(255,255,255,0.8)';
+  const modalFieldBorderColor = isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.05)';
+  const modalPickerColor = isDark ? 'rgba(22,22,26,0.95)' : 'rgba(255,255,255,0.9)';
+  const modalQualityDefaultColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(230,230,230,0.8)';
+  const modalAccentColor = isDark ? '#A26BFF' : '#8E4EC6';
   const router = useRouter();
   const { user } = useAuth();
   const { activeBackend } = useBackend();
@@ -693,7 +885,7 @@ export default function SleepTrackerScreen() {
   // Navigation offsets für Woche und Monat
   const [weekOffset, setWeekOffset] = useState(0);   // 0 = diese Woche, -1 = letzte, +1 = nächste
   const [monthOffset, setMonthOffset] = useState(0); // 0 = dieser Monat, -1 = vorheriger, +1 = nächster
-  const [currentTime, setCurrentTime] = useState(new Date());
+  const [isLiveStatusLoaded, setIsLiveStatusLoaded] = useState(false);
   const [babyBirthdate, setBabyBirthdate] = useState<Date | null>(null);
   const [sleepPrediction, setSleepPrediction] = useState<SleepWindowPrediction | null>(null);
   const [predictionLoading, setPredictionLoading] = useState(false);
@@ -789,24 +981,60 @@ export default function SleepTrackerScreen() {
   const [splashHint, setSplashHint] = useState<string>('');
   const [isStartingSleep, setIsStartingSleep] = useState(false);
   const [isStoppingSleep, setIsStoppingSleep] = useState(false);
+  const [showSleepInfoModal, setShowSleepInfoModal] = useState(false);
 
-  const normalizePickerDate = useCallback((value?: Date | null) => {
-    if (!value || Number.isNaN(value.getTime())) {
+  const isValidManualDate = useCallback((value: unknown): value is Date => {
+    if (!(value instanceof Date)) return false;
+    const timestamp = value.getTime();
+    return Number.isFinite(timestamp) && timestamp > 0 && value.getFullYear() >= 2000;
+  }, []);
+
+  const sanitizeManualDate = useCallback(
+    (value?: Date | null, fallback?: Date) => {
+      if (isValidManualDate(value)) return new Date(value.getTime());
+      if (isValidManualDate(fallback)) return new Date(fallback.getTime());
       return new Date();
-    }
-    if (value.getFullYear() < 2000) {
-      const now = new Date();
-      const patched = new Date(value);
-      patched.setFullYear(now.getFullYear(), now.getMonth(), now.getDate());
-      return patched;
-    }
-    return value;
+    },
+    [isValidManualDate]
+  );
+
+  const normalizePickerDate = useCallback(
+    (value?: Date | null, fallback?: Date) => sanitizeManualDate(value, fallback),
+    [sanitizeManualDate]
+  );
+
+  const resetManualModalData = useCallback(() => {
+    setSleepModalData({
+      start_time: sanitizeManualDate(new Date()),
+      end_time: null,
+      quality: null,
+      notes: ''
+    });
+    setShowStartPicker(false);
+    setShowEndPicker(false);
+  }, [sanitizeManualDate]);
+
+  const closeManualSleepModal = useCallback(() => {
+    setShowInputModal(false);
+    setEditingEntry(null);
+    resetManualModalData();
+  }, [resetManualModalData]);
+
+  const openManualSleepModal = useCallback(() => {
+    setEditingEntry(null);
+    resetManualModalData();
+    setShowInputModal(true);
+  }, [resetManualModalData]);
+
+  const openEditSleepModal = useCallback((entry: ClassifiedSleepEntry) => {
+    setEditingEntry(entry);
+    setShowStartPicker(false);
+    setShowEndPicker(false);
+    setShowInputModal(true);
   }, []);
 
   // Animation refs
-  const timerAnim = useRef(new Animated.Value(1)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
-  const [elapsedTime, setElapsedTime] = useState(0);
   const appearAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -892,45 +1120,32 @@ export default function SleepTrackerScreen() {
     }).start();
   }, [appearAnim]);
 
-  // Live time update
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
-
   // Timer animation for active sleep
   useEffect(() => {
-    if (activeSleepEntry) {
-      const interval = setInterval(() => {
-        const now = new Date().getTime();
-        const start = new Date(activeSleepEntry.start_time).getTime();
-        setElapsedTime(Math.floor((now - start) / 1000));
-      }, 1000);
-
-      // Pulsing animation
-      const pulseAnimation = Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, {
-            toValue: 1.02,
-            duration: 1500,
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulseAnim, {
-            toValue: 1,
-            duration: 1500,
-            useNativeDriver: true,
-          }),
-        ])
-      );
-      pulseAnimation.start();
-
-      return () => {
-        clearInterval(interval);
-        pulseAnimation.stop();
-      };
+    if (!activeSleepEntry) {
+      pulseAnim.setValue(1);
+      return;
     }
+
+    const pulseAnimation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.02,
+          duration: 1500,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 1500,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    pulseAnimation.start();
+
+    return () => {
+      pulseAnimation.stop();
+    };
   }, [activeSleepEntry, pulseAnim]);
 
   const updateSleepPrediction = useCallback(
@@ -1052,6 +1267,7 @@ export default function SleepTrackerScreen() {
   const loadSleepData = async () => {
     try {
       setIsLoading(true);
+      setIsLiveStatusLoaded(false);
 
       // LIVE: Always fresh, no cache
       const activeSleep = await loadLiveStatus();
@@ -1110,6 +1326,7 @@ export default function SleepTrackerScreen() {
       console.error('Failed to load sleep data:', error);
       setPredictionLoading(false);
     } finally {
+      setIsLiveStatusLoaded(true);
       setIsLoading(false);
       setRefreshing(false);
     }
@@ -1260,8 +1477,6 @@ export default function SleepTrackerScreen() {
       console.log('🔍 handleSaveEntry called with:', payload);
       console.log('🔍 editingEntry:', editingEntry);
 
-      const effectivePartnerId = await getEffectivePartnerId();
-
       // SleepInputModal sendet die Daten direkt als Objekt
       const sleepData = payload;
 
@@ -1270,6 +1485,27 @@ export default function SleepTrackerScreen() {
         Alert.alert('Fehler', 'Startzeit ist erforderlich');
         return;
       }
+
+      const normalizedStartDate = new Date(sleepData.start_time);
+      if (!isValidManualDate(normalizedStartDate)) {
+        Alert.alert('Fehler', 'Ungültige Startzeit. Bitte Datum/Zeit neu wählen.');
+        return;
+      }
+
+      const normalizedEndDate = sleepData.end_time ? new Date(sleepData.end_time) : null;
+      if (normalizedEndDate && !isValidManualDate(normalizedEndDate)) {
+        Alert.alert('Fehler', 'Ungültige Endzeit. Bitte Datum/Zeit neu wählen.');
+        return;
+      }
+
+      if (normalizedEndDate && normalizedEndDate.getTime() <= normalizedStartDate.getTime()) {
+        Alert.alert('Fehler', 'Die Endzeit muss nach der Startzeit liegen.');
+        return;
+      }
+
+      const normalizedStartTime = normalizedStartDate.toISOString();
+      const normalizedEndTime = normalizedEndDate ? normalizedEndDate.toISOString() : null;
+      const effectivePartnerId = await getEffectivePartnerId();
 
       // Robuste Berechnung der duration_minutes
       const calculateDurationMinutes = (startTime: string | Date, endTime: string | Date | null): number | null => {
@@ -1301,7 +1537,7 @@ export default function SleepTrackerScreen() {
         }
       };
 
-      const calculatedDuration = calculateDurationMinutes(sleepData.start_time, sleepData.end_time);
+      const calculatedDuration = calculateDurationMinutes(normalizedStartTime, normalizedEndTime);
       console.log('🔍 Calculated duration:', calculatedDuration, 'minutes');
 
       if (editingEntry?.id) {
@@ -1314,8 +1550,8 @@ export default function SleepTrackerScreen() {
 
         // Update existing entry via service (dual-write)
         const result = await sleepService.updateEntry(editingEntry.id, {
-          start_time: sleepData.start_time,
-          end_time: sleepData.end_time ?? null,
+          start_time: normalizedStartTime,
+          end_time: normalizedEndTime,
           quality: sleepData.quality || null,
           notes: sleepData.notes ?? null,
           duration_minutes: calculatedDuration,
@@ -1347,8 +1583,8 @@ export default function SleepTrackerScreen() {
         const result = await sleepService.createEntry({
           user_id: user.id,
           baby_id: activeBabyId ?? null,
-          start_time: sleepData.start_time,
-          end_time: sleepData.end_time ?? null,
+          start_time: normalizedStartTime,
+          end_time: normalizedEndTime,
           quality: sleepData.quality || null,
           notes: sleepData.notes ?? null,
           duration_minutes: calculatedDuration,
@@ -1370,16 +1606,7 @@ export default function SleepTrackerScreen() {
         showSuccessSplash('#8E4EC6', '💤', 'sleep_manual_save');
       }
 
-      setShowInputModal(false);
-      setEditingEntry(null);
-      setSleepModalData({
-        start_time: new Date(),
-        end_time: null,
-        quality: null,
-        notes: ''
-      });
-      setShowStartPicker(false);
-      setShowEndPicker(false);
+      closeManualSleepModal();
 
       // Invalidate cache because new/updated entry should appear immediately
       // WICHTIG: Korrekter Cache-Key wie in loadSleepHistory!
@@ -1438,18 +1665,6 @@ export default function SleepTrackerScreen() {
         }
       ]
     );
-  };
-
-  // Format duration
-  const formatDuration = (seconds: number) => {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
-    
-    if (hours > 0) {
-      return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-    }
-    return `${minutes}:${secs.toString().padStart(2, '0')}`;
   };
 
   // Format duration for completed entries
@@ -1571,8 +1786,8 @@ export default function SleepTrackerScreen() {
     return acc;
   }, {} as Record<SleepPeriod, ClassifiedSleepEntry[]>);
 
-  // Compute high-level stats & score (heutiger Kalendertag 00:00–24:00 lokal)
-  const computeStats = () => {
+  const stats = useMemo(() => {
+    // Compute high-level stats & score (heutiger Kalendertag 00:00–24:00 lokal)
     const dayStart = startOfDay(selectedDate);
     const dayEnd   = endOfDay(selectedDate);
 
@@ -1599,12 +1814,7 @@ export default function SleepTrackerScreen() {
     const score = Math.max(0, Math.round(100 - (deviation / target) * 100));
 
     return { totalMinutes, napsCount, longestStretch, score };
-  };
-
-  const stats = computeStats();
-
-  const formatClockTime = (date: Date) =>
-    date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+  }, [selectedDate, sleepEntries]);
 
   // Daily navigation helpers
   const goPrevDay = () => setSelectedDate(d => { const nd = new Date(d); nd.setDate(nd.getDate() - 1); return nd; });
@@ -1648,34 +1858,35 @@ export default function SleepTrackerScreen() {
     // Setze die Modal-Daten beim Öffnen
     useEffect(() => {
       if (showInputModal) {
+        setShowStartPicker(false);
+        setShowEndPicker(false);
+
         if (editingEntry) {
           // Bearbeitungsmodus - lade vorhandene Daten
-          const startCandidate = new Date(editingEntry.start_time);
-          const endCandidate = editingEntry.end_time ? new Date(editingEntry.end_time) : null;
+          const startCandidate = sanitizeManualDate(new Date(editingEntry.start_time), new Date());
+          const endCandidate = editingEntry.end_time
+            ? sanitizeManualDate(new Date(editingEntry.end_time), startCandidate)
+            : null;
           setSleepModalData({
-            start_time: normalizePickerDate(startCandidate),
-            end_time: endCandidate ? normalizePickerDate(endCandidate) : null,
+            start_time: startCandidate,
+            end_time:
+              endCandidate && endCandidate.getTime() <= startCandidate.getTime() ? null : endCandidate,
             quality: editingEntry.quality || null,
             notes: editingEntry.notes || ''
           });
         } else {
           // Neuer Eintrag - setze Standardwerte
-          setSleepModalData({
-            start_time: normalizePickerDate(new Date()),
-            end_time: null,
-            quality: null,
-            notes: ''
-          });
+          resetManualModalData();
         }
       }
-    }, [showInputModal, editingEntry, normalizePickerDate]);
+    }, [showInputModal, editingEntry, resetManualModalData, sanitizeManualDate]);
 
   const openStartPicker = () => {
     triggerHaptic();
     setShowEndPicker(false);
     setSleepModalData((prev) => ({
       ...prev,
-      start_time: normalizePickerDate(prev.start_time),
+      start_time: normalizePickerDate(prev.start_time, new Date()),
     }));
     setShowStartPicker(true);
   };
@@ -1683,12 +1894,30 @@ export default function SleepTrackerScreen() {
   const openEndPicker = () => {
     triggerHaptic();
     setShowStartPicker(false);
-    setSleepModalData((prev) => ({
-      ...prev,
-      end_time: normalizePickerDate(prev.end_time ?? prev.start_time ?? new Date()),
-    }));
+    setSleepModalData((prev) => {
+      const safeStart = normalizePickerDate(prev.start_time, new Date());
+      return {
+        ...prev,
+        end_time: normalizePickerDate(prev.end_time ?? safeStart, safeStart),
+      };
+    });
     setShowEndPicker(true);
   };
+
+  const safeModalStartTime = useMemo(
+    () => sanitizeManualDate(sleepModalData.start_time, new Date()),
+    [sanitizeManualDate, sleepModalData.start_time]
+  );
+
+  const safeModalEndTime = useMemo(() => {
+    if (!sleepModalData.end_time) return null;
+    return sanitizeManualDate(sleepModalData.end_time, safeModalStartTime);
+  }, [sanitizeManualDate, safeModalStartTime, sleepModalData.end_time]);
+
+  const safeModalEndPickerTime = useMemo(
+    () => sanitizeManualDate(sleepModalData.end_time ?? safeModalStartTime, safeModalStartTime),
+    [sanitizeManualDate, safeModalStartTime, sleepModalData.end_time]
+  );
 
   // Top Tabs Component (exakt wie daily_old.tsx)
   const TopTabs = () => (
@@ -1718,168 +1947,116 @@ export default function SleepTrackerScreen() {
     </View>
   );
 
-  // Central Timer Component (Baby Blue Circle Only)
-  const CentralTimer = () => {
-    const ringSize = screenWidth * 0.75;
-    const circleSize = ringSize * 0.8;
-    const progress = activeSleepEntry ? (elapsedTime / (8 * 60 * 60)) * 100 : 0; // 8h max
-    
-    return (
-      <View style={styles.centralTimerContainer}>
-        <Animated.View pointerEvents="none" style={[styles.centralContainer, { transform: [{ scale: pulseAnim }] }]}>
-          <View
-            style={[
-              styles.circleArea,
-              { width: circleSize, height: circleSize, borderRadius: circleSize / 2 }
-            ]}
-          >
-            {/* Glass Circle Background */}
-            <View style={[styles.glassCircle, { 
-              width: circleSize, 
-              height: circleSize, 
-              borderRadius: circleSize / 2,
-            }]}>
-              <BlurView intensity={18} tint="light" style={[styles.glassCircleBlur, { borderRadius: circleSize / 2 }]}>
-                <View style={[styles.glassCircleOverlay, { borderRadius: circleSize / 2 }]} />
-              </BlurView>
-            </View>
-            
-            {/* Progress Circle as absolute overlay */}
-            <View style={[styles.progressAbsolute, { width: circleSize, height: circleSize }]}>
-            <ProgressCircle 
-              progress={progress}
-              size={circleSize}
-              strokeWidth={8}
-              progressColor={activeSleepEntry ? "#87CEEB" : "rgba(135, 206, 235, 0.4)"} // Baby blue
-              backgroundColor="rgba(135, 206, 235, 0.2)"
-              textColor="transparent"
-            />
-          </View>
-          
-          {/* Absolute centered time - always in perfect center */}
-            <View pointerEvents="none" style={styles.centerOverlay}>
-              <Text
-                style={[
-                  styles.centralTime,
-                  { color: textPrimary, fontWeight: '800' },
-                ]}
-              >
-                {activeSleepEntry
-                  ? isStoppingSleep
-                    ? 'Stoppe...'
-                    : formatDuration(elapsedTime)
-                  : isStartingSleep
-                    ? 'Starte...'
-                    : currentTime.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
-              </Text>
-          </View>
-          
-            {/* Content positioned absolutely above and below the center */}
-            <View pointerEvents="none" style={styles.upperContent}>
-              <View style={[styles.centralIcon, { backgroundColor: activeSleepEntry ? 'rgba(135, 206, 235, 0.9)' : 'rgba(255, 140, 66, 0.9)', borderRadius: 30, padding: 8, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.6)', shadowColor: 'rgba(255, 255, 255, 0.3)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.12, shadowRadius: 2, elevation: 4 }]}>
-                <IconSymbol name={activeSleepEntry ? "moon.fill" : "sun.max.fill"} size={28} color="#FFFFFF" />
-                </View>
-                </View>
-
-            <View pointerEvents="none" style={styles.lowerContent}>
-              {activeSleepEntry && (
-                <Text style={[styles.centralStatus, { color: textPrimary, fontWeight: '700' }]}>
-                  Schläft
-                </Text>
-              )}
-              {activeSleepEntry ? (
-                <Text style={[styles.centralHint, { color: textSecondary, fontWeight: '500' }]}>
-                  Seit {new Date(activeSleepEntry.start_time).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
-                </Text>
-              ) : predictionLoading ? (
-                <Text style={[styles.centralHint, { color: textSecondary, fontWeight: '500' }]}>
-                  Schlaffenster wird berechnet...
-                </Text>
-              ) : sleepPrediction ? (
-                <Text style={[styles.centralHintPrimary, { color: textPrimary }]}>
-                  Nächstes Schlaffenster{'\n'}
-                  {formatClockTime(sleepPrediction.earliest)} – {formatClockTime(sleepPrediction.latest)}
-                </Text>
-              ) : (
-                <Text style={[styles.centralHint, { color: textSecondary, fontWeight: '500' }]}>
-                  {predictionError || 'Bereit für den nächsten Schlaf'}
-                </Text>
-              )}
-            </View>
-          </View>
-        </Animated.View>
-      </View>
-    );
-  };
-
   // Action Buttons (Home.tsx style)
   const ActionButtons = () => {
+    const isActionBlocked = isStartingSleep || isStoppingSleep || !isLiveStatusLoaded;
+    const loadingLabel = !isLiveStatusLoaded
+      ? 'Lade Status...'
+      : isStartingSleep
+        ? 'Starte...'
+        : isStoppingSleep
+          ? 'Stoppe...'
+          : null;
+
     return (
-    <View style={styles.cardsGrid}>
-      {activeSleepEntry ? (
-          // Vollbreite Schlaf-beenden Button
-        <TouchableOpacity
-            style={[styles.fullWidthStopButton]}
-          onPress={() => {
-            triggerHaptic();
-            handleStopSleep();
-          }}
-          activeOpacity={0.9}
-        >
-          <BlurView intensity={24} tint="light" style={styles.liquidGlassCardBackground}>
+      <View style={styles.cardsGrid}>
+        {!isLiveStatusLoaded ? (
+          <TouchableOpacity
+            style={[styles.fullWidthStopButton, styles.actionDisabled]}
+            disabled
+            activeOpacity={1}
+          >
+            <BlurView intensity={24} tint="light" style={styles.liquidGlassCardBackground}>
+              <View style={[styles.card, styles.liquidGlassCard, styles.fullWidthCard, { backgroundColor: 'rgba(210, 210, 210, 0.45)', borderColor: 'rgba(255, 255, 255, 0.6)' }]}>
+                <View style={[styles.iconContainer, { backgroundColor: 'rgba(150, 150, 150, 0.85)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.6)' }]}>
+                  <IconSymbol name="clock.fill" size={28} color="#FFFFFF" />
+                </View>
+                <Text style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>Status wird geladen</Text>
+                <Text style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>Bitte kurz warten</Text>
+              </View>
+            </BlurView>
+          </TouchableOpacity>
+        ) : activeSleepEntry ? (
+          <TouchableOpacity
+            style={[styles.fullWidthStopButton, isActionBlocked && styles.actionDisabled]}
+            disabled={isActionBlocked}
+            hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
+            pressRetentionOffset={{ top: 20, bottom: 20, left: 18, right: 18 }}
+            onPress={() => {
+              if (isActionBlocked) return;
+              triggerHaptic();
+              handleStopSleep();
+            }}
+            activeOpacity={0.9}
+          >
+            <BlurView intensity={24} tint="light" style={styles.liquidGlassCardBackground}>
               <View style={[styles.card, styles.liquidGlassCard, styles.fullWidthCard, { backgroundColor: 'rgba(255, 190, 190, 0.6)', borderColor: 'rgba(255, 255, 255, 0.6)' }]}>
-              <View style={[styles.iconContainer, { backgroundColor: 'rgba(255, 140, 160, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.6)', shadowColor: 'rgba(255, 255, 255, 0.3)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.12, shadowRadius: 2, elevation: 4 }]}>
-                <IconSymbol name="stop.fill" size={28} color="#FFFFFF" />
-              </View>
-              <Text style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>Schlaf beenden</Text>
-              <Text style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>Timer stoppen</Text>
-            </View>
-          </BlurView>
-        </TouchableOpacity>
-      ) : (
-        <>
-          <TouchableOpacity
-            style={[styles.liquidGlassCardWrapper, { width: GRID_COL_W, marginRight: GRID_GUTTER }]}
-              onPress={() => {
-                triggerHaptic();
-                handleStartSleep(currentTime.getHours() >= 20 || currentTime.getHours() < 10 ? 'night' : 'day');
-              }}
-            activeOpacity={0.9}
-          >
-            <BlurView intensity={24} tint="light" style={styles.liquidGlassCardBackground}>
-              <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(220, 200, 255, 0.6)', borderColor: 'rgba(255, 255, 255, 0.6)' }]}>
-                <View style={[styles.iconContainer, { backgroundColor: 'rgba(142, 78, 198, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.6)', shadowColor: 'rgba(255, 255, 255, 0.3)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.12, shadowRadius: 2, elevation: 4 }]}>
-                  <IconSymbol name="moon.fill" size={28} color="#FFFFFF" />
+                <View style={[styles.iconContainer, { backgroundColor: 'rgba(255, 140, 160, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.6)', shadowColor: 'rgba(255, 255, 255, 0.3)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.12, shadowRadius: 2, elevation: 4 }]}>
+                  <IconSymbol name="stop.fill" size={28} color="#FFFFFF" />
                 </View>
-                <Text style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>Schlaf starten</Text>
-                <Text style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>Timer beginnen</Text>
+                <Text style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>
+                  {isStoppingSleep ? 'Schlaf wird beendet' : 'Schlaf beenden'}
+                </Text>
+                <Text style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>
+                  {loadingLabel || 'Timer stoppen'}
+                </Text>
               </View>
             </BlurView>
           </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={[styles.liquidGlassCardWrapper, { width: GRID_COL_W }]}
+        ) : (
+          <>
+            <TouchableOpacity
+              style={[styles.liquidGlassCardWrapper, { width: GRID_COL_W, marginRight: GRID_GUTTER }, isActionBlocked && styles.actionDisabled]}
+              disabled={isActionBlocked}
+              hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
+              pressRetentionOffset={{ top: 20, bottom: 20, left: 18, right: 18 }}
               onPress={() => {
+                if (isActionBlocked) return;
                 triggerHaptic();
-                setEditingEntry(null);
-                setShowInputModal(true);
+                const now = new Date();
+                handleStartSleep(now.getHours() >= 20 || now.getHours() < 10 ? 'night' : 'day');
               }}
-            activeOpacity={0.9}
-          >
-            <BlurView intensity={24} tint="light" style={styles.liquidGlassCardBackground}>
-              <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(168, 196, 193, 0.6)', borderColor: 'rgba(255, 255, 255, 0.6)' }]}>
-                <View style={[styles.iconContainer, { backgroundColor: 'rgba(168, 196, 193, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.6)', shadowColor: 'rgba(255, 255, 255, 0.3)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.12, shadowRadius: 2, elevation: 4 }]}>
-                  <IconSymbol name="plus.circle.fill" size={28} color="#FFFFFF" />
+              activeOpacity={0.9}
+            >
+              <BlurView intensity={24} tint="light" style={styles.liquidGlassCardBackground}>
+                <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(220, 200, 255, 0.6)', borderColor: 'rgba(255, 255, 255, 0.6)' }]}>
+                  <View style={[styles.iconContainer, { backgroundColor: 'rgba(142, 78, 198, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.6)', shadowColor: 'rgba(255, 255, 255, 0.3)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.12, shadowRadius: 2, elevation: 4 }]}>
+                    <IconSymbol name="moon.fill" size={28} color="#FFFFFF" />
+                  </View>
+                  <Text style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>Schlaf starten</Text>
+                  <Text style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>
+                    {loadingLabel || 'Timer beginnen'}
+                  </Text>
                 </View>
-                <Text style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>Manuell</Text>
-                <Text style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>Eintrag hinzufügen</Text>
-              </View>
-            </BlurView>
-          </TouchableOpacity>
-        </>
-      )}
-    </View>
-  );
+              </BlurView>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.liquidGlassCardWrapper, { width: GRID_COL_W }, isActionBlocked && styles.actionDisabled]}
+              disabled={isActionBlocked}
+              hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
+              pressRetentionOffset={{ top: 20, bottom: 20, left: 18, right: 18 }}
+              onPress={() => {
+                if (isActionBlocked) return;
+                triggerHaptic();
+                openManualSleepModal();
+              }}
+              activeOpacity={0.9}
+            >
+              <BlurView intensity={24} tint="light" style={styles.liquidGlassCardBackground}>
+                <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(168, 196, 193, 0.6)', borderColor: 'rgba(255, 255, 255, 0.6)' }]}>
+                  <View style={[styles.iconContainer, { backgroundColor: 'rgba(168, 196, 193, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.6)', shadowColor: 'rgba(255, 255, 255, 0.3)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.12, shadowRadius: 2, elevation: 4 }]}>
+                    <IconSymbol name="plus.circle.fill" size={28} color="#FFFFFF" />
+                  </View>
+                  <Text style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>Manuell</Text>
+                  <Text style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>Eintrag hinzufügen</Text>
+                </View>
+              </BlurView>
+            </TouchableOpacity>
+          </>
+        )}
+      </View>
+    );
   };
 
   // Wochenansicht Component (Design Guide konform)
@@ -2403,7 +2580,7 @@ export default function SleepTrackerScreen() {
         
         <Header 
           title="Schlaf-Tracker"
-          subtitle="Verfolge Levis Schlafmuster"
+          subtitle="Verfolge das Schlafmuster deines Babys"
           showBackButton
           onBackPress={() => router.push('/(tabs)/home')}
         />
@@ -2417,6 +2594,7 @@ export default function SleepTrackerScreen() {
           selectedDate={selectedDate}
           sleepPrediction={sleepPrediction}
           activeSleepEntry={activeSleepEntry}
+          hasSleepData={sleepEntries.length > 0}
           statsPage={statsPage}
           onPageChange={setStatsPage}
         />
@@ -2424,6 +2602,10 @@ export default function SleepTrackerScreen() {
         <ScrollView
           style={styles.scrollContainer}
           contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          {...(Platform.OS === 'ios'
+            ? ({ delaysContentTouches: false, canCancelContentTouches: true } as any)
+            : {})}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -2469,10 +2651,28 @@ export default function SleepTrackerScreen() {
                   <Text style={[styles.weekNavButtonText, { color: textSecondary }]}>›</Text>
                 </TouchableOpacity>
               </View>
+              <TouchableOpacity
+                onPress={() => setShowSleepInfoModal(true)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                style={styles.sleepInfoIconButton}
+              >
+                <IconSymbol name="info.circle" size={14} color={textSecondary} />
+              </TouchableOpacity>
 
               {/* Central Timer - nur in Tag-Ansicht */}
               <Animated.View style={{ opacity: appearAnim }}>
-                <CentralTimer />
+                <CentralTimer
+                  activeSleepEntry={activeSleepEntry}
+                  isStartingSleep={isStartingSleep}
+                  isStoppingSleep={isStoppingSleep}
+                  predictionLoading={predictionLoading}
+                  sleepPrediction={sleepPrediction}
+                  predictionError={predictionError}
+                  hasSleepData={sleepEntries.length > 0}
+                  textPrimary={textPrimary}
+                  textSecondary={textSecondary}
+                  pulseAnim={pulseAnim}
+                />
               </Animated.View>
 
               {/* Schlaferfassung Section - nur in Tag-Ansicht */}
@@ -2497,10 +2697,9 @@ export default function SleepTrackerScreen() {
                     triggerHaptic();
                     handleDeleteEntry(entryId);
                   }}
-                  onEdit={(entry) => {
+                  onEdit={() => {
                     triggerHaptic();
-                    setEditingEntry(entry as any);
-                    setShowInputModal(true);
+                    openEditSleepModal(entry);
                   }}
                   marginHorizontal={8}
                 />
@@ -2529,8 +2728,7 @@ export default function SleepTrackerScreen() {
                   style={[styles.actionButton, styles.manualButton, { marginTop: 16 }]}
                   onPress={() => {
                     triggerHaptic();
-                    setEditingEntry(null);
-                    setShowInputModal(true);
+                    openManualSleepModal();
                   }}
                 >
                 <Text style={[styles.actionButtonText, { color: textSecondary }]}>Manuell hinzufügen</Text>
@@ -2542,11 +2740,18 @@ export default function SleepTrackerScreen() {
           {/* Manuell Button - erscheint nur bei aktivem Schlaf */}
           {activeSleepEntry && (
             <TouchableOpacity
-              style={[styles.liquidGlassCardWrapper, { width: '100%', marginTop: 16, marginHorizontal: 8 }]}
+              style={[
+                styles.liquidGlassCardWrapper,
+                { width: contentWidth, alignSelf: 'center', marginTop: 16 },
+                (isStartingSleep || isStoppingSleep || !isLiveStatusLoaded) && styles.actionDisabled
+              ]}
+              disabled={isStartingSleep || isStoppingSleep || !isLiveStatusLoaded}
+              hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
+              pressRetentionOffset={{ top: 20, bottom: 20, left: 18, right: 18 }}
               onPress={() => {
+                if (isStartingSleep || isStoppingSleep || !isLiveStatusLoaded) return;
                 triggerHaptic();
-                setEditingEntry(null);
-                setShowInputModal(true);
+                openManualSleepModal();
               }}
               activeOpacity={0.9}
             >
@@ -2571,52 +2776,59 @@ export default function SleepTrackerScreen() {
           visible={showInputModal} 
           transparent={true} 
           animationType="slide" 
-          onRequestClose={() => setShowInputModal(false)}
+          onRequestClose={closeManualSleepModal}
         >
-          <View style={styles.modalOverlay}>
+          <View style={[styles.modalOverlay, { backgroundColor: modalOverlayColor }]}>
             {/* Background tap to close */}
             <TouchableOpacity 
               style={StyleSheet.absoluteFill} 
               onPress={() => {
                 triggerHaptic();
-                setShowInputModal(false);
+                closeManualSleepModal();
               }}
               activeOpacity={1}
             />
 
             <BlurView
-              style={styles.modalContent}
-              tint="extraLight"
+              style={[
+                styles.modalContent,
+                {
+                  backgroundColor: modalPanelColor,
+                  borderTopWidth: isDark ? 1 : 0,
+                  borderTopColor: modalPanelBorderColor,
+                },
+              ]}
+              tint={isDark ? 'dark' : 'extraLight'}
               intensity={80}
             >
               {/* Header */}
               <View style={styles.header}>
                 <TouchableOpacity 
-                  style={styles.headerButton}
+                  style={[styles.headerButton, { backgroundColor: modalGhostButtonColor }]}
                   onPress={() => {
                     triggerHaptic();
-                    setShowInputModal(false);
+                    closeManualSleepModal();
                   }}
                 >
-                  <Text style={styles.closeHeaderButtonText}>✕</Text>
+                  <Text style={[styles.closeHeaderButtonText, { color: textSecondary }]}>✕</Text>
                 </TouchableOpacity>
 
                 <View style={styles.headerCenter}>
                   <Text style={[styles.modalTitle, { color: textSecondary }]}>
                     {editingEntry ? 'Schlaf bearbeiten' : 'Schlaf hinzufügen'}
                   </Text>
-                  <Text style={styles.modalSubtitle}>
+                  <Text style={[styles.modalSubtitle, { color: modalSubtitleColor }]}>
                     {editingEntry ? 'Daten anpassen' : 'Neuen Eintrag erstellen'}
                   </Text>
                 </View>
 
                 <TouchableOpacity
-                  style={[styles.headerButton, styles.saveHeaderButton, { backgroundColor: '#8E4EC6' }]}
+                  style={[styles.headerButton, styles.saveHeaderButton, { backgroundColor: modalAccentColor }]}
                   onPress={() => {
                     triggerHaptic();
                     handleSaveEntry({
-                      start_time: sleepModalData.start_time.toISOString(),
-                      end_time: sleepModalData.end_time?.toISOString() || null,
+                      start_time: safeModalStartTime.toISOString(),
+                      end_time: safeModalEndTime?.toISOString() || null,
                       quality: sleepModalData.quality,
                       notes: sleepModalData.notes
                     });
@@ -2635,12 +2847,18 @@ export default function SleepTrackerScreen() {
                       
                       <View style={styles.timeRow}>
                         <TouchableOpacity
-                          style={styles.timeButton}
+                          style={[
+                            styles.timeButton,
+                            {
+                              backgroundColor: modalFieldColor,
+                              borderColor: modalFieldBorderColor,
+                            },
+                          ]}
                           onPress={openStartPicker}
                         >
-                          <Text style={[styles.timeLabel, isDark && { color: Colors.dark.textSecondary }]}>Start</Text>
-                          <Text style={[styles.timeValue, isDark && { color: Colors.dark.textPrimary }]}>
-                            {sleepModalData.start_time.toLocaleString('de-DE', {
+                          <Text style={[styles.timeLabel, { color: textSecondary }]}>Start</Text>
+                          <Text style={[styles.timeValue, { color: textPrimary }]}>
+                            {safeModalStartTime.toLocaleString('de-DE', {
                               hour: '2-digit',
                               minute: '2-digit',
                               day: '2-digit',
@@ -2650,13 +2868,19 @@ export default function SleepTrackerScreen() {
                         </TouchableOpacity>
 
                         <TouchableOpacity
-                          style={styles.timeButton}
+                          style={[
+                            styles.timeButton,
+                            {
+                              backgroundColor: modalFieldColor,
+                              borderColor: modalFieldBorderColor,
+                            },
+                          ]}
                           onPress={openEndPicker}
                         >
-                          <Text style={[styles.timeLabel, isDark && { color: Colors.dark.textSecondary }]}>Ende</Text>
-                          <Text style={[styles.timeValue, isDark && { color: Colors.dark.textPrimary }]}>
-                            {sleepModalData.end_time
-                              ? sleepModalData.end_time.toLocaleString('de-DE', {
+                          <Text style={[styles.timeLabel, { color: textSecondary }]}>Ende</Text>
+                          <Text style={[styles.timeValue, { color: textPrimary }]}>
+                            {safeModalEndTime
+                              ? safeModalEndTime.toLocaleString('de-DE', {
                                   hour: '2-digit',
                                   minute: '2-digit',
                                   day: '2-digit',
@@ -2670,21 +2894,41 @@ export default function SleepTrackerScreen() {
 
                       {/* DateTimePicker direkt im Modal - Zeit und Datum gleichzeitig */}
                       {showStartPicker && (
-                        <View style={styles.datePickerContainer}>
+                        <View
+                          style={[
+                            styles.datePickerContainer,
+                            {
+                              backgroundColor: modalPickerColor,
+                              borderColor: modalFieldBorderColor,
+                            },
+                          ]}
+                        >
                           <DateTimePicker
-                            value={normalizePickerDate(sleepModalData.start_time)}
+                            value={safeModalStartTime}
                             mode="datetime"
                             display={Platform.OS === 'ios' ? 'compact' : 'default'}
-                            onChange={(_, date) => {
-                              if (date && !Number.isNaN(date.getTime())) {
-                                setSleepModalData(prev => ({ ...prev, start_time: date }));
-                              }
+                            onChange={(event, date) => {
+                              if (event.type === 'dismissed') return;
+                              if (!date || !isValidManualDate(date)) return;
+
+                              const nextStart = sanitizeManualDate(date, safeModalStartTime);
+                              setSleepModalData(prev => {
+                                const prevEnd = prev.end_time
+                                  ? sanitizeManualDate(prev.end_time, nextStart)
+                                  : null;
+                                return {
+                                  ...prev,
+                                  start_time: nextStart,
+                                  end_time:
+                                    prevEnd && prevEnd.getTime() <= nextStart.getTime() ? null : prevEnd,
+                                };
+                              });
                             }}
                             style={styles.dateTimePicker}
                           />
                           <View style={styles.datePickerActions}>
                             <TouchableOpacity
-                              style={styles.datePickerCancel}
+                              style={[styles.datePickerCancel, { backgroundColor: modalAccentColor }]}
                               onPress={() => {
                                 triggerHaptic();
                                 setShowStartPicker(false);
@@ -2697,21 +2941,31 @@ export default function SleepTrackerScreen() {
                       )}
 
                       {showEndPicker && (
-                        <View style={styles.datePickerContainer}>
+                        <View
+                          style={[
+                            styles.datePickerContainer,
+                            {
+                              backgroundColor: modalPickerColor,
+                              borderColor: modalFieldBorderColor,
+                            },
+                          ]}
+                        >
                           <DateTimePicker
-                            value={normalizePickerDate(sleepModalData.end_time ?? sleepModalData.start_time)}
+                            value={safeModalEndPickerTime}
                             mode="datetime"
                             display={Platform.OS === 'ios' ? 'compact' : 'default'}
-                            onChange={(_, date) => {
-                              if (date && !Number.isNaN(date.getTime())) {
-                                setSleepModalData(prev => ({ ...prev, end_time: date }));
-                              }
+                            onChange={(event, date) => {
+                              if (event.type === 'dismissed') return;
+                              if (!date || !isValidManualDate(date)) return;
+
+                              const nextEnd = sanitizeManualDate(date, safeModalEndPickerTime);
+                              setSleepModalData(prev => ({ ...prev, end_time: nextEnd }));
                             }}
                             style={styles.dateTimePicker}
                           />
                           <View style={styles.datePickerActions}>
                             <TouchableOpacity
-                              style={styles.datePickerCancel}
+                              style={[styles.datePickerCancel, { backgroundColor: modalAccentColor }]}
                               onPress={() => {
                                 triggerHaptic();
                                 setShowEndPicker(false);
@@ -2737,7 +2991,8 @@ export default function SleepTrackerScreen() {
                               { 
                                 backgroundColor: sleepModalData.quality === q 
                                   ? (q === 'good' ? '#38A169' : q === 'medium' ? '#F5A623' : '#E53E3E')
-                                  : 'rgba(230, 230, 230, 0.8)',
+                                  : modalQualityDefaultColor,
+                                borderColor: sleepModalData.quality === q ? 'transparent' : modalFieldBorderColor,
                                 flex: 1,
                                 marginHorizontal: 3
                               }
@@ -2753,7 +3008,7 @@ export default function SleepTrackerScreen() {
                             <Text style={[
                               styles.optionLabel,
                               {
-                                color: sleepModalData.quality === q ? '#FFFFFF' : (isDark ? Colors.dark.textPrimary : '#333333')
+                                color: sleepModalData.quality === q ? '#FFFFFF' : textPrimary
                               }
                             ]}>
                               {q === 'good' ? 'Gut' : q === 'medium' ? 'Mittel' : 'Schlecht'}
@@ -2767,7 +3022,13 @@ export default function SleepTrackerScreen() {
                     <View style={styles.section}>
                       <Text style={[styles.sectionTitle, { color: textSecondary }]}>📝 Notizen</Text>
                       <TouchableOpacity
-                        style={styles.notesInput}
+                        style={[
+                          styles.notesInput,
+                          {
+                            backgroundColor: modalFieldColor,
+                            borderColor: modalFieldBorderColor,
+                          },
+                        ]}
                         activeOpacity={0.9}
                         onPress={() => {
                           triggerHaptic();
@@ -2777,7 +3038,7 @@ export default function SleepTrackerScreen() {
                         <Text
                           style={[
                             sleepModalData.notes.trim() ? styles.notesText : styles.notesPlaceholder,
-                            isDark && { color: sleepModalData.notes.trim() ? Colors.dark.textPrimary : Colors.dark.textSecondary }
+                            { color: sleepModalData.notes.trim() ? textPrimary : textSecondary }
                           ]}
                           numberOfLines={3}
                         >
@@ -2795,8 +3056,7 @@ export default function SleepTrackerScreen() {
                             triggerHaptic();
                             if (editingEntry.id) {
                               handleDeleteEntry(editingEntry.id);
-                              setShowInputModal(false);
-                              setEditingEntry(null);
+                              closeManualSleepModal();
                             }
                           }}
                         >
@@ -2816,13 +3076,114 @@ export default function SleepTrackerScreen() {
 	            value={notesOverlayValue}
 	            placeholder="Optionale Notizen zum Schlaf..."
 	            multiline
-	            accentColor={PRIMARY}
+	            accentColor={modalAccentColor}
 	            onClose={closeNotesEditor}
 	            onSubmit={(next) => saveNotesEditor(next)}
 	          />
 
 	        </Modal>
       </SafeAreaView>
+
+      {/* Sleep Info Modal */}
+      <Modal
+        visible={showSleepInfoModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowSleepInfoModal(false)}
+      >
+        <View style={[styles.modalOverlay, { backgroundColor: modalOverlayColor, justifyContent: 'center', alignItems: 'center' }]}>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            onPress={() => setShowSleepInfoModal(false)}
+            activeOpacity={1}
+          />
+          <View style={[styles.sleepInfoPanel, { backgroundColor: isDark ? 'rgba(20,20,24,0.96)' : 'rgba(255,255,255,0.97)', borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)' }]}>
+            <View style={styles.sleepInfoHeader}>
+              <Text style={[styles.sleepInfoTitle, { color: textPrimary }]}>So berechnen wir Schlaffenster</Text>
+              <TouchableOpacity onPress={() => setShowSleepInfoModal(false)} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+                <IconSymbol name="xmark.circle.fill" size={24} color={isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.25)'} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.sleepInfoScroll} showsVerticalScrollIndicator={false}>
+              <Text style={[styles.sleepInfoHeading, { color: textPrimary }]}>
+                Warum wir Schlaffenster so berechnen{'\n'}(und warum das für viele Mamas gut funktioniert)
+              </Text>
+              <Text style={[styles.sleepInfoBody, { color: textSecondary }]}>
+                Babyschlaf ist keine exakte Wissenschaft – aber er folgt trotzdem zwei sehr stabilen Kräften:{'\n\n'}
+                <Text style={{ fontWeight: '700', color: textPrimary }}>Schlafdruck</Text> (je länger wach, desto müder) und <Text style={{ fontWeight: '700', color: textPrimary }}>innere Uhr / Tagesrhythmus</Text> (morgens oft länger wach, nachmittags schneller müde).{'\n\n'}
+                Dieses Zusammenspiel ist ein zentrales, etabliertes Rahmenmodell der Schlafforschung (Two-Process Model: homeostatisch + circadian).{'\n\n'}
+                Was Eltern in der Praxis brauchen, ist deshalb meist keine perfekte Minute, sondern eine stressarme Orientierung: Wann wird es wahrscheinlich Zeit, das Baby hinzulegen – ohne starr nach Uhr zu leben?{'\n\n'}
+                <Text style={{ fontStyle: 'italic' }}>Wichtig: Für „die eine richtige Wake-Window-Zahl" gibt es nicht die große harte Evidenz – Babys sind zu individuell. Viele Expert:innen betonen daher: Fenster als Orientierung ja, aber flexibel bleiben und Babyzeichen mitdenken.</Text>
+              </Text>
+
+              <Text style={[styles.sleepInfoSubheading, { color: textPrimary }]}>Unser Ansatz</Text>
+              <View style={styles.sleepInfoBullets}>
+                <Text style={[styles.sleepInfoBullet, { color: textSecondary }]}>
+                  <Text style={{ fontWeight: '700', color: textPrimary }}>Erklärbar</Text> statt Blackbox – du siehst, warum ein Vorschlag entsteht
+                </Text>
+                <Text style={[styles.sleepInfoBullet, { color: textSecondary }]}>
+                  <Text style={{ fontWeight: '700', color: textPrimary }}>Robust</Text> statt hektisch – Caps, Puffer, Ausreißer werden gedämpft
+                </Text>
+                <Text style={[styles.sleepInfoBullet, { color: textSecondary }]}>
+                  <Text style={{ fontWeight: '700', color: textPrimary }}>Individuell</Text> statt „One size fits all" – dein Baby kalibriert das Modell über die Zeit
+                </Text>
+                <Text style={[styles.sleepInfoBullet, { color: textSecondary }]}>
+                  <Text style={{ fontWeight: '700', color: textPrimary }}>Entlastend</Text> statt Druck – wir geben ein Fenster, nicht einen starren Termin
+                </Text>
+              </View>
+
+              <Text style={[styles.sleepInfoSubheading, { color: textPrimary }]}>Die 7 Schritte der Berechnung</Text>
+              <Text style={[styles.sleepInfoBody, { color: textSecondary, marginBottom: 8 }]}>
+                Wir berechnen zuerst ein realistisches Wachfenster (Minuten) und wandeln es dann in ein Zeitfenster um (frühestens/spätestens).
+              </Text>
+
+              <Text style={[styles.sleepInfoStep, { color: textPrimary }]}>1) Basis-Wachfenster nach Alter & Nap-Nummer</Text>
+              <Text style={[styles.sleepInfoBody, { color: textSecondary }]}>
+                Je nach Alter und ob es Nap 1/2/3 ist, gibt es eine Baseline (z.B. 6 Monate ~150 Min, 12 Monate ~210 Min – je nach Nap-Slot unterschiedlich).
+              </Text>
+
+              <Text style={[styles.sleepInfoStep, { color: textPrimary }]}>2) Nap-Dauer-Korrektur (max. ±20 Min)</Text>
+              <Text style={[styles.sleepInfoBody, { color: textSecondary }]}>
+                Letzter Nap kürzer als ideal → früher müde → Wachfenster kürzer.{'\n'}
+                Letzter Nap länger als ideal → später müde → Wachfenster länger.
+              </Text>
+
+              <Text style={[styles.sleepInfoStep, { color: textPrimary }]}>3) Schlafschuld-Korrektur (max. ±20 Min)</Text>
+              <Text style={[styles.sleepInfoBody, { color: textSecondary }]}>
+                Wenn das Baby in den letzten 24h unter dem Tages-Schlafziel lag, wird das Wachfenster moderat verkürzt.
+              </Text>
+
+              <Text style={[styles.sleepInfoStep, { color: textPrimary }]}>4) Circadian-Faktor (0.85–1.05×)</Text>
+              <Text style={[styles.sleepInfoBody, { color: textSecondary }]}>
+                Biologie des Tagesrhythmus: morgens eher länger wach (Faktor {'>'} 1), nachmittags eher schneller müde (Faktor {'<'} 1).
+              </Text>
+
+              <Text style={[styles.sleepInfoStep, { color: textPrimary }]}>5) Historischer Faktor (0.9–1.1×)</Text>
+              <Text style={[styles.sleepInfoBody, { color: textSecondary }]}>
+                Die echten Wachfenster der letzten 14 Tage für denselben Nap-Slot (robust per Trimmed Mean, Ausreißer werden ignoriert).
+              </Text>
+
+              <Text style={[styles.sleepInfoStep, { color: textPrimary }]}>6) Personalisierung (EMA, max. ±60 Min)</Text>
+              <Text style={[styles.sleepInfoBody, { color: textSecondary }]}>
+                Lernender Offset: Wenn dein Baby im Schnitt früher/später einschläft als prognostiziert, passt sich das Modell an. Gewichtung: 30% pro neuem Datenpunkt, damit es stabil lernt.
+              </Text>
+
+              <Text style={[styles.sleepInfoStep, { color: textPrimary }]}>7) Clamp + Zeitfenster</Text>
+              <Text style={[styles.sleepInfoBody, { color: textSecondary }]}>
+                Wachfenster wird auf 30–300 Min begrenzt. Dann berechnen wir Frühest-/Spätestzeit mit ±25–30% Puffer.{'\n\n'}
+                <Text style={{ fontWeight: '600' }}>Extra:</Text> Wenn das Baby bereits länger wach ist als Fenster + 15 Min Gnadenfrist → Empfehlung: „Jetzt hinlegen".
+              </Text>
+
+              <View style={[styles.sleepInfoSafety, { backgroundColor: isDark ? 'rgba(255,155,155,0.1)' : 'rgba(255,155,155,0.08)', borderColor: isDark ? 'rgba(255,155,155,0.2)' : 'rgba(255,155,155,0.15)' }]}>
+                <Text style={[styles.sleepInfoBody, { color: textSecondary, marginBottom: 0 }]}>
+                  <Text style={{ fontWeight: '700', color: textPrimary }}>Hinweis zur Sicherheit:</Text> Schlaf-Timing ersetzt keine sicheren Schlafbedingungen – dafür gelten weiterhin klare Empfehlungen wie Rückenlage, eigene Schlafumgebung, keine weichen Gegenstände im Schlafplatz etc.
+                </Text>
+              </View>
+              <View style={{ height: 30 }} />
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
 
       {/* Splash Popup wie in daily_old.tsx */}
       {splashVisible && (
@@ -3141,6 +3502,9 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     overflow: 'hidden',
   },
+  actionDisabled: {
+    opacity: 0.6,
+  },
   fullWidthStopButton: {
     width: '100%',
     marginBottom: 16,
@@ -3329,6 +3693,79 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
+  sleepInfoIconButton: {
+    alignSelf: 'flex-end',
+    marginRight: LAYOUT_PAD + 6,
+    marginTop: 2,
+    marginBottom: -2,
+    opacity: 0.45,
+  },
+
+  // Sleep Info Modal Styles
+  sleepInfoPanel: {
+    width: screenWidth - 40,
+    maxHeight: screenHeight * 0.8,
+    borderRadius: 24,
+    borderWidth: 1,
+    padding: 0,
+    overflow: 'hidden',
+  },
+  sleepInfoHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 12,
+  },
+  sleepInfoTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    flex: 1,
+    marginRight: 12,
+  },
+  sleepInfoScroll: {
+    paddingHorizontal: 20,
+  },
+  sleepInfoHeading: {
+    fontSize: 15,
+    fontWeight: '700',
+    lineHeight: 21,
+    marginBottom: 12,
+  },
+  sleepInfoSubheading: {
+    fontSize: 14,
+    fontWeight: '700',
+    marginTop: 18,
+    marginBottom: 8,
+  },
+  sleepInfoBody: {
+    fontSize: 13,
+    lineHeight: 19,
+    marginBottom: 10,
+  },
+  sleepInfoStep: {
+    fontSize: 13,
+    fontWeight: '700',
+    marginTop: 10,
+    marginBottom: 2,
+  },
+  sleepInfoBullets: {
+    gap: 6,
+    marginBottom: 4,
+  },
+  sleepInfoBullet: {
+    fontSize: 13,
+    lineHeight: 19,
+    paddingLeft: 8,
+  },
+  sleepInfoSafety: {
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 12,
+    marginTop: 14,
+  },
+
   // 🆕 Insights Rondell Styles (wie KPI-Cards)
   insightsRondellScroll: {
     marginTop: 8,
@@ -3403,7 +3840,7 @@ const styles = StyleSheet.create({
   closeHeaderButtonText: {
     fontSize: 20,
     fontWeight: '400',
-    color: '#888888',
+    // color wird dynamisch gesetzt
   },
   headerCenter: {
     alignItems: 'center',
@@ -3411,12 +3848,12 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#7D5A50',
+    // color wird dynamisch gesetzt
   },
   modalSubtitle: {
     fontSize: 14,
     marginTop: 2,
-    color: '#A8978E',
+    // color wird dynamisch gesetzt
   },
   saveHeaderButton: {
     shadowColor: '#000',
@@ -3447,6 +3884,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 18,
     borderRadius: 20,
+    borderWidth: 1,
     justifyContent: 'center',
     marginHorizontal: 5,
     minHeight: 80,
@@ -3474,6 +3912,8 @@ const styles = StyleSheet.create({
   timeButton: {
     flex: 1,
     backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    borderWidth: 1,
+    borderColor: 'transparent',
     borderRadius: 15,
     padding: 15,
     alignItems: 'center',
@@ -3485,19 +3925,21 @@ const styles = StyleSheet.create({
   },
   timeLabel: {
     fontSize: 12,
-    color: '#888888',
+    // color wird dynamisch gesetzt
     fontWeight: '600',
     marginBottom: 5,
   },
   timeValue: {
     fontSize: 16,
-    color: '#333333',
+    // color wird dynamisch gesetzt
     fontWeight: 'bold',
   },
   notesInput: {
     width: '90%',
     minHeight: 80,
     backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    borderWidth: 1,
+    borderColor: 'transparent',
     borderRadius: 15,
     padding: 15,
     shadowColor: '#000',
@@ -3508,11 +3950,11 @@ const styles = StyleSheet.create({
   },
   notesText: {
     fontSize: 16,
-    color: '#333333',
+    // color wird dynamisch gesetzt
   },
   notesPlaceholder: {
     fontSize: 16,
-    color: '#A8978E',
+    // color wird dynamisch gesetzt
   },
   deleteButton: {
     backgroundColor: '#FF6B6B',
@@ -3536,6 +3978,8 @@ const styles = StyleSheet.create({
   datePickerContainer: {
     marginTop: 15,
     backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderWidth: 1,
+    borderColor: 'transparent',
     borderRadius: 15,
     padding: 15,
     width: '90%',

@@ -13,6 +13,7 @@ import {
   UIManager,
   StyleProp,
   ViewStyle,
+  TextStyle,
   Alert,
 } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -41,6 +42,7 @@ export type PlannerCapturePayload = {
   start?: Date;
   end?: Date | null;
   location?: string;
+  reminderMinutes?: number;
   notes?: string;
   assignee?: PlannerAssignee;
   babyId?: string;
@@ -81,6 +83,16 @@ const THEME = {
   accent: PRIMARY,
   field: "rgba(255,255,255,0.75)",
   divider: "rgba(0,0,0,0.08)",
+};
+
+const REMINDER_OPTIONS = [0, 5, 10, 15, 30, 60, 120, 1440] as const;
+
+const formatReminderLabel = (minutes: number) => {
+  if (minutes === 0) return "Zum Start";
+  if (minutes === 60) return "1 Std vorher";
+  if (minutes === 120) return "2 Std vorher";
+  if (minutes === 1440) return "1 Tag vorher";
+  return `${minutes} Min vorher`;
 };
 
 const toRgba = (hex: string, opacity = 1) => {
@@ -162,10 +174,13 @@ export const PlannerCaptureModal: React.FC<Props> = ({
   const [currentType, setCurrentType] = useState<PlannerCaptureType>(type);
   const [assignee, setAssignee] = useState<PlannerAssignee>("me");
   const [selectedBabyId, setSelectedBabyId] = useState<string | null>(null);
-  const [showBabyPicker, setShowBabyPicker] = useState(false);
+  const [showTimeRangeModal, setShowTimeRangeModal] = useState(false);
+  const [showAssigneePicker, setShowAssigneePicker] = useState(false);
+  const [showReminderPicker, setShowReminderPicker] = useState(false);
   const [focusConfig, setFocusConfig] = useState<FocusConfig | null>(null);
   const [focusValue, setFocusValue] = useState("");
   const [isAllDay, setIsAllDay] = useState(false);
+  const [reminderMinutes, setReminderMinutes] = useState<number>(15);
 
   const partnerLabel = useMemo(() => {
     if (!ownerOptions || ownerOptions.length === 0) return "Partner";
@@ -175,15 +190,135 @@ export const PlannerCaptureModal: React.FC<Props> = ({
     return partnerOption?.label ?? "Partner";
   }, [ownerOptions, defaultOwnerId]);
 
-  const assigneeOptions: { value: PlannerAssignee; label: string }[] = useMemo(
-    () => [
-      { value: "me", label: "Ich" },
-      { value: "partner", label: partnerLabel },
-      { value: "family", label: "Familie" },
-      { value: "child", label: "Kind" },
-    ],
-    [partnerLabel],
+  const assigneeOptions: {
+    key: string;
+    value: PlannerAssignee;
+    label: string;
+    babyId?: string | null;
+  }[] = useMemo(() => {
+    const base = [
+      { key: "me", value: "me" as PlannerAssignee, label: "Ich" },
+      {
+        key: "partner",
+        value: "partner" as PlannerAssignee,
+        label: partnerLabel,
+      },
+      { key: "family", value: "family" as PlannerAssignee, label: "Familie" },
+    ];
+
+    if (babyOptions && babyOptions.length > 0) {
+      const childOptions = babyOptions.map((baby) => ({
+        key: `child:${baby.id}`,
+        value: "child" as PlannerAssignee,
+        label: baby.label,
+        babyId: baby.id,
+      }));
+      return [...base, ...childOptions];
+    }
+
+    return [
+      ...base,
+      {
+        key: "child:none",
+        value: "child" as PlannerAssignee,
+        label: "Kind",
+        babyId: null,
+      },
+    ];
+  }, [partnerLabel, babyOptions]);
+
+  const selectedBabyLabel = useMemo(
+    () => babyOptions?.find((b) => b.id === selectedBabyId)?.label,
+    [babyOptions, selectedBabyId],
   );
+
+  const selectedAssigneeLabel = useMemo(() => {
+    if (assignee === "child") {
+      if (selectedBabyLabel) return selectedBabyLabel;
+      if (babyOptions && babyOptions.length === 1) return babyOptions[0].label;
+      return "Kind";
+    }
+    return assigneeOptions.find((opt) => opt.value === assignee)?.label ?? "Ich";
+  }, [assignee, assigneeOptions, selectedBabyLabel, babyOptions]);
+
+  const selectedReminderLabel = useMemo(
+    () => formatReminderLabel(reminderMinutes),
+    [reminderMinutes],
+  );
+
+  const timeRangeSummary = useMemo(() => {
+    const dayKey = (date: Date) =>
+      `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+    const timeLabel = (date: Date) =>
+      date.toLocaleTimeString("de-DE", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+
+    const dayLabel = (date: Date, withYear = false) => {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+
+      if (dayKey(date) === dayKey(today)) return "Heute";
+      if (dayKey(date) === dayKey(tomorrow)) return "Morgen";
+      if (dayKey(date) === dayKey(yesterday)) return "Gestern";
+      return new Intl.DateTimeFormat("de-DE", {
+        day: "2-digit",
+        month: "2-digit",
+        ...(withYear ? { year: "2-digit" } : {}),
+      }).format(date);
+    };
+
+    if (isAllDay) {
+      const startLabel = dayLabel(startTime);
+      const endLabel = dayLabel(endTime ?? startTime);
+      if (startLabel === endLabel) return `${startLabel} · Ganztägig`;
+      return `${startLabel}–${endLabel} · Ganztägig`;
+    }
+
+    if (showEnd && endTime) {
+      const isSameDay = dayKey(startTime) === dayKey(endTime);
+      const startLabel = dayLabel(startTime);
+      if (isSameDay) {
+        return `${startLabel} · ${timeLabel(startTime)}–${timeLabel(endTime)}`;
+      }
+      return `${dayLabel(startTime, true)} ${timeLabel(startTime)} – ${dayLabel(endTime, true)} ${timeLabel(endTime)}`;
+    }
+
+    return `${dayLabel(startTime)} · ab ${timeLabel(startTime)}`;
+  }, [isAllDay, startTime, endTime, showEnd]);
+
+  const setEventMode = (nextIsAllDay: boolean) => {
+    if (nextIsAllDay === isAllDay) return;
+    setIsAllDay(nextIsAllDay);
+
+    if (nextIsAllDay) {
+      const allDayStart = new Date(startTime);
+      allDayStart.setHours(0, 0, 0, 0);
+      setStartTime(allDayStart);
+
+      const allDayEnd = new Date(endTime ?? startTime);
+      allDayEnd.setHours(23, 59, 59, 999);
+      setEndTime(allDayEnd);
+
+      setShowStartPicker(false);
+      setShowEndPicker(false);
+      return;
+    }
+
+    const now = new Date();
+    const timedStart = new Date(startTime);
+    timedStart.setHours(now.getHours(), now.getMinutes(), 0, 0);
+    setStartTime(timedStart);
+
+    const timedEnd = new Date(timedStart.getTime() + 30 * 60000);
+    setEndTime(timedEnd);
+    setShowEnd(true);
+  };
 
   const deriveAssigneeForOwner = (targetOwnerId?: string | null) => {
     if (!defaultOwnerId || !targetOwnerId) return "me" as PlannerAssignee;
@@ -195,6 +330,9 @@ export const PlannerCaptureModal: React.FC<Props> = ({
     setShowStartPicker(false);
     setShowEndPicker(false);
     setShowDuePicker(false);
+    setShowTimeRangeModal(false);
+    setShowAssigneePicker(false);
+    setShowReminderPicker(false);
 
     if (editingItem) {
       const { type: editingType, item } = editingItem;
@@ -208,23 +346,31 @@ export const PlannerCaptureModal: React.FC<Props> = ({
         setNotesExpanded(false);
       }
       if (editingType === "event") {
-        const start = new Date(item.start);
-        const end = new Date(item.end);
-        const allDay = "isAllDay" in item ? (item.isAllDay ?? false) : false;
+        const eventItem = item as PlannerEvent;
+        const start = new Date(eventItem.start);
+        const end = new Date(eventItem.end);
+        const allDay = eventItem.isAllDay ?? false;
         setStartTime(start);
         setEndTime(end);
         setShowEnd(true);
         setDueTime(null);
-        setLocation(item.location ?? "");
+        setLocation(eventItem.location ?? "");
         setIsAllDay(allDay);
+        const nextReminder =
+          typeof eventItem.reminderMinutes === "number"
+            ? Math.max(0, Math.round(eventItem.reminderMinutes))
+            : 15;
+        setReminderMinutes(nextReminder);
       } else {
-        const due = item.dueAt ? new Date(item.dueAt) : null;
+        const todoItem = item as PlannerTodo;
+        const due = todoItem.dueAt ? new Date(todoItem.dueAt) : null;
         setStartTime(due ?? new Date(initialStart));
         setEndTime(null);
         setShowEnd(false);
         setDueTime(due);
         setHasDueTime(!!due);
         setLocation("");
+        setReminderMinutes(15);
       }
       if ("assignee" in item && item.assignee) {
         setAssignee(item.assignee);
@@ -256,8 +402,16 @@ export const PlannerCaptureModal: React.FC<Props> = ({
       setAssignee("me");
       setSelectedBabyId(null);
       setIsAllDay(false);
+      setReminderMinutes(15);
     }
   }, [visible, type, baseDate, editingItem, defaultOwnerId]);
+
+  useEffect(() => {
+    if (!visible || assignee !== "child") return;
+    if (selectedBabyId) return;
+    if (!babyOptions || babyOptions.length !== 1) return;
+    setSelectedBabyId(babyOptions[0].id);
+  }, [visible, assignee, selectedBabyId, babyOptions]);
 
   useEffect(() => {
     if (!visible) return;
@@ -387,6 +541,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
       }
 
       payload.location = location.trim() || undefined;
+      payload.reminderMinutes = reminderMinutes;
       payload.assignee = assignee ?? deriveAssigneeForOwner(defaultOwnerId);
       payload.babyId =
         assignee === "child" ? (selectedBabyId ?? undefined) : undefined;
@@ -482,6 +637,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
     onPress: () => void,
     style: StyleProp<ViewStyle>,
     multiline = false,
+    textStyle?: StyleProp<TextStyle>,
   ) => {
     const mergedStyle = Array.isArray(style)
       ? [
@@ -504,8 +660,8 @@ export const PlannerCaptureModal: React.FC<Props> = ({
         <Text
           style={
             value
-              ? [styles.inputValue, { color: theme.text }]
-              : [styles.inputPlaceholder, { color: theme.textSecondary }]
+              ? [styles.inputValue, { color: theme.text }, textStyle]
+              : [styles.inputPlaceholder, { color: theme.textSecondary }, textStyle]
           }
           numberOfLines={multiline ? 3 : 1}
         >
@@ -619,6 +775,8 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                       placeholder: "Titel",
                     }),
                   [styles.titleInput, { backgroundColor: theme.field }],
+                  false,
+                  styles.titleFieldText,
                 )}
 
                 {(currentType === "todo" || currentType === "event") && (
@@ -626,239 +784,54 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                     <Text style={[styles.sectionLabel, { color: theme.text }]}>
                       👤 Für
                     </Text>
-                    <View style={styles.assignRowWrap}>
-                      {assigneeOptions.map((opt) => {
-                        const selected = assignee === opt.value;
-                        const displayLabel =
-                          opt.value === "child" && selectedBabyId
-                            ? (babyOptions?.find((b) => b.id === selectedBabyId)
-                                ?.label ?? opt.label)
-                            : opt.label;
-                        return (
-                          <TouchableOpacity
-                            key={opt.value}
-                            style={[
-                              styles.assignButton,
-                              styles.assignButtonHalf,
-                              {
-                                backgroundColor: theme.soft,
-                                borderColor: theme.border,
-                              },
-                              selected && styles.assignButtonActive,
-                              selected && {
-                                backgroundColor: accentColor,
-                                borderColor: accentColor,
-                              },
-                            ]}
-                            onPress={() => {
-                              if (opt.value === "child") {
-                                setShowBabyPicker(true);
-                              } else {
-                                setAssignee(opt.value);
-                                if (opt.value !== "child") {
-                                  setSelectedBabyId(null);
-                                }
-                              }
-                            }}
-                          >
-                            <Text
-                              style={[
-                                styles.assignLabel,
-                                { color: theme.text },
-                                selected && styles.assignLabelActive,
-                              ]}
-                            >
-                              {displayLabel}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
+                    <TouchableOpacity
+                      style={[
+                        styles.dropdownField,
+                        {
+                          backgroundColor: theme.field,
+                          borderColor: theme.border,
+                        },
+                      ]}
+                      onPress={() => setShowAssigneePicker(true)}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={[styles.dropdownValue, { color: theme.text }]}>
+                        {selectedAssigneeLabel}
+                      </Text>
+                      <Text
+                        style={[styles.dropdownChevron, { color: theme.textSecondary }]}
+                      >
+                        ▾
+                      </Text>
+                    </TouchableOpacity>
                   </View>
                 )}
 
                 {currentType === "event" && (
                   <View style={styles.section}>
-                    <View style={styles.allDayRow}>
-                      <Text
-                        style={[styles.sectionLabel, { color: theme.text }]}
-                      >
-                        ⏰ Zeitraum
+                    <Text style={[styles.sectionLabel, { color: theme.text }]}>
+                      Zeitraum
+                    </Text>
+                    <TouchableOpacity
+                      style={[
+                        styles.dropdownField,
+                        {
+                          backgroundColor: theme.field,
+                          borderColor: theme.border,
+                        },
+                      ]}
+                      onPress={() => setShowTimeRangeModal(true)}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={[styles.dropdownValue, { color: theme.text }]}>
+                        {timeRangeSummary}
                       </Text>
-                      <TouchableOpacity
-                        style={[
-                          styles.allDayToggle,
-                          {
-                            backgroundColor: theme.soft,
-                            borderColor: theme.border,
-                          },
-                          isAllDay && styles.allDayToggleActive,
-                          isAllDay && {
-                            backgroundColor: accentColor,
-                            borderColor: accentColor,
-                          },
-                        ]}
-                        onPress={() => {
-                          const newIsAllDay = !isAllDay;
-                          setIsAllDay(newIsAllDay);
-
-                          if (newIsAllDay) {
-                            // Set to all-day: 00:00 - 23:59:59
-                            const allDayStart = new Date(startTime);
-                            allDayStart.setHours(0, 0, 0, 0);
-                            setStartTime(allDayStart);
-
-                            // Keep end date if already set, otherwise same day
-                            const allDayEnd = new Date(endTime ?? startTime);
-                            allDayEnd.setHours(23, 59, 59, 999);
-                            setEndTime(allDayEnd);
-
-                            setShowStartPicker(false);
-                            setShowEndPicker(false);
-                          } else {
-                            // Back to timed event
-                            const now = new Date();
-                            const timedStart = new Date(startTime);
-                            timedStart.setHours(
-                              now.getHours(),
-                              now.getMinutes(),
-                              0,
-                              0,
-                            );
-                            setStartTime(timedStart);
-
-                            const timedEnd = new Date(
-                              timedStart.getTime() + 30 * 60000,
-                            );
-                            setEndTime(timedEnd);
-                            setShowEnd(true);
-                          }
-                        }}
+                      <Text
+                        style={[styles.dropdownChevron, { color: theme.textSecondary }]}
                       >
-                        <Text
-                          style={[
-                            styles.allDayToggleText,
-                            { color: theme.text },
-                            isAllDay && styles.allDayToggleTextActive,
-                          ]}
-                        >
-                          Ganztägig
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                    {isAllDay ? (
-                      <>
-                        {renderDateSelector(
-                          "Von",
-                          startTime,
-                          showStartPicker,
-                          () => setShowStartPicker((prev) => !prev),
-                          (date) => {
-                            const allDayStart = new Date(date);
-                            allDayStart.setHours(0, 0, 0, 0);
-                            setStartTime(allDayStart);
-
-                            // If end date is before start date, adjust it
-                            if (endTime && endTime < allDayStart) {
-                              const allDayEnd = new Date(allDayStart);
-                              allDayEnd.setHours(23, 59, 59, 999);
-                              setEndTime(allDayEnd);
-                            }
-                          },
-                          true,
-                        )}
-                        {renderDateSelector(
-                          "Bis",
-                          endTime ?? startTime,
-                          showEndPicker,
-                          () => setShowEndPicker((prev) => !prev),
-                          (date) => {
-                            const allDayEnd = new Date(date);
-                            allDayEnd.setHours(23, 59, 59, 999);
-
-                            // Don't allow end date before start date
-                            if (allDayEnd < startTime) {
-                              setEndTime(new Date(startTime.getTime()));
-                              (endTime ?? startTime).setHours(23, 59, 59, 999);
-                            } else {
-                              setEndTime(allDayEnd);
-                            }
-                          },
-                          true,
-                        )}
-                      </>
-                    ) : (
-                      <>
-                        {renderDateSelector(
-                          "Start",
-                          startTime,
-                          showStartPicker,
-                          () => setShowStartPicker((prev) => !prev),
-                          (date) => {
-                            setStartTime(date);
-                            if (showEnd && endTime && endTime < date) {
-                              setEndTime(new Date(date.getTime() + 30 * 60000));
-                            }
-                          },
-                          false,
-                        )}
-                        {showEnd && endTime ? (
-                          <>
-                            {renderDateSelector(
-                              "Ende",
-                              endTime,
-                              showEndPicker,
-                              () => setShowEndPicker((prev) => !prev),
-                              setEndTime,
-                            )}
-                            <TouchableOpacity
-                              style={[
-                                styles.removeEndButton,
-                                { backgroundColor: theme.accentSoft },
-                              ]}
-                              onPress={() => {
-                                setShowEnd(false);
-                                setEndTime(null);
-                                setShowEndPicker(false);
-                              }}
-                            >
-                              <Text
-                                style={[
-                                  styles.removeEndLabel,
-                                  { color: accentColor },
-                                ]}
-                              >
-                                Ende entfernen
-                              </Text>
-                            </TouchableOpacity>
-                          </>
-                        ) : (
-                          <TouchableOpacity
-                            style={[
-                              styles.timeButton,
-                              { backgroundColor: theme.field },
-                            ]}
-                            onPress={() => {
-                              const defaultEnd = new Date(
-                                startTime.getTime() + 30 * 60000,
-                              );
-                              setEndTime(defaultEnd);
-                              setShowEnd(true);
-                              setShowEndPicker(true);
-                            }}
-                          >
-                            <Text
-                              style={[
-                                styles.timeButtonLabel,
-                                { color: theme.text },
-                              ]}
-                            >
-                              Ende hinzufügen
-                            </Text>
-                          </TouchableOpacity>
-                        )}
-                      </>
-                    )}
+                        ▾
+                      </Text>
+                    </TouchableOpacity>
                     {renderInlineField(
                       location,
                       "Ort (optional)",
@@ -877,6 +850,37 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                         },
                       ],
                     )}
+                    <View style={styles.section}>
+                      <Text
+                        style={[
+                          styles.sectionLabelSecondary,
+                          { color: theme.textSecondary },
+                        ]}
+                      >
+                        Erinnerung
+                      </Text>
+                      <TouchableOpacity
+                        style={[
+                          styles.dropdownField,
+                          styles.dropdownFieldCompact,
+                          {
+                            backgroundColor: theme.field,
+                            borderColor: theme.border,
+                          },
+                        ]}
+                        onPress={() => setShowReminderPicker(true)}
+                        activeOpacity={0.85}
+                      >
+                        <Text style={[styles.dropdownValue, { color: theme.text }]}>
+                          {selectedReminderLabel}
+                        </Text>
+                        <Text
+                          style={[styles.dropdownChevron, { color: theme.textSecondary }]}
+                        >
+                          ▾
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 )}
 
@@ -1017,12 +1021,12 @@ export const PlannerCaptureModal: React.FC<Props> = ({
           </ScrollView>
         </BlurView>
 
-        {showBabyPicker && (
+        {showAssigneePicker && (
           <Modal
-            visible={showBabyPicker}
+            visible={showAssigneePicker}
             animationType="fade"
             transparent
-            onRequestClose={() => setShowBabyPicker(false)}
+            onRequestClose={() => setShowAssigneePicker(false)}
           >
             <View
               style={[
@@ -1031,7 +1035,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
               ]}
             >
               <TouchableWithoutFeedback
-                onPress={() => setShowBabyPicker(false)}
+                onPress={() => setShowAssigneePicker(false)}
               >
                 <View style={StyleSheet.absoluteFill} />
               </TouchableWithoutFeedback>
@@ -1049,9 +1053,9 @@ export const PlannerCaptureModal: React.FC<Props> = ({
               >
                 <View style={styles.pickerHeader}>
                   <Text style={[styles.pickerTitle, { color: theme.text }]}>
-                    Wähle ein Kind
+                    Für wen?
                   </Text>
-                  <TouchableOpacity onPress={() => setShowBabyPicker(false)}>
+                  <TouchableOpacity onPress={() => setShowAssigneePicker(false)}>
                     <Text
                       style={[styles.pickerCloseButton, { color: theme.text }]}
                     >
@@ -1060,52 +1064,362 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                   </TouchableOpacity>
                 </View>
                 <ScrollView>
-                  {babyOptions && babyOptions.length > 0 ? (
-                    babyOptions.map((baby) => (
+                  {assigneeOptions.map((opt) => {
+                    const isChild = opt.value === "child";
+                    const isSelected = isChild
+                      ? assignee === "child" &&
+                        (opt.babyId ?? null) === (selectedBabyId ?? null)
+                      : assignee === opt.value;
+                    return (
                       <TouchableOpacity
-                        key={baby.id}
+                        key={opt.key}
                         style={[
                           styles.pickerOption,
                           { borderBottomColor: theme.divider },
-                          selectedBabyId === baby.id &&
-                            styles.pickerOptionActive,
-                          selectedBabyId === baby.id && {
+                          isSelected && styles.pickerOptionActive,
+                          isSelected && {
                             backgroundColor: theme.accentSoft,
                           },
                         ]}
                         onPress={() => {
-                          setSelectedBabyId(baby.id);
-                          setAssignee("child");
-                          setShowBabyPicker(false);
+                          setAssignee(opt.value);
+                          setSelectedBabyId(isChild ? (opt.babyId ?? null) : null);
+                          setShowAssigneePicker(false);
                         }}
                       >
                         <Text
                           style={[
                             styles.pickerOptionText,
                             { color: theme.text },
-                            selectedBabyId === baby.id &&
-                              styles.pickerOptionTextActive,
-                            selectedBabyId === baby.id && {
-                              color: accentColor,
-                            },
+                            isSelected && styles.pickerOptionTextActive,
+                            isSelected && { color: accentColor },
                           ]}
                         >
-                          {baby.label}
+                          {opt.label}
                         </Text>
                       </TouchableOpacity>
-                    ))
+                    );
+                  })}
+                </ScrollView>
+              </BlurView>
+            </View>
+          </Modal>
+        )}
+
+        {showTimeRangeModal && (
+          <Modal
+            visible={showTimeRangeModal}
+            animationType="slide"
+            transparent
+            onRequestClose={() => {
+              setShowTimeRangeModal(false);
+              setShowStartPicker(false);
+              setShowEndPicker(false);
+            }}
+          >
+            <View
+              style={[
+                styles.timeRangeModalOverlay,
+                { backgroundColor: theme.pickerOverlay },
+              ]}
+            >
+              <TouchableWithoutFeedback
+                onPress={() => {
+                  setShowTimeRangeModal(false);
+                  setShowStartPicker(false);
+                  setShowEndPicker(false);
+                }}
+              >
+                <View style={StyleSheet.absoluteFill} />
+              </TouchableWithoutFeedback>
+              <BlurView
+                intensity={80}
+                tint={blurTint}
+                style={[
+                  styles.timeRangeModalSheet,
+                  {
+                    backgroundColor: theme.sheetBackground,
+                    borderColor: theme.sheetBorder,
+                    borderWidth: 1,
+                  },
+                ]}
+              >
+                <View style={styles.pickerHeader}>
+                  <Text style={[styles.pickerTitle, { color: theme.text }]}>
+                    Zeitraum
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setShowTimeRangeModal(false);
+                      setShowStartPicker(false);
+                      setShowEndPicker(false);
+                    }}
+                    style={[
+                      styles.modalDoneButton,
+                      { backgroundColor: accentColor },
+                    ]}
+                    accessibilityLabel="Zeitraum übernehmen"
+                  >
+                    <Text
+                      style={[styles.modalDoneLabel, { color: "#fff" }]}
+                    >
+                      ✓
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                <ScrollView
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={styles.timeRangeModalContent}
+                >
+                  <View style={styles.section}>
+                    <Text
+                      style={[styles.sectionLabel, { color: theme.textSecondary }]}
+                    >
+                      🕒 Uhrzeit
+                    </Text>
+                    <View style={styles.timeModeRow}>
+                      <TouchableOpacity
+                        style={[
+                          styles.timeModeOption,
+                          {
+                            backgroundColor: theme.soft,
+                            borderColor: theme.border,
+                          },
+                          isAllDay && styles.timeModeOptionActive,
+                          isAllDay && {
+                            backgroundColor: accentColor,
+                            borderColor: accentColor,
+                          },
+                        ]}
+                        onPress={() => setEventMode(true)}
+                        activeOpacity={0.85}
+                      >
+                        <Text
+                          style={[
+                            styles.timeModeOptionLabel,
+                            { color: theme.text },
+                            isAllDay && styles.timeModeOptionLabelActive,
+                          ]}
+                        >
+                          Ganztägig
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.timeModeOption,
+                          {
+                            backgroundColor: theme.soft,
+                            borderColor: theme.border,
+                          },
+                          !isAllDay && styles.timeModeOptionActive,
+                          !isAllDay && {
+                            backgroundColor: accentColor,
+                            borderColor: accentColor,
+                          },
+                        ]}
+                        onPress={() => setEventMode(false)}
+                        activeOpacity={0.85}
+                      >
+                        <Text
+                          style={[
+                            styles.timeModeOptionLabel,
+                            { color: theme.text },
+                            !isAllDay && styles.timeModeOptionLabelActive,
+                          ]}
+                        >
+                          Mit Uhrzeit
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  {isAllDay ? (
+                    <>
+                      {renderDateSelector(
+                        "Von",
+                        startTime,
+                        showStartPicker,
+                        () => setShowStartPicker((prev) => !prev),
+                        (date) => {
+                          const allDayStart = new Date(date);
+                          allDayStart.setHours(0, 0, 0, 0);
+                          setStartTime(allDayStart);
+
+                          if (endTime && endTime < allDayStart) {
+                            const allDayEnd = new Date(allDayStart);
+                            allDayEnd.setHours(23, 59, 59, 999);
+                            setEndTime(allDayEnd);
+                          }
+                        },
+                        true,
+                      )}
+                      {renderDateSelector(
+                        "Bis",
+                        endTime ?? startTime,
+                        showEndPicker,
+                        () => setShowEndPicker((prev) => !prev),
+                        (date) => {
+                          const allDayEnd = new Date(date);
+                          allDayEnd.setHours(23, 59, 59, 999);
+
+                          if (allDayEnd < startTime) {
+                            setEndTime(new Date(startTime.getTime()));
+                            (endTime ?? startTime).setHours(23, 59, 59, 999);
+                          } else {
+                            setEndTime(allDayEnd);
+                          }
+                        },
+                        true,
+                      )}
+                    </>
                   ) : (
-                    <View style={styles.pickerEmpty}>
+                    <>
+                      {renderDateSelector(
+                        "Start",
+                        startTime,
+                        showStartPicker,
+                        () => setShowStartPicker((prev) => !prev),
+                        (date) => {
+                          setStartTime(date);
+                          if (showEnd && endTime && endTime < date) {
+                            setEndTime(new Date(date.getTime() + 30 * 60000));
+                          }
+                        },
+                        false,
+                      )}
+                      {showEnd && endTime ? (
+                        <>
+                          {renderDateSelector(
+                            "Ende",
+                            endTime,
+                            showEndPicker,
+                            () => setShowEndPicker((prev) => !prev),
+                            setEndTime,
+                          )}
+                          {endTime.getTime() !== startTime.getTime() && (
+                            <TouchableOpacity
+                              style={styles.removeEndButton}
+                              onPress={() => {
+                                setShowEnd(false);
+                                setEndTime(null);
+                                setShowEndPicker(false);
+                              }}
+                            >
+                              <Text
+                                style={[
+                                  styles.removeEndLabel,
+                                  { color: theme.textSecondary },
+                                ]}
+                              >
+                                Endzeit entfernen
+                              </Text>
+                            </TouchableOpacity>
+                          )}
+                        </>
+                      ) : (
+                        <TouchableOpacity
+                          style={[
+                            styles.timeButton,
+                            { backgroundColor: theme.field },
+                          ]}
+                          onPress={() => {
+                            const defaultEnd = new Date(
+                              startTime.getTime() + 30 * 60000,
+                            );
+                            setEndTime(defaultEnd);
+                            setShowEnd(true);
+                            setShowEndPicker(true);
+                          }}
+                        >
+                          <Text
+                            style={[styles.timeButtonLabel, { color: theme.text }]}
+                          >
+                            Endzeit hinzufügen
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+                    </>
+                  )}
+                </ScrollView>
+              </BlurView>
+            </View>
+          </Modal>
+        )}
+
+        {showReminderPicker && (
+          <Modal
+            visible={showReminderPicker}
+            animationType="fade"
+            transparent
+            onRequestClose={() => setShowReminderPicker(false)}
+          >
+            <View
+              style={[
+                styles.pickerOverlay,
+                { backgroundColor: theme.pickerOverlay },
+              ]}
+            >
+              <TouchableWithoutFeedback
+                onPress={() => setShowReminderPicker(false)}
+              >
+                <View style={StyleSheet.absoluteFill} />
+              </TouchableWithoutFeedback>
+              <BlurView
+                intensity={80}
+                tint={blurTint}
+                style={[
+                  styles.pickerSheet,
+                  {
+                    backgroundColor: theme.sheetBackground,
+                    borderColor: theme.sheetBorder,
+                    borderWidth: 1,
+                  },
+                ]}
+              >
+                <View style={styles.pickerHeader}>
+                  <Text style={[styles.pickerTitle, { color: theme.text }]}>
+                    Erinnerung
+                  </Text>
+                  <TouchableOpacity onPress={() => setShowReminderPicker(false)}>
+                    <Text
+                      style={[styles.pickerCloseButton, { color: theme.text }]}
+                    >
+                      ✕
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                <ScrollView>
+                  {REMINDER_OPTIONS.map((minutes) => (
+                    <TouchableOpacity
+                      key={minutes}
+                      style={[
+                        styles.pickerOption,
+                        { borderBottomColor: theme.divider },
+                        reminderMinutes === minutes && styles.pickerOptionActive,
+                        reminderMinutes === minutes && {
+                          backgroundColor: theme.accentSoft,
+                        },
+                      ]}
+                      onPress={() => {
+                        setReminderMinutes(minutes);
+                        setShowReminderPicker(false);
+                      }}
+                    >
                       <Text
                         style={[
-                          styles.pickerEmptyText,
-                          { color: theme.textSecondary },
+                          styles.pickerOptionText,
+                          { color: theme.text },
+                          reminderMinutes === minutes &&
+                            styles.pickerOptionTextActive,
+                          reminderMinutes === minutes && {
+                            color: accentColor,
+                          },
                         ]}
                       >
-                        Keine Kinder gefunden
+                        {formatReminderLabel(minutes)}
                       </Text>
-                    </View>
-                  )}
+                    </TouchableOpacity>
+                  ))}
                 </ScrollView>
               </BlurView>
             </View>
@@ -1216,6 +1530,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: THEME.text,
   },
+  titleFieldText: {
+    fontSize: 18,
+    fontWeight: "700",
+    lineHeight: 24,
+  },
   inlineFieldBase: {
     alignItems: "flex-start",
     justifyContent: "center",
@@ -1238,6 +1557,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     color: THEME.text,
+  },
+  sectionLabelSecondary: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: THEME.textSecondary,
   },
   pickerBlock: {
     backgroundColor: "rgba(255,255,255,0.85)",
@@ -1300,52 +1624,64 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: THEME.text,
   },
-  removeEndButton: {
-    alignSelf: "flex-start",
-    marginTop: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-    backgroundColor: "rgba(94,61,179,0.08)",
-  },
-  removeEndLabel: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: PRIMARY,
-  },
-  assignRowWrap: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-  },
-  assignButton: {
-    flex: 1,
+  dropdownField: {
     borderRadius: 16,
-    paddingVertical: 12,
-    backgroundColor: "rgba(255,255,255,0.6)",
-    alignItems: "center",
     borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.05)",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
   },
-  assignButtonHalf: {
-    flexBasis: "48%",
-    flexGrow: 1,
+  dropdownValue: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "600",
+    color: THEME.text,
   },
-  assignButtonActive: {
+  dropdownChevron: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: THEME.textSecondary,
+  },
+  dropdownFieldCompact: {
+    paddingVertical: 10,
+  },
+  timeModeRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  timeModeOption: {
+    flex: 1,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingVertical: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  timeModeOptionActive: {
     backgroundColor: PRIMARY,
     borderColor: PRIMARY,
-    shadowColor: "#000",
-    shadowOpacity: 0.12,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
   },
-  assignLabel: {
+  timeModeOptionLabel: {
     fontSize: 13,
     fontWeight: "600",
     color: THEME.text,
   },
-  assignLabelActive: {
+  timeModeOptionLabelActive: {
     color: "#fff",
+  },
+  removeEndButton: {
+    alignSelf: "flex-start",
+    marginTop: 4,
+    paddingHorizontal: 2,
+    paddingVertical: 2,
+  },
+  removeEndLabel: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: THEME.textSecondary,
   },
   locationField: {
     borderRadius: 16,
@@ -1407,6 +1743,25 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "rgba(0,0,0,0.4)",
   },
+  timeRangeModalOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.4)",
+  },
+  timeRangeModalSheet: {
+    width: "100%",
+    maxHeight: "82%",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    overflow: "hidden",
+    paddingTop: 20,
+    paddingBottom: 12,
+  },
+  timeRangeModalContent: {
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+    gap: 14,
+  },
   pickerSheet: {
     width: "80%",
     maxHeight: "60%",
@@ -1430,6 +1785,18 @@ const styles = StyleSheet.create({
     fontSize: 24,
     color: THEME.text,
     fontWeight: "600",
+  },
+  modalDoneButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalDoneLabel: {
+    fontSize: 22,
+    fontWeight: "700",
+    lineHeight: 24,
   },
   pickerOption: {
     paddingHorizontal: 20,
