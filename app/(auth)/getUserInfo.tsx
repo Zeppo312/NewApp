@@ -599,70 +599,103 @@ export default function GetUserInfoScreen() {
               style={styles.babyImageSmall}
               resizeMode="contain"
             />
-            <ThemedText style={styles.stepTitle}>Hast du einen Einladungscode?</ThemedText>
-            <ThemedText style={styles.stepSubtitle}>
-              Damit verbindest du dich mit deiner Partnerperson und nutzt gemeinsam dasselbe Baby-Profil.
-            </ThemedText>
-
-            <TextInput
-              style={[styles.input, { color: theme.text }]}
-              value={invitationCode}
-              onChangeText={(value) => setInvitationCode(value.replace(/\s+/g, '').toUpperCase())}
-              placeholder="CODE (optional)"
-              placeholderTextColor={theme.tabIconDefault}
-              autoCapitalize="characters"
-              autoCorrect={false}
-              spellCheck={false}
-              inputAccessoryViewID={Platform.OS === 'ios' ? invitationAccessoryViewID : undefined}
-            />
-
-            {invitationError && (
-              <ThemedText style={[styles.summaryLabel, { color: '#B71C1C', marginTop: 8 }]}>
-                {invitationError}
-              </ThemedText>
-            )}
-
-            {invitationStatus === 'accepted' && (
-              <ThemedText style={[styles.summaryLabel, { color: theme.accent, marginTop: 8 }]}>
-                {invitationInfo?.partnerName
-                  ? `Verbunden mit ${invitationInfo.partnerName}`
-                  : 'Einladungscode akzeptiert'}
-              </ThemedText>
-            )}
-
-            <View style={styles.booleanButtonsContainer}>
-              <TouchableOpacity
-                style={[
-                  styles.booleanButton,
-                  { marginRight: 5 },
-                  invitationStatus === 'accepted' && styles.booleanButtonActive,
-                ]}
-                onPress={handleRedeemInvitation}
-                disabled={isRedeemingInvitation}
-              >
-                <ThemedText
-                  style={[
-                    styles.booleanButtonText,
-                    invitationStatus === 'accepted' && styles.booleanButtonTextActive,
-                  ]}
-                >
-                  {isRedeemingInvitation ? 'Prüfe...' : 'Code einlösen'}
+            {invitationStatus === 'accepted' ? (
+              <>
+                <ThemedText style={styles.stepTitle}>Verknüpfung erfolgreich!</ThemedText>
+                <View style={styles.infoCard}>
+                  <View style={styles.infoRow}>
+                    <View style={[styles.infoRowIcon, { backgroundColor: 'rgba(157,190,187,0.15)' }]}>
+                      <IconSymbol name="checkmark.circle.fill" size={18} color="#9DBEBB" />
+                    </View>
+                    <View style={styles.infoRowContent}>
+                      <ThemedText style={styles.infoRowLabel}>Partner</ThemedText>
+                      <ThemedText style={styles.infoRowValue}>
+                        {invitationInfo?.partnerName || 'Verknüpft'}
+                      </ThemedText>
+                    </View>
+                  </View>
+                  {invitationInfo?.dueDate && (
+                    <>
+                      <View style={styles.infoCardDivider} />
+                      <View style={styles.infoRow}>
+                        <View style={[styles.infoRowIcon, { backgroundColor: 'rgba(142,78,198,0.12)' }]}>
+                          <IconSymbol name="calendar" size={18} color="#8E4EC6" />
+                        </View>
+                        <View style={styles.infoRowContent}>
+                          <ThemedText style={styles.infoRowLabel}>Errechneter Termin</ThemedText>
+                          <ThemedText style={styles.infoRowValue}>
+                            {formatDate(parseSafeDate(invitationInfo.dueDate))}
+                          </ThemedText>
+                        </View>
+                      </View>
+                    </>
+                  )}
+                  <View style={styles.infoCardDivider} />
+                  <View style={styles.infoRow}>
+                    <View style={[styles.infoRowIcon, { backgroundColor: 'rgba(232,160,191,0.15)' }]}>
+                      <IconSymbol name="heart.fill" size={18} color="#E8A0BF" />
+                    </View>
+                    <View style={styles.infoRowContent}>
+                      <ThemedText style={styles.infoRowLabel}>Baby-Daten</ThemedText>
+                      <ThemedText style={styles.infoRowValue}>Vom Partner übernommen</ThemedText>
+                    </View>
+                  </View>
+                </View>
+                <ThemedText style={styles.invitationSkipNote}>
+                  Weiter zur Zusammenfassung!
                 </ThemedText>
-              </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <ThemedText style={styles.stepTitle}>Hast du einen Einladungscode?</ThemedText>
+                <ThemedText style={[styles.stepSubtitle, { textAlign: 'center', marginTop: 0, marginBottom: 16 }]}>
+                  Damit verbindest du dich mit deiner Partnerperson und nutzt gemeinsam dasselbe Baby-Profil.
+                </ThemedText>
 
-              <TouchableOpacity
-                style={[styles.booleanButton, { marginLeft: 5 }]}
-                onPress={() => {
-                  if (invitationStatus !== 'accepted') {
-                    setInvitationStatus('skipped');
-                  }
-                  goToNextStep();
-                }}
-                disabled={isRedeemingInvitation || invitationStatus === 'accepted'}
-              >
-                <ThemedText style={styles.booleanButtonText}>Ohne Code weiter</ThemedText>
-              </TouchableOpacity>
-            </View>
+                <TextInput
+                  style={[styles.input, { color: theme.text }]}
+                  value={invitationCode}
+                  onChangeText={(value) => setInvitationCode(value.replace(/\s+/g, '').toUpperCase())}
+                  placeholder="CODE (optional)"
+                  placeholderTextColor={theme.tabIconDefault}
+                  autoCapitalize="characters"
+                  autoCorrect={false}
+                  spellCheck={false}
+                  returnKeyType="done"
+                  onSubmitEditing={Keyboard.dismiss}
+                  inputAccessoryViewID={Platform.OS === 'ios' ? invitationAccessoryViewID : undefined}
+                />
+
+                {invitationError && (
+                  <ThemedText style={styles.errorText}>
+                    {invitationError}
+                  </ThemedText>
+                )}
+
+                <View style={[styles.booleanButtonsContainer, { marginTop: 16 }]}>
+                  <TouchableOpacity
+                    style={[styles.booleanButton, { marginRight: 5 }]}
+                    onPress={handleRedeemInvitation}
+                    disabled={isRedeemingInvitation}
+                  >
+                    <ThemedText style={styles.booleanButtonText}>
+                      {isRedeemingInvitation ? 'Prüfe...' : 'Code einlösen'}
+                    </ThemedText>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.booleanButton, { marginLeft: 5 }]}
+                    onPress={() => {
+                      setInvitationStatus('skipped');
+                      goToNextStep();
+                    }}
+                    disabled={isRedeemingInvitation}
+                  >
+                    <ThemedText style={styles.booleanButtonText}>Ohne Code weiter</ThemedText>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
           </ThemedView>
         );
 
@@ -870,82 +903,133 @@ export default function GetUserInfoScreen() {
       case 'summary': // Zusammenfassung und Speichern
         return (
           <ThemedView style={styles.stepContainer} lightColor="#FFFFFF" darkColor="#FFFFFF">
-            <ThemedText style={styles.stepTitle}>Zusammenfassung</ThemedText>
-
-            <View style={styles.summaryItem}>
-              <ThemedText style={styles.summaryLabel}>Name:</ThemedText>
-              <ThemedText style={styles.summaryValue}>{firstName} {lastName}</ThemedText>
-            </View>
-
-            <View style={styles.summaryItem}>
-              <ThemedText style={styles.summaryLabel}>Rolle:</ThemedText>
-              <ThemedText style={styles.summaryValue}>{userRole === 'mama' ? 'Mama' : userRole === 'papa' ? 'Papa' : 'Nicht festgelegt'}</ThemedText>
-            </View>
-
-            {invitationStatus === 'accepted' && (
-              <>
-                <View style={styles.summaryItem}>
-                  <ThemedText style={styles.summaryLabel}>Verknüpfung:</ThemedText>
-                  <ThemedText style={styles.summaryValue}>
-                    {invitationInfo?.partnerName
-                      ? `Verbunden mit ${invitationInfo.partnerName}`
-                      : 'Partnerkonto verknüpft'}
-                  </ThemedText>
-                </View>
-                {invitationInfo?.dueDate && (
-                  <View style={styles.summaryItem}>
-                    <ThemedText style={styles.summaryLabel}>Gemeinsamer Termin:</ThemedText>
-                    <ThemedText style={styles.summaryValue}>
-                      {formatDate(parseSafeDate(invitationInfo.dueDate))}
-                    </ThemedText>
-                  </View>
-                )}
-              </>
+            {/* Baby-Foto oder Illustration */}
+            {!isPartnerFlow && babyPhotoUrl ? (
+              <View style={styles.summaryPhotoSection}>
+                <Image source={{ uri: babyPhotoUrl }} style={styles.summaryBabyPhoto} />
+                {babyName ? <ThemedText style={styles.summaryBabyName}>{babyName}</ThemedText> : null}
+              </View>
+            ) : (
+              <Image
+                source={require('@/assets/images/BabyBirth.png')}
+                style={styles.babyImageSmall}
+                resizeMode="contain"
+              />
             )}
 
-            {invitationStatus !== 'accepted' && (
-              <>
-                <View style={styles.summaryItem}>
-                  <ThemedText style={styles.summaryLabel}>Baby geboren:</ThemedText>
-                  <ThemedText style={styles.summaryValue}>{isBabyBorn ? 'Ja' : 'Nein'}</ThemedText>
+            <ThemedText style={styles.stepTitle}>Alles bereit!</ThemedText>
+
+            <View style={styles.infoCard}>
+              {/* Name */}
+              <View style={styles.infoRow}>
+                <View style={[styles.infoRowIcon, { backgroundColor: 'rgba(157,190,187,0.15)' }]}>
+                  <IconSymbol name="person.fill" size={18} color="#9DBEBB" />
                 </View>
-
-                {isBabyBorn === false && (
-                  <View style={styles.summaryItem}>
-                    <ThemedText style={styles.summaryLabel}>Errechneter Geburtstermin:</ThemedText>
-                    <ThemedText style={styles.summaryValue}>{dueDate ? formatDate(dueDate) : 'Nicht festgelegt'}</ThemedText>
-                  </View>
-                )}
-
-                {isBabyBorn && (
-                  <View style={styles.summaryItem}>
-                    <ThemedText style={styles.summaryLabel}>Geburtsdatum:</ThemedText>
-                    <ThemedText style={styles.summaryValue}>{birthDate ? formatDate(birthDate) : 'Nicht festgelegt'}</ThemedText>
-                  </View>
-                )}
-
-                <View style={styles.summaryItem}>
-                  <ThemedText style={styles.summaryLabel}>Baby-Name:</ThemedText>
-                  <ThemedText style={styles.summaryValue}>{babyName || 'Nicht festgelegt'}</ThemedText>
+                <View style={styles.infoRowContent}>
+                  <ThemedText style={styles.infoRowLabel}>Name</ThemedText>
+                  <ThemedText style={styles.infoRowValue}>{firstName} {lastName}</ThemedText>
                 </View>
+              </View>
 
-                <View style={styles.summaryItem}>
-                  <ThemedText style={styles.summaryLabel}>Geschlecht:</ThemedText>
-                  <ThemedText style={styles.summaryValue}>
-                    {babyGender === 'male' ? 'Junge' : babyGender === 'female' ? 'Mädchen' : 'Noch nicht bekannt'}
+              <View style={styles.infoCardDivider} />
+
+              {/* Rolle */}
+              <View style={styles.infoRow}>
+                <View style={[styles.infoRowIcon, { backgroundColor: 'rgba(232,160,191,0.15)' }]}>
+                  <IconSymbol name="heart.fill" size={18} color="#E8A0BF" />
+                </View>
+                <View style={styles.infoRowContent}>
+                  <ThemedText style={styles.infoRowLabel}>Rolle</ThemedText>
+                  <ThemedText style={styles.infoRowValue}>
+                    {userRole === 'mama' ? 'Mama' : userRole === 'papa' ? 'Papa' : 'Nicht festgelegt'}
                   </ThemedText>
                 </View>
+              </View>
 
-                {isBabyBorn && (
-                  <View style={styles.summaryItem}>
-                    <ThemedText style={styles.summaryLabel}>Babyfoto:</ThemedText>
-                    <ThemedText style={styles.summaryValue}>
-                      {babyPhotoUrl ? 'Hochgeladen' : 'Nicht hochgeladen'}
-                    </ThemedText>
+              {/* Partner-Flow */}
+              {isPartnerFlow && (
+                <>
+                  <View style={styles.infoCardDivider} />
+                  <View style={styles.infoRow}>
+                    <View style={[styles.infoRowIcon, { backgroundColor: 'rgba(142,78,198,0.12)' }]}>
+                      <IconSymbol name="person.2.fill" size={16} color="#8E4EC6" />
+                    </View>
+                    <View style={styles.infoRowContent}>
+                      <ThemedText style={styles.infoRowLabel}>Partner</ThemedText>
+                      <ThemedText style={styles.infoRowValue}>
+                        {invitationInfo?.partnerName || 'Verknüpft'}
+                      </ThemedText>
+                    </View>
                   </View>
-                )}
-              </>
-            )}
+                  {invitationInfo?.dueDate && (
+                    <>
+                      <View style={styles.infoCardDivider} />
+                      <View style={styles.infoRow}>
+                        <View style={[styles.infoRowIcon, { backgroundColor: 'rgba(142,78,198,0.12)' }]}>
+                          <IconSymbol name="calendar" size={18} color="#8E4EC6" />
+                        </View>
+                        <View style={styles.infoRowContent}>
+                          <ThemedText style={styles.infoRowLabel}>Gemeinsamer Termin</ThemedText>
+                          <ThemedText style={styles.infoRowValue}>
+                            {formatDate(parseSafeDate(invitationInfo.dueDate))}
+                          </ThemedText>
+                        </View>
+                      </View>
+                    </>
+                  )}
+                </>
+              )}
+
+              {/* Normaler Flow */}
+              {!isPartnerFlow && (
+                <>
+                  <View style={styles.infoCardDivider} />
+                  <View style={styles.infoRow}>
+                    <View style={[styles.infoRowIcon, { backgroundColor: 'rgba(142,78,198,0.12)' }]}>
+                      <IconSymbol name="calendar" size={18} color="#8E4EC6" />
+                    </View>
+                    <View style={styles.infoRowContent}>
+                      <ThemedText style={styles.infoRowLabel}>
+                        {isBabyBorn ? 'Geburtsdatum' : 'Errechneter Termin'}
+                      </ThemedText>
+                      <ThemedText style={styles.infoRowValue}>
+                        {isBabyBorn
+                          ? (birthDate ? formatDate(birthDate) : 'Nicht festgelegt')
+                          : (dueDate ? formatDate(dueDate) : 'Nicht festgelegt')}
+                      </ThemedText>
+                    </View>
+                  </View>
+
+                  {babyName ? (
+                    <>
+                      <View style={styles.infoCardDivider} />
+                      <View style={styles.infoRow}>
+                        <View style={[styles.infoRowIcon, { backgroundColor: 'rgba(232,160,191,0.15)' }]}>
+                          <IconSymbol name="star.fill" size={18} color="#E8A0BF" />
+                        </View>
+                        <View style={styles.infoRowContent}>
+                          <ThemedText style={styles.infoRowLabel}>Baby-Name</ThemedText>
+                          <ThemedText style={styles.infoRowValue}>{babyName}</ThemedText>
+                        </View>
+                      </View>
+                    </>
+                  ) : null}
+
+                  <View style={styles.infoCardDivider} />
+                  <View style={styles.infoRow}>
+                    <View style={[styles.infoRowIcon, { backgroundColor: 'rgba(157,190,187,0.15)' }]}>
+                      <IconSymbol name={babyGender === 'unknown' ? 'questionmark.circle' : 'person.fill'} size={18} color="#9DBEBB" />
+                    </View>
+                    <View style={styles.infoRowContent}>
+                      <ThemedText style={styles.infoRowLabel}>Geschlecht</ThemedText>
+                      <ThemedText style={styles.infoRowValue}>
+                        {babyGender === 'male' ? 'Junge' : babyGender === 'female' ? 'Mädchen' : 'Noch nicht bekannt'}
+                      </ThemedText>
+                    </View>
+                  </View>
+                </>
+              )}
+            </View>
 
             <ThemedText style={styles.summaryNote}>
               Du kannst diese Informationen später in deinem Profil ändern.
@@ -1009,33 +1093,33 @@ export default function GetUserInfoScreen() {
               >
                 <View style={styles.content}>
                   {renderCurrentStep()}
-
-                  <View style={styles.buttonsContainer}>
-                    {currentStep > 0 && (
-                      <TouchableOpacity
-                        style={styles.backButton}
-                        onPress={goToPreviousStep}
-                      >
-                        <IconSymbol name="chevron.left" size={20} color={theme.text} />
-                        <ThemedText style={styles.backButtonText}>Zurück</ThemedText>
-                      </TouchableOpacity>
-                    )}
-
-                    <TouchableOpacity
-                      style={[styles.nextButton, (isSaving || isRedeemingInvitation) && styles.buttonDisabled]}
-                      onPress={goToNextStep}
-                      disabled={isSaving || isRedeemingInvitation}
-                    >
-                      <ThemedText style={styles.nextButtonText}>
-                        {currentStep === totalSteps - 1 ? (isSaving ? 'Speichern...' : 'Fertig') : 'Weiter'}
-                      </ThemedText>
-                      {currentStep < totalSteps - 1 && (
-                        <IconSymbol name="chevron.right" size={20} color="#FFFFFF" />
-                      )}
-                    </TouchableOpacity>
-                  </View>
                 </View>
               </ScrollView>
+
+              <View style={styles.buttonsContainer}>
+                {currentStep > 0 && (
+                  <TouchableOpacity
+                    style={styles.backButton}
+                    onPress={goToPreviousStep}
+                  >
+                    <IconSymbol name="chevron.left" size={20} color={theme.text} />
+                    <ThemedText style={styles.backButtonText}>Zurück</ThemedText>
+                  </TouchableOpacity>
+                )}
+
+                <TouchableOpacity
+                  style={[styles.nextButton, (isSaving || isRedeemingInvitation) && styles.buttonDisabled]}
+                  onPress={goToNextStep}
+                  disabled={isSaving || isRedeemingInvitation}
+                >
+                  <ThemedText style={styles.nextButtonText}>
+                    {currentStep === totalSteps - 1 ? (isSaving ? 'Speichern...' : 'Fertig') : 'Weiter'}
+                  </ThemedText>
+                  {currentStep < totalSteps - 1 && (
+                    <IconSymbol name="chevron.right" size={20} color="#FFFFFF" />
+                  )}
+                </TouchableOpacity>
+              </View>
             </KeyboardAvoidingView>
           )}
 
@@ -1105,8 +1189,13 @@ const styles = StyleSheet.create({
   },
   stepContainer: {
     padding: 20,
-    borderRadius: 15,
+    borderRadius: 22,
     marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 3,
   },
   babyImage: {
     width: 180,
@@ -1144,7 +1233,7 @@ const styles = StyleSheet.create({
     height: 50,
     borderWidth: 1,
     borderColor: '#E9C9B6',
-    borderRadius: 10,
+    borderRadius: 14,
     paddingHorizontal: 15,
     fontSize: 16,
     backgroundColor: 'rgba(255, 255, 255, 0.5)',
@@ -1156,7 +1245,7 @@ const styles = StyleSheet.create({
     height: 50,
     borderWidth: 1,
     borderColor: '#E9C9B6',
-    borderRadius: 10,
+    borderRadius: 14,
     paddingHorizontal: 15,
     backgroundColor: 'rgba(255, 255, 255, 0.5)',
   },
@@ -1175,7 +1264,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#E9C9B6',
-    borderRadius: 10,
+    borderRadius: 14,
     marginHorizontal: 5,
     backgroundColor: 'rgba(255, 255, 255, 0.5)',
   },
@@ -1202,7 +1291,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#E9C9B6',
-    borderRadius: 10,
+    borderRadius: 14,
     marginHorizontal: 5,
     backgroundColor: 'rgba(255, 255, 255, 0.5)',
   },
@@ -1231,7 +1320,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#E9C9B6',
-    borderRadius: 10,
+    borderRadius: 14,
     marginBottom: 10,
     backgroundColor: 'rgba(255, 255, 255, 0.5)',
   },
@@ -1309,18 +1398,76 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
-  summaryItem: {
-    marginBottom: 15,
+  infoCard: {
+    backgroundColor: 'rgba(247,239,229,0.6)',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(233,201,182,0.5)',
+    overflow: 'hidden',
+    marginBottom: 8,
   },
-  summaryLabel: {
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 13,
+    paddingHorizontal: 14,
+  },
+  infoRowIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  infoRowContent: {
+    flex: 1,
+  },
+  infoRowLabel: {
+    fontSize: 12,
+    color: '#7D5A50',
+    opacity: 0.65,
+    marginBottom: 1,
+  },
+  infoRowValue: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#7D5A50',
+  },
+  infoCardDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(125,90,80,0.12)',
+    marginHorizontal: 14,
+  },
+  invitationSkipNote: {
     fontSize: 14,
-    color: '#7D5A50',
-    opacity: 0.8,
+    color: '#9DBEBB',
+    fontWeight: '600',
+    textAlign: 'center',
+    marginTop: 14,
+    lineHeight: 20,
   },
-  summaryValue: {
-    fontSize: 16,
-    fontWeight: 'bold',
+  errorText: {
+    fontSize: 14,
+    color: '#B71C1C',
+    marginTop: 8,
+  },
+  summaryPhotoSection: {
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  summaryBabyPhoto: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    borderWidth: 3,
+    borderColor: 'rgba(157,190,187,0.5)',
+  },
+  summaryBabyName: {
+    fontSize: 17,
+    fontWeight: '700',
     color: '#7D5A50',
+    marginTop: 8,
   },
   summaryNote: {
     marginTop: 20,
@@ -1332,7 +1479,9 @@ const styles = StyleSheet.create({
   buttonsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingBottom: 30,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 16,
   },
   backButton: {
     flexDirection: 'row',
