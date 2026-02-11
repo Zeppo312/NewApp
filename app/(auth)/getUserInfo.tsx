@@ -763,6 +763,7 @@ export default function GetUserInfoScreen() {
                 value={selectedDate || new Date()}
                 mode="date"
                 display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                themeVariant="light"
                 onChange={handleBirthDateChange}
                 maximumDate={new Date()}
               />
@@ -773,6 +774,7 @@ export default function GetUserInfoScreen() {
                 value={selectedDate || new Date()}
                 mode="date"
                 display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                themeVariant="light"
                 onChange={handleDueDateChange}
               />
             )}

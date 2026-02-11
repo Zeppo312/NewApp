@@ -2,10 +2,12 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Appearance, ColorSchemeName } from 'react-native';
 import { getAppSettings, saveAppSettings } from '@/lib/supabase';
 
+type ThemeMode = 'light' | 'dark' | 'system';
+
 type ThemeContextType = {
   colorScheme: ColorSchemeName;
-  themePreference: 'light' | 'dark' | 'system';
-  setThemePreference: (theme: 'light' | 'dark' | 'system') => Promise<void>;
+  themePreference: ThemeMode;
+  setThemePreference: (theme: ThemeMode) => Promise<void>;
 };
 
 const ThemeContext = createContext<ThemeContextType>({
@@ -16,8 +18,27 @@ const ThemeContext = createContext<ThemeContextType>({
 
 export const useTheme = () => useContext(ThemeContext);
 
+export const ThemeOverrideProvider: React.FC<{
+  children: React.ReactNode;
+  colorScheme: 'light' | 'dark';
+}> = ({ children, colorScheme }) => {
+  const parentTheme = useTheme();
+
+  return (
+    <ThemeContext.Provider
+      value={{
+        ...parentTheme,
+        colorScheme,
+        themePreference: colorScheme,
+      }}
+    >
+      {children}
+    </ThemeContext.Provider>
+  );
+};
+
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [themePreference, setThemePreference] = useState<'light' | 'dark' | 'system'>('system');
+  const [themePreference, setThemePreference] = useState<ThemeMode>('system');
   const [colorScheme, setColorScheme] = useState<ColorSchemeName>(Appearance.getColorScheme());
 
   // Laden der gespeicherten Themeneinstellung beim Start
@@ -70,7 +91,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, [themePreference]);
 
   // Funktion zum Ändern der Themeneinstellung
-  const handleSetThemePreference = async (theme: 'light' | 'dark' | 'system') => {
+  const handleSetThemePreference = async (theme: ThemeMode) => {
     try {
       setThemePreference(theme);
       await saveAppSettings({ theme });
