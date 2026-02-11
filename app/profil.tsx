@@ -179,7 +179,6 @@ export default function ProfilScreen() {
 
       if (settingsData) {
         if (settingsData.due_date) setDueDate(new Date(settingsData.due_date));
-        if (settingsData.is_baby_born !== undefined) setIsBabyBorn(settingsData.is_baby_born);
       }
 
       // Baby info
@@ -633,6 +632,9 @@ export default function ProfilScreen() {
   };
   const handleBabyBornChange = (value: boolean) => {
     setIsBabyBorn(value);
+    if (value && !birthDate) {
+      setBirthDate(new Date());
+    }
     if (!value) setBirthDate(null);
   };
 
