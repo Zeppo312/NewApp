@@ -861,6 +861,8 @@ export default function WeightTrackerScreen() {
                       value={weightDate}
                       mode="date"
                       display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                      themeVariant={isDark ? 'dark' : 'light'}
+                      accentColor={PLANNER_PRIMARY}
                       onChange={(event, date) => {
                         if (date) {
                           const normalized = new Date(date);

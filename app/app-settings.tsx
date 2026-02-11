@@ -5,7 +5,7 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { useRouter, Stack } from 'expo-router';
+import { Redirect, useRouter, Stack } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { useConvex } from '@/contexts/ConvexContext';
 import { useBackground } from '@/contexts/BackgroundContext';
@@ -26,7 +26,7 @@ export default function AppSettingsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const router = useRouter();
-  const { user, signOut } = useAuth();
+  const { user, session, signOut } = useAuth();
 
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -233,7 +233,6 @@ export default function AppSettingsScreen() {
               text: 'OK',
               onPress: async () => {
                 await signOut();
-                router.replace('/(auth)/login');
               },
             },
           ],
@@ -276,6 +275,10 @@ export default function AppSettingsScreen() {
       ],
     );
   };
+
+  if (!session) {
+    return <Redirect href="/(auth)/login" />;
+  }
 
   return (
     <>

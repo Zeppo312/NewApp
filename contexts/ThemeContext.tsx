@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Appearance, ColorSchemeName } from 'react-native';
 import { getAppSettings, saveAppSettings } from '@/lib/supabase';
+import { useAuth } from './AuthContext';
 
 type ThemeMode = 'light' | 'dark' | 'system';
 
@@ -12,7 +13,7 @@ type ThemeContextType = {
 
 const ThemeContext = createContext<ThemeContextType>({
   colorScheme: 'light',
-  themePreference: 'system',
+  themePreference: 'light',
   setThemePreference: async () => {},
 });
 
@@ -38,34 +39,60 @@ export const ThemeOverrideProvider: React.FC<{
 };
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [themePreference, setThemePreference] = useState<ThemeMode>('system');
-  const [colorScheme, setColorScheme] = useState<ColorSchemeName>(Appearance.getColorScheme());
+  const { user, loading: authLoading } = useAuth();
+  const [themePreference, setThemePreference] = useState<ThemeMode>('light');
+  const [colorScheme, setColorScheme] = useState<ColorSchemeName>('light');
 
-  // Laden der gespeicherten Themeneinstellung beim Start
+  // Laden der gespeicherten Themeneinstellung, sobald der Auth-Status feststeht.
   useEffect(() => {
+    let isMounted = true;
+
     const loadThemePreference = async () => {
+      if (authLoading) return;
+
+      // Ohne angemeldeten Benutzer gilt immer der App-Standard (hell).
+      if (!user) {
+        if (isMounted) {
+          setThemePreference('light');
+          setColorScheme('light');
+        }
+        return;
+      }
+
       try {
         const { data, error } = await getAppSettings();
         if (error) {
           console.error('Error loading theme preference:', error);
+          if (isMounted) {
+            setThemePreference('light');
+          }
           return;
         }
 
-        if (data && data.theme) {
+        if (isMounted && data && data.theme) {
           setThemePreference(data.theme);
+        } else if (isMounted) {
+          setThemePreference('light');
         }
       } catch (err) {
         console.error('Failed to load theme preference:', err);
+        if (isMounted) {
+          setThemePreference('light');
+        }
       }
     };
 
     loadThemePreference();
-  }, []);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [authLoading, user?.id]);
 
   // Aktualisieren des Farbschemas basierend auf der Themeneinstellung
   useEffect(() => {
     const updateColorScheme = () => {
-      const systemColorScheme = Appearance.getColorScheme();
+      const systemColorScheme = Appearance.getColorScheme() ?? 'light';
       
       if (themePreference === 'system') {
         setColorScheme(systemColorScheme);

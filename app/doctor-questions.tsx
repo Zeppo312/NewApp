@@ -48,10 +48,15 @@ export default function DoctorQuestionsScreen() {
   const [newQuestion, setNewQuestion] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isTogglingQuestionId, setIsTogglingQuestionId] = useState<string | null>(null);
+  const [isSavingAnswerId, setIsSavingAnswerId] = useState<string | null>(null);
+  const [isDeletingQuestionId, setIsDeletingQuestionId] = useState<string | null>(null);
+  const [operationMessage, setOperationMessage] = useState<string | null>(null);
   const [expandedQuestion, setExpandedQuestion] = useState<string | null>(null);
   const [editingAnswer, setEditingAnswer] = useState<string | null>(null);
   const [answerText, setAnswerText] = useState('');
   const answerInputRef = useRef<TextInput>(null);
+  const statusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const openQuestions = useMemo(() => questions.filter((q) => !q.is_answered), [questions]);
   const answeredQuestions = useMemo(() => questions.filter((q) => q.is_answered), [questions]);
@@ -62,19 +67,43 @@ export default function DoctorQuestionsScreen() {
     }
   }, [user]);
 
-  const loadQuestions = async () => {
+  useEffect(() => {
+    return () => {
+      if (statusTimeoutRef.current) {
+        clearTimeout(statusTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const showOperationMessage = (message: string) => {
+    setOperationMessage(message);
+    if (statusTimeoutRef.current) {
+      clearTimeout(statusTimeoutRef.current);
+    }
+    statusTimeoutRef.current = setTimeout(() => {
+      setOperationMessage(null);
+    }, 2500);
+  };
+
+  const loadQuestions = async (options?: { silent?: boolean }) => {
     if (!service) {
-      setIsLoading(false);
+      if (!options?.silent) {
+        setIsLoading(false);
+      }
       return;
     }
 
     try {
-      setIsLoading(true);
+      if (!options?.silent) {
+        setIsLoading(true);
+      }
       const { data, error } = await service.getQuestions();
 
       if (error) {
         console.error('Error loading doctor questions:', error);
-        Alert.alert('Fehler', 'Fragen konnten nicht geladen werden.');
+        if (!options?.silent) {
+          Alert.alert('Fehler', 'Fragen konnten nicht geladen werden.');
+        }
         return;
       }
 
@@ -83,12 +112,21 @@ export default function DoctorQuestionsScreen() {
       }
     } catch (err) {
       console.error('Failed to load doctor questions:', err);
+      if (!options?.silent) {
+        Alert.alert('Fehler', 'Fragen konnten nicht geladen werden.');
+      }
     } finally {
-      setIsLoading(false);
+      if (!options?.silent) {
+        setIsLoading(false);
+      }
     }
   };
 
   const handleSaveQuestion = async () => {
+    if (isSaving) {
+      return;
+    }
+
     if (!newQuestion.trim()) {
       Alert.alert('Hinweis', 'Bitte gib eine Frage ein.');
       return;
@@ -103,25 +141,20 @@ export default function DoctorQuestionsScreen() {
       setIsSaving(true);
       const result = await service.saveQuestion(newQuestion.trim());
 
-      // Use primary result for user feedback (dual-write pattern)
       if (result.primary.error) {
         console.error('Error saving doctor question:', result.primary.error);
         Alert.alert('Fehler', 'Frage konnte nicht gespeichert werden.');
         return;
       }
 
-      // Log secondary write failure (non-blocking)
-      if (result.secondary.error) {
-        console.warn('Secondary backend write failed:', result.secondary.error);
-      }
-
       if (result.primary.data) {
-        setQuestions((prev) => [result.primary.data!, ...prev]);
         setNewQuestion('');
-        Alert.alert('Erfolg', 'Deine Frage wurde gespeichert.');
+        await loadQuestions({ silent: true });
+        showOperationMessage('Frage gespeichert.');
       }
     } catch (err) {
       console.error('Failed to save doctor question:', err);
+      Alert.alert('Fehler', 'Frage konnte nicht gespeichert werden.');
     } finally {
       setIsSaving(false);
     }
@@ -133,28 +166,34 @@ export default function DoctorQuestionsScreen() {
       return;
     }
 
+    const nextIsAnswered = !question.is_answered;
+
     try {
+      setIsTogglingQuestionId(question.id);
+
       const result = await service.updateQuestion(question.id, {
-        is_answered: !question.is_answered,
+        is_answered: nextIsAnswered,
       });
 
-      // Use primary result for user feedback (dual-write pattern)
       if (result.primary.error) {
         console.error('Error updating doctor question:', result.primary.error);
         Alert.alert('Fehler', 'Status konnte nicht aktualisiert werden.');
         return;
       }
 
-      // Log secondary write failure (non-blocking)
-      if (result.secondary.error) {
-        console.warn('Secondary backend write failed:', result.secondary.error);
-      }
-
       if (result.primary.data) {
         setQuestions((prev) => prev.map((q) => (q.id === question.id ? result.primary.data! : q)));
       }
+
+      await loadQuestions({ silent: true });
+      showOperationMessage(
+        nextIsAnswered ? 'Frage als beantwortet markiert.' : 'Frage als offen markiert.'
+      );
     } catch (err) {
       console.error('Failed to update doctor question:', err);
+      Alert.alert('Fehler', 'Status konnte nicht aktualisiert werden.');
+    } finally {
+      setIsTogglingQuestionId(null);
     }
   };
 
@@ -174,23 +213,26 @@ export default function DoctorQuestionsScreen() {
           }
 
           try {
+            setIsDeletingQuestionId(questionId);
             const result = await service.deleteQuestion(questionId);
 
-            // Use primary result for user feedback (dual-write pattern)
             if (result.primary.error) {
               console.error('Error deleting doctor question:', result.primary.error);
               Alert.alert('Fehler', 'Frage konnte nicht gelöscht werden.');
               return;
             }
 
-            // Log secondary write failure (non-blocking)
-            if (result.secondary.error) {
-              console.warn('Secondary backend delete failed:', result.secondary.error);
-            }
-
             setQuestions((prev) => prev.filter((q) => q.id !== questionId));
+            if (expandedQuestion === questionId) {
+              setExpandedQuestion(null);
+            }
+            await loadQuestions({ silent: true });
+            showOperationMessage('Frage gelöscht.');
           } catch (err) {
             console.error('Failed to delete doctor question:', err);
+            Alert.alert('Fehler', 'Frage konnte nicht gelöscht werden.');
+          } finally {
+            setIsDeletingQuestionId(null);
           }
         },
       },
@@ -221,29 +263,31 @@ export default function DoctorQuestionsScreen() {
     }
 
     try {
+      setIsSavingAnswerId(questionId);
       const result = await service.updateQuestion(questionId, {
         answer: answerText.trim() || undefined,
       });
 
-      // Use primary result for user feedback (dual-write pattern)
       if (result.primary.error) {
         console.error('Error saving answer:', result.primary.error);
         Alert.alert('Fehler', 'Antwort konnte nicht gespeichert werden.');
         return;
       }
 
-      // Log secondary write failure (non-blocking)
-      if (result.secondary.error) {
-        console.warn('Secondary backend write failed:', result.secondary.error);
-      }
-
       if (result.primary.data) {
         setQuestions((prev) => prev.map((q) => (q.id === questionId ? result.primary.data! : q)));
         setEditingAnswer(null);
+        setAnswerText('');
         Keyboard.dismiss();
       }
+
+      await loadQuestions({ silent: true });
+      showOperationMessage('Antwort gespeichert.');
     } catch (err) {
       console.error('Failed to save answer:', err);
+      Alert.alert('Fehler', 'Antwort konnte nicht gespeichert werden.');
+    } finally {
+      setIsSavingAnswerId(null);
     }
   };
 
@@ -259,6 +303,10 @@ export default function DoctorQuestionsScreen() {
 
   const renderQuestionCard = (question: DoctorQuestion) => {
     const isExpanded = expandedQuestion === question.id;
+    const isToggling = isTogglingQuestionId === question.id;
+    const isSavingAnswer = isSavingAnswerId === question.id;
+    const isDeleting = isDeletingQuestionId === question.id;
+    const isQuestionBusy = isToggling || isSavingAnswer || isDeleting;
     const overlayColor = question.is_answered
       ? 'rgba(168,196,162,0.22)'
       : 'rgba(142,78,198,0.18)';
@@ -309,23 +357,36 @@ export default function DoctorQuestionsScreen() {
         {isExpanded && (
           <View style={styles.questionBody}>
             <TouchableOpacity
-              style={[styles.actionChip, question.is_answered && styles.actionChipActive]}
+              style={[
+                styles.actionChip,
+                question.is_answered && styles.actionChipActive,
+                isToggling && styles.buttonDisabled,
+              ]}
               onPress={() => handleToggleAnswered(question)}
+              disabled={isQuestionBusy}
               activeOpacity={0.85}
             >
-              <IconSymbol
-                name={question.is_answered ? 'arrow.uturn.backward' : 'checklist'}
-                size={18}
-                color={question.is_answered ? '#3C7C59' : PRIMARY}
-                style={styles.actionChipIcon}
-              />
+              {isToggling ? (
+                <ActivityIndicator size="small" color={question.is_answered ? '#3C7C59' : PRIMARY} />
+              ) : (
+                <IconSymbol
+                  name={question.is_answered ? 'arrow.uturn.backward' : 'checklist'}
+                  size={18}
+                  color={question.is_answered ? '#3C7C59' : PRIMARY}
+                  style={styles.actionChipIcon}
+                />
+              )}
               <ThemedText
                 style={[
                   styles.actionChipText,
                   question.is_answered && styles.actionChipTextActive,
                 ]}
               >
-                {question.is_answered ? 'Als offen markieren' : 'Als beantwortet markieren'}
+                {isToggling
+                  ? 'Wird aktualisiert...'
+                  : question.is_answered
+                    ? 'Als offen markieren'
+                    : 'Als beantwortet markieren'}
               </ThemedText>
             </TouchableOpacity>
 
@@ -355,8 +416,9 @@ export default function DoctorQuestionsScreen() {
                   </GlassCard>
                   <View style={styles.answerButtons}>
                     <TouchableOpacity
-                      style={styles.secondaryButton}
+                      style={[styles.secondaryButton, isSavingAnswer && styles.buttonDisabled]}
                       onPress={handleCancelEditAnswer}
+                      disabled={isSavingAnswer}
                       activeOpacity={0.85}
                     >
                       <IconSymbol
@@ -368,17 +430,24 @@ export default function DoctorQuestionsScreen() {
                       <ThemedText style={styles.secondaryButtonText}>Abbrechen</ThemedText>
                     </TouchableOpacity>
                     <TouchableOpacity
-                      style={styles.primaryPill}
+                      style={[styles.primaryPill, isSavingAnswer && styles.buttonDisabled]}
                       onPress={() => handleSaveAnswer(question.id)}
+                      disabled={isSavingAnswer}
                       activeOpacity={0.85}
                     >
-                      <IconSymbol
-                        name="checklist"
-                        size={14}
-                        color="#FFFFFF"
-                        style={styles.primaryPillIcon}
-                      />
-                      <ThemedText style={styles.primaryPillText}>Speichern</ThemedText>
+                      {isSavingAnswer ? (
+                        <ActivityIndicator size="small" color="#FFFFFF" />
+                      ) : (
+                        <>
+                          <IconSymbol
+                            name="checklist"
+                            size={14}
+                            color="#FFFFFF"
+                            style={styles.primaryPillIcon}
+                          />
+                          <ThemedText style={styles.primaryPillText}>Speichern</ThemedText>
+                        </>
+                      )}
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -400,12 +469,24 @@ export default function DoctorQuestionsScreen() {
             </View>
 
             <TouchableOpacity
-              style={styles.deleteButton}
+              style={[styles.deleteButton, isDeleting && styles.buttonDisabled]}
               onPress={() => handleDeleteQuestion(question.id)}
+              disabled={isQuestionBusy}
               activeOpacity={0.85}
             >
-              <IconSymbol name="trash" size={15} color="#FFFFFF" style={styles.deleteButtonIcon} />
-              <ThemedText style={styles.deleteButtonText}>Frage löschen</ThemedText>
+              {isDeleting ? (
+                <>
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                  <ThemedText style={[styles.deleteButtonText, styles.loadingInlineText]}>
+                    Lösche...
+                  </ThemedText>
+                </>
+              ) : (
+                <>
+                  <IconSymbol name="trash" size={15} color="#FFFFFF" style={styles.deleteButtonIcon} />
+                  <ThemedText style={styles.deleteButtonText}>Frage löschen</ThemedText>
+                </>
+              )}
             </TouchableOpacity>
           </View>
         )}
@@ -497,16 +578,21 @@ export default function DoctorQuestionsScreen() {
                 />
               </View>
               <LiquidGlassCard
-                style={styles.primaryButton}
+                style={[styles.primaryButton, isSaving && styles.buttonDisabled]}
                 intensity={28}
                 overlayColor="rgba(142,78,198,0.32)"
                 borderColor="rgba(255,255,255,0.35)"
-                onPress={handleSaveQuestion}
-                activeOpacity={0.85}
+                onPress={isSaving ? undefined : handleSaveQuestion}
+                activeOpacity={isSaving ? 1 : 0.85}
               >
                 <View style={styles.primaryButtonInner}>
                   {isSaving ? (
-                    <ActivityIndicator size="small" color="#FFFFFF" />
+                    <>
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                      <ThemedText style={[styles.primaryButtonText, styles.loadingInlineText]}>
+                        Speichere...
+                      </ThemedText>
+                    </>
                   ) : (
                     <>
                       <IconSymbol
@@ -521,6 +607,22 @@ export default function DoctorQuestionsScreen() {
                 </View>
               </LiquidGlassCard>
             </GlassCard>
+
+            {operationMessage ? (
+              <GlassCard style={[styles.fullWidthCard, styles.feedbackCard]}>
+                <View style={styles.feedbackInner}>
+                  <IconSymbol
+                    name="checkmark.circle.fill"
+                    size={18}
+                    color="#3C7C59"
+                    style={styles.feedbackIcon}
+                  />
+                  <ThemedText style={[styles.feedbackText, { color: textPrimary }]}>
+                    {operationMessage}
+                  </ThemedText>
+                </View>
+              </GlassCard>
+            ) : null}
 
             {isLoading ? (
               <LiquidGlassCard
@@ -741,6 +843,30 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '700',
     fontSize: 15,
+  },
+  loadingInlineText: {
+    marginLeft: 8,
+  },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
+  feedbackCard: {
+    marginTop: 12,
+    marginBottom: 10,
+    borderRadius: RADIUS,
+  },
+  feedbackInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  feedbackIcon: {
+    marginRight: 10,
+  },
+  feedbackText: {
+    fontSize: 13,
+    fontWeight: '600',
   },
   loadingCard: {
     borderRadius: RADIUS,

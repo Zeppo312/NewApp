@@ -904,7 +904,7 @@ export default function GetUserInfoScreen() {
 
       case 'summary': // Zusammenfassung und Speichern
         return (
-          <ThemedView style={styles.stepContainer} lightColor="#FFFFFF" darkColor="#FFFFFF">
+          <ThemedView style={[styles.stepContainer, styles.summaryStepContainer]} lightColor="#FFFFFF" darkColor="#FFFFFF">
             {/* Baby-Foto oder Illustration */}
             {!isPartnerFlow && babyPhotoUrl ? (
               <View style={styles.summaryPhotoSection}>
@@ -1033,9 +1033,6 @@ export default function GetUserInfoScreen() {
               )}
             </View>
 
-            <ThemedText style={styles.summaryNote}>
-              Du kannst diese Informationen später in deinem Profil ändern.
-            </ThemedText>
           </ThemedView>
         );
 
@@ -1087,6 +1084,7 @@ export default function GetUserInfoScreen() {
               keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
             >
               <ScrollView
+                style={styles.scrollView}
                 contentContainerStyle={styles.scrollContent}
                 keyboardShouldPersistTaps="never"
                 keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
@@ -1098,29 +1096,37 @@ export default function GetUserInfoScreen() {
                 </View>
               </ScrollView>
 
-              <View style={styles.buttonsContainer}>
-                {currentStep > 0 && (
-                  <TouchableOpacity
-                    style={styles.backButton}
-                    onPress={goToPreviousStep}
-                  >
-                    <IconSymbol name="chevron.left" size={20} color={theme.text} />
-                    <ThemedText style={styles.backButtonText}>Zurück</ThemedText>
-                  </TouchableOpacity>
+              <View style={styles.footerContainer}>
+                {currentStepKey === 'summary' && (
+                  <ThemedText style={styles.footerSummaryNote} allowFontScaling={false}>
+                    Du kannst das später im Profil ändern.
+                  </ThemedText>
                 )}
 
-                <TouchableOpacity
-                  style={[styles.nextButton, (isSaving || isRedeemingInvitation) && styles.buttonDisabled]}
-                  onPress={goToNextStep}
-                  disabled={isSaving || isRedeemingInvitation}
-                >
-                  <ThemedText style={styles.nextButtonText}>
-                    {currentStep === totalSteps - 1 ? (isSaving ? 'Speichern...' : 'Fertig') : 'Weiter'}
-                  </ThemedText>
-                  {currentStep < totalSteps - 1 && (
-                    <IconSymbol name="chevron.right" size={20} color="#FFFFFF" />
+                <View style={styles.buttonsContainer}>
+                  {currentStep > 0 && (
+                    <TouchableOpacity
+                      style={styles.backButton}
+                      onPress={goToPreviousStep}
+                    >
+                      <IconSymbol name="chevron.left" size={20} color={theme.text} />
+                      <ThemedText style={styles.backButtonText}>Zurück</ThemedText>
+                    </TouchableOpacity>
                   )}
-                </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.nextButton, (isSaving || isRedeemingInvitation) && styles.buttonDisabled]}
+                    onPress={goToNextStep}
+                    disabled={isSaving || isRedeemingInvitation}
+                  >
+                    <ThemedText style={styles.nextButtonText}>
+                      {currentStep === totalSteps - 1 ? (isSaving ? 'Speichern...' : 'Fertig') : 'Weiter'}
+                    </ThemedText>
+                    {currentStep < totalSteps - 1 && (
+                      <IconSymbol name="chevron.right" size={20} color="#FFFFFF" />
+                    )}
+                  </TouchableOpacity>
+                </View>
               </View>
             </KeyboardAvoidingView>
           )}
@@ -1186,7 +1192,6 @@ const styles = StyleSheet.create({
     color: '#7D5A50',
   },
   content: {
-    flex: 1,
     paddingHorizontal: 20,
   },
   stepContainer: {
@@ -1198,6 +1203,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.06,
     shadowRadius: 12,
     elevation: 3,
+  },
+  summaryStepContainer: {
+    paddingBottom: 28,
   },
   babyImage: {
     width: 180,
@@ -1214,9 +1222,12 @@ const styles = StyleSheet.create({
   keyboardAvoidingView: {
     flex: 1,
   },
+  scrollView: {
+    flex: 1,
+  },
   scrollContent: {
     flexGrow: 1,
-    paddingBottom: 20,
+    paddingBottom: 48,
   },
   stepTitle: {
     fontSize: 20,
@@ -1471,19 +1482,24 @@ const styles = StyleSheet.create({
     color: '#7D5A50',
     marginTop: 8,
   },
-  summaryNote: {
-    marginTop: 20,
+  footerContainer: {
+    paddingHorizontal: 20,
+    paddingBottom: 8,
+  },
+  footerSummaryNote: {
+    marginBottom: 10,
+    textAlign: 'center',
     fontSize: 14,
+    lineHeight: 20,
     fontStyle: 'italic',
     color: '#7D5A50',
-    opacity: 0.7,
+    opacity: 0.75,
   },
   buttonsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
     paddingTop: 12,
-    paddingBottom: 16,
+    paddingBottom: 8,
   },
   backButton: {
     flexDirection: 'row',

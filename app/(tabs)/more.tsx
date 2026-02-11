@@ -7,7 +7,7 @@ import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
-import { useRouter } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import Header from '@/components/Header';
 import { GlassCard, LiquidGlassCard, GLASS_OVERLAY, LAYOUT_PAD } from '@/constants/DesignGuide';
@@ -20,12 +20,16 @@ export default function MoreScreen() {
   const adaptiveColors = useAdaptiveColors();
   const { isBabyBorn, setIsBabyBorn } = useBabyStatus();
   const router = useRouter();
-  const { signOut } = useAuth();
+  const { session, signOut } = useAuth();
 
   // Nur bei dunklem Hintergrundbild die adaptiven Farben verwenden
   const useDarkMode = adaptiveColors.hasCustomBackground && adaptiveColors.isDarkBackground;
   const iconAccentColor = useDarkMode ? adaptiveColors.accent : theme.accent;
   const iconSecondaryColor = useDarkMode ? adaptiveColors.iconSecondary : theme.tabIconDefault;
+
+  if (!session) {
+    return <Redirect href="/(auth)/login" />;
+  }
 
   const handleSwitchBack = () => {
     Alert.alert(
@@ -70,15 +74,12 @@ export default function MoreScreen() {
               // Abmelden mit Supabase
               const { error } = await signOut();
               if (error) throw error;
-
-              // Zur Login-Seite navigieren
-              router.replace('/(auth)');
             } catch (error) {
               console.error('Logout error:', error);
               const message = error instanceof Error
                 ? error.message
-                : (typeof error === 'object' && error?.message)
-                  ? String((error as any).message)
+                : (typeof error === 'object' && error !== null && 'message' in error)
+                  ? String((error as { message?: unknown }).message ?? 'Unbekannter Fehler')
                   : 'Unbekannter Fehler';
               Alert.alert('Fehler', `Beim Abmelden ist ein Fehler aufgetreten.\n${message}`);
             }

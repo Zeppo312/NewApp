@@ -16,7 +16,7 @@ import {
 import { CachedImage } from '@/components/CachedImage';
 import { BlurView } from 'expo-blur';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { router, Stack } from 'expo-router';
+import { Redirect, router, Stack } from 'expo-router';
 import * as Linking from 'expo-linking';
 
 import { ThemedText } from '@/components/ThemedText';
@@ -90,7 +90,7 @@ export default function ProfilScreen() {
   const securityCardBackground = isDark ? toRgba(babyBlue, 0.2) : 'rgba(135,206,235,0.45)';
   const dangerCardBackground = isDark ? 'rgba(255,107,107,0.22)' : 'rgba(255,130,130,0.5)';
   const actionDisabledBackground = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(168,168,168,0.5)';
-  const { user, signOut } = useAuth();
+  const { user, session, signOut } = useAuth();
   const { isBabyBorn, setIsBabyBorn, refreshBabyDetails } = useBabyStatus();
   const { activeBabyId, refreshBabies } = useActiveBaby();
   const { syncUser } = useConvex();
@@ -138,13 +138,20 @@ export default function ProfilScreen() {
     try {
       setIsLoading(true);
 
-      if (user?.email) setEmail(user.email);
+      if (!user) {
+        setIsLoading(false);
+        return;
+      }
+
+      const userId = user.id;
+
+      if (user.email) setEmail(user.email);
 
       // Profile
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('first_name, last_name, user_role, avatar_url')
-        .eq('id', user?.id)
+        .eq('id', userId)
         .single();
 
       if (!profileError && profileData) {
@@ -155,7 +162,7 @@ export default function ProfilScreen() {
         setAvatarPreview(profileData.avatar_url || null);
         setAvatarRemoved(false);
         await setLocalProfileName(
-          user.id,
+          userId,
           profileData.first_name || '',
           profileData.last_name || '',
         );
@@ -165,7 +172,7 @@ export default function ProfilScreen() {
       const { data: settingsData } = await supabase
         .from('user_settings')
         .select('due_date, is_baby_born')
-        .eq('user_id', user?.id)
+        .eq('user_id', userId)
         .order('updated_at', { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -366,7 +373,6 @@ export default function ProfilScreen() {
             text: 'OK',
             onPress: async () => {
               await signOut();
-              router.replace('/(auth)/login');
             },
           },
         ],
@@ -629,6 +635,10 @@ export default function ProfilScreen() {
     setIsBabyBorn(value);
     if (!value) setBirthDate(null);
   };
+
+  if (!session) {
+    return <Redirect href="/(auth)/login" />;
+  }
 
   return (
     <>
