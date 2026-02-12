@@ -5,6 +5,7 @@ import { router, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Linking from 'expo-linking';
 
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
@@ -40,8 +41,9 @@ export default function LoginScreen() {
       setIsLoading(true);
       setError('');
 
+      const redirectTo = Linking.createURL('auth/reset-password');
       const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: 'lottibaby://reset-password',
+        redirectTo,
       });
 
       if (resetError) {

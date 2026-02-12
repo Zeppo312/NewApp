@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { BlurView } from 'expo-blur';
+import * as Linking from 'expo-linking';
 
 import Header from '@/components/Header';
 import { ThemedBackground } from '@/components/ThemedBackground';
@@ -23,6 +24,7 @@ const ACCENT_PURPLE = '#8E4EC6';
 export default function ResetPasswordScreen() {
   const router = useRouter();
   const searchParams = useLocalSearchParams();
+  const rawUrl = Linking.useURL();
   const [password, setPassword] = useState('');
   const [passwordConfirm, setPasswordConfirm] = useState('');
   const [isCheckingSession, setIsCheckingSession] = useState(true);
@@ -30,20 +32,80 @@ export default function ResetPasswordScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
 
+  const rawUrlParams = useMemo(() => {
+    const params: Record<string, string> = {};
+    if (!rawUrl) return params;
+
+    const parseSegment = (segment?: string) => {
+      if (!segment) return;
+      const parsed = new URLSearchParams(segment);
+      parsed.forEach((value, key) => {
+        params[key] = value;
+      });
+    };
+
+    const [withoutHash, hashSegment] = rawUrl.split('#');
+    const querySegment = withoutHash.split('?')[1];
+    parseSegment(querySegment);
+    parseSegment(hashSegment);
+
+    return params;
+  }, [rawUrl]);
+
   const code = useMemo(() => {
-    const raw = searchParams.code;
+    const raw = searchParams.code ?? rawUrlParams.code;
     return Array.isArray(raw) ? raw[0] : raw;
-  }, [searchParams.code]);
+  }, [rawUrlParams.code, searchParams.code]);
+
+  const token = useMemo(() => {
+    const raw =
+      searchParams.token ??
+      rawUrlParams.token ??
+      searchParams.token_hash ??
+      rawUrlParams.token_hash;
+    return Array.isArray(raw) ? raw[0] : raw;
+  }, [rawUrlParams.token, rawUrlParams.token_hash, searchParams.token, searchParams.token_hash]);
+
+  const accessToken = useMemo(() => {
+    const raw = searchParams.access_token ?? rawUrlParams.access_token;
+    return Array.isArray(raw) ? raw[0] : raw;
+  }, [rawUrlParams.access_token, searchParams.access_token]);
+
+  const refreshToken = useMemo(() => {
+    const raw = searchParams.refresh_token ?? rawUrlParams.refresh_token;
+    return Array.isArray(raw) ? raw[0] : raw;
+  }, [rawUrlParams.refresh_token, searchParams.refresh_token]);
 
   useEffect(() => {
     let isMounted = true;
 
     const bootstrap = async () => {
       try {
-        if (code) {
+        const codeOrToken = code ?? token;
+
+        if (codeOrToken) {
           if (isMounted) setStatus('Link wird verarbeitet…');
-          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
-          if (exchangeError) throw exchangeError;
+          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(codeOrToken);
+          if (exchangeError) {
+            const rawType = searchParams.type ?? rawUrlParams.type;
+            const type = Array.isArray(rawType) ? rawType[0] : rawType;
+            if (type && token) {
+              const { error: verifyError } = await supabase.auth.verifyOtp({
+                type: type as any,
+                token_hash: token,
+              });
+              if (verifyError) throw verifyError;
+            } else {
+              throw exchangeError;
+            }
+          }
+        } else if (accessToken && refreshToken) {
+          if (isMounted) setStatus('Link wird verarbeitet…');
+          const { error: setSessionError } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+          if (setSessionError) throw setSessionError;
         }
 
         const { data, error } = await supabase.auth.getSession();
@@ -67,7 +129,7 @@ export default function ResetPasswordScreen() {
     return () => {
       isMounted = false;
     };
-  }, [code]);
+  }, [accessToken, code, refreshToken, rawUrlParams.type, searchParams.type, token]);
 
   const handleUpdatePassword = async () => {
     if (isSubmitting) return;
