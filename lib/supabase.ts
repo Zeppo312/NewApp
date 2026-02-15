@@ -313,12 +313,41 @@ export const signInWithApple = async () => {
       ],
     });
 
-    // Sign in with Supabase using the Apple credential
-    const { data, error } = await supabase.auth.signInWithIdToken({
+    if (!credential.identityToken) {
+      return { data: null, error: { message: 'Kein Apple identityToken erhalten' } };
+    }
+
+    const signInPayload: any = {
       provider: 'apple',
-      token: credential.identityToken!,
-      nonce: credential.nonce,
-    });
+      token: credential.identityToken,
+    };
+
+    if (credential.nonce) {
+      signInPayload.nonce = credential.nonce;
+    }
+
+    if (credential.authorizationCode) {
+      signInPayload.access_token = credential.authorizationCode;
+    }
+
+    // Sign in with Supabase using the Apple credential
+    const { data, error } = await supabase.auth.signInWithIdToken(signInPayload);
+
+    if (error?.message?.includes('Unacceptable audience in id_token')) {
+      const audienceMatch = error.message.match(/\[([^\]]+)\]/);
+      const audience = audienceMatch?.[1];
+      const audienceHint = audience
+        ? `"${audience}" in den Client IDs`
+        : 'die iOS Bundle-ID in den Client IDs';
+
+      return {
+        data: null,
+        error: {
+          message: `Apple Sign-In ist nicht vollständig konfiguriert. Bitte in Supabase unter Authentication > Providers > Apple ${audienceHint} ergänzen.`,
+          originalMessage: error.message,
+        },
+      };
+    }
 
     // If sign-in successful, create/update profile
     if (data.user && !error) {

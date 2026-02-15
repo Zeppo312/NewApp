@@ -988,19 +988,39 @@ export default function SleepTrackerScreen() {
   const [isStoppingSleep, setIsStoppingSleep] = useState(false);
   const [showSleepInfoModal, setShowSleepInfoModal] = useState(false);
 
-  const isValidManualDate = useCallback((value: unknown): value is Date => {
-    if (!(value instanceof Date)) return false;
-    const timestamp = value.getTime();
-    return Number.isFinite(timestamp) && timestamp > 0 && value.getFullYear() >= 2000;
+  const isFiniteManualDate = useCallback((value: unknown): value is Date => {
+    return value instanceof Date && Number.isFinite(value.getTime());
   }, []);
+
+  const isValidManualDate = useCallback((value: unknown): boolean => {
+    if (!isFiniteManualDate(value)) return false;
+    const timestamp = value.getTime();
+    return timestamp > 0 && value.getFullYear() >= 2000;
+  }, [isFiniteManualDate]);
 
   const sanitizeManualDate = useCallback(
     (value?: Date | null, fallback?: Date) => {
+      const safeFallback =
+        fallback && isValidManualDate(fallback) ? new Date(fallback.getTime()) : new Date();
+
+      if (!isFiniteManualDate(value)) return safeFallback;
       if (isValidManualDate(value)) return new Date(value.getTime());
-      if (isValidManualDate(fallback)) return new Date(fallback.getTime());
-      return new Date();
+
+      // iOS compact datetime can emit epoch dates when only time is changed.
+      if (value.getTime() <= 0 || value.getFullYear() < 2000) {
+        const patched = new Date(safeFallback.getTime());
+        patched.setHours(
+          value.getHours(),
+          value.getMinutes(),
+          value.getSeconds(),
+          value.getMilliseconds()
+        );
+        if (isValidManualDate(patched)) return patched;
+      }
+
+      return safeFallback;
     },
-    [isValidManualDate]
+    [isFiniteManualDate, isValidManualDate]
   );
 
   const normalizePickerDate = useCallback(
@@ -1911,13 +1931,6 @@ export default function SleepTrackerScreen() {
   const openEndPicker = () => {
     triggerHaptic();
     setShowStartPicker(false);
-    setSleepModalData((prev) => {
-      const safeStart = normalizePickerDate(prev.start_time, new Date());
-      return {
-        ...prev,
-        end_time: normalizePickerDate(prev.end_time ?? safeStart, safeStart),
-      };
-    });
     setShowEndPicker(true);
   };
 
@@ -2926,7 +2939,7 @@ export default function SleepTrackerScreen() {
                             display={Platform.OS === 'ios' ? 'compact' : 'default'}
                             onChange={(event, date) => {
                               if (event.type === 'dismissed') return;
-                              if (!date || !isValidManualDate(date)) return;
+                              if (!date) return;
 
                               const nextStart = sanitizeManualDate(date, safeModalStartTime);
                               setSleepModalData(prev => {
@@ -2973,7 +2986,7 @@ export default function SleepTrackerScreen() {
                             display={Platform.OS === 'ios' ? 'compact' : 'default'}
                             onChange={(event, date) => {
                               if (event.type === 'dismissed') return;
-                              if (!date || !isValidManualDate(date)) return;
+                              if (!date) return;
 
                               const nextEnd = sanitizeManualDate(date, safeModalEndPickerTime);
                               setSleepModalData(prev => ({ ...prev, end_time: nextEnd }));

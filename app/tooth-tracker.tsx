@@ -8,7 +8,6 @@ import {
   ScrollView,
   StatusBar,
   StyleSheet,
-  TextInput,
   TouchableOpacity,
   TouchableWithoutFeedback,
   View,
@@ -21,6 +20,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import Header from '@/components/Header';
+import TextInputOverlay from '@/components/modals/TextInputOverlay';
 import { Colors } from '@/constants/Colors';
 import { GLASS_OVERLAY, GLASS_OVERLAY_DARK, LAYOUT_PAD, LiquidGlassCard, PRIMARY, RADIUS } from '@/constants/DesignGuide';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
@@ -324,6 +324,11 @@ const formatDateLabel = (value: string) => {
   return `${day}.${month}.${year}`;
 };
 
+const formatMonthLabel = (value: string) => {
+  const parsed = parseDateOnly(value);
+  return new Intl.DateTimeFormat('de-DE', { month: 'long', year: 'numeric' }).format(parsed);
+};
+
 const normalizeEditorDate = (date: Date) => {
   const next = new Date(date);
   next.setHours(12, 0, 0, 0);
@@ -353,6 +358,7 @@ export default function ToothTrackerScreen() {
   const [formDate, setFormDate] = useState<Date>(() => normalizeEditorDate(new Date()));
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [formNotes, setFormNotes] = useState('');
+  const [notesEditorVisible, setNotesEditorVisible] = useState(false);
   const [formSymptoms, setFormSymptoms] = useState<ToothSymptom[]>([]);
 
   const entriesByTooth = useMemo(
@@ -376,6 +382,23 @@ export default function ToothTrackerScreen() {
     });
     return sorted;
   }, [entries]);
+
+  const groupedTimeline = useMemo(() => {
+    const groups = new Map<string, ToothEntry[]>();
+
+    for (const entry of timelineEntries) {
+      const monthKey = entry.eruption_date.slice(0, 7);
+      const bucket = groups.get(monthKey) ?? [];
+      bucket.push(entry);
+      groups.set(monthKey, bucket);
+    }
+
+    return Array.from(groups.entries()).map(([monthKey, items]) => ({
+      monthKey,
+      monthLabel: formatMonthLabel(`${monthKey}-01`),
+      items,
+    }));
+  }, [timelineEntries]);
 
   const availableTeeth = useMemo(
     () => ALL_TEETH.filter((tooth) => !entriesByTooth.has(tooth.key) || tooth.key === selectedTooth),
@@ -412,6 +435,7 @@ export default function ToothTrackerScreen() {
   const closeEditor = () => {
     setEditorVisible(false);
     setShowDatePicker(false);
+    setNotesEditorVisible(false);
     setShowToothPicker(true);
   };
 
@@ -439,6 +463,7 @@ export default function ToothTrackerScreen() {
     setFormNotes('');
     setFormSymptoms([]);
     setShowDatePicker(false);
+    setNotesEditorVisible(false);
     setEditorVisible(true);
   }, [activeBabyId, entriesByTooth]);
 
@@ -451,6 +476,7 @@ export default function ToothTrackerScreen() {
     setFormNotes(entry.notes ?? '');
     setFormSymptoms(entry.symptoms ?? []);
     setShowDatePicker(false);
+    setNotesEditorVisible(false);
     setEditorVisible(true);
   }, []);
 
@@ -559,11 +585,12 @@ export default function ToothTrackerScreen() {
     ]);
   };
 
-  const gumColor = isDark ? 'rgba(200, 120, 120, 0.5)' : 'rgba(240, 160, 155, 0.65)';
-  const gumHighlight = isDark ? 'rgba(220, 140, 140, 0.35)' : 'rgba(255, 195, 190, 0.5)';
+  const softenedGumColor = isDark ? 'rgba(196, 128, 122, 0.44)' : 'rgba(240, 160, 155, 0.55)';
+  const softenedGumHighlight = isDark ? 'rgba(232, 164, 158, 0.24)' : 'rgba(255, 205, 198, 0.38)';
 
-  const toothGradTop = isDark ? '#F5F2EE' : '#FFFFFF';
-  const toothGradBot = isDark ? '#E0DAD2' : '#F3EFEA';
+  const toothGradTop = '#FFFFFF';
+  const toothGradMid = isDark ? '#F4F0EA' : '#F9F6F2';
+  const toothGradBot = isDark ? '#E6DED4' : '#EFEAE4';
   const toothInactiveFill = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(200,185,170,0.18)';
   const toothInactiveStroke = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(180,165,150,0.22)';
   const toothActiveStroke = isDark ? 'rgba(255,255,255,0.45)' : 'rgba(180,165,150,0.5)';
@@ -574,7 +601,6 @@ export default function ToothTrackerScreen() {
       const spec = specs[i];
       const erupted = eruptedTeeth.has(tooth.key);
       const d = jaw === 'upper' ? upperCrownPath(spec) : lowerCrownPath(spec);
-      const gradId = `tg_${tooth.key}`;
       const shadowOffset = jaw === 'upper' ? 2 : -2;
 
       return (
@@ -587,20 +613,9 @@ export default function ToothTrackerScreen() {
             />
           )}
 
-          <Defs>
-            <SvgLinearGradient
-              id={gradId}
-              x1="0" y1={jaw === 'upper' ? '0' : '1'}
-              x2="0" y2={jaw === 'upper' ? '1' : '0'}
-            >
-              <Stop offset="0" stopColor={toothGradTop} />
-              <Stop offset="1" stopColor={toothGradBot} />
-            </SvgLinearGradient>
-          </Defs>
-
           <Path
             d={d}
-            fill={erupted ? `url(#${gradId})` : toothInactiveFill}
+            fill={erupted ? 'url(#toothGrad)' : toothInactiveFill}
             fillOpacity={erupted ? 0.95 : 0.55}
             stroke={erupted ? toothActiveStroke : toothInactiveStroke}
             strokeWidth={erupted ? 1 : 0.8}
@@ -622,6 +637,14 @@ export default function ToothTrackerScreen() {
 
   const isCtaDisabled = !activeBabyId || !isReady || isLoading;
 
+  const statsMessage = useMemo(() => {
+    if (eruptedCount === 0) return 'Noch kein Zahn sichtbar';
+    if (eruptedCount === 1) return 'Der erste Zahn ist da 🦷✨';
+    if (eruptedCount >= 20) return 'Komplettes Milchgebiss 🎉';
+    if (eruptedCount >= 8) return 'Halbzeit erreicht';
+    return 'Dein Baby bekommt sein Lächeln 🥹';
+  }, [eruptedCount]);
+
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
@@ -635,12 +658,13 @@ export default function ToothTrackerScreen() {
             contentContainerStyle={styles.contentContainer}
             showsVerticalScrollIndicator={false}
           >
-            <LiquidGlassCard style={styles.card} intensity={26} overlayColor={glassOverlay}>
+            <LiquidGlassCard style={styles.card} intensity={28} overlayColor={glassOverlay}>
               <View style={styles.statsInner}>
-                <ThemedText style={[styles.statsNumber, { color: PRIMARY }]}>
-                  {eruptedCount}
-                </ThemedText>
-                <ThemedText style={[styles.statsLabel, { color: textSecondary }]}>von 20 Zähnen</ThemedText>
+                <View style={styles.statsStack}>
+                  <ThemedText style={[styles.statsNumber, { color: PRIMARY }]}>{eruptedCount}</ThemedText>
+                  <ThemedText style={[styles.statsLabel, { color: textSecondary }]}>von 20 Milchzähnen</ThemedText>
+                  <ThemedText style={[styles.statsMood, { color: textSecondary }]}>{statsMessage}</ThemedText>
+                </View>
               </View>
             </LiquidGlassCard>
 
@@ -660,12 +684,17 @@ export default function ToothTrackerScreen() {
                 <Svg width={SVG_W} height={SVG_H} viewBox={`0 0 ${SVG_W} ${SVG_H}`} style={styles.svg}>
                   <Defs>
                     <SvgLinearGradient id="gumGradUpper" x1="0" y1="0" x2="0" y2="1">
-                      <Stop offset="0" stopColor={gumHighlight} />
-                      <Stop offset="1" stopColor={gumColor} />
+                      <Stop offset="0" stopColor={softenedGumHighlight} />
+                      <Stop offset="1" stopColor={softenedGumColor} />
                     </SvgLinearGradient>
                     <SvgLinearGradient id="gumGradLower" x1="0" y1="1" x2="0" y2="0">
-                      <Stop offset="0" stopColor={gumHighlight} />
-                      <Stop offset="1" stopColor={gumColor} />
+                      <Stop offset="0" stopColor={softenedGumHighlight} />
+                      <Stop offset="1" stopColor={softenedGumColor} />
+                    </SvgLinearGradient>
+                    <SvgLinearGradient id="toothGrad" x1="0" y1="0" x2="0" y2="1">
+                      <Stop offset="0" stopColor={toothGradTop} />
+                      <Stop offset="0.6" stopColor={toothGradMid} />
+                      <Stop offset="1" stopColor={toothGradBot} />
                     </SvgLinearGradient>
                   </Defs>
 
@@ -675,9 +704,9 @@ export default function ToothTrackerScreen() {
                   <Ellipse
                     cx={CX}
                     cy={SVG_H / 2}
-                    rx={85}
-                    ry={5}
-                    fill={isDark ? 'rgba(255,255,255,0.03)' : 'rgba(160,140,120,0.05)'}
+                    rx={95}
+                    ry={10}
+                    fill={isDark ? 'rgba(120,90,70,0.1)' : 'rgba(120,90,70,0.05)'}
                   />
 
                   <Path d={LOWER_GUM_PATH} fill="url(#gumGradLower)" />
@@ -701,14 +730,24 @@ export default function ToothTrackerScreen() {
                 ) : timelineEntries.length === 0 ? (
                   <ThemedText style={[styles.emptyText, { color: textSecondary }]}>Noch keine Zähne eingetragen.</ThemedText>
                 ) : (
-                  timelineEntries.map((entry) => (
-                    <View key={entry.id} style={styles.timelineItem}>
-                      <View style={[styles.dateBubble, { backgroundColor: `${PRIMARY}20` }]}>
-                        <ThemedText style={[styles.dateText, { color: PRIMARY }]}>{formatDateLabel(entry.eruption_date)}</ThemedText>
-                      </View>
-                      <ThemedText style={[styles.toothName, { color: textPrimary }]}>
-                        {BABY_TEETH_MAP[entry.tooth_position]?.label ?? entry.tooth_position}
+                  groupedTimeline.map((group) => (
+                    <View key={group.monthKey} style={styles.timelineMonthBlock}>
+                      <ThemedText style={[styles.timelineMonthTitle, { color: textSecondary }]}>
+                        {group.monthLabel}
                       </ThemedText>
+                      {group.items.map((entry) => (
+                        <View key={entry.id} style={styles.timelineItem}>
+                          <View style={[styles.dateBubble, { backgroundColor: `${PRIMARY}20` }]}>
+                            <ThemedText style={[styles.dateText, { color: PRIMARY }]}>{formatDateLabel(entry.eruption_date)}</ThemedText>
+                          </View>
+                          <View style={[styles.toothMiniIcon, { backgroundColor: `${PRIMARY}14` }]}>
+                            <ThemedText style={styles.toothMiniIconText}>🦷</ThemedText>
+                          </View>
+                          <ThemedText style={[styles.toothName, { color: textPrimary }]}>
+                            {BABY_TEETH_MAP[entry.tooth_position]?.label ?? entry.tooth_position}
+                          </ThemedText>
+                        </View>
+                      ))}
                     </View>
                   ))
                 )}
@@ -786,6 +825,17 @@ export default function ToothTrackerScreen() {
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.modalScrollContent}>
+              {selectedTooth && (
+                <View style={styles.selectedToothHero}>
+                  <View style={[styles.selectedToothHeroIcon, { backgroundColor: `${PRIMARY}14` }]}>
+                    <ThemedText style={styles.selectedToothHeroIconText}>🦷</ThemedText>
+                  </View>
+                  <ThemedText style={[styles.selectedToothHeroLabel, { color: textPrimary }]}>
+                    {BABY_TEETH_MAP[selectedTooth]?.label ?? selectedTooth}
+                  </ThemedText>
+                </View>
+              )}
+
               {editorMode === 'create' && showToothPicker && (
                 <View style={styles.modalSection}>
                   <ThemedText style={[styles.modalSectionLabel, { color: textPrimary }]}>Zahn auswählen</ThemedText>
@@ -823,25 +873,6 @@ export default function ToothTrackerScreen() {
                 </View>
               )}
 
-              {selectedTooth && (
-                <View style={styles.modalSection}>
-                  <ThemedText style={[styles.modalSectionLabel, { color: textPrimary }]}>Zahn</ThemedText>
-                  <View
-                    style={[
-                      styles.staticField,
-                      {
-                        backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.76)',
-                        borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.06)',
-                      },
-                    ]}
-                  >
-                    <ThemedText style={[styles.staticFieldText, { color: textPrimary }]}>
-                      {BABY_TEETH_MAP[selectedTooth]?.label ?? selectedTooth}
-                    </ThemedText>
-                  </View>
-                </View>
-              )}
-
               <View style={styles.modalSection}>
                 <ThemedText style={[styles.modalSectionLabel, { color: textPrimary }]}>Durchbruch-Datum</ThemedText>
                 <View
@@ -855,7 +886,9 @@ export default function ToothTrackerScreen() {
                 >
                   <TouchableOpacity style={styles.dateHeader} onPress={() => setShowDatePicker((prev) => !prev)}>
                     <ThemedText style={[styles.dateValue, { color: textPrimary }]}>{formatDateLabel(toDateOnly(formDate))}</ThemedText>
-                    <ThemedText style={[styles.dateToggleLabel, { color: PRIMARY }]}>{showDatePicker ? 'Schließen' : 'Ändern'}</ThemedText>
+                    <View style={[styles.calendarPill, { backgroundColor: `${PRIMARY}18` }]}>
+                      <ThemedText style={[styles.calendarPillIcon, { color: PRIMARY }]}>📅</ThemedText>
+                    </View>
                   </TouchableOpacity>
 
                   {showDatePicker && (
@@ -896,7 +929,7 @@ export default function ToothTrackerScreen() {
                           styles.symptomChip,
                           {
                             backgroundColor: active
-                              ? PRIMARY
+                              ? `${PRIMARY}15`
                               : isDark
                                 ? 'rgba(255,255,255,0.09)'
                                 : 'rgba(255,255,255,0.78)',
@@ -909,7 +942,7 @@ export default function ToothTrackerScreen() {
                         ]}
                         onPress={() => toggleSymptom(option.key)}
                       >
-                        <ThemedText style={[styles.symptomLabel, { color: active ? '#FFFFFF' : textPrimary }]}>
+                        <ThemedText style={[styles.symptomLabel, { color: active ? PRIMARY : textPrimary }]}>
                           {option.label}
                         </ThemedText>
                       </TouchableOpacity>
@@ -920,22 +953,34 @@ export default function ToothTrackerScreen() {
 
               <View style={styles.modalSection}>
                 <ThemedText style={[styles.modalSectionLabel, { color: textPrimary }]}>Notizen</ThemedText>
-                <TextInput
-                  value={formNotes}
-                  onChangeText={setFormNotes}
-                  placeholder="Optional: Beobachtungen oder Hinweise"
-                  placeholderTextColor={isDark ? 'rgba(255,255,255,0.45)' : 'rgba(90,70,60,0.45)'}
-                  multiline
-                  textAlignVertical="top"
+                <TouchableOpacity
                   style={[
                     styles.notesInput,
+                    styles.notesInputTouchable,
                     {
-                      color: textPrimary,
                       backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.78)',
                       borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.07)',
                     },
                   ]}
-                />
+                  activeOpacity={0.9}
+                  onPress={() => setNotesEditorVisible(true)}
+                >
+                  <ThemedText
+                    style={[
+                      formNotes.trim() ? styles.notesInputValue : styles.notesInputPlaceholder,
+                      {
+                        color: formNotes.trim()
+                          ? textPrimary
+                          : isDark
+                            ? 'rgba(255,255,255,0.45)'
+                            : 'rgba(90,70,60,0.45)',
+                      },
+                    ]}
+                    numberOfLines={4}
+                  >
+                    {formNotes.trim() || 'Optional: Beobachtungen oder Hinweise'}
+                  </ThemedText>
+                </TouchableOpacity>
               </View>
 
               {editorMode === 'edit' && (
@@ -949,6 +994,19 @@ export default function ToothTrackerScreen() {
                 </TouchableOpacity>
               )}
             </ScrollView>
+            <TextInputOverlay
+              visible={notesEditorVisible}
+              label="Notizen"
+              value={formNotes}
+              placeholder="Optional: Beobachtungen oder Hinweise"
+              multiline
+              accentColor={PRIMARY}
+              onClose={() => setNotesEditorVisible(false)}
+              onSubmit={(next) => {
+                setFormNotes(next);
+                setNotesEditorVisible(false);
+              }}
+            />
           </BlurView>
         </View>
       </Modal>
@@ -981,9 +1039,10 @@ const styles = StyleSheet.create({
   statsInner: {
     padding: 20,
     alignItems: 'center',
-    flexDirection: 'row',
     justifyContent: 'center',
-    gap: 8,
+  },
+  statsStack: {
+    alignItems: 'center',
   },
   statsNumber: {
     fontSize: 36,
@@ -997,6 +1056,12 @@ const styles = StyleSheet.create({
   statsLabel: {
     fontSize: 18,
     fontWeight: '600',
+  },
+  statsMood: {
+    marginTop: 6,
+    fontSize: 13,
+    fontWeight: '500',
+    opacity: 0.78,
   },
 
   chartInner: {
@@ -1034,6 +1099,16 @@ const styles = StyleSheet.create({
   timelineInner: {
     padding: 16,
   },
+  timelineMonthBlock: {
+    marginTop: 10,
+  },
+  timelineMonthTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    textTransform: 'capitalize',
+    opacity: 0.82,
+    marginBottom: 2,
+  },
   loadingWrap: {
     paddingVertical: 20,
     alignItems: 'center',
@@ -1061,6 +1136,16 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
+  toothMiniIcon: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  toothMiniIconText: {
+    fontSize: 13,
+  },
   toothName: {
     fontSize: 14,
     fontWeight: '500',
@@ -1077,7 +1162,7 @@ const styles = StyleSheet.create({
   },
   ctaButton: {
     backgroundColor: PRIMARY,
-    borderRadius: 20,
+    borderRadius: 22,
     paddingVertical: 16,
     alignItems: 'center',
     shadowColor: PRIMARY,
@@ -1160,6 +1245,33 @@ const styles = StyleSheet.create({
   modalScrollContent: {
     paddingBottom: 18,
   },
+  selectedToothHero: {
+    marginTop: 2,
+    marginBottom: 14,
+    alignItems: 'center',
+    overflow: 'visible',
+  },
+  selectedToothHeroIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 2,
+    marginBottom: 8,
+    overflow: 'visible',
+  },
+  selectedToothHeroIconText: {
+    fontSize: 25,
+    lineHeight: 32,
+    textAlign: 'center',
+  },
+  selectedToothHeroLabel: {
+    fontSize: 15,
+    fontWeight: '700',
+    textAlign: 'center',
+    paddingHorizontal: 24,
+  },
   modalSection: {
     marginBottom: 20,
     width: '100%',
@@ -1190,17 +1302,6 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     fontWeight: '700',
   },
-  staticField: {
-    width: '100%',
-    borderRadius: 14,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  staticFieldText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
   dateContainer: {
     width: '100%',
     borderWidth: 1,
@@ -1218,9 +1319,15 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
   },
-  dateToggleLabel: {
-    fontSize: 13,
-    fontWeight: '700',
+  calendarPill: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calendarPillIcon: {
+    fontSize: 15,
   },
   datePickerWrap: {
     paddingHorizontal: 4,
@@ -1251,6 +1358,20 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     fontSize: 14,
     lineHeight: 20,
+  },
+  notesInputTouchable: {
+    alignItems: 'flex-start',
+    justifyContent: 'flex-start',
+  },
+  notesInputValue: {
+    fontSize: 14,
+    lineHeight: 20,
+    width: '100%',
+  },
+  notesInputPlaceholder: {
+    fontSize: 14,
+    lineHeight: 20,
+    width: '100%',
   },
   deleteActionButton: {
     width: '100%',
