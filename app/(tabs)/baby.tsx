@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { StyleSheet, ScrollView, View, TouchableOpacity, Image, TextInput, Alert, SafeAreaView, StatusBar, Platform, BackHandler } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { Colors } from '@/constants/Colors';
@@ -8,7 +9,7 @@ import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { getBabyInfo, saveBabyInfo, BabyInfo } from '@/lib/baby';
+import { saveBabyInfo, BabyInfo } from '@/lib/baby';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { loadBabyInfoWithCache, invalidateBabyCache } from '@/lib/babyCache';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -17,7 +18,15 @@ import Header from '@/components/Header';
 import { useSmartBack } from '@/contexts/NavigationContext';
 import * as Notifications from 'expo-notifications';
 import { defineMilestoneCheckerTask, saveBabyInfoForBackgroundTask, isTaskRegistered } from '@/tasks/milestoneCheckerTask';
-import { LAYOUT_PAD, LiquidGlassCard, GLASS_OVERLAY, GLASS_OVERLAY_DARK } from '@/constants/DesignGuide';
+import {
+  LAYOUT_PAD,
+  LiquidGlassCard,
+  TIMELINE_INSET,
+  GLASS_BORDER,
+  GLASS_BORDER_DARK,
+  GLASS_OVERLAY,
+  GLASS_OVERLAY_DARK,
+} from '@/constants/DesignGuide';
 import { useFocusEffect } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
@@ -27,6 +36,73 @@ import {
   DEFAULT_BEDTIME_ANCHOR,
   normalizeBedtimeAnchor,
 } from '@/lib/bedtime';
+import {
+  differenceInYears,
+  differenceInMonths,
+  differenceInDays,
+  addMonths,
+  addDays,
+} from 'date-fns';
+
+const initialStats = {
+  years: 0,
+  months: 0,
+  days: 0,
+  totalDays: 0,
+  totalWeeks: 0,
+  totalMonths: 0,
+  milestones: [] as { name: string; reached: boolean; date?: Date }[],
+};
+
+const HEADER_TEXT_COLOR = '#7D5A50';
+
+const pastelPaletteLight = {
+  peach: 'rgba(255, 223, 209, 0.85)',
+  rose: 'rgba(255, 210, 224, 0.8)',
+  honey: 'rgba(255, 239, 214, 0.85)',
+  sage: 'rgba(214, 236, 220, 0.78)',
+  lavender: 'rgba(236, 224, 255, 0.78)',
+  sky: 'rgba(222, 238, 255, 0.85)',
+  blush: 'rgba(255, 218, 230, 0.8)',
+};
+
+const pastelPaletteDark = {
+  peach: 'rgba(255, 177, 138, 0.25)',
+  rose: 'rgba(255, 133, 170, 0.25)',
+  honey: 'rgba(255, 210, 137, 0.23)',
+  sage: 'rgba(150, 210, 178, 0.22)',
+  lavender: 'rgba(190, 156, 255, 0.24)',
+  sky: 'rgba(134, 186, 255, 0.24)',
+  blush: 'rgba(255, 160, 188, 0.24)',
+};
+
+const GlassLayer = ({
+  tint = 'rgba(255,255,255,0.22)',
+  sheenOpacity = 0.35,
+  isDark = false,
+}: {
+  tint?: string;
+  sheenOpacity?: number;
+  isDark?: boolean;
+}) => (
+  <>
+    <LinearGradient
+      colors={[tint, isDark ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.06)']}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={styles.statsGlassLayerGradient}
+    />
+    <View
+      style={[
+        styles.statsGlassSheen,
+        {
+          opacity: sheenOpacity,
+          backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.25)',
+        },
+      ]}
+    />
+  </>
+);
 
 export default function BabyScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -37,6 +113,16 @@ export default function BabyScreen() {
   const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
   const textTertiary = isDark ? Colors.dark.textTertiary : '#A8978E';
   const glassOverlay = isDark ? GLASS_OVERLAY_DARK : GLASS_OVERLAY;
+  const glassBorderColor = isDark ? GLASS_BORDER_DARK : GLASS_BORDER;
+  const glassSurfaceStyle = {
+    borderColor: glassBorderColor,
+    backgroundColor: isDark ? 'rgba(0,0,0,0.35)' : 'rgba(255,255,255,0.15)',
+    shadowOpacity: isDark ? 0.18 : 0.06,
+  } as const;
+  const iconBubbleBackground = isDark ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.82)';
+  const pastelPalette = isDark ? pastelPaletteDark : pastelPaletteLight;
+  const milestoneReachedIconColor = isDark ? '#FFB08D' : '#E88368';
+  const milestoneUpcomingIconColor = isDark ? '#D8CCC2' : '#9E8F86';
   const photoButtonBackground = isDark ? 'rgba(255,255,255,0.10)' : 'rgba(125, 90, 80, 0.15)';
   const photoButtonBorder = isDark ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.35)';
   const accentButtonBackground = isDark ? 'rgba(142, 78, 198, 0.26)' : 'rgba(142, 78, 198, 0.16)';
@@ -162,6 +248,24 @@ export default function BabyScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
   };
 
+  const getAvgHeartRate = (ageMonths: number) =>
+    ageMonths < 1 ? 140 : ageMonths < 6 ? 130 : 120;
+
+  const getAvgBreathRate = (ageMonths: number) =>
+    ageMonths < 1 ? 40 : ageMonths < 6 ? 35 : 30;
+
+  const getAvgDiapers = (ageMonths: number) =>
+    ageMonths < 1 ? 10 : ageMonths < 3 ? 8 : ageMonths < 12 ? 6 : 4;
+
+  const getAvgSleepHours = (ageMonths: number) =>
+    ageMonths < 1 ? 16 : ageMonths < 6 ? 14 : ageMonths < 12 ? 13 : 12;
+
+  const genderLabels = {
+    male: 'Männlich',
+    female: 'Weiblich',
+    unknown: 'Nicht angegeben',
+  };
+
   const pickBabyPhoto = async () => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -275,6 +379,241 @@ export default function BabyScreen() {
       });
     }
   };
+
+  const computeStats = (birthDate: Date) => {
+    const now = new Date();
+    const years = differenceInYears(now, birthDate);
+    const months = differenceInMonths(now, addMonths(birthDate, years * 12));
+    const days = differenceInDays(now, addMonths(birthDate, years * 12 + months));
+    const totalDays = differenceInDays(now, birthDate);
+    const totalWeeks = Math.floor(totalDays / 7);
+    const totalMonths = years * 12 + months;
+
+    const milestoneDefinitions = [
+      { name: '1 Woche', addFn: () => addDays(birthDate, 7) },
+      { name: '1 Monat', addFn: () => addMonths(birthDate, 1) },
+      { name: '2 Monate', addFn: () => addMonths(birthDate, 2) },
+      { name: '3 Monate', addFn: () => addMonths(birthDate, 3) },
+      { name: '100 Tage', addFn: () => addDays(birthDate, 100) },
+      { name: '6 Monate', addFn: () => addMonths(birthDate, 6) },
+      { name: '1 Jahr', addFn: () => addMonths(birthDate, 12) },
+      { name: '500 Tage', addFn: () => addDays(birthDate, 500) },
+      { name: '1000 Tage', addFn: () => addDays(birthDate, 1000) },
+      { name: '1111 Tage', addFn: () => addDays(birthDate, 1111) },
+    ];
+
+    const milestones = milestoneDefinitions.map(({ name, addFn }) => {
+      const date = addFn();
+      const reached = now >= date;
+      return { name, reached, date: reached ? date : undefined };
+    });
+
+    return { years, months, days, totalDays, totalWeeks, totalMonths, milestones };
+  };
+
+  const stats = useMemo(() => {
+    if (!babyInfo.birth_date) return initialStats;
+    return computeStats(new Date(babyInfo.birth_date));
+  }, [babyInfo.birth_date]);
+
+  const renderAgeDescription = () => {
+    const { years, months, days } = stats;
+
+    if (years > 0) {
+      return `${years} Jahr${years !== 1 ? 'e' : ''}, ${months} Monat${months !== 1 ? 'e' : ''} und ${days} Tag${days !== 1 ? 'e' : ''}`;
+    }
+
+    if (months > 0) {
+      return `${months} Monat${months !== 1 ? 'e' : ''} und ${days} Tag${days !== 1 ? 'e' : ''}`;
+    }
+
+    return `${days} Tag${days !== 1 ? 'e' : ''}`;
+  };
+
+  const formatDate = (date: Date) =>
+    date.toLocaleDateString('de-DE', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    });
+
+  const renderMilestoneStatus = (milestone: { name: string; reached: boolean; date?: Date }) => {
+    const reached = milestone.reached;
+
+    const tint = reached
+      ? (isDark ? 'rgba(150,210,178,0.22)' : 'rgba(213,245,231,0.75)')
+      : (isDark ? 'rgba(209,170,145,0.2)' : 'rgba(244,236,230,0.78)');
+
+    return (
+      <View
+        style={[styles.statsMilestoneRow, styles.statsGlassSurface, glassSurfaceStyle]}
+      >
+        <GlassLayer tint={tint} sheenOpacity={reached ? 0.22 : 0.16} isDark={isDark} />
+        <View
+          style={[
+            styles.statsMilestoneIcon,
+            reached ? styles.statsMilestoneIconReached : styles.statsMilestoneIconUpcoming,
+            {
+              backgroundColor: reached
+                ? (isDark ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.85)')
+                : (isDark ? 'rgba(255,255,255,0.11)' : 'rgba(255,255,255,0.75)'),
+            },
+          ]}
+        >
+          <IconSymbol
+            name={reached ? 'star.fill' : 'calendar.badge.exclamationmark'}
+            size={18}
+            color={reached ? milestoneReachedIconColor : milestoneUpcomingIconColor}
+          />
+        </View>
+        <View style={styles.statsMilestoneInfo}>
+          <ThemedText style={[styles.statsMilestoneName, { color: textPrimary }]}>{milestone.name}</ThemedText>
+          <ThemedText style={[styles.statsMilestoneDate, { color: textSecondary }]}>
+            {reached && milestone.date ? `Erreicht am ${formatDate(milestone.date)}` : 'Noch nicht erreicht'}
+          </ThemedText>
+        </View>
+      </View>
+    );
+  };
+
+  const renderInterestingFacts = () => {
+    if (!babyInfo.birth_date) return null;
+
+    const totalMonths = stats.years * 12 + stats.months;
+    const heartbeats = Math.round(stats.totalDays * 24 * 60 * getAvgHeartRate(totalMonths));
+    const breaths = Math.round(stats.totalDays * 24 * 60 * getAvgBreathRate(totalMonths));
+    const diapers = Math.round(stats.totalDays * getAvgDiapers(totalMonths));
+    const sleep = Math.round(stats.totalDays * getAvgSleepHours(totalMonths));
+
+    const factItems = [
+      {
+        key: 'heart',
+        label: 'Herzschläge',
+        value: heartbeats.toLocaleString('de-DE'),
+        caption: 'geschätzt',
+        icon: 'heart.fill' as const,
+        accent: pastelPalette.rose,
+        iconColor: isDark ? '#FFB8C8' : '#D06262',
+        iconBg: iconBubbleBackground,
+      },
+      {
+        key: 'breath',
+        label: 'Atemzüge',
+        value: breaths.toLocaleString('de-DE'),
+        caption: 'seit Geburt',
+        icon: 'wind' as const,
+        accent: pastelPalette.sage,
+        iconColor: isDark ? '#9BE0CB' : '#5A8F80',
+        iconBg: iconBubbleBackground,
+      },
+      {
+        key: 'diapers',
+        label: 'Windeln',
+        value: diapers.toLocaleString('de-DE'),
+        caption: 'insgesamt',
+        icon: 'drop.fill' as const,
+        accent: pastelPalette.honey,
+        iconColor: isDark ? '#FFCA9E' : '#B98160',
+        iconBg: iconBubbleBackground,
+      },
+      {
+        key: 'sleep',
+        label: 'Schlafstunden',
+        value: sleep.toLocaleString('de-DE'),
+        caption: 'seit Geburt',
+        icon: 'moon.stars.fill' as const,
+        accent: pastelPalette.sky,
+        iconColor: isDark ? '#C3B8FF' : '#7A6FD1',
+        iconBg: iconBubbleBackground,
+      },
+    ];
+
+    return (
+      <LiquidGlassCard
+        style={styles.statsGlassCard}
+        intensity={26}
+        overlayColor={glassOverlay}
+        borderColor={glassBorderColor}
+      >
+        <View style={styles.statsGlassInner}>
+          <ThemedText style={[styles.statsSectionTitle, { color: textSecondary }]}>Interessante Fakten</ThemedText>
+          <View style={styles.statsFactGrid}>
+            {factItems.map((fact) => (
+              <View key={fact.key} style={[styles.statsFactTile, styles.statsGlassSurface, glassSurfaceStyle]}>
+                <GlassLayer tint={fact.accent} sheenOpacity={0.18} isDark={isDark} />
+                <View style={[styles.statsFactIcon, { backgroundColor: fact.iconBg }]}>
+                  <IconSymbol name={fact.icon} size={18} color={fact.iconColor} />
+                </View>
+                <ThemedText style={[styles.statsFactLabel, { color: textSecondary }]}>{fact.label}</ThemedText>
+                <ThemedText style={[styles.statsFactValue, { color: textPrimary }]}>{fact.value}</ThemedText>
+                <ThemedText style={[styles.statsFactCaption, { color: textSecondary }]}>{fact.caption}</ThemedText>
+              </View>
+            ))}
+          </View>
+        </View>
+      </LiquidGlassCard>
+    );
+  };
+
+  const ageChips = [
+    { key: 'years', label: 'Jahre', value: stats.years, accent: pastelPalette.rose },
+    { key: 'months', label: 'Monate', value: stats.months, accent: pastelPalette.honey },
+    { key: 'days', label: 'Tage', value: stats.days, accent: pastelPalette.sky },
+  ];
+
+  const statChips = [
+    {
+      key: 'total-days',
+      label: 'Tage gesamt',
+      value: stats.totalDays.toLocaleString('de-DE'),
+      icon: 'calendar' as const,
+      accent: pastelPalette.peach,
+      iconColor: isDark ? '#FFC5A7' : '#C17055',
+    },
+    {
+      key: 'total-weeks',
+      label: 'Wochen',
+      value: stats.totalWeeks.toLocaleString('de-DE'),
+      icon: 'clock' as const,
+      accent: pastelPalette.lavender,
+      iconColor: isDark ? '#C2B7FF' : '#7A6FD1',
+    },
+    {
+      key: 'total-months',
+      label: 'Monate',
+      value: stats.totalMonths.toLocaleString('de-DE'),
+      icon: 'moon.stars.fill' as const,
+      accent: pastelPalette.blush,
+      iconColor: isDark ? '#FFB6D1' : '#CF6F8B',
+    },
+  ];
+
+  const bodyMetrics = [
+    {
+      key: 'height',
+      label: 'Größe',
+      value: babyInfo.height ? `${babyInfo.height} cm` : 'Nicht angegeben',
+      icon: 'person.fill' as const,
+      accent: pastelPalette.sky,
+      iconColor: isDark ? '#B6CEFF' : '#6C87C1',
+    },
+    {
+      key: 'weight',
+      label: 'Gewicht',
+      value: babyInfo.weight ? `${babyInfo.weight} kg` : 'Nicht angegeben',
+      icon: 'chart.bar.fill' as const,
+      accent: pastelPalette.honey,
+      iconColor: isDark ? '#FFCAA2' : '#B7745D',
+    },
+    {
+      key: 'gender',
+      label: 'Geschlecht',
+      value: genderLabels[babyInfo.baby_gender as keyof typeof genderLabels] || genderLabels.unknown,
+      icon: 'person.2.fill' as const,
+      accent: pastelPalette.lavender,
+      iconColor: isDark ? '#D1BDFF' : '#8C6AC3',
+    },
+  ];
 
   return (
     <ThemedBackground style={styles.container}>
@@ -549,45 +888,116 @@ export default function BabyScreen() {
             </View>
           </LiquidGlassCard>
 
-          <LiquidGlassCard
-            style={styles.infoGlassCard}
-            intensity={24}
-            overlayColor={accentButtonBackground}
-            borderColor={accentButtonBorder}
-            onPress={() => {
-              triggerHaptic();
-              router.push({ pathname: '/baby-stats' } as any);
-            }}
-          >
-            <View style={styles.infoGlassInner}>
-              <View style={styles.statsButtonContent}>
-                <View>
-                  <ThemedText style={styles.infoTitle}>Baby-Statistiken</ThemedText>
-                  <ThemedText style={styles.infoText}>
-                    Alter, Entwicklung, Meilensteine und interessante Fakten über dein Baby
-                  </ThemedText>
+          {babyInfo.birth_date ? (
+            <>
+              <LiquidGlassCard
+                style={[styles.statsGlassCard, styles.statsFirstGlassCard]}
+                intensity={26}
+                overlayColor={glassOverlay}
+                borderColor={glassBorderColor}
+              >
+                <View style={styles.statsGlassInner}>
+                  <ThemedText style={[styles.statsSectionTitle, { color: textSecondary }]}>Alter</ThemedText>
+
+                  <View style={[styles.statsAgeHighlight, styles.statsGlassSurface, glassSurfaceStyle]}>
+                    <GlassLayer
+                      tint={isDark ? 'rgba(255, 177, 138, 0.24)' : 'rgba(255,232,220,0.75)'}
+                      sheenOpacity={0.22}
+                      isDark={isDark}
+                    />
+                    <View style={[styles.statsAgeHighlightIcon, { backgroundColor: iconBubbleBackground }]}>
+                      <IconSymbol name="clock" size={18} color={milestoneReachedIconColor} />
+                    </View>
+                    <View style={styles.statsAgeHighlightText}>
+                      <ThemedText style={[styles.statsAgeValue, { color: textPrimary }]}>{renderAgeDescription()}</ThemedText>
+                      <ThemedText style={[styles.statsAgeSubline, { color: textSecondary }]}>Stand heute</ThemedText>
+                    </View>
+                  </View>
+
+                  <View style={styles.statsAgeChipRow}>
+                    {ageChips.map((chip) => (
+                      <View key={chip.key} style={[styles.statsAgeChip, styles.statsGlassSurface, glassSurfaceStyle]}>
+                        <GlassLayer tint={chip.accent} sheenOpacity={0.25} isDark={isDark} />
+                        <ThemedText style={[styles.statsAgeChipValue, { color: textPrimary }]}>{chip.value}</ThemedText>
+                        <ThemedText style={[styles.statsAgeChipLabel, { color: textSecondary }]}>{chip.label}</ThemedText>
+                      </View>
+                    ))}
+                  </View>
+
+                  <View style={styles.statsStatRow}>
+                    {statChips.map((stat) => (
+                      <View key={stat.key} style={[styles.statsStatItem, styles.statsGlassSurface, glassSurfaceStyle]}>
+                        <GlassLayer tint={stat.accent} sheenOpacity={0.2} isDark={isDark} />
+                        <View style={[styles.statsStatIcon, { backgroundColor: iconBubbleBackground }]}>
+                          <IconSymbol name={stat.icon} size={16} color={stat.iconColor} />
+                        </View>
+                        <ThemedText style={[styles.statsStatValue, { color: textPrimary }]}>{stat.value}</ThemedText>
+                        <ThemedText style={[styles.statsStatLabel, { color: textSecondary }]}>{stat.label}</ThemedText>
+                      </View>
+                    ))}
+                  </View>
                 </View>
+              </LiquidGlassCard>
+
+              <LiquidGlassCard
+                style={styles.statsGlassCard}
+                intensity={26}
+                overlayColor={glassOverlay}
+                borderColor={glassBorderColor}
+              >
+                <View style={styles.statsGlassInner}>
+                  <ThemedText style={[styles.statsSectionTitle, { color: textSecondary }]}>Geburtsdaten</ThemedText>
+                  <View style={styles.statsBodyGrid}>
+                    {bodyMetrics.map((metric) => (
+                      <View key={metric.key} style={[styles.statsBodyBadge, styles.statsGlassSurface, glassSurfaceStyle]}>
+                        <GlassLayer tint={metric.accent} sheenOpacity={0.18} isDark={isDark} />
+                        <View style={[styles.statsBodyIcon, { backgroundColor: iconBubbleBackground }]}>
+                          <IconSymbol name={metric.icon} size={18} color={metric.iconColor} />
+                        </View>
+                        <View style={styles.statsBodyCopy}>
+                          <ThemedText style={[styles.statsBodyValue, { color: textPrimary }]}>{metric.value}</ThemedText>
+                          <ThemedText style={[styles.statsBodyLabel, { color: textSecondary }]}>{metric.label}</ThemedText>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              </LiquidGlassCard>
+
+              {renderInterestingFacts()}
+
+              <LiquidGlassCard
+                style={styles.statsGlassCard}
+                intensity={26}
+                overlayColor={glassOverlay}
+                borderColor={glassBorderColor}
+              >
+                <View style={styles.statsGlassInner}>
+                  <ThemedText style={[styles.statsSectionTitle, { color: textSecondary }]}>Meilensteine</ThemedText>
+                  <View style={styles.statsMilestoneContainer}>
+                    {stats.milestones.map((milestone, index) => (
+                      <View key={index}>
+                        {renderMilestoneStatus(milestone)}
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              </LiquidGlassCard>
+            </>
+          ) : (
+            <LiquidGlassCard
+              style={styles.statsGlassCard}
+              intensity={26}
+              overlayColor={glassOverlay}
+              borderColor={glassBorderColor}
+            >
+              <View style={styles.statsGlassInner}>
+                <ThemedText style={[styles.statsNoDataText, { color: textSecondary }]}>
+                  Kein Geburtsdatum verfügbar. Bitte füge das Geburtsdatum deines Babys hinzu, um Statistiken anzuzeigen.
+                </ThemedText>
               </View>
-            </View>
-          </LiquidGlassCard>
-          
-          <LiquidGlassCard style={styles.infoGlassCard} intensity={24} overlayColor={glassOverlay}>
-            <View style={styles.infoGlassInner}>
-              <ThemedText style={styles.infoTitle}>Die ersten Wochen</ThemedText>
-              <ThemedText style={styles.infoText}>
-                • In den ersten Wochen ist es wichtig, eine Bindung zu deinem Baby aufzubauen.
-              </ThemedText>
-              <ThemedText style={styles.infoText}>
-                • Achte auf ausreichend Ruhe und Erholung für dich und dein Baby.
-              </ThemedText>
-              <ThemedText style={styles.infoText}>
-                • Nimm dir Zeit, dein Baby kennenzulernen und seine Bedürfnisse zu verstehen.
-              </ThemedText>
-              <ThemedText style={styles.infoText}>
-                • Scheue dich nicht, um Hilfe zu bitten, wenn du sie brauchst.
-              </ThemedText>
-            </View>
-          </LiquidGlassCard>
+            </LiquidGlassCard>
+          )}
         </ScrollView>
       </SafeAreaView>
     </ThemedBackground>
@@ -790,27 +1200,250 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
-  // Info cards (Liquid Glass)
-  infoGlassCard: {
+  statsGlassSurface: {
+    position: 'relative',
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: GLASS_BORDER,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
+  statsGlassLayerGradient: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  statsGlassSheen: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '55%',
+    backgroundColor: 'rgba(255,255,255,0.25)',
+  },
+  statsGlassCard: {
+    marginHorizontal: TIMELINE_INSET,
     marginBottom: 20,
     borderRadius: 22,
+    width: '100%',
+    maxWidth: 520,
+    alignSelf: 'center',
   },
-  infoGlassInner: {
+  statsGlassInner: {
     padding: 20,
   },
-  infoTitle: {
+  statsFirstGlassCard: {
+    marginTop: 12,
+  },
+  statsSectionTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 15,
+    fontWeight: '700',
+    color: HEADER_TEXT_COLOR,
+    marginBottom: 12,
+    textAlign: 'center',
+    letterSpacing: 0.2,
   },
-  infoText: {
-    fontSize: 14,
-    marginBottom: 10,
-    lineHeight: 20,
+  statsAgeHighlight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 18,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginBottom: 16,
   },
-  statsButtonContent: {
+  statsAgeHighlightIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  statsAgeHighlightText: {
+    flex: 1,
+  },
+  statsAgeValue: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: HEADER_TEXT_COLOR,
+  },
+  statsAgeSubline: {
+    fontSize: 12,
+    color: HEADER_TEXT_COLOR,
+    opacity: 0.75,
+    marginTop: 2,
+  },
+  statsAgeChipRow: {
+    flexDirection: 'row',
+    marginBottom: 6,
+    marginTop: 4,
+  },
+  statsAgeChip: {
+    flex: 1,
+    borderRadius: 14,
+    paddingVertical: 10,
+    alignItems: 'center',
+    marginHorizontal: 4,
+  },
+  statsAgeChipValue: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: HEADER_TEXT_COLOR,
+  },
+  statsAgeChipLabel: {
+    fontSize: 12,
+    color: HEADER_TEXT_COLOR,
+    opacity: 0.8,
+  },
+  statsStatRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    marginTop: 12,
+  },
+  statsStatItem: {
     alignItems: 'center',
-  }
+    flex: 1,
+    borderRadius: 18,
+    paddingVertical: 14,
+    paddingHorizontal: 8,
+    marginHorizontal: 4,
+  },
+  statsStatIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  statsStatValue: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: HEADER_TEXT_COLOR,
+  },
+  statsStatLabel: {
+    fontSize: 12,
+    marginTop: 2,
+    color: HEADER_TEXT_COLOR,
+    opacity: 0.8,
+    textAlign: 'center',
+  },
+  statsBodyGrid: {
+    marginTop: 4,
+  },
+  statsBodyBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 18,
+    marginBottom: 12,
+  },
+  statsBodyIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  statsBodyCopy: {
+    flex: 1,
+  },
+  statsBodyValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: HEADER_TEXT_COLOR,
+  },
+  statsBodyLabel: {
+    fontSize: 12,
+    color: HEADER_TEXT_COLOR,
+    opacity: 0.8,
+    marginTop: 2,
+  },
+  statsFactGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginTop: 4,
+  },
+  statsFactTile: {
+    width: '48%',
+    borderRadius: 18,
+    padding: 14,
+    marginBottom: 12,
+  },
+  statsFactIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  statsFactLabel: {
+    fontSize: 12,
+    color: HEADER_TEXT_COLOR,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  statsFactValue: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: HEADER_TEXT_COLOR,
+  },
+  statsFactCaption: {
+    fontSize: 12,
+    color: HEADER_TEXT_COLOR,
+    opacity: 0.8,
+    marginTop: 2,
+  },
+  statsMilestoneContainer: {
+    marginTop: 8,
+  },
+  statsMilestoneRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 18,
+    padding: 14,
+    marginBottom: 12,
+  },
+  statsMilestoneIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  statsMilestoneIconReached: {
+    backgroundColor: 'rgba(255,255,255,0.85)',
+  },
+  statsMilestoneIconUpcoming: {
+    backgroundColor: 'rgba(255,255,255,0.75)',
+  },
+  statsMilestoneInfo: {
+    flex: 1,
+  },
+  statsMilestoneName: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: HEADER_TEXT_COLOR,
+  },
+  statsMilestoneDate: {
+    fontSize: 12,
+    marginTop: 2,
+    color: HEADER_TEXT_COLOR,
+    opacity: 0.8,
+  },
+  statsNoDataText: {
+    fontSize: 14,
+    textAlign: 'center',
+    padding: 20,
+    color: HEADER_TEXT_COLOR,
+  },
 });

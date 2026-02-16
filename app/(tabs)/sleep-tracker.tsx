@@ -2130,10 +2130,9 @@ export default function SleepTrackerScreen() {
 
   // Action Buttons (Home.tsx style)
   const ActionButtons = () => {
-    const isActionBlocked = isStartingSleep || isStoppingSleep || !isLiveStatusLoaded;
-    const loadingLabel = !isLiveStatusLoaded
-      ? 'Lade Status...'
-      : isStartingSleep
+    const isActionBlocked = isStartingSleep || isStoppingSleep;
+    const shouldShowStatusLoading = !isLiveStatusLoaded && !activeSleepEntry;
+    const loadingLabel = isStartingSleep
         ? 'Starte...'
         : isStoppingSleep
           ? 'Stoppe...'
@@ -2141,7 +2140,7 @@ export default function SleepTrackerScreen() {
 
     return (
       <View style={styles.cardsGrid}>
-        {!isLiveStatusLoaded ? (
+        {shouldShowStatusLoading ? (
           <TouchableOpacity
             style={[styles.fullWidthStopButton, styles.actionDisabled]}
             disabled
@@ -2166,7 +2165,7 @@ export default function SleepTrackerScreen() {
             onPress={() => {
               if (isActionBlocked) return;
               triggerHaptic();
-              handleStopSleep();
+              void handleStopSleep();
             }}
             activeOpacity={0.9}
           >

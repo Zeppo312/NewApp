@@ -1275,21 +1275,40 @@ export default function DailyScreen() {
     const feedingOverview = buildFeedingOverview(currentEntries as any[]);
     const diaperEntries = currentEntries.filter((e) => e.entry_type === 'diaper');
 
-    const feedingPrimaryDetail =
-      feedingOverview.totalFeedingCount === 0
-        ? 'Noch keine Mahlzeit heute'
-        : feedingOverview.bottleCount > 0
-          ? `Flasche ${feedingOverview.bottleCount}×`
-          : 'Keine Flasche';
-    const feedingSecondaryDetail =
-      feedingOverview.totalFeedingCount === 0
-        ? null
-        : [
-            feedingOverview.breastCount > 0 ? `Stillen ${feedingOverview.breastCount}×` : null,
-            feedingOverview.solidsCount > 0 ? `Beikost ${feedingOverview.solidsCount}×` : null,
-          ]
-            .filter(Boolean)
-            .join(' • ') || null;
+    const hasBottleFeedings = feedingOverview.bottleCount > 0;
+    const hasBreastFeedings = feedingOverview.breastCount > 0;
+    const hasSolidFeedings = feedingOverview.solidsCount > 0;
+
+    let feedingStatValue = `${feedingOverview.totalBottleMl}`;
+    let feedingStatUnit: 'ml' | 'times' = 'ml';
+    let feedingPrimaryDetail = 'Keine Mahlzeit heute';
+    let feedingSecondaryDetail: string | null = null;
+
+    if (feedingOverview.totalFeedingCount > 0) {
+      if (hasBottleFeedings) {
+        feedingPrimaryDetail = `Flasche ${feedingOverview.bottleCount}×`;
+        feedingSecondaryDetail = [
+          hasBreastFeedings ? `Stillen ${feedingOverview.breastCount}×` : null,
+          hasSolidFeedings ? `Beikost ${feedingOverview.solidsCount}×` : null,
+        ]
+          .filter(Boolean)
+          .join(' • ') || null;
+      } else if (hasBreastFeedings || hasSolidFeedings) {
+        const useBreastAsPrimary =
+          hasBreastFeedings && (!hasSolidFeedings || feedingOverview.breastCount >= feedingOverview.solidsCount);
+
+        feedingStatUnit = 'times';
+        if (useBreastAsPrimary) {
+          feedingStatValue = `${feedingOverview.breastCount}`;
+          feedingPrimaryDetail = 'Stillen';
+          feedingSecondaryDetail = hasSolidFeedings ? `Beikost ${feedingOverview.solidsCount}×` : null;
+        } else {
+          feedingStatValue = `${feedingOverview.solidsCount}`;
+          feedingPrimaryDetail = 'Beikost';
+          feedingSecondaryDetail = hasBreastFeedings ? `Stillen ${feedingOverview.breastCount}×` : null;
+        }
+      }
+    }
 
     const lastDiaperEntry = diaperEntries
       .sort((a, b) => new Date(b.entry_date).getTime() - new Date(a.entry_date).getTime())[0];
@@ -1311,8 +1330,8 @@ export default function DailyScreen() {
             <Text style={[s.kpiTitle, { color: textSecondary }]}>Fütterung</Text>
           </View>
           <Text style={[s.kpiValue, s.kpiValueCentered, { color: textPrimary }]}>
-            {feedingOverview.totalBottleMl}
-            <Text style={s.kpiMlUnit}> ml</Text>
+            {feedingStatValue}
+            <Text style={s.kpiMlUnit}>{feedingStatUnit === 'ml' ? ' ml' : '×'}</Text>
           </Text>
           <Text numberOfLines={2} ellipsizeMode="tail" style={[s.kpiSub, s.kpiSubPrimary, { color: textSecondary }]}>
             {feedingPrimaryDetail}

@@ -847,21 +847,40 @@ export default function HomeScreen() {
   // Rendere die Tagesübersicht
   const renderDailySummary = (wrapperStyle?: StyleProp<ViewStyle>) => {
     const feedingOverview = buildFeedingOverview(dailyEntries);
-    const todayFeedingsPrimaryDetail =
-      feedingOverview.totalFeedingCount === 0
-        ? 'Noch keine Mahlzeit heute'
-        : feedingOverview.bottleCount > 0
-          ? `Flasche ${feedingOverview.bottleCount}×`
-          : 'Keine Flasche';
-    const todayFeedingsSecondaryDetail =
-      feedingOverview.totalFeedingCount === 0
-        ? null
-        : [
-            feedingOverview.breastCount > 0 ? `Stillen ${feedingOverview.breastCount}×` : null,
-            feedingOverview.solidsCount > 0 ? `Beikost ${feedingOverview.solidsCount}×` : null,
-          ]
-            .filter(Boolean)
-            .join(' • ') || null;
+    const hasBottleFeedings = feedingOverview.bottleCount > 0;
+    const hasBreastFeedings = feedingOverview.breastCount > 0;
+    const hasSolidFeedings = feedingOverview.solidsCount > 0;
+
+    let feedingStatValue = `${feedingOverview.totalBottleMl}`;
+    let feedingStatUnit: 'ml' | 'times' = 'ml';
+    let todayFeedingsPrimaryDetail = 'Keine Mahlzeit heute';
+    let todayFeedingsSecondaryDetail: string | null = null;
+
+    if (feedingOverview.totalFeedingCount > 0) {
+      if (hasBottleFeedings) {
+        todayFeedingsPrimaryDetail = `Flasche ${feedingOverview.bottleCount}×`;
+        todayFeedingsSecondaryDetail = [
+          hasBreastFeedings ? `Stillen ${feedingOverview.breastCount}×` : null,
+          hasSolidFeedings ? `Beikost ${feedingOverview.solidsCount}×` : null,
+        ]
+          .filter(Boolean)
+          .join(' • ') || null;
+      } else if (hasBreastFeedings || hasSolidFeedings) {
+        const useBreastAsPrimary =
+          hasBreastFeedings && (!hasSolidFeedings || feedingOverview.breastCount >= feedingOverview.solidsCount);
+
+        feedingStatUnit = 'times';
+        if (useBreastAsPrimary) {
+          feedingStatValue = `${feedingOverview.breastCount}`;
+          todayFeedingsPrimaryDetail = 'Stillen';
+          todayFeedingsSecondaryDetail = hasSolidFeedings ? `Beikost ${feedingOverview.solidsCount}×` : null;
+        } else {
+          feedingStatValue = `${feedingOverview.solidsCount}`;
+          todayFeedingsPrimaryDetail = 'Beikost';
+          todayFeedingsSecondaryDetail = hasBreastFeedings ? `Stillen ${feedingOverview.breastCount}×` : null;
+        }
+      }
+    }
     const todayDiaperChanges = getTodayDiaperChanges();
 
     return (
@@ -910,19 +929,21 @@ export default function HomeScreen() {
                 <View style={styles.liquidGlassStatIcon}>
                   <Text style={styles.statEmoji}>🍼</Text>
                 </View>
-                <ThemedText adaptive={false} style={[styles.statValue, styles.liquidGlassStatValue, {
-                  color: accentPurple,
-                  textShadowColor: 'rgba(255, 255, 255, 0.8)',
-                  textShadowOffset: { width: 0, height: 1 },
-                  textShadowRadius: 2,
-                }]}>
-                  {feedingOverview.totalBottleMl}
-                  <Text style={styles.feedingMlUnit}> ml</Text>
-                </ThemedText>
+                <View style={styles.statValueContainer}>
+                  <ThemedText adaptive={false} style={[styles.statValue, styles.liquidGlassStatValue, {
+                    color: accentPurple,
+                    textShadowColor: 'rgba(255, 255, 255, 0.8)',
+                    textShadowOffset: { width: 0, height: 1 },
+                    textShadowRadius: 2,
+                  }]}>
+                    {feedingStatValue}
+                    <Text style={styles.feedingMlUnit}>{feedingStatUnit === 'ml' ? ' ml' : '×'}</Text>
+                  </ThemedText>
+                </View>
                 <View style={styles.feedingDetailsWrap}>
                   <ThemedText
                     adaptive={false}
-                    numberOfLines={2}
+                    numberOfLines={3}
                     ellipsizeMode="tail"
                     style={[styles.feedingDetailPrimary, { color: textSecondary }]}
                   >
@@ -955,12 +976,14 @@ export default function HomeScreen() {
                 <View style={styles.liquidGlassStatIcon}>
                   <Text style={styles.statEmoji}>💩</Text>
                 </View>
-                <ThemedText adaptive={false} style={[styles.statValue, styles.liquidGlassStatValue, {
-                  color: accentPurple,
-                  textShadowColor: 'rgba(255, 255, 255, 0.8)',
-                  textShadowOffset: { width: 0, height: 1 },
-                  textShadowRadius: 2,
-                }]}>{todayDiaperChanges}</ThemedText>
+                <View style={styles.statValueContainer}>
+                  <ThemedText adaptive={false} style={[styles.statValue, styles.liquidGlassStatValue, {
+                    color: accentPurple,
+                    textShadowColor: 'rgba(255, 255, 255, 0.8)',
+                    textShadowOffset: { width: 0, height: 1 },
+                    textShadowRadius: 2,
+                  }]}>{todayDiaperChanges}</ThemedText>
+                </View>
                 <ThemedText adaptive={false} style={[styles.statLabel, styles.liquidGlassStatLabel, { color: textSecondary }]}>Windeln</ThemedText>
               </TouchableOpacity>
 
@@ -978,12 +1001,14 @@ export default function HomeScreen() {
                 <View style={styles.liquidGlassStatIcon}>
                   <Text style={styles.statEmoji}>💤</Text>
                 </View>
-                <ThemedText adaptive={false} style={[styles.statValue, styles.liquidGlassStatValue, {
-                  color: accentPurple,
-                  textShadowColor: 'rgba(255, 255, 255, 0.8)',
-                  textShadowOffset: { width: 0, height: 1 },
-                  textShadowRadius: 2,
-                }]}>{formatMinutes(todaySleepMinutes)}</ThemedText>
+                <View style={styles.statValueContainer}>
+                  <ThemedText adaptive={false} style={[styles.statValue, styles.liquidGlassStatValue, {
+                    color: accentPurple,
+                    textShadowColor: 'rgba(255, 255, 255, 0.8)',
+                    textShadowOffset: { width: 0, height: 1 },
+                    textShadowRadius: 2,
+                  }]}>{formatMinutes(todaySleepMinutes)}</ThemedText>
+                </View>
                 <ThemedText adaptive={false} style={[styles.statLabel, styles.liquidGlassStatLabel, { color: textSecondary }]}>Schlaf</ThemedText>
               </TouchableOpacity>
             </View>
@@ -1886,6 +1911,12 @@ const styles = StyleSheet.create({
     marginTop: 2,
     marginBottom: 2,
     lineHeight: 26,
+  },
+  statValueContainer: {
+    minHeight: 56,
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   feedingMlUnit: {
     fontSize: 14,
