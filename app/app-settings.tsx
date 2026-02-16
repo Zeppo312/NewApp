@@ -22,6 +22,15 @@ const ADMIN_EMAILS = [
   'anyhelptoolate@gmail.com',
 ];
 
+const PRESET_OPTIONS = [
+  { id: 'default', label: 'Standard' },
+  { id: 'heller', label: 'Heller' },
+  { id: 'dunkler', label: 'Dunkler' },
+  { id: 'shadow', label: 'Shadow' },
+  { id: 'wave', label: 'Wave' },
+  { id: 'stone', label: 'Stone' },
+] as const;
+
 export default function AppSettingsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
@@ -39,13 +48,25 @@ export default function AppSettingsScreen() {
   const { convexClient, lastSyncError } = useConvex();
 
   // Background context
-  const { customUri, hasCustomBackground, isDarkBackground, pickAndSaveBackground, setBackgroundMode, resetToDefault } = useBackground();
+  const {
+    selectedBackground,
+    backgroundSource,
+    hasCustomBackground,
+    isDarkBackground,
+    pickAndSaveBackground,
+    setPresetBackground,
+    setBackgroundMode,
+    resetToDefault,
+  } = useBackground();
 
   // Notification sub-preferences
   const { preferences: notifPrefs, updatePreference: updateNotifPref } = useNotificationPreferences();
 
   // Check if current user is admin
   const isAdmin = user?.email ? ADMIN_EMAILS.includes(user.email) : false;
+  const useLightIcons = colorScheme === 'dark' || isDarkBackground;
+  const primaryIconColor = useLightIcons ? '#FFFFFF' : theme.accent;
+  const trailingIconColor = useLightIcons ? 'rgba(255,255,255,0.9)' : theme.tabIconDefault;
 
   // no extra width logic; match "Mehr" padding rhythm via ScrollView
 
@@ -331,7 +352,7 @@ export default function AppSettingsScreen() {
 
                     <View style={styles.rowItem}>
                       <View style={styles.rowIcon}>
-                        <IconSymbol name="bell" size={24} color={theme.accent} />
+                        <IconSymbol name="bell" size={24} color={primaryIconColor} />
                       </View>
                       <View style={styles.rowContent}>
                         <ThemedText style={styles.rowTitle}>Benachrichtigungen aktivieren</ThemedText>
@@ -353,7 +374,7 @@ export default function AppSettingsScreen() {
                       <>
                         <View style={styles.rowItem}>
                           <View style={styles.rowIcon}>
-                            <IconSymbol name="moon.zzz" size={22} color={theme.accent} />
+                            <IconSymbol name="moon.zzz" size={22} color={primaryIconColor} />
                           </View>
                           <View style={styles.rowContent}>
                             <ThemedText style={styles.rowTitle}>Schlaffenster-Erinnerung</ThemedText>
@@ -396,7 +417,7 @@ export default function AppSettingsScreen() {
                       onPress={() => router.push('/(tabs)/baby' as any)}
                     >
                       <View style={styles.rowIcon}>
-                        <IconSymbol name="moon.zzz" size={22} color={theme.accent} />
+                        <IconSymbol name="moon.zzz" size={22} color={primaryIconColor} />
                       </View>
                       <View style={styles.rowContent}>
                         <ThemedText style={styles.rowTitle}>Schlafenszeit einstellen</ThemedText>
@@ -405,7 +426,7 @@ export default function AppSettingsScreen() {
                         </ThemedText>
                       </View>
                       <View style={styles.trailing}>
-                        <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
+                        <IconSymbol name="chevron.right" size={20} color={trailingIconColor} />
                       </View>
                     </TouchableOpacity>
                   </LiquidGlassCard>
@@ -417,20 +438,45 @@ export default function AppSettingsScreen() {
                     {/* Vorschau */}
                     <View style={styles.backgroundPreviewContainer}>
                       <Image
-                        source={hasCustomBackground && customUri
-                          ? { uri: customUri }
-                          : require('@/assets/images/Background_Hell.png')
-                        }
+                        source={backgroundSource}
                         style={styles.backgroundPreview}
                         resizeMode={hasCustomBackground ? 'cover' : 'repeat'}
                       />
                       <View style={styles.backgroundPreviewOverlay}>
                         <ThemedText style={styles.backgroundPreviewLabel}>
-                          {hasCustomBackground
+                          {selectedBackground === 'custom'
                             ? `Eigenes Bild (${isDarkBackground ? 'dunkel' : 'hell'})`
-                            : 'Standard'}
+                            : PRESET_OPTIONS.find(option => option.id === selectedBackground)?.label ?? 'Standard'}
                         </ThemedText>
                       </View>
+                    </View>
+
+                    <View style={styles.backgroundPresetRow}>
+                      {PRESET_OPTIONS.map((option) => {
+                        const isSelected = selectedBackground === option.id;
+                        return (
+                          <TouchableOpacity
+                            key={option.id}
+                            style={[
+                              styles.backgroundPresetButton,
+                              isSelected && {
+                                borderColor: theme.accent,
+                                backgroundColor: `${theme.accent}22`,
+                              },
+                            ]}
+                            onPress={() => void setPresetBackground(option.id)}
+                          >
+                            <ThemedText
+                              style={[
+                                styles.backgroundPresetButtonLabel,
+                                isSelected && { color: theme.accent, fontWeight: '700' },
+                              ]}
+                            >
+                              {option.label}
+                            </ThemedText>
+                          </TouchableOpacity>
+                        );
+                      })}
                     </View>
 
                     <TouchableOpacity
@@ -439,17 +485,17 @@ export default function AppSettingsScreen() {
                       disabled={isChangingBackground}
                     >
                       <View style={styles.rowIcon}>
-                        <IconSymbol name="photo" size={24} color={theme.accent} />
+                        <IconSymbol name="photo" size={24} color={primaryIconColor} />
                       </View>
                       <View style={styles.rowContent}>
                         <ThemedText style={styles.rowTitle}>Hintergrund ändern</ThemedText>
-                        <ThemedText style={styles.rowDescription}>Wähle ein Bild aus deiner Galerie</ThemedText>
+                        <ThemedText style={styles.rowDescription}>Wähle ein eigenes Bild aus deiner Galerie</ThemedText>
                       </View>
                       <View style={styles.trailing}>
                         {isChangingBackground ? (
                           <ActivityIndicator size="small" color={theme.accent} />
                         ) : (
-                          <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
+                          <IconSymbol name="chevron.right" size={20} color={trailingIconColor} />
                         )}
                       </View>
                     </TouchableOpacity>
@@ -461,7 +507,7 @@ export default function AppSettingsScreen() {
                           onPress={() => setBackgroundMode(!isDarkBackground)}
                         >
                           <View style={styles.rowIcon}>
-                            <IconSymbol name={isDarkBackground ? 'sun.max' : 'moon'} size={24} color={theme.accent} />
+                            <IconSymbol name={isDarkBackground ? 'sun.max' : 'moon'} size={24} color={primaryIconColor} />
                           </View>
                           <View style={styles.rowContent}>
                             <ThemedText style={styles.rowTitle}>Textfarbe anpassen</ThemedText>
@@ -470,7 +516,7 @@ export default function AppSettingsScreen() {
                             </ThemedText>
                           </View>
                           <View style={styles.trailing}>
-                            <IconSymbol name="arrow.left.arrow.right" size={20} color={theme.tabIconDefault} />
+                            <IconSymbol name="arrow.left.arrow.right" size={20} color={trailingIconColor} />
                           </View>
                         </TouchableOpacity>
 
@@ -480,14 +526,14 @@ export default function AppSettingsScreen() {
                           disabled={isChangingBackground}
                         >
                           <View style={styles.rowIcon}>
-                            <IconSymbol name="arrow.counterclockwise" size={24} color={theme.accent} />
+                            <IconSymbol name="arrow.counterclockwise" size={24} color={primaryIconColor} />
                           </View>
                           <View style={styles.rowContent}>
                             <ThemedText style={styles.rowTitle}>Zurücksetzen</ThemedText>
                             <ThemedText style={styles.rowDescription}>Standard-Hintergrundbild wiederherstellen</ThemedText>
                           </View>
                           <View style={styles.trailing}>
-                            <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
+                            <IconSymbol name="chevron.right" size={20} color={trailingIconColor} />
                           </View>
                         </TouchableOpacity>
                       </>
@@ -504,7 +550,7 @@ export default function AppSettingsScreen() {
                       disabled={isExporting}
                     >
                       <View style={styles.rowIcon}>
-                        <IconSymbol name="arrow.down.doc" size={24} color={theme.accent} />
+                        <IconSymbol name="arrow.down.doc" size={24} color={primaryIconColor} />
                       </View>
                       <View style={styles.rowContent}>
                         <ThemedText style={styles.rowTitle}>Daten exportieren</ThemedText>
@@ -514,7 +560,7 @@ export default function AppSettingsScreen() {
                         {isExporting ? (
                           <ActivityIndicator size="small" color={theme.accent} />
                         ) : (
-                          <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
+                          <IconSymbol name="chevron.right" size={20} color={trailingIconColor} />
                         )}
                       </View>
                     </TouchableOpacity>
@@ -558,7 +604,7 @@ export default function AppSettingsScreen() {
                           <ThemedText style={styles.rowDescription}>Benachrichtigungen testen und debuggen</ThemedText>
                         </View>
                         <View style={styles.trailing}>
-                          <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
+                          <IconSymbol name="chevron.right" size={20} color={trailingIconColor} />
                         </View>
                       </TouchableOpacity>
 
@@ -714,6 +760,24 @@ const styles = StyleSheet.create({
   backgroundPreviewLabel: {
     color: '#FFFFFF',
     fontSize: 12,
+    fontWeight: '600',
+  },
+  backgroundPresetRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+  },
+  backgroundPresetButton: {
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.15)',
+    borderRadius: 999,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  backgroundPresetButtonLabel: {
+    fontSize: 13,
     fontWeight: '600',
   },
   infoRow: {

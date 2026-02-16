@@ -5,6 +5,7 @@ import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedBackground } from '@/components/ThemedBackground';
+import BabySwitcherButton from '@/components/BabySwitcherButton';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import CountdownTimer from '@/components/CountdownTimer';
 import { useRouter } from 'expo-router';
@@ -303,6 +304,7 @@ export default function PregnancyHomeScreen() {
   const overviewScrollRef = useRef<ScrollView | null>(null);
   const [recommendations, setRecommendations] = useState<LottiRecommendation[]>([]);
   const [recommendationImageFailed, setRecommendationImageFailed] = useState(false);
+  const [isBabySwitcherOpen, setIsBabySwitcherOpen] = useState(false);
 
   // Animation für Erfolgsmeldung
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -952,15 +954,26 @@ export default function PregnancyHomeScreen() {
                   </View>
 
                   <View style={styles.profileBadge}>
-                    {profileAvatarUrl ? (
-                      <View style={styles.profileImageWrapper}>
-                        <Image source={{ uri: profileAvatarUrl }} style={styles.profileImage} />
-                      </View>
-                    ) : (
-                      <View style={styles.profilePlaceholder}>
-                        <IconSymbol name="person.fill" size={30} color="#FFFFFF" />
-                      </View>
-                    )}
+                    <TouchableOpacity
+                      onPress={() => setIsBabySwitcherOpen(true)}
+                      activeOpacity={0.85}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      {profileAvatarUrl ? (
+                        <View style={styles.profileImageWrapper}>
+                          <Image source={{ uri: profileAvatarUrl }} style={styles.profileImage} />
+                        </View>
+                      ) : (
+                        <View style={styles.profilePlaceholder}>
+                          <IconSymbol name="person.fill" size={30} color="#FFFFFF" />
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                    <BabySwitcherButton
+                      showTrigger={false}
+                      isOpen={isBabySwitcherOpen}
+                      onOpenChange={setIsBabySwitcherOpen}
+                    />
                     <View style={styles.profileStatusDot} />
                   </View>
                 </View>

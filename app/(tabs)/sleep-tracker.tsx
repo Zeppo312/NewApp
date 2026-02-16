@@ -58,6 +58,11 @@ const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 // Typografie helper
 const FONT_NUM = { fontVariant: ['tabular-nums'] };
+const QUALITY_VISUALS = {
+  good: { color: '#7BBF9A', emoji: '😴' },
+  medium: { color: '#F2C78A', emoji: '🙂' },
+  bad: { color: '#E8A6B0', emoji: '🥱' },
+} as const;
 
 // Globale Helper-Funktionen für Zeitberechnungen
 const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -767,32 +772,34 @@ const convertSleepToDailyEntry = (sleepEntry: ClassifiedSleepEntry): any => {
     
     // Fallback basierend auf Qualität
     switch (quality) {
-      case 'good': return '😴';
-      case 'medium': return '😐';
-      case 'bad': return '😵';
+      case 'good': return QUALITY_VISUALS.good.emoji;
+      case 'medium': return QUALITY_VISUALS.medium.emoji;
+      case 'bad': return QUALITY_VISUALS.bad.emoji;
       default: return '💤';
     }
   };
 
   const getSleepLabel = (sleepType: string, quality?: SleepQuality) => {
-    let baseLabel = '';
-    
-    switch (sleepType) {
-      case 'nickerchen': baseLabel = 'Nickerchen'; break;
-      case 'nacht': baseLabel = 'Nachtschlaf'; break;
-      case 'mittag': baseLabel = 'Mittagsschlaf'; break;
-      case 'tag': baseLabel = 'Tagschlaf'; break;
-      default: baseLabel = 'Schlaf'; break;
-    }
-    
-    if (!quality) return baseLabel;
-    
-    switch (quality) {
-      case 'good': return `Guter ${baseLabel}`;
-      case 'medium': return `Mittlerer ${baseLabel}`;
-      case 'bad': return `Schlechter ${baseLabel}`;
-      default: return baseLabel;
-    }
+    type LabelGender = 'm' | 'f' | 'n';
+    type SleepLabelMeta = { label: string; gender: LabelGender };
+
+    const sleepLabelMeta: Record<string, SleepLabelMeta> = {
+      nickerchen: { label: 'Nickerchen', gender: 'n' },
+      nacht: { label: 'Nachtschlaf', gender: 'm' },
+      mittag: { label: 'Mittagsschlaf', gender: 'm' },
+      tag: { label: 'Tagschlaf', gender: 'm' },
+    };
+
+    const { label, gender } = sleepLabelMeta[sleepType] ?? { label: 'Schlaf', gender: 'm' as LabelGender };
+    if (!quality) return label;
+
+    const adjectiveByQuality: Record<NonNullable<SleepQuality>, Record<LabelGender, string>> = {
+      good: { m: 'Guter', f: 'Gute', n: 'Gutes' },
+      medium: { m: 'Mittlerer', f: 'Mittlere', n: 'Mittleres' },
+      bad: { m: 'Schlechter', f: 'Schlechte', n: 'Schlechtes' },
+    };
+
+    return `${adjectiveByQuality[quality][gender]} ${label}`;
   };
 
   // Bestimme Schlaftyp basierend auf Startzeit und Dauer
@@ -1574,9 +1581,8 @@ export default function SleepTrackerScreen() {
   };
 
   // Stop sleep tracking
-  const handleStopSleep = async (quality?: SleepQuality, notes?: string) => {
+  const handleStopSleep = async (quality: NonNullable<SleepQuality>, notes?: string) => {
     if (!activeSleepEntry?.id || isStoppingSleep || !sleepService) return;
-    const resolvedQuality = quality || 'medium';
     setIsStoppingSleep(true);
 
     try {
@@ -1587,7 +1593,7 @@ export default function SleepTrackerScreen() {
       // Dual-write update to both backends (completely separate, no sync)
       const result = await sleepService.updateEntry(activeSleepEntry.id, {
         end_time: endTime.toISOString(),
-        quality: resolvedQuality,
+        quality,
         notes: notes ?? null,
         duration_minutes: durationMinutes,
       });
@@ -1604,7 +1610,7 @@ export default function SleepTrackerScreen() {
 
       try {
         await sleepActivityService.endSleepActivity(
-          resolvedQuality,
+          quality,
           formatDurationSeconds(Math.max(0, durationMinutes) * 60)
         );
       } catch (liveActivityError) {
@@ -1613,9 +1619,9 @@ export default function SleepTrackerScreen() {
 
       setActiveSleepEntry(null);
 
-      const splashKind = resolvedQuality === 'good' ? 'sleep_stop_good' : resolvedQuality === 'bad' ? 'sleep_stop_bad' : 'sleep_stop_medium';
-      const splashColor = resolvedQuality === 'good' ? '#38A169' : resolvedQuality === 'bad' ? '#E53E3E' : '#F5A623';
-      const splashEmoji = resolvedQuality === 'good' ? '😴' : resolvedQuality === 'bad' ? '😵' : '😐';
+      const splashKind = quality === 'good' ? 'sleep_stop_good' : quality === 'bad' ? 'sleep_stop_bad' : 'sleep_stop_medium';
+      const splashColor = QUALITY_VISUALS[quality].color;
+      const splashEmoji = QUALITY_VISUALS[quality].emoji;
       showSuccessSplash(splashColor, splashEmoji, splashKind);
 
       // Invalidate cache because stopped sleep now appears in history
@@ -1628,6 +1634,22 @@ export default function SleepTrackerScreen() {
       setIsStoppingSleep(false);
     }
   };
+
+  const promptSleepQualityForStop = useCallback(() => {
+    if (!activeSleepEntry?.id || isStoppingSleep) return;
+
+    Alert.alert(
+      'Schlafqualität',
+      'Wie war die Schlafqualität?',
+      [
+        { text: 'Abbrechen', style: 'cancel' },
+        { text: 'Schlecht', onPress: () => void handleStopSleep('bad') },
+        { text: 'Mittel', onPress: () => void handleStopSleep('medium') },
+        { text: 'Gut', onPress: () => void handleStopSleep('good') },
+      ],
+      { cancelable: true }
+    );
+  }, [activeSleepEntry?.id, handleStopSleep, isStoppingSleep]);
 
   useEffect(() => {
     if (liveStopRequestId === 0) return;
@@ -1645,13 +1667,13 @@ export default function SleepTrackerScreen() {
       return;
     }
 
-    void handleStopSleep();
+    promptSleepQualityForStop();
   }, [
     activeSleepEntry?.id,
-    handleStopSleep,
     isLiveStatusLoaded,
     isStoppingSleep,
     liveStopRequestId,
+    promptSleepQualityForStop,
   ]);
 
   // Handle save entry (compatible with SleepInputModal)
@@ -1869,9 +1891,9 @@ export default function SleepTrackerScreen() {
   // Get quality color
   const getQualityColor = (quality?: SleepQuality) => {
     switch (quality) {
-      case 'good': return '#38A169';
-      case 'medium': return '#F5A623';
-      case 'bad': return '#E53E3E';
+      case 'good': return QUALITY_VISUALS.good.color;
+      case 'medium': return QUALITY_VISUALS.medium.color;
+      case 'bad': return QUALITY_VISUALS.bad.color;
       default: return '#A0AEC0';
     }
   };
@@ -1879,9 +1901,9 @@ export default function SleepTrackerScreen() {
   // Get quality emoji
   const getQualityEmoji = (quality?: SleepQuality) => {
     switch (quality) {
-      case 'good': return '😴';
-      case 'medium': return '😐';
-      case 'bad': return '😵';
+      case 'good': return QUALITY_VISUALS.good.emoji;
+      case 'medium': return QUALITY_VISUALS.medium.emoji;
+      case 'bad': return QUALITY_VISUALS.bad.emoji;
       default: return '💤';
     }
   };
@@ -2165,7 +2187,7 @@ export default function SleepTrackerScreen() {
             onPress={() => {
               if (isActionBlocked) return;
               triggerHaptic();
-              void handleStopSleep();
+              promptSleepQualityForStop();
             }}
             activeOpacity={0.9}
           >
@@ -3087,6 +3109,9 @@ export default function SleepTrackerScreen() {
                             value={safeModalStartTime}
                             mode="datetime"
                             display={Platform.OS === 'ios' ? 'compact' : 'default'}
+                            themeVariant={isDark ? 'dark' : 'light'}
+                            textColor={Platform.OS === 'ios' ? (isDark ? '#FFFFFF' : '#111827') : undefined}
+                            accentColor={Platform.OS === 'ios' ? modalAccentColor : undefined}
                             onChange={(event, date) => {
                               if (event.type === 'dismissed') return;
                               if (!date) return;
@@ -3134,6 +3159,9 @@ export default function SleepTrackerScreen() {
                             value={safeModalEndPickerTime}
                             mode="datetime"
                             display={Platform.OS === 'ios' ? 'compact' : 'default'}
+                            themeVariant={isDark ? 'dark' : 'light'}
+                            textColor={Platform.OS === 'ios' ? (isDark ? '#FFFFFF' : '#111827') : undefined}
+                            accentColor={Platform.OS === 'ios' ? modalAccentColor : undefined}
                             onChange={(event, date) => {
                               if (event.type === 'dismissed') return;
                               if (!date) return;
@@ -3170,7 +3198,7 @@ export default function SleepTrackerScreen() {
                               styles.optionButton,
                               { 
                                 backgroundColor: sleepModalData.quality === q 
-                                  ? (q === 'good' ? '#38A169' : q === 'medium' ? '#F5A623' : '#E53E3E')
+                                  ? QUALITY_VISUALS[q].color
                                   : modalQualityDefaultColor,
                                 borderColor: sleepModalData.quality === q ? 'transparent' : modalFieldBorderColor,
                                 flex: 1,
@@ -3183,7 +3211,7 @@ export default function SleepTrackerScreen() {
                             }}
                           >
                             <Text style={styles.optionIcon}>
-                              {q === 'good' ? '😴' : q === 'medium' ? '😐' : '😵'}
+                              {QUALITY_VISUALS[q].emoji}
                             </Text>
                             <Text style={[
                               styles.optionLabel,

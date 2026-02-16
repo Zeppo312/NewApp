@@ -63,46 +63,14 @@ export default function LoginScreen() {
     }
   };
 
-  // Funktion zum Abrufen des is_baby_born-Flags
-  const checkIsBabyBorn = async (userId: string) => {
+  // Nach Auth immer über Root-Router gehen, damit ein zentraler Guard
+  // den passenden Startscreen anhand des aktuellen Baby-Status auswählt.
+  const navigateAfterAuth = async () => {
     try {
-      console.log('Checking is_baby_born flag for user:', userId);
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('is_baby_born')
-        .eq('id', userId)
-        .single();
-
-      if (error) {
-        console.error('Error fetching is_baby_born flag:', error);
-        return false; // Standardmäßig auf false setzen, wenn ein Fehler auftritt
-      }
-
-      console.log('is_baby_born flag data:', data);
-      return data?.is_baby_born || false;
-    } catch (err) {
-      console.error('Exception when checking is_baby_born flag:', err);
-      return false;
-    }
-  };
-
-  // Funktion zur Navigation basierend auf dem is_baby_born-Flag
-  const navigateBasedOnBabyBornFlag = async (userId: string) => {
-    try {
-      const isBabyBorn = await checkIsBabyBorn(userId);
-      console.log('Navigation based on is_baby_born flag:', isBabyBorn);
-
-      if (isBabyBorn) {
-        // Wenn das Baby geboren ist, zur Home-Seite navigieren
-        router.replace('/(tabs)/home');
-      } else {
-        // Wenn das Baby noch nicht geboren ist, zur Countdown-Seite navigieren
-        router.replace('/(tabs)/countdown');
-      }
+      router.replace('/');
     } catch (navError) {
       console.error('Navigation error:', navError);
-      // Fallback-Navigation zur Countdown-Seite
-      router.navigate('/(tabs)/countdown');
+      router.navigate('/');
     }
   };
 
@@ -168,17 +136,11 @@ export default function LoginScreen() {
 
         console.log('Sign in successful:', data);
 
-        // Bei erfolgreicher Anmeldung basierend auf is_baby_born-Flag navigieren
+        // Bei erfolgreicher Anmeldung über zentralen Root-Guard navigieren
         if (data && data.user && data.user.id) {
-          await navigateBasedOnBabyBornFlag(data.user.id);
+          await navigateAfterAuth();
         } else {
-          // Fallback zur Countdown-Seite, wenn keine Benutzer-ID verfügbar ist
-          try {
-            router.replace('/(tabs)/countdown');
-          } catch (navError) {
-            console.error('Navigation error:', navError);
-            router.navigate('/(tabs)/countdown');
-          }
+          await navigateAfterAuth();
         }
       }
     } catch (err: any) {
@@ -228,7 +190,7 @@ export default function LoginScreen() {
         // Check if user profile exists and is complete
         const { data: profileData, error: profileError } = await supabase
           .from('profiles')
-          .select('first_name, is_baby_born')
+          .select('first_name')
           .eq('id', data.user.id)
           .single();
         
@@ -241,8 +203,8 @@ export default function LoginScreen() {
           console.log('New Apple user, redirecting to onboarding');
           router.replace('../getUserInfo');
         } else {
-          // Existing user, navigate based on baby status
-          await navigateBasedOnBabyBornFlag(data.user.id);
+          // Existing user -> zentraler Root-Guard entscheidet über Startscreen
+          await navigateAfterAuth();
         }
       }
     } catch (err: any) {

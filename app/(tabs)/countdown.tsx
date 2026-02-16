@@ -6,16 +6,16 @@ import {
   TouchableOpacity,
   Alert,
   Platform,
-  SafeAreaView,
   StatusBar,
   ActivityIndicator,
   Modal,
   Pressable,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { Asset } from 'expo-asset';
 
 import { ThemedText } from '@/components/ThemedText';
@@ -72,7 +72,8 @@ const lightenHex = (hex: string, amount = 0.35) => {
 // Definiere Typen für die verknüpften Benutzer
 interface LinkedUser {
   firstName: string;
-  id: string;
+  id?: string;
+  userId?: string;
 }
 
 // Interface für die Tagesinformationen
@@ -710,8 +711,8 @@ export default function CountdownScreen() {
             <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={glassOverlay}>
               <ThemedText style={[styles.sectionTitle, { color: textPrimary }]}>Geteilter Countdown</ThemedText>
               <View style={styles.badgeWrap}>
-                {linkedUsers.map((lu) => (
-                  <View key={lu.id} style={[styles.badge, { backgroundColor: badgeBg, borderColor: badgeBorderColor }]}>
+                {linkedUsers.map((lu, index) => (
+                  <View key={lu.id ?? lu.userId ?? `${lu.firstName}-${index}`} style={[styles.badge, { backgroundColor: badgeBg, borderColor: badgeBorderColor }]}>
                     <ThemedText style={[styles.badgeText, { color: textPrimary }]}>{lu.firstName}</ThemedText>
                   </View>
                 ))}
@@ -727,13 +728,14 @@ export default function CountdownScreen() {
 const styles = StyleSheet.create({
   // Layout
   scrollContent: {
-    paddingHorizontal: LAYOUT_PAD,
+    paddingHorizontal: LAYOUT_PAD + TIMELINE_INSET,
     paddingTop: 10,
     paddingBottom: 140,
   },
 
   sectionCard: {
-    marginHorizontal: TIMELINE_INSET,
+    width: '100%',
+    alignSelf: 'center',
     marginBottom: 16,
     borderRadius: 22,
     overflow: 'hidden',

@@ -20,9 +20,17 @@ import * as ImagePicker from 'expo-image-picker';
 
 type BabySwitcherButtonProps = {
   size?: number;
+  showTrigger?: boolean;
+  isOpen?: boolean;
+  onOpenChange?: (isOpen: boolean) => void;
 };
 
-const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({ size = 36 }) => {
+const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
+  size = 36,
+  showTrigger = true,
+  isOpen,
+  onOpenChange,
+}) => {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const isDark = colorScheme === 'dark';
@@ -41,10 +49,18 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({ size = 36 }) =>
     isLoading,
     loadError,
   } = useActiveBaby();
-  const [isOpen, setIsOpen] = useState(false);
+  const [internalIsOpen, setInternalIsOpen] = useState(false);
   const [newBabyName, setNewBabyName] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [isChangingPhoto, setIsChangingPhoto] = useState(false);
+  const modalIsOpen = isOpen ?? internalIsOpen;
+
+  const setModalOpen = (nextIsOpen: boolean) => {
+    if (isOpen === undefined) {
+      setInternalIsOpen(nextIsOpen);
+    }
+    onOpenChange?.(nextIsOpen);
+  };
 
   const displayInitial = useMemo(() => {
     const name = activeBaby?.name?.trim();
@@ -58,7 +74,7 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({ size = 36 }) =>
 
   const handleSelectBaby = async (babyId: string) => {
     await setActiveBabyId(babyId);
-    setIsOpen(false);
+    setModalOpen(false);
   };
 
   const handleCreateBaby = async () => {
@@ -85,7 +101,7 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({ size = 36 }) =>
     }
     setNewBabyName('');
     setIsCreating(false);
-    setIsOpen(false);
+    setModalOpen(false);
   };
 
   const handleChangePhoto = async () => {
@@ -156,48 +172,50 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({ size = 36 }) =>
 
   return (
     <>
-      <TouchableOpacity
-        style={[
-          styles.avatarButton,
-          {
-            width: size,
-            height: size,
-            borderRadius: size / 2,
-          },
-        ]}
-        onPress={() => setIsOpen(true)}
-        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        disabled={isLoading}
-      >
-        {activeBaby?.photo_url ? (
-          <CachedImage
-            uri={activeBaby.photo_url}
-            style={styles.avatarImage}
-            showLoader={false}
-          />
-        ) : (
-          <View
-            style={[
-              styles.avatarFallback,
-              {
-                borderRadius: size / 2,
-                borderColor: theme.text,
-              },
-            ]}
-          >
-            <ThemedText style={[styles.avatarInitial, { color: theme.text }]}>
-              {displayInitial}
-            </ThemedText>
-          </View>
-        )}
-      </TouchableOpacity>
+      {showTrigger && (
+        <TouchableOpacity
+          style={[
+            styles.avatarButton,
+            {
+              width: size,
+              height: size,
+              borderRadius: size / 2,
+            },
+          ]}
+          onPress={() => setModalOpen(true)}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          disabled={isLoading}
+        >
+          {activeBaby?.photo_url ? (
+            <CachedImage
+              uri={activeBaby.photo_url}
+              style={styles.avatarImage}
+              showLoader={false}
+            />
+          ) : (
+            <View
+              style={[
+                styles.avatarFallback,
+                {
+                  borderRadius: size / 2,
+                  borderColor: theme.text,
+                },
+              ]}
+            >
+              <ThemedText style={[styles.avatarInitial, { color: theme.text }]}>
+                {displayInitial}
+              </ThemedText>
+            </View>
+          )}
+        </TouchableOpacity>
+      )}
 
-      <Modal visible={isOpen} transparent animationType="fade" onRequestClose={() => setIsOpen(false)}>
-        <Pressable style={styles.modalBackdrop} onPress={() => setIsOpen(false)}>
+      <Modal visible={modalIsOpen} transparent animationType="fade" onRequestClose={() => setModalOpen(false)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setModalOpen(false)}>
           <Pressable style={[styles.modalCard, { backgroundColor: modalBgColor }]} onPress={(event) => event.stopPropagation()}>
             <View style={styles.modalHeader}>
               <ThemedText style={[styles.modalTitle, { color: textColor }]}>Kind auswählen</ThemedText>
-              <TouchableOpacity onPress={() => setIsOpen(false)}>
+              <TouchableOpacity onPress={() => setModalOpen(false)}>
                 <IconSymbol name="xmark" size={18} color={textColor} />
               </TouchableOpacity>
             </View>

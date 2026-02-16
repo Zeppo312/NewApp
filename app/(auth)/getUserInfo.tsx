@@ -7,6 +7,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { useConvex } from '@/contexts/ConvexContext';
+import { useBackground, type BackgroundPreset } from '@/contexts/BackgroundContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { supabase } from '@/lib/supabase';
 import { saveBabyInfo, syncBabiesForLinkedUsers } from '@/lib/baby';
@@ -25,7 +26,26 @@ type StepKey =
   | 'dates'
   | 'babyInfo'
   | 'babyPhoto'
+  | 'background'
   | 'summary';
+
+const ONBOARDING_PRESET_OPTIONS: ReadonlyArray<{ id: BackgroundPreset; label: string }> = [
+  { id: 'default', label: 'Standard' },
+  { id: 'heller', label: 'Heller' },
+  { id: 'dunkler', label: 'Dunkler' },
+  { id: 'shadow', label: 'Shadow' },
+  { id: 'wave', label: 'Wave' },
+  { id: 'stone', label: 'Stone' },
+];
+
+const PRESET_DARK_MODE_MAP: Record<BackgroundPreset, boolean> = {
+  default: false,
+  heller: false,
+  dunkler: true,
+  shadow: true,
+  wave: false,
+  stone: true,
+};
 
 export default function GetUserInfoScreen() {
   const theme = Colors.light;
@@ -34,6 +54,15 @@ export default function GetUserInfoScreen() {
   const { refreshBabyDetails } = useBabyStatus();
   const { refreshBabies } = useActiveBaby();
   const { syncUser } = useConvex();
+  const {
+    selectedBackground,
+    backgroundSource,
+    hasCustomBackground,
+    isDarkBackground,
+    setPresetBackground,
+    pickAndSaveBackground,
+    setBackgroundMode,
+  } = useBackground();
   const params = useLocalSearchParams<{ invitationCode?: string }>();
   const prefilledInvitationCode = useMemo(() => {
     if (typeof params?.invitationCode !== 'string') return '';
@@ -75,6 +104,7 @@ export default function GetUserInfoScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [showDueDatePicker, setShowDueDatePicker] = useState(false);
   const [showBirthDatePicker, setShowBirthDatePicker] = useState(false);
+  const [isPickingBackground, setIsPickingBackground] = useState(false);
 
   // Einladungscode
   const [invitationCode, setInvitationCode] = useState('');
@@ -89,7 +119,7 @@ export default function GetUserInfoScreen() {
   } | null>(null);
 
   // Schrittweise Abfrage
-  const stepOrder: StepKey[] = ['firstName', 'lastName', 'role', 'invitation', 'babyStatus', 'dates', 'babyInfo', 'babyPhoto', 'summary'];
+  const stepOrder: StepKey[] = ['firstName', 'lastName', 'role', 'invitation', 'babyStatus', 'dates', 'babyInfo', 'babyPhoto', 'background', 'summary'];
   const shouldShowInvitationStep = !hasPrefilledInvitationCode
     || (autoRedeemAttempted && !isRedeemingInvitation && invitationStatus !== 'accepted');
   const onboardingSteps = useMemo<StepKey[]>(() => {
@@ -102,8 +132,8 @@ export default function GetUserInfoScreen() {
 
     return invitationStatus === 'accepted'
       ? (shouldShowInvitationStep
-        ? ['firstName', 'lastName', 'role', 'invitation', 'summary']
-        : ['firstName', 'lastName', 'role', 'summary'])
+        ? ['firstName', 'lastName', 'role', 'invitation', 'background', 'summary']
+        : ['firstName', 'lastName', 'role', 'background', 'summary'])
       : defaultSteps;
   }, [invitationStatus, shouldShowInvitationStep, isBabyBorn]);
   const [currentStep, setCurrentStep] = useState(0);
@@ -290,6 +320,51 @@ export default function GetUserInfoScreen() {
     } catch (error) {
       console.error('Error picking baby photo in onboarding:', error);
       Alert.alert('Fehler', 'Das Babyfoto konnte nicht ausgewählt werden.');
+    }
+  };
+
+  const handleSelectPresetBackground = async (preset: BackgroundPreset) => {
+    await setPresetBackground(preset);
+    await setBackgroundMode(PRESET_DARK_MODE_MAP[preset]);
+  };
+
+  const handlePickCustomBackground = async () => {
+    if (isPickingBackground) return;
+
+    try {
+      setIsPickingBackground(true);
+      const result = await pickAndSaveBackground();
+
+      if (result.error) {
+        Alert.alert('Fehler', result.error);
+        return;
+      }
+
+      if (result.success && result.needsModeSelection) {
+        Alert.alert(
+          'Bildhelligkeit',
+          'Ist dein Hintergrundbild eher hell oder dunkel? Dies passt die Textfarben an.',
+          [
+            {
+              text: 'Hell',
+              onPress: () => {
+                void setBackgroundMode(false);
+              },
+            },
+            {
+              text: 'Dunkel',
+              onPress: () => {
+                void setBackgroundMode(true);
+              },
+            },
+          ],
+        );
+      }
+    } catch (error) {
+      console.error('Error picking onboarding background:', error);
+      Alert.alert('Fehler', 'Hintergrundbild konnte nicht ausgewählt werden.');
+    } finally {
+      setIsPickingBackground(false);
     }
   };
 
@@ -902,6 +977,87 @@ export default function GetUserInfoScreen() {
           </ThemedView>
         );
 
+      case 'background': // Hintergrundauswahl
+        return (
+          <ThemedView style={styles.stepContainer} lightColor="#FFFFFF" darkColor="#FFFFFF">
+            <ThemedText style={styles.stepTitle}>Wähle deinen Hintergrund</ThemedText>
+            <ThemedText style={[styles.stepSubtitle, { textAlign: 'center', marginTop: 0, marginBottom: 14 }]}>
+              Du kannst ihn jederzeit später in den Einstellungen ändern.
+            </ThemedText>
+
+            <View style={styles.onboardingBackgroundPreviewContainer}>
+              <Image
+                source={backgroundSource}
+                style={styles.onboardingBackgroundPreview}
+                resizeMode={hasCustomBackground ? 'cover' : 'repeat'}
+              />
+              <View style={styles.onboardingBackgroundPreviewOverlay}>
+                <ThemedText style={styles.onboardingBackgroundPreviewLabel}>
+                  {selectedBackground === 'custom'
+                    ? `Eigenes Bild (${isDarkBackground ? 'dunkel' : 'hell'})`
+                    : ONBOARDING_PRESET_OPTIONS.find((option) => option.id === selectedBackground)?.label ?? 'Standard'}
+                </ThemedText>
+              </View>
+            </View>
+
+            <View style={styles.onboardingBackgroundPresetRow}>
+              {ONBOARDING_PRESET_OPTIONS.map((option) => {
+                const isSelected = selectedBackground === option.id;
+                return (
+                  <TouchableOpacity
+                    key={option.id}
+                    style={[
+                      styles.onboardingBackgroundPresetButton,
+                      isSelected && styles.onboardingBackgroundPresetButtonActive,
+                    ]}
+                    onPress={() => {
+                      void handleSelectPresetBackground(option.id);
+                    }}
+                  >
+                    <ThemedText
+                      style={[
+                        styles.onboardingBackgroundPresetButtonLabel,
+                        isSelected && styles.onboardingBackgroundPresetButtonLabelActive,
+                      ]}
+                    >
+                      {option.label}
+                    </ThemedText>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <TouchableOpacity
+              style={[styles.onboardingBackgroundActionButton, isPickingBackground && styles.buttonDisabled]}
+              onPress={handlePickCustomBackground}
+              disabled={isPickingBackground}
+            >
+              {isPickingBackground ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <>
+                  <IconSymbol name="photo" size={18} color="#FFFFFF" />
+                  <ThemedText style={styles.onboardingBackgroundActionButtonText}>Eigenes Bild wählen</ThemedText>
+                </>
+              )}
+            </TouchableOpacity>
+
+            {hasCustomBackground && (
+              <TouchableOpacity
+                style={styles.onboardingBackgroundModeButton}
+                onPress={() => {
+                  void setBackgroundMode(!isDarkBackground);
+                }}
+              >
+                <IconSymbol name={isDarkBackground ? 'sun.max' : 'moon'} size={18} color="#7D5A50" />
+                <ThemedText style={styles.onboardingBackgroundModeButtonText}>
+                  {isDarkBackground ? 'Textmodus: hell' : 'Textmodus: dunkel'}
+                </ThemedText>
+              </TouchableOpacity>
+            )}
+          </ThemedView>
+        );
+
       case 'summary': // Zusammenfassung und Speichern
         return (
           <ThemedView style={[styles.stepContainer, styles.summaryStepContainer]} lightColor="#FFFFFF" darkColor="#FFFFFF">
@@ -1043,9 +1199,9 @@ export default function GetUserInfoScreen() {
 
   return (
     <ImageBackground
-      source={require('@/assets/images/Background_Hell.png')}
+      source={backgroundSource}
       style={styles.backgroundImage}
-      resizeMode="repeat"
+      resizeMode={hasCustomBackground ? 'cover' : 'repeat'}
     >
       <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
         <SafeAreaView style={styles.container}>
@@ -1410,6 +1566,88 @@ const styles = StyleSheet.create({
     color: '#7D5A50',
     fontSize: 13,
     fontWeight: '600',
+  },
+  onboardingBackgroundPreviewContainer: {
+    borderRadius: 14,
+    overflow: 'hidden',
+    height: 140,
+    marginBottom: 12,
+    position: 'relative',
+  },
+  onboardingBackgroundPreview: {
+    width: '100%',
+    height: '100%',
+  },
+  onboardingBackgroundPreviewOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  onboardingBackgroundPreviewLabel: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  onboardingBackgroundPresetRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  onboardingBackgroundPresetButton: {
+    borderWidth: 1,
+    borderColor: '#E9C9B6',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(255,255,255,0.6)',
+  },
+  onboardingBackgroundPresetButtonActive: {
+    backgroundColor: '#9DBEBB',
+    borderColor: '#9DBEBB',
+  },
+  onboardingBackgroundPresetButtonLabel: {
+    color: '#7D5A50',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  onboardingBackgroundPresetButtonLabelActive: {
+    color: '#FFFFFF',
+  },
+  onboardingBackgroundActionButton: {
+    height: 46,
+    borderRadius: 14,
+    backgroundColor: '#9DBEBB',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 10,
+  },
+  onboardingBackgroundActionButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  onboardingBackgroundModeButton: {
+    height: 44,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E9C9B6',
+    backgroundColor: 'rgba(255,255,255,0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  onboardingBackgroundModeButtonText: {
+    color: '#7D5A50',
+    fontWeight: '600',
+    fontSize: 14,
   },
   infoCard: {
     backgroundColor: 'rgba(247,239,229,0.6)',

@@ -118,7 +118,7 @@ export default function CommunityScreen() {
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
 
   // Background context
-  const { customUri, hasCustomBackground } = useBackground();
+  const { backgroundSource, hasCustomBackground } = useBackground();
 
   const openModal = useCallback((publish: boolean, draft?: BlogPost) => {
     setErrorMessage('');
@@ -445,11 +445,6 @@ export default function CommunityScreen() {
       </View>
     </View>
   );
-
-  // Custom Bild oder Default verwenden
-  const backgroundSource = hasCustomBackground && customUri
-    ? { uri: customUri }
-    : require('@/assets/images/Background_Hell.png');
 
   return (
     <ImageBackground

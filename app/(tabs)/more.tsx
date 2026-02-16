@@ -24,8 +24,11 @@ export default function MoreScreen() {
 
   // Nur bei dunklem Hintergrundbild die adaptiven Farben verwenden
   const useDarkMode = adaptiveColors.hasCustomBackground && adaptiveColors.isDarkBackground;
-  const iconAccentColor = useDarkMode ? adaptiveColors.accent : theme.accent;
-  const iconSecondaryColor = useDarkMode ? adaptiveColors.iconSecondary : theme.tabIconDefault;
+  const useLightIcons = colorScheme === 'dark' || useDarkMode;
+  const iconAccentColor = useLightIcons ? '#FFFFFF' : theme.accent;
+  const iconSecondaryColor = useLightIcons ? 'rgba(255,255,255,0.9)' : theme.tabIconDefault;
+  const iconPositiveColor = useLightIcons ? '#FFFFFF' : '#3A9E8C';
+  const iconDangerColor = useLightIcons ? '#FFFFFF' : '#FF6B6B';
 
   if (!session) {
     return <Redirect href="/(auth)/login" />;
@@ -265,7 +268,7 @@ export default function MoreScreen() {
                 onPress={handleSwitchToBabyView}
               >
                 <View style={styles.menuItemIcon}>
-                  <IconSymbol name="arrow.forward" size={24} color="#3A9E8C" />
+                  <IconSymbol name="arrow.forward" size={24} color={iconPositiveColor} />
                 </View>
                 <View style={styles.menuItemContent}>
                   <ThemedText style={styles.menuItemTitle}>
@@ -286,7 +289,7 @@ export default function MoreScreen() {
                 onPress={handleSwitchBack}
               >
                 <View style={styles.menuItemIcon}>
-                  <IconSymbol name="arrow.uturn.backward" size={24} color="#FF6B6B" />
+                  <IconSymbol name="arrow.uturn.backward" size={24} color={iconDangerColor} />
                 </View>
                 <View style={styles.menuItemContent}>
                   <ThemedText style={styles.menuItemTitle}>

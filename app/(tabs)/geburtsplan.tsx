@@ -14,7 +14,7 @@ import { supabase } from '@/lib/supabase';
 import { getCurrentUser, getGeburtsplan, saveGeburtsplan, saveStructuredGeburtsplan } from '@/lib/supabase';
 import { GeburtsplanData, defaultGeburtsplan } from '@/types/geburtsplan';
 import { Asset } from 'expo-asset';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { generateAndDownloadPDF } from '@/lib/geburtsplan-utils';
 import Header from '@/components/Header';
 

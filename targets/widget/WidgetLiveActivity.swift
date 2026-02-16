@@ -95,27 +95,23 @@ private struct SleepActivityMainView: View {
 
     var body: some View {
         ZStack {
-            // Background emoji decorations
-            HStack {
-                Text("\u{1F9F8}")
-                    .font(.system(size: 38))
-                    .opacity(0.12)
-                Spacer()
-                Text("\u{1F319}")
-                    .font(.system(size: 34))
-                    .opacity(0.12)
-            }
-            .padding(.horizontal, 24)
-
             VStack(spacing: 6) {
                 // Header: "Levi schläft seit 21:30"
                 Text("\(babyName) schläft seit \(startTimeLabel)")
                     .font(.system(size: 15, weight: .semibold, design: .rounded))
                     .foregroundStyle(.white.opacity(0.70))
 
-                // Timer row: centered timer + stop button right
-                ZStack(alignment: .trailing) {
-                    // Timer centered
+                // Timer row: teddy left + centered timer + stop button right
+                HStack(spacing: 12) {
+                    ZStack {
+                        Circle()
+                            .fill(.white.opacity(0.14))
+                        Text("\u{1F9F8}")
+                            .font(.system(size: 24))
+                    }
+                    .frame(width: 42, height: 42)
+                    .accessibilityHidden(true)
+
                     Group {
                         if let startDate {
                             Text(startDate, style: .timer)
@@ -130,7 +126,6 @@ private struct SleepActivityMainView: View {
                     .minimumScaleFactor(0.55)
                     .frame(maxWidth: .infinity, alignment: .center)
 
-                    // Stop button on the right
                     Link(destination: stopURL) {
                         Circle()
                             .fill(SleepActivityTheme.stopButton)

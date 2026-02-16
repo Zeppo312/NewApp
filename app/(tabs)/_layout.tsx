@@ -21,12 +21,23 @@ export default function TabLayout() {
   useEffect(() => {
     if (isLoading) return;
 
-    if (isBabyBorn && pathname === '/(tabs)/pregnancy-home') {
+    const pregnancyOnlyRoutes = new Set([
+      '/(tabs)/countdown',
+      '/(tabs)/index',
+      '/(tabs)/pregnancy-home',
+    ]);
+    const babyOnlyRoutes = new Set([
+      '/(tabs)/sleep-tracker',
+      '/(tabs)/daily_old',
+      '/(tabs)/home',
+    ]);
+
+    if (isBabyBorn && pregnancyOnlyRoutes.has(pathname)) {
       router.replace('/(tabs)/home');
       return;
     }
 
-    if (!isBabyBorn && pathname === '/(tabs)/home') {
+    if (!isBabyBorn && babyOnlyRoutes.has(pathname)) {
       router.replace('/(tabs)/pregnancy-home');
     }
   }, [isBabyBorn, isLoading, pathname, router]);
@@ -62,14 +73,6 @@ export default function TabLayout() {
         }),
       }}>
       {/* VERSTECKTE TABS - diese werden in keiner der Ansichten in der Tab-Leiste angezeigt */}
-      <Tabs.Screen
-        name="feeding-stats"
-        options={{
-          title: 'Mahlzeiten',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="chart.pie.fill" color={color} />,
-          href: null, // Nicht in der Navigationsleiste anzeigen
-        }}
-      />
       <Tabs.Screen
         name="diary"
         options={{

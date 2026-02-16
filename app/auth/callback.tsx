@@ -175,7 +175,7 @@ export default function Callback() {
           // Prüfen ob Profil vollständig ist
           const { data: profileData } = await supabase
             .from('profiles')
-            .select('first_name, is_baby_born')
+            .select('first_name')
             .eq('id', session.user.id)
             .single();
 
@@ -185,12 +185,8 @@ export default function Callback() {
               // Neuer User -> Onboarding
               router.replace('/(auth)/getUserInfo');
             } else {
-              // Bestehender User -> App
-              if (profileData.is_baby_born) {
-                router.replace('/(tabs)/home');
-              } else {
-                router.replace('/(tabs)/countdown');
-              }
+              // Bestehender User -> zentraler Root-Guard entscheidet über Startscreen
+              router.replace('/');
             }
           }, 2000);
         } else {
