@@ -1,5 +1,5 @@
-import { Tabs } from 'expo-router';
-import React from 'react';
+import { Tabs, usePathname, useRouter } from 'expo-router';
+import React, { useEffect } from 'react';
 import { Platform, View, ActivityIndicator } from 'react-native';
 
 import { HapticTab } from '@/components/HapticTab';
@@ -11,10 +11,25 @@ import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 
 export default function TabLayout() {
+  const router = useRouter();
+  const pathname = usePathname();
   const colorScheme = useColorScheme();
   const { isBabyBorn, isLoading } = useBabyStatus();
   const theme = Colors[colorScheme ?? 'light'];
   const adaptiveColors = useAdaptiveColors();
+
+  useEffect(() => {
+    if (isLoading) return;
+
+    if (isBabyBorn && pathname === '/(tabs)/pregnancy-home') {
+      router.replace('/(tabs)/home');
+      return;
+    }
+
+    if (!isBabyBorn && pathname === '/(tabs)/home') {
+      router.replace('/(tabs)/pregnancy-home');
+    }
+  }, [isBabyBorn, isLoading, pathname, router]);
 
   if (isLoading) {
     return (

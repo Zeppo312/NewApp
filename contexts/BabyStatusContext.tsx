@@ -22,19 +22,27 @@ export const BabyStatusProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [babyAgeMonths, setBabyAgeMonths] = useState(0); // Standardwert: 0 Monate
   const [babyWeightPercentile, setBabyWeightPercentile] = useState(50); // Standardwert: 50. Perzentile
   const { user } = useAuth();
-  const { activeBabyId } = useActiveBaby();
+  const { activeBabyId, isReady: isActiveBabyReady } = useActiveBaby();
   const isInitialLoadRef = useRef(true);
 
   useEffect(() => {
-    if (user) {
-      const showLoading = isInitialLoadRef.current;
-      loadBabyDetails(showLoading);
-      if (isInitialLoadRef.current) isInitialLoadRef.current = false;
-    } else {
+    if (!user) {
+      isInitialLoadRef.current = true;
       setIsBabyBornState(false);
+      setBabyAgeMonths(0);
       setIsLoading(false);
+      return;
     }
-  }, [user, activeBabyId]);
+
+    if (!isActiveBabyReady) {
+      if (isInitialLoadRef.current) setIsLoading(true);
+      return;
+    }
+
+    const showLoading = isInitialLoadRef.current;
+    loadBabyDetails(showLoading);
+    if (isInitialLoadRef.current) isInitialLoadRef.current = false;
+  }, [user, activeBabyId, isActiveBabyReady]);
 
   const loadBabyDetails = async (showLoading: boolean = false) => {
     try {

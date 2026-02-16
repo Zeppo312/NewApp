@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, SafeAreaView, StatusBar, TouchableOpacity, ScrollView, Switch, Alert, ActivityIndicator, Image } from 'react-native';
+import { StyleSheet, View, SafeAreaView, StatusBar, TouchableOpacity, ScrollView, Switch, Alert, ActivityIndicator, Image, Linking } from 'react-native';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { ThemedText } from '@/components/ThemedText';
@@ -116,6 +116,28 @@ export default function AppSettingsScreen() {
       const result = await pickAndSaveBackground();
 
       if (result.error) {
+        if (result.error === 'Zugriff auf Fotos wurde verweigert') {
+          Alert.alert(
+            'Fotos-Zugriff benötigt',
+            'Bitte erlaube den Fotozugriff in den Einstellungen, um ein Hintergrundbild auszuwählen.',
+            [
+              { text: 'Abbrechen', style: 'cancel' },
+              {
+                text: 'Einstellungen öffnen',
+                onPress: async () => {
+                  try {
+                    await Linking.openSettings();
+                  } catch (error) {
+                    console.error('Failed to open app settings:', error);
+                    Alert.alert('Fehler', 'Einstellungen konnten nicht geöffnet werden.');
+                  }
+                },
+              },
+            ],
+          );
+          return;
+        }
+
         Alert.alert('Fehler', result.error);
         return;
       }
