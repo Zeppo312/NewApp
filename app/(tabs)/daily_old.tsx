@@ -53,6 +53,7 @@ import { BlurView } from 'expo-blur';
 import { GlassCard, LiquidGlassCard, LAYOUT_PAD, SECTION_GAP_TOP, SECTION_GAP_BOTTOM, PRIMARY, GLASS_OVERLAY, GLASS_BORDER } from '@/constants/DesignGuide';
 import { useNotifications } from '@/hooks/useNotifications';
 import { usePartnerNotifications } from '@/hooks/usePartnerNotifications';
+import { buildFeedingOverview } from '@/lib/feedingOverview';
 
 // Design Tokens now imported from DesignGuide
 
@@ -1271,11 +1272,24 @@ export default function DailyScreen() {
 
   const KPISection = () => {
     const currentEntries = selectedTab === 'week' ? weekEntries : entries;
-    const feedingEntries = currentEntries.filter((e) => e.entry_type === 'feeding');
+    const feedingOverview = buildFeedingOverview(currentEntries as any[]);
     const diaperEntries = currentEntries.filter((e) => e.entry_type === 'diaper');
 
-    const bottleCount = feedingEntries.filter((f: any) => f.sub_type === 'feeding_bottle').length;
-    const breastCount = feedingEntries.filter((f: any) => f.sub_type === 'feeding_breast').length;
+    const feedingPrimaryDetail =
+      feedingOverview.totalFeedingCount === 0
+        ? 'Noch keine Mahlzeit heute'
+        : feedingOverview.bottleCount > 0
+          ? `Flasche ${feedingOverview.bottleCount}×`
+          : 'Keine Flasche';
+    const feedingSecondaryDetail =
+      feedingOverview.totalFeedingCount === 0
+        ? null
+        : [
+            feedingOverview.breastCount > 0 ? `Stillen ${feedingOverview.breastCount}×` : null,
+            feedingOverview.solidsCount > 0 ? `Beikost ${feedingOverview.solidsCount}×` : null,
+          ]
+            .filter(Boolean)
+            .join(' • ') || null;
 
     const lastDiaperEntry = diaperEntries
       .sort((a, b) => new Date(b.entry_date).getTime() - new Date(a.entry_date).getTime())[0];
@@ -1296,8 +1310,18 @@ export default function DailyScreen() {
             <Text style={s.kpiEmoji}>🍼</Text>
             <Text style={[s.kpiTitle, { color: textSecondary }]}>Fütterung</Text>
           </View>
-          <Text style={[s.kpiValue, s.kpiValueCentered, { color: textPrimary }]}>{feedingEntries.length}</Text>
-          <Text style={[s.kpiSub, { color: textSecondary }]}>{breastCount}× Stillen • {bottleCount}× Flasche</Text>
+          <Text style={[s.kpiValue, s.kpiValueCentered, { color: textPrimary }]}>
+            {feedingOverview.totalBottleMl}
+            <Text style={s.kpiMlUnit}> ml</Text>
+          </Text>
+          <Text numberOfLines={2} ellipsizeMode="tail" style={[s.kpiSub, s.kpiSubPrimary, { color: textSecondary }]}>
+            {feedingPrimaryDetail}
+          </Text>
+          {feedingSecondaryDetail ? (
+            <Text numberOfLines={2} ellipsizeMode="tail" style={[s.kpiSub, s.kpiSubSecondary, { color: textSecondary }]}>
+              {feedingSecondaryDetail}
+            </Text>
+          ) : null}
         </GlassCard>
 
         <GlassCard
@@ -1648,8 +1672,11 @@ const s = StyleSheet.create({
   kpiEmoji: { fontSize: 14, marginRight: 6 },
   kpiTitle: { fontSize: 14, fontWeight: '700', color: '#7D5A50' },
   kpiValue: { fontSize: 34, fontWeight: '800', color: PRIMARY, fontVariant: ['tabular-nums'] },
-kpiValueCentered: { textAlign: 'center', width: '100%' },
+  kpiValueCentered: { textAlign: 'center', width: '100%' },
+  kpiMlUnit: { fontSize: 18, fontWeight: '700' },
   kpiSub: { marginTop: 6, fontSize: 12, color: '#7D5A50' },
+  kpiSubPrimary: { textAlign: 'center', fontWeight: '700', width: '100%', maxWidth: '100%' },
+  kpiSubSecondary: { marginTop: 2, fontSize: 11, textAlign: 'center', width: '100%', maxWidth: '100%' },
 
   // Liquid Glass Base Styles (exakt wie Sleep-Tracker)
   liquidGlassWrapper: {

@@ -6,6 +6,7 @@ RCT_EXTERN_METHOD(isSupported:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromi
 
 RCT_EXTERN_METHOD(startSleepActivity:(NSString *)startTimeISO
                   elapsedTimeText:(NSString *)elapsedTimeText
+                  babyName:(NSString * _Nullable)babyName
                   resolver:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 

@@ -22,6 +22,7 @@ import SleepQuickAddModal, { SleepQuickEntry } from '@/components/SleepQuickAddM
 import BabySwitcherButton from '@/components/BabySwitcherButton';
 import { loadCachedHomeData, cacheHomeData, isCacheFresh } from '@/lib/homeCache';
 import { getLocalProfileName } from '@/lib/localProfile';
+import { buildFeedingOverview } from '@/lib/feedingOverview';
 
 // Tägliche Tipps für Mamas
 const dailyTips = [
@@ -574,11 +575,6 @@ export default function HomeScreen() {
     return new Date().toLocaleDateString('de-DE', options);
   };
 
-  // Berechne die Anzahl der heutigen Mahlzeiten
-  const getTodayFeedings = () => {
-    return dailyEntries.filter(entry => entry.entry_type === 'feeding').length;
-  };
-
   // Berechne die Anzahl der heutigen Windelwechsel
   const getTodayDiaperChanges = () => {
     return dailyEntries.filter(entry => entry.entry_type === 'diaper').length;
@@ -850,7 +846,22 @@ export default function HomeScreen() {
 
   // Rendere die Tagesübersicht
   const renderDailySummary = (wrapperStyle?: StyleProp<ViewStyle>) => {
-    const todayFeedings = getTodayFeedings();
+    const feedingOverview = buildFeedingOverview(dailyEntries);
+    const todayFeedingsPrimaryDetail =
+      feedingOverview.totalFeedingCount === 0
+        ? 'Noch keine Mahlzeit heute'
+        : feedingOverview.bottleCount > 0
+          ? `Flasche ${feedingOverview.bottleCount}×`
+          : 'Keine Flasche';
+    const todayFeedingsSecondaryDetail =
+      feedingOverview.totalFeedingCount === 0
+        ? null
+        : [
+            feedingOverview.breastCount > 0 ? `Stillen ${feedingOverview.breastCount}×` : null,
+            feedingOverview.solidsCount > 0 ? `Beikost ${feedingOverview.solidsCount}×` : null,
+          ]
+            .filter(Boolean)
+            .join(' • ') || null;
     const todayDiaperChanges = getTodayDiaperChanges();
 
     return (
@@ -904,8 +915,30 @@ export default function HomeScreen() {
                   textShadowColor: 'rgba(255, 255, 255, 0.8)',
                   textShadowOffset: { width: 0, height: 1 },
                   textShadowRadius: 2,
-                }]}>{todayFeedings}</ThemedText>
-                <ThemedText adaptive={false} style={[styles.statLabel, styles.liquidGlassStatLabel, { color: textSecondary }]}>Essen</ThemedText>
+                }]}>
+                  {feedingOverview.totalBottleMl}
+                  <Text style={styles.feedingMlUnit}> ml</Text>
+                </ThemedText>
+                <View style={styles.feedingDetailsWrap}>
+                  <ThemedText
+                    adaptive={false}
+                    numberOfLines={2}
+                    ellipsizeMode="tail"
+                    style={[styles.feedingDetailPrimary, { color: textSecondary }]}
+                  >
+                    {todayFeedingsPrimaryDetail}
+                  </ThemedText>
+                  {todayFeedingsSecondaryDetail ? (
+                    <ThemedText
+                      adaptive={false}
+                      numberOfLines={2}
+                      ellipsizeMode="tail"
+                      style={[styles.feedingDetailSecondary, { color: textSecondary }]}
+                    >
+                      {todayFeedingsSecondaryDetail}
+                    </ThemedText>
+                  ) : null}
+                </View>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -1764,11 +1797,17 @@ const styles = StyleSheet.create({
   },
   statsContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    justifyContent: 'space-between',
+    alignItems: 'stretch',
+    width: '100%',
   },
   statItem: {
     alignItems: 'center',
-    flex: 1,
+    width: '31.4%',
+    minWidth: '31.4%',
+    maxWidth: '31.4%',
+    flexGrow: 0,
+    flexShrink: 0,
     paddingVertical: 16,
 
   },
@@ -1800,7 +1839,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.34)',
     borderRadius: 16,
     padding: 8,
-    marginHorizontal: 4,
+    marginHorizontal: 0,
     borderWidth: 1.5,
     borderColor: 'rgba(255, 255, 255, 0.4)',
     shadowColor: '#000',
@@ -1848,12 +1887,43 @@ const styles = StyleSheet.create({
     marginBottom: 2,
     lineHeight: 26,
   },
+  feedingMlUnit: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
   liquidGlassStatLabel: {
     color: 'rgba(255, 255, 255, 0.85)',
     fontSize: 12,
     fontWeight: '600',
     textAlign: 'center',
     marginTop: 4,
+  },
+  feedingDetailsWrap: {
+    alignItems: 'center',
+    marginTop: 4,
+    minHeight: 30,
+    width: '100%',
+    minWidth: 0,
+  },
+  feedingDetailPrimary: {
+    fontSize: 11,
+    fontWeight: '700',
+    lineHeight: 14,
+    textAlign: 'center',
+    width: '100%',
+    maxWidth: '100%',
+    flexShrink: 1,
+  },
+  feedingDetailSecondary: {
+    marginTop: 2,
+    fontSize: 10,
+    fontWeight: '600',
+    lineHeight: 12,
+    opacity: 0.9,
+    textAlign: 'center',
+    width: '100%',
+    maxWidth: '100%',
+    flexShrink: 1,
   },
   liquidGlassChevron: {
     backgroundColor: 'rgba(255, 255, 255, 0.15)',

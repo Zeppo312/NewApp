@@ -894,6 +894,7 @@ export default function SleepTrackerScreen() {
   const [isLiveStatusLoaded, setIsLiveStatusLoaded] = useState(false);
   const [babyBirthdate, setBabyBirthdate] = useState<Date | null>(null);
   const [babyBedtime, setBabyBedtime] = useState<string>('19:30');
+  const [babyName, setBabyName] = useState<string | undefined>(undefined);
   const [sleepPrediction, setSleepPrediction] = useState<SleepWindowPrediction | null>(null);
   const [predictionLoading, setPredictionLoading] = useState(false);
   const [predictionError, setPredictionError] = useState<string | null>(null);
@@ -1151,6 +1152,7 @@ export default function SleepTrackerScreen() {
       if (!user?.id) {
         setBabyBirthdate(null);
         setBabyBedtime('19:30');
+        setBabyName(undefined);
         return;
       }
 
@@ -1168,6 +1170,7 @@ export default function SleepTrackerScreen() {
           setBabyBirthdate(null);
         }
         setBabyBedtime(normalizeBedtimeAnchor(data?.preferred_bedtime ?? null));
+        setBabyName(data?.name || undefined);
       } catch (error) {
         if (isMounted) {
           console.error('Failed to load baby info for sleep prediction:', error);
@@ -1280,7 +1283,7 @@ export default function SleepTrackerScreen() {
           if (cancelled) return;
 
           if (!restored) {
-            await sleepActivityService.startSleepActivity(new Date(activeSleepEntry.start_time));
+            await sleepActivityService.startSleepActivity(new Date(activeSleepEntry.start_time), babyName);
             return;
           }
 
@@ -1525,7 +1528,7 @@ export default function SleepTrackerScreen() {
       setActiveSleepEntry(classifiedEntry);
 
       try {
-        await sleepActivityService.startSleepActivity(now);
+        await sleepActivityService.startSleepActivity(now, babyName);
       } catch (liveActivityError) {
         console.error('Failed to start sleep live activity:', liveActivityError);
       }

@@ -13,6 +13,7 @@ struct SleepActivityAttributes: ActivityAttributes {
     var startTime: String
     var startTimestamp: Double?
     var elapsedTimeText: String?
+    var babyName: String?
 }
 
 @available(iOS 16.1, *)
@@ -83,53 +84,38 @@ private struct SleepActivityMainView: View {
         )
     }
 
+    private var babyName: String {
+        context.attributes.babyName ?? "Baby"
+    }
+
     private var startTimeLabel: String {
         guard let startDate else { return "--:--" }
         return DateFormatter.activityStartFormatter.string(from: startDate)
     }
 
-    @ViewBuilder
-    private var decorationLayer: some View {
-        Circle()
-            .fill(
-                RadialGradient(
-                    colors: [
-                        SleepActivityTheme.accent.opacity(0.18),
-                        .clear,
-                    ],
-                    center: .center,
-                    startRadius: 8,
-                    endRadius: 200
-                )
-            )
-            .blur(radius: 10)
-    }
-
     var body: some View {
         ZStack {
-            decorationLayer
+            // Background emoji decorations
+            HStack {
+                Text("\u{1F9F8}")
+                    .font(.system(size: 38))
+                    .opacity(0.12)
+                Spacer()
+                Text("\u{1F319}")
+                    .font(.system(size: 34))
+                    .opacity(0.12)
+            }
+            .padding(.horizontal, 24)
 
             VStack(spacing: 6) {
-                HStack(spacing: 8) {
-                    Image(systemName: "moon.fill")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(SleepActivityTheme.accent)
+                // Header: "Levi schläft seit 21:30"
+                Text("\(babyName) schläft seit \(startTimeLabel)")
+                    .font(.system(size: 15, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.70))
 
-                    Text("Schläft")
-                        .font(.system(size: 15, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.90))
-
-                    Text("\u{00B7}")
-                        .foregroundStyle(.white.opacity(0.40))
-
-                    Text("Seit \(startTimeLabel)")
-                        .font(.system(size: 13, weight: .medium, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.55))
-
-                    Spacer()
-                }
-
-                HStack(alignment: .center, spacing: 14) {
+                // Timer row: centered timer + stop button right
+                ZStack(alignment: .trailing) {
+                    // Timer centered
                     Group {
                         if let startDate {
                             Text(startDate, style: .timer)
@@ -137,18 +123,18 @@ private struct SleepActivityMainView: View {
                             Text(context.state.elapsedTimeText)
                         }
                     }
-                    .font(.system(size: 46, weight: .bold, design: .rounded))
+                    .font(.system(size: 48, weight: .bold, design: .rounded))
                     .foregroundStyle(.white)
                     .monospacedDigit()
                     .lineLimit(1)
-                    .minimumScaleFactor(0.65)
+                    .minimumScaleFactor(0.55)
+                    .frame(maxWidth: .infinity, alignment: .center)
 
-                    Spacer(minLength: 4)
-
+                    // Stop button on the right
                     Link(destination: stopURL) {
                         Circle()
                             .fill(SleepActivityTheme.stopButton)
-                            .frame(width: 44, height: 44)
+                            .frame(width: 42, height: 42)
                             .overlay(
                                 Image(systemName: "stop.fill")
                                     .font(.system(size: 16, weight: .bold))
@@ -157,6 +143,7 @@ private struct SleepActivityMainView: View {
                     }
                     .buttonStyle(.plain)
                 }
+                .frame(maxWidth: .infinity)
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 14)
@@ -195,23 +182,22 @@ struct WidgetLiveActivity: Widget {
                 }
 
                 DynamicIslandExpandedRegion(.center) {
-                    Text("Schlaf-Tracker")
+                    Text("\(context.attributes.babyName ?? "Baby") schläft")
                         .font(.system(size: 15, weight: .semibold, design: .rounded))
                 }
 
                 DynamicIslandExpandedRegion(.bottom) {
-                    HStack(spacing: 10) {
-                        if let startDate {
-                            Text(startDate, style: .timer)
-                                .font(.system(size: 18, weight: .bold, design: .rounded))
-                                .monospacedDigit()
-                        } else {
-                            Text(context.state.elapsedTimeText)
-                                .font(.system(size: 18, weight: .bold, design: .rounded))
-                                .monospacedDigit()
+                    ZStack(alignment: .trailing) {
+                        Group {
+                            if let startDate {
+                                Text(startDate, style: .timer)
+                            } else {
+                                Text(context.state.elapsedTimeText)
+                            }
                         }
-
-                        Spacer(minLength: 8)
+                        .font(.system(size: 18, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                        .frame(maxWidth: .infinity, alignment: .center)
 
                         if let stopURL {
                             Link(destination: stopURL) {
@@ -228,6 +214,7 @@ struct WidgetLiveActivity: Widget {
                             .buttonStyle(.plain)
                         }
                     }
+                    .frame(maxWidth: .infinity)
                 }
             } compactLeading: {
                 Image(systemName: "moon.fill")

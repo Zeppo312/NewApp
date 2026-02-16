@@ -11,4 +11,5 @@ struct SleepActivityAttributes: ActivityAttributes {
   var startTime: String
   var startTimestamp: Double?
   var elapsedTimeText: String?
+  var babyName: String?
 }

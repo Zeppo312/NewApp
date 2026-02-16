@@ -53,10 +53,11 @@ class LiveActivityModule: NSObject {
     }
   }
 
-  @objc(startSleepActivity:elapsedTimeText:resolver:rejecter:)
+  @objc(startSleepActivity:elapsedTimeText:babyName:resolver:rejecter:)
   func startSleepActivity(
     _ startTimeISO: String,
     elapsedTimeText: String,
+    babyName: String?,
     resolver resolve: @escaping RCTPromiseResolveBlock,
     rejecter reject: @escaping RCTPromiseRejectBlock
   ) {
@@ -80,7 +81,8 @@ class LiveActivityModule: NSObject {
         let attributes = SleepActivityAttributes(
           startTime: startTimeISO,
           startTimestamp: LiveActivityDateParser.parse(startTimeISO)?.timeIntervalSince1970 ?? Date().timeIntervalSince1970,
-          elapsedTimeText: elapsedTimeText
+          elapsedTimeText: elapsedTimeText,
+          babyName: babyName
         )
 
         let state = SleepActivityAttributes.ContentState(
@@ -182,6 +184,7 @@ class LiveActivityModule: NSObject {
       "elapsedTimeText": activity.contentState.elapsedTimeText,
       "isTracking": activity.contentState.isTracking,
       "quality": activity.contentState.quality as Any,
+      "babyName": activity.attributes.babyName as Any,
     ])
   }
 

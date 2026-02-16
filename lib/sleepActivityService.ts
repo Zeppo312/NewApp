@@ -10,7 +10,7 @@ type NativeSleepActivitySnapshot = {
 
 type LiveActivityNativeModule = {
   isSupported: () => Promise<boolean>;
-  startSleepActivity: (startTimeISO: string, elapsedTimeText: string) => Promise<string | null>;
+  startSleepActivity: (startTimeISO: string, elapsedTimeText: string, babyName?: string | null) => Promise<string | null>;
   updateSleepActivity: (
     activityId: string,
     elapsedTimeText: string,
@@ -74,7 +74,7 @@ class SleepActivityService {
     }
   }
 
-  public async startSleepActivity(startTime: Date): Promise<string | null> {
+  public async startSleepActivity(startTime: Date, babyName?: string): Promise<string | null> {
     if (!(await this.ensureSupported()) || !liveActivityModule) {
       return null;
     }
@@ -82,7 +82,8 @@ class SleepActivityService {
     try {
       const activityId = await liveActivityModule.startSleepActivity(
         startTime.toISOString(),
-        '00:00:00'
+        '00:00:00',
+        babyName ?? null
       );
       this.currentActivityId = activityId ?? null;
       if (activityId) {

@@ -5,6 +5,7 @@ export interface SleepActivityAttributes {
   startTime: string;   // ISO-String der Startzeit
   elapsedTimeText?: string;  // Text für die verstrichene Zeit, z.B. "3:42:15"
   quality?: string;   // Schlafqualität (falls eingestellt)
+  babyName?: string;   // Name des Babys für die Live Activity
 }
 
 // Statusattribute für die Activity
