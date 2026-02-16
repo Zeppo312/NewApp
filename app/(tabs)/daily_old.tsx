@@ -48,7 +48,6 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 // Removed old managers; using unified baby_care_entries
 import { SupabaseErrorHandler } from '@/lib/errorHandler';
 import { ConnectionStatus } from '@/components/ConnectionStatus';
-import { DebugPanel } from '@/components/DebugPanel';
 
 import { BlurView } from 'expo-blur';
 import { GlassCard, LiquidGlassCard, LAYOUT_PAD, SECTION_GAP_TOP, SECTION_GAP_BOTTOM, PRIMARY, GLASS_OVERLAY, GLASS_BORDER } from '@/constants/DesignGuide';
@@ -1353,8 +1352,6 @@ export default function DailyScreen() {
             ]);
           }}
         />
-
-        <DebugPanel />
 
         <ScrollView
           style={s.scrollContainer}

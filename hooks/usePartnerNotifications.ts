@@ -4,6 +4,66 @@ import { getPartnerId } from '@/lib/accountLinks';
 import { pollPartnerActivities, getUnreadPartnerNotificationCount } from '@/lib/partnerNotificationService';
 
 const POLLING_INTERVAL = 30000; // 30 seconds
+const activePollingInstances = new Set<symbol>();
+const unreadCountSubscribers = new Set<(count: number) => void>();
+
+let sharedPollingInterval: ReturnType<typeof setInterval> | null = null;
+let sharedPollInFlight = false;
+let sharedUnreadCount = 0;
+let sharedAppState: AppStateStatus = AppState.currentState;
+
+function broadcastUnreadCount(count: number) {
+  sharedUnreadCount = count;
+  unreadCountSubscribers.forEach((callback) => callback(count));
+}
+
+async function runSharedPoll() {
+  if (sharedPollInFlight) {
+    return;
+  }
+
+  sharedPollInFlight = true;
+  try {
+    const newNotifications = await pollPartnerActivities();
+    if (newNotifications > 0) {
+      console.log(`📬 Displayed ${newNotifications} partner notifications`);
+    }
+
+    const count = await getUnreadPartnerNotificationCount();
+    broadcastUnreadCount(count);
+  } catch (error) {
+    console.error('Error polling partner activities:', error);
+  } finally {
+    sharedPollInFlight = false;
+  }
+}
+
+function startSharedPolling() {
+  if (sharedPollingInterval) {
+    return;
+  }
+
+  console.log('▶️ Starting partner notification polling (every 30s)');
+  runSharedPoll();
+
+  sharedPollingInterval = setInterval(() => {
+    if (sharedAppState === 'active' || sharedAppState === 'background') {
+      runSharedPoll();
+    } else {
+      console.log('⏸️ App inactive, skipping poll');
+    }
+  }, POLLING_INTERVAL);
+}
+
+function stopSharedPolling() {
+  if (!sharedPollingInterval) {
+    return;
+  }
+
+  console.log('⏹️ Stopping partner notification polling');
+  clearInterval(sharedPollingInterval);
+  sharedPollingInterval = null;
+}
 
 /**
  * Hook for managing partner activity notifications
@@ -22,10 +82,9 @@ const POLLING_INTERVAL = 30000; // 30 seconds
 export function usePartnerNotifications() {
   const [isPartnerLinked, setIsPartnerLinked] = useState(false);
   const [partnerId, setPartnerId] = useState<string | null>(null);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [isPolling, setIsPolling] = useState(false);
-  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const appState = useRef(AppState.currentState);
+  const [unreadCount, setUnreadCount] = useState(sharedUnreadCount);
+  const instanceIdRef = useRef(Symbol('partner-notification-hook'));
+  const isInstancePollingActiveRef = useRef(false);
 
   /**
    * Check if a partner is linked and get their ID
@@ -55,62 +114,35 @@ export function usePartnerNotifications() {
    * Poll for new partner activities
    */
   const poll = useCallback(async () => {
-    if (isPolling) {
-      console.log('⏸️ Already polling, skipping...');
-      return;
-    }
-
-    setIsPolling(true);
-    try {
-      const newNotifications = await pollPartnerActivities();
-      if (newNotifications > 0) {
-        console.log(`📬 Displayed ${newNotifications} partner notifications`);
-      }
-
-      // Update unread count
-      const count = await getUnreadPartnerNotificationCount();
-      setUnreadCount(count);
-    } catch (error) {
-      console.error('Error polling partner activities:', error);
-    } finally {
-      setIsPolling(false);
-    }
-  }, [isPolling]);
+    await runSharedPoll();
+  }, []);
 
   /**
    * Start polling for partner activities
    */
   const startPolling = useCallback(() => {
-    if (pollingIntervalRef.current) {
-      console.log('⏸️ Polling already started');
+    if (isInstancePollingActiveRef.current) {
       return;
     }
 
-    console.log('▶️ Starting partner notification polling (every 30s)');
-
-    // Poll immediately
-    poll();
-
-    // Setup interval
-    pollingIntervalRef.current = setInterval(() => {
-      const currentState = appState.current;
-      // Only poll when app is active or in background
-      if (currentState === 'active' || currentState === 'background') {
-        poll();
-      } else {
-        console.log('⏸️ App inactive, skipping poll');
-      }
-    }, POLLING_INTERVAL);
-  }, [poll]);
+    isInstancePollingActiveRef.current = true;
+    activePollingInstances.add(instanceIdRef.current);
+    startSharedPolling();
+  }, []);
 
   /**
    * Stop polling for partner activities
    */
   const stopPolling = useCallback(() => {
-    if (pollingIntervalRef.current) {
-      console.log('⏹️ Stopping partner notification polling');
-      clearInterval(pollingIntervalRef.current);
-      pollingIntervalRef.current = null;
+    if (!isInstancePollingActiveRef.current) {
+      return;
+    }
+
+    isInstancePollingActiveRef.current = false;
+    activePollingInstances.delete(instanceIdRef.current);
+
+    if (activePollingInstances.size === 0) {
+      stopSharedPolling();
     }
   }, []);
 
@@ -125,6 +157,19 @@ export function usePartnerNotifications() {
   useEffect(() => {
     checkPartnerLink();
   }, [checkPartnerLink]);
+
+  useEffect(() => {
+    const onUnreadCountChange = (count: number) => {
+      setUnreadCount(count);
+    };
+
+    unreadCountSubscribers.add(onUnreadCountChange);
+    setUnreadCount(sharedUnreadCount);
+
+    return () => {
+      unreadCountSubscribers.delete(onUnreadCountChange);
+    };
+  }, []);
 
   // Setup polling when partner is linked
   useEffect(() => {
@@ -143,8 +188,8 @@ export function usePartnerNotifications() {
   // Listen to app state changes
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
-      console.log('📱 App state changed:', appState.current, '→', nextAppState);
-      appState.current = nextAppState;
+      console.log('📱 App state changed:', sharedAppState, '→', nextAppState);
+      sharedAppState = nextAppState;
 
       // If app becomes active and partner is linked, poll immediately
       if (nextAppState === 'active' && isPartnerLinked) {

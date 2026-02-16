@@ -182,9 +182,9 @@ export const getCachedUserProfile = async (): Promise<UserProfile | null> => {
 
   try {
     const { data, error } = await supabase
-      .from('user_profiles')
+      .from('profiles')
       .select('*')
-      .eq('user_id', userData.user.id)
+      .eq('id', userData.user.id)
       .maybeSingle();
 
     if (error && (error as any).code !== 'PGRST116') {

@@ -1,73 +1,263 @@
 import ActivityKit
-import WidgetKit
 import SwiftUI
+import WidgetKit
 
-struct WidgetAttributes: ActivityAttributes {
+@available(iOS 16.1, *)
+struct SleepActivityAttributes: ActivityAttributes {
     public struct ContentState: Codable, Hashable {
-        // Dynamic stateful properties about your activity go here!
-        var emoji: String
+        var isTracking: Bool
+        var elapsedTimeText: String
+        var quality: String?
     }
 
-    // Fixed non-changing properties about your activity go here!
-    var name: String
+    var startTime: String
+    var startTimestamp: Double?
+    var elapsedTimeText: String?
 }
 
+@available(iOS 16.1, *)
+private enum SleepActivityTheme {
+    static let accent = Color(red: 0.45, green: 0.80, blue: 1.00)
+    static let accentStrong = Color(red: 0.29, green: 0.66, blue: 0.96)
+    static let darkBgTop = Color(red: 0.09, green: 0.13, blue: 0.23)
+    static let darkBgBottom = Color(red: 0.03, green: 0.05, blue: 0.10)
+    static let stopButton = Color(red: 0.95, green: 0.53, blue: 0.66)
+}
+
+@available(iOS 16.1, *)
+private enum SleepActivityDateParser {
+    static let withFractionalSeconds: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
+    static let internetDateTime: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+
+    static func parse(_ value: String) -> Date? {
+        let normalized = value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "\"", with: "")
+        if let date = withFractionalSeconds.date(from: normalized) {
+            return date
+        }
+        if let date = internetDateTime.date(from: normalized) {
+            return date
+        }
+        if let raw = TimeInterval(normalized) {
+            return raw > 1_000_000_000_000
+                ? Date(timeIntervalSince1970: raw / 1000.0)
+                : Date(timeIntervalSince1970: raw)
+        }
+        return nil
+    }
+
+    static func parse(startTime: String, startTimestamp: Double?) -> Date? {
+        if let startTimestamp, startTimestamp > 0 {
+            return Date(timeIntervalSince1970: startTimestamp)
+        }
+        return parse(startTime)
+    }
+}
+
+@available(iOS 16.1, *)
+private struct SleepActivityMainView: View {
+    let context: ActivityViewContext<SleepActivityAttributes>
+
+    private var trackerURL: URL {
+        URL(string: "com.lottibaby.app://sleep-tracker")!
+    }
+
+    private var stopURL: URL {
+        URL(string: "com.lottibaby.app://sleep-tracker?liveStop=1")!
+    }
+
+    private var startDate: Date? {
+        SleepActivityDateParser.parse(
+            startTime: context.attributes.startTime,
+            startTimestamp: context.attributes.startTimestamp
+        )
+    }
+
+    private var startTimeLabel: String {
+        guard let startDate else { return "--:--" }
+        return DateFormatter.activityStartFormatter.string(from: startDate)
+    }
+
+    @ViewBuilder
+    private var decorationLayer: some View {
+        Circle()
+            .fill(
+                RadialGradient(
+                    colors: [
+                        SleepActivityTheme.accent.opacity(0.18),
+                        .clear,
+                    ],
+                    center: .center,
+                    startRadius: 8,
+                    endRadius: 200
+                )
+            )
+            .blur(radius: 10)
+    }
+
+    var body: some View {
+        ZStack {
+            decorationLayer
+
+            VStack(spacing: 6) {
+                HStack(spacing: 8) {
+                    Image(systemName: "moon.fill")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(SleepActivityTheme.accent)
+
+                    Text("Schläft")
+                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.90))
+
+                    Text("\u{00B7}")
+                        .foregroundStyle(.white.opacity(0.40))
+
+                    Text("Seit \(startTimeLabel)")
+                        .font(.system(size: 13, weight: .medium, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.55))
+
+                    Spacer()
+                }
+
+                HStack(alignment: .center, spacing: 14) {
+                    Group {
+                        if let startDate {
+                            Text(startDate, style: .timer)
+                        } else {
+                            Text(context.state.elapsedTimeText)
+                        }
+                    }
+                    .font(.system(size: 46, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.65)
+
+                    Spacer(minLength: 4)
+
+                    Link(destination: stopURL) {
+                        Circle()
+                            .fill(SleepActivityTheme.stopButton)
+                            .frame(width: 44, height: 44)
+                            .overlay(
+                                Image(systemName: "stop.fill")
+                                    .font(.system(size: 16, weight: .bold))
+                                    .foregroundStyle(.white)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 14)
+        }
+        .widgetURL(trackerURL)
+    }
+}
+
+@available(iOS 16.1, *)
 struct WidgetLiveActivity: Widget {
     var body: some WidgetConfiguration {
-        ActivityConfiguration(for: WidgetAttributes.self) { context in
-            // Lock screen/banner UI goes here
-            VStack {
-                Text("Hello \(context.state.emoji)")
-            }
-            .activityBackgroundTint(Color.cyan)
-            .activitySystemActionForegroundColor(Color.black)
-
+        ActivityConfiguration(for: SleepActivityAttributes.self) { context in
+            SleepActivityMainView(context: context)
+                .activityBackgroundTint(SleepActivityTheme.darkBgTop)
+                .activitySystemActionForegroundColor(.white)
         } dynamicIsland: { context in
-            DynamicIsland {
-                // Expanded UI goes here.  Compose the expanded UI through
-                // various regions, like leading/trailing/center/bottom
+            let trackerURL = URL(string: "com.lottibaby.app://sleep-tracker")
+            let stopURL = URL(string: "com.lottibaby.app://sleep-tracker?liveStop=1")
+            let startDate = SleepActivityDateParser.parse(
+                startTime: context.attributes.startTime,
+                startTimestamp: context.attributes.startTimestamp
+            )
+
+            return DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    Text("Leading")
+                    Image(systemName: "moon.fill")
+                        .foregroundStyle(SleepActivityTheme.accent)
                 }
+
                 DynamicIslandExpandedRegion(.trailing) {
-                    Text("Trailing")
+                    if let startDate {
+                        Text("Seit \(DateFormatter.activityStartFormatter.string(from: startDate))")
+                            .font(.system(size: 13, weight: .medium, design: .rounded))
+                            .foregroundStyle(.white.opacity(0.70))
+                    }
                 }
+
+                DynamicIslandExpandedRegion(.center) {
+                    Text("Schlaf-Tracker")
+                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                }
+
                 DynamicIslandExpandedRegion(.bottom) {
-                    Text("Bottom \(context.state.emoji)")
-                    // more content
+                    HStack(spacing: 10) {
+                        if let startDate {
+                            Text(startDate, style: .timer)
+                                .font(.system(size: 18, weight: .bold, design: .rounded))
+                                .monospacedDigit()
+                        } else {
+                            Text(context.state.elapsedTimeText)
+                                .font(.system(size: 18, weight: .bold, design: .rounded))
+                                .monospacedDigit()
+                        }
+
+                        Spacer(minLength: 8)
+
+                        if let stopURL {
+                            Link(destination: stopURL) {
+                                Label("Stop", systemImage: "stop.fill")
+                                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                    .background(
+                                        Capsule()
+                                            .fill(SleepActivityTheme.stopButton.opacity(0.88))
+                                    )
+                                    .foregroundStyle(.white)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
                 }
             } compactLeading: {
-                Text("L")
+                Image(systemName: "moon.fill")
+                    .foregroundStyle(SleepActivityTheme.accent)
             } compactTrailing: {
-                Text("T \(context.state.emoji)")
+                if let startDate {
+                    Text(startDate, style: .timer)
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                } else {
+                    Text(context.state.elapsedTimeText)
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                }
             } minimal: {
-                Text(context.state.emoji)
+                Image(systemName: "moon.fill")
+                    .foregroundStyle(SleepActivityTheme.accent)
             }
-            .widgetURL(URL(string: "https://www.expo.dev"))
-            .keylineTint(Color.red)
+            .widgetURL(trackerURL)
+            .keylineTint(SleepActivityTheme.accentStrong)
         }
     }
 }
 
-extension WidgetAttributes {
-    fileprivate static var preview: WidgetAttributes {
-        WidgetAttributes(name: "World")
-    }
-}
-
-extension WidgetAttributes.ContentState {
-    fileprivate static var smiley: WidgetAttributes.ContentState {
-        WidgetAttributes.ContentState(emoji: "😀")
-     }
-     
-     fileprivate static var starEyes: WidgetAttributes.ContentState {
-         WidgetAttributes.ContentState(emoji: "🤩")
-     }
-}
-
-#Preview("Notification", as: .content, using: WidgetAttributes.preview) {
-   WidgetLiveActivity()
-} contentStates: {
-    WidgetAttributes.ContentState.smiley
-    WidgetAttributes.ContentState.starEyes
+@available(iOS 16.1, *)
+private extension DateFormatter {
+    static let activityStartFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "de_DE")
+        formatter.dateFormat = "HH:mm"
+        return formatter
+    }()
 }

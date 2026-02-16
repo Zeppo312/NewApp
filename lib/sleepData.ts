@@ -88,14 +88,12 @@ export async function getLinkedUsersAlternative(): Promise<{
 
     console.log('getLinkedUsersAlternative: Suche Verknüpfungen für', user.user.id);
 
-    // Direkte Abfrage der account_links Tabelle ohne RPC
+    // Direkte Abfrage der account_links Tabelle ohne RPC.
+    // Profile werden separat geladen, damit wir nicht von impliziten FK-Relation-Hints
+    // (z. B. profiles!creator_profile) abhängig sind.
     const { data: links, error: linksError } = await supabase
       .from('account_links')
-      .select(`
-        *,
-        creator_profile:profiles!creator_profile(id, display_name),
-        invited_profile:profiles!invited_profile(id, display_name)
-      `)
+      .select('id, creator_id, invited_id, status, relationship_type')
       .or(`creator_id.eq.${user.user.id},invited_id.eq.${user.user.id}`)
       .eq('status', 'accepted');
 
@@ -112,24 +110,52 @@ export async function getLinkedUsersAlternative(): Promise<{
       return { success: true, linkedUsers: [] };
     }
 
-    // Verarbeitung der Ergebnisse
-    const linkedUsers: ConnectedUser[] = links.map(link => {
+    const partnerIds = Array.from(
+      new Set(
+        links
+          .map((link: any) => (link.creator_id === user.user.id ? link.invited_id : link.creator_id))
+          .filter((id: unknown): id is string => typeof id === 'string' && id.length > 0)
+      )
+    );
+
+    const profileNameById = new Map<string, string>();
+
+    if (partnerIds.length > 0) {
+      const { data: profiles, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, display_name, first_name, last_name')
+        .in('id', partnerIds);
+
+      if (profilesError) {
+        console.warn('getLinkedUsersAlternative: Profile konnten nicht geladen werden:', profilesError);
+      } else {
+        for (const profile of profiles || []) {
+          const first = (profile as any).first_name ?? '';
+          const last = (profile as any).last_name ?? '';
+          const fullName = `${first} ${last}`.trim();
+          const fallbackName = fullName.length > 0 ? fullName : 'Unbekannter Benutzer';
+          const displayName = ((profile as any).display_name as string | null) ?? fallbackName;
+          profileNameById.set((profile as any).id as string, displayName);
+        }
+      }
+    }
+
+    // Verarbeitung der Ergebnisse (inkl. Fallback bei fehlendem Profil)
+    const linkedUsers: ConnectedUser[] = links
+      .map((link: any) => {
       const isCreator = link.creator_id === user.user.id;
       const partnerId = isCreator ? link.invited_id : link.creator_id;
-      
-      // Zugriff auf die Profildaten
-      const partnerProfile = isCreator 
-        ? link.invited_profile 
-        : link.creator_profile;
-      
-      const displayName = partnerProfile ? partnerProfile.display_name : 'Unbekannter Benutzer';
-      
+      if (!partnerId) return null;
+
       return {
         userId: partnerId,
-        displayName: displayName,
-        linkRole: isCreator ? 'creator' : 'invited'
-      };
-    });
+        displayName: profileNameById.get(partnerId) ?? 'Unbekannter Benutzer',
+        linkRole: isCreator ? 'creator' : 'invited',
+        relationship: link.relationship_type ?? undefined,
+        status: link.status ?? undefined,
+      } as ConnectedUser;
+    })
+      .filter((entry): entry is ConnectedUser => Boolean(entry));
 
     console.log('getLinkedUsersAlternative: Verarbeitete Benutzer', JSON.stringify(linkedUsers));
     

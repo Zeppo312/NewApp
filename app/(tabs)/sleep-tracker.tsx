@@ -18,6 +18,7 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
+import * as Linking from 'expo-linking';
 import { Colors } from '@/constants/Colors';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { ThemedBackground } from '@/components/ThemedBackground';
@@ -52,6 +53,7 @@ import { normalizeBedtimeAnchor } from '@/lib/bedtime';
 import { markPaywallShown, shouldShowPaywall } from '@/lib/paywall';
 import { useNotifications } from '@/hooks/useNotifications';
 import { usePartnerNotifications } from '@/hooks/usePartnerNotifications';
+import { sleepActivityService } from '@/lib/sleepActivityService';
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 // Typografie helper
@@ -987,6 +989,29 @@ export default function SleepTrackerScreen() {
   const [isStartingSleep, setIsStartingSleep] = useState(false);
   const [isStoppingSleep, setIsStoppingSleep] = useState(false);
   const [showSleepInfoModal, setShowSleepInfoModal] = useState(false);
+  const lastLiveStopEventRef = useRef<{ url: string; at: number } | null>(null);
+  const handledLiveStopRequestIdRef = useRef(0);
+  const [liveStopRequestId, setLiveStopRequestId] = useState(0);
+
+  const queueLiveStopRequestFromUrl = useCallback((incomingUrl: string | null) => {
+    if (!incomingUrl) return;
+
+    const targetsSleepTracker = incomingUrl.toLowerCase().includes('sleep-tracker');
+    const hasLiveStopParam = /[?&]liveStop=(1|true)(?:&|$)/i.test(incomingUrl);
+
+    if (!targetsSleepTracker || !hasLiveStopParam) {
+      return;
+    }
+
+    const now = Date.now();
+    const lastEvent = lastLiveStopEventRef.current;
+    if (lastEvent && lastEvent.url === incomingUrl && now - lastEvent.at < 1500) {
+      return;
+    }
+
+    lastLiveStopEventRef.current = { url: incomingUrl, at: now };
+    setLiveStopRequestId((prev) => prev + 1);
+  }, []);
 
   const isFiniteManualDate = useCallback((value: unknown): value is Date => {
     return value instanceof Date && Number.isFinite(value.getTime());
@@ -1075,6 +1100,24 @@ export default function SleepTrackerScreen() {
   useEffect(() => {
     requestPermissions();
   }, [requestPermissions]);
+
+  useEffect(() => {
+    const subscription = Linking.addEventListener('url', (event) => {
+      queueLiveStopRequestFromUrl(event.url);
+    });
+
+    Linking.getInitialURL()
+      .then((initialUrl) => {
+        queueLiveStopRequestFromUrl(initialUrl);
+      })
+      .catch((error) => {
+        console.error('Failed to read initial URL for Live Activity stop:', error);
+      });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [queueLiveStopRequestFromUrl]);
 
   // Lade die aktuelle Partner-ID (aus account_links) für neue Einträge
   const refreshPartnerId = useCallback(async () => {
@@ -1221,6 +1264,71 @@ export default function SleepTrackerScreen() {
 
     return () => clearInterval(interval);
   }, [sleepEntries, updateSleepPrediction]);
+
+  useEffect(() => {
+    if (!isLiveStatusLoaded || !sleepActivityService.isLiveActivitySupported()) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const syncSleepLiveActivity = async () => {
+      try {
+        if (activeSleepEntry?.start_time) {
+          const restored = await sleepActivityService.restoreCurrentActivity();
+
+          if (cancelled) return;
+
+          if (!restored) {
+            await sleepActivityService.startSleepActivity(new Date(activeSleepEntry.start_time));
+            return;
+          }
+
+          const elapsedSeconds = Math.max(
+            0,
+            Math.floor((Date.now() - new Date(activeSleepEntry.start_time).getTime()) / 1000)
+          );
+          await sleepActivityService.updateSleepActivity(formatDurationSeconds(elapsedSeconds));
+        } else {
+          await sleepActivityService.endAllSleepActivities();
+        }
+      } catch (error) {
+        console.error('Failed to synchronize sleep live activity:', error);
+      }
+    };
+
+    void syncSleepLiveActivity();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSleepEntry?.id, activeSleepEntry?.start_time, isLiveStatusLoaded]);
+
+  useEffect(() => {
+    if (!isLiveStatusLoaded || !activeSleepEntry?.start_time) {
+      return;
+    }
+
+    if (!sleepActivityService.isLiveActivitySupported()) {
+      return;
+    }
+
+    const updateElapsedTimeInLiveActivity = async () => {
+      const elapsedSeconds = Math.max(
+        0,
+        Math.floor((Date.now() - new Date(activeSleepEntry.start_time).getTime()) / 1000)
+      );
+      await sleepActivityService.updateSleepActivity(formatDurationSeconds(elapsedSeconds));
+    };
+
+    void updateElapsedTimeInLiveActivity();
+
+    const intervalId = setInterval(() => {
+      void updateElapsedTimeInLiveActivity();
+    }, 60 * 1000);
+
+    return () => clearInterval(intervalId);
+  }, [activeSleepEntry?.id, activeSleepEntry?.start_time, isLiveStatusLoaded]);
 
   // Classify sleep entry by time period
   const classifySleepEntry = (entry: any): ClassifiedSleepEntry => {
@@ -1416,6 +1524,12 @@ export default function SleepTrackerScreen() {
       const classifiedEntry = classifySleepEntry(entry);
       setActiveSleepEntry(classifiedEntry);
 
+      try {
+        await sleepActivityService.startSleepActivity(now);
+      } catch (liveActivityError) {
+        console.error('Failed to start sleep live activity:', liveActivityError);
+      }
+
       if (predictionRef.current) {
         try {
           // Verwende babyId statt userId für gemeinsame Personalization zwischen Partnern
@@ -1485,6 +1599,15 @@ export default function SleepTrackerScreen() {
         console.warn('[SleepTracker] Secondary backend update failed:', result.secondary.error);
       }
 
+      try {
+        await sleepActivityService.endSleepActivity(
+          resolvedQuality,
+          formatDurationSeconds(Math.max(0, durationMinutes) * 60)
+        );
+      } catch (liveActivityError) {
+        console.error('Failed to end sleep live activity:', liveActivityError);
+      }
+
       setActiveSleepEntry(null);
 
       const splashKind = resolvedQuality === 'good' ? 'sleep_stop_good' : resolvedQuality === 'bad' ? 'sleep_stop_bad' : 'sleep_stop_medium';
@@ -1502,6 +1625,31 @@ export default function SleepTrackerScreen() {
       setIsStoppingSleep(false);
     }
   };
+
+  useEffect(() => {
+    if (liveStopRequestId === 0) return;
+    if (handledLiveStopRequestIdRef.current === liveStopRequestId) return;
+    if (!isLiveStatusLoaded) return;
+
+    handledLiveStopRequestIdRef.current = liveStopRequestId;
+
+    if (isStoppingSleep) {
+      return;
+    }
+
+    if (!activeSleepEntry?.id) {
+      console.log('Live Activity stop requested, but no active sleep entry exists.');
+      return;
+    }
+
+    void handleStopSleep();
+  }, [
+    activeSleepEntry?.id,
+    handleStopSleep,
+    isLiveStatusLoaded,
+    isStoppingSleep,
+    liveStopRequestId,
+  ]);
 
   // Handle save entry (compatible with SleepInputModal)
   const handleSaveEntry = async (payload: any) => {

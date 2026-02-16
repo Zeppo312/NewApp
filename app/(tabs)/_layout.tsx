@@ -143,15 +143,6 @@ export default function TabLayout() {
           href: isBabyBorn ? undefined : null,
         }}
       />
-      
-      {/* Backup-Route ausblenden */}
-      <Tabs.Screen
-        name="sleep-tracker.backup"
-        options={{
-          href: null,
-        }}
-      />
-
       {/* Tab 2/5: Unser Tag */}
       <Tabs.Screen
         name="daily_old"
@@ -199,7 +190,7 @@ export default function TabLayout() {
         options={{
           title: 'Debug',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="wrench.fill" color={color} />,
-          href: __DEV__ ? undefined : null, // Nur im Entwicklungsmodus anzeigen
+          href: null, // Immer ausblenden
         }}
       />
 
@@ -210,56 +201,6 @@ export default function TabLayout() {
           title: 'Mehr',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="ellipsis.circle.fill" color={color} />,
           href: undefined, // Immer anzeigen, unabhängig vom Baby-Status
-        }}
-      />
-
-      {/* Geburtsplan-Tab - immer ausgeblendet, aber für die Navigation verfügbar */}
-      <Tabs.Screen
-        name="geburtsplan"
-        options={{
-          title: 'Geburtsplan',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="doc.text.fill" color={color} />,
-          href: null, // Immer ausblenden
-        }}
-      />
-
-      {/* Selfcare-Tab - immer ausgeblendet, aber für die Navigation verfügbar */}
-      <Tabs.Screen
-        name="selfcare"
-        options={{
-          title: 'Mama Selfcare',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="heart.fill" color={color} />,
-          href: null, // Immer ausblenden
-        }}
-      />
-
-      {/* Babywetter-Tab - nicht in der Navigationsleiste anzeigen */}
-      <Tabs.Screen
-        name="babyweather"
-        options={{
-          title: 'Babywetter',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="cloud.sun.fill" color={color} />,
-          href: null, // Nicht in der Navigationsleiste anzeigen
-        }}
-      />
-
-      {/* Gewichtskurven-Tab - nicht in der Navigationsleiste anzeigen */}
-      <Tabs.Screen
-        name="weight-tracker"
-        options={{
-          title: 'Gewicht',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="chart.line.uptrend.xyaxis" color={color} />,
-          href: null, // Nicht in der Navigationsleiste anzeigen
-        }}
-      />
-
-      {/* Debug-Tab - nur im Entwicklungsmodus sichtbar */}
-      <Tabs.Screen
-        name="debug"
-        options={{
-          title: 'Debug',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="wrench.fill" color={color} />,
-          href: __DEV__ ? undefined : null, // Nur im Entwicklungsmodus anzeigen
         }}
       />
     </Tabs>

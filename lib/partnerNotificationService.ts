@@ -13,6 +13,50 @@ interface PartnerActivityNotification {
   created_at: string;
 }
 
+const NETWORK_ERROR_LOG_THROTTLE_MS = 60_000;
+let lastNetworkWarningAt = 0;
+
+function extractErrorText(error: unknown): string {
+  if (!error) return '';
+
+  if (typeof error === 'string') {
+    return error;
+  }
+
+  if (typeof error === 'object') {
+    const candidate = error as { message?: unknown; details?: unknown; hint?: unknown; code?: unknown };
+    return [candidate.message, candidate.details, candidate.hint, candidate.code]
+      .filter((value): value is string => typeof value === 'string' && value.length > 0)
+      .join(' ');
+  }
+
+  return String(error);
+}
+
+function isTransientNetworkError(error: unknown): boolean {
+  const text = extractErrorText(error).toLowerCase();
+  if (!text) return false;
+
+  return (
+    text.includes('network request failed') ||
+    text.includes('failed to fetch') ||
+    text.includes('internet connection appears to be offline')
+  );
+}
+
+function logPartnerNotificationError(context: string, error: unknown) {
+  if (isTransientNetworkError(error)) {
+    const now = Date.now();
+    if (now - lastNetworkWarningAt >= NETWORK_ERROR_LOG_THROTTLE_MS) {
+      lastNetworkWarningAt = now;
+      console.warn(`${context} (temporary network issue)`);
+    }
+    return;
+  }
+
+  console.error(context, error);
+}
+
 /**
  * Poll for new partner activity notifications and display them as local notifications
  *
@@ -45,7 +89,7 @@ export async function pollPartnerActivities(): Promise<number> {
       .limit(10); // Limit to recent 10 to avoid overwhelming user
 
     if (notifError) {
-      console.error('Error fetching partner notifications:', notifError);
+      logPartnerNotificationError('Error fetching partner notifications:', notifError);
       return 0;
     }
 
@@ -97,13 +141,13 @@ export async function pollPartnerActivities(): Promise<number> {
         // Mark notification as read
         await markPartnerNotificationAsRead(notification.id);
       } catch (error) {
-        console.error('Error processing notification:', notification.id, error);
+        logPartnerNotificationError(`Error processing notification: ${notification.id}`, error);
       }
     }
 
     return notifications.length;
   } catch (error) {
-    console.error('Error polling partner activities:', error);
+    logPartnerNotificationError('Error polling partner activities:', error);
     return 0;
   }
 }
@@ -216,13 +260,13 @@ export async function getUnreadPartnerNotificationCount(): Promise<number> {
       .eq('is_read', false);
 
     if (error) {
-      console.error('Error getting unread notification count:', error);
+      logPartnerNotificationError('Error getting unread notification count:', error);
       return 0;
     }
 
     return count || 0;
   } catch (error) {
-    console.error('Error getting unread notification count:', error);
+    logPartnerNotificationError('Error getting unread notification count:', error);
     return 0;
   }
 }

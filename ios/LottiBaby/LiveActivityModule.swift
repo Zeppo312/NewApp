@@ -1,0 +1,205 @@
+import ActivityKit
+import Foundation
+import React
+
+private enum LiveActivityDateParser {
+  static let withFractionalSeconds: ISO8601DateFormatter = {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return formatter
+  }()
+
+  static let internetDateTime: ISO8601DateFormatter = {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime]
+    return formatter
+  }()
+
+  static func parse(_ value: String) -> Date? {
+    let normalized = value
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+      .replacingOccurrences(of: "\"", with: "")
+    if let date = withFractionalSeconds.date(from: normalized) {
+      return date
+    }
+    if let date = internetDateTime.date(from: normalized) {
+      return date
+    }
+    if let raw = TimeInterval(normalized) {
+      return raw > 1_000_000_000_000
+        ? Date(timeIntervalSince1970: raw / 1000.0)
+        : Date(timeIntervalSince1970: raw)
+    }
+    return nil
+  }
+}
+
+@objc(LiveActivityModule)
+class LiveActivityModule: NSObject {
+  @objc
+  static func requiresMainQueueSetup() -> Bool {
+    return false
+  }
+
+  @objc(isSupported:rejecter:)
+  func isSupported(
+    _ resolve: @escaping RCTPromiseResolveBlock,
+    rejecter reject: @escaping RCTPromiseRejectBlock
+  ) {
+    if #available(iOS 16.1, *) {
+      resolve(ActivityAuthorizationInfo().areActivitiesEnabled)
+    } else {
+      resolve(false)
+    }
+  }
+
+  @objc(startSleepActivity:elapsedTimeText:resolver:rejecter:)
+  func startSleepActivity(
+    _ startTimeISO: String,
+    elapsedTimeText: String,
+    resolver resolve: @escaping RCTPromiseResolveBlock,
+    rejecter reject: @escaping RCTPromiseRejectBlock
+  ) {
+    guard #available(iOS 16.1, *) else {
+      resolve(nil)
+      return
+    }
+
+    guard ActivityAuthorizationInfo().areActivitiesEnabled else {
+      resolve(nil)
+      return
+    }
+
+    Task {
+      do {
+        // Ensure only one active sleep Live Activity.
+        for activity in Activity<SleepActivityAttributes>.activities {
+          await activity.end(using: activity.contentState, dismissalPolicy: .immediate)
+        }
+
+        let attributes = SleepActivityAttributes(
+          startTime: startTimeISO,
+          startTimestamp: LiveActivityDateParser.parse(startTimeISO)?.timeIntervalSince1970 ?? Date().timeIntervalSince1970,
+          elapsedTimeText: elapsedTimeText
+        )
+
+        let state = SleepActivityAttributes.ContentState(
+          isTracking: true,
+          elapsedTimeText: elapsedTimeText,
+          quality: nil
+        )
+
+        let activity = try Activity<SleepActivityAttributes>.request(
+          attributes: attributes,
+          contentState: state,
+          pushType: nil
+        )
+
+        resolve(activity.id)
+      } catch {
+        reject("E_LIVE_ACTIVITY_START", "Failed to start sleep live activity", error)
+      }
+    }
+  }
+
+  @objc(updateSleepActivity:elapsedTimeText:quality:resolver:rejecter:)
+  func updateSleepActivity(
+    _ activityId: String,
+    elapsedTimeText: String,
+    quality: String?,
+    resolver resolve: @escaping RCTPromiseResolveBlock,
+    rejecter reject: @escaping RCTPromiseRejectBlock
+  ) {
+    guard #available(iOS 16.1, *) else {
+      resolve(false)
+      return
+    }
+
+    guard let activity = Activity<SleepActivityAttributes>.activities.first(where: { $0.id == activityId }) else {
+      resolve(false)
+      return
+    }
+
+    Task {
+      let state = SleepActivityAttributes.ContentState(
+        isTracking: true,
+        elapsedTimeText: elapsedTimeText,
+        quality: quality
+      )
+      await activity.update(using: state)
+      resolve(true)
+    }
+  }
+
+  @objc(endSleepActivity:elapsedTimeText:quality:resolver:rejecter:)
+  func endSleepActivity(
+    _ activityId: String,
+    elapsedTimeText: String,
+    quality: String?,
+    resolver resolve: @escaping RCTPromiseResolveBlock,
+    rejecter reject: @escaping RCTPromiseRejectBlock
+  ) {
+    guard #available(iOS 16.1, *) else {
+      resolve(false)
+      return
+    }
+
+    guard let activity = Activity<SleepActivityAttributes>.activities.first(where: { $0.id == activityId }) else {
+      resolve(false)
+      return
+    }
+
+    Task {
+      let finalState = SleepActivityAttributes.ContentState(
+        isTracking: false,
+        elapsedTimeText: elapsedTimeText,
+        quality: quality
+      )
+      await activity.end(using: finalState, dismissalPolicy: .immediate)
+      resolve(true)
+    }
+  }
+
+  @objc(getCurrentSleepActivity:rejecter:)
+  func getCurrentSleepActivity(
+    _ resolve: @escaping RCTPromiseResolveBlock,
+    rejecter reject: @escaping RCTPromiseRejectBlock
+  ) {
+    guard #available(iOS 16.1, *) else {
+      resolve(nil)
+      return
+    }
+
+    guard let activity = Activity<SleepActivityAttributes>.activities.first else {
+      resolve(nil)
+      return
+    }
+
+    resolve([
+      "id": activity.id,
+      "startTime": activity.attributes.startTime,
+      "startTimestamp": activity.attributes.startTimestamp as Any,
+      "elapsedTimeText": activity.contentState.elapsedTimeText,
+      "isTracking": activity.contentState.isTracking,
+      "quality": activity.contentState.quality as Any,
+    ])
+  }
+
+  @objc(endAllSleepActivities:rejecter:)
+  func endAllSleepActivities(
+    _ resolve: @escaping RCTPromiseResolveBlock,
+    rejecter reject: @escaping RCTPromiseRejectBlock
+  ) {
+    guard #available(iOS 16.1, *) else {
+      resolve(false)
+      return
+    }
+
+    Task {
+      for activity in Activity<SleepActivityAttributes>.activities {
+        await activity.end(using: activity.contentState, dismissalPolicy: .immediate)
+      }
+      resolve(true)
+    }
+  }
+}

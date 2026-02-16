@@ -1,171 +1,172 @@
-import { LiveActivitiesModule } from 'expo-live-activities';
-import { Platform } from 'react-native';
-import {
-  SLEEP_ACTIVITY_ID,
-  SleepActivityAttributes,
-  SleepActivityStatus,
-  ActivityState
-} from './sleepActivityAttributes';
+import { NativeModules, Platform } from 'react-native';
+
+type NativeSleepActivitySnapshot = {
+  id: string;
+  startTime: string;
+  elapsedTimeText: string;
+  isTracking: boolean;
+  quality?: string | null;
+};
+
+type LiveActivityNativeModule = {
+  isSupported: () => Promise<boolean>;
+  startSleepActivity: (startTimeISO: string, elapsedTimeText: string) => Promise<string | null>;
+  updateSleepActivity: (
+    activityId: string,
+    elapsedTimeText: string,
+    quality?: string | null
+  ) => Promise<boolean>;
+  endSleepActivity: (
+    activityId: string,
+    elapsedTimeText: string,
+    quality?: string | null
+  ) => Promise<boolean>;
+  getCurrentSleepActivity: () => Promise<NativeSleepActivitySnapshot | null>;
+  endAllSleepActivities: () => Promise<boolean>;
+};
+
+const liveActivityModule =
+  NativeModules.LiveActivityModule as LiveActivityNativeModule | undefined;
 
 class SleepActivityService {
-  private liveActivity: LiveActivitiesModule | null = null;
   private currentActivityId: string | null = null;
-  private isSupported: boolean = false;
+  private supportCheckCompleted = false;
+  private isSupportedByDevice = false;
 
-  constructor() {
-    // Dynamic Island ist nur auf iOS-Geräten mit iOS 16.1+ verfügbar
-    this.isSupported = Platform.OS === 'ios';
-
-    if (this.isSupported) {
-      this.initializeLiveActivity();
-    } else {
-      console.log('Live Activities nicht unterstützt auf dieser Plattform');
-    }
-  }
-
-  private async initializeLiveActivity() {
-    try {
-      // Initialisiere das LiveActivities-Modul
-      this.liveActivity = new LiveActivitiesModule();
-      
-      // Registriere den Activity-Typ
-      await this.liveActivity.registerActivityType(SLEEP_ACTIVITY_ID);
-      
-      console.log('Live Activity erfolgreich initialisiert');
-    } catch (error) {
-      console.error('Fehler bei der Initialisierung von Live Activities:', error);
-      this.isSupported = false;
-    }
-  }
-
-  /**
-   * Startet eine neue Live Activity für die Schlafaufzeichnung
-   * @param startTime Die Startzeit der Schlafaufzeichnung
-   * @returns ID der gestarteten Activity oder null
-   */
-  public async startSleepActivity(startTime: Date): Promise<string | null> {
-    if (!this.isSupported || !this.liveActivity) {
-      return null;
-    }
-
-    try {
-      // Erstelle die initialen Attribute
-      const attributes: SleepActivityAttributes = {
-        startTime: startTime.toISOString(),
-        elapsedTimeText: '00:00:00',
-      };
-
-      // Initialer Status
-      const initialStatus: SleepActivityStatus = {
-        isTracking: true,
-        elapsedTimeText: '00:00:00'
-      };
-
-      // Starte die Activity
-      const activityId = await this.liveActivity.startActivity(
-        SLEEP_ACTIVITY_ID,
-        attributes,
-        initialStatus
-      );
-
-      if (activityId) {
-        this.currentActivityId = activityId;
-        console.log('Sleep Activity gestartet mit ID:', activityId);
-        return activityId;
-      }
-      
-      return null;
-    } catch (error) {
-      console.error('Fehler beim Starten der Sleep Activity:', error);
-      return null;
-    }
-  }
-
-  /**
-   * Aktualisiert den Status einer laufenden Schlafaufzeichnung
-   * @param elapsedTimeText Formatierter Text der verstrichenen Zeit
-   * @param quality Optionale Schlafqualität
-   */
-  public async updateSleepActivity(elapsedTimeText: string, quality?: string): Promise<void> {
-    if (!this.isSupported || !this.liveActivity || !this.currentActivityId) {
-      return;
-    }
-
-    try {
-      // Aktualisierter Status
-      const newStatus: SleepActivityStatus = {
-        isTracking: true,
-        elapsedTimeText,
-        quality
-      };
-
-      // Aktualisiere die Activity
-      await this.liveActivity.updateActivity(
-        this.currentActivityId,
-        newStatus
-      );
-      
-      console.log('Sleep Activity aktualisiert:', elapsedTimeText);
-    } catch (error) {
-      console.error('Fehler beim Aktualisieren der Sleep Activity:', error);
-    }
-  }
-
-  /**
-   * Beendet die laufende Schlafaufzeichnung
-   * @param quality Finale Schlafqualität
-   * @param totalDuration Gesamtdauer des Schlafs
-   */
-  public async endSleepActivity(quality: string, totalDuration: string): Promise<void> {
-    if (!this.isSupported || !this.liveActivity || !this.currentActivityId) {
-      return;
-    }
-
-    try {
-      // Finaler Status
-      const finalStatus: SleepActivityStatus = {
-        isTracking: false,
-        elapsedTimeText: totalDuration,
-        quality
-      };
-
-      // Beende die Activity
-      await this.liveActivity.endActivity(
-        this.currentActivityId,
-        finalStatus
-      );
-      
-      console.log('Sleep Activity beendet');
-      this.currentActivityId = null;
-    } catch (error) {
-      console.error('Fehler beim Beenden der Sleep Activity:', error);
-    }
-  }
-
-  /**
-   * Ruft den aktuellen Status der Schlafaufzeichnung ab
-   */
-  public async getSleepActivityState(): Promise<ActivityState | null> {
-    if (!this.isSupported || !this.liveActivity || !this.currentActivityId) {
-      return null;
-    }
-
-    try {
-      const state = await this.liveActivity.getActivityState(this.currentActivityId);
-      return state as ActivityState;
-    } catch (error) {
-      console.error('Fehler beim Abrufen des Activity-Status:', error);
-      return null;
-    }
-  }
-
-  /**
-   * Prüft, ob die Funktionalität unterstützt wird
-   */
   public isLiveActivitySupported(): boolean {
-    return this.isSupported;
+    return Platform.OS === 'ios' && !!liveActivityModule;
+  }
+
+  private async ensureSupported(): Promise<boolean> {
+    if (!this.isLiveActivitySupported() || !liveActivityModule) {
+      return false;
+    }
+
+    if (this.supportCheckCompleted) {
+      return this.isSupportedByDevice;
+    }
+
+    try {
+      this.isSupportedByDevice = await liveActivityModule.isSupported();
+    } catch (error) {
+      console.error('Failed to check Live Activity support:', error);
+      this.isSupportedByDevice = false;
+    } finally {
+      this.supportCheckCompleted = true;
+    }
+
+    return this.isSupportedByDevice;
+  }
+
+  public async restoreCurrentActivity(): Promise<NativeSleepActivitySnapshot | null> {
+    if (!(await this.ensureSupported()) || !liveActivityModule) {
+      return null;
+    }
+
+    try {
+      const activity = await liveActivityModule.getCurrentSleepActivity();
+      this.currentActivityId = activity?.id ?? null;
+      return activity;
+    } catch (error) {
+      console.error('Failed to restore current sleep live activity:', error);
+      this.currentActivityId = null;
+      return null;
+    }
+  }
+
+  public async startSleepActivity(startTime: Date): Promise<string | null> {
+    if (!(await this.ensureSupported()) || !liveActivityModule) {
+      return null;
+    }
+
+    try {
+      const activityId = await liveActivityModule.startSleepActivity(
+        startTime.toISOString(),
+        '00:00:00'
+      );
+      this.currentActivityId = activityId ?? null;
+      if (activityId) {
+        console.log('Sleep Live Activity started:', activityId);
+      }
+      return this.currentActivityId;
+    } catch (error) {
+      console.error('Failed to start sleep live activity:', error);
+      return null;
+    }
+  }
+
+  private async resolveActivityId(): Promise<string | null> {
+    if (this.currentActivityId) {
+      return this.currentActivityId;
+    }
+
+    const current = await this.restoreCurrentActivity();
+    return current?.id ?? null;
+  }
+
+  public async updateSleepActivity(elapsedTimeText: string, quality?: string): Promise<boolean> {
+    if (!(await this.ensureSupported()) || !liveActivityModule) {
+      return false;
+    }
+
+    const activityId = await this.resolveActivityId();
+    if (!activityId) {
+      return false;
+    }
+
+    try {
+      const updated = await liveActivityModule.updateSleepActivity(
+        activityId,
+        elapsedTimeText,
+        quality ?? null
+      );
+      if (!updated) {
+        this.currentActivityId = null;
+      }
+      return updated;
+    } catch (error) {
+      console.error('Failed to update sleep live activity:', error);
+      return false;
+    }
+  }
+
+  public async endSleepActivity(quality: string, totalDuration: string): Promise<boolean> {
+    if (!(await this.ensureSupported()) || !liveActivityModule) {
+      return false;
+    }
+
+    const activityId = await this.resolveActivityId();
+    if (!activityId) {
+      return false;
+    }
+
+    try {
+      const ended = await liveActivityModule.endSleepActivity(activityId, totalDuration, quality);
+      if (ended) {
+        this.currentActivityId = null;
+        console.log('Sleep Live Activity ended');
+      }
+      return ended;
+    } catch (error) {
+      console.error('Failed to end sleep live activity:', error);
+      return false;
+    }
+  }
+
+  public async endAllSleepActivities(): Promise<boolean> {
+    if (!(await this.ensureSupported()) || !liveActivityModule) {
+      return false;
+    }
+
+    try {
+      const result = await liveActivityModule.endAllSleepActivities();
+      this.currentActivityId = null;
+      return result;
+    } catch (error) {
+      console.error('Failed to end all sleep live activities:', error);
+      return false;
+    }
   }
 }
 
-// Exportiere eine Singleton-Instanz
 export const sleepActivityService = new SleepActivityService();

@@ -68,9 +68,9 @@ export default function LoginScreen() {
     try {
       console.log('Checking is_baby_born flag for user:', userId);
       const { data, error } = await supabase
-        .from('user_profiles')
+        .from('profiles')
         .select('is_baby_born')
-        .eq('user_id', userId)
+        .eq('id', userId)
         .single();
 
       if (error) {
