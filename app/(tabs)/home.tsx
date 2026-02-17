@@ -714,6 +714,10 @@ export default function HomeScreen() {
       feeding_volume_ml: payload.feeding_volume_ml ?? null,
       feeding_side: payload.feeding_side ?? null,
       diaper_type: payload.diaper_type ?? null,
+      diaper_fever_measured: payload.diaper_fever_measured ?? null,
+      diaper_temperature_c: payload.diaper_temperature_c ?? null,
+      diaper_suppository_given: payload.diaper_suppository_given ?? null,
+      diaper_suppository_dose_mg: payload.diaper_suppository_dose_mg ?? null,
     }, activeBabyId ?? undefined);
 
     if (error) {

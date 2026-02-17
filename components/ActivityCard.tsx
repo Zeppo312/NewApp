@@ -232,11 +232,36 @@ const ActivityCard: React.FC<ActivityCardProps> = ({ entry, onDelete, onEdit, ma
   })();
 
   const showNotesBadge = !!notesWithoutRecipe;
+  const diaperFeverMeasured = (entry as any).diaper_fever_measured === true;
+  const diaperSuppositoryGiven = (entry as any).diaper_suppository_given === true;
+  const diaperTemperatureRaw = (entry as any).diaper_temperature_c;
+  const diaperSuppositoryDoseRaw = (entry as any).diaper_suppository_dose_mg;
+  const toFiniteNumber = (value: unknown): number | null => {
+    if (value === null || value === undefined || value === '') return null;
+    const parsed = typeof value === 'number' ? value : Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+  const diaperTemperatureValue =
+    toFiniteNumber(diaperTemperatureRaw);
+  const diaperSuppositoryDoseValue =
+    toFiniteNumber(diaperSuppositoryDoseRaw);
+  const showFeverBadge = entry.entry_type === 'diaper' && (diaperFeverMeasured || diaperTemperatureValue !== null);
+  const showSuppositoryBadge =
+    entry.entry_type === 'diaper' && (diaperSuppositoryGiven || diaperSuppositoryDoseValue !== null);
+  const feverBadgeLabel =
+    diaperTemperatureValue !== null
+      ? `🌡️ ${String(diaperTemperatureValue).replace('.', ',')} °C`
+      : '🌡️ Fieber gemessen';
+  const suppositoryBadgeLabel =
+    diaperSuppositoryDoseValue !== null
+      ? `💊 Zäpfchen ${Math.trunc(diaperSuppositoryDoseValue)} mg`
+      : '💊 Zäpfchen gegeben';
 
   // Berechne Dauer
   const duration = entry.end_time
     ? calculateDuration(entry.start_time!, entry.end_time)
     : 0;
+  const showTimePills = !!entry.start_time || (entry.entry_type !== 'diaper' && (!!entry.end_time || duration > 0));
 
   // Rendere Swipe-Aktionen
   const renderRightActions = (
@@ -314,35 +339,51 @@ const ActivityCard: React.FC<ActivityCardProps> = ({ entry, onDelete, onEdit, ma
                     />
                   </Animated.View>
                 </View>
-                {recipeNote ? (
-                  <View style={styles.badgeRow}>
-                    <ThemedText style={[styles.badgeText, { color: badgeTextColor }]}>🥄 BLW: {recipeNote}</ThemedText>
-                  </View>
-                ) : null}
-                {weightDateLabel ? (
-                  <View style={styles.badgeRow}>
-                    <ThemedText style={[styles.badgeText, { color: badgeTextColor }]}>📅 {weightDateLabel}</ThemedText>
-                  </View>
-                ) : null}
-                {showNotesBadge ? (
-                  <View style={styles.badgeRow}>
-                    <ThemedText style={[styles.badgeText, { color: badgeTextColor }]}>📝 {notesWithoutRecipe}</ThemedText>
+                {(recipeNote || weightDateLabel || showNotesBadge || showFeverBadge || showSuppositoryBadge) ? (
+                  <View style={styles.badgesWrap}>
+                    {recipeNote ? (
+                      <View style={styles.badgePill}>
+                        <ThemedText style={[styles.badgeText, { color: badgeTextColor }]}>🥄 BLW: {recipeNote}</ThemedText>
+                      </View>
+                    ) : null}
+                    {weightDateLabel ? (
+                      <View style={styles.badgePill}>
+                        <ThemedText style={[styles.badgeText, { color: badgeTextColor }]}>📅 {weightDateLabel}</ThemedText>
+                      </View>
+                    ) : null}
+                    {showNotesBadge ? (
+                      <View style={styles.badgePill}>
+                        <ThemedText style={[styles.badgeText, { color: badgeTextColor }]}>📝 {notesWithoutRecipe}</ThemedText>
+                      </View>
+                    ) : null}
+                    {showFeverBadge ? (
+                      <View style={styles.badgePill}>
+                        <ThemedText style={[styles.badgeText, { color: badgeTextColor }]}>{feverBadgeLabel}</ThemedText>
+                      </View>
+                    ) : null}
+                    {showSuppositoryBadge ? (
+                      <View style={styles.badgePill}>
+                        <ThemedText style={[styles.badgeText, { color: badgeTextColor }]}>{suppositoryBadgeLabel}</ThemedText>
+                      </View>
+                    ) : null}
                   </View>
                 ) : null}
 
                 {/* Zeiten nur zeigen, wenn vorhanden */}
-                {(entry.start_time || entry.end_time || duration > 0) && (
+                {showTimePills && (
                 <View style={styles.timeRowTop}>
-                  <View style={styles.timePill}>
-                    <ThemedText style={[styles.timePillText, { color: secondaryTextColor }]}>Start {entry.start_time && formatTime(entry.start_time)}</ThemedText>
-                  </View>
-                  {entry.end_time && (
+                  {entry.start_time && (
+                    <View style={styles.timePill}>
+                      <ThemedText style={[styles.timePillText, { color: secondaryTextColor }]}>Start {formatTime(entry.start_time)}</ThemedText>
+                    </View>
+                  )}
+                  {entry.entry_type !== 'diaper' && entry.end_time && (
                     <View style={[styles.timePill, { marginLeft: 6 }]}>
                       <ThemedText style={[styles.timePillText, { color: secondaryTextColor }]}>Ende {formatTime(entry.end_time)}</ThemedText>
                     </View>
                   )}
 
-                 {duration > 0 && (
+                 {entry.entry_type !== 'diaper' && duration > 0 && (
                     <View style={[styles.timePill, { marginLeft: 6, backgroundColor: 'rgba(94,61,179,0.18)', borderColor: 'rgba(94,61,179,0.35)' }]}>
                       <ThemedText style={[styles.timePillText, { fontWeight: '700', color: secondaryTextColor }]}>{duration} Min</ThemedText>
                     </View>
@@ -418,11 +459,17 @@ const styles = StyleSheet.create({
     marginTop: 8,
     flexWrap: 'wrap'
   },
-  badgeRow: {
+  badgesWrap: {
     marginTop: 6,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'flex-start',
+  },
+  badgePill: {
+    marginRight: 8,
+    marginBottom: 8,
     paddingVertical: 4,
     paddingHorizontal: 10,
-    alignSelf: 'flex-start',
     backgroundColor: 'rgba(94,61,179,0.12)',
     borderColor: 'rgba(94,61,179,0.28)',
     borderWidth: 1,

@@ -17,6 +17,7 @@ import { pregnancyWeekInfo } from '@/constants/PregnancyWeekInfo';
 import { pregnancyMotherInfo } from '@/constants/PregnancyMotherInfo';
 import { pregnancyPartnerInfo } from '@/constants/PregnancyPartnerInfo';
 import { pregnancySymptoms } from '@/constants/PregnancySymptoms';
+import { BIRTH_PREP_SECTION_START_WEEK, birthPreparationMeasures } from '@/constants/BirthPreparationMeasures';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { BlurView } from 'expo-blur';
@@ -245,7 +246,6 @@ function TipHighlightDots() {
 
 // AsyncStorage-Schlüssel
 const LAST_POPUP_DATE_KEY = 'lastDueDatePopup';
-const DEBUG_POPUP_COUNTER_KEY = 'debugPopupCounter';
 
 // Definiere Typen für die verknüpften Benutzer
 interface LinkedUser {
@@ -296,7 +296,6 @@ export default function PregnancyHomeScreen() {
   const [dailyTip, setDailyTip] = useState('');
   const [currentWeek, setCurrentWeek] = useState<number | null>(null);
   const [currentDay, setCurrentDay] = useState<number | null>(null);
-  const [debugCounter, setDebugCounter] = useState<number>(0);
   const [refreshing, setRefreshing] = useState(false);
   const [overviewCarouselWidth, setOverviewCarouselWidth] = useState(0);
   const [overviewIndex, setOverviewIndex] = useState(0);
@@ -365,52 +364,6 @@ export default function PregnancyHomeScreen() {
     console.log(`[${now.toLocaleTimeString()}] ${message}`);
   };
 
-  // Debug-Funktion: Popup-Zähler erhöhen
-  const incrementDebugCounter = async () => {
-    try {
-      const currentCountStr = await AsyncStorage.getItem(DEBUG_POPUP_COUNTER_KEY) || '0';
-      const currentCount = parseInt(currentCountStr, 10);
-      const newCount = currentCount + 1;
-      await AsyncStorage.setItem(DEBUG_POPUP_COUNTER_KEY, newCount.toString());
-      setDebugCounter(newCount);
-      logWithTimestamp(`Popup-Zähler erhöht auf: ${newCount}`);
-    } catch (error) {
-      console.error('Fehler beim Aktualisieren des Debug-Zählers:', error);
-    }
-  };
-
-  // Debug-Funktion: AsyncStorage-Key löschen
-  const clearLastPopupDate = async () => {
-    try {
-      await AsyncStorage.removeItem(LAST_POPUP_DATE_KEY);
-      logWithTimestamp('Letztes Popup-Datum zurückgesetzt');
-    } catch (error) {
-      console.error('Fehler beim Zurücksetzen des letzten Popup-Datums:', error);
-    }
-  };
-
-  // Debug: Zeige den aktuellen Status beim Laden an
-  useEffect(() => {
-    const loadDebugInfo = async () => {
-      try {
-        const countStr = await AsyncStorage.getItem(DEBUG_POPUP_COUNTER_KEY) || '0';
-        setDebugCounter(parseInt(countStr, 10));
-        
-        const lastPopupDateStr = await AsyncStorage.getItem(LAST_POPUP_DATE_KEY);
-        logWithTimestamp(`DEBUG INFO - Popup-Zähler: ${countStr}, Letztes Popup: ${lastPopupDateStr || 'nie'}`);
-      } catch (error) {
-        console.error('Fehler beim Laden der Debug-Informationen:', error);
-      }
-    };
-    
-    loadDebugInfo();
-  }, []);
-
-  // Debug-Funktion: Manuelles Anzeigen des Popups für Testzwecke
-  const debugShowPopup = () => {
-    showPastDueDateAlert();
-  };
-
   // Überprüfen, ob das Fälligkeitsdatum überschritten ist und ggf. Popup anzeigen
   useEffect(() => {
     const checkPastDueDate = async () => {
@@ -453,7 +406,6 @@ export default function PregnancyHomeScreen() {
           
           // Speichern des heutigen Datums als letztes Popup-Datum
           await AsyncStorage.setItem(LAST_POPUP_DATE_KEY, today.toISOString());
-          incrementDebugCounter();
           
           // Popup anzeigen
           showPastDueDateAlert();
@@ -890,6 +842,21 @@ export default function PregnancyHomeScreen() {
     </View>
   );
 
+  const shouldShowBirthPreparationCard = Boolean(
+    currentWeek && currentWeek >= BIRTH_PREP_SECTION_START_WEEK
+  );
+  const birthPrepPreview = birthPreparationMeasures
+    .slice(0, 3)
+    .map((measure) => measure.title)
+    .join(' • ');
+
+  const openBirthPreparationOverview = () => {
+    router.push({
+      pathname: '/(tabs)/countdown',
+      params: { focus: 'birth-preparation' },
+    } as any);
+  };
+
   return (
     <ThemedBackground style={styles.backgroundImage}>
       <SafeAreaView style={styles.container}>
@@ -978,55 +945,56 @@ export default function PregnancyHomeScreen() {
                   </View>
                 </View>
 
-                <View style={styles.tipCard}>
-                  <GlassLensOverlay radius={20} />
-                  <TipHighlightDots />
-                  <View style={styles.tipCardRow}>
-                    <View style={styles.tipIconWrap}>
-                      <IconSymbol name="lightbulb.fill" size={18} color="#D6B28C" />
+                {shouldShowBirthPreparationCard ? (
+                  <TouchableOpacity
+                    style={styles.tipCard}
+                    onPress={openBirthPreparationOverview}
+                    activeOpacity={0.9}
+                  >
+                    <GlassLensOverlay radius={20} />
+                    <TipHighlightDots />
+                    <View style={styles.tipCardRow}>
+                      <View style={styles.tipIconWrap}>
+                        <IconSymbol name="calendar" size={18} color="#D6B28C" />
+                      </View>
+                      <View style={styles.tipContent}>
+                        <ThemedText adaptive={false} style={[styles.tipLabel, { color: accentPurple }]}>
+                          Geburtsvorbereitung
+                        </ThemedText>
+                        <ThemedText adaptive={false} style={[styles.tipText, { color: textPrimary }]}>
+                          Ab SSW 34 findest du alle Maßnahmen übersichtlich im Countdown.
+                        </ThemedText>
+                        <ThemedText adaptive={false} style={[styles.birthPrepTeaserList, { color: textSecondary }]}>
+                          {birthPrepPreview}
+                        </ThemedText>
+                        <View style={styles.birthPrepTeaserCta}>
+                          <ThemedText adaptive={false} style={styles.birthPrepTeaserCtaText}>
+                            Zur Übersicht
+                          </ThemedText>
+                          <IconSymbol name="chevron.right" size={14} color="#FFFFFF" />
+                        </View>
+                      </View>
                     </View>
-                    <View style={styles.tipContent}>
-                      <ThemedText adaptive={false} style={[styles.tipLabel, { color: accentPurple }]}>Tipp des Tages</ThemedText>
-                      <ThemedText adaptive={false} style={[styles.tipText, { color: textPrimary }]}>{dailyTip}</ThemedText>
+                  </TouchableOpacity>
+                ) : (
+                  <View style={styles.tipCard}>
+                    <GlassLensOverlay radius={20} />
+                    <TipHighlightDots />
+                    <View style={styles.tipCardRow}>
+                      <View style={styles.tipIconWrap}>
+                        <IconSymbol name="lightbulb.fill" size={18} color="#D6B28C" />
+                      </View>
+                      <View style={styles.tipContent}>
+                        <ThemedText adaptive={false} style={[styles.tipLabel, { color: accentPurple }]}>Tipp des Tages</ThemedText>
+                        <ThemedText adaptive={false} style={[styles.tipText, { color: textPrimary }]}>{dailyTip}</ThemedText>
+                      </View>
                     </View>
                   </View>
-                </View>
+                )}
               </ThemedView>
             </BlurView>
             <GlassBorderGlint radius={30} />
           </View>
-
-          {/* Debug-Panel (nur im Entwicklungsmodus sichtbar) */}
-          {__DEV__ && (
-            <ThemedView style={styles.debugCard} lightColor="#ffefdb" darkColor="#453531">
-              <ThemedText style={styles.debugTitle} lightColor="#8b4513" darkColor="#f5deb3">
-                Debug Info
-              </ThemedText>
-              <View style={{ marginBottom: 10 }}>
-                <ThemedText style={styles.debugText} lightColor="#333" darkColor="#f0f0f0">
-                  Popup-Zähler: {debugCounter}
-                </ThemedText>
-              </View>
-              <View style={styles.debugButtonRow}>
-                <TouchableOpacity 
-                  style={[styles.debugButton, { backgroundColor: '#4caf50' }]} 
-                  onPress={debugShowPopup}
-                >
-                  <ThemedText style={styles.debugButtonText} lightColor="#fff" darkColor="#fff">
-                    Test Popup
-                  </ThemedText>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={[styles.debugButton, { backgroundColor: '#f44336' }]} 
-                  onPress={clearLastPopupDate}
-                >
-                  <ThemedText style={styles.debugButtonText} lightColor="#fff" darkColor="#fff">
-                    Reset Timer
-                  </ThemedText>
-                </TouchableOpacity>
-              </View>
-            </ThemedView>
-          )}
 
           {renderOverviewSection()}
 
@@ -1617,6 +1585,27 @@ const styles = StyleSheet.create({
   cardsSection: {
     marginBottom: 16,
   },
+  birthPrepTeaserList: {
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 6,
+    marginBottom: 8,
+  },
+  birthPrepTeaserCta: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#5E3DB3',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  birthPrepTeaserCtaText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+    marginRight: 4,
+  },
   cardsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1666,43 +1655,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#7D5A50',
     textAlign: 'center',
-  },
-  debugCard: {
-    padding: 15,
-    borderRadius: 15,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    borderWidth: 1,
-    borderColor: '#ffcc80',
-  },
-  debugTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 8,
-  },
-  debugText: {
-    fontSize: 14,
-    marginBottom: 10,
-  },
-  debugButtonRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  debugButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    flex: 1,
-    marginHorizontal: 5,
-    alignItems: 'center',
-  },
-  debugButtonText: {
-    fontSize: 14,
-    fontWeight: 'bold',
   },
   updateSuccessContainer: {
     position: 'absolute',

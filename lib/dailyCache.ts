@@ -34,6 +34,10 @@ export const mapCareToDaily = (rows: any[]): any[] =>
     feeding_volume_ml: r.feeding_volume_ml ?? undefined,
     feeding_side: r.feeding_side ?? undefined,
     diaper_type: r.diaper_type ?? undefined,
+    diaper_fever_measured: r.diaper_fever_measured ?? undefined,
+    diaper_temperature_c: r.diaper_temperature_c ?? undefined,
+    diaper_suppository_given: r.diaper_suppository_given ?? undefined,
+    diaper_suppository_dose_mg: r.diaper_suppository_dose_mg ?? undefined,
     sub_type:
       r.entry_type === 'feeding'
         ? r.feeding_type === 'BREAST'

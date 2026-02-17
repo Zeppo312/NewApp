@@ -635,6 +635,10 @@ export default function DailyScreen() {
           end_time: payload.end_time ?? null,
           notes: payload.notes ?? null,
           diaper_type: diaperType,
+          diaper_fever_measured: payload.diaper_fever_measured ?? null,
+          diaper_temperature_c: payload.diaper_temperature_c ?? null,
+          diaper_suppository_given: payload.diaper_suppository_given ?? null,
+          diaper_suppository_dose_mg: payload.diaper_suppository_dose_mg ?? null,
         }, activeBabyId ?? undefined);
         data = res.data; error = res.error;
       } else {
@@ -644,6 +648,10 @@ export default function DailyScreen() {
           end_time: payload.end_time ?? null,
           notes: payload.notes ?? null,
           diaper_type: diaperType,
+          diaper_fever_measured: payload.diaper_fever_measured ?? null,
+          diaper_temperature_c: payload.diaper_temperature_c ?? null,
+          diaper_suppository_given: payload.diaper_suppository_given ?? null,
+          diaper_suppository_dose_mg: payload.diaper_suppository_dose_mg ?? null,
         }, activeBabyId ?? undefined);
         data = res.data; error = res.error;
       }
@@ -1491,6 +1499,10 @@ export default function DailyScreen() {
             feeding_volume_ml: (editingEntry as any).feeding_volume_ml ?? null,
             feeding_side: (editingEntry as any).feeding_side as any,
             diaper_type: (editingEntry as any).diaper_type as any,
+            diaper_fever_measured: (editingEntry as any).diaper_fever_measured ?? null,
+            diaper_temperature_c: (editingEntry as any).diaper_temperature_c ?? null,
+            diaper_suppository_given: (editingEntry as any).diaper_suppository_given ?? null,
+            diaper_suppository_dose_mg: (editingEntry as any).diaper_suppository_dose_mg ?? null,
             notes: editingEntry.notes ?? null,
             start_time: editingEntry.start_time!,
             end_time: editingEntry.end_time ?? null,

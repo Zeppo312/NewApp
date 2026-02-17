@@ -12,6 +12,8 @@ import {
   LayoutAnimation,
   UIManager,
   Image,
+  Alert,
+  TextInputProps,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -27,6 +29,15 @@ type ActivityType = 'feeding' | 'diaper' | 'other';
 type FeedingType = 'breast' | 'bottle' | 'solids';
 type DiaperType = 'wet' | 'dirty' | 'both';
 type BreastSide = 'left' | 'right' | 'both';
+type FocusField = 'notes' | 'diaper_temperature_c' | 'diaper_suppository_dose_mg';
+type FocusConfig = {
+  field: FocusField;
+  label: string;
+  placeholder?: string;
+  multiline?: boolean;
+  keyboardType?: TextInputProps['keyboardType'];
+  inputMode?: TextInputProps['inputMode'];
+};
 
 // Props-Interface
 interface ActivityInputModalProps {
@@ -44,6 +55,10 @@ interface ActivityInputModalProps {
     feeding_volume_ml: number | null;
     feeding_side: 'LEFT' | 'RIGHT' | 'BOTH' | null;
     diaper_type: 'WET' | 'DIRTY' | 'BOTH' | null;
+    diaper_fever_measured: boolean | null;
+    diaper_temperature_c: number | null;
+    diaper_suppository_given: boolean | null;
+    diaper_suppository_dose_mg: number | null;
     notes: string | null;
     start_time: string;
     end_time: string | null;
@@ -55,6 +70,31 @@ const FixedEmojiText: React.FC<React.ComponentProps<typeof Text>> = ({ style, ch
     {children}
   </Text>
 );
+
+const toDecimalValue = (raw: string): number | null => {
+  const normalized = raw.trim().replace(',', '.');
+  if (!normalized) return null;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const toPositiveInt = (raw: string): number | null => {
+  const normalized = raw.trim();
+  if (!normalized) return null;
+  if (!/^\d+$/.test(normalized)) return null;
+  const parsed = Number(normalized);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+};
+
+const formatTempInput = (value: number | null | undefined): string => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '';
+  return String(value).replace('.', ',');
+};
+
+const formatIntInput = (value: number | null | undefined): string => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '';
+  return String(Math.trunc(value));
+};
 
 const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   visible,
@@ -105,7 +145,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   const [showEndPicker, setShowEndPicker] = useState(false);
   const [notes, setNotes] = useState('');
   const [isNotesVisible, setNotesVisible] = useState(false);
-  const [focusConfig, setFocusConfig] = useState<{ label: string; placeholder?: string; multiline?: boolean } | null>(null);
+  const [focusConfig, setFocusConfig] = useState<FocusConfig | null>(null);
   const [focusValue, setFocusValue] = useState('');
   const [startTimer, setStartTimer] = useState(false);
   const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
@@ -123,6 +163,10 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
 
   // Diaper States
   const [diaperType, setDiaperType] = useState<DiaperType>('wet');
+  const [diaperFeverMeasured, setDiaperFeverMeasured] = useState(false);
+  const [diaperTemperatureC, setDiaperTemperatureC] = useState('');
+  const [diaperSuppositoryGiven, setDiaperSuppositoryGiven] = useState(false);
+  const [diaperSuppositoryDoseMg, setDiaperSuppositoryDoseMg] = useState('');
 
   // Enable LayoutAnimation for Android
   if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -162,10 +206,26 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
       setBreastSide(
         initialData?.feeding_side === 'RIGHT' ? 'right' : initialData?.feeding_side === 'BOTH' ? 'both' : 'left'
       );
+      setDiaperFeverMeasured(false);
+      setDiaperTemperatureC('');
+      setDiaperSuppositoryGiven(false);
+      setDiaperSuppositoryDoseMg('');
     } else if (activityType === 'diaper') {
+      const hasTemp = typeof initialData?.diaper_temperature_c === 'number' && Number.isFinite(initialData.diaper_temperature_c);
+      const hasDose =
+        typeof initialData?.diaper_suppository_dose_mg === 'number' && Number.isFinite(initialData.diaper_suppository_dose_mg);
       setDiaperType(
         initialData?.diaper_type === 'DIRTY' ? 'dirty' : initialData?.diaper_type === 'BOTH' ? 'both' : 'wet'
       );
+      setDiaperFeverMeasured(initialData?.diaper_fever_measured === true || hasTemp);
+      setDiaperTemperatureC(formatTempInput(initialData?.diaper_temperature_c));
+      setDiaperSuppositoryGiven(initialData?.diaper_suppository_given === true || hasDose);
+      setDiaperSuppositoryDoseMg(formatIntInput(initialData?.diaper_suppository_dose_mg));
+    } else {
+      setDiaperFeverMeasured(false);
+      setDiaperTemperatureC('');
+      setDiaperSuppositoryGiven(false);
+      setDiaperSuppositoryDoseMg('');
     }
 
     // Hier könnten initialSubType ausgewertet werden
@@ -202,6 +262,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   // Speichern: Payload für baby_care_entries
   const handleSave = () => {
     const entryDateISO = startTime.toISOString();
+    const isDiaperEntry = activityType === 'diaper';
     const selectedRecipe = recipeOptions.find((r) => r.id === selectedRecipeId);
     const recipeTitle = selectedRecipe?.title?.trim() || (selectedRecipe ? 'BLW-Rezept' : null);
     const recipeNote = recipeTitle ? `BLW: ${recipeTitle}` : null;
@@ -209,7 +270,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
     const base = {
       entry_type: activityType,           // 'feeding' | 'diaper'
       start_time: entryDateISO,
-      end_time: endTime ? endTime.toISOString() : null as string | null,
+      end_time: isDiaperEntry ? null : (endTime ? endTime.toISOString() : null as string | null),
       notes: combinedNotes || null,
     };
 
@@ -233,6 +294,19 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
         feeding_side,
       };
     } else if (activityType === 'diaper') {
+      const parsedTemp = diaperFeverMeasured ? toDecimalValue(diaperTemperatureC) : null;
+      const parsedDose = diaperSuppositoryGiven ? toPositiveInt(diaperSuppositoryDoseMg) : null;
+
+      if (diaperFeverMeasured && (parsedTemp === null || parsedTemp < 30 || parsedTemp > 45)) {
+        Alert.alert('Ungültige Temperatur', 'Bitte gib eine Temperatur zwischen 30 und 45 °C ein.');
+        return;
+      }
+
+      if (diaperSuppositoryGiven && parsedDose === null) {
+        Alert.alert('Ungültige Dosis', 'Bitte gib eine gültige Dosis in mg ein (z. B. 125).');
+        return;
+      }
+
       const diaper_type =
         diaperType === 'wet' ? 'WET' :
         diaperType === 'dirty' ? 'DIRTY' :
@@ -241,12 +315,16 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
       payload = {
         ...base,
         diaper_type,
+        diaper_fever_measured: diaperFeverMeasured,
+        diaper_temperature_c: diaperFeverMeasured ? parsedTemp : null,
+        diaper_suppository_given: diaperSuppositoryGiven,
+        diaper_suppository_dose_mg: diaperSuppositoryGiven ? parsedDose : null,
       };
     }
     // other: nur base + notes
 
     console.log('ActivityInputModal - Sending payload:', JSON.stringify(payload, null, 2));
-    onSave(payload, { startTimer });
+    onSave(payload, { startTimer: activityType === 'feeding' ? startTimer : false });
     onClose();
   };
 
@@ -263,17 +341,20 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
     setter(d);
   };
 
-  const renderTimeSection = () => (
+  const renderTimeSection = () => {
+    const showEndTime = activityType !== 'diaper';
+    return (
     <View style={styles.section}>
       <Text style={[styles.sectionTitle, { color: theme.text }]}>
         <FixedEmojiText style={styles.sectionTitleEmoji}>⏰</FixedEmojiText>{' '}
-        Zeitraum
+        {showEndTime ? 'Zeitraum' : 'Zeitpunkt'}
       </Text>
 
-      <View style={styles.timeRow}> 
+      <View style={[styles.timeRow, !showEndTime && styles.timeRowSingle]}> 
         <TouchableOpacity
           style={[
             styles.timeButton,
+            !showEndTime && styles.timeButtonSingle,
             isDark && {
               backgroundColor: 'rgba(24, 24, 28, 0.92)',
               borderWidth: 1,
@@ -288,38 +369,40 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
           </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[
-            styles.timeButton,
-            isDark && {
-              backgroundColor: 'rgba(24, 24, 28, 0.92)',
-              borderWidth: 1,
-              borderColor: 'rgba(255,255,255,0.14)',
-            },
-            startTimer && styles.timeButtonDisabled,
-          ]}
-          onPress={() => {
-            if (startTimer) return;
-            setEndTimeVisible(true);
-            setShowEndPicker(true);
-          }}
-          activeOpacity={startTimer ? 1 : 0.7}
-        >
-          <Text style={[styles.timeLabel, { color: theme.textSecondary }]}>Ende</Text>
-          <Text
+        {showEndTime && (
+          <TouchableOpacity
             style={[
-              styles.timeValue,
-              startTimer ? [styles.timeDisabledText, { color: theme.textSecondary }] : { color: theme.text },
+              styles.timeButton,
+              isDark && {
+                backgroundColor: 'rgba(24, 24, 28, 0.92)',
+                borderWidth: 1,
+                borderColor: 'rgba(255,255,255,0.14)',
+              },
+              startTimer && styles.timeButtonDisabled,
             ]}
+            onPress={() => {
+              if (startTimer) return;
+              setEndTimeVisible(true);
+              setShowEndPicker(true);
+            }}
+            activeOpacity={startTimer ? 1 : 0.7}
           >
-            {startTimer
-              ? 'Timer läuft'
-              : endTime
-              ? endTime.toLocaleString('de-DE', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })
-              : 'Offen'}
-          </Text>
-          {startTimer && <Text style={[styles.timeHint, { color: theme.textSecondary }]}>Stoppe später, Ende wird gesetzt</Text>}
-        </TouchableOpacity>
+            <Text style={[styles.timeLabel, { color: theme.textSecondary }]}>Ende</Text>
+            <Text
+              style={[
+                styles.timeValue,
+                startTimer ? [styles.timeDisabledText, { color: theme.textSecondary }] : { color: theme.text },
+              ]}
+            >
+              {startTimer
+                ? 'Timer läuft'
+                : endTime
+                ? endTime.toLocaleString('de-DE', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })
+                : 'Offen'}
+            </Text>
+            {startTimer && <Text style={[styles.timeHint, { color: theme.textSecondary }]}>Stoppe später, Ende wird gesetzt</Text>}
+          </TouchableOpacity>
+        )}
       </View>
 
       {showStartPicker && (
@@ -348,7 +431,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
         </View>
       )}
 
-      {showEndPicker && (
+      {showEndTime && showEndPicker && (
         <View
           style={[
             styles.datePickerContainer,
@@ -374,7 +457,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
         </View>
       )}
 
-      {(activityType === 'feeding' || activityType === 'diaper') && (
+      {activityType === 'feeding' && (
         <TouchableOpacity
           style={[
             styles.timerToggle,
@@ -416,7 +499,8 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
         </TouchableOpacity>
       )}
     </View>
-  );
+    );
+  };
 
   const getButtonColor = (type: FeedingType) => {
     switch (type) {
@@ -697,6 +781,127 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
           </TouchableOpacity>
         ))}
       </View>
+
+      <View style={styles.diaperHealthGroup}>
+        <TouchableOpacity
+          style={[
+            styles.diaperHealthToggle,
+            { backgroundColor: isDark ? 'rgba(24, 24, 28, 0.92)' : 'rgba(255,255,255,0.82)' },
+            diaperFeverMeasured && styles.diaperHealthToggleActive,
+          ]}
+          onPress={() => {
+            setDiaperFeverMeasured((prev) => {
+              const next = !prev;
+              if (!next) setDiaperTemperatureC('');
+              return next;
+            });
+          }}
+          activeOpacity={0.85}
+        >
+          <View style={[styles.healthTogglePill, diaperFeverMeasured && styles.healthTogglePillActive]}>
+            <View style={[styles.healthToggleKnob, diaperFeverMeasured && styles.healthToggleKnobActive]} />
+          </View>
+          <View style={styles.healthToggleTextWrap}>
+            <Text style={[styles.healthToggleLabel, { color: theme.text }]}>Fieber gemessen</Text>
+            <Text style={[styles.healthToggleSub, { color: theme.textSecondary }]}>
+              {diaperFeverMeasured ? 'Ja, Temperatur eintragen' : 'Optional'}
+            </Text>
+          </View>
+        </TouchableOpacity>
+
+        {diaperFeverMeasured && (
+          <TouchableOpacity
+            style={[
+              styles.diaperHealthInput,
+              {
+                backgroundColor: isDark ? 'rgba(24, 24, 28, 0.92)' : 'rgba(255,255,255,0.82)',
+                borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.08)',
+              },
+            ]}
+            activeOpacity={0.9}
+            onPress={() => {
+              setFocusValue(diaperTemperatureC);
+              setFocusConfig({
+                field: 'diaper_temperature_c',
+                label: 'Temperatur (°C)',
+                placeholder: 'z. B. 38,5',
+                keyboardType: 'decimal-pad',
+                inputMode: 'decimal',
+              });
+            }}
+          >
+            <Text style={[styles.diaperHealthInputLabel, { color: theme.textSecondary }]}>Temperatur (°C)</Text>
+            <Text
+              style={[
+                styles.diaperHealthInputValue,
+                { color: diaperTemperatureC.trim() ? theme.text : theme.textSecondary },
+              ]}
+            >
+              {diaperTemperatureC.trim() ? `${diaperTemperatureC.trim()} °C` : 'Wert eingeben'}
+            </Text>
+          </TouchableOpacity>
+        )}
+
+        <TouchableOpacity
+          style={[
+            styles.diaperHealthToggle,
+            { backgroundColor: isDark ? 'rgba(24, 24, 28, 0.92)' : 'rgba(255,255,255,0.82)' },
+            diaperSuppositoryGiven && styles.diaperHealthToggleActive,
+          ]}
+          onPress={() => {
+            setDiaperSuppositoryGiven((prev) => {
+              const next = !prev;
+              if (!next) setDiaperSuppositoryDoseMg('');
+              return next;
+            });
+          }}
+          activeOpacity={0.85}
+        >
+          <View style={[styles.healthTogglePill, diaperSuppositoryGiven && styles.healthTogglePillActive]}>
+            <View style={[styles.healthToggleKnob, diaperSuppositoryGiven && styles.healthToggleKnobActive]} />
+          </View>
+          <View style={styles.healthToggleTextWrap}>
+            <Text style={[styles.healthToggleLabel, { color: theme.text }]}>Zäpfchen gegeben</Text>
+            <Text style={[styles.healthToggleSub, { color: theme.textSecondary }]}>
+              {diaperSuppositoryGiven ? 'Ja, Dosis eintragen' : 'Optional'}
+            </Text>
+          </View>
+        </TouchableOpacity>
+
+        {diaperSuppositoryGiven && (
+          <TouchableOpacity
+            style={[
+              styles.diaperHealthInput,
+              {
+                backgroundColor: isDark ? 'rgba(24, 24, 28, 0.92)' : 'rgba(255,255,255,0.82)',
+                borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.08)',
+              },
+            ]}
+            activeOpacity={0.9}
+            onPress={() => {
+              setFocusValue(diaperSuppositoryDoseMg);
+              setFocusConfig({
+                field: 'diaper_suppository_dose_mg',
+                label: 'Dosis (mg)',
+                placeholder: 'z. B. 125',
+                keyboardType: 'number-pad',
+                inputMode: 'numeric',
+              });
+            }}
+          >
+            <Text style={[styles.diaperHealthInputLabel, { color: theme.textSecondary }]}>Dosis (mg)</Text>
+            <Text
+              style={[
+                styles.diaperHealthInputValue,
+                { color: diaperSuppositoryDoseMg.trim() ? theme.text : theme.textSecondary },
+              ]}
+            >
+              {diaperSuppositoryDoseMg.trim() ? `${diaperSuppositoryDoseMg.trim()} mg` : 'Wert eingeben'}
+            </Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
       <Text style={[styles.infoText, { marginTop: 20, color: theme.textSecondary }]}>Wähle aus, was auf die Windel zutrifft.</Text>
     </View>
   );
@@ -709,21 +914,28 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   const openNotesEditor = () => {
     setFocusValue(notes);
     setFocusConfig({
+      field: 'notes',
       label: 'Notizen',
       placeholder: 'Details hinzufügen...',
       multiline: true,
     });
   };
 
-  const closeNotesEditor = () => {
+  const closeFocusEditor = () => {
     setFocusConfig(null);
     setFocusValue('');
   };
 
-  const saveNotesEditor = (next?: string) => {
+  const saveFocusEditor = (next?: string) => {
     const val = typeof next === 'string' ? next : focusValue;
-    setNotes(val);
-    closeNotesEditor();
+    if (focusConfig?.field === 'notes') {
+      setNotes(val);
+    } else if (focusConfig?.field === 'diaper_temperature_c') {
+      setDiaperTemperatureC(val);
+    } else if (focusConfig?.field === 'diaper_suppository_dose_mg') {
+      setDiaperSuppositoryDoseMg(val);
+    }
+    closeFocusEditor();
   };
 
   const renderNotes = () => (
@@ -815,8 +1027,10 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
         value={focusValue}
         placeholder={focusConfig?.placeholder}
         multiline={!!focusConfig?.multiline}
-        onClose={closeNotesEditor}
-        onSubmit={(next) => saveNotesEditor(next)}
+        keyboardType={focusConfig?.keyboardType}
+        inputMode={focusConfig?.inputMode}
+        onClose={closeFocusEditor}
+        onSubmit={(next) => saveFocusEditor(next)}
       />
     </Modal>
   );
@@ -978,6 +1192,7 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   timeRow: { flexDirection: 'row', justifyContent: 'space-between', width: '90%', gap: 15 },
+  timeRowSingle: { gap: 0 },
   timeButton: {
     flex: 1,
     backgroundColor: 'rgba(255, 255, 255, 0.8)',
@@ -989,6 +1204,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 3,
     elevation: 3,
+  },
+  timeButtonSingle: {
+    width: '100%',
+    flex: 0,
   },
   timeButtonDisabled: {
     opacity: 0.72,
@@ -1204,6 +1423,80 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginTop: 2,
     fontWeight: '500',
+  },
+  diaperHealthGroup: {
+    width: '90%',
+    marginTop: 16,
+    gap: 10,
+  },
+  diaperHealthToggle: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.05)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  diaperHealthToggleActive: {
+    borderColor: 'rgba(74,144,226,0.45)',
+    backgroundColor: 'rgba(74,144,226,0.12)',
+  },
+  healthTogglePill: {
+    width: 48,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#D6D6D6',
+    padding: 4,
+    justifyContent: 'center',
+  },
+  healthTogglePillActive: {
+    backgroundColor: '#4A90E2',
+  },
+  healthToggleKnob: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#fff',
+    alignSelf: 'flex-start',
+  },
+  healthToggleKnobActive: {
+    alignSelf: 'flex-end',
+  },
+  healthToggleTextWrap: {
+    flex: 1,
+  },
+  healthToggleLabel: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  healthToggleSub: {
+    fontSize: 13,
+    marginTop: 2,
+    fontWeight: '500',
+  },
+  diaperHealthInput: {
+    width: '100%',
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  diaperHealthInputLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  diaperHealthInputValue: {
+    marginTop: 4,
+    fontSize: 15,
+    fontWeight: '700',
   },
   sideSelectorContainer: {
     flexDirection: 'row',

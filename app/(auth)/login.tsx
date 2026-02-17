@@ -27,6 +27,17 @@ export default function LoginScreen() {
   const secondaryTextColor = Colors.light.textSecondary;
   const { signInWithEmail, signUpWithEmail, signInWithApple } = useAuth();
 
+  // Nach Auth immer über Root-Router gehen, damit ein zentraler Guard
+  // den passenden Startscreen anhand des aktuellen Baby-Status auswählt.
+  const navigateAfterAuth = async () => {
+    try {
+      router.replace('/');
+    } catch (navError) {
+      console.error('Navigation error:', navError);
+      router.navigate('/');
+    }
+  };
+
   const handleForgotPassword = async () => {
     if (!email) {
       Alert.alert(
@@ -63,15 +74,25 @@ export default function LoginScreen() {
     }
   };
 
-  // Nach Auth immer über Root-Router gehen, damit ein zentraler Guard
-  // den passenden Startscreen anhand des aktuellen Baby-Status auswählt.
-  const navigateAfterAuth = async () => {
-    try {
-      router.replace('/');
-    } catch (navError) {
-      console.error('Navigation error:', navError);
-      router.navigate('/');
+  const waitForAuthenticatedSession = async (timeoutMs = 2000) => {
+    const startedAt = Date.now();
+
+    while (Date.now() - startedAt < timeoutMs) {
+      const { data, error: sessionError } = await supabase.auth.getSession();
+
+      if (sessionError) {
+        console.error('Session check error after login:', sessionError);
+        return null;
+      }
+
+      if (data.session?.user) {
+        return data.session;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 120));
     }
+
+    return null;
   };
 
   const handleAuth = async () => {
@@ -136,12 +157,15 @@ export default function LoginScreen() {
 
         console.log('Sign in successful:', data);
 
-        // Bei erfolgreicher Anmeldung über zentralen Root-Guard navigieren
-        if (data && data.user && data.user.id) {
-          await navigateAfterAuth();
-        } else {
-          await navigateAfterAuth();
+        // Session explizit bestätigen, damit der Root-Guard nicht in einen Login-Redirect fällt
+        const session = data?.session ?? await waitForAuthenticatedSession();
+        if (!session?.user) {
+          setError('Anmeldung erfolgreich, aber Session noch nicht verfügbar. Bitte kurz erneut versuchen.');
+          return;
         }
+
+        // Bei erfolgreicher Anmeldung über zentralen Root-Guard navigieren
+        await navigateAfterAuth();
       }
     } catch (err: any) {
       // Benutzerfreundliche Fehlermeldungen

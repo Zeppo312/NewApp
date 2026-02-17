@@ -148,6 +148,35 @@ private struct SleepActivityMainView: View {
 }
 
 @available(iOS 16.1, *)
+private struct SleepCompactTrailingTimerView: View {
+    let startDate: Date?
+    let elapsedFallbackText: String
+
+    private var compactFallbackText: String {
+        let cleaned = elapsedFallbackText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if cleaned.count <= 5 {
+            return cleaned
+        }
+        return String(cleaned.suffix(5))
+    }
+
+    var body: some View {
+        Group {
+            if let startDate {
+                Text(startDate, style: .timer)
+            } else {
+                Text(compactFallbackText)
+            }
+        }
+        .font(.system(size: 11, weight: .semibold, design: .rounded))
+        .monospacedDigit()
+        .lineLimit(1)
+        .minimumScaleFactor(0.7)
+        .frame(width: 38, alignment: .trailing)
+    }
+}
+
+@available(iOS 16.1, *)
 struct WidgetLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: SleepActivityAttributes.self) { context in
@@ -213,17 +242,13 @@ struct WidgetLiveActivity: Widget {
                 }
             } compactLeading: {
                 Image(systemName: "moon.fill")
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
                     .foregroundStyle(SleepActivityTheme.accent)
             } compactTrailing: {
-                if let startDate {
-                    Text(startDate, style: .timer)
-                        .font(.system(size: 12, weight: .bold, design: .rounded))
-                        .monospacedDigit()
-                } else {
-                    Text(context.state.elapsedTimeText)
-                        .font(.system(size: 12, weight: .bold, design: .rounded))
-                        .monospacedDigit()
-                }
+                SleepCompactTrailingTimerView(
+                    startDate: startDate,
+                    elapsedFallbackText: context.state.elapsedTimeText
+                )
             } minimal: {
                 Image(systemName: "moon.fill")
                     .foregroundStyle(SleepActivityTheme.accent)

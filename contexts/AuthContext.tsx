@@ -1,4 +1,4 @@
-import React, { createContext, useState, useEffect, useContext } from 'react';
+import React, { createContext, useState, useEffect, useContext, useCallback } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import {
   supabase,
@@ -20,6 +20,7 @@ type AuthContextType = {
   session: Session | null;
   user: User | null;
   loading: boolean;
+  refreshSession: () => Promise<Session | null>;
   // E-Mail-Authentifizierung
   signInWithEmail: (email: string, password: string) => Promise<{ data?: any, error: any }>;
   signUpWithEmail: (email: string, password: string) => Promise<{ data?: any, error: any }>;
@@ -42,63 +43,51 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const applySession = useCallback((nextSession: Session | null) => {
+    setSession(nextSession);
+    setUser(nextSession?.user ?? null);
+  }, []);
+
+  const refreshSession = useCallback(async () => {
+    if (!isSupabaseReady()) {
+      applySession(null);
+      return null;
+    }
+
+    const { data, error } = await supabase.auth.getSession();
+    if (error) {
+      console.error('Error refreshing session:', error);
+      applySession(null);
+      return null;
+    }
+
+    const nextSession = data.session ?? null;
+    applySession(nextSession);
+    return nextSession;
+  }, [applySession]);
+
   // Initialisierung und Überwachung des Authentifizierungsstatus
   useEffect(() => {
+    let isMounted = true;
+
+    const applySessionSafe = (nextSession: Session | null) => {
+      if (!isMounted) return;
+      applySession(nextSession);
+    };
+
     // Prüfen, ob wir im Browser sind und Supabase bereit ist
     if (!isSupabaseReady()) {
       console.log('Supabase is not ready yet (server-side rendering)');
-      // Wir setzen einen Timeout, um sicherzustellen, dass die App nicht hängen bleibt
-      setTimeout(() => {
-        setLoading(false);
-      }, 1000);
+      if (isMounted) setLoading(false);
       return;
     }
 
-    const initAuth = async () => {
-      try {
-        // Simulierte Verzögerung für stabileres Laden auf mobilen Geräten
-        await new Promise(resolve => setTimeout(resolve, 500));
-
-        // Prüfen der Supabase-Verbindung
-        const connectionCheck = await checkSupabaseConnection();
-        console.log('Supabase connection check:', connectionCheck);
-
-        // Wenn die Supabase-Verbindung fehlschlägt, setzen wir den Benutzer auf null
-        if (!connectionCheck.success) {
-          console.log('Supabase connection failed, setting user to null');
-          setSession(null);
-          setUser(null);
-          setLoading(false);
-          return;
-        }
-
-        // Abrufen der aktuellen Session beim Start
-        const { data } = await supabase.auth.getSession();
-        console.log('Got session:', data.session ? 'session exists' : 'no session');
-        setSession(data.session);
-        setUser(data.session?.user ?? null);
-      } catch (error) {
-        console.error('Error initializing auth:', error);
-        // Bei einem Fehler setzen wir den Benutzer auf null
-        setSession(null);
-        setUser(null);
-      } finally {
-        // Sicherstellen, dass der Ladeindikator ausgeblendet wird
-        setLoading(false);
-      }
-    };
-
-    // Initialisierung starten
-    initAuth();
-
-    // Überwachung von Authentifizierungsänderungen
+    // Überwachung von Authentifizierungsänderungen früh registrieren
     let subscription: { unsubscribe: () => void } | null = null;
-
     try {
-      const authListener = supabase.auth.onAuthStateChange((_event, session) => {
-        console.log('Auth state changed:', _event, session ? 'session exists' : 'no session');
-        setSession(session);
-        setUser(session?.user ?? null);
+      const authListener = supabase.auth.onAuthStateChange((_event, nextSession) => {
+        console.log('Auth state changed:', _event, nextSession ? 'session exists' : 'no session');
+        applySessionSafe(nextSession);
       });
 
       subscription = authListener.data.subscription;
@@ -106,22 +95,78 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error('Error setting up auth state change:', error);
     }
 
+    const initAuth = async () => {
+      try {
+        // Optionales Connectivity-Logging (darf Auth nicht blockieren)
+        checkSupabaseConnection()
+          .then((result) => {
+            if (!result.success) {
+              console.warn('Supabase connection check warning:', result.error);
+            } else {
+              console.log('Supabase connection check: ok');
+            }
+          })
+          .catch((connectionError) => {
+            console.warn('Supabase connection check exception:', connectionError);
+          });
+
+        // Abrufen der aktuellen Session beim Start
+        const nextSession = await refreshSession();
+        console.log('Got session:', nextSession ? 'session exists' : 'no session');
+      } catch (error) {
+        console.error('Error initializing auth:', error);
+        // Bei einem Fehler setzen wir den Benutzer auf null
+        applySessionSafe(null);
+      } finally {
+        // Sicherstellen, dass der Ladeindikator ausgeblendet wird
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    // Initialisierung starten
+    initAuth();
+
     // Cleanup-Funktion
     return () => {
+      isMounted = false;
       if (subscription) {
         subscription.unsubscribe();
       }
     };
-  }, []);
+  }, [applySession, refreshSession]);
 
   // E-Mail-Authentifizierung
   const handleSignInWithEmail = async (email: string, password: string) => {
     const { data, error } = await signInWithEmail(email, password);
+    if (!error && data?.session) {
+      applySession(data.session);
+    }
     return { data, error };
   };
 
   const handleSignUpWithEmail = async (email: string, password: string) => {
     const { data, error } = await signUpWithEmail(email, password);
+    if (!error && data?.session) {
+      applySession(data.session);
+    }
+    return { data, error };
+  };
+
+  const handleSignInWithApple = async () => {
+    const { data, error } = await signInWithApple();
+    if (!error && data?.session) {
+      applySession(data.session);
+    }
+    return { data, error };
+  };
+
+  const handleVerifyOTPToken = async (email: string, token: string) => {
+    const { data, error } = await verifyOTPToken(email, token);
+    if (!error && data?.session) {
+      applySession(data.session);
+    }
     return { data, error };
   };
 
@@ -132,6 +177,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await invalidateAllCaches();
 
     const { error } = await signOut();
+    if (!error) {
+      applySession(null);
+    }
     return { error };
   };
 
@@ -142,11 +190,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         session,
         user,
         loading,
+        refreshSession,
         signInWithEmail: handleSignInWithEmail,
         signUpWithEmail: handleSignUpWithEmail,
-        signInWithApple,
+        signInWithApple: handleSignInWithApple,
         resendOTPToken,
-        verifyOTPToken,
+        verifyOTPToken: handleVerifyOTPToken,
         checkEmailVerification,
         signOut: handleSignOut,
       }}

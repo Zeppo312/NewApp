@@ -69,6 +69,41 @@ const lightenHex = (hex: string, amount = 0.35) => {
   return `#${toHex(lightenChannel(r))}${toHex(lightenChannel(g))}${toHex(lightenChannel(b))}`;
 };
 
+const MIN_VALID_PROFILE_DATE_YEAR = 2000;
+const MIN_VALID_PROFILE_DATE = new Date(MIN_VALID_PROFILE_DATE_YEAR, 0, 1);
+
+const parseSafeDate = (value: unknown): Date | null => {
+  if (value === null || value === undefined) return null;
+
+  let parsed: Date;
+
+  if (value instanceof Date) {
+    parsed = new Date(value.getTime());
+  } else if (typeof value === 'number') {
+    const timestamp = Math.abs(value) < 1_000_000_000_000 ? value * 1000 : value;
+    parsed = new Date(timestamp);
+  } else if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+
+    if (/^-?\d+$/.test(trimmed)) {
+      const numericValue = Number(trimmed);
+      const timestamp = Math.abs(numericValue) < 1_000_000_000_000 ? numericValue * 1000 : numericValue;
+      parsed = new Date(timestamp);
+    } else {
+      parsed = new Date(trimmed);
+    }
+  } else {
+    return null;
+  }
+
+  if (Number.isNaN(parsed.getTime()) || parsed.getFullYear() < MIN_VALID_PROFILE_DATE_YEAR) {
+    return null;
+  }
+
+  return parsed;
+};
+
 export default function ProfilScreen() {
   const adaptiveColors = useAdaptiveColors();
   const colorScheme = adaptiveColors.effectiveScheme;
@@ -177,9 +212,7 @@ export default function ProfilScreen() {
         .limit(1)
         .maybeSingle();
 
-      if (settingsData) {
-        if (settingsData.due_date) setDueDate(new Date(settingsData.due_date));
-      }
+      setDueDate(parseSafeDate(settingsData?.due_date));
 
       // Baby info
       const { data: babyData } = await getBabyInfo(activeBabyId ?? undefined);
@@ -192,7 +225,7 @@ export default function ProfilScreen() {
         setBabyPhotoPreview(babyData.photo_url || null);
         setBabyPhotoBase64(null);
         setBabyPhotoRemoved(false);
-        if (babyData.birth_date) setBirthDate(new Date(babyData.birth_date));
+        setBirthDate(parseSafeDate(babyData.birth_date));
       }
     } catch (e) {
       console.error(e);
@@ -509,6 +542,8 @@ export default function ProfilScreen() {
 
     let finalAvatarUrl = avatarUrl;
     let finalBabyPhoto = babyPhotoUrl;
+    const dueDateForSave = parseSafeDate(dueDate);
+    const birthDateForSave = parseSafeDate(birthDate);
 
     try {
       if (avatarBase64) {
@@ -563,7 +598,7 @@ export default function ProfilScreen() {
 
       let settingsResult;
       const base = {
-        due_date: dueDate ? dueDate.toISOString() : null,
+        due_date: dueDateForSave ? dueDateForSave.toISOString() : null,
         is_baby_born: isBabyBorn,
         theme: 'light',
         notifications_enabled: true,
@@ -583,7 +618,7 @@ export default function ProfilScreen() {
         {
           name: babyName,
           baby_gender: babyGender,
-          birth_date: birthDate ? birthDate.toISOString() : null,
+          birth_date: birthDateForSave ? birthDateForSave.toISOString() : null,
           weight: babyWeight,
           height: babyHeight,
           photo_url: finalBabyPhoto,
@@ -614,19 +649,21 @@ export default function ProfilScreen() {
     }
   };
 
-  const formatDate = (date: Date | null) =>
-    !date
+  const formatDate = (date: Date | null) => {
+    const parsed = parseSafeDate(date);
+    return !parsed
       ? 'Nicht festgelegt'
-      : date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      : parsed.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  };
 
   const handleDueDateChange = (_: any, selectedDate?: Date) => {
     setShowDueDatePicker(Platform.OS === 'ios');
-    if (selectedDate) setDueDate(selectedDate);
+    if (selectedDate) setDueDate(parseSafeDate(selectedDate));
   };
   const handleBirthDateChange = (_: any, selectedDate?: Date) => {
     setShowBirthDatePicker(Platform.OS === 'ios');
     if (selectedDate) {
-      setBirthDate(selectedDate);
+      setBirthDate(parseSafeDate(selectedDate));
       setIsBabyBorn(true);
     }
   };
@@ -637,6 +674,8 @@ export default function ProfilScreen() {
     }
     if (!value) setBirthDate(null);
   };
+  const dueDateForDisplay = parseSafeDate(dueDate);
+  const birthDateForDisplay = parseSafeDate(birthDate);
 
   if (!session) {
     return <Redirect href="/(auth)/login" />;
@@ -899,16 +938,17 @@ export default function ProfilScreen() {
                         activeOpacity={0.9}
                       >
                         <ThemedText style={[styles.dateButtonText, { color: textPrimary }]}>
-                          {dueDate ? formatDate(dueDate) : 'Geburtstermin auswählen'}
+                          {dueDateForDisplay ? formatDate(dueDateForDisplay) : 'Geburtstermin auswählen'}
                         </ThemedText>
                         <IconSymbol name="calendar" size={20} color={textSecondary} />
                       </TouchableOpacity>
                       {showDueDatePicker && (
                         <DateTimePicker
-                          value={dueDate || new Date()}
+                          value={dueDateForDisplay || new Date()}
                           mode="date"
                           display={Platform.OS === 'ios' ? 'compact' : 'default'}
                           onChange={handleDueDateChange}
+                          minimumDate={MIN_VALID_PROFILE_DATE}
                         />
                       )}
                     </View>
@@ -1009,16 +1049,17 @@ export default function ProfilScreen() {
                             activeOpacity={0.9}
                           >
                             <ThemedText style={[styles.dateButtonText, { color: textPrimary }]}>
-                              {birthDate ? formatDate(birthDate) : 'Geburtsdatum auswählen'}
+                              {birthDateForDisplay ? formatDate(birthDateForDisplay) : 'Geburtsdatum auswählen'}
                             </ThemedText>
                             <IconSymbol name="calendar" size={20} color={textSecondary} />
                           </TouchableOpacity>
                           {showBirthDatePicker && (
                             <DateTimePicker
-                              value={birthDate || new Date()}
+                              value={birthDateForDisplay || new Date()}
                               mode="date"
                               display={Platform.OS === 'ios' ? 'compact' : 'default'}
                               onChange={handleBirthDateChange}
+                              minimumDate={MIN_VALID_PROFILE_DATE}
                               maximumDate={new Date()}
                             />
                           )}

@@ -7,9 +7,13 @@ import { createClient } from '@supabase/supabase-js';
 export const supabaseUrl = 'https://kwniiyayhzgjfqjsjcfu.supabase.co';
 export const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt3bmlpeWF5aHpnamZxanNqY2Z1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDM5NzEyNjIsImV4cCI6MjA1OTU0NzI2Mn0.h0CL1_SXhfp9BXSPy0ipprs57qSZ8A_26wh2hP-8vZk';
 
-// Konfiguration für die Entwicklungsumgebung
-// Wir verwenden eine bedingte Prüfung, um sicherzustellen, dass der Code sowohl im Browser als auch in Node.js funktioniert
-const isClient = typeof window !== 'undefined';
+// Laufzeit-Erkennung:
+// - Web: window verfügbar
+// - React Native: navigator.product === 'ReactNative'
+// Damit Auth auch in nativen Builds zuverlässig initialisiert.
+const isReactNativeRuntime =
+  typeof navigator !== 'undefined' && navigator.product === 'ReactNative';
+const isClient = typeof window !== 'undefined' || isReactNativeRuntime;
 
 // Erstellen des Supabase-Clients mit einer Prüfung, ob wir im Browser oder in Node.js sind
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
@@ -181,6 +185,10 @@ export type BabyCareEntry = {
   feeding_side?: 'LEFT' | 'RIGHT' | 'BOTH' | null;
   // Diaper-spezifisch
   diaper_type?: 'WET' | 'DIRTY' | 'BOTH' | null;
+  diaper_fever_measured?: boolean | null;
+  diaper_temperature_c?: number | null;
+  diaper_suppository_given?: boolean | null;
+  diaper_suppository_dose_mg?: number | null;
   created_at?: string;
   updated_at?: string;
 };
@@ -415,6 +423,10 @@ export const addBabyCareEntry = async (entry: BabyCareEntry, babyId?: string) =>
       feeding_volume_ml: entry.feeding_volume_ml ?? null,
       feeding_side: entry.feeding_side ?? null,
       diaper_type: entry.diaper_type ?? null,
+      diaper_fever_measured: entry.diaper_fever_measured ?? null,
+      diaper_temperature_c: entry.diaper_temperature_c ?? null,
+      diaper_suppository_given: entry.diaper_suppository_given ?? null,
+      diaper_suppository_dose_mg: entry.diaper_suppository_dose_mg ?? null,
     };
 
     const { data, error } = await supabase
@@ -542,6 +554,10 @@ export const updateBabyCareEntry = async (
       feeding_volume_ml: updates.feeding_volume_ml ?? null,
       feeding_side: updates.feeding_side ?? null,
       diaper_type: updates.diaper_type ?? null,
+      diaper_fever_measured: updates.diaper_fever_measured ?? null,
+      diaper_temperature_c: updates.diaper_temperature_c ?? null,
+      diaper_suppository_given: updates.diaper_suppository_given ?? null,
+      diaper_suppository_dose_mg: updates.diaper_suppository_dose_mg ?? null,
       updated_at: new Date().toISOString(),
     };
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet,
   ScrollView,
@@ -11,7 +11,7 @@ import {
   Modal,
   Pressable,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -33,6 +33,7 @@ import { pregnancyWeekInfo } from '@/constants/PregnancyWeekInfo';
 import { pregnancyMotherInfo } from '@/constants/PregnancyMotherInfo';
 import { pregnancyPartnerInfo } from '@/constants/PregnancyPartnerInfo';
 import { pregnancySymptoms } from '@/constants/PregnancySymptoms';
+import { BIRTH_PREP_SECTION_START_WEEK, birthPreparationMeasures } from '@/constants/BirthPreparationMeasures';
 import Header from '@/components/Header';
 
 // Sleep-Tracker Design Tokens
@@ -179,6 +180,7 @@ const overdueInfo: Record<number, DayInfo> & { default: DayInfo } = {
 };
 
 export default function CountdownScreen() {
+  const params = useLocalSearchParams<{ focus?: string }>();
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const adaptiveColors = useAdaptiveColors();
@@ -207,6 +209,7 @@ export default function CountdownScreen() {
   const { user } = useAuth();
   const { isBabyBorn, setIsBabyBorn } = useBabyStatus();
   const router = useRouter();
+  const scrollViewRef = useRef<ScrollView | null>(null);
 
   const [dueDate, setDueDate] = useState<Date | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -219,6 +222,7 @@ export default function CountdownScreen() {
   const [currentWeek, setCurrentWeek] = useState<number | null>(null);
   const [currentDay, setCurrentDay] = useState<number | null>(null);
   const [daysOverdue, setDaysOverdue] = useState<number>(0);
+  const [birthPreparationSectionY, setBirthPreparationSectionY] = useState<number | null>(null);
 
   const logWithTimestamp = (message: string) => {
     const now = new Date();
@@ -250,6 +254,21 @@ export default function CountdownScreen() {
       setIsLoading(false);
     }
   }, [user]);
+
+  useEffect(() => {
+    if (params.focus !== 'birth-preparation' || birthPreparationSectionY === null) {
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      scrollViewRef.current?.scrollTo({
+        y: Math.max(0, birthPreparationSectionY - 12),
+        animated: true,
+      });
+    }, 180);
+
+    return () => clearTimeout(timeoutId);
+  }, [params.focus, birthPreparationSectionY]);
 
   const checkGeburtsplan = async () => {
     try {
@@ -472,7 +491,7 @@ export default function CountdownScreen() {
         <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
         <Header title="Countdown" subtitle="Verfolge die Zeit bis zur Geburt" />
 
-        <ScrollView contentContainerStyle={styles.scrollContent}>
+        <ScrollView ref={scrollViewRef} contentContainerStyle={styles.scrollContent}>
           {/* Countdown im Glas-Card */}
           <LiquidGlassCard style={[styles.sectionCard, styles.centerCard]} intensity={26} overlayColor={glassOverlay}>
             <CountdownTimer dueDate={dueDate} variant="embedded" />
@@ -624,6 +643,43 @@ export default function CountdownScreen() {
                 ))}
               </View>
             </LiquidGlassCard>
+          )}
+
+          {/* Geburtsvorbereitung */}
+          {currentWeek && currentWeek >= BIRTH_PREP_SECTION_START_WEEK && (
+            <View onLayout={(event) => setBirthPreparationSectionY(event.nativeEvent.layout.y)}>
+              <LiquidGlassCard
+                style={styles.sectionCard}
+                intensity={26}
+                overlayColor={glassOverlay}
+              >
+                <ThemedText style={[styles.sectionTitle, { color: textPrimary }]}>
+                  Geburtsvorbereitung (ab SSW {BIRTH_PREP_SECTION_START_WEEK})
+                </ThemedText>
+                <ThemedText style={[styles.sectionDescription, { color: textSecondary }]}>
+                  Alltagstaugliche Maßnahmen für die letzten Wochen. Bitte individuell mit Hebamme oder gynäkologischer Praxis abstimmen.
+                </ThemedText>
+
+                <View style={styles.birthPrepList}>
+                  {birthPreparationMeasures.map((measure) => (
+                    <View key={measure.id} style={[styles.birthPrepCard, { borderColor: cardBorderColor }]}>
+                      <View style={styles.birthPrepHeader}>
+                        <ThemedText style={styles.birthPrepIcon}>{measure.icon}</ThemedText>
+                        <ThemedText style={[styles.birthPrepTitle, { color: textPrimary }]}>{measure.title}</ThemedText>
+                      </View>
+                      <ThemedText style={[styles.birthPrepLabel, { color: textPrimary }]}>Was bringt&apos;s?</ThemedText>
+                      <ThemedText style={[styles.birthPrepText, { color: textSecondary }]}>{measure.benefit}</ThemedText>
+                      <ThemedText style={[styles.birthPrepLabel, { color: textPrimary }]}>Ab wann?</ThemedText>
+                      <ThemedText style={[styles.birthPrepText, { color: textSecondary }]}>{measure.startAt}</ThemedText>
+                      <ThemedText style={[styles.birthPrepLabel, { color: textPrimary }]}>Wie oft?</ThemedText>
+                      <ThemedText style={[styles.birthPrepText, { color: textSecondary }]}>{measure.frequency}</ThemedText>
+                      <ThemedText style={[styles.birthPrepLabel, { color: textPrimary }]}>Wann nicht?</ThemedText>
+                      <ThemedText style={[styles.birthPrepText, { color: textSecondary }]}>{measure.caution}</ThemedText>
+                    </View>
+                  ))}
+                </View>
+              </LiquidGlassCard>
+            </View>
           )}
 
           {/* Hinweis Überfälligkeit */}
@@ -812,6 +868,22 @@ const styles = StyleSheet.create({
   symptomList: { paddingHorizontal: 16, paddingTop: 2 },
   symptomItem: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
   symptomText: { fontSize: 14, marginLeft: 8, color: PRIMARY_TEXT },
+
+  // Geburtsvorbereitung
+  birthPrepList: { paddingHorizontal: 12, paddingBottom: 8 },
+  birthPrepCard: {
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.45)',
+    borderWidth: 1.2,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 10,
+  },
+  birthPrepHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
+  birthPrepIcon: { fontSize: 17, marginRight: 8 },
+  birthPrepTitle: { fontSize: 14, fontWeight: '800', flex: 1 },
+  birthPrepLabel: { fontSize: 12, fontWeight: '800', marginTop: 4 },
+  birthPrepText: { fontSize: 13, lineHeight: 18, opacity: 0.95 },
 
   infoInset: { paddingHorizontal: 16 },
 

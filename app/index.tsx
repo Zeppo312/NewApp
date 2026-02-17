@@ -2,27 +2,53 @@ import { Redirect } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { View, ActivityIndicator, Text } from 'react-native';
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 
 export default function Index() {
-  const { session, loading } = useAuth();
+  const { session, loading, refreshSession } = useAuth();
   const { isBabyBorn, isLoading: isBabyStatusLoading } = useBabyStatus();
   const colorScheme = useColorScheme() ?? 'light';
   const adaptiveColors = useAdaptiveColors();
   const isDark = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
   const backgroundColor = isDark ? Colors.dark.background : '#FFFFFF';
   const textColor = isDark ? Colors.dark.textSecondary : '#7D5A50';
+  const [isRecoveringSession, setIsRecoveringSession] = useState(false);
+  const hasTriedRecoveryRef = useRef(false);
 
   // Debug-Ausgabe
   useEffect(() => {
     console.log('Auth state:', { session, loading, isBabyBorn });
   }, [session, loading, isBabyBorn]);
 
+  // Einmaliger Session-Recovery-Pass:
+  // verhindert Login-Bounce, falls die Session kurzzeitig noch nicht im Context angekommen ist.
+  useEffect(() => {
+    if (loading) return;
+
+    if (session) {
+      hasTriedRecoveryRef.current = false;
+      setIsRecoveringSession(false);
+      return;
+    }
+
+    if (hasTriedRecoveryRef.current) return;
+    hasTriedRecoveryRef.current = true;
+    setIsRecoveringSession(true);
+
+    refreshSession()
+      .catch((error) => {
+        console.error('Session recovery failed:', error);
+      })
+      .finally(() => {
+        setIsRecoveringSession(false);
+      });
+  }, [loading, refreshSession, session]);
+
   // Zeige einen Ladeindikator, während der Authentifizierungsstatus geprüft wird
-  if (loading || isBabyStatusLoading) {
+  if (loading || isBabyStatusLoading || isRecoveringSession) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor }}>
         <ActivityIndicator size="large" color="#E9C9B6" />

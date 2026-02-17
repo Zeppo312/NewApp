@@ -43,6 +43,10 @@ export interface DailyEntry {
   feeding_volume_ml?: number | null;
   feeding_side?: 'LEFT' | 'RIGHT' | 'BOTH' | null;
   diaper_type?: 'WET' | 'DIRTY' | 'BOTH' | null;
+  diaper_fever_measured?: boolean | null;
+  diaper_temperature_c?: number | null;
+  diaper_suppository_given?: boolean | null;
+  diaper_suppository_dose_mg?: number | null;
 }
 
 // Typen für Entwicklungsphasen
