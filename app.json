@@ -10,6 +10,7 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
+      "appleTeamId": "FWCPXYUKA2",
       "buildNumber": "2",
       "version": "1.0.5",
       

@@ -121,10 +121,22 @@ export async function getLinkedUsersAlternative(): Promise<{
     const profileNameById = new Map<string, string>();
 
     if (partnerIds.length > 0) {
-      const { data: profiles, error: profilesError } = await supabase
+      const profileQuery = await supabase
         .from('profiles')
         .select('id, display_name, first_name, last_name')
         .in('id', partnerIds);
+      let profiles: Array<Record<string, any>> | null = profileQuery.data as Array<Record<string, any>> | null;
+      let profilesError = profileQuery.error;
+
+      if (profilesError && profilesError.code === '42703') {
+        // Some environments do not have display_name in profiles.
+        const fallbackResult = await supabase
+          .from('profiles')
+          .select('id, first_name, last_name')
+          .in('id', partnerIds);
+        profiles = fallbackResult.data;
+        profilesError = fallbackResult.error;
+      }
 
       if (profilesError) {
         console.warn('getLinkedUsersAlternative: Profile konnten nicht geladen werden:', profilesError);
