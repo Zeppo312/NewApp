@@ -9,7 +9,7 @@ import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 
 export default function Index() {
   const { session, loading, refreshSession } = useAuth();
-  const { isBabyBorn, isLoading: isBabyStatusLoading } = useBabyStatus();
+  const { isBabyBorn, isLoading: isBabyStatusLoading, isResolved: isBabyStatusResolved } = useBabyStatus();
   const colorScheme = useColorScheme() ?? 'light';
   const adaptiveColors = useAdaptiveColors();
   const isDark = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
@@ -48,7 +48,7 @@ export default function Index() {
   }, [loading, refreshSession, session]);
 
   // Zeige einen Ladeindikator, während der Authentifizierungsstatus geprüft wird
-  if (loading || isBabyStatusLoading || isRecoveringSession) {
+  if (loading || isBabyStatusLoading || !isBabyStatusResolved || isRecoveringSession) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor }}>
         <ActivityIndicator size="large" color="#E9C9B6" />

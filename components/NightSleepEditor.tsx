@@ -37,8 +37,8 @@ type NightSleepEditorProps = {
     targetEntry: ClassifiedSleepEntry;
     splitTime: Date;
     wakeMinutes: number;
-  }) => Promise<void>;
-  onMerge: (entryA: ClassifiedSleepEntry, entryB: ClassifiedSleepEntry) => Promise<void>;
+  }) => Promise<boolean>;
+  onMerge: (entryA: ClassifiedSleepEntry, entryB: ClassifiedSleepEntry) => Promise<boolean>;
   onAdjustBoundary: (
     entry: ClassifiedSleepEntry,
     field: 'start_time' | 'end_time',
@@ -60,6 +60,24 @@ const minutesToHMM = (mins: number) => {
   return `${h}h ${m.toString().padStart(2, '0')}m`;
 };
 
+const formatWakeDuration = (seconds: number) => {
+  if (seconds < 60) return `${seconds} Sek`;
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  if (minutes < 60) {
+    return remainingSeconds > 0 ? `${minutes} Min ${remainingSeconds} Sek` : `${minutes} Min`;
+  }
+
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (remainingSeconds > 0) {
+    return m > 0
+      ? `${h}h ${m.toString().padStart(2, '0')}m ${remainingSeconds} Sek`
+      : `${h}h ${remainingSeconds} Sek`;
+  }
+  return m > 0 ? `${h}h ${m.toString().padStart(2, '0')}m` : `${h}h`;
+};
+
 const getNightAnchor = (group: NightGroup): Date => {
   const start = group.start;
   const anchor = new Date(start);
@@ -76,12 +94,17 @@ const minutesFromAnchor = (date: Date, anchor: Date): number =>
   Math.max(0, (date.getTime() - anchor.getTime()) / 60000);
 
 const hapticLight = () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+const withReferenceDate = (pickedTime: Date, referenceDate: Date): Date => {
+  const normalized = new Date(referenceDate);
+  normalized.setHours(pickedTime.getHours(), pickedTime.getMinutes(), 0, 0);
+  return normalized;
+};
 
 // ─── WakePhase type (derived from gaps between entries) ─────
 type WakePhase = {
   start: Date;
   end: Date;
-  durationMin: number;
+  durationSeconds: number;
   prevEntry: ClassifiedSleepEntry;
   nextEntry: ClassifiedSleepEntry;
 };
@@ -316,6 +339,7 @@ export default function NightSleepEditor({
   const [addingWake, setAddingWake] = useState(false);
   const [newWakeStart, setNewWakeStart] = useState<Date | null>(null);
   const [newWakeEnd, setNewWakeEnd] = useState<Date | null>(null);
+  const [isSubmittingWake, setIsSubmittingWake] = useState(false);
 
   const entries = nightGroup.entries;
   const firstEntry = entries[0];
@@ -324,7 +348,7 @@ export default function NightSleepEditor({
   const nightStart = new Date(firstEntry.start_time);
   const nightEnd = lastEntry.end_time ? new Date(lastEntry.end_time) : new Date();
   const totalSleepMin = nightGroup.totalMinutes;
-  const totalWakeMin = nightGroup.wakeGaps.reduce((a, b) => a + b, 0);
+  const totalWakeSeconds = nightGroup.wakeGaps.reduce((a, b) => a + b, 0);
 
   // Derive wake phases from gaps between entries
   const wakePhases: WakePhase[] = useMemo(() => {
@@ -335,9 +359,9 @@ export default function NightSleepEditor({
       if (!prev.end_time) continue;
       const start = new Date(prev.end_time);
       const end = new Date(next.start_time);
-      const durationMin = Math.round((end.getTime() - start.getTime()) / 60000);
-      if (durationMin > 0) {
-        phases.push({ start, end, durationMin, prevEntry: prev, nextEntry: next });
+      const durationSeconds = Math.round((end.getTime() - start.getTime()) / 1000);
+      if (durationSeconds > 0) {
+        phases.push({ start, end, durationSeconds, prevEntry: prev, nextEntry: next });
       }
     }
     return phases;
@@ -380,15 +404,19 @@ export default function NightSleepEditor({
   const handleDeleteWake = useCallback((phase: WakePhase) => {
     Alert.alert(
       'Wachphase entfernen',
-      `${formatClockTime(phase.start)} – ${formatClockTime(phase.end)} (${phase.durationMin} Min) entfernen und Schlaf verbinden?`,
+      `${formatClockTime(phase.start)} – ${formatClockTime(phase.end)} (${formatWakeDuration(phase.durationSeconds)}) entfernen und Schlaf verbinden?`,
       [
         { text: 'Abbrechen', style: 'cancel' },
         {
           text: 'Entfernen',
           style: 'destructive',
-          onPress: () => {
-            onMerge(phase.prevEntry, phase.nextEntry);
-            hapticLight();
+          onPress: async () => {
+            const didMerge = await onMerge(phase.prevEntry, phase.nextEntry);
+            if (didMerge) {
+              hapticLight();
+            } else {
+              Alert.alert('Konnte nicht löschen', 'Die Wachphase konnte nicht entfernt werden.');
+            }
           },
         },
       ]
@@ -425,34 +453,68 @@ export default function NightSleepEditor({
   }, [entries]);
 
   const handleConfirmAddWake = useCallback(async () => {
-    if (!newWakeStart || !newWakeEnd) return;
+    if (!newWakeStart || !newWakeEnd || isSubmittingWake) return;
+
+    if (newWakeEnd.getTime() <= newWakeStart.getTime()) {
+      Alert.alert('Ungültige Zeit', 'Die Endzeit muss nach der Startzeit liegen.');
+      return;
+    }
 
     // Find which entry contains newWakeStart
     const wakeStartMs = newWakeStart.getTime();
     const targetEntry = entries.find((entry) => {
       const start = new Date(entry.start_time).getTime();
       const end = (entry.end_time ? new Date(entry.end_time) : new Date()).getTime();
-      return wakeStartMs >= start && wakeStartMs <= end;
+      return wakeStartMs >= start && wakeStartMs < end;
     });
 
     if (!targetEntry) {
-      setAddingWake(false);
+      Alert.alert(
+        'Nicht speicherbar',
+        'Die gewählte Startzeit liegt außerhalb der Schlafphase. Bitte passe "Von" an.'
+      );
       return;
     }
 
     const wakeMinutes = Math.max(0, Math.round((newWakeEnd.getTime() - newWakeStart.getTime()) / 60000));
+    if (wakeMinutes < 1) {
+      Alert.alert('Ungültige Dauer', 'Die Wachphase muss mindestens 1 Minute dauern.');
+      return;
+    }
 
-    await onSplit({
-      targetEntry,
-      splitTime: newWakeStart,
-      wakeMinutes,
-    });
+    setIsSubmittingWake(true);
+    try {
+      const didSave = await onSplit({
+        targetEntry,
+        splitTime: newWakeStart,
+        wakeMinutes,
+      });
 
-    setAddingWake(false);
-    setNewWakeStart(null);
-    setNewWakeEnd(null);
-    hapticLight();
-  }, [newWakeStart, newWakeEnd, entries, onSplit]);
+      if (!didSave) {
+        Alert.alert('Konnte nicht speichern', 'Bitte versuche es erneut.');
+        return;
+      }
+
+      setAddingWake(false);
+      setNewWakeStart(null);
+      setNewWakeEnd(null);
+      hapticLight();
+    } catch {
+      Alert.alert('Konnte nicht speichern', 'Beim Speichern ist ein Fehler aufgetreten.');
+    } finally {
+      setIsSubmittingWake(false);
+    }
+  }, [newWakeStart, newWakeEnd, entries, onSplit, isSubmittingWake]);
+
+  const handleChangeNewWakeStart = useCallback((pickedTime: Date) => {
+    if (!newWakeStart) return;
+    setNewWakeStart(withReferenceDate(pickedTime, newWakeStart));
+  }, [newWakeStart]);
+
+  const handleChangeNewWakeEnd = useCallback((pickedTime: Date) => {
+    if (!newWakeEnd) return;
+    setNewWakeEnd(withReferenceDate(pickedTime, newWakeEnd));
+  }, [newWakeEnd]);
 
   return (
     <Modal
@@ -500,10 +562,10 @@ export default function NightSleepEditor({
                 <Text style={[styles.summaryLabel, { color: textSecondary }]}>Schlaf</Text>
                 <Text style={[styles.summaryValue, { color: accentColor }]}>{minutesToHMM(totalSleepMin)}</Text>
               </View>
-              {totalWakeMin > 0 && (
+              {totalWakeSeconds > 0 && (
                 <View style={styles.summaryRow}>
                   <Text style={[styles.summaryLabel, { color: textSecondary }]}>Wach</Text>
-                  <Text style={[styles.summaryValue, { color: WAKE_COLOR }]}>{minutesToHMM(totalWakeMin)}</Text>
+                  <Text style={[styles.summaryValue, { color: WAKE_COLOR }]}>{formatWakeDuration(totalWakeSeconds)}</Text>
                 </View>
               )}
             </View>
@@ -555,11 +617,15 @@ export default function NightSleepEditor({
                     {formatClockTime(phase.start)} – {formatClockTime(phase.end)}
                   </Text>
                   <Text style={[styles.wakeDuration, { color: WAKE_COLOR }]}>
-                    {phase.durationMin} Min
+                    {formatWakeDuration(phase.durationSeconds)}
                   </Text>
                   <TouchableOpacity
                     style={styles.wakeDeleteBtn}
-                    onPress={() => handleDeleteWake(phase)}
+                    onPress={() => {
+                      if (isSaving) return;
+                      void handleDeleteWake(phase);
+                    }}
+                    disabled={isSaving}
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                     activeOpacity={0.6}
                   >
@@ -601,7 +667,7 @@ export default function NightSleepEditor({
                   <TimePickerRow
                     label="Von"
                     time={newWakeStart}
-                    onChange={setNewWakeStart}
+                    onChange={handleChangeNewWakeStart}
                     accentColor={WAKE_COLOR}
                     isDark={isDark}
                     textPrimary={textPrimary}
@@ -610,7 +676,7 @@ export default function NightSleepEditor({
                   <TimePickerRow
                     label="Bis"
                     time={newWakeEnd}
-                    onChange={setNewWakeEnd}
+                    onChange={handleChangeNewWakeEnd}
                     accentColor={WAKE_COLOR}
                     isDark={isDark}
                     textPrimary={textPrimary}
@@ -628,11 +694,11 @@ export default function NightSleepEditor({
                   <TouchableOpacity
                     style={[styles.newWakeConfirmBtn, { backgroundColor: WAKE_COLOR }]}
                     onPress={handleConfirmAddWake}
-                    disabled={isSaving}
+                    disabled={isSaving || isSubmittingWake}
                     activeOpacity={0.7}
                   >
                     <Text style={styles.newWakeConfirmText}>
-                      {isSaving ? 'Speichert...' : 'Hinzufügen'}
+                      {isSaving || isSubmittingWake ? 'Speichert...' : 'Hinzufügen'}
                     </Text>
                   </TouchableOpacity>
                 </View>

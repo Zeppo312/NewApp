@@ -1,5 +1,5 @@
 import { Tabs, usePathname, useRouter } from 'expo-router';
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Platform, View, ActivityIndicator } from 'react-native';
 
 import { HapticTab } from '@/components/HapticTab';
@@ -14,12 +14,24 @@ export default function TabLayout() {
   const router = useRouter();
   const pathname = usePathname();
   const colorScheme = useColorScheme();
-  const { isBabyBorn, isLoading } = useBabyStatus();
+  const { isBabyBorn, isLoading, isResolved } = useBabyStatus();
+  const [hasInitialResolution, setHasInitialResolution] = useState(false);
   const theme = Colors[colorScheme ?? 'light'];
   const adaptiveColors = useAdaptiveColors();
 
   useEffect(() => {
-    if (isLoading) return;
+    if (isResolved) {
+      setHasInitialResolution(true);
+    }
+  }, [isResolved]);
+
+  useEffect(() => {
+    if (!hasInitialResolution || isLoading || !isResolved) return;
+
+    if (pathname === '/(tabs)/diary') {
+      router.replace(isBabyBorn ? '/(tabs)/home' : '/(tabs)/pregnancy-home');
+      return;
+    }
 
     const pregnancyOnlyRoutes = new Set([
       '/(tabs)/countdown',
@@ -40,9 +52,9 @@ export default function TabLayout() {
     if (!isBabyBorn && babyOnlyRoutes.has(pathname)) {
       router.replace('/(tabs)/pregnancy-home');
     }
-  }, [isBabyBorn, isLoading, pathname, router]);
+  }, [hasInitialResolution, isBabyBorn, isLoading, isResolved, pathname, router]);
 
-  if (isLoading) {
+  if (!hasInitialResolution && (isLoading || !isResolved)) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
         <ActivityIndicator size="large" color={theme.accent} />

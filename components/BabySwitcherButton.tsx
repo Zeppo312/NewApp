@@ -13,10 +13,11 @@ import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { createBaby, saveBabyInfo } from '@/lib/baby';
+import { createBaby, getBabyInfo, saveBabyInfo } from '@/lib/baby';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { useAuth } from '@/contexts/AuthContext';
 import * as ImagePicker from 'expo-image-picker';
+import { useRouter } from 'expo-router';
 
 type BabySwitcherButtonProps = {
   size?: number;
@@ -39,6 +40,7 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
   const subtitleColor = isDark ? Colors.dark.textTertiary : '#A8978E';
   const inputBgColor = isDark ? Colors.dark.cardDark : '#FFFFFF';
   const rowBgColor = isDark ? Colors.dark.cardDark : '#FFFFFF';
+  const router = useRouter();
   const { user } = useAuth();
   const {
     babies,
@@ -72,9 +74,27 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
     return null;
   }
 
+  const getHomeRouteForBaby = async (babyId: string): Promise<'/(tabs)/home' | '/(tabs)/pregnancy-home'> => {
+    const knownBaby = babies.find((baby) => baby.id === babyId);
+    if (knownBaby?.birth_date) {
+      return '/(tabs)/home';
+    }
+
+    const { data } = await getBabyInfo(babyId);
+    return data?.birth_date ? '/(tabs)/home' : '/(tabs)/pregnancy-home';
+  };
+
   const handleSelectBaby = async (babyId: string) => {
-    await setActiveBabyId(babyId);
-    setModalOpen(false);
+    try {
+      await setActiveBabyId(babyId);
+      const targetRoute = await getHomeRouteForBaby(babyId);
+      setModalOpen(false);
+      router.replace(targetRoute as any);
+    } catch (error) {
+      console.error('Error switching active baby:', error);
+      setModalOpen(false);
+      Alert.alert('Fehler', 'Das aktive Kind konnte nicht gewechselt werden.');
+    }
   };
 
   const handleCreateBaby = async () => {
@@ -98,10 +118,14 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
     await refreshBabies();
     if (created?.id) {
       await setActiveBabyId(created.id);
+      setModalOpen(false);
+      router.replace('/(tabs)/pregnancy-home' as any);
+    }
+    if (!created?.id) {
+      setModalOpen(false);
     }
     setNewBabyName('');
     setIsCreating(false);
-    setModalOpen(false);
   };
 
   const handleChangePhoto = async () => {

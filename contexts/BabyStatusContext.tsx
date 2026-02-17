@@ -1,13 +1,21 @@
-import React, { createContext, useState, useEffect, useContext, useRef } from 'react';
+import React, { createContext, useState, useEffect, useContext, useRef, useCallback } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { differenceInMonths } from 'date-fns';
-import { setBabyBornStatus } from '@/lib/supabase';
+import { getBabyBornStatus, setBabyBornStatus } from '@/lib/supabase';
 import { useAuth } from './AuthContext';
 import { getBabyInfo, saveBabyInfo } from '@/lib/baby';
 import { useActiveBaby } from './ActiveBabyContext';
 
+type BabyStatusSource = 'cache' | 'baby_info' | 'user_settings' | 'default' | 'error' | 'local_action';
+type SetBabyBornOptions = {
+  birthDate?: string | null;
+};
+
 interface BabyStatusContextType {
   isBabyBorn: boolean;
-  setIsBabyBorn: (value: boolean) => Promise<void>;
+  isResolved: boolean;
+  source: BabyStatusSource;
+  setIsBabyBorn: (value: boolean, options?: SetBabyBornOptions) => Promise<void>;
   isLoading: boolean;
   babyAgeMonths: number;
   babyWeightPercentile: number;
@@ -15,79 +23,232 @@ interface BabyStatusContextType {
 }
 
 const BabyStatusContext = createContext<BabyStatusContextType | undefined>(undefined);
+const BABY_STATUS_CACHE_PREFIX = 'baby_status_v1';
+
+type CachedBabyStatus = {
+  isBabyBorn: boolean;
+  birthDate: string | null;
+  source: BabyStatusSource;
+  updatedAt: string;
+};
 
 export const BabyStatusProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isBabyBorn, setIsBabyBornState] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isResolved, setIsResolved] = useState(false);
+  const [source, setSource] = useState<BabyStatusSource>('default');
   const [babyAgeMonths, setBabyAgeMonths] = useState(0); // Standardwert: 0 Monate
   const [babyWeightPercentile, setBabyWeightPercentile] = useState(50); // Standardwert: 50. Perzentile
   const { user } = useAuth();
   const { activeBabyId, isReady: isActiveBabyReady } = useActiveBaby();
-  const isInitialLoadRef = useRef(true);
+  const latestRequestIdRef = useRef(0);
 
-  useEffect(() => {
-    if (!user) {
-      isInitialLoadRef.current = true;
-      setIsBabyBornState(false);
-      setBabyAgeMonths(0);
-      setIsLoading(false);
-      return;
-    }
+  const getCacheKey = useCallback(
+    (userId: string, babyId: string | null) =>
+      `${BABY_STATUS_CACHE_PREFIX}:${userId}:${babyId ?? 'none'}`,
+    [],
+  );
 
-    if (!isActiveBabyReady) {
-      if (isInitialLoadRef.current) setIsLoading(true);
-      return;
-    }
+  const parseValidDate = useCallback((value: string | null | undefined) => {
+    if (!value) return null;
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return null;
+    return parsed;
+  }, []);
 
-    const showLoading = isInitialLoadRef.current;
-    loadBabyDetails(showLoading);
-    if (isInitialLoadRef.current) isInitialLoadRef.current = false;
-  }, [user, activeBabyId, isActiveBabyReady]);
-
-  const loadBabyDetails = async (showLoading: boolean = false) => {
-    try {
-      if (showLoading) setIsLoading(true);
-
-      if (!activeBabyId) {
-        setIsBabyBornState(false);
-        setBabyAgeMonths(0);
-        return;
-      }
-
-      const { data } = await getBabyInfo(activeBabyId);
-      setIsBabyBornState(!!(data && data.birth_date));
-
-      if (data?.birth_date) {
-        const ageInMonths = differenceInMonths(new Date(), new Date(data.birth_date));
-        setBabyAgeMonths(Math.max(0, ageInMonths));
+  const applyResolvedState = useCallback(
+    (status: { isBabyBorn: boolean; birthDate: string | null; source: BabyStatusSource }) => {
+      setIsBabyBornState(status.isBabyBorn);
+      setSource(status.source);
+      if (status.birthDate) {
+        const parsed = parseValidDate(status.birthDate);
+        if (parsed) {
+          const ageInMonths = differenceInMonths(new Date(), parsed);
+          setBabyAgeMonths(Math.max(0, ageInMonths));
+        } else {
+          setBabyAgeMonths(0);
+        }
       } else {
         setBabyAgeMonths(0);
       }
       setBabyWeightPercentile(50);
-    } catch (error) {
-      console.error('Error loading baby details:', error);
-    } finally {
-      if (showLoading) setIsLoading(false);
-    }
-  };
+      setIsResolved(true);
+    },
+    [parseValidDate],
+  );
 
-  const setIsBabyBorn = async (value: boolean) => {
+  const readCachedStatus = useCallback(async () => {
+    if (!user?.id) return null;
     try {
-      if (activeBabyId) {
-        if (value) {
-          const { data: currentBaby } = await getBabyInfo(activeBabyId);
-          if (!currentBaby?.birth_date) {
-            await saveBabyInfo({ birth_date: new Date().toISOString() }, activeBabyId);
-          }
-        } else {
-          await saveBabyInfo({ birth_date: null }, activeBabyId);
+      const raw = await AsyncStorage.getItem(getCacheKey(user.id, activeBabyId));
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as CachedBabyStatus;
+      if (typeof parsed?.isBabyBorn !== 'boolean') return null;
+      return parsed;
+    } catch (error) {
+      console.warn('Failed to read baby status cache:', error);
+      return null;
+    }
+  }, [activeBabyId, getCacheKey, user?.id]);
+
+  const writeCachedStatus = useCallback(
+    async (status: { isBabyBorn: boolean; birthDate: string | null; source: BabyStatusSource }) => {
+      if (!user?.id) return;
+      const payload: CachedBabyStatus = {
+        isBabyBorn: status.isBabyBorn,
+        birthDate: status.birthDate,
+        source: status.source,
+        updatedAt: new Date().toISOString(),
+      };
+      try {
+        await AsyncStorage.setItem(getCacheKey(user.id, activeBabyId), JSON.stringify(payload));
+      } catch (error) {
+        console.warn('Failed to write baby status cache:', error);
+      }
+    },
+    [activeBabyId, getCacheKey, user?.id],
+  );
+
+  const resolveBabyDetails = useCallback(
+    async (options?: { showLoading?: boolean; preferCache?: boolean }) => {
+      const showLoading = options?.showLoading ?? false;
+      const preferCache = options?.preferCache ?? true;
+
+      if (!user) {
+        latestRequestIdRef.current += 1;
+        setIsBabyBornState(false);
+        setSource('default');
+        setBabyAgeMonths(0);
+        setBabyWeightPercentile(50);
+        setIsResolved(true);
+        setIsLoading(false);
+        return;
+      }
+
+      if (!isActiveBabyReady) {
+        setIsResolved(false);
+        setIsLoading(true);
+        return;
+      }
+
+      const requestId = ++latestRequestIdRef.current;
+      if (showLoading) {
+        setIsLoading(true);
+      }
+      setIsResolved(false);
+
+      let hasCachedValue = false;
+      if (preferCache) {
+        const cached = await readCachedStatus();
+        if (cached && requestId === latestRequestIdRef.current) {
+          hasCachedValue = true;
+          applyResolvedState({
+            isBabyBorn: cached.isBabyBorn,
+            birthDate: cached.birthDate,
+            source: 'cache',
+          });
         }
       }
-      await setBabyBornStatus(value); // Partner-Sync
-      setIsBabyBornState(value);
-      await loadBabyDetails();
+
+      try {
+        let remoteBirthDate: string | null = null;
+        let babyInfoError: unknown = null;
+
+        if (activeBabyId) {
+          const { data: babyInfoData, error } = await getBabyInfo(activeBabyId);
+          babyInfoError = error;
+          if (babyInfoData?.birth_date) {
+            remoteBirthDate = babyInfoData.birth_date;
+          }
+        }
+
+        const { data: settingsIsBabyBorn, error: settingsError } = await getBabyBornStatus();
+
+        if (requestId !== latestRequestIdRef.current) return;
+
+        const noReliableSources =
+          Boolean(settingsError) &&
+          (!activeBabyId || Boolean(babyInfoError));
+
+        if (noReliableSources) {
+          if (!hasCachedValue) {
+            applyResolvedState({ isBabyBorn: false, birthDate: null, source: 'error' });
+          }
+          return;
+        }
+
+        const fromBabyInfo = Boolean(remoteBirthDate);
+        const fromSettings = !settingsError && settingsIsBabyBorn === true;
+        const resolvedIsBabyBorn = fromBabyInfo || fromSettings;
+        const resolvedSource: BabyStatusSource = fromBabyInfo
+          ? 'baby_info'
+          : fromSettings
+            ? 'user_settings'
+            : 'default';
+
+        const resolved = {
+          isBabyBorn: resolvedIsBabyBorn,
+          birthDate: remoteBirthDate,
+          source: resolvedSource,
+        };
+
+        applyResolvedState(resolved);
+        await writeCachedStatus(resolved);
+      } catch (error) {
+        console.error('Error loading baby details:', error);
+        if (requestId === latestRequestIdRef.current && !hasCachedValue) {
+          applyResolvedState({ isBabyBorn: false, birthDate: null, source: 'error' });
+        }
+      } finally {
+        if (requestId === latestRequestIdRef.current) {
+          setIsLoading(false);
+          setIsResolved(true);
+        }
+      }
+    },
+    [activeBabyId, applyResolvedState, isActiveBabyReady, readCachedStatus, user, writeCachedStatus],
+  );
+
+  useEffect(() => {
+    void resolveBabyDetails({ showLoading: true, preferCache: true });
+  }, [resolveBabyDetails]);
+
+  const setIsBabyBorn = async (value: boolean, options?: SetBabyBornOptions) => {
+    if (!user) return;
+    try {
+      setIsLoading(true);
+      setSource('local_action');
+
+      if (activeBabyId) {
+        if (value) {
+          if (options && Object.prototype.hasOwnProperty.call(options, 'birthDate')) {
+            const { error: saveError } = await saveBabyInfo(
+              { birth_date: options.birthDate ?? null },
+              activeBabyId,
+            );
+            if (saveError) {
+              throw saveError;
+            }
+          }
+        } else {
+          const { error: saveError } = await saveBabyInfo({ birth_date: null }, activeBabyId);
+          if (saveError) {
+            throw saveError;
+          }
+        }
+      }
+
+      const { error: statusError } = await setBabyBornStatus(value); // Partner-Sync
+      if (statusError) {
+        throw statusError;
+      }
+
+      await resolveBabyDetails({ showLoading: false, preferCache: false });
     } catch (error) {
       console.error('Error setting baby born status:', error);
+      await resolveBabyDetails({ showLoading: false, preferCache: true });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -95,11 +256,13 @@ export const BabyStatusProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     <BabyStatusContext.Provider 
       value={{ 
         isBabyBorn, 
+        isResolved,
+        source,
         setIsBabyBorn, 
         isLoading, 
         babyAgeMonths,
         babyWeightPercentile,
-        refreshBabyDetails: loadBabyDetails
+        refreshBabyDetails: () => resolveBabyDetails({ showLoading: true, preferCache: true })
       }}
     >
       {children}

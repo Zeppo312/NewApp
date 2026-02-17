@@ -663,15 +663,13 @@ export default function ProfilScreen() {
   const handleBirthDateChange = (_: any, selectedDate?: Date) => {
     setShowBirthDatePicker(Platform.OS === 'ios');
     if (selectedDate) {
-      setBirthDate(parseSafeDate(selectedDate));
-      setIsBabyBorn(true);
+      const safeDate = parseSafeDate(selectedDate);
+      setBirthDate(safeDate);
+      void setIsBabyBorn(true, { birthDate: safeDate ? safeDate.toISOString() : null });
     }
   };
   const handleBabyBornChange = (value: boolean) => {
-    setIsBabyBorn(value);
-    if (value && !birthDate) {
-      setBirthDate(new Date());
-    }
+    void setIsBabyBorn(value);
     if (!value) setBirthDate(null);
   };
   const dueDateForDisplay = parseSafeDate(dueDate);

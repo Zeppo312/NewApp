@@ -8,7 +8,7 @@
  * - Schneller Zugriff auf bereits geladene Bilder
  */
 
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Crypto from 'expo-crypto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -30,6 +30,9 @@ interface CacheMetadata {
 }
 
 let metadataCache: CacheMetadata | null = null;
+
+const isInlineImageDataUrl = (url: string): boolean =>
+  typeof url === 'string' && url.startsWith('data:image/');
 
 /**
  * Initialisiere das Cache-Verzeichnis
@@ -113,7 +116,7 @@ export const getCachedImage = async (
   }
 
   // Lokale Bilder nicht cachen
-  if (url.startsWith('file://') || url.startsWith('asset://')) {
+  if (url.startsWith('file://') || url.startsWith('asset://') || isInlineImageDataUrl(url)) {
     return url;
   }
 
@@ -165,6 +168,7 @@ export const getCachedImage = async (
  */
 export const isImageCached = async (url: string): Promise<boolean> => {
   if (!url) return false;
+  if (isInlineImageDataUrl(url)) return true;
 
   try {
     const hash = await getUrlHash(url);
@@ -187,7 +191,9 @@ export const isImageCached = async (url: string): Promise<boolean> => {
  * Prefetch: Lade mehrere Bilder im Voraus
  */
 export const prefetchImages = async (urls: string[]): Promise<void> => {
-  const validUrls = urls.filter(url => url && !url.startsWith('file://'));
+  const validUrls = urls.filter(
+    (url) => url && !url.startsWith('file://') && !isInlineImageDataUrl(url)
+  );
 
   await Promise.allSettled(
     validUrls.map(url => getCachedImage(url))
@@ -199,6 +205,7 @@ export const prefetchImages = async (urls: string[]): Promise<void> => {
  */
 export const invalidateImageCache = async (url: string): Promise<void> => {
   if (!url) return;
+  if (isInlineImageDataUrl(url)) return;
 
   try {
     const hash = await getUrlHash(url);

@@ -78,9 +78,11 @@ export const ActiveBabyProvider: React.FC<{ children: React.ReactNode }> = ({
   const resolveActiveBabyId = useCallback(
     async (nextBabies: BabyInfo[]): Promise<string | null> => {
       const storedId = await AsyncStorage.getItem(ACTIVE_BABY_STORAGE_KEY);
+      const firstWithBirthDate = nextBabies.find((b) => Boolean(b.birth_date))?.id ?? null;
 
       const resolvedId =
         nextBabies.find((b) => b.id === storedId)?.id ??
+        firstWithBirthDate ??
         nextBabies[0]?.id ??
         null;
 

@@ -5,9 +5,9 @@ import { useBabyStatus } from '@/contexts/BabyStatusContext';
 
 export default function AuthIndex() {
   const { session, loading: authLoading } = useAuth();
-  const { isBabyBorn, isLoading: babyStatusLoading } = useBabyStatus();
+  const { isBabyBorn, isLoading: babyStatusLoading, isResolved: babyStatusResolved } = useBabyStatus();
 
-  if (authLoading || babyStatusLoading) {
+  if (authLoading || babyStatusLoading || !babyStatusResolved) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFFFF' }}>
         <ActivityIndicator size="large" color="#E9C9B6" />

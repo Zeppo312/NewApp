@@ -70,7 +70,11 @@ export const CachedImage: React.FC<CachedImageProps> = ({
     }
 
     // Lokale Bilder direkt verwenden
-    if (uri.startsWith('file://') || uri.startsWith('asset://')) {
+    if (
+      uri.startsWith('file://') ||
+      uri.startsWith('asset://') ||
+      uri.startsWith('data:image/')
+    ) {
       setLocalUri(uri);
       setIsLoading(false);
       return;

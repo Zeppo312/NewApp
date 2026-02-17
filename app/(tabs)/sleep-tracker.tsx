@@ -168,6 +168,7 @@ export type NightGroup = {
   totalMinutes: number;
   start: Date;
   end: Date;
+  // Gap durations between segments in seconds
   wakeGaps: number[];
 };
 
@@ -230,7 +231,10 @@ const buildNightGroupFromSegments = (segments: ClassifiedSleepEntry[]): NightGro
       if (previous.end_time) {
         const wakeGapMs = start.getTime() - new Date(previous.end_time).getTime();
         if (wakeGapMs > 0) {
-          wakeGaps.push(Math.round(wakeGapMs / 60000));
+          const wakeGapSeconds = Math.round(wakeGapMs / 1000);
+          if (wakeGapSeconds > 0) {
+            wakeGaps.push(wakeGapSeconds);
+          }
         }
       }
     }
@@ -301,6 +305,24 @@ const minutesToHMM = (mins: number) => {
   const m = mins % 60;
   if (h <= 0) return `${m}m`;
   return `${h}h ${m}m`;
+};
+
+const formatWakeDuration = (seconds: number) => {
+  if (seconds < 60) return `${seconds} Sek`;
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  if (minutes < 60) {
+    return remainingSeconds > 0 ? `${minutes} Min ${remainingSeconds} Sek` : `${minutes} Min`;
+  }
+
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (remainingSeconds > 0) {
+    return m > 0
+      ? `${h}h ${m}m ${remainingSeconds} Sek`
+      : `${h}h ${remainingSeconds} Sek`;
+  }
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
 };
 
 const toNumber = (value: unknown, fallback = 0): number => {
@@ -2171,50 +2193,102 @@ export default function SleepTrackerScreen() {
     wakeMinutes: number;
   }) => {
     const { targetEntry, splitTime: paramSplitTime, wakeMinutes: paramWakeMinutes } = params;
-    if (!targetEntry?.id || !targetEntry.end_time || !sleepService || !user?.id || isSplittingSegment) {
-      return;
+
+    if (!sleepService || !user?.id) {
+      Alert.alert('Fehler', 'Service nicht verfügbar. Bitte neu anmelden und erneut versuchen.');
+      return false;
+    }
+    if (isSplittingSegment) {
+      Alert.alert('Bitte warten', 'Es läuft bereits ein Speichervorgang.');
+      return false;
     }
 
-    const segmentStart = new Date(targetEntry.start_time);
-    const originalEnd = new Date(targetEntry.end_time);
+    const targetStartMs = new Date(targetEntry.start_time).getTime();
+    const targetEndMs = targetEntry.end_time ? new Date(targetEntry.end_time).getTime() : null;
+    let resolvedTarget = targetEntry;
+
+    if (!resolvedTarget?.id) {
+      const fallbackTarget = sleepEntries.find((entry) => {
+        if (!entry.id) return false;
+        const startMs = new Date(entry.start_time).getTime();
+        if (startMs !== targetStartMs) return false;
+
+        if (!entry.end_time && targetEndMs === null) return true;
+        if (!entry.end_time || targetEndMs === null) return false;
+
+        const endMs = new Date(entry.end_time).getTime();
+        return endMs === targetEndMs;
+      });
+
+      if (fallbackTarget) {
+        resolvedTarget = fallbackTarget;
+      }
+    }
+
+    if (!resolvedTarget?.id) {
+      Alert.alert('Nicht speicherbar', 'Das gewählte Segment konnte nicht eindeutig zugeordnet werden.');
+      return false;
+    }
+
+    const targetWasActive = !resolvedTarget.end_time;
+    const segmentStart = new Date(resolvedTarget.start_time);
+    const segmentEnd = resolvedTarget.end_time ? new Date(resolvedTarget.end_time) : new Date();
     const safeSplitTime = sanitizeManualDate(paramSplitTime, segmentStart);
     const wakeMinutes = Math.max(0, Math.round(paramWakeMinutes));
     const resumedStart = new Date(safeSplitTime.getTime() + wakeMinutes * 60000);
 
     if (safeSplitTime.getTime() <= segmentStart.getTime()) {
       Alert.alert('Fehler', 'Der Teilungszeitpunkt muss nach dem Start liegen.');
-      return;
+      return false;
     }
-    if (safeSplitTime.getTime() >= originalEnd.getTime()) {
-      Alert.alert('Fehler', 'Der Teilungszeitpunkt muss vor dem Ende liegen.');
-      return;
+    if (safeSplitTime.getTime() >= segmentEnd.getTime()) {
+      Alert.alert(
+        'Fehler',
+        targetWasActive
+          ? 'Der Teilungszeitpunkt muss vor dem aktuellen Zeitpunkt liegen.'
+          : 'Der Teilungszeitpunkt muss vor dem Ende liegen.'
+      );
+      return false;
     }
-    if (resumedStart.getTime() >= originalEnd.getTime()) {
-      Alert.alert('Fehler', 'Die Wachpause ist zu lang für dieses Segment.');
-      return;
+    if (resumedStart.getTime() >= segmentEnd.getTime()) {
+      Alert.alert(
+        'Fehler',
+        targetWasActive
+          ? 'Die Wachphase darf nicht in der Zukunft enden.'
+          : 'Die Wachpause ist zu lang für dieses Segment.'
+      );
+      return false;
     }
 
     const firstDuration = Math.max(1, Math.round((safeSplitTime.getTime() - segmentStart.getTime()) / 60000));
-    const secondDuration = Math.max(1, Math.round((originalEnd.getTime() - resumedStart.getTime()) / 60000));
+    const secondDuration = targetWasActive
+      ? null
+      : Math.max(1, Math.round((segmentEnd.getTime() - resumedStart.getTime()) / 60000));
 
     setIsSplittingSegment(true);
     try {
       const effectivePartnerId = await getEffectivePartnerId();
-      const originalEndISO = originalEnd.toISOString();
-      const originalDuration = Math.max(
-        1,
-        Math.round((originalEnd.getTime() - segmentStart.getTime()) / 60000)
-      );
+      const originalEndISO = resolvedTarget.end_time
+        ? new Date(resolvedTarget.end_time).toISOString()
+        : null;
+      const originalDuration = Number.isFinite(resolvedTarget.duration_minutes as number)
+        ? (resolvedTarget.duration_minutes as number)
+        : targetWasActive
+          ? null
+          : Math.max(1, Math.round((segmentEnd.getTime() - segmentStart.getTime()) / 60000));
 
-      const updateResult = await sleepService.updateEntry(targetEntry.id, {
+      const updateResult = await sleepService.updateEntry(resolvedTarget.id, {
         end_time: safeSplitTime.toISOString(),
         duration_minutes: firstDuration,
       });
 
       if (updateResult.primary.error) {
         console.error('Split update error:', updateResult.primary.error);
-        Alert.alert('Fehler', 'Segment konnte nicht aufgeteilt werden');
-        return;
+        Alert.alert(
+          'Fehler',
+          `Segment konnte nicht aufgeteilt werden: ${updateResult.primary.error.message || 'Unbekannter Fehler'}`
+        );
+        return false;
       }
 
       if (updateResult.secondary.error) {
@@ -2223,20 +2297,20 @@ export default function SleepTrackerScreen() {
 
       const createResult = await sleepService.createEntry({
         user_id: user.id,
-        baby_id: targetEntry.baby_id ?? activeBabyId ?? null,
+        baby_id: resolvedTarget.baby_id ?? activeBabyId ?? null,
         start_time: resumedStart.toISOString(),
-        end_time: originalEndISO,
+        end_time: targetWasActive ? null : segmentEnd.toISOString(),
         duration_minutes: secondDuration,
-        notes: targetEntry.notes ?? null,
-        quality: targetEntry.quality ?? null,
-        partner_id: targetEntry.partner_id ?? effectivePartnerId ?? null,
+        notes: resolvedTarget.notes ?? null,
+        quality: resolvedTarget.quality ?? null,
+        partner_id: resolvedTarget.partner_id ?? effectivePartnerId ?? null,
       });
 
       if (createResult.primary.error) {
         console.error('Split create error:', createResult.primary.error);
 
         // best effort rollback of first update
-        const rollback = await sleepService.updateEntry(targetEntry.id, {
+        const rollback = await sleepService.updateEntry(resolvedTarget.id, {
           end_time: originalEndISO,
           duration_minutes: originalDuration,
         });
@@ -2244,63 +2318,127 @@ export default function SleepTrackerScreen() {
           console.error('Split rollback failed:', rollback.primary.error);
         }
 
-        Alert.alert('Fehler', 'Segment konnte nicht aufgeteilt werden');
-        return;
+        Alert.alert(
+          'Fehler',
+          `Segment konnte nicht aufgeteilt werden: ${createResult.primary.error.message || 'Unbekannter Fehler'}`
+        );
+        return false;
       }
 
       if (createResult.secondary.error) {
         console.warn('[SleepTracker] Secondary backend write failed:', createResult.secondary.error);
       }
 
+      if (targetWasActive) {
+        try {
+          await sleepActivityService.startSleepActivity(resumedStart, babyName);
+        } catch (liveActivityError) {
+          console.error('Failed to restart sleep live activity after split:', liveActivityError);
+        }
+      }
+
       showSuccessSplash('#4A90E2', '✂️', 'sleep_split_save');
 
       await invalidateCacheAfterAction(`sleep_history_${activeBackend}_${activeBabyId || 'default'}`);
       await loadSleepData();
+      return true;
     } catch (error) {
       console.error('Unexpected split error:', error);
       Alert.alert('Fehler', 'Unerwarteter Fehler beim Aufteilen');
+      return false;
     } finally {
       setIsSplittingSegment(false);
     }
   };
 
   const handleMergeNightSegments = async (entryA: ClassifiedSleepEntry, entryB: ClassifiedSleepEntry) => {
-    if (!sleepService || !user?.id || isSplittingSegment) return;
-    if (!entryA.id || !entryB.id || !entryA.end_time || !entryB.end_time) return;
+    if (!sleepService || !user?.id) {
+      Alert.alert('Fehler', 'Service nicht verfügbar. Bitte neu anmelden und erneut versuchen.');
+      return false;
+    }
+    if (isSplittingSegment) {
+      Alert.alert('Bitte warten', 'Es läuft bereits ein Speichervorgang.');
+      return false;
+    }
 
-    const mergedStart = new Date(entryA.start_time);
-    const mergedEnd = new Date(entryB.end_time);
-    const mergedDuration = Math.max(1, Math.round((mergedEnd.getTime() - mergedStart.getTime()) / 60000));
+    const resolveEntry = (candidate: ClassifiedSleepEntry): ClassifiedSleepEntry => {
+      if (candidate.id) return candidate;
+      const startMs = new Date(candidate.start_time).getTime();
+      const endMs = candidate.end_time ? new Date(candidate.end_time).getTime() : null;
+      return (
+        sleepEntries.find((entry) => {
+          if (!entry.id) return false;
+          const entryStartMs = new Date(entry.start_time).getTime();
+          const entryEndMs = entry.end_time ? new Date(entry.end_time).getTime() : null;
+          return entryStartMs === startMs && entryEndMs === endMs;
+        }) ?? candidate
+      );
+    };
+
+    const resolvedEntryA = resolveEntry(entryA);
+    const resolvedEntryB = resolveEntry(entryB);
+
+    if (!resolvedEntryA.id || !resolvedEntryB.id || !resolvedEntryA.end_time) {
+      Alert.alert('Nicht speicherbar', 'Die ausgewählten Segmente konnten nicht eindeutig zugeordnet werden.');
+      return false;
+    }
+
+    const mergedStart = new Date(resolvedEntryA.start_time);
+    const mergedEnd = resolvedEntryB.end_time ? new Date(resolvedEntryB.end_time) : null;
+    if (mergedEnd && mergedEnd.getTime() <= mergedStart.getTime()) {
+      Alert.alert('Fehler', 'Die Segmentzeiten sind ungültig und können nicht verbunden werden.');
+      return false;
+    }
+
+    const mergedDuration = mergedEnd
+      ? Math.max(1, Math.round((mergedEnd.getTime() - mergedStart.getTime()) / 60000))
+      : null;
 
     setIsSplittingSegment(true);
     try {
-      // Update first entry to span both
-      const updateResult = await sleepService.updateEntry(entryA.id, {
-        end_time: mergedEnd.toISOString(),
+      // Update first entry to span both (including open-ended active segments)
+      const updateResult = await sleepService.updateEntry(resolvedEntryA.id, {
+        end_time: mergedEnd ? mergedEnd.toISOString() : null,
         duration_minutes: mergedDuration,
       });
 
       if (updateResult.primary.error) {
         console.error('Merge update error:', updateResult.primary.error);
-        Alert.alert('Fehler', 'Segmente konnten nicht verbunden werden');
-        return;
+        Alert.alert(
+          'Fehler',
+          `Segmente konnten nicht verbunden werden: ${updateResult.primary.error.message || 'Unbekannter Fehler'}`
+        );
+        return false;
       }
 
       // Delete second entry
-      const deleteResult = await sleepService.deleteEntry(entryB.id);
+      const deleteResult = await sleepService.deleteEntry(resolvedEntryB.id);
       if (deleteResult.primary.error) {
         console.error('Merge delete error:', deleteResult.primary.error);
-        Alert.alert('Fehler', 'Zweites Segment konnte nicht entfernt werden');
-        return;
+        Alert.alert(
+          'Fehler',
+          `Zweites Segment konnte nicht entfernt werden: ${deleteResult.primary.error.message || 'Unbekannter Fehler'}`
+        );
+        return false;
+      }
+
+      if (!mergedEnd) {
+        try {
+          await sleepActivityService.startSleepActivity(mergedStart, babyName);
+        } catch (liveActivityError) {
+          console.error('Failed to restart sleep live activity after merge:', liveActivityError);
+        }
       }
 
       showSuccessSplash('#4A90E2', '🔗', 'sleep_merge_save');
 
       await invalidateCacheAfterAction(`sleep_history_${activeBackend}_${activeBabyId || 'default'}`);
       await loadSleepData();
+      return true;
     } catch (error) {
       console.error('Unexpected merge error:', error);
       Alert.alert('Fehler', 'Unerwarteter Fehler beim Verbinden');
+      return false;
     } finally {
       setIsSplittingSegment(false);
     }
@@ -2593,12 +2731,71 @@ export default function SleepTrackerScreen() {
       .sort((a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime());
   }, [sleepEntries, selectedDate]);
 
-  const nightGroups = useMemo(() => getNightGroupsForDayEntries(dayEntries), [dayEntries]);
+  const nightGroups = useMemo(() => {
+    const baseGroups = getNightGroupsForDayEntries(dayEntries);
+    if (baseGroups.length === 0) return [];
+
+    const expandedGroups = new Map<string, NightGroup>();
+
+    for (const baseGroup of baseGroups) {
+      const referenceEntry = baseGroup.entries[0];
+      if (!referenceEntry) continue;
+
+      const windowKey = getNightWindowKeyForEntry(referenceEntry);
+      if (expandedGroups.has(windowKey)) continue;
+
+      const fullWindowSegments = sleepEntries
+        .filter((entry) => entry.period === 'night' && getNightWindowKeyForEntry(entry) === windowKey)
+        .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
+
+      const expanded = buildNightGroupFromSegments(fullWindowSegments);
+      if (expanded) {
+        expandedGroups.set(windowKey, expanded);
+      }
+    }
+
+    return Array.from(expandedGroups.values()).sort((a, b) => b.start.getTime() - a.start.getTime());
+  }, [dayEntries, sleepEntries]);
 
   const openNightEditor = useCallback((group: NightGroup) => {
     setNightEditorGroup(group);
     setShowNightEditor(true);
   }, []);
+
+  useEffect(() => {
+    if (!showNightEditor || !nightEditorGroup || nightGroups.length === 0) return;
+
+    const currentIdentities = new Set(
+      nightEditorGroup.entries.map((entry) => getEntryIdentity(entry))
+    );
+
+    let bestMatch: NightGroup | null = null;
+    let bestOverlap = 0;
+
+    for (const group of nightGroups) {
+      const overlap = group.entries.reduce((sum, entry) => {
+        return sum + (currentIdentities.has(getEntryIdentity(entry)) ? 1 : 0);
+      }, 0);
+
+      if (overlap > bestOverlap) {
+        bestOverlap = overlap;
+        bestMatch = group;
+      }
+    }
+
+    if (!bestMatch || bestOverlap === 0) return;
+
+    const currentSignature = nightEditorGroup.entries
+      .map((entry) => getEntryIdentity(entry))
+      .join(',');
+    const bestSignature = bestMatch.entries
+      .map((entry) => getEntryIdentity(entry))
+      .join(',');
+
+    if (currentSignature !== bestSignature) {
+      setNightEditorGroup(bestMatch);
+    }
+  }, [showNightEditor, nightEditorGroup, nightGroups]);
 
   const nightGroupEntryIdentities = useMemo(
     () =>
@@ -3588,10 +3785,10 @@ export default function SleepTrackerScreen() {
             {timelineItems.map((item, index) => {
               if (item.kind === 'night_group') {
                 const group = item.group;
-                const totalWakeMins = group.wakeGaps.reduce((sum: number, mins: number) => sum + mins, 0);
+                const totalWakeSeconds = group.wakeGaps.reduce((sum: number, secs: number) => sum + secs, 0);
 
                 // Derive wake phases for display
-                const wakePhasesList: { start: Date; end: Date; durationMin: number }[] = [];
+                const wakePhasesList: { start: Date; end: Date; durationSeconds: number }[] = [];
                 // Find longest sleep phase
                 let longestSleepMin = 0;
                 for (let wi = 0; wi < group.entries.length; wi++) {
@@ -3606,8 +3803,10 @@ export default function SleepTrackerScreen() {
                     if (prev.end_time) {
                       const ws = new Date(prev.end_time);
                       const we = new Date(e.start_time);
-                      const wdur = Math.round((we.getTime() - ws.getTime()) / 60000);
-                      if (wdur > 0) wakePhasesList.push({ start: ws, end: we, durationMin: wdur });
+                      const wdurSeconds = Math.round((we.getTime() - ws.getTime()) / 1000);
+                      if (wdurSeconds > 0) {
+                        wakePhasesList.push({ start: ws, end: we, durationSeconds: wdurSeconds });
+                      }
                     }
                   }
                 }
@@ -3666,12 +3865,12 @@ export default function SleepTrackerScreen() {
                       />
 
                       {/* Divider */}
-                      {(wakePhasesList.length > 0 || totalWakeMins > 0) && (
+                      {(wakePhasesList.length > 0 || totalWakeSeconds > 0) && (
                         <View style={[styles.nightGroupDivider, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]} />
                       )}
 
                       {/* Stats row */}
-                      {totalWakeMins > 0 && (
+                      {totalWakeSeconds > 0 && (
                         <>
                           <View style={styles.nightGroupStatsRow}>
                             <View style={styles.nightGroupStat}>
@@ -3683,7 +3882,7 @@ export default function SleepTrackerScreen() {
                             <View style={styles.nightGroupStat}>
                               <View style={[styles.nightGroupStatDot, { backgroundColor: 'rgba(232,160,130,0.8)' }]} />
                               <Text style={[styles.nightGroupStatText, { color: textSecondary }]}>
-                                Wach: {totalWakeMins} Min
+                                Wach: {formatWakeDuration(totalWakeSeconds)}
                               </Text>
                             </View>
                           </View>
@@ -3706,7 +3905,7 @@ export default function SleepTrackerScreen() {
                               </Text>
                               <View style={[styles.nightGroupWakeBadge, { borderColor: isDark ? 'rgba(232,160,130,0.3)' : 'rgba(232,160,130,0.35)' }]}>
                                 <Text style={[styles.nightGroupWakeBadgeText, { color: isDark ? 'rgba(232,160,130,0.6)' : 'rgba(200,120,80,0.7)' }]}>
-                                  {wp.durationMin}m
+                                  {formatWakeDuration(wp.durationSeconds)}
                                 </Text>
                               </View>
                             </View>
