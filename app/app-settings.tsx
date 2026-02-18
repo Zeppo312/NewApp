@@ -9,6 +9,7 @@ import { Redirect, useRouter, Stack } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { useConvex } from '@/contexts/ConvexContext';
 import { useBackground } from '@/contexts/BackgroundContext';
+import { useTheme } from '@/contexts/ThemeContext';
 import { getAppSettings, saveAppSettings, AppSettings } from '@/lib/supabase';
 import { exportUserData } from '@/lib/dataExport';
 import { deleteUserAccount, deleteUserData } from '@/lib/profile';
@@ -26,20 +27,33 @@ const PRESET_OPTIONS = [
   { id: 'default', label: 'Standard' },
   { id: 'heller', label: 'Heller' },
   { id: 'dunkler', label: 'Dunkler' },
+  { id: 'nightmode', label: 'Night Mode' },
   { id: 'shadow', label: 'Shadow' },
   { id: 'wave', label: 'Wave' },
   { id: 'stone', label: 'Stone' },
 ] as const;
+
+const PRESET_DARK_MODE_MAP = {
+  default: false,
+  heller: false,
+  dunkler: true,
+  nightmode: true,
+  shadow: true,
+  wave: false,
+  stone: true,
+} as const;
 
 export default function AppSettingsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const router = useRouter();
   const { user, session, signOut } = useAuth();
+  const { autoDarkModeEnabled, setAutoDarkModeEnabled } = useTheme();
 
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSavingAutoDark, setIsSavingAutoDark] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isDeletingData, setIsDeletingData] = useState(false);
   const [isChangingBackground, setIsChangingBackground] = useState(false);
@@ -127,6 +141,29 @@ export default function AppSettingsScreen() {
 
   const handleToggleNotifications = async (value: boolean) => {
     await handleSaveSettings({ notifications_enabled: value });
+  };
+
+  const handleToggleAutoDarkMode = async (value: boolean) => {
+    try {
+      setIsSavingAutoDark(true);
+      await setAutoDarkModeEnabled(value);
+
+      // Beim Aktivieren des Auto-Dunkelmodus auch den Textmodus für dunkles Bild setzen.
+      if (value && !isDarkBackground) {
+        await setBackgroundMode(true);
+        return;
+      }
+
+      // Beim Deaktivieren wieder an das gewählte Preset anpassen (nur bei Presets, nicht bei Custom-Bildern).
+      if (!value && selectedBackground !== 'custom') {
+        const presetIsDark = PRESET_DARK_MODE_MAP[selectedBackground];
+        if (presetIsDark !== isDarkBackground) {
+          await setBackgroundMode(presetIsDark);
+        }
+      }
+    } finally {
+      setIsSavingAutoDark(false);
+    }
   };
 
   const handleChangeBackground = async () => {
@@ -429,6 +466,32 @@ export default function AppSettingsScreen() {
                         <IconSymbol name="chevron.right" size={20} color={trailingIconColor} />
                       </View>
                     </TouchableOpacity>
+                  </LiquidGlassCard>
+
+                  <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
+                    <ThemedText style={styles.sectionTitle}>Darstellung</ThemedText>
+
+                    <View style={styles.rowItem}>
+                      <View style={styles.rowIcon}>
+                        <IconSymbol name="moon.stars" size={22} color={primaryIconColor} />
+                      </View>
+                      <View style={styles.rowContent}>
+                        <ThemedText style={styles.rowTitle}>Auto-Dunkelmodus</ThemedText>
+                        <ThemedText style={styles.rowDescription}>
+                          Schaltet den Dark Mode automatisch von 20:00 bis 07:00 Uhr ein.
+                        </ThemedText>
+                      </View>
+                      <View style={styles.trailing}>
+                        <Switch
+                          value={autoDarkModeEnabled}
+                          onValueChange={handleToggleAutoDarkMode}
+                          disabled={isSavingAutoDark}
+                          trackColor={{ false: '#D1D1D6', true: '#9DBEBB' }}
+                          thumbColor={autoDarkModeEnabled ? '#FFFFFF' : '#F4F4F4'}
+                          ios_backgroundColor="#D1D1D6"
+                        />
+                      </View>
+                    </View>
                   </LiquidGlassCard>
 
                   {/* Hintergrundbild */}

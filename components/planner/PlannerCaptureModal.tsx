@@ -465,6 +465,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
             value={value}
             mode={dateOnly ? "date" : "datetime"}
             display={Platform.OS === "ios" ? "inline" : "spinner"}
+            locale={Platform.OS === "ios" ? "de-DE-u-ca-gregory" : undefined}
             onChange={(event, date) => {
               if (event?.type === "dismissed") {
                 toggle();
@@ -475,6 +476,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
               }
             }}
             style={styles.dateTimePicker}
+            themeVariant={isDark ? "dark" : "light"}
           />
           <View style={styles.pickerActions}>
             <TouchableOpacity

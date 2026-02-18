@@ -15,6 +15,7 @@ const presetBackgrounds = {
   default: defaultBackground,
   heller: require('@/assets/images/heller-background.png'),
   dunkler: require('@/assets/images/dunkler-background.png'),
+  nightmode: require('@/assets/images/nightmode.png'),
   shadow: require('@/assets/images/Shadow.png'),
   wave: require('@/assets/images/Wave.png'),
   stone: require('@/assets/images/stone.png'),
@@ -28,6 +29,7 @@ const isBackgroundSelection = (value: string | null): value is BackgroundSelecti
     value === 'default' ||
     value === 'heller' ||
     value === 'dunkler' ||
+    value === 'nightmode' ||
     value === 'shadow' ||
     value === 'wave' ||
     value === 'stone' ||

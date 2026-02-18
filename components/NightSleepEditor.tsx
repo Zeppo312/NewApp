@@ -266,6 +266,7 @@ const TimePickerRow = ({
           onChange={(_, d) => { if (d) onChange(d); }}
           style={rowStyles.picker}
           accentColor={accentColor}
+          themeVariant={isDark ? 'dark' : 'light'}
           locale="de-DE"
         />
       ) : (

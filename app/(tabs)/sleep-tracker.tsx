@@ -65,6 +65,11 @@ const QUALITY_VISUALS = {
   bad: { color: '#E8A6B0', emoji: '🥱' },
 } as const;
 
+const NIGHT_SPLASH_COLORS = {
+  sleep_start_night: '#141C34',
+  sleep_pause_night: '#1E1A2E',
+} as const;
+
 // Globale Helper-Funktionen für Zeitberechnungen
 const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 const endOfDay   = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
@@ -2577,7 +2582,13 @@ export default function SleepTrackerScreen() {
       const b = parseInt(c.substring(4,6),16);
       return `rgba(${r},${g},${b},${a})`;
     };
-    setSplashBg(rgba(hex, 1));
+    const splashHex =
+      kind === 'sleep_start_night'
+        ? NIGHT_SPLASH_COLORS.sleep_start_night
+        : kind === 'sleep_pause_night'
+          ? NIGHT_SPLASH_COLORS.sleep_pause_night
+          : hex;
+    setSplashBg(rgba(splashHex, 1));
     setSplashEmoji(emoji);
     // Texte je Kontext - angepasst für Sleep
     if (kind === 'sleep_start_night') {

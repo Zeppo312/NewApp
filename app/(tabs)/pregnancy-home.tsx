@@ -1047,6 +1047,26 @@ export default function PregnancyHomeScreen() {
 
               <TouchableOpacity
                 style={styles.liquidGlassCardWrapper}
+                onPress={() => router.push('/planner' as any)}
+                activeOpacity={0.9}
+              >
+                <BlurView
+                  intensity={24}
+                  tint={colorScheme === 'dark' ? 'dark' : 'light'}
+                  style={styles.liquidGlassCardBackground}
+                >
+                  <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(195, 220, 255, 0.6)', borderColor: 'rgba(255, 255, 255, 0.35)' }]}>
+                    <View style={[styles.iconContainer, { backgroundColor: 'rgba(120, 170, 255, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
+                      <IconSymbol name="clock" size={28} color="#FFFFFF" />
+                    </View>
+                    <ThemedText adaptive={false} style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>Planer</ThemedText>
+                    <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>Tagesplanung & Termine</ThemedText>
+                  </View>
+                </BlurView>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.liquidGlassCardWrapper}
                 onPress={() => router.push({ pathname: '/(tabs)/explore' })}
                 activeOpacity={0.9}
               >
