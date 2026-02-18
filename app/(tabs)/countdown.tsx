@@ -489,7 +489,12 @@ export default function CountdownScreen() {
     <ThemedBackground style={{ flex: 1 }}>
       <SafeAreaView style={{ flex: 1 }}>
         <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
-        <Header title="Countdown" subtitle="Verfolge die Zeit bis zur Geburt" />
+        <Header
+          title="Countdown"
+          subtitle="Verfolge die Zeit bis zur Geburt"
+          showBackButton
+          onBackPress={() => router.push('/(tabs)/pregnancy-home')}
+        />
 
         <ScrollView ref={scrollViewRef} contentContainerStyle={styles.scrollContent}>
           {/* Countdown im Glas-Card */}

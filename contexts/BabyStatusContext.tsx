@@ -9,13 +9,17 @@ import { useActiveBaby } from './ActiveBabyContext';
 type BabyStatusSource = 'cache' | 'baby_info' | 'user_settings' | 'default' | 'error' | 'local_action';
 type SetBabyBornOptions = {
   birthDate?: string | null;
+  babyId?: string | null;
 };
+type TemporaryViewMode = 'baby' | 'pregnancy';
 
 interface BabyStatusContextType {
   isBabyBorn: boolean;
   isResolved: boolean;
   source: BabyStatusSource;
   setIsBabyBorn: (value: boolean, options?: SetBabyBornOptions) => Promise<void>;
+  temporaryViewMode: TemporaryViewMode | null;
+  setTemporaryViewMode: (mode: TemporaryViewMode | null) => void;
   isLoading: boolean;
   babyAgeMonths: number;
   babyWeightPercentile: number;
@@ -24,6 +28,7 @@ interface BabyStatusContextType {
 
 const BabyStatusContext = createContext<BabyStatusContextType | undefined>(undefined);
 const BABY_STATUS_CACHE_PREFIX = 'baby_status_v1';
+const TEMPORARY_VIEW_MODE_TIMEOUT_MS = 10 * 60 * 1000;
 
 type CachedBabyStatus = {
   isBabyBorn: boolean;
@@ -34,6 +39,7 @@ type CachedBabyStatus = {
 
 export const BabyStatusProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isBabyBorn, setIsBabyBornState] = useState(false);
+  const [temporaryViewMode, setTemporaryViewModeState] = useState<TemporaryViewMode | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isResolved, setIsResolved] = useState(false);
   const [source, setSource] = useState<BabyStatusSource>('default');
@@ -42,6 +48,35 @@ export const BabyStatusProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const { user } = useAuth();
   const { activeBabyId, isReady: isActiveBabyReady } = useActiveBaby();
   const latestRequestIdRef = useRef(0);
+  const temporaryViewModeResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearTemporaryViewModeResetTimer = useCallback(() => {
+    if (!temporaryViewModeResetTimerRef.current) return;
+    clearTimeout(temporaryViewModeResetTimerRef.current);
+    temporaryViewModeResetTimerRef.current = null;
+  }, []);
+
+  const setTemporaryViewMode = useCallback(
+    (mode: TemporaryViewMode | null) => {
+      clearTemporaryViewModeResetTimer();
+      setTemporaryViewModeState(mode);
+
+      if (!mode) return;
+
+      temporaryViewModeResetTimerRef.current = setTimeout(() => {
+        setTemporaryViewModeState(null);
+        temporaryViewModeResetTimerRef.current = null;
+      }, TEMPORARY_VIEW_MODE_TIMEOUT_MS);
+    },
+    [clearTemporaryViewModeResetTimer],
+  );
+
+  useEffect(
+    () => () => {
+      clearTemporaryViewModeResetTimer();
+    },
+    [clearTemporaryViewModeResetTimer],
+  );
 
   const getCacheKey = useCallback(
     (userId: string, babyId: string | null) =>
@@ -216,22 +251,24 @@ export const BabyStatusProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const setIsBabyBorn = async (value: boolean, options?: SetBabyBornOptions) => {
     if (!user) return;
     try {
+      setTemporaryViewMode(null);
       setIsLoading(true);
       setSource('local_action');
+      const targetBabyId = options?.babyId ?? activeBabyId;
 
-      if (activeBabyId) {
+      if (targetBabyId) {
         if (value) {
           if (options && Object.prototype.hasOwnProperty.call(options, 'birthDate')) {
             const { error: saveError } = await saveBabyInfo(
               { birth_date: options.birthDate ?? null },
-              activeBabyId,
+              targetBabyId,
             );
             if (saveError) {
               throw saveError;
             }
           }
         } else {
-          const { error: saveError } = await saveBabyInfo({ birth_date: null }, activeBabyId);
+          const { error: saveError } = await saveBabyInfo({ birth_date: null }, targetBabyId);
           if (saveError) {
             throw saveError;
           }
@@ -252,13 +289,22 @@ export const BabyStatusProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
   };
 
+  const effectiveIsBabyBorn =
+    temporaryViewMode === 'baby'
+      ? true
+      : temporaryViewMode === 'pregnancy'
+        ? false
+        : isBabyBorn;
+
   return (
     <BabyStatusContext.Provider 
       value={{ 
-        isBabyBorn, 
+        isBabyBorn: effectiveIsBabyBorn,
         isResolved,
         source,
         setIsBabyBorn, 
+        temporaryViewMode,
+        setTemporaryViewMode,
         isLoading, 
         babyAgeMonths,
         babyWeightPercentile,

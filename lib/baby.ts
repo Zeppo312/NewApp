@@ -383,6 +383,32 @@ export const saveBabyInfo = async (info: BabyInfo, babyId?: string) => {
   }
 };
 
+export const deleteBaby = async (babyId: string) => {
+  try {
+    const { data: userData } = await getCachedUser();
+    if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
+    if (!babyId) return { data: null, error: new Error('Keine babyId angegeben') };
+
+    // Invalidiere Cache vor Löschen
+    await invalidateBabyListCache();
+
+    const { error } = await supabase
+      .from('baby_info')
+      .delete()
+      .eq('id', babyId);
+
+    if (error) {
+      console.error('Error deleting baby info:', error);
+      return { data: null, error };
+    }
+
+    return { data: true, error: null };
+  } catch (err) {
+    console.error('Failed to delete baby info:', err);
+    return { data: null, error: err };
+  }
+};
+
 // Tagebucheinträge
 export const getDiaryEntries = async (babyId?: string) => {
   try {

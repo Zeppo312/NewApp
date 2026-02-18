@@ -4,7 +4,6 @@ import {
   Modal,
   Pressable,
   StyleSheet,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -13,9 +12,10 @@ import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { createBaby, getBabyInfo, saveBabyInfo } from '@/lib/baby';
+import { createBaby, deleteBaby, getBabyInfo, saveBabyInfo } from '@/lib/baby';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 
@@ -38,7 +38,6 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
   const modalBgColor = isDark ? Colors.dark.cardLight : '#FFF7F3';
   const textColor = isDark ? Colors.dark.text : '#7D5A50';
   const subtitleColor = isDark ? Colors.dark.textTertiary : '#A8978E';
-  const inputBgColor = isDark ? Colors.dark.cardDark : '#FFFFFF';
   const rowBgColor = isDark ? Colors.dark.cardDark : '#FFFFFF';
   const router = useRouter();
   const { user } = useAuth();
@@ -51,9 +50,11 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
     isLoading,
     loadError,
   } = useActiveBaby();
+  const { isBabyBorn, temporaryViewMode, setTemporaryViewMode } = useBabyStatus();
   const [internalIsOpen, setInternalIsOpen] = useState(false);
-  const [newBabyName, setNewBabyName] = useState('');
-  const [isCreating, setIsCreating] = useState(false);
+  const [isCreatingBaby, setIsCreatingBaby] = useState(false);
+  const [isCreatingPregnancy, setIsCreatingPregnancy] = useState(false);
+  const [deletingBabyId, setDeletingBabyId] = useState<string | null>(null);
   const [isChangingPhoto, setIsChangingPhoto] = useState(false);
   const modalIsOpen = isOpen ?? internalIsOpen;
 
@@ -86,6 +87,7 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
 
   const handleSelectBaby = async (babyId: string) => {
     try {
+      setTemporaryViewMode(null);
       await setActiveBabyId(babyId);
       const targetRoute = await getHomeRouteForBaby(babyId);
       setModalOpen(false);
@@ -98,34 +100,153 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
   };
 
   const handleCreateBaby = async () => {
-    if (isCreating) return;
-    setIsCreating(true);
+    if (isCreatingBaby) return;
+    setIsCreatingBaby(true);
 
-    const trimmedName = newBabyName.trim();
     const fallbackName = `Kind ${babies.length + 1}`;
-    const name = trimmedName || fallbackName;
 
-    const { data, error } = await createBaby({ name });
+    try {
+      const { data, error } = await createBaby({ name: fallbackName });
 
-    if (error) {
-      console.error('Error creating baby:', error);
-      Alert.alert('Fehler', 'Das neue Kind konnte nicht angelegt werden.');
-      setIsCreating(false);
+      if (error) {
+        console.error('Error creating baby:', error);
+        Alert.alert('Fehler', 'Das neue Kind konnte nicht angelegt werden.');
+        return;
+      }
+
+      const created = Array.isArray(data) ? data[0] : data;
+      await refreshBabies();
+      if (created?.id) {
+        setTemporaryViewMode(null);
+        await setActiveBabyId(created.id);
+        setModalOpen(false);
+        router.push({ pathname: '/(tabs)/baby', params: { edit: '1', created: '1' } } as any);
+        return;
+      }
+
+      setModalOpen(false);
+    } finally {
+      setIsCreatingBaby(false);
+    }
+  };
+
+  const handleOpenPregnancySetup = async () => {
+    if (isCreatingPregnancy) return;
+    setIsCreatingPregnancy(true);
+
+    const fallbackName = 'Schwangerschaft';
+
+    try {
+      const { data, error } = await createBaby({
+        name: fallbackName,
+        baby_gender: 'unknown',
+        birth_date: null,
+      });
+
+      if (error) {
+        console.error('Error creating pregnancy baby:', error);
+        Alert.alert('Fehler', 'Die Schwangerschaft konnte nicht vorbereitet werden.');
+        return;
+      }
+
+      const created = Array.isArray(data) ? data[0] : data;
+      if (!created?.id) {
+        Alert.alert('Fehler', 'Das neue Kind konnte nicht angelegt werden.');
+        return;
+      }
+
+      await refreshBabies();
+      await setActiveBabyId(created.id);
+      setTemporaryViewMode(null);
+      setModalOpen(false);
+      router.push({ pathname: '/pregnancy-setup', params: { babyId: created.id } } as any);
+    } catch (error) {
+      console.error('Error preparing pregnancy setup:', error);
+      Alert.alert('Fehler', 'Die Schwangerschaft konnte nicht vorbereitet werden.');
+    } finally {
+      setIsCreatingPregnancy(false);
+    }
+  };
+
+  const handleSwitchViewMode = () => {
+    const targetMode = isBabyBorn ? 'pregnancy' : 'baby';
+    const targetRoute = targetMode === 'baby' ? '/(tabs)/home' : '/(tabs)/pregnancy-home';
+    setTemporaryViewMode(targetMode);
+    setModalOpen(false);
+    router.replace(targetRoute as any);
+  };
+
+  const runDeleteBaby = async (babyId: string, fallbackBabyId: string | null) => {
+    try {
+      setDeletingBabyId(babyId);
+      const isDeletingActive = babyId === activeBabyId;
+
+      const { error } = await deleteBaby(babyId);
+      if (error) {
+        throw error;
+      }
+
+      await refreshBabies();
+
+      if (isDeletingActive && fallbackBabyId) {
+        await setActiveBabyId(fallbackBabyId);
+        const targetRoute = await getHomeRouteForBaby(fallbackBabyId);
+        router.replace(targetRoute as any);
+      }
+    } catch (error) {
+      console.error('Error deleting baby:', error);
+      Alert.alert('Fehler', 'Das Kind konnte nicht gelöscht werden.');
+    } finally {
+      setDeletingBabyId(null);
+    }
+  };
+
+  const handleDeleteBaby = (babyId: string, label: string) => {
+    if (deletingBabyId) return;
+    if (babies.length <= 1) {
+      Alert.alert('Nicht möglich', 'Du brauchst mindestens ein Kind in der App.');
       return;
     }
 
-    const created = Array.isArray(data) ? data[0] : data;
-    await refreshBabies();
-    if (created?.id) {
-      await setActiveBabyId(created.id);
-      setModalOpen(false);
-      router.replace('/(tabs)/pregnancy-home' as any);
+    const fallbackBabyId = babies.find((baby) => baby.id && baby.id !== babyId)?.id ?? null;
+
+    Alert.alert(
+      'Kind löschen?',
+      `Möchtest du "${label}" wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.`,
+      [
+        { text: 'Abbrechen', style: 'cancel' },
+        {
+          text: 'Löschen',
+          style: 'destructive',
+          onPress: () => {
+            void runDeleteBaby(babyId, fallbackBabyId);
+          },
+        },
+      ],
+    );
+  };
+
+  const handleBabyActions = (babyId: string, label: string) => {
+    if (deletingBabyId) return;
+
+    const canDelete = babies.length > 1;
+    if (!canDelete) {
+      Alert.alert('Verwalten', `"${label}" kann nicht gelöscht werden, weil mindestens ein Kind bestehen bleiben muss.`);
+      return;
     }
-    if (!created?.id) {
-      setModalOpen(false);
-    }
-    setNewBabyName('');
-    setIsCreating(false);
+
+    Alert.alert(
+      `"${label}" verwalten`,
+      'Was möchtest du tun?',
+      [
+        { text: 'Abbrechen', style: 'cancel' },
+        {
+          text: 'Kind löschen',
+          style: 'destructive',
+          onPress: () => handleDeleteBaby(babyId, label),
+        },
+      ],
+    );
   };
 
   const handleChangePhoto = async () => {
@@ -260,11 +381,13 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
               {babies.map((baby, index) => {
                 const label = baby.name?.trim() || `Kind ${index + 1}`;
                 const isActive = baby.id === activeBabyId;
+                const isDeletingThisBaby = baby.id != null && deletingBabyId === baby.id;
                 return (
                   <TouchableOpacity
                     key={baby.id ?? `${label}-${index}`}
                     style={[styles.babyRow, { backgroundColor: rowBgColor }, isActive && styles.babyRowActive]}
                     onPress={() => baby.id && handleSelectBaby(baby.id)}
+                    disabled={Boolean(deletingBabyId)}
                   >
                     {baby.photo_url ? (
                       <CachedImage
@@ -286,6 +409,25 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
                     {isActive && (
                       <IconSymbol name="checkmark.circle.fill" size={18} color="#E9C9B6" />
                     )}
+                    {baby.id && (
+                      <TouchableOpacity
+                        style={[
+                          styles.babyActionsButton,
+                          (isDeletingThisBaby || Boolean(deletingBabyId)) && styles.deleteBabyButtonDisabled,
+                        ]}
+                        onPress={(event) => {
+                          event.stopPropagation();
+                          handleBabyActions(baby.id as string, label);
+                        }}
+                        disabled={isDeletingThisBaby || Boolean(deletingBabyId)}
+                      >
+                        <IconSymbol
+                          name="ellipsis.circle.fill"
+                          size={18}
+                          color={isDark ? 'rgba(255,255,255,0.55)' : 'rgba(125, 90, 80, 0.55)'}
+                        />
+                      </TouchableOpacity>
+                    )}
                   </TouchableOpacity>
                 );
               })}
@@ -304,22 +446,38 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
               </TouchableOpacity>
             </View>
 
+            <View style={[styles.viewModeSection, isDark && { borderTopColor: Colors.dark.border }]}>
+              <ThemedText style={[styles.viewModeTitle, { color: textColor }]}>Ansicht</ThemedText>
+              <TouchableOpacity style={styles.viewModeButton} onPress={handleSwitchViewMode}>
+                <ThemedText style={[styles.viewModeButtonText, { color: textColor }]}>
+                  {isBabyBorn ? 'Schwangerschaftsmodus anschauen' : 'Babymodus anschauen'}
+                </ThemedText>
+              </TouchableOpacity>
+              {temporaryViewMode && (
+                <ThemedText style={[styles.viewModeHint, { color: subtitleColor }]}>
+                  Temporär aktiv (max. 10 Minuten)
+                </ThemedText>
+              )}
+            </View>
+
             <View style={[styles.newBabySection, isDark && { borderTopColor: Colors.dark.border }]}>
-              <ThemedText style={[styles.newBabyTitle, { color: textColor }]}>Neues Kind</ThemedText>
-              <TextInput
-                style={[styles.newBabyInput, { backgroundColor: inputBgColor, color: textColor }]}
-                placeholder="Name (optional)"
-                placeholderTextColor={subtitleColor}
-                value={newBabyName}
-                onChangeText={setNewBabyName}
-              />
+              <ThemedText style={[styles.newBabyTitle, { color: textColor }]}>Neu anlegen</ThemedText>
               <TouchableOpacity
-                style={[styles.createButton, isCreating && styles.createButtonDisabled]}
+                style={[styles.createButton, isCreatingBaby && styles.createButtonDisabled]}
                 onPress={handleCreateBaby}
-                disabled={isCreating}
+                disabled={isCreatingBaby}
               >
                 <ThemedText style={[styles.createButtonText, { color: textColor }]}>
-                  {isCreating ? 'Wird angelegt...' : 'Kind anlegen'}
+                  {isCreatingBaby ? 'Wird angelegt...' : 'Kind anlegen'}
+                </ThemedText>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.secondaryActionButton, (isCreatingPregnancy || isCreatingBaby) && styles.createButtonDisabled]}
+                onPress={handleOpenPregnancySetup}
+                disabled={isCreatingPregnancy || isCreatingBaby}
+              >
+                <ThemedText style={[styles.secondaryActionButtonText, { color: textColor }]}>
+                  {isCreatingPregnancy ? 'Wird vorbereitet...' : 'Schwangerschaft anlegen'}
                 </ThemedText>
               </TouchableOpacity>
             </View>
@@ -442,6 +600,15 @@ const styles = StyleSheet.create({
     // color wird dynamisch gesetzt
     marginTop: 2,
   },
+  babyActionsButton: {
+    marginLeft: 8,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  deleteBabyButtonDisabled: {
+    opacity: 0.55,
+  },
   photoSection: {
     borderTopWidth: 1,
     borderTopColor: 'rgba(125, 90, 80, 0.1)',
@@ -463,6 +630,31 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
   },
+  viewModeSection: {
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(125, 90, 80, 0.1)',
+    paddingTop: 12,
+    marginBottom: 12,
+  },
+  viewModeTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  viewModeButton: {
+    backgroundColor: '#E9C9B6',
+    borderRadius: 12,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  viewModeButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  viewModeHint: {
+    fontSize: 12,
+    marginTop: 6,
+  },
   newBabySection: {
     borderTopWidth: 1,
     borderTopColor: 'rgba(125, 90, 80, 0.1)',
@@ -474,23 +666,27 @@ const styles = StyleSheet.create({
     // color wird dynamisch gesetzt
     marginBottom: 8,
   },
-  newBabyInput: {
-    // backgroundColor und color werden dynamisch gesetzt
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(125, 90, 80, 0.15)',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginBottom: 10,
-  },
   createButton: {
     backgroundColor: '#E9C9B6',
     borderRadius: 12,
     paddingVertical: 10,
     alignItems: 'center',
+    marginBottom: 8,
   },
   createButtonDisabled: {
     opacity: 0.7,
+  },
+  secondaryActionButton: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(125, 90, 80, 0.25)',
+    backgroundColor: 'rgba(233, 201, 182, 0.25)',
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  secondaryActionButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
   },
   createButtonText: {
     fontSize: 14,

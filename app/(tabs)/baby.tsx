@@ -13,7 +13,7 @@ import { saveBabyInfo, BabyInfo } from '@/lib/baby';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { loadBabyInfoWithCache, invalidateBabyCache } from '@/lib/babyCache';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { useRouter, Stack } from 'expo-router';
+import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import Header from '@/components/Header';
 import { useSmartBack } from '@/contexts/NavigationContext';
 import * as Notifications from 'expo-notifications';
@@ -133,6 +133,7 @@ export default function BabyScreen() {
   const { activeBabyId, refreshBabies, isReady } = useActiveBaby();
   const { refreshBabyDetails } = useBabyStatus();
   const router = useRouter();
+  const params = useLocalSearchParams<{ edit?: string | string[]; created?: string | string[] }>();
 
   // Set fallback route for smart back navigation
   useSmartBack('/(tabs)/home');
@@ -143,6 +144,17 @@ export default function BabyScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [backgroundTaskStatus, setBackgroundTaskStatus] = useState<{status: string, isRegistered: boolean} | null>(null);
+
+  const editParamValue = Array.isArray(params.edit) ? params.edit[0] : params.edit;
+  const createdParamValue = Array.isArray(params.created) ? params.created[0] : params.created;
+  const autoOpenEdit = editParamValue === '1' || editParamValue === 'true';
+  const showCreatedHint = createdParamValue === '1' || createdParamValue === 'true';
+
+  useEffect(() => {
+    if (autoOpenEdit) {
+      setIsEditing(true);
+    }
+  }, [autoOpenEdit]);
 
   useEffect(() => {
     if (user) {
@@ -701,6 +713,13 @@ export default function BabyScreen() {
             </View>
 
             <View style={styles.infoContainer}>
+              {showCreatedHint && (
+                <View style={styles.createdHintBox}>
+                  <ThemedText style={[styles.createdHintText, { color: textSecondary }]}>
+                    Neues Kind angelegt. Trage jetzt die wichtigsten Daten ein.
+                  </ThemedText>
+                </View>
+              )}
               {isEditing ? (
                 <>
                   <View style={styles.inputRow}>
@@ -1114,6 +1133,19 @@ const styles = StyleSheet.create({
   },
   infoContainer: {
     width: '100%',
+  },
+  createdHintBox: {
+    borderWidth: 1,
+    borderColor: 'rgba(125, 90, 80, 0.2)',
+    backgroundColor: 'rgba(233, 201, 182, 0.25)',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 14,
+  },
+  createdHintText: {
+    fontSize: 13,
+    fontWeight: '600',
   },
   infoRow: {
     flexDirection: 'row',

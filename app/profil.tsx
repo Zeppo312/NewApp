@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet,
   ScrollView,
@@ -126,7 +126,7 @@ export default function ProfilScreen() {
   const dangerCardBackground = isDark ? 'rgba(255,107,107,0.22)' : 'rgba(255,130,130,0.5)';
   const actionDisabledBackground = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(168,168,168,0.5)';
   const { user, session, signOut } = useAuth();
-  const { isBabyBorn, setIsBabyBorn, refreshBabyDetails } = useBabyStatus();
+  const { refreshBabyDetails } = useBabyStatus();
   const { activeBabyId, refreshBabies } = useActiveBaby();
   const { syncUser } = useConvex();
 
@@ -143,6 +143,7 @@ export default function ProfilScreen() {
   // Baby-Informationen
   const [babyName, setBabyName]         = useState('');
   const [babyGender, setBabyGender]     = useState<'male' | 'female' | ''>('');
+  const [isBabyBornForActiveBaby, setIsBabyBornForActiveBaby] = useState(false);
   const [dueDate, setDueDate]           = useState<Date | null>(null);
   const [birthDate, setBirthDate]       = useState<Date | null>(null);
   const [babyWeight, setBabyWeight]     = useState('');
@@ -163,6 +164,7 @@ export default function ProfilScreen() {
   const [isUpdatingEmail, setIsUpdatingEmail] = useState(false);
   const [emailOverlayVisible, setEmailOverlayVisible] = useState(false);
   const [emailOverlayValue, setEmailOverlayValue] = useState('');
+  const latestLoadRequestIdRef = useRef(0);
 
   useEffect(() => {
     if (user) loadUserData();
@@ -170,11 +172,14 @@ export default function ProfilScreen() {
   }, [user, activeBabyId]);
 
   const loadUserData = async () => {
+    const requestId = ++latestLoadRequestIdRef.current;
     try {
       setIsLoading(true);
 
       if (!user) {
-        setIsLoading(false);
+        if (requestId === latestLoadRequestIdRef.current) {
+          setIsLoading(false);
+        }
         return;
       }
 
@@ -190,6 +195,7 @@ export default function ProfilScreen() {
         .single();
 
       if (!profileError && profileData) {
+        if (requestId !== latestLoadRequestIdRef.current) return;
         setFirstName(profileData.first_name || '');
         setLastName(profileData.last_name || '');
         setUserRole((profileData.user_role as any) || '');
@@ -212,11 +218,14 @@ export default function ProfilScreen() {
         .limit(1)
         .maybeSingle();
 
+      if (requestId !== latestLoadRequestIdRef.current) return;
       setDueDate(parseSafeDate(settingsData?.due_date));
 
       // Baby info
       const { data: babyData } = await getBabyInfo(activeBabyId ?? undefined);
+      if (requestId !== latestLoadRequestIdRef.current) return;
       if (babyData) {
+        const parsedBirthDate = parseSafeDate(babyData.birth_date);
         setBabyName(babyData.name || '');
         setBabyGender(babyData.baby_gender || '');
         setBabyWeight(babyData.weight || '');
@@ -225,13 +234,29 @@ export default function ProfilScreen() {
         setBabyPhotoPreview(babyData.photo_url || null);
         setBabyPhotoBase64(null);
         setBabyPhotoRemoved(false);
-        setBirthDate(parseSafeDate(babyData.birth_date));
+        setBirthDate(parsedBirthDate);
+        setIsBabyBornForActiveBaby(Boolean(parsedBirthDate));
+      } else {
+        setBabyName('');
+        setBabyGender('');
+        setBabyWeight('');
+        setBabyHeight('');
+        setBabyPhotoUrl(null);
+        setBabyPhotoPreview(null);
+        setBabyPhotoBase64(null);
+        setBabyPhotoRemoved(false);
+        setBirthDate(null);
+        setIsBabyBornForActiveBaby(false);
       }
     } catch (e) {
       console.error(e);
-      Alert.alert('Fehler', 'Deine Daten konnten nicht geladen werden.');
+      if (requestId === latestLoadRequestIdRef.current) {
+        Alert.alert('Fehler', 'Deine Daten konnten nicht geladen werden.');
+      }
     } finally {
-      setIsLoading(false);
+      if (requestId === latestLoadRequestIdRef.current) {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -599,7 +624,7 @@ export default function ProfilScreen() {
       let settingsResult;
       const base = {
         due_date: dueDateForSave ? dueDateForSave.toISOString() : null,
-        is_baby_born: isBabyBorn,
+        is_baby_born: isBabyBornForActiveBaby,
         theme: 'light',
         notifications_enabled: true,
         updated_at: new Date().toISOString(),
@@ -618,7 +643,7 @@ export default function ProfilScreen() {
         {
           name: babyName,
           baby_gender: babyGender,
-          birth_date: birthDateForSave ? birthDateForSave.toISOString() : null,
+          birth_date: isBabyBornForActiveBaby && birthDateForSave ? birthDateForSave.toISOString() : null,
           weight: babyWeight,
           height: babyHeight,
           photo_url: finalBabyPhoto,
@@ -665,11 +690,11 @@ export default function ProfilScreen() {
     if (selectedDate) {
       const safeDate = parseSafeDate(selectedDate);
       setBirthDate(safeDate);
-      void setIsBabyBorn(true, { birthDate: safeDate ? safeDate.toISOString() : null });
+      setIsBabyBornForActiveBaby(Boolean(safeDate));
     }
   };
   const handleBabyBornChange = (value: boolean) => {
-    void setIsBabyBorn(value);
+    setIsBabyBornForActiveBaby(value);
     if (!value) setBirthDate(null);
   };
   const dueDateForDisplay = parseSafeDate(dueDate);
@@ -955,14 +980,14 @@ export default function ProfilScreen() {
                       <ThemedText style={[styles.label, { color: textPrimary }]}>Baby bereits geboren?</ThemedText>
                       <View style={styles.switchContainer}>
                         <ThemedText style={[styles.switchLabel, { color: textPrimary }]}>
-                          {isBabyBorn ? 'Ja' : 'Nein'}
+                          {isBabyBornForActiveBaby ? 'Ja' : 'Nein'}
                         </ThemedText>
                         <Switch
-                          value={isBabyBorn}
+                          value={isBabyBornForActiveBaby}
                           onValueChange={handleBabyBornChange}
                           disabled={isSaving}
                           trackColor={{ false: '#D1D1D6', true: '#9DBEBB' }}
-                          thumbColor={isBabyBorn ? '#FFFFFF' : '#F4F4F4'}
+                          thumbColor={isBabyBornForActiveBaby ? '#FFFFFF' : '#F4F4F4'}
                           ios_backgroundColor="#D1D1D6"
                         />
                       </View>
@@ -1034,7 +1059,7 @@ export default function ProfilScreen() {
                       </View>
                     </View>
 
-                    {isBabyBorn && (
+                    {isBabyBornForActiveBaby && (
                       <>
                         <View style={styles.formGroup}>
                           <ThemedText style={[styles.label, { color: textPrimary }]}>Geburtsdatum</ThemedText>

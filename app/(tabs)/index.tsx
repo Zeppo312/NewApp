@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { StyleSheet, TouchableOpacity, ScrollView, Alert, View, StatusBar, SafeAreaView, ActivityIndicator, AppState, Platform, RefreshControl, Dimensions, Animated, Text, Modal } from 'react-native';
+import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import VerticalContractionTimeline from '@/components/VerticalContractionTimeline';
@@ -110,6 +111,7 @@ const INTENSITY_STYLES = {
 } as const;
 
 export default function HomeScreen() {
+  const router = useRouter();
   const [contractions, setContractions] = useState<Contraction[]>([]);
   const [currentContraction, setCurrentContraction] = useState<Contraction | null>(null);
   const [timerRunning, setTimerRunning] = useState(false);
@@ -1074,6 +1076,8 @@ export default function HomeScreen() {
         <Header 
           title="Wehen-Tracker" 
           subtitle="Verfolge deine Wehen bis zur Geburt" 
+          showBackButton
+          onBackPress={() => router.push('/(tabs)/pregnancy-home')}
         />
 
         <ScrollView
