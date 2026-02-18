@@ -1393,6 +1393,27 @@ export default function HomeScreen() {
 
           <TouchableOpacity
             style={styles.liquidGlassCardWrapper}
+            onPress={() => handleNavigate('/(tabs)/size-tracker')}
+            activeOpacity={0.9}
+          >
+            <BlurView
+              {...androidBlurProps}
+              intensity={24}
+              tint={colorScheme === 'dark' ? 'dark' : 'light'}
+              style={styles.liquidGlassCardBackground}
+            >
+              <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(200, 230, 240, 0.6)', borderColor: 'rgba(255, 255, 255, 0.35)' }]}>
+                <View style={[styles.iconContainer, { backgroundColor: 'rgba(130, 180, 210, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
+                  <IconSymbol name="ruler" size={28} color="#FFFFFF" />
+                </View>
+                <ThemedText adaptive={false} style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>Größenkurve</ThemedText>
+                <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>Babygröße tracken</ThemedText>
+              </View>
+            </BlurView>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.liquidGlassCardWrapper}
             onPress={() => handleNavigate('/tooth-tracker' as any)}
             activeOpacity={0.9}
           >
@@ -1408,6 +1429,27 @@ export default function HomeScreen() {
                 </View>
                 <ThemedText adaptive={false} style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>Zahn-Tracker</ThemedText>
                 <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>Erste Zähnchen</ThemedText>
+              </View>
+            </BlurView>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.liquidGlassCardWrapper}
+            onPress={() => handleNavigate('/milestones' as any)}
+            activeOpacity={0.9}
+          >
+            <BlurView
+              {...androidBlurProps}
+              intensity={24}
+              tint={colorScheme === 'dark' ? 'dark' : 'light'}
+              style={styles.liquidGlassCardBackground}
+            >
+              <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(255, 228, 195, 0.6)', borderColor: 'rgba(255, 255, 255, 0.35)' }]}>
+                <View style={[styles.iconContainer, { backgroundColor: 'rgba(255, 190, 130, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
+                  <IconSymbol name="flag.fill" size={28} color="#FFFFFF" />
+                </View>
+                <ThemedText adaptive={false} style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>Meilensteine</ThemedText>
+                <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>Erste Male festhalten</ThemedText>
               </View>
             </BlurView>
           </TouchableOpacity>

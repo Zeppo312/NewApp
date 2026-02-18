@@ -312,6 +312,7 @@ function RootLayoutNav() {
         <Stack.Screen name="paywall" />
         <Stack.Screen name="pregnancy-stats" />
         <Stack.Screen name="pregnancy-setup" />
+        <Stack.Screen name="milestones" />
         <Stack.Screen name="account-linking" />
         <Stack.Screen name="sync-test" />
         <Stack.Screen name="+not-found" />

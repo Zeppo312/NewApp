@@ -141,6 +141,14 @@ export default function TabLayout() {
           href: null, // Nicht in der Navigationsleiste anzeigen
         }}
       />
+      <Tabs.Screen
+        name="size-tracker"
+        options={{
+          title: 'Größe',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="ruler" color={color} />,
+          href: null, // Nicht in der Navigationsleiste anzeigen
+        }}
+      />
 
       {/* === SCHWANGERSCHAFTS-TABS === */}
       {/* Tab 1/5: Countdown */}

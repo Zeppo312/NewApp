@@ -41,6 +41,8 @@ const MAPPING = {
   'calendar.badge.exclamationmark': 'event_busy',
   'trash': 'delete',
   'location': 'location_on',
+  'ruler': 'straighten',
+  'ruler.fill': 'straighten',
   'wind': 'air',
   'humidity': 'water_drop',
   'plus': 'add',
