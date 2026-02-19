@@ -75,6 +75,107 @@ const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDat
 const endOfDay   = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
 const overlapMinutes = (aStart: Date, aEnd: Date, bStart: Date, bEnd: Date) =>
   Math.max(0, Math.min(+aEnd, +bEnd) - Math.max(+aStart, +bStart)) / 60000 | 0;
+
+type TimeInterval = {
+  startMs: number;
+  endMs: number;
+};
+
+const mergeIntervals = (intervals: TimeInterval[]): TimeInterval[] => {
+  if (intervals.length === 0) return [];
+
+  const sorted = [...intervals]
+    .filter((interval) => Number.isFinite(interval.startMs) && Number.isFinite(interval.endMs) && interval.endMs > interval.startMs)
+    .sort((a, b) => a.startMs - b.startMs);
+
+  if (sorted.length === 0) return [];
+
+  const merged: TimeInterval[] = [sorted[0]];
+
+  for (let index = 1; index < sorted.length; index += 1) {
+    const current = sorted[index];
+    const last = merged[merged.length - 1];
+
+    if (current.startMs <= last.endMs) {
+      last.endMs = Math.max(last.endMs, current.endMs);
+      continue;
+    }
+
+    merged.push({ ...current });
+  }
+
+  return merged;
+};
+
+const getMergedIntervalsForEntries = (
+  entries: ClassifiedSleepEntry[],
+  options?: {
+    rangeStart?: Date;
+    rangeEnd?: Date;
+    predicate?: (entry: ClassifiedSleepEntry) => boolean;
+    nowMs?: number;
+  }
+): TimeInterval[] => {
+  const rangeStartMs = options?.rangeStart?.getTime();
+  const rangeEndMs = options?.rangeEnd?.getTime();
+  const nowMs = options?.nowMs ?? Date.now();
+
+  const clippedIntervals: TimeInterval[] = [];
+
+  for (const entry of entries) {
+    if (options?.predicate && !options.predicate(entry)) continue;
+
+    const startMs = new Date(entry.start_time).getTime();
+    const rawEndMs = entry.end_time ? new Date(entry.end_time).getTime() : nowMs;
+    if (!Number.isFinite(startMs) || !Number.isFinite(rawEndMs)) continue;
+
+    let clippedStartMs = startMs;
+    let clippedEndMs = rawEndMs;
+
+    if (typeof rangeStartMs === 'number') {
+      clippedStartMs = Math.max(clippedStartMs, rangeStartMs);
+    }
+    if (typeof rangeEndMs === 'number') {
+      clippedEndMs = Math.min(clippedEndMs, rangeEndMs);
+    }
+
+    if (clippedEndMs <= clippedStartMs) continue;
+    clippedIntervals.push({ startMs: clippedStartMs, endMs: clippedEndMs });
+  }
+
+  return mergeIntervals(clippedIntervals);
+};
+
+const minutesFromMergedIntervals = (intervals: TimeInterval[]): number =>
+  intervals.reduce((sum, interval) => {
+    const minutes = Math.floor((interval.endMs - interval.startMs) / 60000);
+    return sum + Math.max(0, minutes);
+  }, 0);
+
+const findOverlappingEntries = (
+  entries: ClassifiedSleepEntry[],
+  candidateStart: Date,
+  candidateEnd: Date,
+  excludedEntryId?: string | null,
+): ClassifiedSleepEntry[] => {
+  const candidateStartMs = candidateStart.getTime();
+  const candidateEndMs = candidateEnd.getTime();
+  if (!Number.isFinite(candidateStartMs) || !Number.isFinite(candidateEndMs) || candidateEndMs <= candidateStartMs) {
+    return [];
+  }
+
+  const nowMs = Date.now();
+  return entries.filter((entry) => {
+    if (excludedEntryId && entry.id === excludedEntryId) return false;
+
+    const entryStartMs = new Date(entry.start_time).getTime();
+    const entryEndMs = entry.end_time ? new Date(entry.end_time).getTime() : nowMs;
+    if (!Number.isFinite(entryStartMs) || !Number.isFinite(entryEndMs)) return false;
+
+    return Math.min(candidateEndMs, entryEndMs) > Math.max(candidateStartMs, entryStartMs);
+  });
+};
+
 const NIGHT_WINDOW_START_HOUR = 18;
 const NIGHT_WINDOW_END_HOUR = 10;
 const isNightTrackingTime = (date: Date) =>
@@ -170,6 +271,7 @@ type StatusMetricsBarProps = {
 
 export type NightGroup = {
   entries: ClassifiedSleepEntry[];
+  segments: { start: Date; end: Date }[];
   totalMinutes: number;
   start: Date;
   end: Date;
@@ -189,7 +291,6 @@ const getNightSessionSegmentsForReference = (
     const { nightWindowStart, nightWindowEnd } = getNightWindowForDate(referenceDate, anchor);
     return entries
       .filter((entry) => {
-        if (entry.period !== 'night') return false;
         const start = new Date(entry.start_time);
         const end = entry.end_time ? new Date(entry.end_time) : new Date();
         return overlapMinutes(start, end, nightWindowStart, nightWindowEnd) > 0;
@@ -217,48 +318,34 @@ const buildNightGroupFromSegments = (segments: ClassifiedSleepEntry[]): NightGro
     (a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
   );
 
-  let totalMinutes = 0;
+  const mergedIntervals = getMergedIntervalsForEntries(sortedSegments);
+  if (mergedIntervals.length === 0) return null;
+
+  const totalMinutes = minutesFromMergedIntervals(mergedIntervals);
   const wakeGaps: number[] = [];
-  const firstStart = new Date(sortedSegments[0].start_time);
-  let lastEnd = sortedSegments[0].end_time
-    ? new Date(sortedSegments[0].end_time)
-    : new Date();
-
-  for (let index = 0; index < sortedSegments.length; index += 1) {
-    const entry = sortedSegments[index];
-    const start = new Date(entry.start_time);
-    const end = entry.end_time ? new Date(entry.end_time) : new Date();
-
-    totalMinutes += Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000));
-
-    if (index > 0) {
-      const previous = sortedSegments[index - 1];
-      if (previous.end_time) {
-        const wakeGapMs = start.getTime() - new Date(previous.end_time).getTime();
-        if (wakeGapMs > 0) {
-          const wakeGapSeconds = Math.round(wakeGapMs / 1000);
-          if (wakeGapSeconds > 0) {
-            wakeGaps.push(wakeGapSeconds);
-          }
-        }
-      }
-    }
-
-    if (end.getTime() > lastEnd.getTime()) {
-      lastEnd = end;
+  for (let index = 1; index < mergedIntervals.length; index += 1) {
+    const previous = mergedIntervals[index - 1];
+    const current = mergedIntervals[index];
+    const wakeGapSeconds = Math.round((current.startMs - previous.endMs) / 1000);
+    if (wakeGapSeconds > 0) {
+      wakeGaps.push(wakeGapSeconds);
     }
   }
 
   return {
     entries: sortedSegments,
+    segments: mergedIntervals.map((interval) => ({
+      start: new Date(interval.startMs),
+      end: new Date(interval.endMs),
+    })),
     totalMinutes,
-    start: firstStart,
-    end: lastEnd,
+    start: new Date(mergedIntervals[0].startMs),
+    end: new Date(mergedIntervals[mergedIntervals.length - 1].endMs),
     wakeGaps,
   };
 };
 
-const getNightWindowKeyForEntry = (entry: ClassifiedSleepEntry) => {
+const getNightWindowKeyForEntry = (entry: ClassifiedSleepEntry): string | null => {
   const start = new Date(entry.start_time);
   const end = entry.end_time ? new Date(entry.end_time) : new Date();
 
@@ -278,6 +365,8 @@ const getNightWindowKeyForEntry = (entry: ClassifiedSleepEntry) => {
     upcomingWindow.nightWindowEnd
   );
 
+  if (previousOverlap <= 0 && upcomingOverlap <= 0) return null;
+
   const selectedWindow = upcomingOverlap > previousOverlap ? upcomingWindow : previousWindow;
   return `${selectedWindow.nightWindowStart.toISOString()}|${selectedWindow.nightWindowEnd.toISOString()}`;
 };
@@ -286,8 +375,8 @@ const getNightGroupsForDayEntries = (entries: ClassifiedSleepEntry[]): NightGrou
   const grouped = new Map<string, ClassifiedSleepEntry[]>();
 
   for (const entry of entries) {
-    if (entry.period !== 'night') continue;
     const key = getNightWindowKeyForEntry(entry);
+    if (!key) continue;
     const current = grouped.get(key) ?? [];
     current.push(entry);
     grouped.set(key, current);
@@ -2075,6 +2164,46 @@ export default function SleepTrackerScreen() {
 
       const normalizedStartTime = normalizedStartDate.toISOString();
       const normalizedEndTime = normalizedEndDate ? normalizedEndDate.toISOString() : null;
+      const overlapEndDate = normalizedEndDate
+        ? normalizedEndDate
+        : new Date(Math.max(Date.now(), normalizedStartDate.getTime() + 60 * 1000));
+      const overlappingEntries = findOverlappingEntries(
+        sleepEntries,
+        normalizedStartDate,
+        overlapEndDate,
+        editingEntry?.id
+      );
+
+      if (overlappingEntries.length > 0) {
+        const overlapsPreview = overlappingEntries
+          .slice(0, 3)
+          .map((entry) => {
+            const entryStart = new Date(entry.start_time).toLocaleString('de-DE', {
+              day: '2-digit',
+              month: '2-digit',
+              hour: '2-digit',
+              minute: '2-digit',
+            });
+            const entryEnd = entry.end_time
+              ? new Date(entry.end_time).toLocaleString('de-DE', {
+                day: '2-digit',
+                month: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+              })
+              : 'läuft noch';
+            return `• ${entryStart} - ${entryEnd}`;
+          })
+          .join('\n');
+        const moreCount = overlappingEntries.length - 3;
+
+        Alert.alert(
+          'Überschneidung erkannt',
+          `Bitte den Zeitraum anpassen. Der Eintrag überschneidet sich mit bestehenden Schlafzeiten:\n\n${overlapsPreview}${moreCount > 0 ? `\n+ ${moreCount} weitere` : ''}`
+        );
+        return;
+      }
+
       const effectivePartnerId = await getEffectivePartnerId();
 
       // Robuste Berechnung der duration_minutes
@@ -2683,32 +2812,24 @@ export default function SleepTrackerScreen() {
     // Compute high-level stats & score (heutiger Kalendertag 00:00–24:00 lokal)
     const dayStart = startOfDay(selectedDate);
     const dayEnd   = endOfDay(selectedDate);
-    const { nightWindowStart, nightWindowEnd } = getNightWindowForDate(selectedDate);
+    const dayIntervals = getMergedIntervalsForEntries(sleepEntries, {
+      rangeStart: dayStart,
+      rangeEnd: dayEnd,
+    });
+    const totalMinutes = minutesFromMergedIntervals(dayIntervals);
+    const longestStretch = dayIntervals.reduce((maxValue, interval) => {
+      const minutes = Math.floor((interval.endMs - interval.startMs) / 60000);
+      return Math.max(maxValue, Math.max(0, minutes));
+    }, 0);
+    const napsCount = dayIntervals.reduce((count, interval) => {
+      const minutes = Math.floor((interval.endMs - interval.startMs) / 60000);
+      return minutes > 0 && minutes <= 30 ? count + 1 : count;
+    }, 0);
 
-    let totalMinutes = 0;
-    let longestStretch = 0;
-    let napsCount = 0;
-    let nightTotalMinutes = 0;
-    let nightSegmentCount = 0;
-
-    for (const e of sleepEntries) {
-      const s = new Date(e.start_time);
-      const ee = e.end_time ? new Date(e.end_time) : new Date();
-      const mins = overlapMinutes(s, ee, dayStart, dayEnd);
-      if (!mins) continue;
-
-      totalMinutes += mins;
-      longestStretch = Math.max(longestStretch, mins);
-
-      // Naps = kurze Schläfchen (<= 30 Min), egal ob Tag/Nacht klassifiziert
-      if (mins <= 30) napsCount += 1;
-
-      const nightMins = overlapMinutes(s, ee, nightWindowStart, nightWindowEnd);
-      if (nightMins > 0) {
-        nightTotalMinutes += nightMins;
-        nightSegmentCount += 1;
-      }
-    }
+    const nightSessionSegments = getNightSessionSegmentsForReference(sleepEntries, selectedDate);
+    const nightSessionGroup = buildNightGroupFromSegments(nightSessionSegments);
+    const nightTotalMinutes = nightSessionGroup?.totalMinutes ?? 0;
+    const nightSegmentCount = nightSessionGroup?.segments.length ?? 0;
 
     // Beispiel-Score: 14h Ziel, lineare Abweichung (keine 100% bei 25h)
     const target = 14 * 60;
@@ -2753,10 +2874,11 @@ export default function SleepTrackerScreen() {
       if (!referenceEntry) continue;
 
       const windowKey = getNightWindowKeyForEntry(referenceEntry);
+      if (!windowKey) continue;
       if (expandedGroups.has(windowKey)) continue;
 
       const fullWindowSegments = sleepEntries
-        .filter((entry) => entry.period === 'night' && getNightWindowKeyForEntry(entry) === windowKey)
+        .filter((entry) => getNightWindowKeyForEntry(entry) === windowKey)
         .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
 
       const expanded = buildNightGroupFromSegments(fullWindowSegments);
@@ -3206,35 +3328,29 @@ export default function SleepTrackerScreen() {
     const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
     const endOfDay   = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
 
-    // Minuten-Überlappung zweier Zeitintervalle
-    const overlapMinutes = (aStart: Date, aEnd: Date, bStart: Date, bEnd: Date) => {
-      const ms = Math.max(0, Math.min(+aEnd, +bEnd) - Math.max(+aStart, +bStart));
-      return Math.round(ms / 60000);
-    };
-
     // Berechne Schlaf-Minuten für genau diesen Kalendertag (00:00–24:00 lokal)
     const getDayStats = (date: Date) => {
       const dayStart = startOfDay(date);
       const dayEnd   = endOfDay(date);
 
-      let totalMinutes = 0;
-      let nightMinutes = 0;
-      let dayMinutes   = 0;
+      const totalMinutes = minutesFromMergedIntervals(
+        getMergedIntervalsForEntries(sleepEntries, { rangeStart: dayStart, rangeEnd: dayEnd })
+      );
+      const nightMinutes = minutesFromMergedIntervals(
+        getMergedIntervalsForEntries(sleepEntries, {
+          rangeStart: dayStart,
+          rangeEnd: dayEnd,
+          predicate: (entry) => entry.period === 'night',
+        })
+      );
+      const dayMinutes = minutesFromMergedIntervals(
+        getMergedIntervalsForEntries(sleepEntries, {
+          rangeStart: dayStart,
+          rangeEnd: dayEnd,
+          predicate: (entry) => entry.period === 'day',
+        })
+      );
 
-      for (const e of sleepEntries) {
-        const eStart = new Date(e.start_time);
-        const eEnd   = e.end_time ? new Date(e.end_time) : new Date(); // laufender Schlaf bis jetzt
-
-        const mins = overlapMinutes(eStart, eEnd, dayStart, dayEnd);
-        if (mins > 0) {
-          totalMinutes += mins;
-          if (e.period === 'night') {
-            nightMinutes += mins;
-          } else {
-            dayMinutes += mins;
-          }
-        }
-      }
       return { totalMinutes, nightMinutes, dayMinutes, count: totalMinutes > 0 ? 1 : 0 };
     };
 
@@ -3247,26 +3363,29 @@ export default function SleepTrackerScreen() {
     const weekSpanEnd   = endOfDay(weekEnd);
 
     // Wochen-spezifische Berechnung für Zusammenfassung
-    const nightWeekMins = sleepEntries.reduce((sum, e) => {
-      if (e.period !== 'night') return sum;
-      const s = new Date(e.start_time);
-      const eEnd = e.end_time ? new Date(e.end_time) : new Date();
-      return sum + overlapMinutes(s, eEnd, weekSpanStart, weekSpanEnd);
-    }, 0);
+    const nightWeekMins = minutesFromMergedIntervals(
+      getMergedIntervalsForEntries(sleepEntries, {
+        rangeStart: weekSpanStart,
+        rangeEnd: weekSpanEnd,
+        predicate: (entry) => entry.period === 'night',
+      })
+    );
 
-    const dayWeekMins = sleepEntries.reduce((sum, e) => {
-      if (e.period !== 'day') return sum;
-      const s = new Date(e.start_time);
-      const eEnd = e.end_time ? new Date(e.end_time) : new Date();
-      return sum + overlapMinutes(s, eEnd, weekSpanStart, weekSpanEnd);
-    }, 0);
+    const dayWeekMins = minutesFromMergedIntervals(
+      getMergedIntervalsForEntries(sleepEntries, {
+        rangeStart: weekSpanStart,
+        rangeEnd: weekSpanEnd,
+        predicate: (entry) => entry.period === 'day',
+      })
+    );
 
-    // gesamte Schlafminuten dieser Woche (mit Intervall-Überlappung)
-    const totalWeekMins = sleepEntries.reduce((sum, e) => {
-      const s = new Date(e.start_time);
-      const eEnd = e.end_time ? new Date(e.end_time) : new Date();
-      return sum + overlapMinutes(s, eEnd, weekSpanStart, weekSpanEnd);
-    }, 0);
+    // gesamte Schlafminuten dieser Woche (überlappungsfrei)
+    const totalWeekMins = minutesFromMergedIntervals(
+      getMergedIntervalsForEntries(sleepEntries, {
+        rangeStart: weekSpanStart,
+        rangeEnd: weekSpanEnd,
+      })
+    );
 
     
     return (
@@ -3475,13 +3594,12 @@ export default function SleepTrackerScreen() {
     const getDayScore = (date: Date) => {
       const dayStart = startOfDay(date);
       const dayEnd   = endOfDay(date);
-
-      let totalMinutes = 0;
-      for (const entry of sleepEntries) {
-        const eStart = new Date(entry.start_time);
-        const eEnd   = entry.end_time ? new Date(entry.end_time) : new Date();
-        totalMinutes += overlapMinutes(eStart, eEnd, dayStart, dayEnd);
-      }
+      const totalMinutes = minutesFromMergedIntervals(
+        getMergedIntervalsForEntries(sleepEntries, {
+          rangeStart: dayStart,
+          rangeEnd: dayEnd,
+        })
+      );
 
       if (totalMinutes >= 480) return 'excellent'; // 8h+
       if (totalMinutes >= 360) return 'good';      // 6h+
@@ -3492,11 +3610,12 @@ export default function SleepTrackerScreen() {
     const getTotalMinutesForDate = (date: Date) => {
       const dayStart = startOfDay(date);
       const dayEnd   = endOfDay(date);
-      return sleepEntries.reduce((sum, e) => {
-        const s = new Date(e.start_time);
-        const eEnd = e.end_time ? new Date(e.end_time) : new Date();
-        return sum + overlapMinutes(s, eEnd, dayStart, dayEnd);
-      }, 0);
+      return minutesFromMergedIntervals(
+        getMergedIntervalsForEntries(sleepEntries, {
+          rangeStart: dayStart,
+          rangeEnd: dayEnd,
+        })
+      );
     };
 
     // Neue Farbpalette für Kalender-Tiles (wie KPI-Cards)
@@ -3802,22 +3921,20 @@ export default function SleepTrackerScreen() {
                 const wakePhasesList: { start: Date; end: Date; durationSeconds: number }[] = [];
                 // Find longest sleep phase
                 let longestSleepMin = 0;
-                for (let wi = 0; wi < group.entries.length; wi++) {
-                  const e = group.entries[wi];
-                  const eStart = new Date(e.start_time);
-                  const eEnd = e.end_time ? new Date(e.end_time) : new Date();
+                for (let wi = 0; wi < group.segments.length; wi++) {
+                  const segment = group.segments[wi];
+                  const eStart = segment.start;
+                  const eEnd = segment.end;
                   const dur = Math.round((eEnd.getTime() - eStart.getTime()) / 60000);
                   if (dur > longestSleepMin) longestSleepMin = dur;
 
                   if (wi > 0) {
-                    const prev = group.entries[wi - 1];
-                    if (prev.end_time) {
-                      const ws = new Date(prev.end_time);
-                      const we = new Date(e.start_time);
-                      const wdurSeconds = Math.round((we.getTime() - ws.getTime()) / 1000);
-                      if (wdurSeconds > 0) {
-                        wakePhasesList.push({ start: ws, end: we, durationSeconds: wdurSeconds });
-                      }
+                    const prev = group.segments[wi - 1];
+                    const ws = prev.end;
+                    const we = segment.start;
+                    const wdurSeconds = Math.round((we.getTime() - ws.getTime()) / 1000);
+                    if (wdurSeconds > 0) {
+                      wakePhasesList.push({ start: ws, end: we, durationSeconds: wdurSeconds });
                     }
                   }
                 }

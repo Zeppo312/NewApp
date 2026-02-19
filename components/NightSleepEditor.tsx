@@ -124,23 +124,21 @@ export const MiniNightTimeline = ({
   showLabels?: boolean;
 }) => {
   const anchor = getNightAnchor(nightGroup);
-  const entries = nightGroup.entries;
-  if (entries.length === 0) return null;
+  const segments = nightGroup.segments;
+  if (segments.length === 0) return null;
 
   // Compute range: first start to last end
-  const firstStart = new Date(entries[0].start_time);
-  const lastEnd = entries[entries.length - 1].end_time
-    ? new Date(entries[entries.length - 1].end_time!)
-    : new Date();
+  const firstStart = segments[0].start;
+  const lastEnd = segments[segments.length - 1].end;
   const rangeStartMin = minutesFromAnchor(firstStart, anchor);
   const rangeEndMin = minutesFromAnchor(lastEnd, anchor);
   const rangeMin = Math.max(rangeEndMin - rangeStartMin, 1);
   const ppm = width / rangeMin;
 
   // Sleep blocks (purple)
-  const sleepBlocks = entries.map((entry) => {
-    const s = new Date(entry.start_time);
-    const e = entry.end_time ? new Date(entry.end_time) : new Date();
+  const sleepBlocks = segments.map((segment) => {
+    const s = segment.start;
+    const e = segment.end;
     const x = (minutesFromAnchor(s, anchor) - rangeStartMin) * ppm;
     const w = Math.max(((e.getTime() - s.getTime()) / 60000) * ppm, 2);
     return { x, w };
@@ -148,11 +146,9 @@ export const MiniNightTimeline = ({
 
   // Wake gaps (beige cutouts)
   const wakeBlocks: { x: number; w: number }[] = [];
-  for (let i = 1; i < entries.length; i++) {
-    const prev = entries[i - 1];
-    if (!prev.end_time) continue;
-    const gapStart = new Date(prev.end_time);
-    const gapEnd = new Date(entries[i].start_time);
+  for (let i = 1; i < segments.length; i++) {
+    const gapStart = segments[i - 1].end;
+    const gapEnd = segments[i].start;
     const gapDur = (gapEnd.getTime() - gapStart.getTime()) / 60000;
     if (gapDur > 0) {
       const x = (minutesFromAnchor(gapStart, anchor) - rangeStartMin) * ppm;
@@ -343,11 +339,31 @@ export default function NightSleepEditor({
   const [isSubmittingWake, setIsSubmittingWake] = useState(false);
 
   const entries = nightGroup.entries;
-  const firstEntry = entries[0];
-  const lastEntry = entries[entries.length - 1];
+  const firstEntry = useMemo(() => {
+    return entries.reduce((earliest, entry) => {
+      if (!earliest) return entry;
+      return new Date(entry.start_time).getTime() < new Date(earliest.start_time).getTime()
+        ? entry
+        : earliest;
+    }, entries[0]);
+  }, [entries]);
+  const lastEntry = useMemo(() => {
+    return entries.reduce((latest, entry) => {
+      if (!latest) return entry;
+      const latestEnd = latest.end_time ? new Date(latest.end_time).getTime() : Number.NEGATIVE_INFINITY;
+      const currentEnd = entry.end_time ? new Date(entry.end_time).getTime() : Number.NEGATIVE_INFINITY;
+      if (currentEnd > latestEnd) return entry;
+      if (currentEnd === latestEnd) {
+        return new Date(entry.start_time).getTime() > new Date(latest.start_time).getTime()
+          ? entry
+          : latest;
+      }
+      return latest;
+    }, entries[0]);
+  }, [entries]);
 
-  const nightStart = new Date(firstEntry.start_time);
-  const nightEnd = lastEntry.end_time ? new Date(lastEntry.end_time) : new Date();
+  const nightStart = nightGroup.start;
+  const nightEnd = nightGroup.end;
   const totalSleepMin = nightGroup.totalMinutes;
   const totalWakeSeconds = nightGroup.wakeGaps.reduce((a, b) => a + b, 0);
 
