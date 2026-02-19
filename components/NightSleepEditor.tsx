@@ -472,18 +472,45 @@ export default function NightSleepEditor({
   const handleConfirmAddWake = useCallback(async () => {
     if (!newWakeStart || !newWakeEnd || isSubmittingWake) return;
 
-    if (newWakeEnd.getTime() <= newWakeStart.getTime()) {
-      Alert.alert('Ungültige Zeit', 'Die Endzeit muss nach der Startzeit liegen.');
+    const getWakeMinutes = (start: Date, end: Date): number => {
+      const rawMinutes = Math.round((end.getTime() - start.getTime()) / 60000);
+      if (rawMinutes > 0) return rawMinutes;
+
+      // Allow midnight wrap (e.g. 23:50 -> 00:00).
+      const startMinutesOfDay = start.getHours() * 60 + start.getMinutes();
+      const endMinutesOfDay = end.getHours() * 60 + end.getMinutes();
+      return (endMinutesOfDay - startMinutesOfDay + 24 * 60) % (24 * 60);
+    };
+
+    const wakeMinutes = Math.max(0, getWakeMinutes(newWakeStart, newWakeEnd));
+    if (wakeMinutes < 1) {
+      Alert.alert('Ungültige Dauer', 'Die Wachphase muss mindestens 1 Minute dauern.');
       return;
     }
 
-    // Find which entry contains newWakeStart
-    const wakeStartMs = newWakeStart.getTime();
-    const targetEntry = entries.find((entry) => {
-      const start = new Date(entry.start_time).getTime();
-      const end = (entry.end_time ? new Date(entry.end_time) : new Date()).getTime();
-      return wakeStartMs >= start && wakeStartMs < end;
-    });
+    const startCandidates = [
+      newWakeStart,
+      new Date(newWakeStart.getTime() + 24 * 60 * 60 * 1000),
+      new Date(newWakeStart.getTime() - 24 * 60 * 60 * 1000),
+    ];
+
+    let resolvedWakeStart: Date | null = null;
+    let targetEntry: ClassifiedSleepEntry | null = null;
+
+    for (const candidate of startCandidates) {
+      const wakeStartMs = candidate.getTime();
+      const candidateEntry = entries.find((entry) => {
+        const start = new Date(entry.start_time).getTime();
+        const end = (entry.end_time ? new Date(entry.end_time) : new Date()).getTime();
+        return wakeStartMs >= start && wakeStartMs < end;
+      });
+
+      if (candidateEntry) {
+        resolvedWakeStart = candidate;
+        targetEntry = candidateEntry;
+        break;
+      }
+    }
 
     if (!targetEntry) {
       Alert.alert(
@@ -492,10 +519,8 @@ export default function NightSleepEditor({
       );
       return;
     }
-
-    const wakeMinutes = Math.max(0, Math.round((newWakeEnd.getTime() - newWakeStart.getTime()) / 60000));
-    if (wakeMinutes < 1) {
-      Alert.alert('Ungültige Dauer', 'Die Wachphase muss mindestens 1 Minute dauern.');
+    if (!resolvedWakeStart) {
+      Alert.alert('Konnte nicht speichern', 'Bitte versuche es erneut.');
       return;
     }
 
@@ -503,7 +528,7 @@ export default function NightSleepEditor({
     try {
       const didSave = await onSplit({
         targetEntry,
-        splitTime: newWakeStart,
+        splitTime: resolvedWakeStart,
         wakeMinutes,
       });
 
