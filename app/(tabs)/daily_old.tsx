@@ -133,16 +133,12 @@ const TimerBanner: React.FC<{
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
     if (!timer) return;
-    const interval = setInterval(() => setElapsed(Math.floor((Date.now() - timer.start) / 1000)), 1000);
+    const syncElapsed = () => setElapsed(Math.floor((Date.now() - timer.start) / 1000));
+    syncElapsed();
+    const interval = setInterval(syncElapsed, 1000);
     return () => clearInterval(interval);
   }, [timer]);
   if (!timer) return null;
-
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
 
   const timerLabel =
     timer.type === 'BREAST'
@@ -159,7 +155,7 @@ const TimerBanner: React.FC<{
         <Text style={[s.timerType, { color: textPrimary }]}>
           {timerLabel} • läuft seit {new Date(timer.start).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
         </Text>
-        <Text style={[s.timerTime, { color: textSecondary }]}>{formatTime(elapsed)}</Text>
+        <Text style={[s.timerTime, { color: textSecondary }]}>{formatDurationSeconds(elapsed)}</Text>
       </View>
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
         <TouchableOpacity style={s.timerCancelButton} onPress={onCancel}>
@@ -499,18 +495,46 @@ export default function DailyScreen() {
     try {
       const { data, error } = await supabase
         .from('baby_care_entries')
-        .select('id,entry_type,feeding_type,start_time')
+        .select('id,feeding_type,start_time')
         .eq('baby_id', activeBabyId)
+        .eq('entry_type', 'feeding')
         .is('end_time', null)
         .order('start_time', { ascending: false })
-        .limit(1);
+        .limit(50);
 
       if (error) {
         console.error('Error loading active timer:', error);
         return;
       }
 
-      const current = data?.[0];
+      const openTimers = data ?? [];
+      const validTypeSet = new Set(['BREAST', 'BOTTLE', 'SOLIDS']);
+      const validOpenTimers = openTimers.filter(
+        (
+          row,
+        ): row is { id: string; feeding_type: 'BREAST' | 'BOTTLE' | 'SOLIDS'; start_time: string } =>
+          !!row?.id && !!row?.start_time && typeof row.feeding_type === 'string' && validTypeSet.has(row.feeding_type),
+      );
+      const current = validOpenTimers[0];
+
+      // Data hygiene: only one timer can be active. Close stale open timers automatically.
+      const staleOpenTimers = openTimers.filter((row) => !!row?.id && (!current || row.id !== current.id));
+      if (staleOpenTimers.length > 0) {
+        const nowIso = new Date().toISOString();
+        await Promise.allSettled(
+          staleOpenTimers.map((row) => {
+            const startMs = row.start_time ? new Date(row.start_time).getTime() : NaN;
+            const endIso = Number.isFinite(startMs) ? new Date(startMs).toISOString() : nowIso;
+            return supabase
+              .from('baby_care_entries')
+              .update({ end_time: endIso, updated_at: nowIso })
+              .eq('id', row.id)
+              .eq('baby_id', activeBabyId)
+              .is('end_time', null);
+          }),
+        );
+      }
+
       if (!current?.id || !current.start_time) {
         setActiveTimer(null);
         return;
@@ -522,14 +546,7 @@ export default function DailyScreen() {
         return;
       }
 
-      const nextType =
-        current.entry_type === 'diaper'
-          ? 'DIAPER'
-          : current.feeding_type === 'BOTTLE'
-          ? 'BOTTLE'
-          : current.feeding_type === 'SOLIDS'
-          ? 'SOLIDS'
-          : 'BREAST';
+      const nextType = current.feeding_type;
 
       setActiveTimer((prev) => {
         if (prev && prev.id === current.id && prev.type === nextType && prev.start === startMs) {
@@ -795,11 +812,13 @@ export default function DailyScreen() {
       );
     } else if (selectedActivityType === 'diaper') {
       const diaperType = (payload.diaper_type as 'WET' | 'DIRTY' | 'BOTH' | undefined) ?? undefined;
+      const resolvedStartTime = payload.start_time ?? new Date().toISOString();
+      const resolvedEndTime = timerRequested ? null : (payload.end_time ?? resolvedStartTime);
       let data, error;
       if (editingEntry?.id) {
         const res = await updateBabyCareEntry(editingEntry.id, {
-          start_time: payload.start_time,
-          end_time: payload.end_time ?? null,
+          start_time: resolvedStartTime,
+          end_time: resolvedEndTime,
           notes: payload.notes ?? null,
           diaper_type: diaperType,
           diaper_fever_measured: payload.diaper_fever_measured ?? null,
@@ -811,8 +830,8 @@ export default function DailyScreen() {
       } else {
         const res = await addBabyCareEntry({
           entry_type: 'diaper',
-          start_time: payload.start_time,
-          end_time: payload.end_time ?? null,
+          start_time: resolvedStartTime,
+          end_time: resolvedEndTime,
           notes: payload.notes ?? null,
           diaper_type: diaperType,
           diaper_fever_measured: payload.diaper_fever_measured ?? null,
@@ -827,7 +846,7 @@ export default function DailyScreen() {
         return;
       }
       if (timerRequested) {
-        const startMs = payload.start_time ? new Date(payload.start_time).getTime() : Date.now();
+        const startMs = new Date(resolvedStartTime).getTime();
         setActiveTimer({
           id: data?.id || editingEntry?.id || `temp_${Date.now()}`,
           type: 'DIAPER',

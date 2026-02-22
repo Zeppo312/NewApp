@@ -219,7 +219,7 @@ private struct LiveActivityPresentation {
     var feedingTitle: String {
         switch feedingKind {
         case .breast:
-            return "\(babyName) stillt"
+            return "Du stillst"
         case .bottle:
             return "\(babyName) trinkt"
         case .solids:

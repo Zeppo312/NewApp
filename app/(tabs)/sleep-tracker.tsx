@@ -24,7 +24,7 @@ import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import TextInputOverlay from '@/components/modals/TextInputOverlay';
 
 import { SleepEntry, SleepQuality, loadConnectedUsers } from '@/lib/sleepData';
@@ -79,12 +79,28 @@ const NIGHT_SPLASH_COLORS = {
   sleep_pause_night: '#1E1A2E',
 } as const;
 const SPLASH_PROMO_GIF = require('@/assets/images/App_Werbung.gif');
+const MIN_VALID_MANUAL_DATE = new Date(2000, 0, 1);
 
 // Globale Helper-Funktionen für Zeitberechnungen
 const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 const endOfDay   = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
 const overlapMinutes = (aStart: Date, aEnd: Date, bStart: Date, bEnd: Date) =>
   Math.max(0, Math.min(+aEnd, +bEnd) - Math.max(+aStart, +bStart)) / 60000 | 0;
+const MIN_PERSISTED_SLEEP_DURATION_MS = 60 * 1000;
+
+const toTimeMs = (value: Date | string | null | undefined): number | null => {
+  if (value === null || value === undefined) return null;
+  const ms = new Date(value).getTime();
+  return Number.isFinite(ms) ? ms : null;
+};
+
+const isSubMinuteFinishedSleepEntry = (entry: Pick<SleepEntry, 'start_time' | 'end_time'>): boolean => {
+  const startMs = toTimeMs(entry.start_time);
+  const endMs = toTimeMs(entry.end_time ?? null);
+  if (startMs === null || endMs === null) return false;
+  if (endMs <= startMs) return false;
+  return endMs - startMs < MIN_PERSISTED_SLEEP_DURATION_MS;
+};
 
 type TimeInterval = {
   startMs: number;
@@ -177,6 +193,7 @@ const findOverlappingEntries = (
   const nowMs = Date.now();
   return entries.filter((entry) => {
     if (excludedEntryId && entry.id === excludedEntryId) return false;
+    if (isSubMinuteFinishedSleepEntry(entry)) return false;
 
     const entryStartMs = new Date(entry.start_time).getTime();
     const entryEndMs = entry.end_time ? new Date(entry.end_time).getTime() : nowMs;
@@ -1340,7 +1357,7 @@ export default function SleepTrackerScreen() {
   const isValidManualDate = useCallback((value: unknown): boolean => {
     if (!isFiniteManualDate(value)) return false;
     const timestamp = value.getTime();
-    return timestamp > 0 && value.getFullYear() >= 2000;
+    return timestamp >= MIN_VALID_MANUAL_DATE.getTime() && value.getFullYear() >= 2000;
   }, [isFiniteManualDate]);
 
   const sanitizeManualDate = useCallback(
@@ -1371,6 +1388,26 @@ export default function SleepTrackerScreen() {
   const normalizePickerDate = useCallback(
     (value?: Date | null, fallback?: Date) => sanitizeManualDate(value, fallback),
     [sanitizeManualDate]
+  );
+
+  const getSafePickerDateFromEvent = useCallback(
+    (event: DateTimePickerEvent, date: Date | undefined, fallback?: Date) => {
+      const safeFallback = sanitizeManualDate(fallback, new Date());
+
+      if (date) {
+        const fromDate = sanitizeManualDate(date, safeFallback);
+        if (isValidManualDate(fromDate)) return fromDate;
+      }
+
+      const nativeTimestamp = event.nativeEvent?.timestamp;
+      if (typeof nativeTimestamp === 'number' && Number.isFinite(nativeTimestamp)) {
+        const fromTimestamp = sanitizeManualDate(new Date(nativeTimestamp), safeFallback);
+        if (isValidManualDate(fromTimestamp)) return fromTimestamp;
+      }
+
+      return safeFallback;
+    },
+    [isValidManualDate, sanitizeManualDate]
   );
 
   const resetManualModalData = useCallback(() => {
@@ -1698,7 +1735,35 @@ export default function SleepTrackerScreen() {
         const result = await sleepService.getEntries(babyId);
 
         if (result.data) {
-          return { success: true, entries: result.data };
+          const subMinuteEntries = result.data.filter((entry) => isSubMinuteFinishedSleepEntry(entry));
+
+          if (subMinuteEntries.length > 0) {
+            const ownEntryIdsToDelete =
+              activeBackend === 'supabase'
+                ? subMinuteEntries
+                    .filter(
+                      (entry) =>
+                        typeof entry.id === 'string' && entry.id.length > 0 && entry.user_id === user?.id
+                    )
+                    .map((entry) => entry.id as string)
+                : [];
+
+            if (ownEntryIdsToDelete.length > 0) {
+              const deleteResults = await Promise.all(
+                ownEntryIdsToDelete.map((entryId) => sleepService.deleteEntry(entryId))
+              );
+
+              const failedDeletes = deleteResults.filter((deleteResult) => deleteResult.primary.error);
+              if (failedDeletes.length > 0) {
+                console.warn(
+                  `[SleepTracker] Failed to auto-delete ${failedDeletes.length} sub-minute sleep entries from Supabase.`
+                );
+              }
+            }
+          }
+
+          const cleanedEntries = result.data.filter((entry) => !isSubMinuteFinishedSleepEntry(entry));
+          return { success: true, entries: cleanedEntries };
         }
 
         if (result.error) {
@@ -1712,7 +1777,7 @@ export default function SleepTrackerScreen() {
         return { success: false, entries: [] };
       }
     },
-    [sleepService]
+    [activeBackend, sleepService, user?.id]
   );
 
   // Load LIVE status (active sleep entry) - NEVER cache!
@@ -1980,7 +2045,37 @@ export default function SleepTrackerScreen() {
     try {
       const endTime = new Date();
       const startTime = new Date(activeSleepEntry.start_time);
-      const durationMinutes = Math.round((endTime.getTime() - startTime.getTime()) / 60000);
+      const durationMs = endTime.getTime() - startTime.getTime();
+      const durationMinutes = Math.round(durationMs / 60000);
+
+      if (durationMs < MIN_PERSISTED_SLEEP_DURATION_MS) {
+        const deleteResult = await sleepService.deleteEntry(activeSleepEntry.id);
+        if (deleteResult.primary.error) {
+          console.error('❌ Delete sub-minute sleep error:', deleteResult.primary.error);
+          Alert.alert('Fehler', 'Sehr kurzer Eintrag konnte nicht automatisch gelöscht werden');
+          return;
+        }
+
+        if (deleteResult.secondary.error) {
+          console.warn('[SleepTracker] Secondary backend delete failed:', deleteResult.secondary.error);
+        }
+
+        try {
+          await sleepActivityService.endAllSleepActivities();
+        } catch (liveActivityError) {
+          console.error('Failed to end sleep live activity after deleting sub-minute entry:', liveActivityError);
+        }
+
+        delete activeEntryPeriodOverridesRef.current[activeSleepEntry.id];
+        setActiveSleepEntry(null);
+        setPausedNightState(null);
+
+        Alert.alert('Hinweis', 'Ein Schlafeintrag unter 1 Minute wurde automatisch gelöscht.');
+
+        await invalidateCacheAfterAction(`sleep_history_${activeBackend}_${activeBabyId || 'default'}`);
+        await loadSleepData();
+        return;
+      }
 
       // Dual-write update to both backends (completely separate, no sync)
       const result = await sleepService.updateEntry(activeSleepEntry.id, {
@@ -2048,9 +2143,14 @@ export default function SleepTrackerScreen() {
     setIsStoppingSleep(true);
     try {
       const pausedAt = new Date();
+      const durationMs = pausedAt.getTime() - activeStart.getTime();
+      if (durationMs < MIN_PERSISTED_SLEEP_DURATION_MS) {
+        Alert.alert('Bitte warten', 'Pausieren ist erst nach mindestens 1 Minute Schlaf möglich.');
+        return;
+      }
       const durationMinutes = Math.max(
         0,
-        Math.round((pausedAt.getTime() - activeStart.getTime()) / 60000)
+        Math.round(durationMs / 60000)
       );
 
       const result = await sleepService.updateEntry(activeSleepEntry.id, {
@@ -2234,6 +2334,38 @@ export default function SleepTrackerScreen() {
 
       if (normalizedEndDate && normalizedEndDate.getTime() <= normalizedStartDate.getTime()) {
         Alert.alert('Fehler', 'Die Endzeit muss nach der Startzeit liegen.');
+        return;
+      }
+
+      const enteredDurationMs = normalizedEndDate
+        ? normalizedEndDate.getTime() - normalizedStartDate.getTime()
+        : null;
+      if (typeof enteredDurationMs === 'number' && enteredDurationMs < MIN_PERSISTED_SLEEP_DURATION_MS) {
+        if (editingEntry?.id) {
+          if (!sleepService) {
+            Alert.alert('Fehler', 'Service nicht verfügbar');
+            return;
+          }
+
+          const deleteResult = await sleepService.deleteEntry(editingEntry.id);
+          if (deleteResult.primary.error) {
+            console.error('❌ Delete sub-minute edit error:', deleteResult.primary.error);
+            Alert.alert('Fehler', 'Sehr kurzer Eintrag konnte nicht automatisch gelöscht werden');
+            return;
+          }
+
+          if (deleteResult.secondary.error) {
+            console.warn('[SleepTracker] Secondary backend delete failed:', deleteResult.secondary.error);
+          }
+
+          closeManualSleepModal();
+          await invalidateCacheAfterAction(`sleep_history_${activeBackend}_${activeBabyId || 'default'}`);
+          await loadSleepData();
+          Alert.alert('Hinweis', 'Ein Schlafeintrag unter 1 Minute wurde automatisch gelöscht.');
+          return;
+        }
+
+        Alert.alert('Hinweis', 'Einträge unter 1 Minute werden nicht gespeichert.');
         return;
       }
 
@@ -4028,7 +4160,7 @@ export default function SleepTrackerScreen() {
 
                 const accentPurple = isDark ? '#A26BFF' : '#8E4EC6';
                 // Timeline bar width = 85% of contentWidth, capped & centered
-                const timelineBarWidth = Math.round(contentWidth * 0.75);
+                const timelineBarWidth = Math.round(contentWidth * 0.70);
 
                 return (
                   <TouchableOpacity
@@ -4041,6 +4173,7 @@ export default function SleepTrackerScreen() {
                     style={styles.nightGroupTouchable}
                   >
                     <LiquidGlassCard style={styles.nightGroupCard}>
+                      <View style={styles.nightGroupCardInner}>
                       {/* Header: Moon + Title + Edit hint */}
                       <View style={styles.nightGroupHeader}>
                         <Text style={styles.nightGroupEmoji}>🌙</Text>
@@ -4117,6 +4250,7 @@ export default function SleepTrackerScreen() {
                           ))}
                         </View>
                       )}
+                      </View>
                     </LiquidGlassCard>
                   </TouchableOpacity>
                 );
@@ -4340,6 +4474,7 @@ export default function SleepTrackerScreen() {
                         >
                           <DateTimePicker
                             value={safeModalStartTime}
+                            minimumDate={MIN_VALID_MANUAL_DATE}
                             mode="datetime"
                             display={Platform.OS === 'ios' ? 'compact' : 'default'}
                             themeVariant={isDark ? 'dark' : 'light'}
@@ -4347,13 +4482,10 @@ export default function SleepTrackerScreen() {
                             accentColor={Platform.OS === 'ios' ? modalAccentColor : undefined}
                             onChange={(event, date) => {
                               if (event.type === 'dismissed') return;
-                              if (!date) return;
-
-                              const nextStart = sanitizeManualDate(date, safeModalStartTime);
-                              setSleepModalData(prev => {
-                                const prevEnd = prev.end_time
-                                  ? sanitizeManualDate(prev.end_time, nextStart)
-                                  : null;
+                              setSleepModalData((prev) => {
+                                const prevStart = sanitizeManualDate(prev.start_time, new Date());
+                                const nextStart = getSafePickerDateFromEvent(event, date, prevStart);
+                                const prevEnd = prev.end_time ? sanitizeManualDate(prev.end_time, nextStart) : null;
                                 return {
                                   ...prev,
                                   start_time: nextStart,
@@ -4390,6 +4522,7 @@ export default function SleepTrackerScreen() {
                         >
                           <DateTimePicker
                             value={safeModalEndPickerTime}
+                            minimumDate={MIN_VALID_MANUAL_DATE}
                             mode="datetime"
                             display={Platform.OS === 'ios' ? 'compact' : 'default'}
                             themeVariant={isDark ? 'dark' : 'light'}
@@ -4397,10 +4530,14 @@ export default function SleepTrackerScreen() {
                             accentColor={Platform.OS === 'ios' ? modalAccentColor : undefined}
                             onChange={(event, date) => {
                               if (event.type === 'dismissed') return;
-                              if (!date) return;
-
-                              const nextEnd = sanitizeManualDate(date, safeModalEndPickerTime);
-                              setSleepModalData(prev => ({ ...prev, end_time: nextEnd }));
+                              setSleepModalData((prev) => {
+                                const baseStart = sanitizeManualDate(prev.start_time, new Date());
+                                const baseEnd = prev.end_time
+                                  ? sanitizeManualDate(prev.end_time, baseStart)
+                                  : baseStart;
+                                const nextEnd = getSafePickerDateFromEvent(event, date, baseEnd);
+                                return { ...prev, end_time: nextEnd };
+                              });
                             }}
                             style={styles.dateTimePicker}
                           />
@@ -5158,19 +5295,21 @@ const styles = StyleSheet.create({
     marginHorizontal: 8,
   },
   nightGroupCard: {
-    paddingTop: 22,
-    paddingBottom: 26,
-    paddingHorizontal: 22,
     borderWidth: 1.2,
     borderColor: 'rgba(142, 78, 198, 0.25)',
     backgroundColor: 'rgba(142, 78, 198, 0.06)',
+  },
+  nightGroupCardInner: {
+    paddingTop: 24,
+    paddingBottom: 28,
+    paddingHorizontal: 28,
   },
   nightGroupHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 14,
-    paddingHorizontal: 2,
+    marginBottom: 16,
+    paddingHorizontal: 0,
   },
   nightGroupEmoji: {
     fontSize: 18,
@@ -5206,13 +5345,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
     fontVariant: ['tabular-nums'],
-    marginBottom: 18,
+    marginBottom: 20,
     opacity: 0.5,
   },
   nightGroupDivider: {
     height: StyleSheet.hairlineWidth,
-    marginTop: 16,
-    marginBottom: 14,
+    marginTop: 18,
+    marginBottom: 16,
   },
   nightGroupStatsRow: {
     flexDirection: 'row',
@@ -5246,14 +5385,14 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   nightGroupWakeSection: {
-    marginTop: 8,
-    gap: 4,
+    marginTop: 10,
+    gap: 5,
   },
   nightGroupWakeCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 4,
-    paddingHorizontal: 4,
+    paddingVertical: 5,
+    paddingHorizontal: 2,
     gap: 8,
   },
   nightGroupWakeDot: {

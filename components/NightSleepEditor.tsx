@@ -78,6 +78,13 @@ const formatWakeDuration = (seconds: number) => {
   return m > 0 ? `${h}h ${m.toString().padStart(2, '0')}m` : `${h}h`;
 };
 
+const formatShortDayDate = (date: Date) =>
+  date.toLocaleDateString('de-DE', {
+    weekday: 'short',
+    day: '2-digit',
+    month: '2-digit',
+  });
+
 const getNightAnchor = (group: NightGroup): Date => {
   const start = group.start;
   const anchor = new Date(start);
@@ -338,111 +345,116 @@ const TimePickerRow = ({
   return (
     <View style={rowStyles.container}>
       <Text style={[rowStyles.label, { color: textSecondary }]}>{label}</Text>
-      {Platform.OS === 'ios' ? (
-        <>
-          <TouchableOpacity
-            style={[
-              rowStyles.timeBtn,
-              { backgroundColor: isDark ? 'rgba(162,107,255,0.12)' : 'rgba(142,78,198,0.06)' },
-            ]}
-            onPress={() => {
-              setIosDraftTime(displayTime);
-              setShowIOS(true);
-            }}
-            activeOpacity={0.7}
-          >
-            <Text style={[rowStyles.timeBtnText, { color: accentColor }]}>
-              {formatClockTime(displayTime)}
-            </Text>
-          </TouchableOpacity>
-
-          <Modal
-            visible={showIOS}
-            transparent
-            animationType="fade"
-            onRequestClose={() => {
-              commitIOSDraft();
-              setShowIOS(false);
-            }}
-          >
-            <View style={rowStyles.iosModalOverlay}>
-              <TouchableOpacity
-                style={StyleSheet.absoluteFill}
-                onPress={() => {
-                  commitIOSDraft();
-                  setShowIOS(false);
-                }}
-                activeOpacity={1}
-              />
-
-              <View
-                style={[
-                  rowStyles.iosModalCard,
-                  {
-                    backgroundColor: isDark ? 'rgba(24,24,28,0.96)' : 'rgba(255,255,255,0.98)',
-                    borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)',
-                  },
-                ]}
-              >
-                <View style={rowStyles.iosModalHeader}>
-                  <TouchableOpacity
-                    onPress={() => setShowIOS(false)}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <Text style={[rowStyles.iosActionText, { color: textSecondary }]}>Abbrechen</Text>
-                  </TouchableOpacity>
-                  <Text style={[rowStyles.iosModalTitle, { color: textPrimary }]}>{label}</Text>
-                  <TouchableOpacity
-                    onPress={() => {
-                      commitIOSDraft();
-                      setShowIOS(false);
-                    }}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <Text style={[rowStyles.iosActionText, { color: accentColor }]}>Fertig</Text>
-                  </TouchableOpacity>
-                </View>
-
-                <DateTimePicker
-                  value={iosDraftTime}
-                  mode="time"
-                  display="spinner"
-                  locale="de-DE"
-                  onChange={(_, d) => {
-                    if (d) setIosDraftTime(d);
-                  }}
-                  accentColor={accentColor}
-                  themeVariant={isDark ? 'dark' : 'light'}
-                  style={rowStyles.iosSpinner}
-                />
-              </View>
-            </View>
-          </Modal>
-        </>
-      ) : (
-        <>
-          <TouchableOpacity
-            style={[rowStyles.timeBtn, { backgroundColor: isDark ? 'rgba(162,107,255,0.12)' : 'rgba(142,78,198,0.06)' }]}
-            onPress={() => setShowAndroid(true)}
-            activeOpacity={0.7}
-          >
-            <Text style={[rowStyles.timeBtnText, { color: accentColor }]}>
-              {formatClockTime(displayTime)}
-            </Text>
-          </TouchableOpacity>
-          {showAndroid && (
-            <DateTimePicker
-              value={displayTime}
-              mode="time"
-              is24Hour
-              onChange={(_, d) => {
-                setShowAndroid(false);
-                if (d) applyTimeChange(d);
+      <View style={rowStyles.valueColumn}>
+        <Text style={[rowStyles.dayText, { color: textSecondary }]}>
+          {formatShortDayDate(displayTime)}
+        </Text>
+        {Platform.OS === 'ios' ? (
+          <>
+            <TouchableOpacity
+              style={[
+                rowStyles.timeBtn,
+                { backgroundColor: isDark ? 'rgba(162,107,255,0.12)' : 'rgba(142,78,198,0.06)' },
+              ]}
+              onPress={() => {
+                setIosDraftTime(displayTime);
+                setShowIOS(true);
               }}
-            />
-          )}
-        </>
-      )}
+              activeOpacity={0.7}
+            >
+              <Text style={[rowStyles.timeBtnText, { color: accentColor }]}>
+                {formatClockTime(displayTime)}
+              </Text>
+            </TouchableOpacity>
+
+            <Modal
+              visible={showIOS}
+              transparent
+              animationType="fade"
+              onRequestClose={() => {
+                commitIOSDraft();
+                setShowIOS(false);
+              }}
+            >
+              <View style={rowStyles.iosModalOverlay}>
+                <TouchableOpacity
+                  style={StyleSheet.absoluteFill}
+                  onPress={() => {
+                    commitIOSDraft();
+                    setShowIOS(false);
+                  }}
+                  activeOpacity={1}
+                />
+
+                <View
+                  style={[
+                    rowStyles.iosModalCard,
+                    {
+                      backgroundColor: isDark ? 'rgba(24,24,28,0.96)' : 'rgba(255,255,255,0.98)',
+                      borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)',
+                    },
+                  ]}
+                >
+                  <View style={rowStyles.iosModalHeader}>
+                    <TouchableOpacity
+                      onPress={() => setShowIOS(false)}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Text style={[rowStyles.iosActionText, { color: textSecondary }]}>Abbrechen</Text>
+                    </TouchableOpacity>
+                    <Text style={[rowStyles.iosModalTitle, { color: textPrimary }]}>{label}</Text>
+                    <TouchableOpacity
+                      onPress={() => {
+                        commitIOSDraft();
+                        setShowIOS(false);
+                      }}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Text style={[rowStyles.iosActionText, { color: accentColor }]}>Fertig</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <DateTimePicker
+                    value={iosDraftTime}
+                    mode="time"
+                    display="spinner"
+                    locale="de-DE"
+                    onChange={(_, d) => {
+                      if (d) setIosDraftTime(d);
+                    }}
+                    accentColor={accentColor}
+                    themeVariant={isDark ? 'dark' : 'light'}
+                    style={rowStyles.iosSpinner}
+                  />
+                </View>
+              </View>
+            </Modal>
+          </>
+        ) : (
+          <>
+            <TouchableOpacity
+              style={[rowStyles.timeBtn, { backgroundColor: isDark ? 'rgba(162,107,255,0.12)' : 'rgba(142,78,198,0.06)' }]}
+              onPress={() => setShowAndroid(true)}
+              activeOpacity={0.7}
+            >
+              <Text style={[rowStyles.timeBtnText, { color: accentColor }]}>
+                {formatClockTime(displayTime)}
+              </Text>
+            </TouchableOpacity>
+            {showAndroid && (
+              <DateTimePicker
+                value={displayTime}
+                mode="time"
+                is24Hour
+                onChange={(_, d) => {
+                  setShowAndroid(false);
+                  if (d) applyTimeChange(d);
+                }}
+              />
+            )}
+          </>
+        )}
+      </View>
     </View>
   );
 };
@@ -455,6 +467,16 @@ const rowStyles = StyleSheet.create({
     paddingVertical: 6,
   },
   label: { fontSize: 15, fontWeight: '500' },
+  valueColumn: {
+    alignItems: 'flex-end',
+    gap: 4,
+  },
+  dayText: {
+    fontSize: 12,
+    fontWeight: '600',
+    opacity: 0.75,
+    textTransform: 'capitalize',
+  },
   timeBtn: {
     paddingVertical: 8,
     paddingHorizontal: 16,
@@ -653,10 +675,13 @@ export default function NightSleepEditor({
   // ─── Handlers ──────────────────────────────────────────
   const handleChangeNightStart = useCallback((newTime: Date): boolean => {
     const key = `night-start-${firstEntry.id ?? 'no-id'}`;
+    const endKey = `night-end-${lastEntry.id ?? 'no-id'}`;
     const fallbackOriginal = new Date(firstEntry.start_time);
+    const fallbackNightEnd = lastEntry.end_time ? new Date(lastEntry.end_time) : nightEnd;
     const original = boundaryReferenceTimesRef.current[key] ?? fallbackOriginal;
+    const currentNightEnd = boundaryReferenceTimesRef.current[endKey] ?? fallbackNightEnd;
     const resolved = resolvePickerTimeNearReference(newTime, original, {
-      maxExclusive: nightEnd,
+      maxExclusive: currentNightEnd,
     });
     if (!resolved) return false;
     if (Math.floor(resolved.getTime() / 60000) === Math.floor(original.getTime() / 60000)) return false;
@@ -665,14 +690,17 @@ export default function NightSleepEditor({
     scheduleBoundaryAdjust(key, firstEntry, 'start_time', resolved);
     hapticLight();
     return true;
-  }, [firstEntry, nightEnd, scheduleBoundaryAdjust]);
+  }, [firstEntry, lastEntry.id, lastEntry.end_time, nightEnd, scheduleBoundaryAdjust]);
 
   const handleChangeNightEnd = useCallback((newTime: Date): boolean => {
     const key = `night-end-${lastEntry.id ?? 'no-id'}`;
+    const startKey = `night-start-${firstEntry.id ?? 'no-id'}`;
+    const fallbackNightStart = new Date(firstEntry.start_time);
     const fallbackOriginal = lastEntry.end_time ? new Date(lastEntry.end_time) : new Date();
     const original = boundaryReferenceTimesRef.current[key] ?? fallbackOriginal;
+    const currentNightStart = boundaryReferenceTimesRef.current[startKey] ?? fallbackNightStart;
     const resolved = resolvePickerTimeNearReference(newTime, original, {
-      minExclusive: nightStart,
+      minExclusive: currentNightStart,
     });
     if (!resolved) return false;
     if (Math.floor(resolved.getTime() / 60000) === Math.floor(original.getTime() / 60000)) return false;
@@ -681,22 +709,24 @@ export default function NightSleepEditor({
     scheduleBoundaryAdjust(key, lastEntry, 'end_time', resolved);
     hapticLight();
     return true;
-  }, [lastEntry, nightStart, scheduleBoundaryAdjust]);
+  }, [firstEntry.id, firstEntry.start_time, lastEntry, scheduleBoundaryAdjust]);
 
   const handleChangeWakeStart = useCallback((phase: WakePhase, newTime: Date): boolean => {
-    const key = `wake-start-${phase.prevEntry.id ?? 'no-id'}-${phase.nextEntry.id ?? 'no-id'}`;
-    const original = boundaryReferenceTimesRef.current[key] ?? phase.start;
+    const startKey = `wake-start-${phase.prevEntry.id ?? 'no-id'}-${phase.nextEntry.id ?? 'no-id'}`;
+    const endKey = `wake-end-${phase.prevEntry.id ?? 'no-id'}-${phase.nextEntry.id ?? 'no-id'}`;
+    const original = boundaryReferenceTimesRef.current[startKey] ?? phase.start;
+    const currentWakeEnd = boundaryReferenceTimesRef.current[endKey] ?? phase.end;
     const prevEntryStart = new Date(phase.prevEntry.start_time);
     const resolved = resolvePickerTimeNearReference(newTime, original, {
       minExclusive: prevEntryStart,
-      maxExclusive: phase.end,
+      maxExclusive: currentWakeEnd,
     });
     if (!resolved) return false;
     if (Math.floor(resolved.getTime() / 60000) === Math.floor(original.getTime() / 60000)) return false;
 
-    boundaryReferenceTimesRef.current[key] = resolved;
+    boundaryReferenceTimesRef.current[startKey] = resolved;
     scheduleBoundaryAdjust(
-      key,
+      startKey,
       phase.prevEntry,
       'end_time',
       resolved
@@ -706,19 +736,21 @@ export default function NightSleepEditor({
   }, [scheduleBoundaryAdjust]);
 
   const handleChangeWakeEnd = useCallback((phase: WakePhase, newTime: Date): boolean => {
-    const key = `wake-end-${phase.prevEntry.id ?? 'no-id'}-${phase.nextEntry.id ?? 'no-id'}`;
-    const original = boundaryReferenceTimesRef.current[key] ?? phase.end;
+    const endKey = `wake-end-${phase.prevEntry.id ?? 'no-id'}-${phase.nextEntry.id ?? 'no-id'}`;
+    const startKey = `wake-start-${phase.prevEntry.id ?? 'no-id'}-${phase.nextEntry.id ?? 'no-id'}`;
+    const original = boundaryReferenceTimesRef.current[endKey] ?? phase.end;
+    const currentWakeStart = boundaryReferenceTimesRef.current[startKey] ?? phase.start;
     const nextEntryEnd = phase.nextEntry.end_time ? new Date(phase.nextEntry.end_time) : undefined;
     const resolved = resolvePickerTimeNearReference(newTime, original, {
-      minExclusive: phase.start,
+      minExclusive: currentWakeStart,
       maxExclusive: nextEntryEnd,
     });
     if (!resolved) return false;
     if (Math.floor(resolved.getTime() / 60000) === Math.floor(original.getTime() / 60000)) return false;
 
-    boundaryReferenceTimesRef.current[key] = resolved;
+    boundaryReferenceTimesRef.current[endKey] = resolved;
     scheduleBoundaryAdjust(
-      key,
+      endKey,
       phase.nextEntry,
       'start_time',
       resolved
@@ -730,7 +762,7 @@ export default function NightSleepEditor({
   const handleDeleteWake = useCallback((phase: WakePhase) => {
     Alert.alert(
       'Wachphase entfernen',
-      `${formatClockTime(phase.start)} – ${formatClockTime(phase.end)} (${formatWakeDuration(phase.durationSeconds)}) entfernen und Schlaf verbinden?`,
+      `${formatShortDayDate(phase.start)} ${formatClockTime(phase.start)} – ${formatShortDayDate(phase.end)} ${formatClockTime(phase.end)} (${formatWakeDuration(phase.durationSeconds)}) entfernen und Schlaf verbinden?`,
       [
         { text: 'Abbrechen', style: 'cancel' },
         {
@@ -847,22 +879,19 @@ export default function NightSleepEditor({
     }
   }, [newWakeStart, newWakeEnd, entries, onSplit, isSubmittingWake]);
 
-  const handleChangeNewWakeStart = useCallback((pickedTime: Date): boolean => {
+  const applyResolvedNewWakeStart = useCallback((resolvedStart: Date): boolean => {
     if (!newWakeStart || !newWakeEnd) return false;
-
-    const resolvedStart = resolvePickerTimeNearReference(pickedTime, newWakeStart, {
-      minExclusive: new Date(nightStart.getTime() - 1),
-      maxExclusive: nightEnd,
-    });
-    if (!resolvedStart) return false;
     if (minutesBucket(resolvedStart) === minutesBucket(newWakeStart)) return false;
+
+    const earliestAllowedStartMs = nightStart.getTime();
+    const latestAllowedEndMs = nightEnd.getTime() - ONE_MINUTE_MS;
+    if (resolvedStart.getTime() < earliestAllowedStartMs) return false;
+    if (resolvedStart.getTime() >= latestAllowedEndMs) return false;
 
     const preservedWakeMinutes = Math.max(
       1,
       getWakeMinutesWithMidnightWrap(newWakeStart, newWakeEnd)
     );
-    const latestAllowedEndMs = nightEnd.getTime() - ONE_MINUTE_MS;
-    if (resolvedStart.getTime() >= latestAllowedEndMs) return false;
 
     let resolvedEnd = new Date(resolvedStart.getTime() + preservedWakeMinutes * ONE_MINUTE_MS);
     if (resolvedEnd.getTime() > latestAllowedEndMs) {
@@ -877,6 +906,28 @@ export default function NightSleepEditor({
     return true;
   }, [newWakeEnd, newWakeStart, nightEnd, nightStart]);
 
+  const applyResolvedNewWakeEnd = useCallback((resolvedEnd: Date): boolean => {
+    if (!newWakeEnd || !newWakeStart) return false;
+    if (minutesBucket(resolvedEnd) === minutesBucket(newWakeEnd)) return false;
+    if (resolvedEnd.getTime() <= newWakeStart.getTime()) return false;
+    if (resolvedEnd.getTime() >= nightEnd.getTime()) return false;
+
+    setNewWakeEnd(resolvedEnd);
+    return true;
+  }, [newWakeEnd, newWakeStart, nightEnd]);
+
+  const handleChangeNewWakeStart = useCallback((pickedTime: Date): boolean => {
+    if (!newWakeStart) return false;
+
+    const resolvedStart = resolvePickerTimeNearReference(pickedTime, newWakeStart, {
+      minExclusive: new Date(nightStart.getTime() - 1),
+      maxExclusive: nightEnd,
+    });
+    if (!resolvedStart) return false;
+
+    return applyResolvedNewWakeStart(resolvedStart);
+  }, [applyResolvedNewWakeStart, newWakeStart, nightEnd, nightStart]);
+
   const handleChangeNewWakeEnd = useCallback((pickedTime: Date): boolean => {
     if (!newWakeEnd || !newWakeStart) return false;
 
@@ -885,11 +936,9 @@ export default function NightSleepEditor({
       maxExclusive: nightEnd,
     });
     if (!resolvedEnd) return false;
-    if (minutesBucket(resolvedEnd) === minutesBucket(newWakeEnd)) return false;
 
-    setNewWakeEnd(resolvedEnd);
-    return true;
-  }, [newWakeEnd, newWakeStart, nightEnd]);
+    return applyResolvedNewWakeEnd(resolvedEnd);
+  }, [applyResolvedNewWakeEnd, newWakeEnd, newWakeStart, nightEnd]);
 
   return (
     <Modal
@@ -989,7 +1038,7 @@ export default function NightSleepEditor({
                 <View style={styles.wakeCardHeader}>
                   <View style={[styles.wakeDot, { backgroundColor: WAKE_COLOR }]} />
                   <Text style={[styles.wakeTimeRange, { color: textPrimary }]}>
-                    {formatClockTime(phase.start)} – {formatClockTime(phase.end)}
+                    {formatShortDayDate(phase.start)} {formatClockTime(phase.start)} – {formatShortDayDate(phase.end)} {formatClockTime(phase.end)}
                   </Text>
                   <Text style={[styles.wakeDuration, { color: WAKE_COLOR }]}>
                     {formatWakeDuration(phase.durationSeconds)}

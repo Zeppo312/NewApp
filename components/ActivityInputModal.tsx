@@ -420,6 +420,8 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
             value={startTime}
             mode="datetime"
             display={Platform.OS === 'ios' ? 'compact' : 'default'}
+            themeVariant={isDark ? 'dark' : 'light'}
+            textColor={Platform.OS === 'ios' ? (isDark ? '#FFFFFF' : '#111827') : undefined}
             onChange={(_, date) => { if (date) setStartTime(date); }}
             style={styles.dateTimePicker}
           />
@@ -446,6 +448,8 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
             value={endTime || new Date()}
             mode="datetime"
             display={Platform.OS === 'ios' ? 'compact' : 'default'}
+            themeVariant={isDark ? 'dark' : 'light'}
+            textColor={Platform.OS === 'ios' ? (isDark ? '#FFFFFF' : '#111827') : undefined}
             onChange={(_, date) => { if (date) setEndTime(date); }}
             style={styles.dateTimePicker}
           />

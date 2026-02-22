@@ -190,6 +190,7 @@ export default function PlannerScreen() {
     updateTodo,
     updateEvent,
     convertPlannerItem,
+    refetch,
   } = usePlannerDay(selectedDate);
 
   const [captureVisible, setCaptureVisible] = useState(false);
@@ -624,6 +625,7 @@ export default function PlannerScreen() {
         console.error("Planner: failed to delete item", error);
         Alert.alert("Fehler", "Der Eintrag konnte nicht gelöscht werden.");
       } else {
+        await refetch();
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
     } catch (err) {
