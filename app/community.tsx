@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   FlatList,
   Image,
-  ImageBackground,
   Alert,
   Keyboard,
   KeyboardAvoidingView,
@@ -26,12 +25,13 @@ import Header from '@/components/Header';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
+import { ThemedBackground } from '@/components/ThemedBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/contexts/AuthContext';
-import { useBackground } from '@/contexts/BackgroundContext';
 import { BlogPost, createBlogPost, getBlogPosts, updateBlogPost, uploadBlogCover, deleteBlogPost } from '@/lib/blog';
 import { supabase } from '@/lib/supabase';
 
@@ -91,13 +91,15 @@ const mapSupabaseError = (error: any) => {
 
 export default function CommunityScreen() {
   const colorScheme = useColorScheme() ?? 'light';
-  const theme = Colors[colorScheme];
-  const statusBarStyle = colorScheme === 'dark' ? 'light-content' : 'dark-content';
+  const adaptiveColors = useAdaptiveColors();
+  const isDarkMode = colorScheme === 'dark' || adaptiveColors.isDarkBackground;
+  const theme = Colors[isDarkMode ? 'dark' : 'light'];
+  const statusBarStyle = isDarkMode ? 'light-content' : 'dark-content';
   const router = useRouter();
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
   const headerTextColor = '#7D5A50';
-  const primaryTextOnCommunity = colorScheme === 'dark' ? theme.text : headerTextColor;
+  const primaryTextOnCommunity = isDarkMode ? theme.textPrimary : headerTextColor;
 
   const [posts, setPosts] = useState<BlogPost[]>([]);
   const [expandedPostId, setExpandedPostId] = useState<string | null>(null);
@@ -116,9 +118,6 @@ export default function CommunityScreen() {
   const [currentUserName, setCurrentUserName] = useState('Lotti Baby Team');
   const [showDraftList, setShowDraftList] = useState(false);
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
-
-  // Background context
-  const { backgroundSource, hasCustomBackground } = useBackground();
 
   const openModal = useCallback((publish: boolean, draft?: BlogPost) => {
     setErrorMessage('');
@@ -295,7 +294,7 @@ export default function CommunityScreen() {
           style={[
             styles.card,
             {
-              backgroundColor: colorScheme === 'dark' ? theme.cardDark : '#FFF5EE',
+              backgroundColor: isDarkMode ? theme.cardDark : '#FFF5EE',
               borderColor: theme.border,
             },
           ]}
@@ -329,7 +328,7 @@ export default function CommunityScreen() {
               <ThemedText type="subtitle" style={[styles.cardTitle, { color: primaryTextOnCommunity }]}>
                 {item.title}
               </ThemedText>
-              <View style={[styles.metaPill, { backgroundColor: colorScheme === 'dark' ? '#3D3330' : '#FFE2CF' }]}>
+              <View style={[styles.metaPill, { backgroundColor: isDarkMode ? '#3D3330' : '#FFE2CF' }]}>
                 <IconSymbol name="doc.text.fill" size={14} color={primaryTextOnCommunity} />
                 <ThemedText style={[styles.metaPillText, { color: primaryTextOnCommunity }]}>{formatDate(item.published_at)}</ThemedText>
               </View>
@@ -350,7 +349,7 @@ export default function CommunityScreen() {
         </View>
       );
     },
-    [colorScheme, expandedPostId, primaryTextOnCommunity, theme.border, theme.cardDark, theme.textSecondary, theme.textTertiary, theme.tint],
+    [expandedPostId, isDarkMode, primaryTextOnCommunity, theme.border, theme.cardDark, theme.textSecondary, theme.textTertiary, theme.tint],
   );
 
   const renderEmptyState = useMemo(
@@ -368,7 +367,7 @@ export default function CommunityScreen() {
   };
 
   const hero = (
-    <View style={[styles.hero, { backgroundColor: colorScheme === 'dark' ? '#3A2E2A' : '#FFE7D6' }]}>
+    <View style={[styles.hero, { backgroundColor: isDarkMode ? '#3A2E2A' : '#FFE7D6' }]}>
       <TouchableOpacity style={styles.heroImageContainer} onPress={openInstagram} activeOpacity={0.8}>
         <Image source={require('@/assets/images/LottiPic.png')} style={styles.heroImage} />
       </TouchableOpacity>
@@ -389,11 +388,11 @@ export default function CommunityScreen() {
       </View>
       {isAdmin ? (
         <View style={styles.heroStats}>
-          <View style={[styles.statCard, { backgroundColor: colorScheme === 'dark' ? '#2F2522' : '#FFFFFF', borderColor: theme.border }]}>
+          <View style={[styles.statCard, { backgroundColor: isDarkMode ? '#2F2522' : '#FFFFFF', borderColor: theme.border }]}>
             <ThemedText style={[styles.statNumber, { color: primaryTextOnCommunity }]}>{published.length}</ThemedText>
             <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>veröffentlichte Artikel</ThemedText>
           </View>
-          <View style={[styles.statCard, { backgroundColor: colorScheme === 'dark' ? '#2F2522' : '#FFFFFF', borderColor: theme.border }]}>
+          <View style={[styles.statCard, { backgroundColor: isDarkMode ? '#2F2522' : '#FFFFFF', borderColor: theme.border }]}>
             <ThemedText style={[styles.statNumber, { color: primaryTextOnCommunity }]}>{drafts.length}</ThemedText>
             <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>in Vorbereitung</ThemedText>
           </View>
@@ -403,7 +402,7 @@ export default function CommunityScreen() {
   );
 
   const adminPanel = isAdmin ? (
-    <View style={[styles.adminPanel, { backgroundColor: colorScheme === 'dark' ? '#2E2522' : '#FFF4EA', borderColor: theme.border }]}>
+    <View style={[styles.adminPanel, { backgroundColor: isDarkMode ? '#2E2522' : '#FFF4EA', borderColor: theme.border }]}>
       <View style={styles.adminHeaderRow}>
         <View style={styles.adminBadgeRow}>
           <View style={styles.adminBadge}>
@@ -447,11 +446,7 @@ export default function CommunityScreen() {
   );
 
   return (
-    <ImageBackground
-      source={backgroundSource}
-      style={styles.bgImage}
-      resizeMode={hasCustomBackground ? 'cover' : 'repeat'}
-    >
+    <ThemedBackground style={styles.bgImage}>
       <ThemedView style={styles.screen}>
         <StatusBar barStyle={statusBarStyle} backgroundColor={theme.background} />
         <SafeAreaView style={styles.safeArea}>
@@ -487,7 +482,7 @@ export default function CommunityScreen() {
               pointerEvents="box-none"
             >
               <TouchableOpacity
-                style={[styles.fab, styles.fabGhost, { borderColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.1)' : theme.border }]}
+                style={[styles.fab, styles.fabGhost, { borderColor: isDarkMode ? 'rgba(255,255,255,0.1)' : theme.border }]}
                 onPress={() => setShowDraftList(true)}
               >
                 <IconSymbol name="tray.full.fill" size={16} color={primaryTextOnCommunity} />
@@ -519,8 +514,8 @@ export default function CommunityScreen() {
                   style={[
                     styles.modalContent,
                     {
-                      backgroundColor: colorScheme === 'dark' ? 'rgba(34, 24, 20, 0.94)' : 'rgba(255, 247, 239, 0.94)',
-                      borderColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(125,90,80,0.1)',
+                      backgroundColor: isDarkMode ? 'rgba(34, 24, 20, 0.94)' : 'rgba(255, 247, 239, 0.94)',
+                      borderColor: isDarkMode ? 'rgba(255,255,255,0.06)' : 'rgba(125,90,80,0.1)',
                     },
                   ]}
                 >
@@ -535,9 +530,9 @@ export default function CommunityScreen() {
                 style={[
                   styles.input,
                   {
-                    borderColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.08)' : theme.border,
+                    borderColor: isDarkMode ? 'rgba(255,255,255,0.08)' : theme.border,
                     color: primaryTextOnCommunity,
-                    backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.9)',
+                    backgroundColor: isDarkMode ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.9)',
                   },
                 ]}
               />
@@ -550,9 +545,9 @@ export default function CommunityScreen() {
                 style={[
                   styles.input,
                   {
-                    borderColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.08)' : theme.border,
+                    borderColor: isDarkMode ? 'rgba(255,255,255,0.08)' : theme.border,
                     color: primaryTextOnCommunity,
-                    backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.9)',
+                    backgroundColor: isDarkMode ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.9)',
                   },
                 ]}
               />
@@ -561,13 +556,13 @@ export default function CommunityScreen() {
                 style={[
                   styles.coverPicker,
                   {
-                    borderColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.08)' : theme.border,
-                    backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.8)',
+                    borderColor: isDarkMode ? 'rgba(255,255,255,0.08)' : theme.border,
+                    backgroundColor: isDarkMode ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.8)',
                   },
                 ]}
                 onPress={pickCoverImage}
               >
-                <View style={[styles.coverPickerIcon, { backgroundColor: colorScheme === 'dark' ? '#3A2E2A' : '#FADBC7' }]}>
+                <View style={[styles.coverPickerIcon, { backgroundColor: isDarkMode ? '#3A2E2A' : '#FADBC7' }]}>
                   <IconSymbol name="photo" size={18} color={primaryTextOnCommunity} />
                 </View>
                 <View style={styles.coverPickerTextBlock}>
@@ -589,9 +584,9 @@ export default function CommunityScreen() {
                   styles.input,
                   styles.multiline,
                   {
-                    borderColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.08)' : theme.border,
+                    borderColor: isDarkMode ? 'rgba(255,255,255,0.08)' : theme.border,
                     color: primaryTextOnCommunity,
-                    backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.9)',
+                    backgroundColor: isDarkMode ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.9)',
                   },
                 ]}
                 multiline
@@ -658,8 +653,8 @@ export default function CommunityScreen() {
                     style={[
                       styles.draftModalContent,
                       {
-                        backgroundColor: colorScheme === 'dark' ? 'rgba(34, 24, 20, 0.96)' : 'rgba(255, 247, 239, 0.96)',
-                        borderColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(125,90,80,0.1)',
+                        backgroundColor: isDarkMode ? 'rgba(34, 24, 20, 0.96)' : 'rgba(255, 247, 239, 0.96)',
+                        borderColor: isDarkMode ? 'rgba(255,255,255,0.06)' : 'rgba(125,90,80,0.1)',
                       },
                     ]}
                   >
@@ -675,7 +670,7 @@ export default function CommunityScreen() {
                               styles.draftListItem,
                               {
                                 borderColor: theme.border,
-                                backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.92)',
+                                backgroundColor: isDarkMode ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.92)',
                               },
                             ]}
                             onPress={() => {
@@ -714,7 +709,7 @@ export default function CommunityScreen() {
           </Modal>
         </SafeAreaView>
       </ThemedView>
-    </ImageBackground>
+    </ThemedBackground>
   );
 }
 

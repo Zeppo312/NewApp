@@ -1,7 +1,6 @@
 import React from 'react';
 import { StyleSheet, ScrollView, View, TouchableOpacity, Alert, SafeAreaView, StatusBar } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
@@ -10,7 +9,7 @@ import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { Redirect, useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import Header from '@/components/Header';
-import { GlassCard, LiquidGlassCard, GLASS_OVERLAY, LAYOUT_PAD } from '@/constants/DesignGuide';
+import { LiquidGlassCard, GLASS_OVERLAY, LAYOUT_PAD } from '@/constants/DesignGuide';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 
 
@@ -18,7 +17,7 @@ export default function MoreScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const adaptiveColors = useAdaptiveColors();
-  const { isBabyBorn, setIsBabyBorn } = useBabyStatus();
+  const { isBabyBorn } = useBabyStatus();
   const router = useRouter();
   const { session, signOut } = useAuth();
 
@@ -27,37 +26,10 @@ export default function MoreScreen() {
   const useLightIcons = colorScheme === 'dark' || useDarkMode;
   const iconAccentColor = useLightIcons ? '#FFFFFF' : theme.accent;
   const iconSecondaryColor = useLightIcons ? 'rgba(255,255,255,0.9)' : theme.tabIconDefault;
-  const iconPositiveColor = useLightIcons ? '#FFFFFF' : '#3A9E8C';
-  const iconDangerColor = useLightIcons ? '#FFFFFF' : '#FF6B6B';
 
   if (!session) {
     return <Redirect href="/(auth)/login" />;
   }
-
-  const handleSwitchBack = () => {
-    Alert.alert(
-      "Zurück zur Schwangerschaftsansicht",
-      "Möchtest du wirklich zur Schwangerschaftsansicht zurückkehren?",
-      [
-        {
-          text: "Abbrechen",
-          style: "cancel"
-        },
-        {
-          text: "Ja, zurückkehren",
-          onPress: async () => {
-            try {
-              await setIsBabyBorn(false);
-              Alert.alert("Erfolg", "Du bist jetzt in der Schwangerschaftsansicht.");
-            } catch (error) {
-              console.error('Error switching to pregnancy view:', error);
-              Alert.alert("Fehler", "Es ist ein Fehler aufgetreten. Bitte versuche es später erneut.");
-            }
-          }
-        }
-      ]
-    );
-  };
 
   // Abmelden-Funktion
   const handleLogout = async () => {
@@ -90,32 +62,6 @@ export default function MoreScreen() {
         },
       ],
       { cancelable: true }
-    );
-  };
-
-  // Wechsel zur Babyansicht
-  const handleSwitchToBabyView = () => {
-    Alert.alert(
-      "Zur Babyansicht wechseln",
-      "Möchtest du wirklich zur Babyansicht wechseln?",
-      [
-        {
-          text: "Abbrechen",
-          style: "cancel"
-        },
-        {
-          text: "Ja, wechseln",
-          onPress: async () => {
-            try {
-              await setIsBabyBorn(true);
-              Alert.alert("Erfolg", "Du bist jetzt in der Babyansicht.");
-            } catch (error) {
-              console.error('Error switching to baby view:', error);
-              Alert.alert("Fehler", "Es ist ein Fehler aufgetreten. Bitte versuche es später erneut.");
-            }
-          }
-        }
-      ]
     );
   };
 
@@ -261,47 +207,6 @@ export default function MoreScreen() {
               <IconSymbol name="chevron.right" size={20} color={iconSecondaryColor} />
             </TouchableOpacity>
 
-            {/* Zur Babyansicht wechseln (nur vor der Geburt anzeigen) */}
-            {!isBabyBorn && (
-              <TouchableOpacity
-                style={styles.menuItem}
-                onPress={handleSwitchToBabyView}
-              >
-                <View style={styles.menuItemIcon}>
-                  <IconSymbol name="arrow.forward" size={24} color={iconPositiveColor} />
-                </View>
-                <View style={styles.menuItemContent}>
-                  <ThemedText style={styles.menuItemTitle}>
-                    Zur Babyansicht wechseln
-                  </ThemedText>
-                  <ThemedText style={styles.menuItemDescription}>
-                    Wechsle zur Ansicht nach der Geburt
-                  </ThemedText>
-                </View>
-                <IconSymbol name="chevron.right" size={20} color={iconSecondaryColor} />
-              </TouchableOpacity>
-            )}
-
-            {/* Zurück zur Schwangerschaftsansicht (nur nach der Geburt anzeigen) */}
-            {isBabyBorn && (
-              <TouchableOpacity
-                style={styles.menuItem}
-                onPress={handleSwitchBack}
-              >
-                <View style={styles.menuItemIcon}>
-                  <IconSymbol name="arrow.uturn.backward" size={24} color={iconDangerColor} />
-                </View>
-                <View style={styles.menuItemContent}>
-                  <ThemedText style={styles.menuItemTitle}>
-                    Zurück zur Schwangerschaftsansicht
-                  </ThemedText>
-                  <ThemedText style={styles.menuItemDescription}>
-                    Wechsle zurück zur Ansicht vor der Geburt
-                  </ThemedText>
-                </View>
-                <IconSymbol name="chevron.right" size={20} color={iconSecondaryColor} />
-              </TouchableOpacity>
-            )}
           </LiquidGlassCard>
 
           <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>

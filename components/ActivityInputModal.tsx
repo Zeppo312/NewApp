@@ -628,7 +628,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
       </Text>
       <View style={styles.optionsGrid}>
         {[
-          { type: 'breast', label: 'Brust', icon: '🤱' },
+          { type: 'breast', label: 'Stillen', icon: '🤱' },
           { type: 'bottle', label: 'Flasche', icon: '🍼' },
           { type: 'solids', label: 'Beikost', icon: '🥄' },
         ].map((option) => (

@@ -20,7 +20,12 @@ export default function Index() {
 
   // Debug-Ausgabe
   useEffect(() => {
-    console.log('Auth state:', { session, loading, isBabyBorn });
+    console.log('Auth state:', {
+      hasSession: !!session,
+      hasUser: !!session?.user,
+      loading,
+      isBabyBorn,
+    });
   }, [session, loading, isBabyBorn]);
 
   // Einmaliger Session-Recovery-Pass:

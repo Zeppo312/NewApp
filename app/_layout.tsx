@@ -33,6 +33,8 @@ import type { BabyCareEntry } from '@/lib/supabase';
 import { preloadAppData } from '@/lib/appCache';
 import { SleepEntriesService } from '@/lib/services/SleepEntriesService';
 import { normalizeBedtimeAnchor } from '@/lib/bedtime';
+import { sleepActivityService } from '@/lib/sleepActivityService';
+import { loadAllVisibleSleepEntries } from '@/lib/sleepSharing';
 
 // Importieren der Meilenstein-Task-Definition
 import { defineMilestoneCheckerTask } from '@/tasks/milestoneCheckerTask';
@@ -95,6 +97,7 @@ function RootLayoutNav() {
   const { activeBackend } = useBackend();
   const { convexClient } = useConvex();
   const [sleepPrediction, setSleepPrediction] = useState<SleepWindowPrediction | null>(null);
+  const [hasActiveSleepEntry, setHasActiveSleepEntry] = useState(false);
   const [feedingPrediction, setFeedingPrediction] = useState<FeedingPrediction | null>(null);
   const { preferences: notifPrefs } = useNotificationPreferences();
   const sleepEntriesService = useMemo(() => {
@@ -128,6 +131,7 @@ function RootLayoutNav() {
   useEffect(() => {
     if (!userId || !activeBabyId || !sleepEntriesService) {
       setSleepPrediction(null);
+      setHasActiveSleepEntry(false);
       return;
     }
 
@@ -145,6 +149,14 @@ function RootLayoutNav() {
 
         if (error) {
           console.error('Fehler beim Laden der Schlafeinträge für Prediction:', error);
+          setSleepPrediction(null);
+          return;
+        }
+
+        const hasActiveEntry = (entries || []).some((entry) => !entry.end_time);
+        setHasActiveSleepEntry(hasActiveEntry);
+        if (hasActiveEntry) {
+          // Während ein Sleep-Timer läuft, keine Schlafenszeit-Erinnerung planen.
           setSleepPrediction(null);
           return;
         }
@@ -234,13 +246,75 @@ function RootLayoutNav() {
     return () => clearInterval(interval);
   }, [userId, activeBabyId]);
 
+  // Live Activity nach App-Start / Update wiederherstellen
+  useEffect(() => {
+    if (!userId || !sleepActivityService.isLiveActivitySupported()) return;
+
+    let cancelled = false;
+
+    const restoreLiveActivity = async () => {
+      try {
+        const existing = await sleepActivityService.restoreCurrentActivity();
+        if (cancelled) return;
+
+        // DB-Zustand laden
+        const { success, entries } = await loadAllVisibleSleepEntries();
+        if (cancelled || !success || !entries) return;
+
+        const activeEntry = entries.find((entry) => !entry.end_time);
+
+        // Kein aktiver Schlaf in DB → stale Activity beenden
+        if (!activeEntry?.start_time) {
+          if (existing?.isTracking) {
+            await sleepActivityService.endAllSleepActivities();
+          }
+          return;
+        }
+
+        const startDate = new Date(activeEntry.start_time);
+        if (!Number.isFinite(startDate.getTime())) return;
+
+        // Prüfe ob bestehende Activity zur richtigen Session gehört
+        if (existing?.isTracking) {
+          const existingStart = new Date(existing.startTime).getTime();
+          const dbStart = startDate.getTime();
+          // Gleiche Session (Toleranz 2s) → nichts zu tun
+          if (Number.isFinite(existingStart) && Math.abs(existingStart - dbStart) < 2000) {
+            return;
+          }
+          // Falsche Session → beenden und neu starten
+          await sleepActivityService.endAllSleepActivities();
+          if (cancelled) return;
+        }
+
+        // Baby-Name für die Live Activity laden
+        let babyName: string | undefined;
+        if (activeBabyId) {
+          try {
+            const { data: babyInfo } = await getBabyInfo(activeBabyId);
+            babyName = babyInfo?.name || undefined;
+          } catch { /* Name ist optional */ }
+        }
+
+        await sleepActivityService.startSleepActivity(startDate, babyName);
+      } catch (error) {
+        console.error('Failed to restore live activity on app start:', error);
+      }
+    };
+
+    void restoreLiveActivity();
+
+    return () => { cancelled = true; };
+  }, [userId, activeBabyId]);
+
   // Sleep Window Notifications Hook (läuft unabhängig vom Screen)
   useSleepWindowNotifications(
     sleepPrediction,
     notifPrefs.sleepWindowReminder,
     userId,
     activeBabyId,
-    expoPushToken
+    expoPushToken,
+    hasActiveSleepEntry
   );
 
   // Feeding Reminder Notifications Hook

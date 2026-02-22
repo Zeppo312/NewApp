@@ -54,6 +54,15 @@ import { markPaywallShown, shouldShowPaywall } from '@/lib/paywall';
 import { useNotifications } from '@/hooks/useNotifications';
 import { usePartnerNotifications } from '@/hooks/usePartnerNotifications';
 import { sleepActivityService } from '@/lib/sleepActivityService';
+import { cancelBabyReminderNotification } from '@/lib/babyReminderNotifications';
+import { cancelLocalSleepWindowReminders } from '@/lib/sleepWindowReminderNotifications';
+import {
+  DEFAULT_NIGHT_WINDOW_SETTINGS,
+  clockTimeToMinutes,
+  getNightWindowRangeForDate,
+  loadNightWindowSettings,
+  type NightWindowSettings,
+} from '@/lib/nightWindowSettings';
 import NightSleepEditor, { MiniNightTimeline } from '@/components/NightSleepEditor';
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -69,6 +78,7 @@ const NIGHT_SPLASH_COLORS = {
   sleep_start_night: '#141C34',
   sleep_pause_night: '#1E1A2E',
 } as const;
+const SPLASH_PROMO_GIF = require('@/assets/images/App_Werbung.gif');
 
 // Globale Helper-Funktionen für Zeitberechnungen
 const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -176,32 +186,19 @@ const findOverlappingEntries = (
   });
 };
 
-const NIGHT_WINDOW_START_HOUR = 18;
-const NIGHT_WINDOW_END_HOUR = 10;
-const isNightTrackingTime = (date: Date) =>
-  date.getHours() >= NIGHT_WINDOW_START_HOUR || date.getHours() < NIGHT_WINDOW_END_HOUR;
-const getNightWindowForDate = (date: Date, anchor: 'previous' | 'upcoming' = 'previous') => {
-  if (anchor === 'upcoming') {
-    const nightWindowStart = new Date(
-      date.getFullYear(),
-      date.getMonth(),
-      date.getDate(),
-      NIGHT_WINDOW_START_HOUR,
-      0,
-      0,
-      0
-    );
-    const nightWindowEnd = new Date(nightWindowStart);
-    nightWindowEnd.setDate(nightWindowEnd.getDate() + 1);
-    nightWindowEnd.setHours(NIGHT_WINDOW_END_HOUR, 0, 0, 0);
-    return { nightWindowStart, nightWindowEnd };
-  }
+const getSleepPeriodForStart = (
+  date: Date,
+  nightWindowSettings: NightWindowSettings = DEFAULT_NIGHT_WINDOW_SETTINGS
+) => {
+  const minutesSinceMidnight = date.getHours() * 60 + date.getMinutes();
+  const nightStartMinutes = clockTimeToMinutes(nightWindowSettings.startTime, 18 * 60);
+  const nightEndMinutes = clockTimeToMinutes(nightWindowSettings.endTime, 10 * 60);
+  const isOvernightWindow = nightEndMinutes <= nightStartMinutes;
+  const isNight = isOvernightWindow
+    ? minutesSinceMidnight >= nightStartMinutes || minutesSinceMidnight < nightEndMinutes
+    : minutesSinceMidnight >= nightStartMinutes && minutesSinceMidnight < nightEndMinutes;
 
-  const nightWindowEnd = new Date(date.getFullYear(), date.getMonth(), date.getDate(), NIGHT_WINDOW_END_HOUR, 0, 0, 0);
-  const nightWindowStart = new Date(nightWindowEnd);
-  nightWindowStart.setDate(nightWindowStart.getDate() - 1);
-  nightWindowStart.setHours(NIGHT_WINDOW_START_HOUR, 0, 0, 0);
-  return { nightWindowStart, nightWindowEnd };
+  return isNight ? 'night' : 'day';
 };
 
 // Match Timeline (ActivityCard marginHorizontal=8 -> 16px gesamt)
@@ -286,9 +283,14 @@ type TimelineItem =
 const getNightSessionSegmentsForReference = (
   entries: ClassifiedSleepEntry[],
   referenceDate: Date,
+  nightWindowSettings: NightWindowSettings,
 ) => {
   const collectSegmentsForWindow = (anchor: 'previous' | 'upcoming') => {
-    const { nightWindowStart, nightWindowEnd } = getNightWindowForDate(referenceDate, anchor);
+    const { nightWindowStart, nightWindowEnd } = getNightWindowRangeForDate(
+      referenceDate,
+      nightWindowSettings,
+      anchor
+    );
     return entries
       .filter((entry) => {
         const start = new Date(entry.start_time);
@@ -303,7 +305,9 @@ const getNightSessionSegmentsForReference = (
     referenceDate.getFullYear() === now.getFullYear() &&
     referenceDate.getMonth() === now.getMonth() &&
     referenceDate.getDate() === now.getDate();
-  const preferUpcomingWindow = isReferenceToday && now.getHours() >= NIGHT_WINDOW_START_HOUR;
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  const nightStartMinutes = clockTimeToMinutes(nightWindowSettings.startTime, 18 * 60);
+  const preferUpcomingWindow = isReferenceToday && nowMinutes >= nightStartMinutes;
 
   const primary = collectSegmentsForWindow(preferUpcomingWindow ? 'upcoming' : 'previous');
   if (primary.length > 0) return primary;
@@ -345,12 +349,15 @@ const buildNightGroupFromSegments = (segments: ClassifiedSleepEntry[]): NightGro
   };
 };
 
-const getNightWindowKeyForEntry = (entry: ClassifiedSleepEntry): string | null => {
+const getNightWindowKeyForEntry = (
+  entry: ClassifiedSleepEntry,
+  nightWindowSettings: NightWindowSettings
+): string | null => {
   const start = new Date(entry.start_time);
   const end = entry.end_time ? new Date(entry.end_time) : new Date();
 
-  const previousWindow = getNightWindowForDate(start, 'previous');
-  const upcomingWindow = getNightWindowForDate(start, 'upcoming');
+  const previousWindow = getNightWindowRangeForDate(start, nightWindowSettings, 'previous');
+  const upcomingWindow = getNightWindowRangeForDate(start, nightWindowSettings, 'upcoming');
 
   const previousOverlap = overlapMinutes(
     start,
@@ -371,11 +378,14 @@ const getNightWindowKeyForEntry = (entry: ClassifiedSleepEntry): string | null =
   return `${selectedWindow.nightWindowStart.toISOString()}|${selectedWindow.nightWindowEnd.toISOString()}`;
 };
 
-const getNightGroupsForDayEntries = (entries: ClassifiedSleepEntry[]): NightGroup[] => {
+const getNightGroupsForDayEntries = (
+  entries: ClassifiedSleepEntry[],
+  nightWindowSettings: NightWindowSettings
+): NightGroup[] => {
   const grouped = new Map<string, ClassifiedSleepEntry[]>();
 
   for (const entry of entries) {
-    const key = getNightWindowKeyForEntry(entry);
+    const key = getNightWindowKeyForEntry(entry, nightWindowSettings);
     if (!key) continue;
     const current = grouped.get(key) ?? [];
     current.push(entry);
@@ -998,7 +1008,10 @@ const StatusMetricsBar = ({
 };
 
 // Convert SleepEntry to DailyEntry format for ActivityCard
-const convertSleepToDailyEntry = (sleepEntry: ClassifiedSleepEntry): any => {
+const convertSleepToDailyEntry = (
+  sleepEntry: ClassifiedSleepEntry,
+  nightWindowSettings: NightWindowSettings
+): any => {
   const formatTime = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
@@ -1011,8 +1024,8 @@ const convertSleepToDailyEntry = (sleepEntry: ClassifiedSleepEntry): any => {
     return `${mins}m`;
   };
 
-  // Bestimme Schlaftyp basierend auf Startzeit
-    const getSleepType = (startTime: string | Date, durationMinutes?: number) => {
+  // Bestimme Schlaftyp basierend auf Startzeit, Dauer und eingestelltem Nachtfenster
+  const getSleepType = (startTime: string | Date, durationMinutes?: number) => {
     const date = new Date(startTime);
     const hour = date.getHours();
     
@@ -1021,17 +1034,17 @@ const convertSleepToDailyEntry = (sleepEntry: ClassifiedSleepEntry): any => {
       return 'nickerchen';
     }
     
-    // Nachtschlaf: 18:00-06:00
-    if (hour >= 18 || hour <= 6) {
+    // Nachtschlaf: dynamisches, konfigurierbares Nachtfenster
+    if (getSleepPeriodForStart(date, nightWindowSettings) === 'night') {
       return 'nacht';
     }
     
-    // Mittagsschlaf: 12:00-14:00
-    if (hour >= 12 && hour <= 14) {
+    // Mittagsschlaf: 12:00-14:59
+    if (hour >= 12 && hour < 15) {
       return 'mittag';
     }
     
-    // Tagschlaf: 06:01-17:59 (außer Mittagszeit)
+    // Tagschlaf: außerhalb des Nachtfensters (außer Mittagszeit)
     return 'tag';
   };
 
@@ -1159,6 +1172,7 @@ export default function SleepTrackerScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeSleepEntry, setActiveSleepEntry] = useState<ClassifiedSleepEntry | null>(null);
+  const activeEntryPeriodOverridesRef = useRef<Record<string, SleepPeriod>>({});
   const [pausedNightState, setPausedNightState] = useState<PausedNightState | null>(null);
   const [showInputModal, setShowInputModal] = useState(false);
   const [selectedTab, setSelectedTab] = useState<'day' | 'week' | 'month'>('day');
@@ -1173,6 +1187,9 @@ export default function SleepTrackerScreen() {
   const [isLiveStatusLoaded, setIsLiveStatusLoaded] = useState(false);
   const [babyBirthdate, setBabyBirthdate] = useState<Date | null>(null);
   const [babyBedtime, setBabyBedtime] = useState<string>('19:30');
+  const [nightWindowSettings, setNightWindowSettings] = useState<NightWindowSettings>(
+    DEFAULT_NIGHT_WINDOW_SETTINGS
+  );
   const [babyName, setBabyName] = useState<string | undefined>(undefined);
   const [sleepPrediction, setSleepPrediction] = useState<SleepWindowPrediction | null>(null);
   const [predictionLoading, setPredictionLoading] = useState(false);
@@ -1254,13 +1271,33 @@ export default function SleepTrackerScreen() {
       checkPaywallGate();
     }, [checkPaywallGate])
   );
+
+  const refreshNightWindowSettings = useCallback(async () => {
+    try {
+      const loaded = await loadNightWindowSettings(user?.id);
+      setNightWindowSettings(loaded);
+    } catch (error) {
+      console.error('Failed to load night window settings:', error);
+      setNightWindowSettings(DEFAULT_NIGHT_WINDOW_SETTINGS);
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    void refreshNightWindowSettings();
+  }, [refreshNightWindowSettings]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void refreshNightWindowSettings();
+    }, [refreshNightWindowSettings])
+  );
+
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
 
   // Splash System wie in daily_old.tsx
   const [splashVisible, setSplashVisible] = useState(false);
   const [splashBg, setSplashBg] = useState<string>('rgba(0,0,0,0.6)');
-  const [splashEmoji, setSplashEmoji] = useState<string>('✅');
   const [splashText, setSplashText] = useState<string>('Gespeichert');
   const splashAnim = useRef(new Animated.Value(0)).current;
   const splashEmojiAnim = useRef(new Animated.Value(0.9)).current;
@@ -1622,9 +1659,8 @@ export default function SleepTrackerScreen() {
   }, [activeSleepEntry?.id, activeSleepEntry?.start_time, isLiveStatusLoaded]);
 
   // Classify sleep entry by time period
-  const classifySleepEntry = (entry: any): ClassifiedSleepEntry => {
-    const startHour = new Date(entry.start_time).getHours();
-    const period: SleepPeriod = (startHour >= 8 && startHour < 18) ? 'day' : 'night';
+  const classifySleepEntry = useCallback((entry: any, forcedPeriod?: SleepPeriod): ClassifiedSleepEntry => {
+    const period = forcedPeriod ?? getSleepPeriodForStart(new Date(entry.start_time), nightWindowSettings);
     const isActive = !entry.end_time;
     
     return {
@@ -1632,7 +1668,22 @@ export default function SleepTrackerScreen() {
       period,
       isActive
     };
-  };
+  }, [nightWindowSettings]);
+
+  useEffect(() => {
+    setSleepEntries((prevEntries) =>
+      prevEntries.map((entry) => {
+        const forced = entry.id ? activeEntryPeriodOverridesRef.current[entry.id] : undefined;
+        return classifySleepEntry(entry, forced);
+      })
+    );
+
+    setActiveSleepEntry((prevActive) => {
+      if (!prevActive) return prevActive;
+      const forced = prevActive.id ? activeEntryPeriodOverridesRef.current[prevActive.id] : undefined;
+      return classifySleepEntry(prevActive, forced);
+    });
+  }, [classifySleepEntry]);
 
   // Sync function removed - now using dual-write via SleepEntriesService
 
@@ -1670,7 +1721,12 @@ export default function SleepTrackerScreen() {
       const { success, entries } = await loadVisibleSleepEntries(activeBabyId ?? undefined);
       if (success && entries) {
         const active = entries.find(entry => !entry.end_time);
-        return active ? classifySleepEntry(active) : null;
+        if (!active) {
+          activeEntryPeriodOverridesRef.current = {};
+          return null;
+        }
+        const periodOverride = active.id ? activeEntryPeriodOverridesRef.current[active.id] : undefined;
+        return classifySleepEntry(active, periodOverride);
       }
     } catch (error) {
       console.error('Failed to load live status:', error);
@@ -1717,8 +1773,8 @@ export default function SleepTrackerScreen() {
 
       // Combine active + finished entries
       const allEntries = activeSleep
-        ? [activeSleep, ...safeFinishedEntries.map(classifySleepEntry)]
-        : safeFinishedEntries.map(classifySleepEntry);
+        ? [activeSleep, ...safeFinishedEntries.map((entry) => classifySleepEntry(entry))]
+        : safeFinishedEntries.map((entry) => classifySleepEntry(entry));
 
       setSleepEntries(allEntries);
 
@@ -1727,8 +1783,8 @@ export default function SleepTrackerScreen() {
         refresh().then(freshEntries => {
           const safeFreshEntries = freshEntries || [];
           const combinedFresh = activeSleep
-            ? [activeSleep, ...safeFreshEntries.map(classifySleepEntry)]
-            : safeFreshEntries.map(classifySleepEntry);
+            ? [activeSleep, ...safeFreshEntries.map((entry) => classifySleepEntry(entry))]
+            : safeFreshEntries.map((entry) => classifySleepEntry(entry));
           setSleepEntries(combinedFresh);
         });
       }
@@ -1782,7 +1838,11 @@ export default function SleepTrackerScreen() {
     if (!sleepService) return { updated: 0, failed: 0 };
 
     const excluded = new Set(excludedEntryIds);
-    const nightSegments = getNightSessionSegmentsForReference(sleepEntries, referenceDate)
+    const nightSegments = getNightSessionSegmentsForReference(
+      sleepEntries,
+      referenceDate,
+      nightWindowSettings
+    )
       .filter((entry) => Boolean(entry.id) && Boolean(entry.end_time) && !excluded.has(entry.id as string));
 
     let updated = 0;
@@ -1808,10 +1868,10 @@ export default function SleepTrackerScreen() {
     }
 
     return { updated, failed };
-  }, [sleepEntries, sleepService]);
+  }, [nightWindowSettings, sleepEntries, sleepService]);
 
   // Start sleep tracking
-  const handleStartSleep = async (_period: SleepPeriod) => {
+  const handleStartSleep = async (period: SleepPeriod) => {
     if (isStartingSleep) return false;
     if (!user?.id || !sleepService) {
       Alert.alert('Fehler', 'Service nicht verfügbar');
@@ -1846,9 +1906,24 @@ export default function SleepTrackerScreen() {
         console.warn('[SleepTracker] Secondary backend write failed:', result.secondary.error);
       }
 
+      // Aktiver Schlaf läuft jetzt: ausstehende Schlaffenster-Erinnerungen sofort entfernen.
+      try {
+        await cancelLocalSleepWindowReminders();
+        if (activeBabyId) {
+          await cancelBabyReminderNotification({
+            userId: user.id,
+            babyId: activeBabyId,
+            reminderType: 'sleep_window',
+          });
+        }
+      } catch (reminderError) {
+        console.error('Failed to cancel pending sleep window reminders:', reminderError);
+      }
+
       // Use primary result to set active sleep entry
       const entry = result.primary.data!;
-      const classifiedEntry = classifySleepEntry(entry);
+      activeEntryPeriodOverridesRef.current[entry.id] = period;
+      const classifiedEntry = classifySleepEntry(entry, period);
       setActiveSleepEntry(classifiedEntry);
 
       try {
@@ -1882,12 +1957,10 @@ export default function SleepTrackerScreen() {
       await loadSleepData();
 
       // Splash anzeigen
-      const currentPeriod: SleepPeriod =
-        isNightTrackingTime(now) ? 'night' : 'day';
       showSuccessSplash(
         '#87CEEB', // Baby blue
-        currentPeriod === 'night' ? '🌙' : '😴',
-        currentPeriod === 'night' ? 'sleep_start_night' : 'sleep_start_day'
+        period === 'night' ? '🌙' : '😴',
+        period === 'night' ? 'sleep_start_night' : 'sleep_start_day'
       );
       return true;
     } catch (error) {
@@ -1927,7 +2000,7 @@ export default function SleepTrackerScreen() {
         console.warn('[SleepTracker] Secondary backend update failed:', result.secondary.error);
       }
 
-      if (isNightTrackingTime(startTime)) {
+      if (activeSleepEntry.period === 'night') {
         const propagated = await applyNightQualityToSession(quality, startTime, [activeSleepEntry.id]);
         if (propagated.failed > 0) {
           Alert.alert('Hinweis', 'Die Qualität konnte nicht auf alle Nachtschlaf-Segmente übertragen werden.');
@@ -1943,6 +2016,7 @@ export default function SleepTrackerScreen() {
         console.error('Failed to end sleep live activity:', liveActivityError);
       }
 
+      delete activeEntryPeriodOverridesRef.current[activeSleepEntry.id];
       setActiveSleepEntry(null);
       setPausedNightState(null);
 
@@ -1966,7 +2040,7 @@ export default function SleepTrackerScreen() {
     if (!activeSleepEntry?.id || isStoppingSleep || !sleepService) return;
 
     const activeStart = new Date(activeSleepEntry.start_time);
-    if (!isNightTrackingTime(activeStart)) {
+    if (activeSleepEntry.period !== 'night') {
       Alert.alert('Hinweis', 'Pause ist nur im Nachtschlaf verfügbar.');
       return;
     }
@@ -2004,6 +2078,7 @@ export default function SleepTrackerScreen() {
         lastPausedEntryId: activeSleepEntry.id,
         pausedAt: pausedAt.toISOString(),
       });
+      delete activeEntryPeriodOverridesRef.current[activeSleepEntry.id];
       setActiveSleepEntry(null);
 
       showSuccessSplash('#F2C78A', '⏸️', 'sleep_pause_night');
@@ -2069,7 +2144,7 @@ export default function SleepTrackerScreen() {
 
   const promptSleepQualityForStop = useCallback(() => {
     if (!activeSleepEntry?.id || isStoppingSleep) return;
-    const isNightStop = isNightTrackingTime(new Date(activeSleepEntry.start_time));
+    const isNightStop = activeSleepEntry.period === 'night';
 
     Alert.alert(
       isNightStop ? 'Nachtschlaf abschließen' : 'Schlafqualität',
@@ -2082,7 +2157,7 @@ export default function SleepTrackerScreen() {
       ],
       { cancelable: true }
     );
-  }, [activeSleepEntry?.id, activeSleepEntry?.start_time, handleStopSleep, isStoppingSleep]);
+  }, [activeSleepEntry?.id, activeSleepEntry?.period, handleStopSleep, isStoppingSleep]);
 
   const promptSleepQualityForFinalizePausedNight = useCallback(() => {
     if (!pausedNightState?.lastPausedEntryId || isStoppingSleep) return;
@@ -2703,7 +2778,7 @@ export default function SleepTrackerScreen() {
   };
 
   // Splash Funktion wie in daily_old.tsx
-  const showSuccessSplash = (hex: string, emoji: string, kind: string) => {
+  const showSuccessSplash = (hex: string, _emoji: string, kind: string) => {
     const rgba = (h: string, a: number) => {
       const c = h.replace('#','');
       const r = parseInt(c.substring(0,2),16);
@@ -2718,7 +2793,6 @@ export default function SleepTrackerScreen() {
           ? NIGHT_SPLASH_COLORS.sleep_pause_night
           : hex;
     setSplashBg(rgba(splashHex, 1));
-    setSplashEmoji(emoji);
     // Texte je Kontext - angepasst für Sleep
     if (kind === 'sleep_start_night') {
       setSplashTitle('Nachtschlaf läuft');
@@ -2826,7 +2900,11 @@ export default function SleepTrackerScreen() {
       return minutes > 0 && minutes <= 30 ? count + 1 : count;
     }, 0);
 
-    const nightSessionSegments = getNightSessionSegmentsForReference(sleepEntries, selectedDate);
+    const nightSessionSegments = getNightSessionSegmentsForReference(
+      sleepEntries,
+      selectedDate,
+      nightWindowSettings
+    );
     const nightSessionGroup = buildNightGroupFromSegments(nightSessionSegments);
     const nightTotalMinutes = nightSessionGroup?.totalMinutes ?? 0;
     const nightSegmentCount = nightSessionGroup?.segments.length ?? 0;
@@ -2837,7 +2915,7 @@ export default function SleepTrackerScreen() {
     const score = Math.max(0, Math.round(100 - (deviation / target) * 100));
 
     return { totalMinutes, napsCount, longestStretch, score, nightTotalMinutes, nightSegmentCount };
-  }, [selectedDate, sleepEntries]);
+  }, [nightWindowSettings, selectedDate, sleepEntries]);
 
   // Daily navigation helpers
   const goPrevDay = () => setSelectedDate(d => { const nd = new Date(d); nd.setDate(nd.getDate() - 1); return nd; });
@@ -2864,7 +2942,7 @@ export default function SleepTrackerScreen() {
   }, [sleepEntries, selectedDate]);
 
   const nightGroups = useMemo(() => {
-    const baseGroups = getNightGroupsForDayEntries(dayEntries);
+    const baseGroups = getNightGroupsForDayEntries(dayEntries, nightWindowSettings);
     if (baseGroups.length === 0) return [];
 
     const expandedGroups = new Map<string, NightGroup>();
@@ -2873,12 +2951,12 @@ export default function SleepTrackerScreen() {
       const referenceEntry = baseGroup.entries[0];
       if (!referenceEntry) continue;
 
-      const windowKey = getNightWindowKeyForEntry(referenceEntry);
+      const windowKey = getNightWindowKeyForEntry(referenceEntry, nightWindowSettings);
       if (!windowKey) continue;
       if (expandedGroups.has(windowKey)) continue;
 
       const fullWindowSegments = sleepEntries
-        .filter((entry) => getNightWindowKeyForEntry(entry) === windowKey)
+        .filter((entry) => getNightWindowKeyForEntry(entry, nightWindowSettings) === windowKey)
         .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
 
       const expanded = buildNightGroupFromSegments(fullWindowSegments);
@@ -2888,7 +2966,7 @@ export default function SleepTrackerScreen() {
     }
 
     return Array.from(expandedGroups.values()).sort((a, b) => b.start.getTime() - a.start.getTime());
-  }, [dayEntries, sleepEntries]);
+  }, [dayEntries, nightWindowSettings, sleepEntries]);
 
   const openNightEditor = useCallback((group: NightGroup) => {
     setNightEditorGroup(group);
@@ -3067,9 +3145,7 @@ export default function SleepTrackerScreen() {
   // Action Buttons (Home.tsx style)
   const ActionButtons = () => {
     const isActionBlocked = isStartingSleep || isStoppingSleep;
-    const isActiveNightSleep = Boolean(
-      activeSleepEntry?.start_time && isNightTrackingTime(new Date(activeSleepEntry.start_time))
-    );
+    const isActiveNightSleep = activeSleepEntry?.period === 'night';
     const isNightPaused = Boolean(pausedNightState && !activeSleepEntry);
     const shouldShowStatusLoading = !isLiveStatusLoaded && !activeSleepEntry && !isNightPaused;
     const loadingLabel = isStartingSleep
@@ -3240,7 +3316,7 @@ export default function SleepTrackerScreen() {
                 if (isActionBlocked) return;
                 triggerHaptic();
                 const now = new Date();
-                void handleStartSleep(isNightTrackingTime(now) ? 'night' : 'day');
+                void handleStartSleep(getSleepPeriodForStart(now, nightWindowSettings));
               }}
               activeOpacity={0.9}
             >
@@ -3951,7 +4027,8 @@ export default function SleepTrackerScreen() {
                 else nightMood = 'Kurze Nacht';
 
                 const accentPurple = isDark ? '#A26BFF' : '#8E4EC6';
-                const timelineBarWidth = contentWidth - 16 - 36;
+                // Timeline bar width = 85% of contentWidth, capped & centered
+                const timelineBarWidth = Math.round(contentWidth * 0.75);
 
                 return (
                   <TouchableOpacity
@@ -4049,7 +4126,7 @@ export default function SleepTrackerScreen() {
               return (
                 <ActivityCard
                   key={entry.id || index}
-                  entry={convertSleepToDailyEntry(entry)}
+                  entry={convertSleepToDailyEntry(entry, nightWindowSettings)}
                   onDelete={(entryId) => {
                     triggerHaptic();
                     handleDeleteEntry(entryId);
@@ -4577,7 +4654,11 @@ export default function SleepTrackerScreen() {
           />
           <View style={styles.splashCenterCard}>
             <Animated.View style={[styles.splashEmojiRing, { transform: [{ scale: splashEmojiAnim }] }]}>
-              <Text style={styles.splashEmoji}>{splashEmoji}</Text>
+              <Animated.Image
+                source={SPLASH_PROMO_GIF}
+                style={styles.splashGif}
+                resizeMode="contain"
+              />
             </Animated.View>
             {splashTitle ? <Text style={styles.splashTitle}>{splashTitle}</Text> : null}
             {splashSubtitle ? <Text style={styles.splashSubtitle}>{splashSubtitle}</Text> : null}
@@ -5077,8 +5158,9 @@ const styles = StyleSheet.create({
     marginHorizontal: 8,
   },
   nightGroupCard: {
-    paddingVertical: 16,
-    paddingHorizontal: 18,
+    paddingTop: 22,
+    paddingBottom: 26,
+    paddingHorizontal: 22,
     borderWidth: 1.2,
     borderColor: 'rgba(142, 78, 198, 0.25)',
     backgroundColor: 'rgba(142, 78, 198, 0.06)',
@@ -5086,90 +5168,93 @@ const styles = StyleSheet.create({
   nightGroupHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginBottom: 6,
+    gap: 8,
+    marginBottom: 14,
+    paddingHorizontal: 2,
   },
   nightGroupEmoji: {
     fontSize: 18,
   },
   nightGroupTitle: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '700',
     flex: 1,
   },
   nightGroupEditHint: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '600',
   },
   nightGroupBigDuration: {
-    fontSize: 32,
+    fontSize: 38,
     fontWeight: '800',
     textAlign: 'center',
     fontVariant: ['tabular-nums'],
     letterSpacing: -0.5,
+    marginTop: 4,
+    marginBottom: 4,
   },
   nightGroupMood: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600',
     textAlign: 'center',
-    marginTop: 2,
-    marginBottom: 4,
+    marginTop: 6,
+    marginBottom: 8,
     opacity: 0.7,
   },
   nightGroupTimeRange: {
-    fontSize: 13,
+    fontSize: 13.5,
     fontWeight: '600',
     textAlign: 'center',
     fontVariant: ['tabular-nums'],
-    marginBottom: 10,
+    marginBottom: 18,
     opacity: 0.5,
   },
   nightGroupDivider: {
     height: StyleSheet.hairlineWidth,
-    marginTop: 10,
-    marginBottom: 10,
+    marginTop: 16,
+    marginBottom: 14,
   },
   nightGroupStatsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
-    gap: 12,
-    marginBottom: 6,
+    gap: 16,
+    marginBottom: 8,
   },
   nightGroupStat: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
   },
   nightGroupStatDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
   },
   nightGroupStatText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '600',
     fontVariant: ['tabular-nums'],
   },
   nightGroupLongestPhase: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '500',
     textAlign: 'center',
     opacity: 0.45,
-    marginTop: 4,
+    marginTop: 6,
     marginBottom: 2,
     fontVariant: ['tabular-nums'],
   },
   nightGroupWakeSection: {
-    marginTop: 6,
-    gap: 2,
+    marginTop: 8,
+    gap: 4,
   },
   nightGroupWakeCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 3,
-    paddingHorizontal: 2,
-    gap: 6,
+    paddingVertical: 4,
+    paddingHorizontal: 4,
+    gap: 8,
   },
   nightGroupWakeDot: {
     width: 5,
@@ -5585,6 +5670,10 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     color: '#fff',
   },
+  splashGif: {
+    width: 170,
+    height: 170,
+  },
   splashText: {
     fontSize: 20,
     fontWeight: '800',
@@ -5636,14 +5725,15 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   splashEmojiRing: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
+    width: 176,
+    height: 176,
+    borderRadius: 28,
     borderWidth: 2,
     borderColor: 'rgba(255,255,255,0.7)',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.08)'
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    overflow: 'hidden',
   },
 
   // Wochen- und Monatsansicht Styles (Design Guide konform)

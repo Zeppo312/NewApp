@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, SafeAreaView, StatusBar, TouchableOpacity, ScrollView, Switch, Alert, ActivityIndicator, Image, Linking } from 'react-native';
+import { StyleSheet, View, SafeAreaView, StatusBar, TouchableOpacity, ScrollView, Switch, Alert, ActivityIndicator, Image, Linking, Platform } from 'react-native';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { ThemedText } from '@/components/ThemedText';
@@ -13,6 +14,13 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { getAppSettings, saveAppSettings, AppSettings } from '@/lib/supabase';
 import { exportUserData } from '@/lib/dataExport';
 import { deleteUserAccount, deleteUserData } from '@/lib/profile';
+import { sleepActivityService } from '@/lib/sleepActivityService';
+import { loadAllVisibleSleepEntries } from '@/lib/sleepSharing';
+import {
+  DEFAULT_NIGHT_WINDOW_SETTINGS,
+  loadNightWindowSettings,
+  saveNightWindowSettings,
+} from '@/lib/nightWindowSettings';
 import Header from '@/components/Header';
 import { LiquidGlassCard, GLASS_OVERLAY, LAYOUT_PAD } from '@/constants/DesignGuide';
 import { useNotificationPreferences } from '@/hooks/useNotificationPreferences';
@@ -33,30 +41,42 @@ const PRESET_OPTIONS = [
   { id: 'stone', label: 'Stone' },
 ] as const;
 
-const PRESET_DARK_MODE_MAP = {
-  default: false,
-  heller: false,
-  dunkler: true,
-  nightmode: true,
-  shadow: true,
-  wave: false,
-  stone: true,
-} as const;
-
 export default function AppSettingsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const router = useRouter();
   const { user, session, signOut } = useAuth();
-  const { autoDarkModeEnabled, setAutoDarkModeEnabled } = useTheme();
+  const {
+    autoDarkModeEnabled,
+    autoDarkModeStartTime,
+    autoDarkModeEndTime,
+    setAutoDarkModeEnabled,
+    setAutoDarkModeStartTime,
+    setAutoDarkModeEndTime,
+  } = useTheme();
 
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isSavingAutoDark, setIsSavingAutoDark] = useState(false);
+  const [isAutoDarkExpanded, setIsAutoDarkExpanded] = useState(false);
+  const [showAutoDarkStartPicker, setShowAutoDarkStartPicker] = useState(false);
+  const [showAutoDarkEndPicker, setShowAutoDarkEndPicker] = useState(false);
+  const [nightWindowStartTime, setNightWindowStartTime] = useState(
+    DEFAULT_NIGHT_WINDOW_SETTINGS.startTime
+  );
+  const [nightWindowEndTime, setNightWindowEndTime] = useState(
+    DEFAULT_NIGHT_WINDOW_SETTINGS.endTime
+  );
+  const [isNightWindowExpanded, setIsNightWindowExpanded] = useState(false);
+  const [showNightWindowStartPicker, setShowNightWindowStartPicker] = useState(false);
+  const [showNightWindowEndPicker, setShowNightWindowEndPicker] = useState(false);
+  const [isSavingNightWindow, setIsSavingNightWindow] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isDeletingData, setIsDeletingData] = useState(false);
   const [isChangingBackground, setIsChangingBackground] = useState(false);
+  const [isSyncingLiveActivities, setIsSyncingLiveActivities] = useState(false);
+  const [liveActivitiesStatusText, setLiveActivitiesStatusText] = useState('Status wird geladen...');
 
   // Convex context
   const { convexClient, lastSyncError } = useConvex();
@@ -78,9 +98,14 @@ export default function AppSettingsScreen() {
 
   // Check if current user is admin
   const isAdmin = user?.email ? ADMIN_EMAILS.includes(user.email) : false;
-  const useLightIcons = colorScheme === 'dark' || isDarkBackground;
+  const isBackgroundModeAutoSynced = autoDarkModeEnabled;
+  const effectiveIsDarkBackground = isBackgroundModeAutoSynced
+    ? colorScheme === 'dark'
+    : isDarkBackground;
+  const useLightIcons = colorScheme === 'dark' || effectiveIsDarkBackground;
   const primaryIconColor = useLightIcons ? '#FFFFFF' : theme.accent;
   const trailingIconColor = useLightIcons ? 'rgba(255,255,255,0.9)' : theme.tabIconDefault;
+  const autoDarkTimeTextColor = useLightIcons ? '#FFFFFF' : '#000000';
 
   // no extra width logic; match "Mehr" padding rhythm via ScrollView
 
@@ -93,7 +118,13 @@ export default function AppSettingsScreen() {
   const loadSettings = async () => {
     try {
       setIsLoading(true);
-      const { data, error } = await getAppSettings();
+      const [{ data, error }, nightWindowSettings] = await Promise.all([
+        getAppSettings(),
+        loadNightWindowSettings(user?.id),
+      ]);
+
+      setNightWindowStartTime(nightWindowSettings.startTime);
+      setNightWindowEndTime(nightWindowSettings.endTime);
 
       if (error) {
         console.error('Error loading app settings:', error);
@@ -108,6 +139,48 @@ export default function AppSettingsScreen() {
       console.error('Failed to load app settings:', err);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const formatElapsedSeconds = (seconds: number) => {
+    const safe = Math.max(0, Math.floor(seconds));
+    const hours = Math.floor(safe / 3600);
+    const minutes = Math.floor((safe % 3600) / 60);
+    const secs = safe % 60;
+    if (hours > 0) {
+      return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+    return `${minutes}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const refreshLiveActivitiesStatus = async (): Promise<string> => {
+    if (!sleepActivityService.isLiveActivitySupported()) {
+      const status = 'Auf diesem Gerät nicht verfügbar.';
+      setLiveActivitiesStatusText(status);
+      return status;
+    }
+
+    try {
+      const current = await sleepActivityService.restoreCurrentActivity();
+      if (current?.isTracking && current.startTime) {
+        const startDate = new Date(current.startTime);
+        const hasValidStart = Number.isFinite(startDate.getTime());
+        const status =
+          hasValidStart
+            ? `Aktiv seit ${startDate.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}`
+            : 'Aktiv';
+        setLiveActivitiesStatusText(status);
+        return status;
+      }
+
+      const status = 'Keine aktive Anzeige oder in iOS deaktiviert.';
+      setLiveActivitiesStatusText(status);
+      return status;
+    } catch (error) {
+      console.error('Failed to refresh live activities status:', error);
+      const status = 'Status konnte nicht geladen werden.';
+      setLiveActivitiesStatusText(status);
+      return status;
     }
   };
 
@@ -147,23 +220,115 @@ export default function AppSettingsScreen() {
     try {
       setIsSavingAutoDark(true);
       await setAutoDarkModeEnabled(value);
-
-      // Beim Aktivieren des Auto-Dunkelmodus auch den Textmodus für dunkles Bild setzen.
-      if (value && !isDarkBackground) {
-        await setBackgroundMode(true);
-        return;
-      }
-
-      // Beim Deaktivieren wieder an das gewählte Preset anpassen (nur bei Presets, nicht bei Custom-Bildern).
-      if (!value && selectedBackground !== 'custom') {
-        const presetIsDark = PRESET_DARK_MODE_MAP[selectedBackground];
-        if (presetIsDark !== isDarkBackground) {
-          await setBackgroundMode(presetIsDark);
-        }
-      }
     } finally {
       setIsSavingAutoDark(false);
     }
+  };
+
+  const getDateFromTimeString = (time: string) => {
+    const match = time.match(/^([01]\d|2[0-3]):([0-5]\d)$/);
+    const date = new Date();
+    if (!match) {
+      date.setHours(20, 0, 0, 0);
+      return date;
+    }
+    date.setHours(Number(match[1]), Number(match[2]), 0, 0);
+    return date;
+  };
+
+  const formatTime = (date: Date) => {
+    const hours = date.getHours().toString().padStart(2, '0');
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    return `${hours}:${minutes}`;
+  };
+
+  const handleAutoDarkStartTimeChange = async (
+    event: DateTimePickerEvent,
+    selectedDate?: Date,
+  ) => {
+    if (Platform.OS === 'android') {
+      setShowAutoDarkStartPicker(false);
+    }
+    if (event.type === 'dismissed' || !selectedDate) {
+      return;
+    }
+
+    try {
+      setIsSavingAutoDark(true);
+      await setAutoDarkModeStartTime(formatTime(selectedDate));
+    } finally {
+      setIsSavingAutoDark(false);
+    }
+  };
+
+  const handleAutoDarkEndTimeChange = async (
+    event: DateTimePickerEvent,
+    selectedDate?: Date,
+  ) => {
+    if (Platform.OS === 'android') {
+      setShowAutoDarkEndPicker(false);
+    }
+    if (event.type === 'dismissed' || !selectedDate) {
+      return;
+    }
+
+    try {
+      setIsSavingAutoDark(true);
+      await setAutoDarkModeEndTime(formatTime(selectedDate));
+    } finally {
+      setIsSavingAutoDark(false);
+    }
+  };
+
+  const updateNightWindowSettings = async (nextStartTime: string, nextEndTime: string) => {
+    if (nextStartTime === nextEndTime) {
+      Alert.alert('Ungültige Zeit', 'Start und Ende dürfen nicht identisch sein.');
+      return;
+    }
+
+    try {
+      setIsSavingNightWindow(true);
+      const saved = await saveNightWindowSettings(
+        { startTime: nextStartTime, endTime: nextEndTime },
+        user?.id,
+      );
+      setNightWindowStartTime(saved.startTime);
+      setNightWindowEndTime(saved.endTime);
+    } catch (error) {
+      console.error('Failed to save night window settings:', error);
+      Alert.alert('Fehler', 'Nachtschlaf-Zeitfenster konnte nicht gespeichert werden.');
+      const restored = await loadNightWindowSettings(user?.id);
+      setNightWindowStartTime(restored.startTime);
+      setNightWindowEndTime(restored.endTime);
+    } finally {
+      setIsSavingNightWindow(false);
+    }
+  };
+
+  const handleNightWindowStartTimeChange = async (
+    event: DateTimePickerEvent,
+    selectedDate?: Date,
+  ) => {
+    if (Platform.OS === 'android') {
+      setShowNightWindowStartPicker(false);
+    }
+    if (event.type === 'dismissed' || !selectedDate) {
+      return;
+    }
+    await updateNightWindowSettings(formatTime(selectedDate), nightWindowEndTime);
+  };
+
+  const handleNightWindowEndTimeChange = async (
+    event: DateTimePickerEvent,
+    selectedDate?: Date,
+  ) => {
+    if (Platform.OS === 'android') {
+      setShowNightWindowEndPicker(false);
+    }
+    if (event.type === 'dismissed' || !selectedDate) {
+      return;
+    }
+    await updateNightWindowSettings(nightWindowStartTime, formatTime(selectedDate));
   };
 
   const handleChangeBackground = async () => {
@@ -252,6 +417,115 @@ export default function AppSettingsScreen() {
           },
         },
       ]
+    );
+  };
+
+  const handleOpenSystemSettings = async () => {
+    try {
+      await Linking.openSettings();
+    } catch (error) {
+      console.error('Failed to open app settings:', error);
+      Alert.alert('Fehler', 'Einstellungen konnten nicht geöffnet werden.');
+    }
+  };
+
+  const handleSyncLiveActivities = async () => {
+    if (isSyncingLiveActivities) return;
+
+    if (!sleepActivityService.isLiveActivitySupported()) {
+      setLiveActivitiesStatusText('Auf diesem Gerät nicht verfügbar.');
+      Alert.alert(
+        'Live Activities',
+        'Live Activities werden auf diesem Gerät oder in diesem Build nicht unterstützt.'
+      );
+      return;
+    }
+
+    try {
+      setIsSyncingLiveActivities(true);
+
+      const { success, entries } = await loadAllVisibleSleepEntries();
+      if (!success || !entries) {
+        throw new Error('Schlafdaten konnten nicht geladen werden.');
+      }
+
+      const activeEntry = entries.find((entry) => !entry.end_time);
+
+      if (!activeEntry?.start_time) {
+        await sleepActivityService.endAllSleepActivities();
+        setLiveActivitiesStatusText('Kein aktiver Schlaf. Keine Live Activity aktiv.');
+        Alert.alert('Live Activities', 'Es läuft aktuell kein Schlaftracking.');
+        return;
+      }
+
+      const startDate = new Date(activeEntry.start_time);
+      if (!Number.isFinite(startDate.getTime())) {
+        throw new Error('Ungültige Startzeit beim aktiven Schlaf.');
+      }
+
+      // Prüfe ob bereits eine native Live Activity läuft
+      const existing = await sleepActivityService.restoreCurrentActivity();
+
+      let needsNewActivity = !existing;
+
+      // Falls bestehende Activity zu einer anderen Session gehört → beenden
+      if (existing) {
+        const existingStart = new Date(existing.startTime).getTime();
+        const dbStart = startDate.getTime();
+        if (!Number.isFinite(existingStart) || Math.abs(existingStart - dbStart) >= 2000) {
+          await sleepActivityService.endAllSleepActivities();
+          needsNewActivity = true;
+        }
+      }
+
+      if (needsNewActivity) {
+        const startedId = await sleepActivityService.startSleepActivity(startDate);
+        if (!startedId) {
+          setLiveActivitiesStatusText('In iOS deaktiviert oder derzeit nicht verfügbar.');
+          Alert.alert(
+            'Live Activities',
+            'Die Anzeige konnte nicht gestartet werden. Bitte prüfe die iOS-Einstellungen.'
+          );
+          return;
+        }
+      }
+
+      // Bestehende oder neu gestartete Activity mit aktueller Zeit updaten
+      const elapsedSeconds = Math.max(0, Math.floor((Date.now() - startDate.getTime()) / 1000));
+      await sleepActivityService.updateSleepActivity(formatElapsedSeconds(elapsedSeconds));
+
+      setLiveActivitiesStatusText(
+        `Aktiv seit ${startDate.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}`
+      );
+      Alert.alert('Live Activities', 'Die Anzeige wurde synchronisiert.');
+    } catch (error) {
+      console.error('Failed to synchronize live activities:', error);
+      setLiveActivitiesStatusText('Synchronisierung fehlgeschlagen.');
+      Alert.alert('Fehler', 'Live Activities konnten nicht synchronisiert werden.');
+    } finally {
+      setIsSyncingLiveActivities(false);
+    }
+  };
+
+  const handleOpenLiveActivitiesPopup = async () => {
+    const status = await refreshLiveActivitiesStatus();
+    const message = [
+      `Status: ${status}`,
+      '',
+      '• Zeigt Schlafzeit auf Sperrbildschirm an.',
+      '• Dynamic Island nur auf unterstützten iPhones.',
+      '• Bei aktivem Schlaf kannst du neu synchronisieren.',
+    ].join('\n');
+
+    Alert.alert(
+      'Live Activities',
+      message,
+      [
+        { text: 'Schließen', style: 'cancel' },
+        { text: 'iOS-Einstellungen', onPress: () => void handleOpenSystemSettings() },
+        { text: 'Synchronisieren', onPress: () => void handleSyncLiveActivities() },
+      ],
+      { cancelable: true }
     );
   };
 
@@ -356,6 +630,15 @@ export default function AppSettingsScreen() {
     );
   };
 
+  useEffect(() => {
+    if (!user) {
+      setLiveActivitiesStatusText('Bitte anmelden.');
+      return;
+    }
+
+    void refreshLiveActivitiesStatus();
+  }, [user?.id]);
+
   if (!session) {
     return <Redirect href="/(auth)/login" />;
   }
@@ -449,39 +732,135 @@ export default function AppSettingsScreen() {
                       </>
                     )}
 
+                  </LiquidGlassCard>
+
+                  <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
+                    <ThemedText style={styles.sectionTitle}>Schlaftracking</ThemedText>
+
                     <TouchableOpacity
                       style={styles.rowItem}
-                      onPress={() => router.push('/(tabs)/baby' as any)}
+                      onPress={() => setIsNightWindowExpanded((prev) => !prev)}
+                      activeOpacity={0.8}
                     >
                       <View style={styles.rowIcon}>
                         <IconSymbol name="moon.zzz" size={22} color={primaryIconColor} />
                       </View>
                       <View style={styles.rowContent}>
-                        <ThemedText style={styles.rowTitle}>Schlafenszeit einstellen</ThemedText>
+                        <ThemedText style={styles.rowTitle}>Nachtschlaf-Zeitfenster</ThemedText>
                         <ThemedText style={styles.rowDescription}>
-                          Die Schlafvorhersage nutzt die Schlafenszeit aus „Mein Baby“.
+                          Von {nightWindowStartTime} bis {nightWindowEndTime} Uhr
                         </ThemedText>
                       </View>
-                      <View style={styles.trailing}>
-                        <IconSymbol name="chevron.right" size={20} color={trailingIconColor} />
+                      <View style={styles.autoDarkTrailing}>
+                        {isSavingNightWindow ? (
+                          <ActivityIndicator size="small" color={theme.accent} />
+                        ) : null}
+                        <IconSymbol
+                          name={isNightWindowExpanded ? 'chevron.up' : 'chevron.down'}
+                          size={18}
+                          color={trailingIconColor}
+                        />
                       </View>
                     </TouchableOpacity>
+
+                    {isNightWindowExpanded && (
+                      <View style={styles.autoDarkScheduleContainer}>
+                        <View style={styles.autoDarkScheduleHeader}>
+                          <ThemedText style={styles.autoDarkScheduleLabel}>Zeitfenster</ThemedText>
+                          {isSavingNightWindow && <ActivityIndicator size="small" color={theme.accent} />}
+                        </View>
+
+                        <View style={styles.autoDarkTimeRow}>
+                          <ThemedText style={styles.autoDarkTimeTitle}>Von</ThemedText>
+                          <TouchableOpacity
+                            style={styles.autoDarkTimeButton}
+                            onPress={() => setShowNightWindowStartPicker(true)}
+                            disabled={isSavingNightWindow}
+                          >
+                            <ThemedText style={[styles.autoDarkTimeButtonText, { color: autoDarkTimeTextColor }]}>
+                              {nightWindowStartTime}
+                            </ThemedText>
+                          </TouchableOpacity>
+                        </View>
+
+                        <View style={styles.autoDarkTimeRow}>
+                          <ThemedText style={styles.autoDarkTimeTitle}>Bis</ThemedText>
+                          <TouchableOpacity
+                            style={styles.autoDarkTimeButton}
+                            onPress={() => setShowNightWindowEndPicker(true)}
+                            disabled={isSavingNightWindow}
+                          >
+                            <ThemedText style={[styles.autoDarkTimeButtonText, { color: autoDarkTimeTextColor }]}>
+                              {nightWindowEndTime}
+                            </ThemedText>
+                          </TouchableOpacity>
+                        </View>
+
+                        {showNightWindowStartPicker && (
+                          <View style={styles.autoDarkPickerContainer}>
+                            <DateTimePicker
+                              mode="time"
+                              value={getDateFromTimeString(nightWindowStartTime)}
+                              onChange={handleNightWindowStartTimeChange}
+                              is24Hour
+                              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                              themeVariant={useLightIcons ? 'dark' : 'light'}
+                              textColor={Platform.OS === 'ios' ? autoDarkTimeTextColor : undefined}
+                            />
+                            {Platform.OS === 'ios' && (
+                              <TouchableOpacity
+                                style={styles.autoDarkPickerDone}
+                                onPress={() => setShowNightWindowStartPicker(false)}
+                              >
+                                <ThemedText style={styles.autoDarkPickerDoneText}>Fertig</ThemedText>
+                              </TouchableOpacity>
+                            )}
+                          </View>
+                        )}
+
+                        {showNightWindowEndPicker && (
+                          <View style={styles.autoDarkPickerContainer}>
+                            <DateTimePicker
+                              mode="time"
+                              value={getDateFromTimeString(nightWindowEndTime)}
+                              onChange={handleNightWindowEndTimeChange}
+                              is24Hour
+                              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                              themeVariant={useLightIcons ? 'dark' : 'light'}
+                              textColor={Platform.OS === 'ios' ? autoDarkTimeTextColor : undefined}
+                            />
+                            {Platform.OS === 'ios' && (
+                              <TouchableOpacity
+                                style={styles.autoDarkPickerDone}
+                                onPress={() => setShowNightWindowEndPicker(false)}
+                              >
+                                <ThemedText style={styles.autoDarkPickerDoneText}>Fertig</ThemedText>
+                              </TouchableOpacity>
+                            )}
+                          </View>
+                        )}
+                      </View>
+                    )}
                   </LiquidGlassCard>
 
                   <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
                     <ThemedText style={styles.sectionTitle}>Darstellung</ThemedText>
 
-                    <View style={styles.rowItem}>
+                    <TouchableOpacity
+                      style={styles.rowItem}
+                      onPress={() => setIsAutoDarkExpanded((prev) => !prev)}
+                      activeOpacity={0.8}
+                    >
                       <View style={styles.rowIcon}>
                         <IconSymbol name="moon.stars" size={22} color={primaryIconColor} />
                       </View>
                       <View style={styles.rowContent}>
                         <ThemedText style={styles.rowTitle}>Auto-Dunkelmodus</ThemedText>
                         <ThemedText style={styles.rowDescription}>
-                          Schaltet den Dark Mode automatisch von 20:00 bis 07:00 Uhr ein.
+                          Aktiv von {autoDarkModeStartTime} bis {autoDarkModeEndTime} Uhr.
                         </ThemedText>
                       </View>
-                      <View style={styles.trailing}>
+                      <View style={styles.autoDarkTrailing}>
                         <Switch
                           value={autoDarkModeEnabled}
                           onValueChange={handleToggleAutoDarkMode}
@@ -490,8 +869,115 @@ export default function AppSettingsScreen() {
                           thumbColor={autoDarkModeEnabled ? '#FFFFFF' : '#F4F4F4'}
                           ios_backgroundColor="#D1D1D6"
                         />
+                        <IconSymbol
+                          name={isAutoDarkExpanded ? 'chevron.up' : 'chevron.down'}
+                          size={18}
+                          color={trailingIconColor}
+                        />
                       </View>
-                    </View>
+                    </TouchableOpacity>
+
+                    {isAutoDarkExpanded && (
+                      <View style={styles.autoDarkScheduleContainer}>
+                        <View style={styles.autoDarkScheduleHeader}>
+                          <ThemedText style={styles.autoDarkScheduleLabel}>Zeitfenster</ThemedText>
+                          {isSavingAutoDark && <ActivityIndicator size="small" color={theme.accent} />}
+                        </View>
+
+                        <View style={styles.autoDarkTimeRow}>
+                          <ThemedText style={styles.autoDarkTimeTitle}>Von</ThemedText>
+                          <TouchableOpacity
+                            style={styles.autoDarkTimeButton}
+                            onPress={() => setShowAutoDarkStartPicker(true)}
+                            disabled={isSavingAutoDark}
+                          >
+                            <ThemedText style={[styles.autoDarkTimeButtonText, { color: autoDarkTimeTextColor }]}>
+                              {autoDarkModeStartTime}
+                            </ThemedText>
+                          </TouchableOpacity>
+                        </View>
+
+                        <View style={styles.autoDarkTimeRow}>
+                          <ThemedText style={styles.autoDarkTimeTitle}>Bis</ThemedText>
+                          <TouchableOpacity
+                            style={styles.autoDarkTimeButton}
+                            onPress={() => setShowAutoDarkEndPicker(true)}
+                            disabled={isSavingAutoDark}
+                          >
+                            <ThemedText style={[styles.autoDarkTimeButtonText, { color: autoDarkTimeTextColor }]}>
+                              {autoDarkModeEndTime}
+                            </ThemedText>
+                          </TouchableOpacity>
+                        </View>
+
+                        {showAutoDarkStartPicker && (
+                          <View style={styles.autoDarkPickerContainer}>
+                            <DateTimePicker
+                              mode="time"
+                              value={getDateFromTimeString(autoDarkModeStartTime)}
+                              onChange={handleAutoDarkStartTimeChange}
+                              is24Hour
+                              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                              themeVariant={useLightIcons ? 'dark' : 'light'}
+                              textColor={Platform.OS === 'ios' ? autoDarkTimeTextColor : undefined}
+                            />
+                            {Platform.OS === 'ios' && (
+                              <TouchableOpacity
+                                style={styles.autoDarkPickerDone}
+                                onPress={() => setShowAutoDarkStartPicker(false)}
+                              >
+                                <ThemedText style={styles.autoDarkPickerDoneText}>Fertig</ThemedText>
+                              </TouchableOpacity>
+                            )}
+                          </View>
+                        )}
+
+                        {showAutoDarkEndPicker && (
+                          <View style={styles.autoDarkPickerContainer}>
+                            <DateTimePicker
+                              mode="time"
+                              value={getDateFromTimeString(autoDarkModeEndTime)}
+                              onChange={handleAutoDarkEndTimeChange}
+                              is24Hour
+                              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                              themeVariant={useLightIcons ? 'dark' : 'light'}
+                              textColor={Platform.OS === 'ios' ? autoDarkTimeTextColor : undefined}
+                            />
+                            {Platform.OS === 'ios' && (
+                              <TouchableOpacity
+                                style={styles.autoDarkPickerDone}
+                                onPress={() => setShowAutoDarkEndPicker(false)}
+                              >
+                                <ThemedText style={styles.autoDarkPickerDoneText}>Fertig</ThemedText>
+                              </TouchableOpacity>
+                            )}
+                          </View>
+                        )}
+                      </View>
+                    )}
+                  </LiquidGlassCard>
+
+                  <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
+                    <TouchableOpacity
+                      style={[styles.rowItem, isSyncingLiveActivities && styles.disabledRow]}
+                      onPress={handleOpenLiveActivitiesPopup}
+                      disabled={isSyncingLiveActivities}
+                    >
+                      <View style={styles.rowIcon}>
+                        <IconSymbol name="moon.zzz" size={22} color={primaryIconColor} />
+                      </View>
+                      <View style={styles.rowContent}>
+                        <ThemedText style={styles.rowTitle}>Live Activities</ThemedText>
+                        <ThemedText style={styles.rowDescription}>Status und Optionen anzeigen</ThemedText>
+                      </View>
+                      <View style={styles.trailing}>
+                        {isSyncingLiveActivities ? (
+                          <ActivityIndicator size="small" color={theme.accent} />
+                        ) : (
+                          <IconSymbol name="chevron.right" size={20} color={trailingIconColor} />
+                        )}
+                      </View>
+                    </TouchableOpacity>
                   </LiquidGlassCard>
 
                   {/* Hintergrundbild */}
@@ -566,16 +1052,22 @@ export default function AppSettingsScreen() {
                     {hasCustomBackground && (
                       <>
                         <TouchableOpacity
-                          style={styles.rowItem}
-                          onPress={() => setBackgroundMode(!isDarkBackground)}
+                          style={[styles.rowItem, isBackgroundModeAutoSynced && styles.disabledRow]}
+                          onPress={() => {
+                            if (isBackgroundModeAutoSynced) return;
+                            void setBackgroundMode(!effectiveIsDarkBackground);
+                          }}
+                          disabled={isBackgroundModeAutoSynced}
                         >
                           <View style={styles.rowIcon}>
-                            <IconSymbol name={isDarkBackground ? 'sun.max' : 'moon'} size={24} color={primaryIconColor} />
+                            <IconSymbol name={effectiveIsDarkBackground ? 'sun.max' : 'moon'} size={24} color={primaryIconColor} />
                           </View>
                           <View style={styles.rowContent}>
                             <ThemedText style={styles.rowTitle}>Textfarbe anpassen</ThemedText>
                             <ThemedText style={styles.rowDescription}>
-                              Aktuell: {isDarkBackground ? 'Heller Text (dunkles Bild)' : 'Dunkler Text (helles Bild)'}
+                              {isBackgroundModeAutoSynced
+                                ? `Automatisch: ${effectiveIsDarkBackground ? 'Heller Text (dunkles Bild)' : 'Dunkler Text (helles Bild)'}`
+                                : `Aktuell: ${effectiveIsDarkBackground ? 'Heller Text (dunkles Bild)' : 'Dunkler Text (helles Bild)'}`}
                             </ThemedText>
                           </View>
                           <View style={styles.trailing}>
@@ -770,6 +1262,72 @@ const styles = StyleSheet.create({
   rowTitle: { fontSize: 16, fontWeight: '700' },
   rowDescription: { fontSize: 13, opacity: 0.8, marginTop: 2 },
   trailing: { marginLeft: 12, alignItems: 'center', justifyContent: 'center' },
+  autoDarkTrailing: {
+    marginLeft: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  autoDarkScheduleContainer: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(0,0,0,0.08)',
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 12,
+    gap: 8,
+  },
+  autoDarkScheduleHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  autoDarkScheduleLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    opacity: 0.8,
+  },
+  autoDarkTimeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: 36,
+  },
+  autoDarkTimeTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  autoDarkTimeButton: {
+    minWidth: 84,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.15)',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  autoDarkTimeButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  autoDarkPickerContainer: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.08)',
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+  },
+  autoDarkPickerDone: {
+    alignSelf: 'flex-end',
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    backgroundColor: 'rgba(157,190,187,0.2)',
+  },
+  autoDarkPickerDoneText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
   themeButton: {
     width: 30,
     height: 30,

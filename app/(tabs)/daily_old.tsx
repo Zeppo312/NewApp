@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   SafeAreaView,
   View,
@@ -14,6 +14,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import * as Linking from 'expo-linking';
 import { Colors } from '@/constants/Colors';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { ThemedBackground } from '@/components/ThemedBackground';
@@ -28,6 +29,7 @@ import {
   getBabyCareEntriesForMonth,
   deleteBabyCareEntry,
   stopBabyCareEntryTimer,
+  supabase,
   updateBabyCareEntry,
 } from '@/lib/supabase';
 import {
@@ -54,6 +56,7 @@ import { GlassCard, LiquidGlassCard, LAYOUT_PAD, SECTION_GAP_TOP, SECTION_GAP_BO
 import { useNotifications } from '@/hooks/useNotifications';
 import { usePartnerNotifications } from '@/hooks/usePartnerNotifications';
 import { buildFeedingOverview } from '@/lib/feedingOverview';
+import { sleepActivityService } from '@/lib/sleepActivityService';
 
 // Design Tokens now imported from DesignGuide
 
@@ -68,6 +71,17 @@ const WEEK_COL_WIDTH = Math.floor((WEEK_CONTENT_WIDTH - (COLS - 1) * GUTTER) / C
 const WEEK_COLS_WIDTH = COLS * WEEK_COL_WIDTH;
 const WEEK_LEFTOVER = WEEK_CONTENT_WIDTH - (WEEK_COLS_WIDTH + (COLS - 1) * GUTTER);
 const MAX_BAR_H = 140;
+
+const formatDurationSeconds = (totalSeconds: number): string => {
+  const safe = Math.max(0, Math.floor(totalSeconds));
+  const hours = Math.floor(safe / 3600);
+  const minutes = Math.floor((safe % 3600) / 60);
+  const seconds = safe % 60;
+
+  return [hours, minutes, seconds]
+    .map((value) => value.toString().padStart(2, '0'))
+    .join(':');
+};
 
 type QuickActionType =
   | 'feeding_breast'
@@ -249,6 +263,10 @@ export default function DailyScreen() {
     type: 'BOTTLE' | 'BREAST' | 'SOLIDS' | 'DIAPER';
     start: number;
   } | null>(null);
+  const [isTimerHydrated, setIsTimerHydrated] = useState(false);
+  const lastLiveStopEventRef = useRef<{ url: string; at: number } | null>(null);
+  const handledLiveStopRequestIdRef = useRef(0);
+  const [liveStopRequestId, setLiveStopRequestId] = useState(0);
 
   const [selectedActivityType, setSelectedActivityType] = useState<'feeding' | 'diaper' | 'other'>('feeding');
   const [selectedSubType, setSelectedSubType] = useState<QuickActionType | null>(null);
@@ -275,6 +293,82 @@ export default function DailyScreen() {
   useEffect(() => {
     requestPermissions();
   }, [requestPermissions]);
+
+  const queueLiveStopRequestFromUrl = useCallback((incomingUrl: string | null) => {
+    if (!incomingUrl) return;
+
+    const normalized = incomingUrl.toLowerCase();
+    const targetsDailyView = normalized.includes("daily_old");
+    const hasLiveStopParam = /[?&]livestop=(1|true)(?:&|$)/i.test(incomingUrl);
+    const hasFeedingTypeParam = /[?&]livetype=feeding(?:&|$)/i.test(incomingUrl);
+
+    if (!targetsDailyView || !hasLiveStopParam) return;
+    if (/[?&]livetype=/i.test(incomingUrl) && !hasFeedingTypeParam) return;
+
+    const now = Date.now();
+    const lastEvent = lastLiveStopEventRef.current;
+    if (lastEvent && lastEvent.url === incomingUrl && now - lastEvent.at < 1500) {
+      return;
+    }
+
+    lastLiveStopEventRef.current = { url: incomingUrl, at: now };
+    setLiveStopRequestId((current) => current + 1);
+  }, []);
+
+  const startBreastfeedingLiveActivity = useCallback(async (startMs: number) => {
+    if (!sleepActivityService.isLiveActivitySupported()) {
+      return;
+    }
+
+    try {
+      await sleepActivityService.startFeedingActivity(new Date(startMs), 'BREAST');
+    } catch (error) {
+      console.error('Failed to start feeding live activity:', error);
+    }
+  }, []);
+
+  const endBreastfeedingLiveActivity = useCallback(async (timer: {
+    id: string;
+    type: 'BOTTLE' | 'BREAST' | 'SOLIDS' | 'DIAPER';
+    start: number;
+  } | null) => {
+    if (!timer || timer.type !== 'BREAST') {
+      return;
+    }
+
+    if (!sleepActivityService.isLiveActivitySupported()) {
+      return;
+    }
+
+    try {
+      const elapsedSeconds = Math.max(0, Math.floor((Date.now() - timer.start) / 1000));
+      await sleepActivityService.endFeedingActivity(formatDurationSeconds(elapsedSeconds), timer.type);
+    } catch (error) {
+      console.error('Failed to end feeding live activity:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    const subscription = Linking.addEventListener('url', (event) => {
+      queueLiveStopRequestFromUrl(event.url);
+    });
+
+    Linking.getInitialURL()
+      .then((initialUrl) => {
+        queueLiveStopRequestFromUrl(initialUrl);
+      })
+      .catch((error) => {
+        console.error('Failed to read initial URL for feeding live activity stop:', error);
+      });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [queueLiveStopRequestFromUrl]);
+
+  useEffect(() => {
+    setIsTimerHydrated(false);
+  }, [activeBabyId]);
 
   useEffect(() => {
     if (!isReady || !activeBabyId) return;
@@ -395,6 +489,66 @@ export default function DailyScreen() {
     return latestVolume ?? 120;
   }, [entries, weekEntries, monthEntries]);
 
+  const loadActiveTimer = useCallback(async () => {
+    if (!activeBabyId) {
+      setActiveTimer(null);
+      setIsTimerHydrated(true);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('baby_care_entries')
+        .select('id,entry_type,feeding_type,start_time')
+        .eq('baby_id', activeBabyId)
+        .is('end_time', null)
+        .order('start_time', { ascending: false })
+        .limit(1);
+
+      if (error) {
+        console.error('Error loading active timer:', error);
+        return;
+      }
+
+      const current = data?.[0];
+      if (!current?.id || !current.start_time) {
+        setActiveTimer(null);
+        return;
+      }
+
+      const startMs = new Date(current.start_time).getTime();
+      if (!Number.isFinite(startMs)) {
+        setActiveTimer(null);
+        return;
+      }
+
+      const nextType =
+        current.entry_type === 'diaper'
+          ? 'DIAPER'
+          : current.feeding_type === 'BOTTLE'
+          ? 'BOTTLE'
+          : current.feeding_type === 'SOLIDS'
+          ? 'SOLIDS'
+          : 'BREAST';
+
+      setActiveTimer((prev) => {
+        if (prev && prev.id === current.id && prev.type === nextType && prev.start === startMs) {
+          return prev;
+        }
+
+        return {
+          id: current.id,
+          type: nextType,
+          start: startMs,
+        };
+      });
+    } catch (error) {
+      console.error('Failed to resolve active timer:', error);
+    } finally {
+      setIsTimerHydrated(true);
+    }
+  }, [activeBabyId]);
+
   const loadEntries = async () => {
     if (!activeBabyId) return;
     setIsLoading(true);
@@ -425,9 +579,10 @@ export default function DailyScreen() {
     } catch (error) {
       console.error('Error loading day entries:', error);
       setIsLoading(false);
+    } finally {
+      await loadActiveTimer();
+      setRefreshing(false);
     }
-
-    setRefreshing(false);
   };
 
   const loadWeekEntries = async () => {
@@ -464,6 +619,8 @@ export default function DailyScreen() {
     } catch (error) {
       console.error('Error loading week entries:', error);
       setIsLoading(false);
+    } finally {
+      await loadActiveTimer();
     }
   };
 
@@ -497,6 +654,8 @@ export default function DailyScreen() {
     } catch (error) {
       console.error('Error loading month entries:', error);
       setIsLoading(false);
+    } finally {
+      await loadActiveTimer();
     }
   };
 
@@ -584,11 +743,13 @@ export default function DailyScreen() {
     
     if (selectedActivityType === 'feeding') {
       const feedingType = (payload.feeding_type as 'BREAST' | 'BOTTLE' | 'SOLIDS' | undefined) ?? undefined;
+      const resolvedStartTime = payload.start_time ?? new Date().toISOString();
+      const resolvedEndTime = timerRequested ? null : (payload.end_time ?? resolvedStartTime);
       let data, error;
       if (editingEntry?.id) {
         const res = await updateBabyCareEntry(editingEntry.id, {
-          start_time: payload.start_time,
-          end_time: payload.end_time ?? null,
+          start_time: resolvedStartTime,
+          end_time: resolvedEndTime,
           notes: payload.notes ?? null,
           feeding_type: feedingType,
           feeding_volume_ml: payload.feeding_volume_ml ?? null,
@@ -598,8 +759,8 @@ export default function DailyScreen() {
       } else {
         const res = await addBabyCareEntry({
           entry_type: 'feeding',
-          start_time: payload.start_time,
-          end_time: payload.end_time ?? null,
+          start_time: resolvedStartTime,
+          end_time: resolvedEndTime,
           notes: payload.notes ?? null,
           feeding_type: feedingType,
           feeding_volume_ml: payload.feeding_volume_ml ?? null,
@@ -612,13 +773,19 @@ export default function DailyScreen() {
         return;
       }
       if (timerRequested && feedingType) {
-        const startMs = payload.start_time ? new Date(payload.start_time).getTime() : Date.now();
+        const startMs = new Date(resolvedStartTime).getTime();
         const timerType = feedingType as 'BREAST' | 'BOTTLE' | 'SOLIDS';
-        setActiveTimer({
+        const nextTimer = {
           id: data?.id || editingEntry?.id || `temp_${Date.now()}`,
           type: timerType,
           start: startMs,
-        });
+        };
+
+        setActiveTimer(nextTimer);
+
+        if (timerType === 'BREAST') {
+          await startBreastfeedingLiveActivity(startMs);
+        }
       }
       showSuccessSplash(
         feedingType === 'BREAST' ? '#8E4EC6' : feedingType === 'BOTTLE' ? '#4A90E2' : '#F5A623',
@@ -752,14 +919,18 @@ export default function DailyScreen() {
     }, 4500);
   };
 
-  const handleTimerStop = async () => {
+  const handleTimerStop = useCallback(async () => {
     if (!activeTimer) return;
     if (!activeBabyId) return;
-    const { error } = await stopBabyCareEntryTimer(activeTimer.id, activeBabyId);
+
+    const timerToStop = activeTimer;
+    const { error } = await stopBabyCareEntryTimer(timerToStop.id, activeBabyId);
     if (error) {
       Alert.alert('Fehler', String((error as any)?.message ?? error ?? 'Unbekannter Fehler'));
       return;
     }
+
+    await endBreastfeedingLiveActivity(timerToStop);
     setActiveTimer(null);
 
     // Invalidate cache after timer stop
@@ -775,7 +946,90 @@ export default function DailyScreen() {
     }
 
     Alert.alert('Erfolg', 'Timer gestoppt! ⏹️');
-  };
+  }, [
+    activeBabyId,
+    activeTimer,
+    endBreastfeedingLiveActivity,
+    selectedTab,
+    loadWeekEntries,
+    loadMonthEntries,
+    loadEntries,
+  ]);
+
+  useEffect(() => {
+    if (!sleepActivityService.isLiveActivitySupported()) {
+      return;
+    }
+    if (!isTimerHydrated) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const syncFeedingLiveActivity = async () => {
+      try {
+        if (activeTimer?.type === 'BREAST') {
+          const restored = await sleepActivityService.restoreCurrentFeedingActivity();
+          if (cancelled) return;
+
+          if (!restored) {
+            await sleepActivityService.startFeedingActivity(new Date(activeTimer.start), activeTimer.type);
+            return;
+          }
+
+          const elapsedSeconds = Math.max(0, Math.floor((Date.now() - activeTimer.start) / 1000));
+          await sleepActivityService.updateFeedingActivity(formatDurationSeconds(elapsedSeconds), activeTimer.type);
+        } else {
+          await sleepActivityService.endAllFeedingActivities();
+        }
+      } catch (error) {
+        console.error('Failed to synchronize feeding live activity:', error);
+      }
+    };
+
+    void syncFeedingLiveActivity();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTimer?.id, activeTimer?.start, activeTimer?.type, isTimerHydrated]);
+
+  useEffect(() => {
+    if (!sleepActivityService.isLiveActivitySupported()) {
+      return;
+    }
+    if (!isTimerHydrated || activeTimer?.type !== 'BREAST') {
+      return;
+    }
+
+    const updateElapsedTimeInLiveActivity = async () => {
+      const elapsedSeconds = Math.max(0, Math.floor((Date.now() - activeTimer.start) / 1000));
+      await sleepActivityService.updateFeedingActivity(formatDurationSeconds(elapsedSeconds), activeTimer.type);
+    };
+
+    void updateElapsedTimeInLiveActivity();
+
+    const intervalId = setInterval(() => {
+      void updateElapsedTimeInLiveActivity();
+    }, 60 * 1000);
+
+    return () => clearInterval(intervalId);
+  }, [activeTimer?.id, activeTimer?.start, activeTimer?.type, isTimerHydrated]);
+
+  useEffect(() => {
+    if (liveStopRequestId === 0) return;
+    if (handledLiveStopRequestIdRef.current === liveStopRequestId) return;
+    if (!isTimerHydrated) return;
+
+    handledLiveStopRequestIdRef.current = liveStopRequestId;
+
+    if (!activeTimer?.id || activeTimer.type !== 'BREAST') {
+      console.log('Live Activity stop requested, but no active breastfeeding timer exists.');
+      return;
+    }
+
+    void handleTimerStop();
+  }, [activeTimer?.id, activeTimer?.type, handleTimerStop, isTimerHydrated, liveStopRequestId]);
 
   const handleDeleteEntry = async (id: string) => {
     Alert.alert('Eintrag löschen', 'Möchtest du diesen Eintrag wirklich löschen?', [
@@ -787,6 +1041,11 @@ export default function DailyScreen() {
           if (!activeBabyId) return;
           const { error } = await deleteBabyCareEntry(id, activeBabyId);
           if (error) return;
+
+          if (activeTimer?.id === id) {
+            await endBreastfeedingLiveActivity(activeTimer);
+            setActiveTimer(null);
+          }
 
           // Invalidate cache after delete
           await invalidateDailyCache(activeBabyId);
@@ -1393,8 +1652,10 @@ export default function DailyScreen() {
                 text: 'Ja, verwerfen',
                 style: 'destructive',
                 onPress: async () => {
-                  const { error } = await deleteBabyCareEntry(activeTimer.id, activeBabyId ?? undefined);
+                  const timerToCancel = activeTimer;
+                  const { error } = await deleteBabyCareEntry(timerToCancel.id, activeBabyId ?? undefined);
                   if (!error) {
+                    await endBreastfeedingLiveActivity(timerToCancel);
                     setActiveTimer(null);
                     loadEntries();
                   }

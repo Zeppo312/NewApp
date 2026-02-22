@@ -84,7 +84,7 @@ export function useNotifications() {
 
         // Save token to database
         await savePushToken(tokenData.data);
-        console.log('✅ Push token registered:', tokenData.data);
+        console.log('✅ Push token registered');
       } catch (error) {
         console.error('Failed to get push token:', error);
       }

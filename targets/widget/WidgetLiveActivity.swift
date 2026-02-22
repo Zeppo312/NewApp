@@ -8,21 +8,27 @@ struct SleepActivityAttributes: ActivityAttributes {
         var isTracking: Bool
         var elapsedTimeText: String
         var quality: String?
+        var feedingType: String?
     }
 
     var startTime: String
     var startTimestamp: Double?
     var elapsedTimeText: String?
     var babyName: String?
+    var activityType: String?
+    var feedingType: String?
 }
 
 @available(iOS 16.1, *)
 private enum SleepActivityTheme {
-    static let accent = Color(red: 0.45, green: 0.80, blue: 1.00)
-    static let accentStrong = Color(red: 0.29, green: 0.66, blue: 0.96)
+    static let sleepAccent = Color(red: 0.45, green: 0.80, blue: 1.00)
+    static let sleepAccentStrong = Color(red: 0.29, green: 0.66, blue: 0.96)
+    static let feedingAccent = Color(red: 0.72, green: 0.50, blue: 0.92)
+    static let feedingAccentStrong = Color(red: 0.62, green: 0.40, blue: 0.86)
     static let darkBgTop = Color(red: 0.09, green: 0.13, blue: 0.23)
     static let darkBgBottom = Color(red: 0.03, green: 0.05, blue: 0.10)
-    static let stopButton = Color(red: 0.95, green: 0.53, blue: 0.66)
+    static let sleepStopButton = Color(red: 0.95, green: 0.53, blue: 0.66)
+    static let feedingStopButton = Color(red: 0.89, green: 0.44, blue: 0.70)
 }
 
 @available(iOS 16.1, *)
@@ -66,54 +72,189 @@ private enum SleepActivityDateParser {
 }
 
 @available(iOS 16.1, *)
-private struct SleepActivityMainView: View {
+private enum LiveActivityKind: String {
+    case sleep
+    case feeding
+
+    static func from(_ value: String?) -> LiveActivityKind {
+        guard let normalized = value?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(), !normalized.isEmpty else {
+            return .sleep
+        }
+
+        return LiveActivityKind(rawValue: normalized) ?? .sleep
+    }
+}
+
+@available(iOS 16.1, *)
+private enum FeedingKind: String {
+    case breast = "BREAST"
+    case bottle = "BOTTLE"
+    case solids = "SOLIDS"
+
+    static func from(_ value: String?) -> FeedingKind {
+        guard let normalized = value?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(), !normalized.isEmpty else {
+            return .breast
+        }
+
+        return FeedingKind(rawValue: normalized) ?? .breast
+    }
+}
+
+@available(iOS 16.1, *)
+private struct LiveActivityPresentation {
     let context: ActivityViewContext<SleepActivityAttributes>
 
-    private var trackerURL: URL {
-        URL(string: "com.lottibaby.app://sleep-tracker")!
+    var kind: LiveActivityKind {
+        LiveActivityKind.from(context.attributes.activityType)
     }
 
-    private var stopURL: URL {
-        URL(string: "com.lottibaby.app://sleep-tracker?liveStop=1")!
+    var feedingKind: FeedingKind {
+        FeedingKind.from(context.attributes.feedingType ?? context.state.feedingType)
     }
 
-    private var startDate: Date? {
+    var startDate: Date? {
         SleepActivityDateParser.parse(
             startTime: context.attributes.startTime,
             startTimestamp: context.attributes.startTimestamp
         )
     }
 
-    private var babyName: String {
+    var babyName: String {
         context.attributes.babyName ?? "Baby"
     }
 
-    private var startTimeLabel: String {
+    var trackerURL: URL {
+        switch kind {
+        case .sleep:
+            return URL(string: "com.lottibaby.app://sleep-tracker")!
+        case .feeding:
+            return URL(string: "com.lottibaby.app://daily_old")!
+        }
+    }
+
+    var stopURL: URL {
+        switch kind {
+        case .sleep:
+            return URL(string: "com.lottibaby.app://sleep-tracker?liveStop=1")!
+        case .feeding:
+            return URL(string: "com.lottibaby.app://daily_old?liveStop=1&liveType=feeding")!
+        }
+    }
+
+    var startTimeLabel: String {
         guard let startDate else { return "--:--" }
         return DateFormatter.activityStartFormatter.string(from: startDate)
+    }
+
+    var headerText: String {
+        switch kind {
+        case .sleep:
+            return "\(babyName) schläft seit \(startTimeLabel)"
+        case .feeding:
+            return "\(feedingTitle) seit \(startTimeLabel)"
+        }
+    }
+
+    var centerTitleText: String {
+        switch kind {
+        case .sleep:
+            return "\(babyName) schläft"
+        case .feeding:
+            return feedingTitle
+        }
+    }
+
+    var leadingSystemIcon: String {
+        switch kind {
+        case .sleep:
+            return "moon.fill"
+        case .feeding:
+            return "heart.fill"
+        }
+    }
+
+    var leadingEmoji: String {
+        switch kind {
+        case .sleep:
+            return "\u{1F9F8}"
+        case .feeding:
+            switch feedingKind {
+            case .breast:
+                return "\u{1F931}"
+            case .bottle:
+                return "\u{1F37C}"
+            case .solids:
+                return "\u{1F944}"
+            }
+        }
+    }
+
+    var accent: Color {
+        switch kind {
+        case .sleep:
+            return SleepActivityTheme.sleepAccent
+        case .feeding:
+            return SleepActivityTheme.feedingAccent
+        }
+    }
+
+    var accentStrong: Color {
+        switch kind {
+        case .sleep:
+            return SleepActivityTheme.sleepAccentStrong
+        case .feeding:
+            return SleepActivityTheme.feedingAccentStrong
+        }
+    }
+
+    var stopButtonColor: Color {
+        switch kind {
+        case .sleep:
+            return SleepActivityTheme.sleepStopButton
+        case .feeding:
+            return SleepActivityTheme.feedingStopButton
+        }
+    }
+
+    var feedingTitle: String {
+        switch feedingKind {
+        case .breast:
+            return "\(babyName) stillt"
+        case .bottle:
+            return "\(babyName) trinkt"
+        case .solids:
+            return "\(babyName) isst"
+        }
+    }
+}
+
+@available(iOS 16.1, *)
+private struct SleepActivityMainView: View {
+    let context: ActivityViewContext<SleepActivityAttributes>
+
+    private var presentation: LiveActivityPresentation {
+        LiveActivityPresentation(context: context)
     }
 
     var body: some View {
         ZStack {
             VStack(spacing: 6) {
-                // Header: "Levi schläft seit 21:30"
-                Text("\(babyName) schläft seit \(startTimeLabel)")
+                Text(presentation.headerText)
                     .font(.system(size: 15, weight: .semibold, design: .rounded))
                     .foregroundStyle(.white.opacity(0.70))
 
-                // Timer row: teddy left + centered timer + stop button right
                 HStack(spacing: 12) {
                     ZStack {
                         Circle()
                             .fill(.white.opacity(0.14))
-                        Text("\u{1F9F8}")
+                        Text(presentation.leadingEmoji)
                             .font(.system(size: 24))
                     }
                     .frame(width: 42, height: 42)
                     .accessibilityHidden(true)
 
                     Group {
-                        if let startDate {
+                        if let startDate = presentation.startDate {
                             Text(startDate, style: .timer)
                         } else {
                             Text(context.state.elapsedTimeText)
@@ -126,9 +267,9 @@ private struct SleepActivityMainView: View {
                     .minimumScaleFactor(0.55)
                     .frame(maxWidth: .infinity, alignment: .center)
 
-                    Link(destination: stopURL) {
+                    Link(destination: presentation.stopURL) {
                         Circle()
-                            .fill(SleepActivityTheme.stopButton)
+                            .fill(presentation.stopButtonColor)
                             .frame(width: 42, height: 42)
                             .overlay(
                                 Image(systemName: "stop.fill")
@@ -143,7 +284,7 @@ private struct SleepActivityMainView: View {
             .padding(.horizontal, 20)
             .padding(.vertical, 14)
         }
-        .widgetURL(trackerURL)
+        .widgetURL(presentation.trackerURL)
     }
 }
 
@@ -184,21 +325,16 @@ struct WidgetLiveActivity: Widget {
                 .activityBackgroundTint(SleepActivityTheme.darkBgTop)
                 .activitySystemActionForegroundColor(.white)
         } dynamicIsland: { context in
-            let trackerURL = URL(string: "com.lottibaby.app://sleep-tracker")
-            let stopURL = URL(string: "com.lottibaby.app://sleep-tracker?liveStop=1")
-            let startDate = SleepActivityDateParser.parse(
-                startTime: context.attributes.startTime,
-                startTimestamp: context.attributes.startTimestamp
-            )
+            let presentation = LiveActivityPresentation(context: context)
 
             return DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    Image(systemName: "moon.fill")
-                        .foregroundStyle(SleepActivityTheme.accent)
+                    Image(systemName: presentation.leadingSystemIcon)
+                        .foregroundStyle(presentation.accent)
                 }
 
                 DynamicIslandExpandedRegion(.trailing) {
-                    if let startDate {
+                    if let startDate = presentation.startDate {
                         Text("Seit \(DateFormatter.activityStartFormatter.string(from: startDate))")
                             .font(.system(size: 13, weight: .medium, design: .rounded))
                             .foregroundStyle(.white.opacity(0.70))
@@ -206,14 +342,14 @@ struct WidgetLiveActivity: Widget {
                 }
 
                 DynamicIslandExpandedRegion(.center) {
-                    Text("\(context.attributes.babyName ?? "Baby") schläft")
+                    Text(presentation.centerTitleText)
                         .font(.system(size: 15, weight: .semibold, design: .rounded))
                 }
 
                 DynamicIslandExpandedRegion(.bottom) {
                     ZStack(alignment: .trailing) {
                         Group {
-                            if let startDate {
+                            if let startDate = presentation.startDate {
                                 Text(startDate, style: .timer)
                             } else {
                                 Text(context.state.elapsedTimeText)
@@ -223,38 +359,36 @@ struct WidgetLiveActivity: Widget {
                         .monospacedDigit()
                         .frame(maxWidth: .infinity, alignment: .center)
 
-                        if let stopURL {
-                            Link(destination: stopURL) {
-                                Label("Stop", systemImage: "stop.fill")
-                                    .font(.system(size: 13, weight: .semibold, design: .rounded))
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 6)
-                                    .background(
-                                        Capsule()
-                                            .fill(SleepActivityTheme.stopButton.opacity(0.88))
-                                    )
-                                    .foregroundStyle(.white)
-                            }
-                            .buttonStyle(.plain)
+                        Link(destination: presentation.stopURL) {
+                            Label("Stop", systemImage: "stop.fill")
+                                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(
+                                    Capsule()
+                                        .fill(presentation.stopButtonColor.opacity(0.88))
+                                )
+                                .foregroundStyle(.white)
                         }
+                        .buttonStyle(.plain)
                     }
                     .frame(maxWidth: .infinity)
                 }
             } compactLeading: {
-                Image(systemName: "moon.fill")
+                Image(systemName: presentation.leadingSystemIcon)
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
-                    .foregroundStyle(SleepActivityTheme.accent)
+                    .foregroundStyle(presentation.accent)
             } compactTrailing: {
                 SleepCompactTrailingTimerView(
-                    startDate: startDate,
+                    startDate: presentation.startDate,
                     elapsedFallbackText: context.state.elapsedTimeText
                 )
             } minimal: {
-                Image(systemName: "moon.fill")
-                    .foregroundStyle(SleepActivityTheme.accent)
+                Image(systemName: presentation.leadingSystemIcon)
+                    .foregroundStyle(presentation.accent)
             }
-            .widgetURL(trackerURL)
-            .keylineTint(SleepActivityTheme.accentStrong)
+            .widgetURL(presentation.trackerURL)
+            .keylineTint(presentation.accentStrong)
         }
     }
 }

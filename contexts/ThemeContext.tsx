@@ -6,21 +6,33 @@ import { useAuth } from './AuthContext';
 
 type ThemeMode = 'light' | 'dark' | 'system';
 const AUTO_DARK_MODE_STORAGE_KEY_PREFIX = '@auto_dark_mode_enabled:';
+const AUTO_DARK_MODE_START_TIME_STORAGE_KEY_PREFIX = '@auto_dark_mode_start_time:';
+const AUTO_DARK_MODE_END_TIME_STORAGE_KEY_PREFIX = '@auto_dark_mode_end_time:';
+const DEFAULT_AUTO_DARK_START_TIME = '20:00';
+const DEFAULT_AUTO_DARK_END_TIME = '07:00';
 
 type ThemeContextType = {
   colorScheme: ColorSchemeName;
   themePreference: ThemeMode;
   autoDarkModeEnabled: boolean;
+  autoDarkModeStartTime: string;
+  autoDarkModeEndTime: string;
   setThemePreference: (theme: ThemeMode) => Promise<void>;
   setAutoDarkModeEnabled: (enabled: boolean) => Promise<void>;
+  setAutoDarkModeStartTime: (time: string) => Promise<void>;
+  setAutoDarkModeEndTime: (time: string) => Promise<void>;
 };
 
 const ThemeContext = createContext<ThemeContextType>({
   colorScheme: 'light',
   themePreference: 'light',
   autoDarkModeEnabled: false,
+  autoDarkModeStartTime: DEFAULT_AUTO_DARK_START_TIME,
+  autoDarkModeEndTime: DEFAULT_AUTO_DARK_END_TIME,
   setThemePreference: async () => {},
   setAutoDarkModeEnabled: async () => {},
+  setAutoDarkModeStartTime: async () => {},
+  setAutoDarkModeEndTime: async () => {},
 });
 
 export const useTheme = () => useContext(ThemeContext);
@@ -48,11 +60,46 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const { user, loading: authLoading } = useAuth();
   const [themePreference, setThemePreference] = useState<ThemeMode>('light');
   const [autoDarkModeEnabled, setAutoDarkModeEnabledState] = useState(false);
+  const [autoDarkModeStartTime, setAutoDarkModeStartTimeState] = useState(DEFAULT_AUTO_DARK_START_TIME);
+  const [autoDarkModeEndTime, setAutoDarkModeEndTimeState] = useState(DEFAULT_AUTO_DARK_END_TIME);
   const [colorScheme, setColorScheme] = useState<ColorSchemeName>('light');
 
+  const parseTimeToMinutes = (time: string, fallbackTime: string) => {
+    const match = time.match(/^([01]\d|2[0-3]):([0-5]\d)$/);
+    if (!match) {
+      const fallbackMatch = fallbackTime.match(/^([01]\d|2[0-3]):([0-5]\d)$/);
+      if (!fallbackMatch) {
+        return 0;
+      }
+      const fallbackHours = Number(fallbackMatch[1]);
+      const fallbackMinutes = Number(fallbackMatch[2]);
+      return fallbackHours * 60 + fallbackMinutes;
+    }
+    const hours = Number(match[1]);
+    const minutes = Number(match[2]);
+    return hours * 60 + minutes;
+  };
+
   const isAutoDarkTime = (date: Date) => {
-    const currentHour = date.getHours();
-    return currentHour >= 20 || currentHour < 7;
+    const currentMinutes = date.getHours() * 60 + date.getMinutes();
+    const startMinutes = parseTimeToMinutes(
+      autoDarkModeStartTime,
+      DEFAULT_AUTO_DARK_START_TIME,
+    );
+    const endMinutes = parseTimeToMinutes(
+      autoDarkModeEndTime,
+      DEFAULT_AUTO_DARK_END_TIME,
+    );
+
+    if (startMinutes === endMinutes) {
+      return true;
+    }
+
+    if (startMinutes < endMinutes) {
+      return currentMinutes >= startMinutes && currentMinutes < endMinutes;
+    }
+
+    return currentMinutes >= startMinutes || currentMinutes < endMinutes;
   };
 
   const resolveColorScheme = () => {
@@ -65,6 +112,14 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const getAutoDarkModeStorageKey = (userId: string) => `${AUTO_DARK_MODE_STORAGE_KEY_PREFIX}${userId}`;
+  const getAutoDarkStartTimeStorageKey = (userId: string) =>
+    `${AUTO_DARK_MODE_START_TIME_STORAGE_KEY_PREFIX}${userId}`;
+  const getAutoDarkEndTimeStorageKey = (userId: string) =>
+    `${AUTO_DARK_MODE_END_TIME_STORAGE_KEY_PREFIX}${userId}`;
+
+  const normalizeTimeString = (value: string, fallbackTime: string) => {
+    return /^([01]\d|2[0-3]):([0-5]\d)$/.test(value) ? value : fallbackTime;
+  };
 
   // Laden der gespeicherten Theme-/Auto-Dunkelmodus-Einstellungen, sobald der Auth-Status feststeht.
   useEffect(() => {
@@ -78,14 +133,18 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         if (isMounted) {
           setThemePreference('light');
           setAutoDarkModeEnabledState(false);
+          setAutoDarkModeStartTimeState(DEFAULT_AUTO_DARK_START_TIME);
+          setAutoDarkModeEndTimeState(DEFAULT_AUTO_DARK_END_TIME);
         }
         return;
       }
 
       try {
-        const [settingsResult, savedAutoDarkMode] = await Promise.all([
+        const [settingsResult, savedAutoDarkMode, savedAutoDarkStartTime, savedAutoDarkEndTime] = await Promise.all([
           getAppSettings(),
           AsyncStorage.getItem(getAutoDarkModeStorageKey(user.id)),
+          AsyncStorage.getItem(getAutoDarkStartTimeStorageKey(user.id)),
+          AsyncStorage.getItem(getAutoDarkEndTimeStorageKey(user.id)),
         ]);
         const { data, error } = settingsResult;
         if (error) {
@@ -93,6 +152,12 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           if (isMounted) {
             setThemePreference('light');
             setAutoDarkModeEnabledState(savedAutoDarkMode === 'true');
+            setAutoDarkModeStartTimeState(
+              normalizeTimeString(savedAutoDarkStartTime ?? '', DEFAULT_AUTO_DARK_START_TIME),
+            );
+            setAutoDarkModeEndTimeState(
+              normalizeTimeString(savedAutoDarkEndTime ?? '', DEFAULT_AUTO_DARK_END_TIME),
+            );
           }
           return;
         }
@@ -100,12 +165,20 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         if (isMounted) {
           setThemePreference(data?.theme ?? 'light');
           setAutoDarkModeEnabledState(savedAutoDarkMode === 'true');
+          setAutoDarkModeStartTimeState(
+            normalizeTimeString(savedAutoDarkStartTime ?? '', DEFAULT_AUTO_DARK_START_TIME),
+          );
+          setAutoDarkModeEndTimeState(
+            normalizeTimeString(savedAutoDarkEndTime ?? '', DEFAULT_AUTO_DARK_END_TIME),
+          );
         }
       } catch (err) {
         console.error('Failed to load theme preference:', err);
         if (isMounted) {
           setThemePreference('light');
           setAutoDarkModeEnabledState(false);
+          setAutoDarkModeStartTimeState(DEFAULT_AUTO_DARK_START_TIME);
+          setAutoDarkModeEndTimeState(DEFAULT_AUTO_DARK_END_TIME);
         }
       }
     };
@@ -146,7 +219,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         clearInterval(timer);
       }
     };
-  }, [themePreference, autoDarkModeEnabled]);
+  }, [themePreference, autoDarkModeEnabled, autoDarkModeStartTime, autoDarkModeEndTime]);
 
   // Funktion zum Ändern der Themeneinstellung
   const handleSetThemePreference = async (theme: ThemeMode) => {
@@ -173,14 +246,44 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   };
 
+  const handleSetAutoDarkModeStartTime = async (time: string) => {
+    try {
+      const normalized = normalizeTimeString(time, DEFAULT_AUTO_DARK_START_TIME);
+      setAutoDarkModeStartTimeState(normalized);
+
+      if (user?.id) {
+        await AsyncStorage.setItem(getAutoDarkStartTimeStorageKey(user.id), normalized);
+      }
+    } catch (err) {
+      console.error('Failed to save auto dark mode start time:', err);
+    }
+  };
+
+  const handleSetAutoDarkModeEndTime = async (time: string) => {
+    try {
+      const normalized = normalizeTimeString(time, DEFAULT_AUTO_DARK_END_TIME);
+      setAutoDarkModeEndTimeState(normalized);
+
+      if (user?.id) {
+        await AsyncStorage.setItem(getAutoDarkEndTimeStorageKey(user.id), normalized);
+      }
+    } catch (err) {
+      console.error('Failed to save auto dark mode end time:', err);
+    }
+  };
+
   return (
     <ThemeContext.Provider
       value={{
         colorScheme,
         themePreference,
         autoDarkModeEnabled,
+        autoDarkModeStartTime,
+        autoDarkModeEndTime,
         setThemePreference: handleSetThemePreference,
         setAutoDarkModeEnabled: handleSetAutoDarkModeEnabled,
+        setAutoDarkModeStartTime: handleSetAutoDarkModeStartTime,
+        setAutoDarkModeEndTime: handleSetAutoDarkModeEndTime,
       }}
     >
       {children}

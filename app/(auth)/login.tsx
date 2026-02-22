@@ -110,7 +110,7 @@ export default function LoginScreen() {
       console.log('Starting authentication process...');
 
       if (isRegistering) {
-        console.log('Registering with email:', email);
+        console.log('Registering user');
         // Registrierung mit Supabase
         const { data, error: signUpError } = await signUpWithEmail(email, password);
 
@@ -119,7 +119,10 @@ export default function LoginScreen() {
           throw signUpError;
         }
 
-        console.log('Registration successful:', data);
+        console.log('Registration successful:', {
+          hasUser: !!data?.user,
+          hasSession: !!data?.session,
+        });
 
         // Wenn die Registrierung erfolgreich war
         if (data && data.user) {
@@ -146,7 +149,7 @@ export default function LoginScreen() {
           return;
         }
       } else {
-        console.log('Signing in with email:', email);
+        console.log('Signing in user');
         // Anmeldung mit Supabase
         const { data, error: signInError } = await signInWithEmail(email, password);
 
@@ -155,7 +158,10 @@ export default function LoginScreen() {
           throw signInError;
         }
 
-        console.log('Sign in successful:', data);
+        console.log('Sign in successful:', {
+          hasUser: !!data?.user,
+          hasSession: !!data?.session,
+        });
 
         // Session explizit bestätigen, damit der Root-Guard nicht in einen Login-Redirect fällt
         const session = data?.session ?? await waitForAuthenticatedSession();
@@ -207,7 +213,10 @@ export default function LoginScreen() {
         throw appleError;
       }
       
-      console.log('Apple Sign-In successful:', data);
+      console.log('Apple Sign-In successful:', {
+        hasUser: !!data?.user,
+        hasSession: !!data?.session,
+      });
       
       // Check if this is a new user or existing user
       if (data && data.user) {

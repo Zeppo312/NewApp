@@ -8,7 +8,7 @@ import { ThemedBackground } from '@/components/ThemedBackground';
 import BabySwitcherButton from '@/components/BabySwitcherButton';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import CountdownTimer from '@/components/CountdownTimer';
-import { useRouter } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase, getDueDateWithLinkedUsers } from '@/lib/supabase';
 import { getRecommendations, LottiRecommendation } from '@/lib/supabase/recommendations';
@@ -856,6 +856,10 @@ export default function PregnancyHomeScreen() {
       params: { focus: 'birth-preparation' },
     } as any);
   };
+
+  if (isBabyBorn) {
+    return <Redirect href="/(tabs)/home" />;
+  }
 
   return (
     <ThemedBackground style={styles.backgroundImage}>

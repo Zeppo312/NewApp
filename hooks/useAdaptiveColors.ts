@@ -6,6 +6,7 @@
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useBackground } from '@/contexts/BackgroundContext';
+import { useTheme } from '@/contexts/ThemeContext';
 
 // Spezielle Farben für dunkle Hintergrundbilder (optimiert für Lesbarkeit)
 const darkBackgroundColors = {
@@ -77,23 +78,34 @@ export function useAdaptiveColors(): AdaptiveColors & {
 } {
   const systemColorScheme = useColorScheme() ?? 'light';
   const { hasCustomBackground, isDarkBackground } = useBackground();
+  const { autoDarkModeEnabled } = useTheme();
+
+  // Standardmäßig nur den gespeicherten Bildmodus für echte Hintergrundauswahl nutzen.
+  const baseIsDarkBackground = hasCustomBackground ? isDarkBackground : false;
+
+  // Wenn Auto-Dunkelmodus aktiv ist, folgt der Textmodus automatisch dem
+  // Zeitfenster (dunkel nachts, hell tagsüber).
+  const shouldSyncBackgroundModeWithAutoDark = autoDarkModeEnabled;
+  const effectiveIsDarkBackground = shouldSyncBackgroundModeWithAutoDark
+    ? systemColorScheme === 'dark'
+    : baseIsDarkBackground;
 
   // Wenn ein custom Hintergrund gesetzt ist, verwende die speziellen Farben
   // Ansonsten verwenden wir das System-Farbschema
   const effectiveScheme = hasCustomBackground
-    ? (isDarkBackground ? 'dark' : 'light')
+    ? (effectiveIsDarkBackground ? 'dark' : 'light')
     : systemColorScheme;
 
   const systemColors = Colors[systemColorScheme];
 
   // Bei custom Hintergrund: spezielle optimierte Farben verwenden
   if (hasCustomBackground) {
-    const adaptiveColors = isDarkBackground ? darkBackgroundColors : lightBackgroundColors;
+    const adaptiveColors = effectiveIsDarkBackground ? darkBackgroundColors : lightBackgroundColors;
     return {
       ...adaptiveColors,
       effectiveScheme,
       hasCustomBackground,
-      isDarkBackground,
+      isDarkBackground: effectiveIsDarkBackground,
       systemColors,
     };
   }
@@ -121,7 +133,7 @@ export function useAdaptiveColors(): AdaptiveColors & {
     tabIconSelected: systemColors.tabIconSelected,
     effectiveScheme,
     hasCustomBackground,
-    isDarkBackground,
+    isDarkBackground: effectiveIsDarkBackground,
     systemColors,
   };
 }

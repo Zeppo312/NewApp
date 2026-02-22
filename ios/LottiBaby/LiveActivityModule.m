@@ -28,4 +28,29 @@ RCT_EXTERN_METHOD(getCurrentSleepActivity:(RCTPromiseResolveBlock)resolve
 RCT_EXTERN_METHOD(endAllSleepActivities:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 
+RCT_EXTERN_METHOD(startFeedingActivity:(NSString *)startTimeISO
+                  elapsedTimeText:(NSString *)elapsedTimeText
+                  babyName:(NSString * _Nullable)babyName
+                  feedingType:(NSString * _Nullable)feedingType
+                  resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+
+RCT_EXTERN_METHOD(updateFeedingActivity:(NSString *)activityId
+                  elapsedTimeText:(NSString *)elapsedTimeText
+                  feedingType:(NSString * _Nullable)feedingType
+                  resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+
+RCT_EXTERN_METHOD(endFeedingActivity:(NSString *)activityId
+                  elapsedTimeText:(NSString *)elapsedTimeText
+                  feedingType:(NSString * _Nullable)feedingType
+                  resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+
+RCT_EXTERN_METHOD(getCurrentFeedingActivity:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+
+RCT_EXTERN_METHOD(endAllFeedingActivities:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+
 @end

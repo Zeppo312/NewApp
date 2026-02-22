@@ -49,8 +49,8 @@ export async function registerForPushNotificationsAsync() {
       token = (await Notifications.getExpoPushTokenAsync({
         projectId: Constants.expoConfig?.extra?.eas?.projectId,
       })).data;
-      
-      console.log('Push-Token:', token);
+
+      console.log('Push token retrieved successfully');
     } catch (error) {
       console.error('Fehler beim Abrufen des Push-Tokens:', error);
     }

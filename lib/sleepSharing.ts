@@ -29,8 +29,11 @@ export async function loadAllVisibleSleepEntries(babyId?: string): Promise<{
 
     const allEntries: SleepEntry[] = [];
 
-    // 1) RPC (falls die Funktion korrekt deployed ist)
-    const { data: rpcEntries, error: rpcError } = await supabase.rpc('get_all_visible_sleep_entries');
+    // 1) RPC (explicit parameter to avoid overload ambiguity in PostgREST)
+    const { data: rpcEntries, error: rpcError } = await supabase.rpc(
+      'get_all_visible_sleep_entries',
+      { p_baby_id: babyId ?? null }
+    );
     if (rpcError) {
       console.error('loadAllVisibleSleepEntries: Fehler beim Laden per RPC:', rpcError);
     } else if (rpcEntries) {

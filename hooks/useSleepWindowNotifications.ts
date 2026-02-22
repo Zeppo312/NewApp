@@ -5,9 +5,11 @@ import {
   cancelBabyReminderNotification,
   upsertBabyReminderNotification,
 } from '@/lib/babyReminderNotifications';
-
-const NOTIFICATION_IDENTIFIER = 'sleep-window-reminder';
-const NOTIFICATION_TYPE = 'sleep_window_reminder';
+import {
+  SLEEP_WINDOW_REMINDER_IDENTIFIER,
+  SLEEP_WINDOW_REMINDER_TYPE,
+  cancelLocalSleepWindowReminders,
+} from '@/lib/sleepWindowReminderNotifications';
 
 /**
  * Hook for managing sleep window reminder notifications
@@ -26,7 +28,8 @@ export function useSleepWindowNotifications(
   enabled: boolean = true,
   userId?: string | null,
   babyId?: string | null,
-  currentDevicePushToken?: string | null
+  currentDevicePushToken?: string | null,
+  hasActiveSleepEntry: boolean = false
 ) {
   const lastScheduledRef = useRef<string | null>(null);
   const scheduledNotificationIdRef = useRef<string | null>(null);
@@ -35,33 +38,8 @@ export function useSleepWindowNotifications(
   const hasRemoteChannel = Boolean(userId && babyId && currentDevicePushToken);
 
   const cancelCurrentScheduledNotification = useCallback(async () => {
-    const idsToCancel = new Set<string>();
     const scheduledId = scheduledNotificationIdRef.current;
-    if (scheduledId) {
-      idsToCancel.add(scheduledId);
-    } else {
-      idsToCancel.add(NOTIFICATION_IDENTIFIER);
-    }
-
-    try {
-      const allScheduled = await Notifications.getAllScheduledNotificationsAsync();
-      for (const item of allScheduled) {
-        const type = (item.content.data as any)?.type;
-        if (item.identifier === NOTIFICATION_IDENTIFIER || type === NOTIFICATION_TYPE) {
-          idsToCancel.add(item.identifier);
-        }
-      }
-    } catch (error) {
-      console.error('Failed to load scheduled sleep window reminders:', error);
-    }
-
-    for (const id of idsToCancel) {
-      try {
-        await Notifications.cancelScheduledNotificationAsync(id);
-      } catch (error) {
-        console.error('Failed to cancel sleep window reminder:', error);
-      }
-    }
+    await cancelLocalSleepWindowReminders(scheduledId ? [scheduledId] : []);
 
     scheduledNotificationIdRef.current = null;
   }, []);
@@ -92,7 +70,7 @@ export function useSleepWindowNotifications(
           body,
           scheduleKey,
           payload: {
-            type: 'sleep_window_reminder',
+            type: SLEEP_WINDOW_REMINDER_TYPE,
             recommendedStart: scheduleKey,
             excludeToken: currentDevicePushToken,
           },
@@ -108,13 +86,16 @@ export function useSleepWindowNotifications(
     let isMounted = true;
 
     const syncNotification = async () => {
-      // Cancel if disabled, no prediction, or low confidence
-      if (!enabled || !sleepPrediction || sleepPrediction.confidence < 0.6) {
+      // Cancel if disabled, active sleep is running, no prediction, or low confidence
+      if (!enabled || hasActiveSleepEntry || !sleepPrediction || sleepPrediction.confidence < 0.6) {
         await Promise.all([
           cancelCurrentScheduledNotification(),
           cancelRemoteReminder(),
         ]);
         lastScheduledRef.current = null;
+        if (hasActiveSleepEntry) {
+          console.log('⏸️ Sleep window reminder skipped because an active sleep is running');
+        }
         return;
       }
 
@@ -150,12 +131,12 @@ export function useSleepWindowNotifications(
               sound: true,
               priority: Notifications.AndroidNotificationPriority.HIGH,
               data: {
-                type: 'sleep_window_reminder',
+                type: SLEEP_WINDOW_REMINDER_TYPE,
                 recommendedStart: recommendedStart.toISOString(),
                 confidence: sleepPrediction.confidence,
               },
             },
-            identifier: NOTIFICATION_IDENTIFIER,
+            identifier: SLEEP_WINDOW_REMINDER_IDENTIFIER,
             trigger: null,
           });
 
@@ -198,12 +179,12 @@ export function useSleepWindowNotifications(
           sound: true,
           priority: Notifications.AndroidNotificationPriority.HIGH,
           data: {
-            type: 'sleep_window_reminder',
+            type: SLEEP_WINDOW_REMINDER_TYPE,
             recommendedStart: recommendedStart.toISOString(),
             confidence: sleepPrediction.confidence,
           },
         },
-        identifier: NOTIFICATION_IDENTIFIER,
+        identifier: SLEEP_WINDOW_REMINDER_IDENTIFIER,
         trigger: {
           type: Notifications.SchedulableTriggerInputTypes.DATE,
           date: fifteenMinBefore,
@@ -240,6 +221,7 @@ export function useSleepWindowNotifications(
   }, [
     sleepPrediction,
     enabled,
+    hasActiveSleepEntry,
     cancelCurrentScheduledNotification,
     cancelRemoteReminder,
     hasRemoteChannel,

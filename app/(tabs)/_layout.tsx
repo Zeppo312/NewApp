@@ -1,4 +1,4 @@
-import { Tabs, usePathname, useRouter } from 'expo-router';
+import { Tabs, useRouter, useSegments } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Platform, View, ActivityIndicator } from 'react-native';
 
@@ -12,12 +12,15 @@ import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 
 export default function TabLayout() {
   const router = useRouter();
-  const pathname = usePathname();
+  const segments = useSegments();
   const colorScheme = useColorScheme();
   const { isBabyBorn, isLoading, isResolved } = useBabyStatus();
   const [hasInitialResolution, setHasInitialResolution] = useState(false);
   const theme = Colors[colorScheme ?? 'light'];
   const adaptiveColors = useAdaptiveColors();
+  const currentRoute = typeof segments[segments.length - 1] === 'string'
+    ? segments[segments.length - 1]
+    : null;
 
   useEffect(() => {
     if (isResolved) {
@@ -28,31 +31,31 @@ export default function TabLayout() {
   useEffect(() => {
     if (!hasInitialResolution || isLoading || !isResolved) return;
 
-    if (pathname === '/(tabs)/diary') {
+    if (currentRoute === 'diary') {
       router.replace(isBabyBorn ? '/(tabs)/home' : '/(tabs)/pregnancy-home');
       return;
     }
 
     const pregnancyOnlyRoutes = new Set([
-      '/(tabs)/countdown',
-      '/(tabs)/index',
-      '/(tabs)/pregnancy-home',
+      'countdown',
+      'index',
+      'pregnancy-home',
     ]);
     const babyOnlyRoutes = new Set([
-      '/(tabs)/sleep-tracker',
-      '/(tabs)/daily_old',
-      '/(tabs)/home',
+      'sleep-tracker',
+      'daily_old',
+      'home',
     ]);
 
-    if (isBabyBorn && pregnancyOnlyRoutes.has(pathname)) {
+    if (isBabyBorn && currentRoute && pregnancyOnlyRoutes.has(currentRoute)) {
       router.replace('/(tabs)/home');
       return;
     }
 
-    if (!isBabyBorn && babyOnlyRoutes.has(pathname)) {
+    if (!isBabyBorn && currentRoute && babyOnlyRoutes.has(currentRoute)) {
       router.replace('/(tabs)/pregnancy-home');
     }
-  }, [hasInitialResolution, isBabyBorn, isLoading, isResolved, pathname, router]);
+  }, [currentRoute, hasInitialResolution, isBabyBorn, isLoading, isResolved, router]);
 
   if (!hasInitialResolution && (isLoading || !isResolved)) {
     return (

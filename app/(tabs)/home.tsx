@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Animated, Easing, StyleSheet, ScrollView, View, TouchableOpacity, Text, SafeAreaView, StatusBar, Image, ActivityIndicator, RefreshControl, Alert, Platform, StyleProp, ViewStyle } from 'react-native';
 import { CachedImage } from '@/components/CachedImage';
-import { useRouter } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useFocusEffect } from '@react-navigation/native';
 import { ThemedText } from '@/components/ThemedText';
@@ -10,6 +10,7 @@ import { ThemedBackground } from '@/components/ThemedBackground';
 import { Colors } from '@/constants/Colors';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { useAuth } from '@/contexts/AuthContext';
+import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Canvas, RoundedRect, LinearGradient as SkiaLinearGradient, RadialGradient, Circle, vec } from '@shopify/react-native-skia';
@@ -259,6 +260,7 @@ export default function HomeScreen() {
   const glassBlurBg = isDark ? 'rgba(0, 0, 0, 0.25)' : 'rgba(255, 255, 255, 0.35)';
   const { user } = useAuth();
   const { activeBabyId } = useActiveBaby();
+  const { isBabyBorn } = useBabyStatus();
   const router = useRouter();
   const DEFAULT_OVERVIEW_HEIGHT = 230;
   const PRODUCT_ROTATION_INITIAL_DELAY_MS = 10000;
@@ -1457,6 +1459,10 @@ export default function HomeScreen() {
       </View>
     );
   };
+
+  if (!isBabyBorn) {
+    return <Redirect href="/(tabs)/pregnancy-home" />;
+  }
 
   return (
     <ThemedBackground style={styles.backgroundImage}>

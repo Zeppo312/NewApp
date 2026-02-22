@@ -120,7 +120,7 @@ export default function VerifyOTPScreen() {
     setIsLoading(true);
 
     try {
-      console.log('Verifying OTP:', code, 'for email:', email);
+      console.log('Verifying OTP code...');
       const { data, error } = await verifyOTPToken(email, code);
       
       if (error) {
@@ -139,7 +139,10 @@ export default function VerifyOTPScreen() {
         return;
       }
 
-      console.log('OTP verification successful:', data);
+      console.log('OTP verification successful:', {
+        hasUser: !!data?.user,
+        hasSession: !!data?.session,
+      });
       
       if (data.user) {
         Alert.alert(
