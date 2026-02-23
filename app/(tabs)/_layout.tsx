@@ -1,4 +1,5 @@
 import { Tabs, useRouter, useSegments } from 'expo-router';
+import { useNavigation } from '@react-navigation/native';
 import React, { useEffect, useState } from 'react';
 import { Platform, View, ActivityIndicator } from 'react-native';
 
@@ -16,11 +17,25 @@ export default function TabLayout() {
   const colorScheme = useColorScheme();
   const { isBabyBorn, isLoading, isResolved } = useBabyStatus();
   const [hasInitialResolution, setHasInitialResolution] = useState(false);
+  const [isNavigatorReady, setIsNavigatorReady] = useState(false);
   const theme = Colors[colorScheme ?? 'light'];
   const adaptiveColors = useAdaptiveColors();
+  const navigation = useNavigation();
   const currentRoute = typeof segments[segments.length - 1] === 'string'
     ? segments[segments.length - 1]
     : null;
+
+  // Navigator-Ready-State tracken
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('state', () => {
+      setIsNavigatorReady(true);
+    });
+    // Falls bereits ready (state existiert schon)
+    if (navigation.getState()) {
+      setIsNavigatorReady(true);
+    }
+    return unsubscribe;
+  }, [navigation]);
 
   useEffect(() => {
     if (isResolved) {
@@ -29,7 +44,7 @@ export default function TabLayout() {
   }, [isResolved]);
 
   useEffect(() => {
-    if (!hasInitialResolution || isLoading || !isResolved) return;
+    if (!hasInitialResolution || isLoading || !isResolved || !isNavigatorReady) return;
 
     if (currentRoute === 'diary') {
       router.replace(isBabyBorn ? '/(tabs)/home' : '/(tabs)/pregnancy-home');
@@ -55,9 +70,9 @@ export default function TabLayout() {
     if (!isBabyBorn && currentRoute && babyOnlyRoutes.has(currentRoute)) {
       router.replace('/(tabs)/pregnancy-home');
     }
-  }, [currentRoute, hasInitialResolution, isBabyBorn, isLoading, isResolved, router]);
+  }, [currentRoute, hasInitialResolution, isBabyBorn, isLoading, isNavigatorReady, isResolved, router]);
 
-  if (!hasInitialResolution && (isLoading || !isResolved)) {
+  if (!hasInitialResolution && (isLoading || !isResolved || !isNavigatorReady)) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
         <ActivityIndicator size="large" color={theme.accent} />

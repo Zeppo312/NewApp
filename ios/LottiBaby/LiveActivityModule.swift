@@ -271,7 +271,11 @@ class LiveActivityModule: NSObject {
       return
     }
 
-    guard let activity = Activity<SleepActivityAttributes>.activities.first(where: { matches($0, type: .sleep) }) else {
+    // Nur aktive Activities zurückgeben (nicht bereits beendete/.ended),
+    // damit die Restore-Logik in JS korrekt entscheiden kann.
+    guard let activity = Activity<SleepActivityAttributes>.activities.first(where: {
+      matches($0, type: .sleep) && $0.activityState == .active
+    }) else {
       resolve(nil)
       return
     }
@@ -432,7 +436,10 @@ class LiveActivityModule: NSObject {
       return
     }
 
-    guard let activity = Activity<SleepActivityAttributes>.activities.first(where: { matches($0, type: .feeding) }) else {
+    // Nur aktive Activities zurückgeben (nicht bereits beendete/.ended)
+    guard let activity = Activity<SleepActivityAttributes>.activities.first(where: {
+      matches($0, type: .feeding) && $0.activityState == .active
+    }) else {
       resolve(nil)
       return
     }

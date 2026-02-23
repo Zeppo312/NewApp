@@ -12,7 +12,7 @@ import * as TaskManager from 'expo-task-manager';
 
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
-import { BabyStatusProvider } from '@/contexts/BabyStatusContext';
+import { BabyStatusProvider, useBabyStatus } from '@/contexts/BabyStatusContext';
 import { ActiveBabyProvider, useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { ThemeProvider as AppThemeProvider } from '@/contexts/ThemeContext';
 import { NavigationProvider } from '@/contexts/NavigationContext';
@@ -92,6 +92,7 @@ function RootLayoutNav() {
   const { loading, user } = useAuth();
   const userId = user?.id ?? null;
   const [initialRoute, setInitialRoute] = useState<string | null>(null);
+  const { isResolved: isBabyStatusResolved } = useBabyStatus();
   const { requestPermissions, expoPushToken } = useNotifications();
   const { activeBabyId } = useActiveBaby();
   const { activeBackend } = useBackend();
@@ -335,6 +336,14 @@ function RootLayoutNav() {
     }
   }, [loading]);
 
+  // Splash-Screen erst ausblenden, wenn Auth UND Baby-Status aufgelöst sind.
+  // Verhindert das kurze Aufblitzen des Schwangerschafts-Modus beim App-Start.
+  useEffect(() => {
+    if (!loading && isBabyStatusResolved) {
+      SplashScreen.hideAsync().catch(() => {});
+    }
+  }, [loading, isBabyStatusResolved]);
+
   // Zeige einen Ladeindikator, während der Authentifizierungsstatus geprüft wird
   if (loading || !initialRoute) {
     return (
@@ -434,16 +443,8 @@ export default Sentry.wrap(function RootLayout() {
     prepare();
   }, [loaded]);
 
-  // Ausblenden des Splash-Screens, wenn die App bereit ist
-  useEffect(() => {
-    if (appIsReady) {
-      try {
-        SplashScreen.hideAsync();
-      } catch (error) {
-        console.error('Error hiding splash screen:', error);
-      }
-    }
-  }, [appIsReady]);
+  // Splash-Screen wird in RootLayoutNav ausgeblendet, sobald Auth + Baby-Status resolved sind.
+  // Dadurch wird verhindert, dass der falsche Modus kurz aufblitzt.
 
   // Anzeigen eines Ladeindikators, wenn die App noch nicht bereit ist
   if (!appIsReady) {

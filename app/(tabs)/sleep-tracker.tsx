@@ -1991,12 +1991,6 @@ export default function SleepTrackerScreen() {
       const classifiedEntry = classifySleepEntry(entry, period);
       setActiveSleepEntry(classifiedEntry);
 
-      try {
-        await sleepActivityService.startSleepActivity(now, babyName);
-      } catch (liveActivityError) {
-        console.error('Failed to start sleep live activity:', liveActivityError);
-      }
-
       if (predictionRef.current) {
         try {
           // Verwende babyId statt userId für gemeinsame Personalization zwischen Partnern
@@ -2827,9 +2821,39 @@ export default function SleepTrackerScreen() {
     }
   };
 
-  const handleDeleteNightSegment = (entryId: string) => {
-    if (!sleepService || !user?.id) return;
-    handleDeleteEntry(entryId);
+  const handleDeleteNightGroup = async (entryIds: string[]): Promise<boolean> => {
+    if (!sleepService || !user?.id) return false;
+
+    const ids = Array.from(new Set(entryIds.filter((id) => typeof id === 'string' && id.length > 0)));
+    if (ids.length === 0) return false;
+
+    setIsSplittingSegment(true);
+    try {
+      const results = await Promise.all(ids.map((entryId) => sleepService.deleteEntry(entryId)));
+      const failedPrimary = results.filter((result) => result.primary.error);
+
+      if (failedPrimary.length > 0) {
+        console.error('[SleepTracker] Night group delete failed:', failedPrimary.map((item) => item.primary.error));
+        Alert.alert('Fehler', 'Nachtschlaf konnte nicht vollständig gelöscht werden.');
+        return false;
+      }
+
+      const failedSecondary = results.filter((result) => result.secondary.error);
+      if (failedSecondary.length > 0) {
+        console.warn('[SleepTracker] Secondary backend delete failed for night group:', failedSecondary.map((item) => item.secondary.error));
+      }
+
+      await invalidateCacheAfterAction(`sleep_history_${activeBackend}_${activeBabyId || 'default'}`);
+      await loadSleepData();
+      Alert.alert('Erfolg', 'Nachtschlaf wurde gelöscht.');
+      return true;
+    } catch (error) {
+      console.error('[SleepTracker] Unexpected night group delete error:', error);
+      Alert.alert('Fehler', 'Nachtschlaf konnte nicht gelöscht werden.');
+      return false;
+    } finally {
+      setIsSplittingSegment(false);
+    }
   };
 
 
@@ -4672,7 +4696,7 @@ export default function SleepTrackerScreen() {
             onSplit={handleSplitNightSegment}
             onMerge={handleMergeNightSegments}
             onAdjustBoundary={handleAdjustNightBoundary}
-            onDeleteSegment={handleDeleteNightSegment}
+            onDeleteNightGroup={handleDeleteNightGroup}
             isSaving={isSplittingSegment}
           />
         )}

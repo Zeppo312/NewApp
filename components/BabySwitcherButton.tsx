@@ -39,6 +39,21 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
   const textColor = isDark ? Colors.dark.text : '#7D5A50';
   const subtitleColor = isDark ? Colors.dark.textTertiary : '#A8978E';
   const rowBgColor = isDark ? Colors.dark.cardDark : '#FFFFFF';
+  const backdropColor = isDark ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.3)';
+  const modalBorderColor = isDark ? 'rgba(233, 216, 194, 0.22)' : 'rgba(125, 90, 80, 0.08)';
+  const rowBorderColor = isDark ? 'rgba(233, 216, 194, 0.2)' : 'rgba(125, 90, 80, 0.1)';
+  const activeRowBorderColor = isDark ? 'rgba(233, 201, 182, 0.55)' : '#E9C9B6';
+  const activeRowBgColor = isDark ? 'rgba(233, 201, 182, 0.16)' : 'rgba(233, 201, 182, 0.2)';
+  const rowFallbackBgColor = isDark ? 'rgba(248, 240, 229, 0.12)' : 'rgba(125, 90, 80, 0.08)';
+  const sectionDividerColor = isDark ? 'rgba(233, 216, 194, 0.18)' : 'rgba(125, 90, 80, 0.1)';
+  const actionIconColor = isDark ? 'rgba(248, 240, 229, 0.72)' : 'rgba(125, 90, 80, 0.55)';
+  const activeStateIconColor = isDark ? '#F2D0B9' : '#E9C9B6';
+  const primaryButtonBgColor = isDark ? '#DEC1AE' : '#E9C9B6';
+  const primaryButtonTextColor = isDark ? Colors.light.textPrimary : textColor;
+  const secondaryButtonBgColor = isDark ? 'rgba(248, 240, 229, 0.12)' : 'rgba(233, 201, 182, 0.25)';
+  const secondaryButtonBorderColor = isDark ? 'rgba(233, 216, 194, 0.35)' : 'rgba(125, 90, 80, 0.25)';
+  const secondaryButtonTextColor = isDark ? Colors.dark.text : textColor;
+  const triggerBgColor = isDark ? 'rgba(248, 240, 229, 0.16)' : 'rgba(255, 255, 255, 0.6)';
   const router = useRouter();
   const { user } = useAuth();
   const {
@@ -325,6 +340,7 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
               width: size,
               height: size,
               borderRadius: size / 2,
+              backgroundColor: triggerBgColor,
             },
           ]}
           onPress={() => setModalOpen(true)}
@@ -356,8 +372,14 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
       )}
 
       <Modal visible={modalIsOpen} transparent animationType="fade" onRequestClose={() => setModalOpen(false)}>
-        <Pressable style={styles.modalBackdrop} onPress={() => setModalOpen(false)}>
-          <Pressable style={[styles.modalCard, { backgroundColor: modalBgColor }]} onPress={(event) => event.stopPropagation()}>
+        <Pressable style={[styles.modalBackdrop, { backgroundColor: backdropColor }]} onPress={() => setModalOpen(false)}>
+          <Pressable
+            style={[
+              styles.modalCard,
+              { backgroundColor: modalBgColor, borderColor: modalBorderColor, shadowOpacity: isDark ? 0.28 : 0.1 },
+            ]}
+            onPress={(event) => event.stopPropagation()}
+          >
             <View style={styles.modalHeader}>
               <ThemedText style={[styles.modalTitle, { color: textColor }]}>Kind auswählen</ThemedText>
               <TouchableOpacity onPress={() => setModalOpen(false)}>
@@ -385,7 +407,11 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
                 return (
                   <TouchableOpacity
                     key={baby.id ?? `${label}-${index}`}
-                    style={[styles.babyRow, { backgroundColor: rowBgColor }, isActive && styles.babyRowActive]}
+                    style={[
+                      styles.babyRow,
+                      { backgroundColor: rowBgColor, borderColor: rowBorderColor },
+                      isActive && { borderColor: activeRowBorderColor, backgroundColor: activeRowBgColor },
+                    ]}
                     onPress={() => baby.id && handleSelectBaby(baby.id)}
                     disabled={Boolean(deletingBabyId)}
                   >
@@ -396,7 +422,7 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
                         showLoader={false}
                       />
                     ) : (
-                      <View style={[styles.babyRowAvatar, styles.babyRowFallback]}>
+                      <View style={[styles.babyRowAvatar, styles.babyRowFallback, { backgroundColor: rowFallbackBgColor }]}>
                         <ThemedText style={[styles.babyRowInitial, { color: textColor }]}>
                           {label.charAt(0).toUpperCase()}
                         </ThemedText>
@@ -407,7 +433,7 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
                       {isActive && <ThemedText style={[styles.babyRowSubtitle, { color: subtitleColor }]}>Aktiv</ThemedText>}
                     </View>
                     {isActive && (
-                      <IconSymbol name="checkmark.circle.fill" size={18} color="#E9C9B6" />
+                      <IconSymbol name="checkmark.circle.fill" size={18} color={activeStateIconColor} />
                     )}
                     {baby.id && (
                       <TouchableOpacity
@@ -424,7 +450,7 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
                         <IconSymbol
                           name="ellipsis.circle.fill"
                           size={18}
-                          color={isDark ? 'rgba(255,255,255,0.55)' : 'rgba(125, 90, 80, 0.55)'}
+                          color={actionIconColor}
                         />
                       </TouchableOpacity>
                     )}
@@ -433,23 +459,23 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
               })}
             </View>
 
-            <View style={[styles.photoSection, isDark && { borderTopColor: Colors.dark.border }]}>
+            <View style={[styles.photoSection, { borderTopColor: sectionDividerColor }]}>
               <ThemedText style={[styles.photoSectionTitle, { color: textColor }]}>Aktives Kind</ThemedText>
               <TouchableOpacity
-                style={[styles.photoButton, isChangingPhoto && styles.createButtonDisabled]}
+                style={[styles.photoButton, { backgroundColor: primaryButtonBgColor }, isChangingPhoto && styles.createButtonDisabled]}
                 onPress={handleChangePhoto}
                 disabled={!activeBabyId || isChangingPhoto}
               >
-                <ThemedText style={[styles.photoButtonText, { color: textColor }]}>
+                <ThemedText style={[styles.photoButtonText, { color: primaryButtonTextColor }]}>
                   {isChangingPhoto ? 'Bild wird aktualisiert...' : 'Bild ändern'}
                 </ThemedText>
               </TouchableOpacity>
             </View>
 
-            <View style={[styles.viewModeSection, isDark && { borderTopColor: Colors.dark.border }]}>
+            <View style={[styles.viewModeSection, { borderTopColor: sectionDividerColor }]}>
               <ThemedText style={[styles.viewModeTitle, { color: textColor }]}>Ansicht</ThemedText>
-              <TouchableOpacity style={styles.viewModeButton} onPress={handleSwitchViewMode}>
-                <ThemedText style={[styles.viewModeButtonText, { color: textColor }]}>
+              <TouchableOpacity style={[styles.viewModeButton, { backgroundColor: primaryButtonBgColor }]} onPress={handleSwitchViewMode}>
+                <ThemedText style={[styles.viewModeButtonText, { color: primaryButtonTextColor }]}>
                   {isBabyBorn ? 'Schwangerschaftsmodus anschauen' : 'Babymodus anschauen'}
                 </ThemedText>
               </TouchableOpacity>
@@ -460,23 +486,27 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
               )}
             </View>
 
-            <View style={[styles.newBabySection, isDark && { borderTopColor: Colors.dark.border }]}>
+            <View style={[styles.newBabySection, { borderTopColor: sectionDividerColor }]}>
               <ThemedText style={[styles.newBabyTitle, { color: textColor }]}>Neu anlegen</ThemedText>
               <TouchableOpacity
-                style={[styles.createButton, isCreatingBaby && styles.createButtonDisabled]}
+                style={[styles.createButton, { backgroundColor: primaryButtonBgColor }, isCreatingBaby && styles.createButtonDisabled]}
                 onPress={handleCreateBaby}
                 disabled={isCreatingBaby}
               >
-                <ThemedText style={[styles.createButtonText, { color: textColor }]}>
+                <ThemedText style={[styles.createButtonText, { color: primaryButtonTextColor }]}>
                   {isCreatingBaby ? 'Wird angelegt...' : 'Kind anlegen'}
                 </ThemedText>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.secondaryActionButton, (isCreatingPregnancy || isCreatingBaby) && styles.createButtonDisabled]}
+                style={[
+                  styles.secondaryActionButton,
+                  { borderColor: secondaryButtonBorderColor, backgroundColor: secondaryButtonBgColor },
+                  (isCreatingPregnancy || isCreatingBaby) && styles.createButtonDisabled,
+                ]}
                 onPress={handleOpenPregnancySetup}
                 disabled={isCreatingPregnancy || isCreatingBaby}
               >
-                <ThemedText style={[styles.secondaryActionButtonText, { color: textColor }]}>
+                <ThemedText style={[styles.secondaryActionButtonText, { color: secondaryButtonTextColor }]}>
                   {isCreatingPregnancy ? 'Wird vorbereitet...' : 'Schwangerschaft anlegen'}
                 </ThemedText>
               </TouchableOpacity>
@@ -523,6 +553,8 @@ const styles = StyleSheet.create({
   modalCard: {
     backgroundColor: '#FFF7F3',
     borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'transparent',
     padding: 16,
     shadowColor: '#000',
     shadowOpacity: 0.1,
@@ -566,10 +598,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: 'rgba(125, 90, 80, 0.1)',
-  },
-  babyRowActive: {
-    borderColor: '#E9C9B6',
-    backgroundColor: 'rgba(233, 201, 182, 0.2)',
   },
   babyRowAvatar: {
     width: 34,

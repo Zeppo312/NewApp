@@ -170,7 +170,11 @@ export const BabyStatusProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       if (showLoading) {
         setIsLoading(true);
       }
-      setIsResolved(false);
+      // Nur isResolved zurücksetzen wenn kein Cache erwartet wird,
+      // damit isBabyBorn nicht kurz auf false springt und ein falsches Routing auslöst.
+      if (!preferCache) {
+        setIsResolved(false);
+      }
 
       let hasCachedValue = false;
       if (preferCache) {

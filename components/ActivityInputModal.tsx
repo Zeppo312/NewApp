@@ -185,9 +185,22 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
     if (initKeyRef.current === initKey) return;
     initKeyRef.current = initKey;
 
-    const now = date || new Date();
-    setStartTime(initialData?.start_time ? new Date(initialData.start_time) : now);
-    setEndTime(initialData?.end_time ? new Date(initialData.end_time) : null);
+    const safeDate = (value: Date | undefined | null): Date => {
+      if (!value || !Number.isFinite(value.getTime())) return new Date();
+      return value;
+    };
+    const safeParsed = (iso: string | null | undefined): Date | null => {
+      if (!iso) return null;
+      const d = new Date(iso);
+      return Number.isFinite(d.getTime()) ? d : null;
+    };
+
+    const now = safeDate(date);
+    // Startuhrzeit auf den ausgewählten Tag setzen, Uhrzeit aus dem ISO-String oder aktuelle Uhrzeit
+    const parsedStart = safeParsed(initialData?.start_time);
+    setStartTime(parsedStart ?? now);
+    const parsedEnd = safeParsed(initialData?.end_time);
+    setEndTime(parsedEnd);
     setEndTimeVisible(!!initialData?.end_time);
     setNotes(initialData?.notes ?? '');
     setNotesVisible(false);

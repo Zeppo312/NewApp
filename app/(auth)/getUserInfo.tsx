@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View, TouchableOpacity, TextInput, Alert, ImageBackground, SafeAreaView, StatusBar, Platform, ActivityIndicator, Image, KeyboardAvoidingView, ScrollView, Keyboard, TouchableWithoutFeedback, InputAccessoryView } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
@@ -28,6 +28,9 @@ type StepKey =
   | 'babyPhoto'
   | 'background'
   | 'summary';
+
+const MIN_VALID_PROFILE_DATE_YEAR = 2000;
+const MIN_VALID_PROFILE_DATE = new Date(MIN_VALID_PROFILE_DATE_YEAR, 0, 1);
 
 const ONBOARDING_PRESET_OPTIONS: ReadonlyArray<{ id: BackgroundPreset; label: string }> = [
   { id: 'default', label: 'Standard' },
@@ -74,9 +77,43 @@ export default function GetUserInfoScreen() {
 
   const parseSafeDate = (value: unknown): Date | null => {
     if (value === null || value === undefined) return null;
-    const parsed = new Date(value as string | number | Date);
-    if (Number.isNaN(parsed.getTime()) || parsed.getFullYear() < 2000) return null;
+
+    let parsed: Date;
+    if (value instanceof Date) {
+      parsed = new Date(value.getTime());
+    } else if (typeof value === 'number') {
+      const timestamp = Math.abs(value) < 1_000_000_000_000 ? value * 1000 : value;
+      parsed = new Date(timestamp);
+    } else if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) return null;
+
+      if (/^-?\d+$/.test(trimmed)) {
+        const numericValue = Number(trimmed);
+        const timestamp = Math.abs(numericValue) < 1_000_000_000_000 ? numericValue * 1000 : numericValue;
+        parsed = new Date(timestamp);
+      } else {
+        parsed = new Date(trimmed);
+      }
+    } else {
+      return null;
+    }
+
+    if (Number.isNaN(parsed.getTime()) || parsed.getFullYear() < MIN_VALID_PROFILE_DATE_YEAR) return null;
     return parsed;
+  };
+
+  const getSafePickerDate = (value: unknown, fallback: Date, maximumDate?: Date): Date => {
+    const parsed = parseSafeDate(value) ?? fallback;
+    const candidate = new Date(parsed.getTime());
+
+    if (candidate < MIN_VALID_PROFILE_DATE) {
+      return new Date(MIN_VALID_PROFILE_DATE.getTime());
+    }
+    if (maximumDate && candidate > maximumDate) {
+      return new Date(maximumDate.getTime());
+    }
+    return candidate;
   };
 
   const toSafeIsoString = (value: Date | null): string | null => {
@@ -120,6 +157,8 @@ export default function GetUserInfoScreen() {
     isBabyBorn?: boolean | null;
   } | null>(null);
 
+  const scrollViewRef = useRef<ScrollView>(null);
+
   // Schrittweise Abfrage
   const stepOrder: StepKey[] = ['firstName', 'lastName', 'role', 'invitation', 'babyStatus', 'dates', 'babyInfo', 'babyPhoto', 'background', 'summary'];
   const shouldShowInvitationStep = !hasPrefilledInvitationCode
@@ -148,6 +187,11 @@ export default function GetUserInfoScreen() {
       setCurrentStep(Math.max(0, onboardingSteps.length - 1));
     }
   }, [currentStep, onboardingSteps.length]);
+
+  // Bei Schrittwechsel nach oben scrollen
+  useEffect(() => {
+    scrollViewRef.current?.scrollTo({ y: 0, animated: false });
+  }, [currentStep]);
 
   useEffect(() => {
     if (prefilledInvitationCode) {
@@ -260,8 +304,11 @@ export default function GetUserInfoScreen() {
   };
 
   // Handler für Änderungen am Geburtstermin
-  const handleDueDateChange = (_: any, selectedDate?: Date) => {
-    setShowDueDatePicker(Platform.OS === 'ios');
+  const handleDueDateChange = (event: any, selectedDate?: Date) => {
+    if (Platform.OS !== 'ios') {
+      setShowDueDatePicker(false);
+    }
+    if (event?.type === 'dismissed') return;
     const validDate = parseSafeDate(selectedDate ?? null);
     if (validDate) {
       setDueDate(validDate);
@@ -269,8 +316,11 @@ export default function GetUserInfoScreen() {
   };
 
   // Handler für Änderungen am Geburtsdatum
-  const handleBirthDateChange = (_: any, selectedDate?: Date) => {
-    setShowBirthDatePicker(Platform.OS === 'ios');
+  const handleBirthDateChange = (event: any, selectedDate?: Date) => {
+    if (Platform.OS !== 'ios') {
+      setShowBirthDatePicker(false);
+    }
+    if (event?.type === 'dismissed') return;
     const validDate = parseSafeDate(selectedDate ?? null);
     if (validDate) {
       setBirthDate(validDate);
@@ -814,6 +864,13 @@ export default function GetUserInfoScreen() {
       case 'dates': { // Datum abhängig vom Baby-Status
         const isBorn = isBabyBorn === true;
         const selectedDate = isBorn ? birthDate : dueDate;
+        const maxBirthDate = new Date();
+        const defaultDueDate = new Date(maxBirthDate.getTime());
+        defaultDueDate.setDate(defaultDueDate.getDate() + 280);
+        const maxDueDate = new Date(maxBirthDate.getTime());
+        maxDueDate.setFullYear(maxDueDate.getFullYear() + 2);
+        const birthDatePickerValue = getSafePickerDate(selectedDate, maxBirthDate, maxBirthDate);
+        const dueDatePickerValue = getSafePickerDate(selectedDate, defaultDueDate, maxDueDate);
         const title = isBorn ? 'Wann wurde dein Baby geboren?' : 'Wann ist der errechnete Geburtstermin?';
         const placeholder = isBorn ? 'Geburtsdatum auswählen' : 'Geburtstermin auswählen';
 
@@ -837,22 +894,25 @@ export default function GetUserInfoScreen() {
 
             {isBorn && showBirthDatePicker && (
               <DateTimePicker
-                value={selectedDate || new Date()}
+                value={birthDatePickerValue}
                 mode="date"
                 display={Platform.OS === 'ios' ? 'inline' : 'default'}
                 themeVariant="light"
                 onChange={handleBirthDateChange}
-                maximumDate={new Date()}
+                minimumDate={MIN_VALID_PROFILE_DATE}
+                maximumDate={maxBirthDate}
               />
             )}
 
             {!isBorn && showDueDatePicker && (
               <DateTimePicker
-                value={selectedDate || new Date()}
+                value={dueDatePickerValue}
                 mode="date"
                 display={Platform.OS === 'ios' ? 'inline' : 'default'}
                 themeVariant="light"
                 onChange={handleDueDateChange}
+                minimumDate={MIN_VALID_PROFILE_DATE}
+                maximumDate={maxDueDate}
               />
             )}
           </ThemedView>
@@ -1242,6 +1302,7 @@ export default function GetUserInfoScreen() {
               keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
             >
               <ScrollView
+                ref={scrollViewRef}
                 style={styles.scrollView}
                 contentContainerStyle={styles.scrollContent}
                 keyboardShouldPersistTaps="never"
@@ -1314,8 +1375,8 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: 'center',
-    paddingTop: 20,
-    paddingBottom: 12,
+    paddingTop: 16,
+    paddingBottom: 8,
   },
   title: {
     fontSize: 28,
@@ -1330,7 +1391,7 @@ const styles = StyleSheet.create({
   },
   progressContainer: {
     paddingHorizontal: 20,
-    marginBottom: 20,
+    marginBottom: 14,
   },
   progressBar: {
     height: 8,
@@ -1363,6 +1424,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   summaryStepContainer: {
+    paddingTop: 12,
     paddingBottom: 28,
   },
   babyImage: {
@@ -1385,7 +1447,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    paddingBottom: 48,
+    paddingBottom: 20,
   },
   stepTitle: {
     fontSize: 20,
@@ -1662,7 +1724,7 @@ const styles = StyleSheet.create({
   infoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 13,
+    paddingVertical: 10,
     paddingHorizontal: 14,
   },
   infoRowIcon: {
@@ -1707,20 +1769,20 @@ const styles = StyleSheet.create({
   },
   summaryPhotoSection: {
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 4,
   },
   summaryBabyPhoto: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: 90,
+    height: 90,
+    borderRadius: 45,
     borderWidth: 3,
     borderColor: 'rgba(157,190,187,0.5)',
   },
   summaryBabyName: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '700',
     color: '#7D5A50',
-    marginTop: 8,
+    marginTop: 6,
   },
   footerContainer: {
     paddingHorizontal: 20,

@@ -17,6 +17,7 @@ import Header from '@/components/Header';
 import { ThemedText } from '@/components/ThemedText';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { useAuth } from '@/contexts/AuthContext';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
@@ -33,7 +34,8 @@ const makeDefaultDueDate = () => {
 
 export default function PregnancySetupScreen() {
   const colorScheme = useColorScheme() ?? 'light';
-  const isDark = colorScheme === 'dark';
+  const adaptiveColors = useAdaptiveColors();
+  const isDark = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
   const theme = Colors[colorScheme];
   const router = useRouter();
   const { babyId: babyIdParam } = useLocalSearchParams<{ babyId?: string }>();
@@ -44,6 +46,12 @@ export default function PregnancySetupScreen() {
     setIsBabyBorn,
     setTemporaryViewMode,
   } = useBabyStatus();
+
+  const minDueDate = useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }, []);
 
   const [dueDate, setDueDate] = useState<Date | null>(null);
   const [tempDueDate, setTempDueDate] = useState<Date>(makeDefaultDueDate());
@@ -201,8 +209,9 @@ export default function PregnancySetupScreen() {
                   mode="date"
                   display={Platform.OS === 'ios' ? 'spinner' : 'default'}
                   onChange={handleDateChange}
-                  minimumDate={new Date()}
-                  textColor={isDark ? '#FFFFFF' : undefined}
+                  minimumDate={minDueDate}
+                  themeVariant={isDark ? 'dark' : 'light'}
+                  textColor={Platform.OS === 'ios' ? (isDark ? '#FFFFFF' : '#5C4033') : undefined}
                 />
                 {Platform.OS === 'ios' && (
                   <View style={styles.iosActions}>

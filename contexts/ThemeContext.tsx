@@ -10,6 +10,7 @@ const AUTO_DARK_MODE_START_TIME_STORAGE_KEY_PREFIX = '@auto_dark_mode_start_time
 const AUTO_DARK_MODE_END_TIME_STORAGE_KEY_PREFIX = '@auto_dark_mode_end_time:';
 const DEFAULT_AUTO_DARK_START_TIME = '20:00';
 const DEFAULT_AUTO_DARK_END_TIME = '07:00';
+const DEFAULT_AUTO_DARK_MODE_ENABLED = true;
 
 type ThemeContextType = {
   colorScheme: ColorSchemeName;
@@ -26,7 +27,7 @@ type ThemeContextType = {
 const ThemeContext = createContext<ThemeContextType>({
   colorScheme: 'light',
   themePreference: 'light',
-  autoDarkModeEnabled: false,
+  autoDarkModeEnabled: DEFAULT_AUTO_DARK_MODE_ENABLED,
   autoDarkModeStartTime: DEFAULT_AUTO_DARK_START_TIME,
   autoDarkModeEndTime: DEFAULT_AUTO_DARK_END_TIME,
   setThemePreference: async () => {},
@@ -59,7 +60,7 @@ export const ThemeOverrideProvider: React.FC<{
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, loading: authLoading } = useAuth();
   const [themePreference, setThemePreference] = useState<ThemeMode>('light');
-  const [autoDarkModeEnabled, setAutoDarkModeEnabledState] = useState(false);
+  const [autoDarkModeEnabled, setAutoDarkModeEnabledState] = useState(DEFAULT_AUTO_DARK_MODE_ENABLED);
   const [autoDarkModeStartTime, setAutoDarkModeStartTimeState] = useState(DEFAULT_AUTO_DARK_START_TIME);
   const [autoDarkModeEndTime, setAutoDarkModeEndTimeState] = useState(DEFAULT_AUTO_DARK_END_TIME);
   const [colorScheme, setColorScheme] = useState<ColorSchemeName>('light');
@@ -121,6 +122,13 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return /^([01]\d|2[0-3]):([0-5]\d)$/.test(value) ? value : fallbackTime;
   };
 
+  const parseAutoDarkModeValue = (value: string | null) => {
+    if (value === null) {
+      return DEFAULT_AUTO_DARK_MODE_ENABLED;
+    }
+    return value === 'true';
+  };
+
   // Laden der gespeicherten Theme-/Auto-Dunkelmodus-Einstellungen, sobald der Auth-Status feststeht.
   useEffect(() => {
     let isMounted = true;
@@ -128,11 +136,11 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const loadThemeSettings = async () => {
       if (authLoading) return;
 
-      // Ohne angemeldeten Benutzer gilt immer der App-Standard (hell).
+      // Ohne angemeldeten Benutzer gilt immer der App-Standard.
       if (!user) {
         if (isMounted) {
           setThemePreference('light');
-          setAutoDarkModeEnabledState(false);
+          setAutoDarkModeEnabledState(DEFAULT_AUTO_DARK_MODE_ENABLED);
           setAutoDarkModeStartTimeState(DEFAULT_AUTO_DARK_START_TIME);
           setAutoDarkModeEndTimeState(DEFAULT_AUTO_DARK_END_TIME);
         }
@@ -151,7 +159,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           console.error('Error loading theme preference:', error);
           if (isMounted) {
             setThemePreference('light');
-            setAutoDarkModeEnabledState(savedAutoDarkMode === 'true');
+            setAutoDarkModeEnabledState(parseAutoDarkModeValue(savedAutoDarkMode));
             setAutoDarkModeStartTimeState(
               normalizeTimeString(savedAutoDarkStartTime ?? '', DEFAULT_AUTO_DARK_START_TIME),
             );
@@ -164,7 +172,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
         if (isMounted) {
           setThemePreference(data?.theme ?? 'light');
-          setAutoDarkModeEnabledState(savedAutoDarkMode === 'true');
+          setAutoDarkModeEnabledState(parseAutoDarkModeValue(savedAutoDarkMode));
           setAutoDarkModeStartTimeState(
             normalizeTimeString(savedAutoDarkStartTime ?? '', DEFAULT_AUTO_DARK_START_TIME),
           );
@@ -176,7 +184,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         console.error('Failed to load theme preference:', err);
         if (isMounted) {
           setThemePreference('light');
-          setAutoDarkModeEnabledState(false);
+          setAutoDarkModeEnabledState(DEFAULT_AUTO_DARK_MODE_ENABLED);
           setAutoDarkModeStartTimeState(DEFAULT_AUTO_DARK_START_TIME);
           setAutoDarkModeEndTimeState(DEFAULT_AUTO_DARK_END_TIME);
         }

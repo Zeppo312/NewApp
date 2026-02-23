@@ -44,7 +44,7 @@ type NightSleepEditorProps = {
     field: 'start_time' | 'end_time',
     newTime: Date
   ) => Promise<void>;
-  onDeleteSegment: (entryId: string) => void;
+  onDeleteNightGroup: (entryIds: string[]) => Promise<boolean>;
   isSaving: boolean;
 };
 
@@ -144,6 +144,9 @@ const resolvePickerTimeNearReference = (
 };
 
 const ONE_MINUTE_MS = 60 * 1000;
+const ONE_DAY_MINUTES = 24 * 60;
+const ANOMALOUS_MULTI_DAY_MINUTES = ONE_DAY_MINUTES;
+const PLAUSIBLE_NIGHT_TARGET_MINUTES = 10 * 60;
 const minutesBucket = (date: Date) => Math.floor(date.getTime() / ONE_MINUTE_MS);
 
 const getWakeMinutesWithMidnightWrap = (start: Date, end: Date): number => {
@@ -154,6 +157,37 @@ const getWakeMinutesWithMidnightWrap = (start: Date, end: Date): number => {
   const startMinutesOfDay = start.getHours() * 60 + start.getMinutes();
   const endMinutesOfDay = end.getHours() * 60 + end.getMinutes();
   return (endMinutesOfDay - startMinutesOfDay + 24 * 60) % (24 * 60);
+};
+
+const inferLikelyNightEndFromClock = (nightStart: Date, currentEnd: Date): Date => {
+  const candidates: Array<{ date: Date; score: number }> = [];
+
+  for (let dayOffset = 0; dayOffset <= 2; dayOffset++) {
+    const candidate = new Date(nightStart);
+    candidate.setDate(candidate.getDate() + dayOffset);
+    candidate.setHours(currentEnd.getHours(), currentEnd.getMinutes(), 0, 0);
+
+    if (candidate.getTime() <= nightStart.getTime()) continue;
+
+    const spanMinutes = (candidate.getTime() - nightStart.getTime()) / ONE_MINUTE_MS;
+    if (spanMinutes < 30) continue;
+
+    // Prefer durations close to a typical night and penalize very long spans.
+    const overWindowPenalty = Math.max(0, spanMinutes - NIGHT_WINDOW_MINUTES) * 2;
+    const targetPenalty = Math.abs(spanMinutes - PLAUSIBLE_NIGHT_TARGET_MINUTES);
+    const score = overWindowPenalty + targetPenalty;
+    candidates.push({ date: candidate, score });
+  }
+
+  if (candidates.length > 0) {
+    candidates.sort((a, b) => a.score - b.score);
+    return candidates[0].date;
+  }
+
+  const fallback = new Date(nightStart);
+  fallback.setDate(fallback.getDate() + 1);
+  fallback.setHours(currentEnd.getHours(), currentEnd.getMinutes(), 0, 0);
+  return fallback;
 };
 
 // ─── WakePhase type (derived from gaps between entries) ─────
@@ -415,7 +449,7 @@ const TimePickerRow = ({
                   </View>
 
                   <DateTimePicker
-                    value={iosDraftTime}
+                    value={(() => { const d = new Date(iosDraftTime); d.setSeconds(0, 0); return d; })()}
                     mode="time"
                     display="spinner"
                     locale="de-DE"
@@ -523,7 +557,7 @@ export default function NightSleepEditor({
   onSplit,
   onMerge,
   onAdjustBoundary,
-  onDeleteSegment,
+  onDeleteNightGroup,
   isSaving,
 }: NightSleepEditorProps) {
   const adaptiveColors = useAdaptiveColors();
@@ -542,6 +576,7 @@ export default function NightSleepEditor({
   const [newWakeStart, setNewWakeStart] = useState<Date | null>(null);
   const [newWakeEnd, setNewWakeEnd] = useState<Date | null>(null);
   const [isSubmittingWake, setIsSubmittingWake] = useState(false);
+  const [showAutoFixInfoModal, setShowAutoFixInfoModal] = useState(false);
   const pendingAdjustTimeoutsRef = useRef<Record<string, ReturnType<typeof setTimeout> | null>>({});
   const pendingBoundaryAdjustsRef = useRef<Record<string, PendingBoundaryAdjust>>({});
   const isFlushingBoundaryAdjustsRef = useRef(false);
@@ -575,6 +610,11 @@ export default function NightSleepEditor({
   const nightEnd = nightGroup.end;
   const totalSleepMin = nightGroup.totalMinutes;
   const totalWakeSeconds = nightGroup.wakeGaps.reduce((a, b) => a + b, 0);
+  const nightSpanMinutes = useMemo(
+    () => Math.round((nightEnd.getTime() - nightStart.getTime()) / ONE_MINUTE_MS),
+    [nightEnd, nightStart]
+  );
+  const hasMultiDayNightAnomaly = nightSpanMinutes > ANOMALOUS_MULTI_DAY_MINUTES;
 
   // Derive wake phases from gaps between entries
   const wakePhases: WakePhase[] = useMemo(() => {
@@ -711,6 +751,47 @@ export default function NightSleepEditor({
     return true;
   }, [firstEntry.id, firstEntry.start_time, lastEntry, scheduleBoundaryAdjust]);
 
+  const getAutoFixPreview = useCallback(() => {
+    if (!lastEntry.end_time) return null;
+
+    const startKey = `night-start-${firstEntry.id ?? 'no-id'}`;
+    const endKey = `night-end-${lastEntry.id ?? 'no-id'}`;
+    const startReference = boundaryReferenceTimesRef.current[startKey] ?? new Date(firstEntry.start_time);
+    const endReference = boundaryReferenceTimesRef.current[endKey] ?? new Date(lastEntry.end_time);
+    const fixedEnd = inferLikelyNightEndFromClock(startReference, endReference);
+    return { endKey, endReference, fixedEnd };
+  }, [firstEntry.id, firstEntry.start_time, lastEntry.id, lastEntry.end_time]);
+
+  const handleAutoFixMultiDayNight = useCallback(() => {
+    if (isSaving) return;
+    const preview = getAutoFixPreview();
+    if (!preview) return;
+
+    const { endKey, endReference, fixedEnd } = preview;
+
+    if (minutesBucket(fixedEnd) === minutesBucket(endReference)) return;
+
+    Alert.alert(
+      'Nachtschlaf korrigieren',
+      `Aufgewacht wird auf ${formatShortDayDate(fixedEnd)} ${formatClockTime(fixedEnd)} gesetzt.`,
+      [
+        { text: 'Abbrechen', style: 'cancel' },
+        {
+          text: 'Korrigieren',
+          onPress: () => {
+            boundaryReferenceTimesRef.current[endKey] = fixedEnd;
+            scheduleBoundaryAdjust(endKey, lastEntry, 'end_time', fixedEnd);
+            hapticLight();
+          },
+        },
+      ]
+    );
+  }, [getAutoFixPreview, isSaving, lastEntry, scheduleBoundaryAdjust]);
+
+  const handleShowAutoFixInfo = useCallback(() => {
+    setShowAutoFixInfoModal(true);
+  }, []);
+
   const handleChangeWakeStart = useCallback((phase: WakePhase, newTime: Date): boolean => {
     const startKey = `wake-start-${phase.prevEntry.id ?? 'no-id'}-${phase.nextEntry.id ?? 'no-id'}`;
     const endKey = `wake-end-${phase.prevEntry.id ?? 'no-id'}-${phase.nextEntry.id ?? 'no-id'}`;
@@ -780,6 +861,37 @@ export default function NightSleepEditor({
       ]
     );
   }, [onMerge]);
+
+  const handleDeleteEntireNight = useCallback(() => {
+    if (isSaving) return;
+
+    const entryIds = entries
+      .map((entry) => entry.id)
+      .filter((id): id is string => typeof id === 'string' && id.length > 0);
+
+    if (entryIds.length === 0) {
+      Alert.alert('Nicht möglich', 'Für diesen Nachtschlaf wurden keine gültigen Segmente gefunden.');
+      return;
+    }
+
+    Alert.alert(
+      'Nachtschlaf löschen',
+      `Möchtest du den gesamten Nachtschlaf wirklich löschen? (${entryIds.length} Segment${entryIds.length === 1 ? '' : 'e'})`,
+      [
+        { text: 'Abbrechen', style: 'cancel' },
+        {
+          text: 'Alles löschen',
+          style: 'destructive',
+          onPress: async () => {
+            const didDelete = await onDeleteNightGroup(entryIds);
+            if (!didDelete) return;
+            hapticLight();
+            onClose();
+          },
+        },
+      ]
+    );
+  }, [entries, isSaving, onClose, onDeleteNightGroup]);
 
   // Add wake phase: find the longest sleep segment and split in the middle
   const handleStartAddWake = useCallback(() => {
@@ -940,6 +1052,8 @@ export default function NightSleepEditor({
     return applyResolvedNewWakeEnd(resolvedEnd);
   }, [applyResolvedNewWakeEnd, newWakeEnd, newWakeStart, nightEnd]);
 
+  const autoFixPreview = getAutoFixPreview();
+
   return (
     <Modal
       visible={visible}
@@ -993,6 +1107,48 @@ export default function NightSleepEditor({
                 </View>
               )}
             </View>
+
+            {hasMultiDayNightAnomaly && (
+              <View
+                style={[
+                  styles.anomalyCard,
+                  {
+                    backgroundColor: isDark ? 'rgba(232,160,130,0.12)' : 'rgba(232,160,130,0.10)',
+                    borderColor: isDark ? 'rgba(232,160,130,0.35)' : 'rgba(232,160,130,0.45)',
+                  },
+                ]}
+              >
+                <View style={styles.anomalyHeader}>
+                  <Text style={[styles.anomalyTitle, { color: textPrimary }]}>
+                    Unplausible Dauer erkannt
+                  </Text>
+                  <TouchableOpacity
+                    style={[
+                      styles.anomalyInfoBtn,
+                      { borderColor: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.25)' },
+                    ]}
+                    onPress={handleShowAutoFixInfo}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.anomalyInfoBtnText, { color: textSecondary }]}>i</Text>
+                  </TouchableOpacity>
+                </View>
+                <Text style={[styles.anomalyText, { color: textSecondary }]}>
+                  Dieser Nachtschlaf läuft aktuell über {Math.floor(nightSpanMinutes / ONE_DAY_MINUTES)} Tage.
+                </Text>
+                <TouchableOpacity
+                  style={[styles.anomalyBtn, { backgroundColor: WAKE_COLOR }]}
+                  onPress={handleAutoFixMultiDayNight}
+                  disabled={isSaving || !lastEntry.end_time}
+                  activeOpacity={0.75}
+                >
+                  <Text style={styles.anomalyBtnText}>
+                    {isSaving ? 'Speichert...' : 'Automatisch korrigieren'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
 
             {/* Start / End times */}
             <View style={[styles.section, { backgroundColor: cardBg }]}>
@@ -1140,7 +1296,70 @@ export default function NightSleepEditor({
                 <Text style={[styles.addWakeText, { color: textSecondary }]}>Wachphase hinzufügen</Text>
               </TouchableOpacity>
             )}
+
+            <TouchableOpacity
+              style={[
+                styles.deleteNightBtn,
+                { borderColor: isDark ? 'rgba(232,160,130,0.45)' : 'rgba(210,92,67,0.4)' },
+              ]}
+              onPress={handleDeleteEntireNight}
+              disabled={isSaving}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.deleteNightBtnText}>
+                {isSaving ? 'Speichert...' : 'Gesamten Nachtschlaf löschen'}
+              </Text>
+            </TouchableOpacity>
           </ScrollView>
+
+          <Modal
+            visible={showAutoFixInfoModal}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setShowAutoFixInfoModal(false)}
+          >
+            <View style={styles.infoModalOverlay}>
+              <TouchableOpacity
+                style={StyleSheet.absoluteFill}
+                onPress={() => setShowAutoFixInfoModal(false)}
+                activeOpacity={1}
+              />
+              <View
+                style={[
+                  styles.infoModalCard,
+                  {
+                    backgroundColor: isDark ? 'rgba(24,24,28,0.98)' : 'rgba(255,255,255,0.99)',
+                    borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)',
+                  },
+                ]}
+              >
+                <Text style={[styles.infoModalTitle, { color: textPrimary }]}>
+                  Was macht die Korrektur?
+                </Text>
+                <Text style={[styles.infoModalText, { color: textSecondary }]}>
+                  Es wird nur der Zeitpunkt "Aufgewacht" angepasst.
+                </Text>
+                <Text style={[styles.infoModalText, { color: textSecondary }]}>
+                  Die aktuelle Aufgewacht-Uhrzeit bleibt erhalten und der Tag wird automatisch so gewählt, dass die Nachtdauer plausibel ist.
+                </Text>
+                <Text style={[styles.infoModalText, { color: textSecondary }]}>
+                  Sehr lange Mehrtages-Dauern werden dabei verworfen.
+                </Text>
+                {autoFixPreview && (
+                  <Text style={[styles.infoModalHint, { color: textSecondary }]}>
+                    Aktueller Vorschlag: {formatShortDayDate(autoFixPreview.fixedEnd)} {formatClockTime(autoFixPreview.fixedEnd)}
+                  </Text>
+                )}
+                <TouchableOpacity
+                  style={[styles.infoModalCloseBtn, { backgroundColor: accentColor }]}
+                  onPress={() => setShowAutoFixInfoModal(false)}
+                  activeOpacity={0.75}
+                >
+                  <Text style={styles.infoModalCloseBtnText}>Verstanden</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </Modal>
 
           {/* Bottom Bar */}
           <View style={[styles.bottomBar, { borderTopColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }]}>
@@ -1209,6 +1428,90 @@ const styles = StyleSheet.create({
   },
   summaryValue: {
     fontSize: 20,
+    fontWeight: '700',
+  },
+  anomalyCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 12,
+    marginBottom: 12,
+  },
+  anomalyTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  anomalyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  anomalyInfoBtn: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  anomalyInfoBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 15,
+  },
+  anomalyText: {
+    marginTop: 4,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  anomalyBtn: {
+    marginTop: 10,
+    borderRadius: 10,
+    paddingVertical: 9,
+    alignItems: 'center',
+  },
+  anomalyBtnText: {
+    color: '#FFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  infoModalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  infoModalCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  infoModalTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  infoModalText: {
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: 6,
+  },
+  infoModalHint: {
+    marginTop: 4,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '600',
+  },
+  infoModalCloseBtn: {
+    marginTop: 12,
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  infoModalCloseBtnText: {
+    color: '#FFF',
+    fontSize: 14,
     fontWeight: '700',
   },
   section: {
@@ -1331,6 +1634,21 @@ const styles = StyleSheet.create({
   addWakeText: {
     fontSize: 14,
     fontWeight: '600',
+  },
+  deleteNightBtn: {
+    marginTop: 10,
+    marginBottom: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    paddingVertical: 11,
+    alignItems: 'center',
+    backgroundColor: 'rgba(232,160,130,0.08)',
+  },
+  deleteNightBtnText: {
+    color: '#D25C43',
+    fontSize: 14,
+    fontWeight: '700',
   },
   bottomBar: {
     paddingHorizontal: 20,
