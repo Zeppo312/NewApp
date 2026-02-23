@@ -7,8 +7,14 @@ import { ImageSourcePropType } from 'react-native';
 const BACKGROUND_STORAGE_KEY = '@custom_background_uri';
 const BACKGROUND_MODE_KEY = '@custom_background_is_dark';
 const BACKGROUND_SELECTION_KEY = '@background_selection';
+// Relativer Pfad – wird beim Laden dynamisch mit documentDirectory kombiniert,
+// damit er nach App-Updates (neues .ipa) weiterhin gültig ist.
+const BACKGROUND_RELATIVE_PATH = 'backgrounds/custom_background.jpg';
 const BACKGROUND_DIR = `${FileSystem.documentDirectory}backgrounds/`;
 const BACKGROUND_FILENAME = 'custom_background.jpg';
+
+/** Gibt den absoluten, aktuell gültigen Pfad zur gespeicherten Hintergrunddatei zurück. */
+const resolveBackgroundUri = () => `${FileSystem.documentDirectory}${BACKGROUND_RELATIVE_PATH}`;
 
 const defaultBackground = require('@/assets/images/Background_Hell.png');
 const presetBackgrounds = {
@@ -74,12 +80,19 @@ export function BackgroundProvider({ children }: BackgroundProviderProps) {
       // Lade den Hintergrund-Modus
       setIsDarkBackground(savedMode === 'true');
 
-      let persistedCustomUri: string | null = savedUri;
-      if (persistedCustomUri) {
-        const fileInfo = await FileSystem.getInfoAsync(persistedCustomUri);
+      // Prüfe immer am aktuell gültigen (dynamisch aufgelösten) Pfad – nicht am
+      // gespeicherten absoluten Pfad, der nach einem App-Update veraltet sein kann.
+      let persistedCustomUri: string | null = null;
+      if (savedUri) {
+        const currentUri = resolveBackgroundUri();
+        const fileInfo = await FileSystem.getInfoAsync(currentUri);
         if (fileInfo.exists) {
+          persistedCustomUri = currentUri + '?t=' + Date.now();
+          // Normalisiere den gespeicherten Wert falls er noch einen alten absoluten Pfad enthält
+          if (savedUri !== BACKGROUND_RELATIVE_PATH) {
+            await AsyncStorage.setItem(BACKGROUND_STORAGE_KEY, BACKGROUND_RELATIVE_PATH);
+          }
         } else {
-          persistedCustomUri = null;
           await AsyncStorage.removeItem(BACKGROUND_STORAGE_KEY);
         }
       }
@@ -150,7 +163,8 @@ export function BackgroundProvider({ children }: BackgroundProviderProps) {
       });
 
       await Promise.all([
-        AsyncStorage.setItem(BACKGROUND_STORAGE_KEY, destinationUri),
+        // Relativen Pfad speichern, damit er nach App-Updates weiterhin auflösbar ist
+        AsyncStorage.setItem(BACKGROUND_STORAGE_KEY, BACKGROUND_RELATIVE_PATH),
         AsyncStorage.setItem(BACKGROUND_SELECTION_KEY, 'custom'),
       ]);
 
@@ -186,11 +200,11 @@ export function BackgroundProvider({ children }: BackgroundProviderProps) {
     try {
       const savedUri = await AsyncStorage.getItem(BACKGROUND_STORAGE_KEY);
       if (savedUri) {
-        // URI ohne Query-Parameter für Datei-Check
-        const cleanUri = savedUri.split('?')[0];
-        const fileInfo = await FileSystem.getInfoAsync(cleanUri);
+        // Immer den aktuell gültigen Pfad zum Löschen verwenden
+        const currentUri = resolveBackgroundUri();
+        const fileInfo = await FileSystem.getInfoAsync(currentUri);
         if (fileInfo.exists) {
-          await FileSystem.deleteAsync(cleanUri);
+          await FileSystem.deleteAsync(currentUri);
         }
       }
 

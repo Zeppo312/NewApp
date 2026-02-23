@@ -1052,12 +1052,17 @@ export default function AppSettingsScreen() {
                     {hasCustomBackground && (
                       <>
                         <TouchableOpacity
-                          style={[styles.rowItem, isBackgroundModeAutoSynced && styles.disabledRow]}
+                          style={styles.rowItem}
                           onPress={() => {
-                            if (isBackgroundModeAutoSynced) return;
+                            if (isBackgroundModeAutoSynced) {
+                              Alert.alert(
+                                'Auto-Dunkelmodus aktiv',
+                                'Die Textfarbe wird automatisch durch den Auto-Dunkelmodus gesteuert. Deaktiviere ihn unter "Darstellung", um die Textfarbe manuell anzupassen.'
+                              );
+                              return;
+                            }
                             void setBackgroundMode(!effectiveIsDarkBackground);
                           }}
-                          disabled={isBackgroundModeAutoSynced}
                         >
                           <View style={styles.rowIcon}>
                             <IconSymbol name={effectiveIsDarkBackground ? 'sun.max' : 'moon'} size={24} color={primaryIconColor} />
