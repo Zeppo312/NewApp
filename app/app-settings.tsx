@@ -6,7 +6,7 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { Redirect, useRouter, Stack } from 'expo-router';
+import { Redirect, useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { useConvex } from '@/contexts/ConvexContext';
 import { useBackground } from '@/contexts/BackgroundContext';
@@ -45,6 +45,7 @@ export default function AppSettingsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const router = useRouter();
+  const { focus } = useLocalSearchParams<{ focus?: string }>();
   const { user, session, signOut } = useAuth();
   const {
     autoDarkModeEnabled,
@@ -98,7 +99,8 @@ export default function AppSettingsScreen() {
 
   // Check if current user is admin
   const isAdmin = user?.email ? ADMIN_EMAILS.includes(user.email) : false;
-  const isBackgroundModeAutoSynced = autoDarkModeEnabled;
+  const isAutoDarkWindowActive = autoDarkModeEnabled && colorScheme === 'dark';
+  const isBackgroundModeAutoSynced = isAutoDarkWindowActive;
   const effectiveIsDarkBackground = isBackgroundModeAutoSynced
     ? colorScheme === 'dark'
     : isDarkBackground;
@@ -114,6 +116,12 @@ export default function AppSettingsScreen() {
       loadSettings();
     }
   }, [user]);
+
+  useEffect(() => {
+    if (focus === 'night-window') {
+      setIsNightWindowExpanded(true);
+    }
+  }, [focus]);
 
   const loadSettings = async () => {
     try {

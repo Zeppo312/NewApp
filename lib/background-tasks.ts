@@ -7,6 +7,12 @@ import { Platform } from 'react-native';
 // Constants
 const CONTRACTION_TIMER_TASK = 'CONTRACTION_TIMER_TASK';
 const CONTRACTION_TIMER_KEY = 'CONTRACTION_TIMER_DATA';
+const DEFAULT_TIMER_DATA: ContractionTimerData = {
+  isRunning: false,
+  startTime: 0,
+  elapsedTime: 0,
+  lastUpdated: 0,
+};
 
 // Types
 export type ContractionTimerData = {
@@ -16,21 +22,52 @@ export type ContractionTimerData = {
   lastUpdated: number; // timestamp
 };
 
+const isNonNegativeFiniteNumber = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isFinite(value) && value >= 0;
+
+const isContractionTimerData = (value: unknown): value is ContractionTimerData => {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as ContractionTimerData;
+  return (
+    typeof candidate.isRunning === 'boolean' &&
+    isNonNegativeFiniteNumber(candidate.startTime) &&
+    isNonNegativeFiniteNumber(candidate.elapsedTime) &&
+    isNonNegativeFiniteNumber(candidate.lastUpdated)
+  );
+};
+
+const readTimerDataFromStorage = async (): Promise<ContractionTimerData | null> => {
+  const storedDataStr = await AsyncStorage.getItem(CONTRACTION_TIMER_KEY);
+  if (!storedDataStr) return null;
+
+  try {
+    const parsed = JSON.parse(storedDataStr);
+    if (!isContractionTimerData(parsed)) {
+      console.warn('Invalid contraction timer payload in storage. Resetting timer state.');
+      await AsyncStorage.removeItem(CONTRACTION_TIMER_KEY);
+      return null;
+    }
+    return parsed;
+  } catch (error) {
+    console.warn('Failed to parse contraction timer payload. Resetting timer state:', error);
+    await AsyncStorage.removeItem(CONTRACTION_TIMER_KEY);
+    return null;
+  }
+};
+
 // Register the background task
 TaskManager.defineTask(CONTRACTION_TIMER_TASK, async () => {
   try {
     // Get current timer data
-    const storedDataStr = await AsyncStorage.getItem(CONTRACTION_TIMER_KEY);
-    if (!storedDataStr) {
+    const timerData = await readTimerDataFromStorage();
+    if (!timerData) {
       return "noData";
     }
-
-    const timerData: ContractionTimerData = JSON.parse(storedDataStr);
     
     // If timer is running, update elapsed time
     if (timerData.isRunning) {
       const now = Date.now();
-      const secondsSinceLastUpdate = Math.floor((now - timerData.lastUpdated) / 1000);
+      const secondsSinceLastUpdate = Math.max(0, Math.floor((now - timerData.lastUpdated) / 1000));
       
       const updatedTimerData: ContractionTimerData = {
         ...timerData,
@@ -145,16 +182,14 @@ export const startContractionTimer = async () => {
 
 // Stop the timer
 export const stopContractionTimer = async () => {
-  const storedDataStr = await AsyncStorage.getItem(CONTRACTION_TIMER_KEY);
-  if (!storedDataStr) {
-    return { isRunning: false, elapsedTime: 0, startTime: 0, lastUpdated: 0 };
+  const timerData = await readTimerDataFromStorage();
+  if (!timerData) {
+    return DEFAULT_TIMER_DATA;
   }
-  
-  const timerData: ContractionTimerData = JSON.parse(storedDataStr);
   
   // Update elapsed time one more time
   const now = Date.now();
-  const secondsSinceLastUpdate = Math.floor((now - timerData.lastUpdated) / 1000);
+  const secondsSinceLastUpdate = Math.max(0, Math.floor((now - timerData.lastUpdated) / 1000));
   
   const finalTimerData: ContractionTimerData = {
     isRunning: false,
@@ -174,22 +209,15 @@ export const stopContractionTimer = async () => {
 
 // Get current timer state
 export const getContractionTimerState = async (): Promise<ContractionTimerData> => {
-  const storedDataStr = await AsyncStorage.getItem(CONTRACTION_TIMER_KEY);
-  if (!storedDataStr) {
-    return {
-      isRunning: false,
-      startTime: 0,
-      elapsedTime: 0,
-      lastUpdated: 0
-    };
+  const timerData = await readTimerDataFromStorage();
+  if (!timerData) {
+    return DEFAULT_TIMER_DATA;
   }
-  
-  const timerData: ContractionTimerData = JSON.parse(storedDataStr);
   
   // If timer is running, calculate current elapsed time
   if (timerData.isRunning) {
     const now = Date.now();
-    const secondsSinceLastUpdate = Math.floor((now - timerData.lastUpdated) / 1000);
+    const secondsSinceLastUpdate = Math.max(0, Math.floor((now - timerData.lastUpdated) / 1000));
     
     return {
       ...timerData,

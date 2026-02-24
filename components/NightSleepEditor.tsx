@@ -12,6 +12,7 @@ import {
 import { BlurView } from 'expo-blur';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Haptics from 'expo-haptics';
+import { useRouter } from 'expo-router';
 import { Colors } from '@/constants/Colors';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { RADIUS } from '@/constants/DesignGuide';
@@ -24,9 +25,11 @@ const NIGHT_WINDOW_START_MINUTES = 30;
 
 const ACCENT_LIGHT = '#8E4EC6';
 const ACCENT_DARK = '#A26BFF';
-const WAKE_COLOR = 'rgba(232, 160, 130, 0.9)';
-const WAKE_BG_LIGHT = 'rgba(232, 160, 130, 0.1)';
-const WAKE_BG_DARK = 'rgba(232, 160, 130, 0.12)';
+// Wachphasen: warmes Terrakotta passend zur App-Palette
+const WAKE_COLOR_LIGHT = '#B07252';   // Terrakotta, harmoniert mit #C89F81 & #5C4033
+const WAKE_COLOR_DARK  = '#D4956A';   // Etwas heller für Dark Mode
+const WAKE_BG_LIGHT = 'rgba(200, 159, 129, 0.12)';
+const WAKE_BG_DARK  = 'rgba(200, 159, 129, 0.10)';
 
 // ─── Types ──────────────────────────────────────────────────
 type NightSleepEditorProps = {
@@ -199,12 +202,6 @@ type WakePhase = {
   nextEntry: ClassifiedSleepEntry;
 };
 
-type PendingBoundaryAdjust = {
-  entry: ClassifiedSleepEntry;
-  field: 'start_time' | 'end_time';
-  date: Date;
-};
-
 // ─── MiniNightTimeline (exported for sleep-tracker) ─────────
 const MINI_BAR_HEIGHT = 12;
 
@@ -254,7 +251,7 @@ export const MiniNightTimeline = ({
   }
 
   const purpleColor = isDark ? 'rgba(162, 107, 255, 0.65)' : 'rgba(142, 78, 198, 0.55)';
-  const wakeColor = isDark ? 'rgba(232, 160, 130, 0.5)' : 'rgba(232, 160, 130, 0.45)';
+  const wakeColor = isDark ? 'rgba(212, 149, 106, 0.5)' : 'rgba(176, 114, 82, 0.45)';
 
   return (
     <View style={{ marginTop: 10, alignSelf: 'center' }}>
@@ -337,6 +334,9 @@ const TimePickerRow = ({
   isDark,
   textPrimary,
   textSecondary,
+  heroMode = false,
+  wakeMode = false,
+  linkedDisplayTime,
 }: {
   label: string;
   time: Date;
@@ -345,6 +345,15 @@ const TimePickerRow = ({
   isDark: boolean;
   textPrimary: string;
   textSecondary: string;
+  /** Wenn true: große Hero-Darstellung mit Datum+Zeit-Picker (datetime-mode) */
+  heroMode?: boolean;
+  /** Wenn true: nur Uhrzeit-Button (groß), kein Label/Datum drumherum */
+  wakeMode?: boolean;
+  /**
+   * Optionaler Override für die angezeigte Zeit — wird gesetzt wenn ein verlinkter Picker
+   * (z.B. Eingeschlafen) die Endzeit mitverschieben muss, bevor der DB-Save zurückkommt.
+   */
+  linkedDisplayTime?: Date;
 }) => {
   const [showAndroid, setShowAndroid] = useState(false);
   const [showIOS, setShowIOS] = useState(false);
@@ -354,6 +363,13 @@ const TimePickerRow = ({
   useEffect(() => {
     setDisplayTime(time);
   }, [time.getTime()]);
+
+  // Wenn der Parent einen verlinkten Wert liefert (wegen linked-shift), sofort anzeigen
+  useEffect(() => {
+    if (linkedDisplayTime) {
+      setDisplayTime(linkedDisplayTime);
+    }
+  }, [linkedDisplayTime?.getTime()]);
 
   useEffect(() => {
     if (!showIOS) {
@@ -376,6 +392,183 @@ const TimePickerRow = ({
     }
   }, [applyTimeChange, displayTime, iosDraftTime]);
 
+  // ── Hero-Darstellung (Aufgewacht / Eingeschlafen groß) ──────────────
+  if (heroMode) {
+    return (
+      <View style={rowStyles.heroContainer}>
+        <Text style={[rowStyles.heroDayText, { color: textSecondary }]}>
+          {formatShortDayDate(displayTime)}
+        </Text>
+        {Platform.OS === 'ios' ? (
+          <>
+            <TouchableOpacity
+              style={[
+                rowStyles.heroTimeBtn,
+                { backgroundColor: isDark ? 'rgba(162,107,255,0.14)' : 'rgba(142,78,198,0.07)' },
+              ]}
+              onPress={() => {
+                setIosDraftTime(displayTime);
+                setShowIOS(true);
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={[rowStyles.heroTimeBtnText, { color: accentColor }]}>
+                {formatClockTime(displayTime)}
+              </Text>
+            </TouchableOpacity>
+
+            <Modal
+              visible={showIOS}
+              transparent
+              animationType="fade"
+              onRequestClose={() => {
+                commitIOSDraft();
+                setShowIOS(false);
+              }}
+            >
+              <View style={rowStyles.iosModalOverlayBottom}>
+                <TouchableOpacity
+                  style={StyleSheet.absoluteFill}
+                  onPress={() => {
+                    commitIOSDraft();
+                    setShowIOS(false);
+                  }}
+                  activeOpacity={1}
+                />
+                <View
+                  style={[
+                    rowStyles.iosModalCard,
+                    {
+                      backgroundColor: isDark ? 'rgba(24,24,28,0.96)' : 'rgba(255,255,255,0.98)',
+                      borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)',
+                    },
+                  ]}
+                >
+                  <View style={rowStyles.iosModalHeader}>
+                    <TouchableOpacity
+                      onPress={() => setShowIOS(false)}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Text style={[rowStyles.iosActionText, { color: textSecondary }]}>Abbrechen</Text>
+                    </TouchableOpacity>
+                    <Text style={[rowStyles.iosModalTitle, { color: textPrimary }]}>{label}</Text>
+                    <TouchableOpacity
+                      onPress={() => {
+                        commitIOSDraft();
+                        setShowIOS(false);
+                      }}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Text style={[rowStyles.iosActionText, { color: accentColor }]}>Fertig</Text>
+                    </TouchableOpacity>
+                  </View>
+                  {/* datetime-Spinner: Datum + Uhrzeit in einem */}
+                  <DateTimePicker
+                    value={(() => { const d = new Date(iosDraftTime); d.setSeconds(0, 0); return d; })()}
+                    mode="datetime"
+                    display="spinner"
+                    locale="de-DE"
+                    onChange={(_, d) => {
+                      if (d) setIosDraftTime(d);
+                    }}
+                    accentColor={accentColor}
+                    themeVariant={isDark ? 'dark' : 'light'}
+                    style={rowStyles.iosSpinnerDatetime}
+                  />
+                </View>
+              </View>
+            </Modal>
+          </>
+        ) : (
+          <>
+            <TouchableOpacity
+              style={[rowStyles.heroTimeBtn, { backgroundColor: isDark ? 'rgba(162,107,255,0.14)' : 'rgba(142,78,198,0.07)' }]}
+              onPress={() => setShowAndroid(true)}
+              activeOpacity={0.7}
+            >
+              <Text style={[rowStyles.heroTimeBtnText, { color: accentColor }]}>
+                {formatClockTime(displayTime)}
+              </Text>
+            </TouchableOpacity>
+            {showAndroid && (
+              <DateTimePicker
+                value={displayTime}
+                mode="datetime"
+                is24Hour
+                onChange={(_, d) => {
+                  setShowAndroid(false);
+                  if (d) applyTimeChange(d);
+                }}
+              />
+            )}
+          </>
+        )}
+      </View>
+    );
+  }
+
+  // ── Wake-Mode: nur großer Uhrzeit-Button (für Wachphasen-Karten) ──
+  if (wakeMode) {
+    return (
+      <>
+        {Platform.OS === 'ios' ? (
+          <>
+            <TouchableOpacity
+              style={[rowStyles.wakeModeBtn, { backgroundColor: isDark ? 'rgba(232,160,130,0.15)' : 'rgba(232,160,130,0.1)' }]}
+              onPress={() => { setIosDraftTime(displayTime); setShowIOS(true); }}
+              activeOpacity={0.7}
+            >
+              <Text style={[rowStyles.wakeModeBtnText, { color: accentColor }]}>
+                {formatClockTime(displayTime)}
+              </Text>
+            </TouchableOpacity>
+            <Modal visible={showIOS} transparent animationType="fade" onRequestClose={() => { commitIOSDraft(); setShowIOS(false); }}>
+              {/* Modal weiter unten positioniert — besser mit dem Daumen erreichbar */}
+              <View style={rowStyles.iosModalOverlayBottom}>
+                <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => { commitIOSDraft(); setShowIOS(false); }} activeOpacity={1} />
+                <View style={[rowStyles.iosModalCard, { backgroundColor: isDark ? 'rgba(24,24,28,0.96)' : 'rgba(255,255,255,0.98)', borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)' }]}>
+                  <View style={rowStyles.iosModalHeader}>
+                    <TouchableOpacity onPress={() => setShowIOS(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                      <Text style={[rowStyles.iosActionText, { color: textSecondary }]}>Abbrechen</Text>
+                    </TouchableOpacity>
+                    <Text style={[rowStyles.iosModalTitle, { color: textPrimary }]}>{label}</Text>
+                    <TouchableOpacity onPress={() => { commitIOSDraft(); setShowIOS(false); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                      <Text style={[rowStyles.iosActionText, { color: accentColor }]}>Fertig</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <DateTimePicker
+                    value={(() => { const d = new Date(iosDraftTime); d.setSeconds(0, 0); return d; })()}
+                    mode="datetime"
+                    display="spinner"
+                    locale="de-DE"
+                    onChange={(_, d) => { if (d) setIosDraftTime(d); }}
+                    accentColor={accentColor}
+                    themeVariant={isDark ? 'dark' : 'light'}
+                    style={rowStyles.iosSpinnerDatetime}
+                  />
+                </View>
+              </View>
+            </Modal>
+          </>
+        ) : (
+          <>
+            <TouchableOpacity
+              style={[rowStyles.wakeModeBtn, { backgroundColor: isDark ? 'rgba(232,160,130,0.15)' : 'rgba(232,160,130,0.1)' }]}
+              onPress={() => setShowAndroid(true)}
+              activeOpacity={0.7}
+            >
+              <Text style={[rowStyles.wakeModeBtnText, { color: accentColor }]}>{formatClockTime(displayTime)}</Text>
+            </TouchableOpacity>
+            {showAndroid && (
+              <DateTimePicker value={displayTime} mode="datetime" is24Hour onChange={(_, d) => { setShowAndroid(false); if (d) applyTimeChange(d); }} />
+            )}
+          </>
+        )}
+      </>
+    );
+  }
+
+  // ── Normale Zeile (Wachphasen etc.) ────────────────────────────────
   return (
     <View style={rowStyles.container}>
       <Text style={[rowStyles.label, { color: textSecondary }]}>{label}</Text>
@@ -517,10 +710,45 @@ const rowStyles = StyleSheet.create({
     borderRadius: 10,
   },
   timeBtnText: { fontSize: 16, fontWeight: '700' },
+  // Hero mode
+  heroContainer: {
+    alignItems: 'center',
+    alignSelf: 'stretch',
+  },
+  heroDayText: {
+    fontSize: 12,
+    fontWeight: '600',
+    opacity: 0.75,
+    textTransform: 'capitalize',
+    marginBottom: 6,
+  },
+  heroTimeBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    alignSelf: 'stretch',
+    alignItems: 'center',
+  },
+  heroTimeBtnText: { fontSize: 28, fontWeight: '700', letterSpacing: 0.5, fontVariant: ['tabular-nums'] as any },
+  // Wake mode (Uhrzeit-Button im Wachphasen-Formular)
+  wakeModeBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 12,
+  },
+  wakeModeBtnText: { fontSize: 24, fontWeight: '700', fontVariant: ['tabular-nums'] as any },
   iosModalOverlay: {
     flex: 1,
     justifyContent: 'center',
     paddingHorizontal: 24,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  // Für wakeMode: Picker weiter unten — leichter mit dem Daumen erreichbar
+  iosModalOverlayBottom: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    paddingHorizontal: 24,
+    paddingBottom: Platform.OS === 'ios' ? 48 : 24,
     backgroundColor: 'rgba(0,0,0,0.35)',
   },
   iosModalCard: {
@@ -547,6 +775,10 @@ const rowStyles = StyleSheet.create({
     marginTop: 4,
     height: 180,
   },
+  iosSpinnerDatetime: {
+    marginTop: 4,
+    height: 180,
+  },
 });
 
 // ─── Main Editor Component ──────────────────────────────────
@@ -560,11 +792,13 @@ export default function NightSleepEditor({
   onDeleteNightGroup,
   isSaving,
 }: NightSleepEditorProps) {
+  const router = useRouter();
   const adaptiveColors = useAdaptiveColors();
   const isDark = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
   const textPrimary = isDark ? Colors.dark.textPrimary : '#5C4033';
   const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
   const accentColor = isDark ? ACCENT_DARK : ACCENT_LIGHT;
+  const wakeColor = isDark ? WAKE_COLOR_DARK : WAKE_COLOR_LIGHT;
   const ghostColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)';
   const overlayColor = isDark ? 'rgba(0,0,0,0.58)' : 'rgba(0,0,0,0.35)';
   const panelColor = isDark ? 'rgba(10,10,12,0.86)' : 'transparent';
@@ -574,15 +808,30 @@ export default function NightSleepEditor({
 
   const [addingWake, setAddingWake] = useState(false);
   const [newWakeStart, setNewWakeStart] = useState<Date | null>(null);
-  const [newWakeEnd, setNewWakeEnd] = useState<Date | null>(null);
+  const [newWakeDurationMin, setNewWakeDurationMin] = useState(5);
   const [isSubmittingWake, setIsSubmittingWake] = useState(false);
   const [showAutoFixInfoModal, setShowAutoFixInfoModal] = useState(false);
+  // Linked-shift display overrides: wenn Eingeschlafen die Aufgewacht-Zeit mitschiebt
+  // (oder umgekehrt), zeigen wir den neuen Wert sofort — bevor der DB-Save zurückkommt.
+  const [linkedNightStartDisplay, setLinkedNightStartDisplay] = useState<Date | undefined>(undefined);
+  const [linkedNightEndDisplay, setLinkedNightEndDisplay] = useState<Date | undefined>(undefined);
+  // Optimistischer Entries-Override: wird sofort nach Split gesetzt, damit die neue Wachphase
+  // direkt erscheint — bevor der Parent nach dem DB-Reload eine neue nightGroup liefert.
+  const [optimisticEntries, setOptimisticEntries] = useState<ClassifiedSleepEntry[] | null>(null);
+  // Debounce-Timer pro Boundary-Key (z.B. "night-end-<id>")
   const pendingAdjustTimeoutsRef = useRef<Record<string, ReturnType<typeof setTimeout> | null>>({});
-  const pendingBoundaryAdjustsRef = useRef<Record<string, PendingBoundaryAdjust>>({});
-  const isFlushingBoundaryAdjustsRef = useRef(false);
+  // Letzte akzeptierte Zeit pro Key – damit der nächste Picker-Interact richtig aufgelöst wird
   const boundaryReferenceTimesRef = useRef<Record<string, Date>>({});
+  // Spiegel von `isSaving` als Ref, damit setTimeout-Callbacks den aktuellen Wert lesen können
+  const isSavingRef = useRef(isSaving);
+  useEffect(() => { isSavingRef.current = isSaving; }, [isSaving]);
 
-  const entries = nightGroup.entries;
+  // Wenn der Parent neue Daten liefert (nach DB-Reload), optimistische Daten verwerfen
+  useEffect(() => {
+    setOptimisticEntries(null);
+  }, [nightGroup]);
+
+  const entries = optimisticEntries ?? nightGroup.entries;
   const firstEntry = useMemo(() => {
     return entries.reduce((earliest, entry) => {
       if (!earliest) return entry;
@@ -594,8 +843,11 @@ export default function NightSleepEditor({
   const lastEntry = useMemo(() => {
     return entries.reduce((latest, entry) => {
       if (!latest) return entry;
-      const latestEnd = latest.end_time ? new Date(latest.end_time).getTime() : Number.NEGATIVE_INFINITY;
-      const currentEnd = entry.end_time ? new Date(entry.end_time).getTime() : Number.NEGATIVE_INFINITY;
+      // Aktive Einträge (kein end_time) gelten als "jetzt endend" — nicht als negative Unendlichkeit.
+      // So gewinnt ein laufender Schlaf immer gegen jeden bereits beendeten Eintrag.
+      const now = Date.now();
+      const latestEnd = latest.end_time ? new Date(latest.end_time).getTime() : now;
+      const currentEnd = entry.end_time ? new Date(entry.end_time).getTime() : now;
       if (currentEnd > latestEnd) return entry;
       if (currentEnd === latestEnd) {
         return new Date(entry.start_time).getTime() > new Date(latest.start_time).getTime()
@@ -609,7 +861,6 @@ export default function NightSleepEditor({
   const nightStart = nightGroup.start;
   const nightEnd = nightGroup.end;
   const totalSleepMin = nightGroup.totalMinutes;
-  const totalWakeSeconds = nightGroup.wakeGaps.reduce((a, b) => a + b, 0);
   const nightSpanMinutes = useMemo(
     () => Math.round((nightEnd.getTime() - nightStart.getTime()) / ONE_MINUTE_MS),
     [nightEnd, nightStart]
@@ -632,6 +883,10 @@ export default function NightSleepEditor({
     }
     return phases;
   }, [entries]);
+  const totalWakeSeconds = useMemo(
+    () => wakePhases.reduce((sum, phase) => sum + phase.durationSeconds, 0),
+    [wakePhases]
+  );
 
   useEffect(() => {
     const nextReferenceTimes: Record<string, Date> = {};
@@ -657,62 +912,39 @@ export default function NightSleepEditor({
     wakePhases,
   ]);
 
-  const flushBoundaryAdjustQueue = useCallback(async () => {
-    if (isSaving || isFlushingBoundaryAdjustsRef.current) return;
-
-    const pendingKeys = Object.keys(pendingBoundaryAdjustsRef.current);
-    if (pendingKeys.length === 0) return;
-
-    isFlushingBoundaryAdjustsRef.current = true;
-    try {
-      while (true) {
-        const nextKey = Object.keys(pendingBoundaryAdjustsRef.current)[0];
-        if (!nextKey) break;
-
-        const nextAdjust = pendingBoundaryAdjustsRef.current[nextKey];
-        delete pendingBoundaryAdjustsRef.current[nextKey];
-        await onAdjustBoundary(nextAdjust.entry, nextAdjust.field, nextAdjust.date);
-      }
-    } finally {
-      isFlushingBoundaryAdjustsRef.current = false;
-    }
-  }, [isSaving, onAdjustBoundary]);
-
   useEffect(() => {
     return () => {
       Object.values(pendingAdjustTimeoutsRef.current).forEach((timeoutId) => {
         if (timeoutId) clearTimeout(timeoutId);
       });
       pendingAdjustTimeoutsRef.current = {};
-      pendingBoundaryAdjustsRef.current = {};
       boundaryReferenceTimesRef.current = {};
-      isFlushingBoundaryAdjustsRef.current = false;
     };
   }, []);
-
-  useEffect(() => {
-    if (!isSaving) {
-      void flushBoundaryAdjustQueue();
-    }
-  }, [flushBoundaryAdjustQueue, isSaving]);
 
   const scheduleBoundaryAdjust = useCallback(
     (key: string, entry: ClassifiedSleepEntry, field: 'start_time' | 'end_time', date: Date) => {
       const existingTimeout = pendingAdjustTimeoutsRef.current[key];
-      if (existingTimeout) {
-        clearTimeout(existingTimeout);
-      }
+      if (existingTimeout) clearTimeout(existingTimeout);
 
       pendingAdjustTimeoutsRef.current[key] = setTimeout(() => {
         pendingAdjustTimeoutsRef.current[key] = null;
-        pendingBoundaryAdjustsRef.current[key] = { entry, field, date };
-        void flushBoundaryAdjustQueue();
+        if (isSavingRef.current) {
+          // Wenn gerade gespeichert wird, noch einmal kurz warten und dann direkt speichern
+          pendingAdjustTimeoutsRef.current[key] = setTimeout(() => {
+            pendingAdjustTimeoutsRef.current[key] = null;
+            void onAdjustBoundary(entry, field, date);
+          }, 300);
+          return;
+        }
+        void onAdjustBoundary(entry, field, date);
       }, 250);
     },
-    [flushBoundaryAdjustQueue]
+    [onAdjustBoundary]
   );
 
   // ─── Handlers ──────────────────────────────────────────
+  // heroMode-Picker liefert absolutes Datum+Zeit (datetime-mode) → direkt verwenden, kein resolve nötig
   const handleChangeNightStart = useCallback((newTime: Date): boolean => {
     const key = `night-start-${firstEntry.id ?? 'no-id'}`;
     const endKey = `night-end-${lastEntry.id ?? 'no-id'}`;
@@ -720,17 +952,29 @@ export default function NightSleepEditor({
     const fallbackNightEnd = lastEntry.end_time ? new Date(lastEntry.end_time) : nightEnd;
     const original = boundaryReferenceTimesRef.current[key] ?? fallbackOriginal;
     const currentNightEnd = boundaryReferenceTimesRef.current[endKey] ?? fallbackNightEnd;
-    const resolved = resolvePickerTimeNearReference(newTime, original, {
-      maxExclusive: currentNightEnd,
-    });
-    if (!resolved) return false;
+
+    const resolved = new Date(newTime);
+    resolved.setSeconds(0, 0);
     if (Math.floor(resolved.getTime() / 60000) === Math.floor(original.getTime() / 60000)) return false;
+
+    // Wenn neue Startzeit hinter der Endzeit liegt: Endzeit um gleiche Differenz verschieben
+    if (resolved.getTime() >= currentNightEnd.getTime()) {
+      const delta = resolved.getTime() - original.getTime();
+      const newEnd = new Date(currentNightEnd.getTime() + delta);
+      newEnd.setSeconds(0, 0);
+      boundaryReferenceTimesRef.current[endKey] = newEnd;
+      scheduleBoundaryAdjust(endKey, lastEntry, 'end_time', newEnd);
+      // Sofort visuell im Aufgewacht-Picker anzeigen (linked-shift)
+      setLinkedNightEndDisplay(newEnd);
+    } else {
+      setLinkedNightEndDisplay(undefined);
+    }
 
     boundaryReferenceTimesRef.current[key] = resolved;
     scheduleBoundaryAdjust(key, firstEntry, 'start_time', resolved);
     hapticLight();
     return true;
-  }, [firstEntry, lastEntry.id, lastEntry.end_time, nightEnd, scheduleBoundaryAdjust]);
+  }, [firstEntry, lastEntry, nightEnd, scheduleBoundaryAdjust]);
 
   const handleChangeNightEnd = useCallback((newTime: Date): boolean => {
     const key = `night-end-${lastEntry.id ?? 'no-id'}`;
@@ -739,17 +983,29 @@ export default function NightSleepEditor({
     const fallbackOriginal = lastEntry.end_time ? new Date(lastEntry.end_time) : new Date();
     const original = boundaryReferenceTimesRef.current[key] ?? fallbackOriginal;
     const currentNightStart = boundaryReferenceTimesRef.current[startKey] ?? fallbackNightStart;
-    const resolved = resolvePickerTimeNearReference(newTime, original, {
-      minExclusive: currentNightStart,
-    });
-    if (!resolved) return false;
+
+    const resolved = new Date(newTime);
+    resolved.setSeconds(0, 0);
     if (Math.floor(resolved.getTime() / 60000) === Math.floor(original.getTime() / 60000)) return false;
+
+    // Wenn neue Endzeit vor der Startzeit liegt: Startzeit um gleiche Differenz verschieben
+    if (resolved.getTime() <= currentNightStart.getTime()) {
+      const delta = resolved.getTime() - original.getTime();
+      const newStart = new Date(currentNightStart.getTime() + delta);
+      newStart.setSeconds(0, 0);
+      boundaryReferenceTimesRef.current[startKey] = newStart;
+      scheduleBoundaryAdjust(startKey, firstEntry, 'start_time', newStart);
+      // Sofort visuell im Eingeschlafen-Picker anzeigen (linked-shift)
+      setLinkedNightStartDisplay(newStart);
+    } else {
+      setLinkedNightStartDisplay(undefined);
+    }
 
     boundaryReferenceTimesRef.current[key] = resolved;
     scheduleBoundaryAdjust(key, lastEntry, 'end_time', resolved);
     hapticLight();
     return true;
-  }, [firstEntry.id, firstEntry.start_time, lastEntry, scheduleBoundaryAdjust]);
+  }, [firstEntry, lastEntry, scheduleBoundaryAdjust]);
 
   const getAutoFixPreview = useCallback(() => {
     if (!lastEntry.end_time) return null;
@@ -798,11 +1054,12 @@ export default function NightSleepEditor({
     const original = boundaryReferenceTimesRef.current[startKey] ?? phase.start;
     const currentWakeEnd = boundaryReferenceTimesRef.current[endKey] ?? phase.end;
     const prevEntryStart = new Date(phase.prevEntry.start_time);
-    const resolved = resolvePickerTimeNearReference(newTime, original, {
-      minExclusive: prevEntryStart,
-      maxExclusive: currentWakeEnd,
-    });
-    if (!resolved) return false;
+
+    // wakeMode verwendet datetime-Picker → absoluten Timestamp direkt verwenden
+    const resolved = new Date(newTime);
+    resolved.setSeconds(0, 0);
+    if (resolved.getTime() <= prevEntryStart.getTime()) return false;
+    if (resolved.getTime() >= currentWakeEnd.getTime()) return false;
     if (Math.floor(resolved.getTime() / 60000) === Math.floor(original.getTime() / 60000)) return false;
 
     boundaryReferenceTimesRef.current[startKey] = resolved;
@@ -822,11 +1079,12 @@ export default function NightSleepEditor({
     const original = boundaryReferenceTimesRef.current[endKey] ?? phase.end;
     const currentWakeStart = boundaryReferenceTimesRef.current[startKey] ?? phase.start;
     const nextEntryEnd = phase.nextEntry.end_time ? new Date(phase.nextEntry.end_time) : undefined;
-    const resolved = resolvePickerTimeNearReference(newTime, original, {
-      minExclusive: currentWakeStart,
-      maxExclusive: nextEntryEnd,
-    });
-    if (!resolved) return false;
+
+    // wakeMode verwendet datetime-Picker → absoluten Timestamp direkt verwenden
+    const resolved = new Date(newTime);
+    resolved.setSeconds(0, 0);
+    if (resolved.getTime() <= currentWakeStart.getTime()) return false;
+    if (nextEntryEnd && resolved.getTime() >= nextEntryEnd.getTime()) return false;
     if (Math.floor(resolved.getTime() / 60000) === Math.floor(original.getTime() / 60000)) return false;
 
     boundaryReferenceTimesRef.current[endKey] = resolved;
@@ -850,17 +1108,72 @@ export default function NightSleepEditor({
           text: 'Entfernen',
           style: 'destructive',
           onPress: async () => {
-            const didMerge = await onMerge(phase.prevEntry, phase.nextEntry);
-            if (didMerge) {
-              hapticLight();
-            } else {
+            const currentEntries = entries;
+            let didApplyOptimisticMerge = false;
+
+            const toMinuteBucket = (value: Date | string | null | undefined): number | null => {
+              if (!value) return null;
+              const ms = new Date(value).getTime();
+              if (!Number.isFinite(ms)) return null;
+              return Math.floor(ms / ONE_MINUTE_MS);
+            };
+            const hasSameBoundaries = (
+              left: { start_time: Date | string; end_time?: Date | string | null },
+              right: { start_time: Date | string; end_time?: Date | string | null }
+            ): boolean => {
+              const leftStartBucket = toMinuteBucket(left.start_time);
+              const rightStartBucket = toMinuteBucket(right.start_time);
+              if (leftStartBucket === null || rightStartBucket === null || leftStartBucket !== rightStartBucket) {
+                return false;
+              }
+              return toMinuteBucket(left.end_time ?? null) === toMinuteBucket(right.end_time ?? null);
+            };
+            const isSameEntry = (
+              candidate: ClassifiedSleepEntry,
+              target: ClassifiedSleepEntry
+            ): boolean => {
+              if (candidate.id && target.id) return candidate.id === target.id;
+              return hasSameBoundaries(candidate, target);
+            };
+
+            const prevIdx = currentEntries.findIndex((entry) => isSameEntry(entry, phase.prevEntry));
+            const nextIdx = currentEntries.findIndex((entry, idx) => idx > prevIdx && isSameEntry(entry, phase.nextEntry));
+
+            if (prevIdx >= 0 && nextIdx > prevIdx) {
+              const mergedEntry: ClassifiedSleepEntry = {
+                ...currentEntries[prevIdx],
+                end_time: currentEntries[nextIdx].end_time ?? null,
+              };
+              const newEntries: ClassifiedSleepEntry[] = [
+                ...currentEntries.slice(0, prevIdx),
+                mergedEntry,
+                ...currentEntries.slice(nextIdx + 1),
+              ];
+              setOptimisticEntries(newEntries);
+              didApplyOptimisticMerge = true;
+            }
+
+            try {
+              const didMerge = await onMerge(phase.prevEntry, phase.nextEntry);
+              if (didMerge) {
+                hapticLight();
+                return;
+              }
+              if (didApplyOptimisticMerge) {
+                setOptimisticEntries(currentEntries);
+              }
+              Alert.alert('Konnte nicht löschen', 'Die Wachphase konnte nicht entfernt werden.');
+            } catch {
+              if (didApplyOptimisticMerge) {
+                setOptimisticEntries(currentEntries);
+              }
               Alert.alert('Konnte nicht löschen', 'Die Wachphase konnte nicht entfernt werden.');
             }
           },
         },
       ]
     );
-  }, [onMerge]);
+  }, [entries, onMerge]);
 
   const handleDeleteEntireNight = useCallback(() => {
     if (isSaving) return;
@@ -913,47 +1226,25 @@ export default function NightSleepEditor({
       new Date(longest.start_time).getTime() + longestDur / 2
     );
     mid.setSeconds(0, 0);
-    // Default: 15 min wake
-    const wakeEnd = new Date(mid.getTime() + 15 * 60000);
-    wakeEnd.setSeconds(0, 0);
 
     setNewWakeStart(mid);
-    setNewWakeEnd(wakeEnd);
+    setNewWakeDurationMin(5);
     setAddingWake(true);
   }, [entries]);
 
   const handleConfirmAddWake = useCallback(async () => {
-    if (!newWakeStart || !newWakeEnd || isSubmittingWake) return;
+    if (!newWakeStart || isSubmittingWake) return;
 
-    const wakeMinutes = Math.max(0, getWakeMinutesWithMidnightWrap(newWakeStart, newWakeEnd));
-    if (wakeMinutes < 1) {
-      Alert.alert('Ungültige Dauer', 'Die Wachphase muss mindestens 1 Minute dauern.');
-      return;
-    }
+    const wakeMinutes = Math.max(1, newWakeDurationMin);
 
-    const startCandidates = [
-      newWakeStart,
-      new Date(newWakeStart.getTime() + 24 * 60 * 60 * 1000),
-      new Date(newWakeStart.getTime() - 24 * 60 * 60 * 1000),
-    ];
-
-    let resolvedWakeStart: Date | null = null;
-    let targetEntry: ClassifiedSleepEntry | null = null;
-
-    for (const candidate of startCandidates) {
-      const wakeStartMs = candidate.getTime();
-      const candidateEntry = entries.find((entry) => {
-        const start = new Date(entry.start_time).getTime();
-        const end = (entry.end_time ? new Date(entry.end_time) : new Date()).getTime();
-        return wakeStartMs >= start && wakeStartMs < end;
-      });
-
-      if (candidateEntry) {
-        resolvedWakeStart = candidate;
-        targetEntry = candidateEntry;
-        break;
-      }
-    }
+    // newWakeStart ist ein absoluter Timestamp (aus handleStartAddWake oder resolvePickerTimeNearReference),
+    // daher kein Datum-Kandidaten-Loop nötig — direkte Suche im passenden Eintrag.
+    const wakeStartMs = newWakeStart.getTime();
+    const targetEntry = entries.find((entry) => {
+      const start = new Date(entry.start_time).getTime();
+      const end = (entry.end_time ? new Date(entry.end_time) : new Date()).getTime();
+      return wakeStartMs >= start && wakeStartMs < end;
+    }) ?? null;
 
     if (!targetEntry) {
       Alert.alert(
@@ -962,16 +1253,12 @@ export default function NightSleepEditor({
       );
       return;
     }
-    if (!resolvedWakeStart) {
-      Alert.alert('Konnte nicht speichern', 'Bitte versuche es erneut.');
-      return;
-    }
 
     setIsSubmittingWake(true);
     try {
       const didSave = await onSplit({
         targetEntry,
-        splitTime: resolvedWakeStart,
+        splitTime: newWakeStart,
         wakeMinutes,
       });
 
@@ -980,77 +1267,62 @@ export default function NightSleepEditor({
         return;
       }
 
+      // Optimistisches Update: Wachphase sofort in der Liste zeigen, bevor der Parent
+      // nach dem DB-Reload eine neue nightGroup liefert.
+      const wakeEnd = new Date(newWakeStart.getTime() + wakeMinutes * ONE_MINUTE_MS);
+      const optimisticFirstHalf: ClassifiedSleepEntry = {
+        ...targetEntry,
+        end_time: newWakeStart.toISOString(),
+      };
+      const optimisticSecondHalf: ClassifiedSleepEntry = {
+        ...targetEntry,
+        id: undefined,   // temporäre ID — wird nach DB-Reload durch echte ID ersetzt
+        start_time: wakeEnd.toISOString(),
+      };
+      const currentEntries = entries;
+      const insertIdx = currentEntries.findIndex((e) => e === targetEntry || e.id === targetEntry.id);
+      const newEntries: ClassifiedSleepEntry[] = [
+        ...currentEntries.slice(0, insertIdx),
+        optimisticFirstHalf,
+        optimisticSecondHalf,
+        ...currentEntries.slice(insertIdx + 1),
+      ];
+      setOptimisticEntries(newEntries);
+
       setAddingWake(false);
       setNewWakeStart(null);
-      setNewWakeEnd(null);
       hapticLight();
     } catch {
       Alert.alert('Konnte nicht speichern', 'Beim Speichern ist ein Fehler aufgetreten.');
     } finally {
       setIsSubmittingWake(false);
     }
-  }, [newWakeStart, newWakeEnd, entries, onSplit, isSubmittingWake]);
-
-  const applyResolvedNewWakeStart = useCallback((resolvedStart: Date): boolean => {
-    if (!newWakeStart || !newWakeEnd) return false;
-    if (minutesBucket(resolvedStart) === minutesBucket(newWakeStart)) return false;
-
-    const earliestAllowedStartMs = nightStart.getTime();
-    const latestAllowedEndMs = nightEnd.getTime() - ONE_MINUTE_MS;
-    if (resolvedStart.getTime() < earliestAllowedStartMs) return false;
-    if (resolvedStart.getTime() >= latestAllowedEndMs) return false;
-
-    const preservedWakeMinutes = Math.max(
-      1,
-      getWakeMinutesWithMidnightWrap(newWakeStart, newWakeEnd)
-    );
-
-    let resolvedEnd = new Date(resolvedStart.getTime() + preservedWakeMinutes * ONE_MINUTE_MS);
-    if (resolvedEnd.getTime() > latestAllowedEndMs) {
-      resolvedEnd = new Date(latestAllowedEndMs);
-    }
-    if (resolvedEnd.getTime() <= resolvedStart.getTime()) {
-      resolvedEnd = new Date(resolvedStart.getTime() + ONE_MINUTE_MS);
-    }
-
-    setNewWakeStart(resolvedStart);
-    setNewWakeEnd(resolvedEnd);
-    return true;
-  }, [newWakeEnd, newWakeStart, nightEnd, nightStart]);
-
-  const applyResolvedNewWakeEnd = useCallback((resolvedEnd: Date): boolean => {
-    if (!newWakeEnd || !newWakeStart) return false;
-    if (minutesBucket(resolvedEnd) === minutesBucket(newWakeEnd)) return false;
-    if (resolvedEnd.getTime() <= newWakeStart.getTime()) return false;
-    if (resolvedEnd.getTime() >= nightEnd.getTime()) return false;
-
-    setNewWakeEnd(resolvedEnd);
-    return true;
-  }, [newWakeEnd, newWakeStart, nightEnd]);
+  }, [newWakeStart, newWakeDurationMin, entries, onSplit, isSubmittingWake]);
 
   const handleChangeNewWakeStart = useCallback((pickedTime: Date): boolean => {
     if (!newWakeStart) return false;
 
-    const resolvedStart = resolvePickerTimeNearReference(pickedTime, newWakeStart, {
-      minExclusive: new Date(nightStart.getTime() - 1),
-      maxExclusive: nightEnd,
+    // wakeMode verwendet datetime-Picker → absoluten Timestamp direkt verwenden
+    const resolved = new Date(pickedTime);
+    resolved.setSeconds(0, 0);
+
+    const earliestAllowedStartMs = nightStart.getTime();
+    const latestAllowedEndMs = nightEnd.getTime() - ONE_MINUTE_MS;
+    if (resolved.getTime() < earliestAllowedStartMs) return false;
+    if (resolved.getTime() >= latestAllowedEndMs) return false;
+    if (minutesBucket(resolved) === minutesBucket(newWakeStart)) return false;
+
+    setNewWakeStart(resolved);
+    return true;
+  }, [newWakeStart, nightEnd, nightStart]);
+
+  const handleOpenNightWindowSettings = useCallback(() => {
+    onClose();
+    router.push({
+      pathname: '/app-settings',
+      params: { focus: 'night-window' },
     });
-    if (!resolvedStart) return false;
-
-    return applyResolvedNewWakeStart(resolvedStart);
-  }, [applyResolvedNewWakeStart, newWakeStart, nightEnd, nightStart]);
-
-  const handleChangeNewWakeEnd = useCallback((pickedTime: Date): boolean => {
-    if (!newWakeEnd || !newWakeStart) return false;
-
-    const resolvedEnd = resolvePickerTimeNearReference(pickedTime, newWakeEnd, {
-      minExclusive: newWakeStart,
-      maxExclusive: nightEnd,
-    });
-    if (!resolvedEnd) return false;
-
-    return applyResolvedNewWakeEnd(resolvedEnd);
-  }, [applyResolvedNewWakeEnd, newWakeEnd, newWakeStart, nightEnd]);
+  }, [onClose, router]);
 
   const autoFixPreview = getAutoFixPreview();
 
@@ -1092,6 +1364,21 @@ export default function NightSleepEditor({
               <Text style={[styles.headerTitle, { color: textPrimary }]}>
                 Nachtschlaf bearbeiten
               </Text>
+              <TouchableOpacity
+                style={[
+                  styles.headerSettingsBtn,
+                  {
+                    borderColor: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.12)',
+                    backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)',
+                  },
+                ]}
+                onPress={handleOpenNightWindowSettings}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.headerSettingsBtnText, { color: accentColor }]}>
+                  ✏️ Nachtschlaffenster anpassen
+                </Text>
+              </TouchableOpacity>
             </View>
 
             {/* Summary */}
@@ -1103,9 +1390,47 @@ export default function NightSleepEditor({
               {totalWakeSeconds > 0 && (
                 <View style={styles.summaryRow}>
                   <Text style={[styles.summaryLabel, { color: textSecondary }]}>Wach</Text>
-                  <Text style={[styles.summaryValue, { color: WAKE_COLOR }]}>{formatWakeDuration(totalWakeSeconds)}</Text>
+                  <Text style={[styles.summaryValue, { color: wakeColor }]}>{formatWakeDuration(totalWakeSeconds)}</Text>
                 </View>
               )}
+            </View>
+
+            {/* Hero: Eingeschlafen + Aufgewacht nebeneinander */}
+            <View style={[styles.heroDuoCard, { backgroundColor: cardBg }]}>
+              {/* Eingeschlafen */}
+              <View style={styles.heroDuoSide}>
+                <Text style={[styles.heroLabel, { color: textSecondary }]}>Eingeschlafen</Text>
+                <TimePickerRow
+                  label="Eingeschlafen"
+                  time={nightStart}
+                  onChange={handleChangeNightStart}
+                  accentColor={accentColor}
+                  isDark={isDark}
+                  textPrimary={textPrimary}
+                  textSecondary={textSecondary}
+                  heroMode
+                  linkedDisplayTime={linkedNightStartDisplay}
+                />
+              </View>
+
+              {/* Trennlinie */}
+              <View style={[styles.heroDuoDivider, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }]} />
+
+              {/* Aufgewacht */}
+              <View style={styles.heroDuoSide}>
+                <Text style={[styles.heroLabel, { color: textSecondary }]}>Aufgewacht</Text>
+                <TimePickerRow
+                  label="Aufgewacht"
+                  time={nightEnd}
+                  onChange={handleChangeNightEnd}
+                  accentColor={accentColor}
+                  isDark={isDark}
+                  textPrimary={textPrimary}
+                  textSecondary={textSecondary}
+                  heroMode
+                  linkedDisplayTime={linkedNightEndDisplay}
+                />
+              </View>
             </View>
 
             {hasMultiDayNightAnomaly && (
@@ -1138,7 +1463,7 @@ export default function NightSleepEditor({
                   Dieser Nachtschlaf läuft aktuell über {Math.floor(nightSpanMinutes / ONE_DAY_MINUTES)} Tage.
                 </Text>
                 <TouchableOpacity
-                  style={[styles.anomalyBtn, { backgroundColor: WAKE_COLOR }]}
+                  style={[styles.anomalyBtn, { backgroundColor: wakeColor }]}
                   onPress={handleAutoFixMultiDayNight}
                   disabled={isSaving || !lastEntry.end_time}
                   activeOpacity={0.75}
@@ -1150,38 +1475,76 @@ export default function NightSleepEditor({
               </View>
             )}
 
-            {/* Start / End times */}
-            <View style={[styles.section, { backgroundColor: cardBg }]}>
-              <TimePickerRow
-                label="Eingeschlafen"
-                time={nightStart}
-                onChange={handleChangeNightStart}
-                accentColor={accentColor}
-                isDark={isDark}
-                textPrimary={textPrimary}
-                textSecondary={textSecondary}
-              />
-              <View style={[styles.divider, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]} />
-              <TimePickerRow
-                label="Aufgewacht"
-                time={nightEnd}
-                onChange={handleChangeNightEnd}
-                accentColor={accentColor}
-                isDark={isDark}
-                textPrimary={textPrimary}
-                textSecondary={textSecondary}
-              />
-            </View>
-
             {/* Wake phases */}
             <View style={styles.wakeSection}>
-              <Text style={[styles.wakeSectionTitle, { color: textPrimary }]}>
-                Wachphasen
-              </Text>
-              <Text style={[styles.wakeSectionSub, { color: textSecondary }]}>
-                optional
-              </Text>
+              <Text style={[styles.wakeSectionTitle, { color: textPrimary }]}>Wachphasen</Text>
+              {!addingWake && (
+                <TouchableOpacity
+                  style={[styles.wakeAddInlineBtn, { backgroundColor: isDark ? 'rgba(232,160,130,0.15)' : 'rgba(232,160,130,0.12)' }]}
+                  onPress={handleStartAddWake}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.wakeAddInlineBtnText, { color: wakeColor }]}>+ Hinzufügen</Text>
+                </TouchableOpacity>
+              )}
             </View>
+
+            {/* Existing wake phases */}
+            {wakePhases.map((phase, i) => (
+              <View key={`wake-${i}`} style={[styles.wakeCard, { backgroundColor: wakeBg }]}>
+                {/* Header: Dauer + Löschen */}
+                <View style={styles.wakeCardTop}>
+                  <Text style={[styles.wakeCardDuration, { color: wakeColor }]}>
+                    {formatWakeDuration(phase.durationSeconds)}
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => { if (!isSaving) void handleDeleteWake(phase); }}
+                    disabled={isSaving}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    activeOpacity={0.5}
+                  >
+                    <Text style={[styles.wakeCardDeleteIcon, { color: textSecondary }]}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Von / Bis nebeneinander — wie die Eingeschlafen/Aufgewacht-Karte */}
+                <View style={styles.wakeCardDuo}>
+                  <View style={styles.wakeCardDuoSide}>
+                    <Text style={[styles.wakeCardDuoLabel, { color: textSecondary }]}>Von</Text>
+                    <Text style={[styles.wakeCardDuoDate, { color: textSecondary }]}>
+                      {formatShortDayDate(phase.start)}
+                    </Text>
+                    <TimePickerRow
+                      label="Von"
+                      time={phase.start}
+                      onChange={(d) => handleChangeWakeStart(phase, d)}
+                      accentColor={wakeColor}
+                      isDark={isDark}
+                      textPrimary={textPrimary}
+                      textSecondary={textSecondary}
+                      wakeMode
+                    />
+                  </View>
+                  <View style={[styles.wakeCardDuoDivider, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }]} />
+                  <View style={styles.wakeCardDuoSide}>
+                    <Text style={[styles.wakeCardDuoLabel, { color: textSecondary }]}>Bis</Text>
+                    <Text style={[styles.wakeCardDuoDate, { color: textSecondary }]}>
+                      {formatShortDayDate(phase.end)}
+                    </Text>
+                    <TimePickerRow
+                      label="Bis"
+                      time={phase.end}
+                      onChange={(d) => handleChangeWakeEnd(phase, d)}
+                      accentColor={wakeColor}
+                      isDark={isDark}
+                      textPrimary={textPrimary}
+                      textSecondary={textSecondary}
+                      wakeMode
+                    />
+                  </View>
+                </View>
+              </View>
+            ))}
 
             {wakePhases.length === 0 && !addingWake && (
               <Text style={[styles.noWakeText, { color: textSecondary }]}>
@@ -1189,80 +1552,58 @@ export default function NightSleepEditor({
               </Text>
             )}
 
-            {wakePhases.map((phase, i) => (
-              <View key={`wake-${i}`} style={[styles.wakeCard, { backgroundColor: wakeBg }]}>
-                <View style={styles.wakeCardHeader}>
-                  <View style={[styles.wakeDot, { backgroundColor: WAKE_COLOR }]} />
-                  <Text style={[styles.wakeTimeRange, { color: textPrimary }]}>
-                    {formatShortDayDate(phase.start)} {formatClockTime(phase.start)} – {formatShortDayDate(phase.end)} {formatClockTime(phase.end)}
-                  </Text>
-                  <Text style={[styles.wakeDuration, { color: WAKE_COLOR }]}>
-                    {formatWakeDuration(phase.durationSeconds)}
-                  </Text>
-                  <TouchableOpacity
-                    style={styles.wakeDeleteBtn}
-                    onPress={() => {
-                      if (isSaving) return;
-                      void handleDeleteWake(phase);
-                    }}
-                    disabled={isSaving}
-                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                    activeOpacity={0.6}
-                  >
-                    <Text style={[styles.wakeDeleteText, { color: textSecondary }]}>✕</Text>
-                  </TouchableOpacity>
-                </View>
+            {/* New wake phase form */}
+            {addingWake && newWakeStart && (
+              <View style={[styles.newWakeForm, { backgroundColor: wakeBg, borderColor: wakeColor }]}>
 
-                {/* Editable times */}
-                <View style={styles.wakePickerRow}>
-                  <TimePickerRow
-                    label="Von"
-                    time={phase.start}
-                    onChange={(d) => handleChangeWakeStart(phase, d)}
-                    accentColor={WAKE_COLOR}
-                    isDark={isDark}
-                    textPrimary={textPrimary}
-                    textSecondary={textSecondary}
-                  />
-                  <TimePickerRow
-                    label="Bis"
-                    time={phase.end}
-                    onChange={(d) => handleChangeWakeEnd(phase, d)}
-                    accentColor={WAKE_COLOR}
-                    isDark={isDark}
-                    textPrimary={textPrimary}
-                    textSecondary={textSecondary}
-                  />
-                </View>
-              </View>
-            ))}
-
-            {/* Adding new wake phase */}
-            {addingWake && newWakeStart && newWakeEnd && (
-              <View style={[styles.wakeCard, styles.wakeCardNew, { backgroundColor: wakeBg, borderColor: WAKE_COLOR }]}>
-                <Text style={[styles.newWakeTitle, { color: textPrimary }]}>
-                  Neue Wachphase
-                </Text>
-                <View style={styles.wakePickerRow}>
+                {/* Von — zwei Spalten: Label + Uhrzeit-Button */}
+                <View style={styles.newWakeVonRow}>
+                  <View>
+                    <Text style={[styles.newWakeFormLabel, { color: textSecondary }]}>Von</Text>
+                    <Text style={[styles.newWakeVonDate, { color: textSecondary }]}>
+                      {formatShortDayDate(newWakeStart)}
+                    </Text>
+                  </View>
                   <TimePickerRow
                     label="Von"
                     time={newWakeStart}
                     onChange={handleChangeNewWakeStart}
-                    accentColor={WAKE_COLOR}
+                    accentColor={wakeColor}
                     isDark={isDark}
                     textPrimary={textPrimary}
                     textSecondary={textSecondary}
-                  />
-                  <TimePickerRow
-                    label="Bis"
-                    time={newWakeEnd}
-                    onChange={handleChangeNewWakeEnd}
-                    accentColor={WAKE_COLOR}
-                    isDark={isDark}
-                    textPrimary={textPrimary}
-                    textSecondary={textSecondary}
+                    wakeMode
                   />
                 </View>
+
+                {/* Trennlinie */}
+                <View style={[styles.newWakeInnerDivider, { backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)' }]} />
+
+                {/* Dauer stepper */}
+                <View style={styles.newWakeStepper}>
+                  <Text style={[styles.newWakeStepperLabel, { color: textSecondary }]}>Dauer</Text>
+                  <View style={styles.newWakeStepperControls}>
+                    <TouchableOpacity
+                      style={[styles.newWakeStepBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' }]}
+                      onPress={() => setNewWakeDurationMin((d) => Math.max(1, d - 1))}
+                      onLongPress={() => setNewWakeDurationMin((d) => Math.max(1, d - 5))}
+                      activeOpacity={0.6}
+                    >
+                      <Text style={[styles.newWakeStepBtnText, { color: wakeColor }]}>−</Text>
+                    </TouchableOpacity>
+                    <Text style={[styles.newWakeStepValue, { color: textPrimary }]}>{newWakeDurationMin} Min</Text>
+                    <TouchableOpacity
+                      style={[styles.newWakeStepBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' }]}
+                      onPress={() => setNewWakeDurationMin((d) => Math.min(240, d + 1))}
+                      onLongPress={() => setNewWakeDurationMin((d) => Math.min(240, d + 5))}
+                      activeOpacity={0.6}
+                    >
+                      <Text style={[styles.newWakeStepBtnText, { color: wakeColor }]}>+</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {/* Buttons */}
                 <View style={styles.newWakeBtns}>
                   <TouchableOpacity
                     style={[styles.newWakeCancelBtn, { borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)' }]}
@@ -1272,30 +1613,19 @@ export default function NightSleepEditor({
                     <Text style={[styles.newWakeCancelText, { color: textSecondary }]}>Abbrechen</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={[styles.newWakeConfirmBtn, { backgroundColor: WAKE_COLOR }]}
+                    style={[styles.newWakeConfirmBtn, { backgroundColor: wakeColor }]}
                     onPress={handleConfirmAddWake}
                     disabled={isSaving || isSubmittingWake}
                     activeOpacity={0.7}
                   >
                     <Text style={styles.newWakeConfirmText}>
-                      {isSaving || isSubmittingWake ? 'Speichert...' : 'Hinzufügen'}
+                      {isSaving || isSubmittingWake ? 'Speichert…' : 'Hinzufügen'}
                     </Text>
                   </TouchableOpacity>
                 </View>
               </View>
             )}
 
-            {/* Add wake button */}
-            {!addingWake && (
-              <TouchableOpacity
-                style={[styles.addWakeBtn, { borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)' }]}
-                onPress={handleStartAddWake}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.addWakePlus, { color: WAKE_COLOR }]}>+</Text>
-                <Text style={[styles.addWakeText, { color: textSecondary }]}>Wachphase hinzufügen</Text>
-              </TouchableOpacity>
-            )}
 
             <TouchableOpacity
               style={[
@@ -1387,8 +1717,8 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: RADIUS,
     borderTopRightRadius: RADIUS,
     overflow: 'hidden',
-    maxHeight: '97%',
-    minHeight: 500,
+    maxHeight: '99%',
+    minHeight: 540,
   },
   scrollContent: {
     flex: 1,
@@ -1401,6 +1731,17 @@ const styles = StyleSheet.create({
   header: {
     alignItems: 'center',
     marginBottom: 16,
+  },
+  headerSettingsBtn: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginTop: 8,
+  },
+  headerSettingsBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
   },
   headerEmoji: {
     fontSize: 28,
@@ -1514,6 +1855,38 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
   },
+  heroCard: {
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 16,
+    marginBottom: 12,
+    alignItems: 'center',
+  },
+  heroDuoCard: {
+    borderRadius: 16,
+    paddingVertical: 14,
+    marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'stretch',
+  },
+  heroDuoSide: {
+    flex: 1,
+    alignItems: 'center',
+    paddingHorizontal: 8,
+  },
+  heroDuoDivider: {
+    width: StyleSheet.hairlineWidth,
+    marginVertical: 4,
+  },
+  heroLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    opacity: 0.6,
+    marginBottom: 4,
+  },
   section: {
     borderRadius: 14,
     paddingHorizontal: 16,
@@ -1526,80 +1899,150 @@ const styles = StyleSheet.create({
   },
   wakeSection: {
     flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 8,
-    marginBottom: 10,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+    marginTop: 4,
   },
   wakeSectionTitle: {
     fontSize: 16,
     fontWeight: '700',
   },
-  wakeSectionSub: {
-    fontSize: 12,
-    fontWeight: '500',
-    opacity: 0.6,
+  wakeAddInlineBtn: {
+    paddingVertical: 5,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+  },
+  wakeAddInlineBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
   },
   noWakeText: {
     fontSize: 13,
     fontWeight: '500',
-    opacity: 0.5,
+    opacity: 0.4,
     textAlign: 'center',
-    paddingVertical: 12,
+    paddingVertical: 10,
   },
+  // Bestehende Wachphasen
   wakeCard: {
-    borderRadius: 14,
-    padding: 14,
+    borderRadius: 16,
     marginBottom: 10,
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 12,
   },
-  wakeCardNew: {
-    borderWidth: 1,
-    borderStyle: 'dashed',
-  },
-  wakeCardHeader: {
+  wakeCardTop: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 6,
+    justifyContent: 'space-between',
+    marginBottom: 8,
   },
-  wakeDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 8,
-  },
-  wakeTimeRange: {
-    fontSize: 14,
-    fontWeight: '600',
-    flex: 1,
-  },
-  wakeDuration: {
+  wakeCardDuration: {
     fontSize: 13,
     fontWeight: '700',
-    marginRight: 8,
   },
-  wakeDeleteBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  wakeDeleteText: {
+  wakeCardDeleteIcon: {
     fontSize: 14,
     fontWeight: '600',
-    opacity: 0.5,
+    opacity: 0.4,
   },
-  wakePickerRow: {
-    marginTop: 4,
+  wakeCardDuo: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
   },
-  newWakeTitle: {
-    fontSize: 14,
+  wakeCardDuoSide: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  wakeCardDuoDivider: {
+    width: StyleSheet.hairlineWidth,
+    marginVertical: 2,
+  },
+  wakeCardDuoLabel: {
+    fontSize: 11,
     fontWeight: '700',
-    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    opacity: 0.6,
+    marginBottom: 2,
+  },
+  wakeCardDuoDate: {
+    fontSize: 11,
+    fontWeight: '500',
+    opacity: 0.6,
+    textTransform: 'capitalize',
+    marginBottom: 4,
+  },
+  // Neues Wachphasen-Formular
+  newWakeForm: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    padding: 16,
+    marginBottom: 10,
+    gap: 2,
+  },
+  newWakeFormLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    marginBottom: 2,
+  },
+  newWakeVonRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  newWakeVonDate: {
+    fontSize: 12,
+    fontWeight: '500',
+    opacity: 0.7,
+    marginTop: 2,
+    textTransform: 'capitalize',
+  },
+  newWakeInnerDivider: {
+    height: StyleSheet.hairlineWidth,
+    marginVertical: 10,
+  },
+  newWakeStepper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  newWakeStepperLabel: {
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  newWakeStepperControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  newWakeStepBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  newWakeStepBtnText: {
+    fontSize: 22,
+    fontWeight: '600',
+    lineHeight: 26,
+  },
+  newWakeStepValue: {
+    fontSize: 17,
+    fontWeight: '700',
+    minWidth: 64,
+    textAlign: 'center',
+    fontVariant: ['tabular-nums'] as any,
   },
   newWakeBtns: {
     flexDirection: 'row',
     gap: 10,
-    marginTop: 12,
+    marginTop: 14,
   },
   newWakeCancelBtn: {
     flex: 1,
@@ -1616,25 +2059,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   newWakeConfirmText: { color: '#FFF', fontSize: 14, fontWeight: '700' },
-  addWakeBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 14,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    gap: 6,
-    marginTop: 2,
-  },
-  addWakePlus: {
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  addWakeText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
   deleteNightBtn: {
     marginTop: 10,
     marginBottom: 4,

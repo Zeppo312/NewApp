@@ -83,9 +83,10 @@ export function useAdaptiveColors(): AdaptiveColors & {
   // Standardmäßig nur den gespeicherten Bildmodus für echte Hintergrundauswahl nutzen.
   const baseIsDarkBackground = hasCustomBackground ? isDarkBackground : false;
 
-  // Wenn Auto-Dunkelmodus aktiv ist, folgt der Textmodus automatisch dem
-  // Zeitfenster (dunkel nachts, hell tagsüber).
-  const shouldSyncBackgroundModeWithAutoDark = autoDarkModeEnabled;
+  // Nur wenn das Auto-Dunkel-Fenster gerade aktiv ist (dark), wird der
+  // Hintergrundmodus automatisch übersteuert.
+  const isAutoDarkWindowActive = autoDarkModeEnabled && systemColorScheme === 'dark';
+  const shouldSyncBackgroundModeWithAutoDark = isAutoDarkWindowActive;
   const effectiveIsDarkBackground = shouldSyncBackgroundModeWithAutoDark
     ? systemColorScheme === 'dark'
     : baseIsDarkBackground;

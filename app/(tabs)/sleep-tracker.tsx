@@ -402,6 +402,7 @@ const getNightGroupsForDayEntries = (
   const grouped = new Map<string, ClassifiedSleepEntry[]>();
 
   for (const entry of entries) {
+    if (entry.period !== 'night') continue;
     const key = getNightWindowKeyForEntry(entry, nightWindowSettings);
     if (!key) continue;
     const current = grouped.get(key) ?? [];
@@ -513,16 +514,23 @@ const CentralTimer = React.memo(({
       return;
     }
 
+    const startMs = new Date(activeSleepEntry.start_time).getTime();
+    if (!Number.isFinite(startMs)) {
+      // Ungültiger start_time — kein Interval starten
+      setElapsedTime(0);
+      return;
+    }
+
     const updateElapsed = () => {
-      const now = Date.now();
-      const start = new Date(activeSleepEntry.start_time).getTime();
-      setElapsedTime(Math.max(0, Math.floor((now - start) / 1000)));
+      setElapsedTime(Math.max(0, Math.floor((Date.now() - startMs) / 1000)));
     };
 
     updateElapsed();
     const interval = setInterval(updateElapsed, 1000);
     return () => clearInterval(interval);
-  }, [activeSleepEntry?.start_time]);
+  // activeSleepEntry?.id stellt sicher dass der Effect neu läuft wenn null→entry wechselt,
+  // auch wenn start_time identisch bleibt (sonst würde der Interval nicht neu gestartet).
+  }, [activeSleepEntry?.id, activeSleepEntry?.start_time]);
 
   useEffect(() => {
     if (activeSleepEntry) return;
@@ -1311,6 +1319,8 @@ export default function SleepTrackerScreen() {
 
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
+  const [startPickerDraft, setStartPickerDraft] = useState(new Date());
+  const [endPickerDraft, setEndPickerDraft] = useState(new Date());
 
   // Splash System wie in daily_old.tsx
   const [splashVisible, setSplashVisible] = useState(false);
@@ -1411,12 +1421,15 @@ export default function SleepTrackerScreen() {
   );
 
   const resetManualModalData = useCallback(() => {
+    const now = sanitizeManualDate(new Date());
     setSleepModalData({
-      start_time: sanitizeManualDate(new Date()),
+      start_time: now,
       end_time: null,
       quality: null,
       notes: ''
     });
+    setStartPickerDraft(now);
+    setEndPickerDraft(now);
     setShowStartPicker(false);
     setShowEndPicker(false);
   }, [sanitizeManualDate]);
@@ -1828,7 +1841,19 @@ export default function SleepTrackerScreen() {
 
       // LIVE: Always fresh, no cache
       const activeSleep = await loadLiveStatus();
-      setActiveSleepEntry(activeSleep);
+      // Nur auf null setzen wenn die DB explizit keinen aktiven Eintrag zurückgibt.
+      // Wenn activeSleep null ist und wir bereits einen gesetzten Eintrag haben, behalten wir
+      // ihn — sonst tritt eine Race Condition auf: handleStartSleep setzt activeSleepEntry
+      // sofort, aber loadLiveStatus findet den Eintrag noch nicht in der DB, was den Timer
+      // auf elapsedTime=0 zurücksetzt und den Interval zerstört.
+      setActiveSleepEntry(prev => {
+        if (activeSleep !== null) return activeSleep;
+        // null von DB: nur zurücksetzen wenn kein laufender Eintrag bekannt ist,
+        // oder wenn der bekannte Eintrag bereits eine end_time hat (also gestoppt wurde).
+        if (prev === null || prev.end_time) return null;
+        // Andernfalls: aktuellen Wert behalten (DB noch nicht synced)
+        return prev;
+      });
 
       // HISTORY: With cache, refresh in background
       const { data: finishedEntries, isStale, refresh } = await loadSleepHistory();
@@ -2696,22 +2721,58 @@ export default function SleepTrackerScreen() {
       return false;
     }
 
-    const resolveEntry = (candidate: ClassifiedSleepEntry): ClassifiedSleepEntry => {
-      if (candidate.id) return candidate;
-      const startMs = new Date(candidate.start_time).getTime();
-      const endMs = candidate.end_time ? new Date(candidate.end_time).getTime() : null;
-      return (
-        sleepEntries.find((entry) => {
-          if (!entry.id) return false;
-          const entryStartMs = new Date(entry.start_time).getTime();
-          const entryEndMs = entry.end_time ? new Date(entry.end_time).getTime() : null;
-          return entryStartMs === startMs && entryEndMs === endMs;
-        }) ?? candidate
-      );
+    const toMinuteBucket = (value: Date | string | null | undefined): number | null => {
+      if (!value) return null;
+      const ms = new Date(value).getTime();
+      if (!Number.isFinite(ms)) return null;
+      return Math.floor(ms / 60000);
     };
 
-    const resolvedEntryA = resolveEntry(entryA);
-    const resolvedEntryB = resolveEntry(entryB);
+    const matchesEntryByTime = (
+      left: { start_time: Date | string; end_time?: Date | string | null },
+      right: { start_time: Date | string; end_time?: Date | string | null }
+    ): boolean => {
+      const leftStartBucket = toMinuteBucket(left.start_time);
+      const rightStartBucket = toMinuteBucket(right.start_time);
+      if (leftStartBucket === null || rightStartBucket === null || leftStartBucket !== rightStartBucket) {
+        return false;
+      }
+      return toMinuteBucket(left.end_time ?? null) === toMinuteBucket(right.end_time ?? null);
+    };
+
+    const resolveEntryFromList = (
+      candidate: ClassifiedSleepEntry,
+      source: Array<{ id?: string; start_time: Date | string; end_time?: Date | string | null }>
+    ): ClassifiedSleepEntry => {
+      if (candidate.id) return candidate;
+      const match = source.find((entry) => entry.id && matchesEntryByTime(candidate, entry));
+      return match?.id ? { ...candidate, id: match.id } : candidate;
+    };
+
+    let resolvedEntryA = resolveEntryFromList(entryA, sleepEntries);
+    let resolvedEntryB = resolveEntryFromList(entryB, sleepEntries);
+
+    if (!resolvedEntryA.id || !resolvedEntryB.id) {
+      // Nach einem optimistischen Split kann die neue Segment-ID kurz fehlen.
+      // Dann frisch vom Backend laden und die IDs über Start/End-Zeit auflösen.
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const freshResult = await sleepService.getEntries(activeBabyId ?? undefined);
+        if (freshResult.data) {
+          resolvedEntryA = resolveEntryFromList(resolvedEntryA, freshResult.data);
+          resolvedEntryB = resolveEntryFromList(resolvedEntryB, freshResult.data);
+        } else if (freshResult.error) {
+          console.warn('[SleepTracker] Merge resolve refresh failed:', freshResult.error);
+        }
+
+        if (resolvedEntryA.id && resolvedEntryB.id) {
+          break;
+        }
+
+        if (attempt === 0) {
+          await new Promise((resolve) => setTimeout(resolve, 200));
+        }
+      }
+    }
 
     if (!resolvedEntryA.id || !resolvedEntryB.id || !resolvedEntryA.end_time) {
       Alert.alert('Nicht speicherbar', 'Die ausgewählten Segmente konnten nicht eindeutig zugeordnet werden.');
@@ -2787,14 +2848,17 @@ export default function SleepTrackerScreen() {
     if (!sleepService || !user?.id || isSplittingSegment || !entry.id) return;
 
     const start = field === 'start_time' ? newTime : new Date(entry.start_time);
-    const end = field === 'end_time' ? newTime : (entry.end_time ? new Date(entry.end_time) : new Date());
+    // Für aktive Einträge (kein end_time): end_time wird gesetzt, kein Vergleich gegen "jetzt" nötig
+    const end = field === 'end_time' ? newTime : (entry.end_time ? new Date(entry.end_time) : null);
 
-    if (start.getTime() >= end.getTime()) {
+    if (end !== null && start.getTime() >= end.getTime()) {
       Alert.alert('Fehler', 'Startzeit muss vor der Endzeit liegen.');
       return;
     }
 
-    const newDuration = Math.max(1, Math.round((end.getTime() - start.getTime()) / 60000));
+    // end kann null sein wenn der Eintrag aktiv ist und end_time gerade gesetzt wird
+    const effectiveEnd = end ?? newTime;
+    const newDuration = Math.max(1, Math.round((effectiveEnd.getTime() - start.getTime()) / 60000));
 
     setIsSplittingSegment(true);
     try {
@@ -3112,7 +3176,10 @@ export default function SleepTrackerScreen() {
       if (expandedGroups.has(windowKey)) continue;
 
       const fullWindowSegments = sleepEntries
-        .filter((entry) => getNightWindowKeyForEntry(entry, nightWindowSettings) === windowKey)
+        .filter((entry) =>
+          entry.period === 'night' &&
+          getNightWindowKeyForEntry(entry, nightWindowSettings) === windowKey
+        )
         .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
 
       const expanded = buildNightGroupFromSegments(fullWindowSegments);
@@ -3242,16 +3309,25 @@ export default function SleepTrackerScreen() {
   const openStartPicker = () => {
     triggerHaptic();
     setShowEndPicker(false);
+    const normalizedStart = normalizePickerDate(sleepModalData.start_time, new Date());
     setSleepModalData((prev) => ({
       ...prev,
-      start_time: normalizePickerDate(prev.start_time, new Date()),
+      start_time: normalizedStart,
     }));
+    if (Platform.OS === 'ios') {
+      setStartPickerDraft(normalizedStart);
+    }
     setShowStartPicker(true);
   };
 
   const openEndPicker = () => {
     triggerHaptic();
     setShowStartPicker(false);
+    const safeStart = sanitizeManualDate(sleepModalData.start_time, new Date());
+    const safeEnd = sanitizeManualDate(sleepModalData.end_time ?? safeStart, safeStart);
+    if (Platform.OS === 'ios') {
+      setEndPickerDraft(safeEnd);
+    }
     setShowEndPicker(true);
   };
 
@@ -3269,6 +3345,46 @@ export default function SleepTrackerScreen() {
     () => sanitizeManualDate(sleepModalData.end_time ?? safeModalStartTime, safeModalStartTime),
     [sanitizeManualDate, safeModalStartTime, sleepModalData.end_time]
   );
+
+  const applyStartPickerValue = useCallback((nextStartValue: Date) => {
+    setSleepModalData((prev) => {
+      const prevStart = sanitizeManualDate(prev.start_time, new Date());
+      const nextStart = sanitizeManualDate(nextStartValue, prevStart);
+      const prevEnd = prev.end_time ? sanitizeManualDate(prev.end_time, nextStart) : null;
+      return {
+        ...prev,
+        start_time: nextStart,
+        end_time: prevEnd && prevEnd.getTime() <= nextStart.getTime() ? null : prevEnd,
+      };
+    });
+  }, [sanitizeManualDate]);
+
+  const applyEndPickerValue = useCallback((nextEndValue: Date) => {
+    setSleepModalData((prev) => {
+      const baseStart = sanitizeManualDate(prev.start_time, new Date());
+      const baseEnd = prev.end_time
+        ? sanitizeManualDate(prev.end_time, baseStart)
+        : baseStart;
+      const nextEnd = sanitizeManualDate(nextEndValue, baseEnd);
+      return { ...prev, end_time: nextEnd };
+    });
+  }, [sanitizeManualDate]);
+
+  const commitStartPickerDraft = useCallback(() => {
+    const currentMinute = Math.floor(safeModalStartTime.getTime() / 60000);
+    const draftMinute = Math.floor(startPickerDraft.getTime() / 60000);
+    if (currentMinute !== draftMinute) {
+      applyStartPickerValue(startPickerDraft);
+    }
+  }, [applyStartPickerValue, safeModalStartTime, startPickerDraft]);
+
+  const commitEndPickerDraft = useCallback(() => {
+    const currentMinute = Math.floor(safeModalEndPickerTime.getTime() / 60000);
+    const draftMinute = Math.floor(endPickerDraft.getTime() / 60000);
+    if (currentMinute !== draftMinute) {
+      applyEndPickerValue(endPickerDraft);
+    }
+  }, [applyEndPickerValue, endPickerDraft, safeModalEndPickerTime]);
 
   // Top Tabs Component (exakt wie daily_old.tsx)
   const TopTabs = () => (
@@ -4485,8 +4601,8 @@ export default function SleepTrackerScreen() {
                         </TouchableOpacity>
                       </View>
 
-                      {/* DateTimePicker direkt im Modal - Zeit und Datum gleichzeitig */}
-                      {showStartPicker && (
+                      {/* Android: DateTimePicker direkt im Modal */}
+                      {Platform.OS !== 'ios' && showStartPicker && (
                         <View
                           style={[
                             styles.datePickerContainer,
@@ -4500,23 +4616,13 @@ export default function SleepTrackerScreen() {
                             value={safeModalStartTime}
                             minimumDate={MIN_VALID_MANUAL_DATE}
                             mode="datetime"
-                            display={Platform.OS === 'ios' ? 'compact' : 'default'}
+                            display="default"
                             themeVariant={isDark ? 'dark' : 'light'}
-                            textColor={Platform.OS === 'ios' ? (isDark ? '#FFFFFF' : '#111827') : undefined}
-                            accentColor={Platform.OS === 'ios' ? modalAccentColor : undefined}
+                            accentColor={modalAccentColor}
                             onChange={(event, date) => {
                               if (event.type === 'dismissed') return;
-                              setSleepModalData((prev) => {
-                                const prevStart = sanitizeManualDate(prev.start_time, new Date());
-                                const nextStart = getSafePickerDateFromEvent(event, date, prevStart);
-                                const prevEnd = prev.end_time ? sanitizeManualDate(prev.end_time, nextStart) : null;
-                                return {
-                                  ...prev,
-                                  start_time: nextStart,
-                                  end_time:
-                                    prevEnd && prevEnd.getTime() <= nextStart.getTime() ? null : prevEnd,
-                                };
-                              });
+                              const nextStart = getSafePickerDateFromEvent(event, date, safeModalStartTime);
+                              applyStartPickerValue(nextStart);
                             }}
                             style={styles.dateTimePicker}
                           />
@@ -4534,7 +4640,7 @@ export default function SleepTrackerScreen() {
                         </View>
                       )}
 
-                      {showEndPicker && (
+                      {Platform.OS !== 'ios' && showEndPicker && (
                         <View
                           style={[
                             styles.datePickerContainer,
@@ -4548,20 +4654,13 @@ export default function SleepTrackerScreen() {
                             value={safeModalEndPickerTime}
                             minimumDate={MIN_VALID_MANUAL_DATE}
                             mode="datetime"
-                            display={Platform.OS === 'ios' ? 'compact' : 'default'}
+                            display="default"
                             themeVariant={isDark ? 'dark' : 'light'}
-                            textColor={Platform.OS === 'ios' ? (isDark ? '#FFFFFF' : '#111827') : undefined}
-                            accentColor={Platform.OS === 'ios' ? modalAccentColor : undefined}
+                            accentColor={modalAccentColor}
                             onChange={(event, date) => {
                               if (event.type === 'dismissed') return;
-                              setSleepModalData((prev) => {
-                                const baseStart = sanitizeManualDate(prev.start_time, new Date());
-                                const baseEnd = prev.end_time
-                                  ? sanitizeManualDate(prev.end_time, baseStart)
-                                  : baseStart;
-                                const nextEnd = getSafePickerDateFromEvent(event, date, baseEnd);
-                                return { ...prev, end_time: nextEnd };
-                              });
+                              const nextEnd = getSafePickerDateFromEvent(event, date, safeModalEndPickerTime);
+                              applyEndPickerValue(nextEnd);
                             }}
                             style={styles.dateTimePicker}
                           />
@@ -4577,6 +4676,134 @@ export default function SleepTrackerScreen() {
                             </TouchableOpacity>
                           </View>
                         </View>
+                      )}
+
+                      {Platform.OS === 'ios' && showStartPicker && (
+                        <Modal
+                          visible={showStartPicker}
+                          transparent
+                          animationType="fade"
+                          onRequestClose={() => {
+                            commitStartPickerDraft();
+                            setShowStartPicker(false);
+                          }}
+                        >
+                          <View style={styles.manualPickerOverlay}>
+                            <TouchableOpacity
+                              style={StyleSheet.absoluteFill}
+                              onPress={() => {
+                                commitStartPickerDraft();
+                                setShowStartPicker(false);
+                              }}
+                              activeOpacity={1}
+                            />
+                            <View
+                              style={[
+                                styles.manualPickerCard,
+                                {
+                                  backgroundColor: isDark ? 'rgba(24,24,28,0.96)' : 'rgba(255,255,255,0.98)',
+                                  borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)',
+                                },
+                              ]}
+                            >
+                              <View style={styles.manualPickerHeader}>
+                                <TouchableOpacity
+                                  onPress={() => setShowStartPicker(false)}
+                                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                >
+                                  <Text style={[styles.manualPickerActionText, { color: textSecondary }]}>Abbrechen</Text>
+                                </TouchableOpacity>
+                                <Text style={[styles.manualPickerTitle, { color: textPrimary }]}>Start</Text>
+                                <TouchableOpacity
+                                  onPress={() => {
+                                    commitStartPickerDraft();
+                                    setShowStartPicker(false);
+                                  }}
+                                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                >
+                                  <Text style={[styles.manualPickerActionText, { color: modalAccentColor }]}>Fertig</Text>
+                                </TouchableOpacity>
+                              </View>
+                              <DateTimePicker
+                                value={(() => { const d = new Date(startPickerDraft); d.setSeconds(0, 0); return d; })()}
+                                minimumDate={MIN_VALID_MANUAL_DATE}
+                                mode="datetime"
+                                display="spinner"
+                                locale="de-DE"
+                                onChange={(_, d) => {
+                                  if (d) setStartPickerDraft(d);
+                                }}
+                                accentColor={modalAccentColor}
+                                themeVariant={isDark ? 'dark' : 'light'}
+                                style={styles.manualPickerSpinner}
+                              />
+                            </View>
+                          </View>
+                        </Modal>
+                      )}
+
+                      {Platform.OS === 'ios' && showEndPicker && (
+                        <Modal
+                          visible={showEndPicker}
+                          transparent
+                          animationType="fade"
+                          onRequestClose={() => {
+                            commitEndPickerDraft();
+                            setShowEndPicker(false);
+                          }}
+                        >
+                          <View style={styles.manualPickerOverlay}>
+                            <TouchableOpacity
+                              style={StyleSheet.absoluteFill}
+                              onPress={() => {
+                                commitEndPickerDraft();
+                                setShowEndPicker(false);
+                              }}
+                              activeOpacity={1}
+                            />
+                            <View
+                              style={[
+                                styles.manualPickerCard,
+                                {
+                                  backgroundColor: isDark ? 'rgba(24,24,28,0.96)' : 'rgba(255,255,255,0.98)',
+                                  borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)',
+                                },
+                              ]}
+                            >
+                              <View style={styles.manualPickerHeader}>
+                                <TouchableOpacity
+                                  onPress={() => setShowEndPicker(false)}
+                                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                >
+                                  <Text style={[styles.manualPickerActionText, { color: textSecondary }]}>Abbrechen</Text>
+                                </TouchableOpacity>
+                                <Text style={[styles.manualPickerTitle, { color: textPrimary }]}>Ende</Text>
+                                <TouchableOpacity
+                                  onPress={() => {
+                                    commitEndPickerDraft();
+                                    setShowEndPicker(false);
+                                  }}
+                                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                >
+                                  <Text style={[styles.manualPickerActionText, { color: modalAccentColor }]}>Fertig</Text>
+                                </TouchableOpacity>
+                              </View>
+                              <DateTimePicker
+                                value={(() => { const d = new Date(endPickerDraft); d.setSeconds(0, 0); return d; })()}
+                                minimumDate={MIN_VALID_MANUAL_DATE}
+                                mode="datetime"
+                                display="spinner"
+                                locale="de-DE"
+                                onChange={(_, d) => {
+                                  if (d) setEndPickerDraft(d);
+                                }}
+                                accentColor={modalAccentColor}
+                                themeVariant={isDark ? 'dark' : 'light'}
+                                style={styles.manualPickerSpinner}
+                              />
+                            </View>
+                          </View>
+                        </Modal>
                       )}
                     </View>
 
@@ -5756,6 +5983,38 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600',
+  },
+  manualPickerOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  manualPickerCard: {
+    marginHorizontal: 12,
+    marginBottom: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  manualPickerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 6,
+  },
+  manualPickerActionText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  manualPickerTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  manualPickerSpinner: {
+    width: '100%',
+    height: 220,
   },
   splitSegmentNav: {
     width: '90%',

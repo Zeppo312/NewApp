@@ -239,29 +239,33 @@ export default function HomeScreen() {
   // Initialize background tasks and notifications
   useEffect(() => {
     const initBackgroundServices = async () => {
-      await setupNotifications();
-      
-      if (Platform.OS === 'ios') {
-        await setupDynamicIsland();
-      }
-      
-      // Check if timer is already running in background
-      const timerState = await getContractionTimerState();
-      if (timerState.isRunning) {
-        // Resume timer
-        setTimerRunning(true);
-        setElapsedTime(timerState.elapsedTime);
+      try {
+        await setupNotifications();
         
-        // Create a current contraction object
-        const startTimeDate = new Date(timerState.startTime);
-        setCurrentContraction({
-          id: generateUniqueId(),
-          startTime: startTimeDate,
-          endTime: null,
-          duration: null,
-          interval: null,
-          intensity: null
-        });
+        if (Platform.OS === 'ios') {
+          await setupDynamicIsland();
+        }
+        
+        // Check if timer is already running in background
+        const timerState = await getContractionTimerState();
+        if (timerState.isRunning) {
+          // Resume timer
+          setTimerRunning(true);
+          setElapsedTime(timerState.elapsedTime);
+          
+          // Create a current contraction object
+          const startTimeDate = new Date(timerState.startTime);
+          setCurrentContraction({
+            id: generateUniqueId(),
+            startTime: startTimeDate,
+            endTime: null,
+            duration: null,
+            interval: null,
+            intensity: null
+          });
+        }
+      } catch (error) {
+        console.error('Failed to initialize contraction background services:', error);
       }
     };
     
@@ -321,7 +325,11 @@ export default function HomeScreen() {
     setElapsedTime(0);
     
     // Start background timer
-    await startContractionTimer();
+    try {
+      await startContractionTimer();
+    } catch (error) {
+      console.error('Failed to start contraction timer in background:', error);
+    }
   };
 
   // Funktion zum Anzeigen des Intensitäts-Dialogs mit Buttons
@@ -421,10 +429,15 @@ export default function HomeScreen() {
   const stopContraction = async () => {
     if (currentContraction) {
       const endTime = new Date();
-      
+      let duration = elapsedTime;
+
       // Get final timer data from background
-      const timerData = await stopContractionTimer();
-      const duration = timerData.elapsedTime;
+      try {
+        const timerData = await stopContractionTimer();
+        duration = timerData.elapsedTime;
+      } catch (error) {
+        console.error('Failed to stop contraction timer in background:', error);
+      }
 
       const completedContraction: Contraction = {
         ...currentContraction,
@@ -452,8 +465,12 @@ export default function HomeScreen() {
         // App has come to the foreground
         const updateTimerFromBackground = async () => {
           if (timerRunning) {
-            const timerState = await getContractionTimerState();
-            setElapsedTime(timerState.elapsedTime);
+            try {
+              const timerState = await getContractionTimerState();
+              setElapsedTime(timerState.elapsedTime);
+            } catch (error) {
+              console.error('Failed to restore contraction timer state after app foreground:', error);
+            }
           }
         };
         
@@ -476,8 +493,12 @@ export default function HomeScreen() {
       intervalId = setInterval(async () => {
         if (Platform.OS === 'ios' && Device.isDevice) {
           // On real iOS devices, get time from background service
-          const timerState = await getContractionTimerState();
-          setElapsedTime(timerState.elapsedTime);
+          try {
+            const timerState = await getContractionTimerState();
+            setElapsedTime(timerState.elapsedTime);
+          } catch (error) {
+            console.error('Failed to refresh contraction timer state:', error);
+          }
         } else {
           // For other platforms or simulator, increment locally
           setElapsedTime(prev => prev + 1);
