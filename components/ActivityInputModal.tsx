@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   View,
   Modal,
@@ -17,7 +17,7 @@ import {
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { getSampleRecipeImage, RECIPE_SAMPLES } from '@/lib/recipes-samples';
 import { fetchRecipes, RecipeRecord } from '@/lib/recipes';
 import TextInputOverlay from '@/components/modals/TextInputOverlay';
@@ -96,6 +96,8 @@ const formatIntInput = (value: number | null | undefined): string => {
   return String(Math.trunc(value));
 };
 
+const MIN_VALID_MANUAL_DATE = new Date(2000, 0, 1);
+
 const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   visible,
   activityType,
@@ -143,6 +145,8 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   const [isEndTimeVisible, setEndTimeVisible] = useState(false);
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
+  const [startPickerDraft, setStartPickerDraft] = useState(new Date());
+  const [endPickerDraft, setEndPickerDraft] = useState(new Date());
   const [notes, setNotes] = useState('');
   const [isNotesVisible, setNotesVisible] = useState(false);
   const [focusConfig, setFocusConfig] = useState<FocusConfig | null>(null);
@@ -168,6 +172,60 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   const [diaperSuppositoryGiven, setDiaperSuppositoryGiven] = useState(false);
   const [diaperSuppositoryDoseMg, setDiaperSuppositoryDoseMg] = useState('');
 
+  const isFiniteManualDate = useCallback((value: unknown): value is Date => {
+    return value instanceof Date && Number.isFinite(value.getTime());
+  }, []);
+
+  const isValidManualDate = useCallback((value: unknown): boolean => {
+    if (!isFiniteManualDate(value)) return false;
+    const timestamp = value.getTime();
+    return timestamp >= MIN_VALID_MANUAL_DATE.getTime() && value.getFullYear() >= 2000;
+  }, [isFiniteManualDate]);
+
+  const sanitizeManualDate = useCallback(
+    (value?: Date | null, fallback?: Date) => {
+      const safeFallback =
+        fallback && isValidManualDate(fallback) ? new Date(fallback.getTime()) : new Date();
+
+      if (!isFiniteManualDate(value)) return safeFallback;
+      if (isValidManualDate(value)) return new Date(value.getTime());
+
+      if (value.getTime() <= 0 || value.getFullYear() < 2000) {
+        const patched = new Date(safeFallback.getTime());
+        patched.setHours(
+          value.getHours(),
+          value.getMinutes(),
+          value.getSeconds(),
+          value.getMilliseconds()
+        );
+        if (isValidManualDate(patched)) return patched;
+      }
+
+      return safeFallback;
+    },
+    [isFiniteManualDate, isValidManualDate]
+  );
+
+  const getSafePickerDateFromEvent = useCallback(
+    (event: DateTimePickerEvent, date: Date | undefined, fallback?: Date) => {
+      const safeFallback = sanitizeManualDate(fallback, new Date());
+
+      if (date) {
+        const fromDate = sanitizeManualDate(date, safeFallback);
+        if (isValidManualDate(fromDate)) return fromDate;
+      }
+
+      const nativeTimestamp = event.nativeEvent?.timestamp;
+      if (typeof nativeTimestamp === 'number' && Number.isFinite(nativeTimestamp)) {
+        const fromTimestamp = sanitizeManualDate(new Date(nativeTimestamp), safeFallback);
+        if (isValidManualDate(fromTimestamp)) return fromTimestamp;
+      }
+
+      return safeFallback;
+    },
+    [isValidManualDate, sanitizeManualDate]
+  );
+
   // Enable LayoutAnimation for Android
   if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
     UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -185,22 +243,23 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
     if (initKeyRef.current === initKey) return;
     initKeyRef.current = initKey;
 
-    const safeDate = (value: Date | undefined | null): Date => {
-      if (!value || !Number.isFinite(value.getTime())) return new Date();
-      return value;
-    };
     const safeParsed = (iso: string | null | undefined): Date | null => {
       if (!iso) return null;
       const d = new Date(iso);
       return Number.isFinite(d.getTime()) ? d : null;
     };
 
-    const now = safeDate(date);
-    // Startuhrzeit auf den ausgewählten Tag setzen, Uhrzeit aus dem ISO-String oder aktuelle Uhrzeit
+    const now = sanitizeManualDate(date, new Date());
     const parsedStart = safeParsed(initialData?.start_time);
-    setStartTime(parsedStart ?? now);
+    const nextStartTime = sanitizeManualDate(parsedStart ?? now, now);
+    setStartTime(nextStartTime);
     const parsedEnd = safeParsed(initialData?.end_time);
-    setEndTime(parsedEnd);
+    const nextEndTime = parsedEnd ? sanitizeManualDate(parsedEnd, nextStartTime) : null;
+    setEndTime(nextEndTime);
+    setStartPickerDraft(nextStartTime);
+    setEndPickerDraft(nextEndTime ?? nextStartTime);
+    setShowStartPicker(false);
+    setShowEndPicker(false);
     setEndTimeVisible(!!initialData?.end_time);
     setNotes(initialData?.notes ?? '');
     setNotesVisible(false);
@@ -242,7 +301,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
     }
 
     // Hier könnten initialSubType ausgewertet werden
-  }, [visible, initialSubType, date, initialData, activityType]);
+  }, [visible, initialSubType, date, initialData, activityType, sanitizeManualDate]);
 
   // Rezepte laden (Supabase), fallback auf Samples
   useEffect(() => {
@@ -274,7 +333,9 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
 
   // Speichern: Payload für baby_care_entries
   const handleSave = () => {
-    const entryDateISO = startTime.toISOString();
+    const safeStartTime = sanitizeManualDate(startTime, date ?? new Date());
+    const safeEndTime = endTime ? sanitizeManualDate(endTime, safeStartTime) : null;
+    const entryDateISO = safeStartTime.toISOString();
     const isDiaperEntry = activityType === 'diaper';
     const selectedRecipe = recipeOptions.find((r) => r.id === selectedRecipeId);
     const recipeTitle = selectedRecipe?.title?.trim() || (selectedRecipe ? 'BLW-Rezept' : null);
@@ -283,7 +344,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
     const base = {
       entry_type: activityType,           // 'feeding' | 'diaper'
       start_time: entryDateISO,
-      end_time: isDiaperEntry ? null : (endTime ? endTime.toISOString() : null as string | null),
+      end_time: isDiaperEntry ? null : (safeEndTime ? safeEndTime.toISOString() : null as string | null),
       notes: combinedNotes || null,
     };
 
@@ -348,14 +409,76 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
     onClose();
   };
 
-  const adjustTime = (setter: (d: Date) => void, target: Date, deltaMinutes: number) => {
-    const d = new Date(target);
-    d.setMinutes(d.getMinutes() + deltaMinutes);
-    setter(d);
-  };
+  const safeModalStartTime = useMemo(
+    () => sanitizeManualDate(startTime, new Date()),
+    [sanitizeManualDate, startTime]
+  );
+
+  const safeModalEndTime = useMemo(() => {
+    if (!endTime) return null;
+    return sanitizeManualDate(endTime, safeModalStartTime);
+  }, [endTime, sanitizeManualDate, safeModalStartTime]);
+
+  const safeModalEndPickerTime = useMemo(
+    () => sanitizeManualDate(endTime ?? safeModalStartTime, safeModalStartTime),
+    [endTime, sanitizeManualDate, safeModalStartTime]
+  );
+
+  const openStartPicker = useCallback(() => {
+    setShowEndPicker(false);
+    if (Platform.OS === 'ios') {
+      setStartPickerDraft(safeModalStartTime);
+    }
+    setShowStartPicker(true);
+  }, [safeModalStartTime]);
+
+  const openEndPicker = useCallback(() => {
+    setShowStartPicker(false);
+    if (Platform.OS === 'ios') {
+      setEndPickerDraft(safeModalEndPickerTime);
+    }
+    setShowEndPicker(true);
+  }, [safeModalEndPickerTime]);
+
+  const applyStartPickerValue = useCallback((nextStartValue: Date) => {
+    const nextStart = sanitizeManualDate(nextStartValue, safeModalStartTime);
+    setStartTime(nextStart);
+    setEndTime((prevEnd) => {
+      if (!prevEnd) return null;
+      const safePrevEnd = sanitizeManualDate(prevEnd, nextStart);
+      return safePrevEnd.getTime() <= nextStart.getTime() ? null : safePrevEnd;
+    });
+  }, [safeModalStartTime, sanitizeManualDate]);
+
+  const applyEndPickerValue = useCallback((nextEndValue: Date) => {
+    const baseEnd = endTime ? sanitizeManualDate(endTime, safeModalStartTime) : safeModalStartTime;
+    const nextEnd = sanitizeManualDate(nextEndValue, baseEnd);
+    setEndTime(nextEnd);
+  }, [endTime, safeModalStartTime, sanitizeManualDate]);
+
+  const commitStartPickerDraft = useCallback(() => {
+    const currentMinute = Math.floor(safeModalStartTime.getTime() / 60000);
+    const draftMinute = Math.floor(startPickerDraft.getTime() / 60000);
+    if (currentMinute !== draftMinute) {
+      applyStartPickerValue(startPickerDraft);
+    }
+  }, [applyStartPickerValue, safeModalStartTime, startPickerDraft]);
+
+  const commitEndPickerDraft = useCallback(() => {
+    const currentMinute = Math.floor(safeModalEndPickerTime.getTime() / 60000);
+    const draftMinute = Math.floor(endPickerDraft.getTime() / 60000);
+    if (currentMinute !== draftMinute) {
+      applyEndPickerValue(endPickerDraft);
+    }
+  }, [applyEndPickerValue, endPickerDraft, safeModalEndPickerTime]);
 
   const renderTimeSection = () => {
     const showEndTime = activityType !== 'diaper';
+    const pickerInlineBg = isDark ? 'rgba(20, 20, 24, 0.95)' : 'rgba(255, 255, 255, 0.9)';
+    const pickerInlineBorder = isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.08)';
+    const pickerCardBg = isDark ? 'rgba(24,24,28,0.96)' : 'rgba(255,255,255,0.98)';
+    const pickerCardBorder = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)';
+
     return (
     <View style={styles.section}>
       <Text style={[styles.sectionTitle, { color: theme.text }]}>
@@ -374,11 +497,16 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
               borderColor: 'rgba(255,255,255,0.14)',
             },
           ]}
-          onPress={() => setShowStartPicker(true)}
+          onPress={openStartPicker}
         >
           <Text style={[styles.timeLabel, { color: theme.textSecondary }]}>Start</Text>
           <Text style={[styles.timeValue, { color: theme.text }]}>
-            {startTime.toLocaleString('de-DE', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}
+            {safeModalStartTime.toLocaleString('de-DE', {
+              hour: '2-digit',
+              minute: '2-digit',
+              day: '2-digit',
+              month: '2-digit',
+            })}
           </Text>
         </TouchableOpacity>
 
@@ -396,7 +524,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
             onPress={() => {
               if (startTimer) return;
               setEndTimeVisible(true);
-              setShowEndPicker(true);
+              openEndPicker();
             }}
             activeOpacity={startTimer ? 1 : 0.7}
           >
@@ -409,8 +537,13 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
             >
               {startTimer
                 ? 'Timer läuft'
-                : endTime
-                ? endTime.toLocaleString('de-DE', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })
+                : safeModalEndTime
+                ? safeModalEndTime.toLocaleString('de-DE', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    day: '2-digit',
+                    month: '2-digit',
+                  })
                 : 'Offen'}
             </Text>
             {startTimer && <Text style={[styles.timeHint, { color: theme.textSecondary }]}>Stoppe später, Ende wird gesetzt</Text>}
@@ -418,24 +551,28 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
         )}
       </View>
 
-      {showStartPicker && (
+      {Platform.OS !== 'ios' && showStartPicker && (
         <View
           style={[
             styles.datePickerContainer,
-            isDark && {
-              backgroundColor: 'rgba(20, 20, 24, 0.95)',
-              borderWidth: 1,
-              borderColor: 'rgba(255,255,255,0.14)',
+            {
+              backgroundColor: pickerInlineBg,
+              borderColor: pickerInlineBorder,
             },
           ]}
         >
           <DateTimePicker
-            value={startTime}
+            value={safeModalStartTime}
+            minimumDate={MIN_VALID_MANUAL_DATE}
             mode="datetime"
-            display={Platform.OS === 'ios' ? 'compact' : 'default'}
+            display="default"
             themeVariant={isDark ? 'dark' : 'light'}
-            textColor={Platform.OS === 'ios' ? (isDark ? '#FFFFFF' : '#111827') : undefined}
-            onChange={(_, date) => { if (date) setStartTime(date); }}
+            accentColor={theme.accent}
+            onChange={(event, date) => {
+              if (event.type === 'dismissed') return;
+              const nextStart = getSafePickerDateFromEvent(event, date, safeModalStartTime);
+              applyStartPickerValue(nextStart);
+            }}
             style={styles.dateTimePicker}
           />
           <View style={styles.datePickerActions}>
@@ -446,24 +583,28 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
         </View>
       )}
 
-      {showEndTime && showEndPicker && (
+      {showEndTime && Platform.OS !== 'ios' && showEndPicker && (
         <View
           style={[
             styles.datePickerContainer,
-            isDark && {
-              backgroundColor: 'rgba(20, 20, 24, 0.95)',
-              borderWidth: 1,
-              borderColor: 'rgba(255,255,255,0.14)',
+            {
+              backgroundColor: pickerInlineBg,
+              borderColor: pickerInlineBorder,
             },
           ]}
         >
           <DateTimePicker
-            value={endTime || new Date()}
+            value={safeModalEndPickerTime}
+            minimumDate={MIN_VALID_MANUAL_DATE}
             mode="datetime"
-            display={Platform.OS === 'ios' ? 'compact' : 'default'}
+            display="default"
             themeVariant={isDark ? 'dark' : 'light'}
-            textColor={Platform.OS === 'ios' ? (isDark ? '#FFFFFF' : '#111827') : undefined}
-            onChange={(_, date) => { if (date) setEndTime(date); }}
+            accentColor={theme.accent}
+            onChange={(event, date) => {
+              if (event.type === 'dismissed') return;
+              const nextEnd = getSafePickerDateFromEvent(event, date, safeModalEndPickerTime);
+              applyEndPickerValue(nextEnd);
+            }}
             style={styles.dateTimePicker}
           />
           <View style={styles.datePickerActions}>
@@ -472,6 +613,142 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
             </TouchableOpacity>
           </View>
         </View>
+      )}
+
+      {Platform.OS === 'ios' && showStartPicker && (
+        <Modal
+          visible={showStartPicker}
+          transparent
+          animationType="fade"
+          onRequestClose={() => {
+            commitStartPickerDraft();
+            setShowStartPicker(false);
+          }}
+        >
+          <View style={styles.manualPickerOverlay}>
+            <TouchableOpacity
+              style={StyleSheet.absoluteFill}
+              onPress={() => {
+                commitStartPickerDraft();
+                setShowStartPicker(false);
+              }}
+              activeOpacity={1}
+            />
+            <View
+              style={[
+                styles.manualPickerCard,
+                {
+                  backgroundColor: pickerCardBg,
+                  borderColor: pickerCardBorder,
+                },
+              ]}
+            >
+              <View style={styles.manualPickerHeader}>
+                <TouchableOpacity
+                  onPress={() => setShowStartPicker(false)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Text style={[styles.manualPickerActionText, { color: theme.textSecondary }]}>Abbrechen</Text>
+                </TouchableOpacity>
+                <Text style={[styles.manualPickerTitle, { color: theme.text }]}>Start</Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    commitStartPickerDraft();
+                    setShowStartPicker(false);
+                  }}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Text style={[styles.manualPickerActionText, { color: theme.accent }]}>Fertig</Text>
+                </TouchableOpacity>
+              </View>
+              <DateTimePicker
+                value={(() => {
+                  const d = new Date(startPickerDraft);
+                  d.setSeconds(0, 0);
+                  return d;
+                })()}
+                minimumDate={MIN_VALID_MANUAL_DATE}
+                mode="datetime"
+                display="spinner"
+                locale="de-DE"
+                onChange={(_, d) => {
+                  if (d) setStartPickerDraft(d);
+                }}
+                accentColor={theme.accent}
+                themeVariant={isDark ? 'dark' : 'light'}
+                style={styles.manualPickerSpinner}
+              />
+            </View>
+          </View>
+        </Modal>
+      )}
+
+      {showEndTime && Platform.OS === 'ios' && showEndPicker && (
+        <Modal
+          visible={showEndPicker}
+          transparent
+          animationType="fade"
+          onRequestClose={() => {
+            commitEndPickerDraft();
+            setShowEndPicker(false);
+          }}
+        >
+          <View style={styles.manualPickerOverlay}>
+            <TouchableOpacity
+              style={StyleSheet.absoluteFill}
+              onPress={() => {
+                commitEndPickerDraft();
+                setShowEndPicker(false);
+              }}
+              activeOpacity={1}
+            />
+            <View
+              style={[
+                styles.manualPickerCard,
+                {
+                  backgroundColor: pickerCardBg,
+                  borderColor: pickerCardBorder,
+                },
+              ]}
+            >
+              <View style={styles.manualPickerHeader}>
+                <TouchableOpacity
+                  onPress={() => setShowEndPicker(false)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Text style={[styles.manualPickerActionText, { color: theme.textSecondary }]}>Abbrechen</Text>
+                </TouchableOpacity>
+                <Text style={[styles.manualPickerTitle, { color: theme.text }]}>Ende</Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    commitEndPickerDraft();
+                    setShowEndPicker(false);
+                  }}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Text style={[styles.manualPickerActionText, { color: theme.accent }]}>Fertig</Text>
+                </TouchableOpacity>
+              </View>
+              <DateTimePicker
+                value={(() => {
+                  const d = new Date(endPickerDraft);
+                  d.setSeconds(0, 0);
+                  return d;
+                })()}
+                minimumDate={MIN_VALID_MANUAL_DATE}
+                mode="datetime"
+                display="spinner"
+                locale="de-DE"
+                onChange={(_, d) => {
+                  if (d) setEndPickerDraft(d);
+                }}
+                accentColor={theme.accent}
+                themeVariant={isDark ? 'dark' : 'light'}
+                style={styles.manualPickerSpinner}
+              />
+            </View>
+          </View>
+        </Modal>
       )}
 
       {activityType === 'feeding' && (
@@ -490,6 +767,8 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
               if (next) {
                 setEndTime(null);
                 setEndTimeVisible(false);
+                setShowEndPicker(false);
+                setEndPickerDraft(safeModalStartTime);
               }
               return next;
             });
@@ -1239,6 +1518,8 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     padding: 15,
     width: '90%',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.08)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -1249,6 +1530,38 @@ const styles = StyleSheet.create({
   datePickerActions: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 10 },
   datePickerCancel: { paddingVertical: 8, paddingHorizontal: 16, borderRadius: 8, backgroundColor: '#8E4EC6' },
   datePickerCancelText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
+  manualPickerOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  manualPickerCard: {
+    marginHorizontal: 12,
+    marginBottom: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  manualPickerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 6,
+  },
+  manualPickerActionText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  manualPickerTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  manualPickerSpinner: {
+    width: '100%',
+    height: 220,
+  },
   roundStepper: {
     width: 56,
     height: 56,
