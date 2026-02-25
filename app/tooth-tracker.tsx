@@ -26,6 +26,7 @@ import { GLASS_OVERLAY, GLASS_OVERLAY_DARK, LAYOUT_PAD, LiquidGlassCard, PRIMARY
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
+import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import {
   BABY_TEETH,
   BABY_TEETH_MAP,
@@ -62,6 +63,8 @@ const SYMPTOM_OPTIONS: Array<{ key: ToothSymptom; label: string }> = [
 const SVG_W = 300;
 const SVG_H = 290;
 const CX = SVG_W / 2;
+const BABY_MODE_PREVIEW_READ_ONLY_MESSAGE =
+  'Du bist im Babymodus zur Vorschau. Zahntracking ist erst nach der Geburt moeglich.';
 
 type ToothType = 'molar2' | 'molar1' | 'canine' | 'lateral' | 'central';
 
@@ -340,6 +343,7 @@ export default function ToothTrackerScreen() {
   const adaptiveColors = useAdaptiveColors();
   const insets = useSafeAreaInsets();
   const { activeBabyId, isReady } = useActiveBaby();
+  const { isReadOnlyPreviewMode } = useBabyStatus();
 
   const isDark = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
   const textPrimary = isDark ? Colors.dark.textPrimary : '#5C4033';
@@ -360,6 +364,14 @@ export default function ToothTrackerScreen() {
   const [formNotes, setFormNotes] = useState('');
   const [notesEditorVisible, setNotesEditorVisible] = useState(false);
   const [formSymptoms, setFormSymptoms] = useState<ToothSymptom[]>([]);
+  const showReadOnlyPreviewAlert = useCallback(() => {
+    Alert.alert('Nur Vorschau', BABY_MODE_PREVIEW_READ_ONLY_MESSAGE);
+  }, []);
+  const ensureWritableInCurrentMode = useCallback(() => {
+    if (!isReadOnlyPreviewMode) return true;
+    showReadOnlyPreviewAlert();
+    return false;
+  }, [isReadOnlyPreviewMode, showReadOnlyPreviewAlert]);
 
   const entriesByTooth = useMemo(
     () => new Map(entries.map((entry) => [entry.tooth_position, entry])),
@@ -440,6 +452,7 @@ export default function ToothTrackerScreen() {
   };
 
   const openCreateModal = useCallback((preferredTooth?: ToothPosition, fromToothTap = false) => {
+    if (!ensureWritableInCurrentMode()) return;
     if (!activeBabyId) {
       Alert.alert('Kein Baby ausgewählt', 'Bitte wähle zuerst ein Baby aus.');
       return;
@@ -465,9 +478,10 @@ export default function ToothTrackerScreen() {
     setShowDatePicker(false);
     setNotesEditorVisible(false);
     setEditorVisible(true);
-  }, [activeBabyId, entriesByTooth]);
+  }, [activeBabyId, ensureWritableInCurrentMode, entriesByTooth]);
 
   const openEditModal = useCallback((entry: ToothEntry) => {
+    if (!ensureWritableInCurrentMode()) return;
     setEditorMode('edit');
     setEditingEntryId(entry.id);
     setShowToothPicker(false);
@@ -478,7 +492,7 @@ export default function ToothTrackerScreen() {
     setShowDatePicker(false);
     setNotesEditorVisible(false);
     setEditorVisible(true);
-  }, []);
+  }, [ensureWritableInCurrentMode]);
 
   const handleToothPress = useCallback((toothKey: ToothPosition) => {
     if (!activeBabyId) {
@@ -505,6 +519,7 @@ export default function ToothTrackerScreen() {
   };
 
   const handleSave = async () => {
+    if (!ensureWritableInCurrentMode()) return;
     if (!activeBabyId) {
       Alert.alert('Kein Baby ausgewählt', 'Bitte wähle zuerst ein Baby aus.');
       return;
@@ -559,6 +574,7 @@ export default function ToothTrackerScreen() {
   };
 
   const handleDelete = () => {
+    if (!ensureWritableInCurrentMode()) return;
     if (!editingEntryId) return;
 
     Alert.alert('Eintrag löschen', 'Möchtest du diesen Zahneintrag wirklich löschen?', [
@@ -567,6 +583,7 @@ export default function ToothTrackerScreen() {
         text: 'Löschen',
         style: 'destructive',
         onPress: async () => {
+          if (!ensureWritableInCurrentMode()) return;
           try {
             setIsSaving(true);
             const { error } = await deleteToothEntry(editingEntryId);
@@ -635,7 +652,7 @@ export default function ToothTrackerScreen() {
     });
   };
 
-  const isCtaDisabled = !activeBabyId || !isReady || isLoading;
+  const isCtaDisabled = !activeBabyId || !isReady || isLoading || isReadOnlyPreviewMode;
 
   const statsMessage = useMemo(() => {
     if (eruptedCount === 0) return 'Noch kein Zahn sichtbar';
@@ -644,6 +661,9 @@ export default function ToothTrackerScreen() {
     if (eruptedCount >= 8) return 'Halbzeit erreicht';
     return 'Dein Baby bekommt sein Lächeln 🥹';
   }, [eruptedCount]);
+  const headerSubtitle = isReadOnlyPreviewMode
+    ? 'Vorschau-Modus: nur ansehen'
+    : undefined;
 
   return (
     <>
@@ -651,7 +671,16 @@ export default function ToothTrackerScreen() {
       <ThemedBackground style={styles.backgroundImage}>
         <SafeAreaView style={styles.container}>
           <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
-          <Header title="Zahn-Tracker" showBackButton />
+          <Header title="Zahn-Tracker" subtitle={headerSubtitle} showBackButton />
+
+          {isReadOnlyPreviewMode && (
+            <View style={styles.readOnlyPreviewBanner}>
+              <ThemedText style={styles.readOnlyPreviewTitle}>Nur Vorschau aktiv</ThemedText>
+              <ThemedText style={styles.readOnlyPreviewText}>
+                Du schaust den Babymodus an. Zahntracking ist hier gesperrt.
+              </ThemedText>
+            </View>
+          )}
 
           <ScrollView
             style={styles.scrollView}
@@ -812,9 +841,13 @@ export default function ToothTrackerScreen() {
               </View>
 
               <TouchableOpacity
-                style={[styles.headerButton, styles.saveHeaderButton, isSaving && styles.saveHeaderButtonDisabled]}
+                style={[
+                  styles.headerButton,
+                  styles.saveHeaderButton,
+                  (isSaving || isReadOnlyPreviewMode) && styles.saveHeaderButtonDisabled,
+                ]}
                 onPress={handleSave}
-                disabled={isSaving}
+                disabled={isSaving || isReadOnlyPreviewMode}
               >
                 {isSaving ? (
                   <ActivityIndicator color="#FFFFFF" size="small" />
@@ -1029,6 +1062,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: LAYOUT_PAD,
     paddingTop: 10,
     paddingBottom: 40,
+  },
+  readOnlyPreviewBanner: {
+    marginHorizontal: LAYOUT_PAD,
+    marginTop: 8,
+    marginBottom: 8,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 210, 160, 0.7)',
+    backgroundColor: 'rgba(70, 45, 25, 0.4)',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  readOnlyPreviewTitle: {
+    color: '#FFE2B3',
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  readOnlyPreviewText: {
+    color: 'rgba(255, 240, 220, 0.95)',
+    fontSize: 12,
+    fontWeight: '500',
   },
   card: {
     marginBottom: 16,

@@ -27,6 +27,7 @@ import { Colors } from '@/constants/Colors';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
+import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import {
   BabyMilestoneEntry,
   createMilestoneEntry,
@@ -56,6 +57,8 @@ const CATEGORY_ORDER: MilestoneCategory[] = [
   'schlaf',
   'sonstiges',
 ];
+const BABY_MODE_PREVIEW_READ_ONLY_MESSAGE =
+  'Du bist im Babymodus zur Vorschau. Meilensteine koennen erst nach der Geburt bearbeitet werden.';
 
 const toDateOnly = (date: Date) => {
   const y = date.getFullYear();
@@ -86,6 +89,7 @@ export default function MilestonesScreen() {
 
   const router = useRouter();
   const { activeBabyId, isReady } = useActiveBaby();
+  const { isReadOnlyPreviewMode } = useBabyStatus();
 
   const [entries, setEntries] = useState<BabyMilestoneEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -105,6 +109,14 @@ export default function MilestonesScreen() {
   const [initialImageUri, setInitialImageUri] = useState<string | null>(null);
 
   const modalTitle = editingEntry ? 'Meilenstein bearbeiten' : 'Neuer Meilenstein';
+  const showReadOnlyPreviewAlert = useCallback(() => {
+    Alert.alert('Nur Vorschau', BABY_MODE_PREVIEW_READ_ONLY_MESSAGE);
+  }, []);
+  const ensureWritableInCurrentMode = useCallback(() => {
+    if (!isReadOnlyPreviewMode) return true;
+    showReadOnlyPreviewAlert();
+    return false;
+  }, [isReadOnlyPreviewMode, showReadOnlyPreviewAlert]);
 
   const loadEntries = useCallback(async () => {
     if (!isReady) return;
@@ -150,11 +162,13 @@ export default function MilestonesScreen() {
   };
 
   const openCreateModal = () => {
+    if (!ensureWritableInCurrentMode()) return;
     resetForm();
     setShowModal(true);
   };
 
   const openEditModal = (entry: BabyMilestoneEntry) => {
+    if (!ensureWritableInCurrentMode()) return;
     setEditingEntry(entry);
     setTitle(entry.title);
     setCategory(entry.category);
@@ -173,6 +187,7 @@ export default function MilestonesScreen() {
   };
 
   const handleSave = async () => {
+    if (!ensureWritableInCurrentMode()) return;
     if (!activeBabyId) {
       Alert.alert('Hinweis', 'Bitte zuerst ein Baby auswählen.');
       return;
@@ -226,6 +241,7 @@ export default function MilestonesScreen() {
   };
 
   const handlePickImage = async () => {
+    if (!ensureWritableInCurrentMode()) return;
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
       Alert.alert('Berechtigung benötigt', 'Bitte erlaube den Zugriff auf deine Fotos.');
@@ -244,6 +260,7 @@ export default function MilestonesScreen() {
   };
 
   const handleDelete = (entry: BabyMilestoneEntry) => {
+    if (!ensureWritableInCurrentMode()) return;
     Alert.alert(
       'Meilenstein löschen',
       'Möchtest du diesen Meilenstein wirklich löschen?',
@@ -253,6 +270,7 @@ export default function MilestonesScreen() {
           text: 'Löschen',
           style: 'destructive',
           onPress: async () => {
+            if (!ensureWritableInCurrentMode()) return;
             const { error } = await deleteMilestoneEntry(entry.id);
             if (error) {
               Alert.alert('Fehler', 'Der Meilenstein konnte nicht gelöscht werden.');
@@ -266,6 +284,9 @@ export default function MilestonesScreen() {
   };
 
   const sortedCategories = useMemo(() => CATEGORY_ORDER, []);
+  const headerSubtitle = isReadOnlyPreviewMode
+    ? 'Vorschau-Modus: nur ansehen'
+    : 'Erste Male und besondere Momente';
 
   return (
     <ThemedBackground style={styles.background}>
@@ -273,10 +294,19 @@ export default function MilestonesScreen() {
         <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
         <Header
           title="Meilensteine"
-          subtitle="Erste Male und besondere Momente"
+          subtitle={headerSubtitle}
           showBackButton
           onBackPress={() => router.push('/(tabs)/home')}
         />
+
+        {isReadOnlyPreviewMode && (
+          <View style={styles.readOnlyPreviewBanner}>
+            <ThemedText style={styles.readOnlyPreviewTitle}>Nur Vorschau aktiv</ThemedText>
+            <ThemedText style={styles.readOnlyPreviewText}>
+              Du schaust den Babymodus an. Meilensteine sind hier gesperrt.
+            </ThemedText>
+          </View>
+        )}
 
         <View style={styles.content}>
           <ScrollView
@@ -315,8 +345,13 @@ export default function MilestonesScreen() {
           </ScrollView>
 
           <TouchableOpacity
-            style={[styles.addButton, { backgroundColor: selectedChipBg, borderColor: cardBorder }]}
+            style={[
+              styles.addButton,
+              { backgroundColor: selectedChipBg, borderColor: cardBorder },
+              isReadOnlyPreviewMode && styles.actionDisabled,
+            ]}
             onPress={openCreateModal}
+            disabled={isReadOnlyPreviewMode}
             activeOpacity={0.85}
           >
             <IconSymbol name="plus.circle.fill" size={20} color={textPrimary} />
@@ -332,6 +367,13 @@ export default function MilestonesScreen() {
             contentContainerStyle={styles.listContent}
             ListEmptyComponent={
               <View style={styles.emptyState}>
+                {!loading ? (
+                  <Image
+                    source={require('@/assets/images/Baby_Take_Pic.gif')}
+                    style={styles.emptyStateGif}
+                    resizeMode="contain"
+                  />
+                ) : null}
                 <ThemedText style={[styles.emptyTitle, { color: textPrimary }]}>
                   {loading ? 'Lade Meilensteine...' : 'Noch keine Meilensteine'}
                 </ThemedText>
@@ -346,16 +388,18 @@ export default function MilestonesScreen() {
               <TouchableOpacity
                 style={[styles.card, { backgroundColor: cardBg, borderColor: cardBorder }]}
                 onPress={() => openEditModal(item)}
+                disabled={isReadOnlyPreviewMode}
                 activeOpacity={0.9}
               >
                 <View style={styles.cardHeader}>
                   <ThemedText style={[styles.cardTitle, { color: textPrimary }]}>{item.title}</ThemedText>
                   <TouchableOpacity
-                    style={styles.deleteIconButton}
+                    style={[styles.deleteIconButton, isReadOnlyPreviewMode && styles.actionDisabled]}
                     onPress={(event) => {
                       event.stopPropagation();
                       handleDelete(item);
                     }}
+                    disabled={isReadOnlyPreviewMode}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
                     <IconSymbol name="trash" size={18} color={isDark ? '#FF9A9A' : '#D45B5B'} />
@@ -534,7 +578,7 @@ export default function MilestonesScreen() {
               <TouchableOpacity
                 style={[styles.actionButton, styles.primaryActionButton, { borderColor: inputBorder }]}
                 onPress={handleSave}
-                disabled={saving}
+                disabled={saving || isReadOnlyPreviewMode}
               >
                 <ThemedText style={[styles.actionButtonText, styles.primaryActionText]}>
                   {saving ? 'Speichern...' : 'Speichern'}
@@ -559,6 +603,31 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 20,
     paddingBottom: 28,
+  },
+  actionDisabled: {
+    opacity: 0.45,
+  },
+  readOnlyPreviewBanner: {
+    marginHorizontal: 20,
+    marginTop: 8,
+    marginBottom: 8,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 210, 160, 0.7)',
+    backgroundColor: 'rgba(70, 45, 25, 0.4)',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  readOnlyPreviewTitle: {
+    color: '#FFE2B3',
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  readOnlyPreviewText: {
+    color: 'rgba(255, 240, 220, 0.95)',
+    fontSize: 12,
+    fontWeight: '500',
   },
   filterRow: {
     paddingVertical: 4,
@@ -603,6 +672,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 80,
     paddingHorizontal: 24,
+  },
+  emptyStateGif: {
+    width: 180,
+    height: 180,
+    marginBottom: 12,
   },
   emptyTitle: {
     fontSize: 18,

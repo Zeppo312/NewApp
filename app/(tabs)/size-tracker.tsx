@@ -20,6 +20,7 @@ import { PRIMARY as PLANNER_PRIMARY } from '@/constants/PlannerDesign';
 import FloatingAddButton from '@/components/planner/FloatingAddButton';
 import TextInputOverlay from '@/components/modals/TextInputOverlay';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
+import { useBabyStatus } from '@/contexts/BabyStatusContext';
 
 const SUBJECT_COLORS: Record<WeightSubject, string> = {
   mom: '#5E3DB3',
@@ -64,6 +65,8 @@ const lightenHex = (hex: string, amount = 0.35) => {
 
   return `#${toHex(lightenChannel(r))}${toHex(lightenChannel(g))}${toHex(lightenChannel(b))}`;
 };
+const BABY_MODE_PREVIEW_READ_ONLY_MESSAGE =
+  'Du bist im Babymodus zur Vorschau. Groessentracking ist erst nach der Geburt moeglich.';
 
 export default function SizeTrackerScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -91,6 +94,7 @@ export default function SizeTrackerScreen() {
   // router wird durch die BackButton-Komponente verwaltet
   const insets = useSafeAreaInsets();
   const { activeBaby, activeBabyId, isReady } = useActiveBaby();
+  const { isReadOnlyPreviewMode } = useBabyStatus();
 
   const [weightEntries, setWeightEntries] = useState<WeightEntry[]>([]);
   const selectedSubject: WeightSubject = 'baby';
@@ -110,6 +114,14 @@ export default function SizeTrackerScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [focusConfig, setFocusConfig] = useState<{ field: 'weight' | 'notes'; label: string; placeholder?: string; multiline?: boolean; keyboardType?: TextInputProps['keyboardType']; inputMode?: TextInputProps['inputMode']; } | null>(null);
   const [focusValue, setFocusValue] = useState('');
+  const showReadOnlyPreviewAlert = () => {
+    Alert.alert('Nur Vorschau', BABY_MODE_PREVIEW_READ_ONLY_MESSAGE);
+  };
+  const ensureWritableInCurrentMode = () => {
+    if (!isReadOnlyPreviewMode) return true;
+    showReadOnlyPreviewAlert();
+    return false;
+  };
 
   const babyLabel = useMemo(() => activeBaby?.name?.trim() || 'Mini', [activeBaby?.name]);
   const trackerLabel = babyLabel;
@@ -140,6 +152,7 @@ export default function SizeTrackerScreen() {
 
   // Lösche einen Größeneintrag
   const handleDeleteWeightEntry = async (id: string) => {
+    if (!ensureWritableInCurrentMode()) return;
     Alert.alert(
       'Eintrag löschen',
       'Möchtest du diesen Größeneintrag wirklich löschen?',
@@ -149,6 +162,7 @@ export default function SizeTrackerScreen() {
           text: 'Löschen',
           style: 'destructive',
           onPress: async () => {
+            if (!ensureWritableInCurrentMode()) return;
             try {
               setIsSaving(true);
               const { error } = await deleteWeightEntry(id);
@@ -172,6 +186,7 @@ export default function SizeTrackerScreen() {
   };
 
   const openWeightModal = () => {
+    if (!ensureWritableInCurrentMode()) return;
     if (!activeBabyId) {
       Alert.alert('Hinweis', 'Bitte wähle zuerst ein Kind aus.');
       return;
@@ -222,6 +237,7 @@ export default function SizeTrackerScreen() {
   };
 
   const handleSaveWeightEntry = async () => {
+    if (!ensureWritableInCurrentMode()) return;
     const normalizedInput = normalizeWeightInput(weightInput, weightModalSubject);
     const parsedWeight = parseFloat(normalizedInput);
     const unitLabel = 'cm';
@@ -258,6 +274,7 @@ export default function SizeTrackerScreen() {
   };
 
   const openFocusEditor = (cfg: { field: 'weight' | 'notes'; label: string; placeholder?: string; multiline?: boolean; keyboardType?: TextInputProps['keyboardType']; inputMode?: TextInputProps['inputMode']; }) => {
+    if (!ensureWritableInCurrentMode()) return;
     setFocusConfig(cfg);
     setFocusValue(cfg.field === 'weight' ? weightInput : weightNotes);
   };
@@ -279,6 +296,7 @@ export default function SizeTrackerScreen() {
   };
 
   const handleEditWeightEntry = (entry: any) => {
+    if (!ensureWritableInCurrentMode()) return;
     const source = weightEntries.find((e) => e.id === entry.id);
     if (!source) return;
     const parsedDate = parseDateOnly(source.date);
@@ -659,8 +677,14 @@ export default function SizeTrackerScreen() {
               <Text style={[styles.modalSubtitle, { color: headerTextColor }]}>Für {babyLabel}</Text>
             </View>
             <TouchableOpacity
-              style={[styles.headerButton, styles.saveHeaderButton, { backgroundColor: PLANNER_PRIMARY }]}
+              style={[
+                styles.headerButton,
+                styles.saveHeaderButton,
+                { backgroundColor: PLANNER_PRIMARY },
+                (isSaving || isReadOnlyPreviewMode) && styles.saveHeaderButtonDisabled,
+              ]}
               onPress={handleSaveWeightEntry}
+              disabled={isSaving || isReadOnlyPreviewMode}
             >
               <Text style={styles.saveHeaderButtonText}>✓</Text>
             </TouchableOpacity>
@@ -850,6 +874,9 @@ export default function SizeTrackerScreen() {
   const screenWidth = Dimensions.get('window').width;
   const contentWidth = screenWidth - 2 * LAYOUT_PAD;
   const TIMELINE_INSET = 8;
+  const headerSubtitle = isReadOnlyPreviewMode
+    ? 'Vorschau-Modus: nur ansehen'
+    : undefined;
 
   return (
     <>
@@ -865,7 +892,16 @@ export default function SizeTrackerScreen() {
         <SafeAreaView style={styles.safeArea}>
           <StatusBar hidden={true} />
           
-          <Header title="Größenkurve" showBackButton />
+          <Header title="Größenkurve" subtitle={headerSubtitle} showBackButton />
+
+          {isReadOnlyPreviewMode && (
+            <View style={styles.readOnlyPreviewBanner}>
+              <ThemedText style={styles.readOnlyPreviewTitle}>Nur Vorschau aktiv</ThemedText>
+              <ThemedText style={styles.readOnlyPreviewText}>
+                Du schaust den Babymodus an. Groessentracking ist hier gesperrt.
+              </ThemedText>
+            </View>
+          )}
           
           <View style={styles.container}>
             <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -908,6 +944,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: LAYOUT_PAD,
     paddingTop: LAYOUT_PAD,
     paddingBottom: 40,
+  },
+  readOnlyPreviewBanner: {
+    marginHorizontal: LAYOUT_PAD,
+    marginTop: 8,
+    marginBottom: 8,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 210, 160, 0.7)',
+    backgroundColor: 'rgba(70, 45, 25, 0.4)',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  readOnlyPreviewTitle: {
+    color: '#FFE2B3',
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  readOnlyPreviewText: {
+    color: 'rgba(255, 240, 220, 0.95)',
+    fontSize: 12,
+    fontWeight: '500',
   },
 
   saveViewContainer: {
@@ -1109,6 +1167,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 4,
     elevation: 5,
+  },
+  saveHeaderButtonDisabled: {
+    opacity: 0.55,
   },
   saveHeaderButtonText: {
     fontSize: 22,

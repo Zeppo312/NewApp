@@ -988,7 +988,7 @@ export default function GetUserInfoScreen() {
         return (
           <ThemedView style={styles.stepContainer} lightColor="#FFFFFF" darkColor="#FFFFFF">
             <Image
-              source={require('@/assets/images/Baby_Take_Pic.png')}
+              source={require('@/assets/images/Baby_Take_Pic.gif')}
               style={styles.babyTakePicImage}
               resizeMode="contain"
             />

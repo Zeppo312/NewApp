@@ -20,6 +20,7 @@ import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
+import { useBabyStatus } from '@/contexts/BabyStatusContext';
 
 import { DailyEntry } from '@/lib/baby';
 import {
@@ -71,6 +72,8 @@ const WEEK_COL_WIDTH = Math.floor((WEEK_CONTENT_WIDTH - (COLS - 1) * GUTTER) / C
 const WEEK_COLS_WIDTH = COLS * WEEK_COL_WIDTH;
 const WEEK_LEFTOVER = WEEK_CONTENT_WIDTH - (WEEK_COLS_WIDTH + (COLS - 1) * GUTTER);
 const MAX_BAR_H = 140;
+const BABY_MODE_PREVIEW_READ_ONLY_MESSAGE =
+  'Du bist im Babymodus zur Vorschau. Tracking ist hier nur nach der Geburt moeglich.';
 
 const formatDurationSeconds = (totalSeconds: number): string => {
   const safe = Math.max(0, Math.floor(totalSeconds));
@@ -122,7 +125,8 @@ const TimerBanner: React.FC<{
   timer: { id: string; type: string; start: number } | null;
   onStop: () => void;
   onCancel: () => void;
-}> = ({ timer, onStop, onCancel }) => {
+  disabled?: boolean;
+}> = ({ timer, onStop, onCancel, disabled = false }) => {
   // Adaptive Farben für Dark Mode
   const adaptiveColors = useAdaptiveColors();
   const colorScheme = adaptiveColors.effectiveScheme;
@@ -158,10 +162,10 @@ const TimerBanner: React.FC<{
         <Text style={[s.timerTime, { color: textSecondary }]}>{formatDurationSeconds(elapsed)}</Text>
       </View>
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-        <TouchableOpacity style={s.timerCancelButton} onPress={onCancel}>
+        <TouchableOpacity style={[s.timerCancelButton, disabled && s.actionDisabled]} onPress={onCancel} disabled={disabled}>
           <IconSymbol name="xmark.circle" size={26} color={isDark ? '#888888' : '#a3a3a3'} />
         </TouchableOpacity>
-        <TouchableOpacity style={s.timerStopButton} onPress={onStop}>
+        <TouchableOpacity style={[s.timerStopButton, disabled && s.actionDisabled]} onPress={onStop} disabled={disabled}>
           <IconSymbol name="stop.circle.fill" size={28} color={textPrimary} />
         </TouchableOpacity>
       </View>
@@ -178,7 +182,10 @@ const quickBtns: { icon: string; label: string; action: QuickActionType }[] = [
   { action: 'diaper_both', label: 'Beides', icon: '💧💩' },
 ];
 
-const QuickActionRow: React.FC<{ onPressAction: (action: QuickActionType) => void }> = ({ onPressAction }) => {
+const QuickActionRow: React.FC<{ onPressAction: (action: QuickActionType) => void; disabled?: boolean }> = ({
+  onPressAction,
+  disabled = false,
+}) => {
   // Adaptive Farben für Dark Mode
   const adaptiveColors = useAdaptiveColors();
   const colorScheme = adaptiveColors.effectiveScheme;
@@ -194,7 +201,12 @@ const QuickActionRow: React.FC<{ onPressAction: (action: QuickActionType) => voi
       overlayColor="rgba(255,255,255,0.32)"
       borderColor="rgba(255,255,255,0.70)"
     >
-      <TouchableOpacity style={s.circleInner} onPress={() => onPressAction(item.action)} activeOpacity={0.9}>
+      <TouchableOpacity
+        style={[s.circleInner, disabled && s.actionDisabled]}
+        onPress={() => onPressAction(item.action)}
+        activeOpacity={0.9}
+        disabled={disabled}
+      >
         <Text style={s.circleEmoji}>{item.icon}</Text>
         <Text style={[s.circleLabel, { color: textSecondary }]}>{item.label}</Text>
       </TouchableOpacity>
@@ -236,6 +248,7 @@ export default function DailyScreen() {
   const { quickAction } = useLocalSearchParams<{ quickAction?: string | string[] }>();
   
   const { activeBabyId, isReady } = useActiveBaby();
+  const { isReadOnlyPreviewMode } = useBabyStatus();
 
   const [entries, setEntries] = useState<DailyEntry[]>([]);
   const [weekEntries, setWeekEntries] = useState<DailyEntry[]>([]);
@@ -280,6 +293,14 @@ export default function DailyScreen() {
   const [splashHint, setSplashHint] = useState<string>('');
   const [splashHintEmoji, setSplashHintEmoji] = useState<string>('');
   const splashEmojiParts = useMemo(() => Array.from(splashEmoji), [splashEmoji]);
+  const showReadOnlyPreviewAlert = useCallback(() => {
+    Alert.alert('Nur Vorschau', BABY_MODE_PREVIEW_READ_ONLY_MESSAGE);
+  }, []);
+  const ensureWritableInCurrentMode = useCallback(() => {
+    if (!isReadOnlyPreviewMode) return true;
+    showReadOnlyPreviewAlert();
+    return false;
+  }, [isReadOnlyPreviewMode, showReadOnlyPreviewAlert]);
 
   // Notification hooks
   const { requestPermissions } = useNotifications();
@@ -519,7 +540,7 @@ export default function DailyScreen() {
 
       // Data hygiene: only one timer can be active. Close stale open timers automatically.
       const staleOpenTimers = openTimers.filter((row) => !!row?.id && (!current || row.id !== current.id));
-      if (staleOpenTimers.length > 0) {
+      if (!isReadOnlyPreviewMode && staleOpenTimers.length > 0) {
         const nowIso = new Date().toISOString();
         await Promise.allSettled(
           staleOpenTimers.map((row) => {
@@ -564,7 +585,7 @@ export default function DailyScreen() {
     } finally {
       setIsTimerHydrated(true);
     }
-  }, [activeBabyId]);
+  }, [activeBabyId, isReadOnlyPreviewMode]);
 
   const loadEntries = async () => {
     if (!activeBabyId) return;
@@ -705,6 +726,7 @@ export default function DailyScreen() {
     setSelectedDate(new Date(selectedDate.getTime() + days * 24 * 60 * 60 * 1000));
 
   const handleQuickActionPress = (action: QuickActionType) => {
+    if (!ensureWritableInCurrentMode()) return;
     if (action.startsWith('feeding')) setSelectedActivityType('feeding');
     else if (action.startsWith('diaper')) setSelectedActivityType('diaper');
     else setSelectedActivityType('other');
@@ -737,15 +759,20 @@ export default function DailyScreen() {
               : null;
 
     if (!resolved) return;
+    if (!ensureWritableInCurrentMode()) {
+      router.setParams({ quickAction: undefined });
+      return;
+    }
     quickActionHandledRef.current = rawAction;
     setSelectedActivityType(resolved.activityType);
     setSelectedSubType(resolved.subType);
     setEditingEntry(null);
     setShowInputModal(true);
     router.setParams({ quickAction: undefined });
-  }, [quickAction, router]);
+  }, [ensureWritableInCurrentMode, quickAction, router]);
 
   const handleSaveEntry = async (payload: any, options?: { startTimer?: boolean }) => {
+    if (!ensureWritableInCurrentMode()) return;
     if (!activeBabyId) {
       Alert.alert(
         'Kein Kind ausgewählt',
@@ -939,6 +966,7 @@ export default function DailyScreen() {
   };
 
   const handleTimerStop = useCallback(async () => {
+    if (!ensureWritableInCurrentMode()) return;
     if (!activeTimer) return;
     if (!activeBabyId) return;
 
@@ -966,6 +994,7 @@ export default function DailyScreen() {
 
     Alert.alert('Erfolg', 'Timer gestoppt! ⏹️');
   }, [
+    ensureWritableInCurrentMode,
     activeBabyId,
     activeTimer,
     endBreastfeedingLiveActivity,
@@ -1047,16 +1076,19 @@ export default function DailyScreen() {
       return;
     }
 
+    if (isReadOnlyPreviewMode) return;
     void handleTimerStop();
-  }, [activeTimer?.id, activeTimer?.type, handleTimerStop, isTimerHydrated, liveStopRequestId]);
+  }, [activeTimer?.id, activeTimer?.type, handleTimerStop, isReadOnlyPreviewMode, isTimerHydrated, liveStopRequestId]);
 
   const handleDeleteEntry = async (id: string) => {
+    if (!ensureWritableInCurrentMode()) return;
     Alert.alert('Eintrag löschen', 'Möchtest du diesen Eintrag wirklich löschen?', [
       { text: 'Abbrechen', style: 'cancel' },
       {
         text: 'Löschen',
         style: 'destructive',
         onPress: async () => {
+          if (!ensureWritableInCurrentMode()) return;
           if (!activeBabyId) return;
           const { error } = await deleteBabyCareEntry(id, activeBabyId);
           if (error) return;
@@ -1646,6 +1678,10 @@ export default function DailyScreen() {
     );
   };
 
+  const headerSubtitle = isReadOnlyPreviewMode
+    ? 'Vorschau-Modus: nur ansehen'
+    : 'Euer Tag – voller kleiner Meilensteine ✨';
+
   return (
     <ThemedBackground style={s.backgroundImage}>
       <SafeAreaView style={s.container}>
@@ -1653,17 +1689,28 @@ export default function DailyScreen() {
 
         <Header
           title="Unser Tag"
-          subtitle="Euer Tag – voller kleiner Meilensteine ✨"
+          subtitle={headerSubtitle}
           showBackButton
           onBackPress={() => router.push('/(tabs)/home')}
         />
 
         <ConnectionStatus showAlways={false} autoCheck={true} onRetry={loadEntries} />
 
+        {isReadOnlyPreviewMode && (
+          <View style={s.readOnlyPreviewBanner}>
+            <Text style={s.readOnlyPreviewTitle}>Nur Vorschau aktiv</Text>
+            <Text style={s.readOnlyPreviewText}>
+              Du schaust den Babymodus an. Eintraege, Timer und Bearbeitung sind gesperrt.
+            </Text>
+          </View>
+        )}
+
         <TimerBanner
           timer={activeTimer}
           onStop={handleTimerStop}
+          disabled={isReadOnlyPreviewMode}
           onCancel={async () => {
+            if (!ensureWritableInCurrentMode()) return;
             if (!activeTimer) return;
             Alert.alert('Timer abbrechen', 'Willst du den laufenden Eintrag wirklich verwerfen?', [
               { text: 'Nein', style: 'cancel' },
@@ -1720,7 +1767,7 @@ export default function DailyScreen() {
                 </TouchableOpacity>
               </View>
 
-              <QuickActionRow onPressAction={handleQuickActionPress} />
+              <QuickActionRow onPressAction={handleQuickActionPress} disabled={isReadOnlyPreviewMode} />
 
               <Text style={[s.sectionTitle, { color: textSecondary }]}>Kennzahlen</Text>
               <KPISection />
@@ -1746,6 +1793,7 @@ export default function DailyScreen() {
                       entry={item}
                       onDelete={handleDeleteEntry}
                       onEdit={(entry) => {
+                        if (!ensureWritableInCurrentMode()) return;
                         setEditingEntry(entry);
                         if (entry.entry_type === 'feeding') setSelectedActivityType('feeding');
                         else if (entry.entry_type === 'diaper') setSelectedActivityType('diaper');
@@ -1846,6 +1894,31 @@ const s = StyleSheet.create({
   scrollContainer: { flex: 1 },
   scrollContent: { paddingBottom: 140 },
   content: { paddingHorizontal: LAYOUT_PAD },
+  actionDisabled: {
+    opacity: 0.45,
+  },
+  readOnlyPreviewBanner: {
+    marginHorizontal: LAYOUT_PAD,
+    marginTop: 8,
+    marginBottom: 8,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 210, 160, 0.7)',
+    backgroundColor: 'rgba(70, 45, 25, 0.4)',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  readOnlyPreviewTitle: {
+    color: '#FFE2B3',
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  readOnlyPreviewText: {
+    color: 'rgba(255, 240, 220, 0.95)',
+    fontSize: 12,
+    fontWeight: '500',
+  },
 
   sectionTitle: {
     marginTop: SECTION_GAP_TOP,

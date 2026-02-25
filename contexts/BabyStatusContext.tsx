@@ -15,6 +15,7 @@ type TemporaryViewMode = 'baby' | 'pregnancy';
 
 interface BabyStatusContextType {
   isBabyBorn: boolean;
+  isReadOnlyPreviewMode: boolean;
   isResolved: boolean;
   source: BabyStatusSource;
   setIsBabyBorn: (value: boolean, options?: SetBabyBornOptions) => Promise<void>;
@@ -299,11 +300,13 @@ export const BabyStatusProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       : temporaryViewMode === 'pregnancy'
         ? false
         : isBabyBorn;
+  const isReadOnlyPreviewMode = temporaryViewMode === 'baby' && !isBabyBorn;
 
   return (
     <BabyStatusContext.Provider 
       value={{ 
         isBabyBorn: effectiveIsBabyBorn,
+        isReadOnlyPreviewMode,
         isResolved,
         source,
         setIsBabyBorn, 

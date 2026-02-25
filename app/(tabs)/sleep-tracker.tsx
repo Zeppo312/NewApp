@@ -42,6 +42,7 @@ import ActivityInputModal from '@/components/ActivityInputModal';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBackend } from '@/contexts/BackendContext';
 import { useConvex } from '@/contexts/ConvexContext';
+import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { useSleepEntriesService } from '@/hooks/useSleepEntriesService';
 import { ProgressCircle } from '@/components/ProgressCircle';
 import type { ViewStyle } from 'react-native';
@@ -80,6 +81,8 @@ const NIGHT_SPLASH_COLORS = {
 } as const;
 const SPLASH_PROMO_GIF = require('@/assets/images/App_Werbung.gif');
 const MIN_VALID_MANUAL_DATE = new Date(2000, 0, 1);
+const BABY_MODE_PREVIEW_READ_ONLY_MESSAGE =
+  'Du bist im Babymodus zur Vorschau. Schlaftracking ist erst nach der Geburt moeglich.';
 
 // Globale Helper-Funktionen für Zeitberechnungen
 const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -1184,6 +1187,7 @@ export default function SleepTrackerScreen() {
   const { activeBackend } = useBackend();
   const { convexClient } = useConvex();
   const { activeBabyId } = useActiveBaby();
+  const { isReadOnlyPreviewMode } = useBabyStatus();
   const sleepService = user ? useSleepEntriesService() : null;
   const paywallCheckInFlight = useRef(false);
   const triggerHaptic = useCallback(() => {
@@ -1191,6 +1195,14 @@ export default function SleepTrackerScreen() {
       Haptics.selectionAsync();
     } catch {}
   }, []);
+  const showReadOnlyPreviewAlert = useCallback(() => {
+    Alert.alert('Nur Vorschau', BABY_MODE_PREVIEW_READ_ONLY_MESSAGE);
+  }, []);
+  const ensureWritableInCurrentMode = useCallback(() => {
+    if (!isReadOnlyPreviewMode) return true;
+    showReadOnlyPreviewAlert();
+    return false;
+  }, [isReadOnlyPreviewMode, showReadOnlyPreviewAlert]);
 
   // State management
   const [sleepEntries, setSleepEntries] = useState<ClassifiedSleepEntry[]>([]);
@@ -1441,17 +1453,19 @@ export default function SleepTrackerScreen() {
   }, [resetManualModalData]);
 
   const openManualSleepModal = useCallback(() => {
+    if (!ensureWritableInCurrentMode()) return;
     setEditingEntry(null);
     resetManualModalData();
     setShowInputModal(true);
-  }, [resetManualModalData]);
+  }, [ensureWritableInCurrentMode, resetManualModalData]);
 
   const openEditSleepModal = useCallback((entry: ClassifiedSleepEntry) => {
+    if (!ensureWritableInCurrentMode()) return;
     setEditingEntry(entry);
     setShowStartPicker(false);
     setShowEndPicker(false);
     setShowInputModal(true);
-  }, []);
+  }, [ensureWritableInCurrentMode]);
 
   // Animation refs
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -1962,6 +1976,7 @@ export default function SleepTrackerScreen() {
 
   // Start sleep tracking
   const handleStartSleep = async (period: SleepPeriod) => {
+    if (!ensureWritableInCurrentMode()) return false;
     if (isStartingSleep) return false;
     if (!user?.id || !sleepService) {
       Alert.alert('Fehler', 'Service nicht verfügbar');
@@ -2058,6 +2073,7 @@ export default function SleepTrackerScreen() {
 
   // Stop sleep tracking
   const handleStopSleep = async (quality: NonNullable<SleepQuality>, notes?: string) => {
+    if (!ensureWritableInCurrentMode()) return;
     if (!activeSleepEntry?.id || isStoppingSleep || !sleepService) return;
     setIsStoppingSleep(true);
 
@@ -2151,6 +2167,7 @@ export default function SleepTrackerScreen() {
   };
 
   const handlePauseNightSleep = async () => {
+    if (!ensureWritableInCurrentMode()) return;
     if (!activeSleepEntry?.id || isStoppingSleep || !sleepService) return;
 
     const activeStart = new Date(activeSleepEntry.start_time);
@@ -2213,6 +2230,7 @@ export default function SleepTrackerScreen() {
   };
 
   const handleResumeNightSleep = async () => {
+    if (!ensureWritableInCurrentMode()) return;
     if (!pausedNightState || activeSleepEntry || isStartingSleep) return;
     const started = await handleStartSleep('night');
     if (started) {
@@ -2221,6 +2239,7 @@ export default function SleepTrackerScreen() {
   };
 
   const handleFinalizePausedNight = async (quality: NonNullable<SleepQuality>) => {
+    if (!ensureWritableInCurrentMode()) return;
     if (!pausedNightState?.lastPausedEntryId || isStoppingSleep || !sleepService) return;
     setIsStoppingSleep(true);
 
@@ -2262,6 +2281,7 @@ export default function SleepTrackerScreen() {
   };
 
   const promptSleepQualityForStop = useCallback(() => {
+    if (!ensureWritableInCurrentMode()) return;
     if (!activeSleepEntry?.id || isStoppingSleep) return;
     const isNightStop = activeSleepEntry.period === 'night';
 
@@ -2276,9 +2296,10 @@ export default function SleepTrackerScreen() {
       ],
       { cancelable: true }
     );
-  }, [activeSleepEntry?.id, activeSleepEntry?.period, handleStopSleep, isStoppingSleep]);
+  }, [activeSleepEntry?.id, activeSleepEntry?.period, ensureWritableInCurrentMode, handleStopSleep, isStoppingSleep]);
 
   const promptSleepQualityForFinalizePausedNight = useCallback(() => {
+    if (!ensureWritableInCurrentMode()) return;
     if (!pausedNightState?.lastPausedEntryId || isStoppingSleep) return;
 
     Alert.alert(
@@ -2292,7 +2313,7 @@ export default function SleepTrackerScreen() {
       ],
       { cancelable: true }
     );
-  }, [handleFinalizePausedNight, isStoppingSleep, pausedNightState?.lastPausedEntryId]);
+  }, [ensureWritableInCurrentMode, handleFinalizePausedNight, isStoppingSleep, pausedNightState?.lastPausedEntryId]);
 
   useEffect(() => {
     if (liveStopRequestId === 0) return;
@@ -2321,6 +2342,7 @@ export default function SleepTrackerScreen() {
 
   // Handle save entry (compatible with SleepInputModal)
   const handleSaveEntry = async (payload: any) => {
+    if (!ensureWritableInCurrentMode()) return;
     try {
       if (!user?.id) {
         Alert.alert('Fehler', 'Benutzer nicht angemeldet');
@@ -2552,6 +2574,7 @@ export default function SleepTrackerScreen() {
     splitTime: Date;
     wakeMinutes: number;
   }) => {
+    if (!ensureWritableInCurrentMode()) return false;
     const { targetEntry, splitTime: paramSplitTime, wakeMinutes: paramWakeMinutes } = params;
 
     if (!sleepService || !user?.id) {
@@ -2712,6 +2735,7 @@ export default function SleepTrackerScreen() {
   };
 
   const handleMergeNightSegments = async (entryA: ClassifiedSleepEntry, entryB: ClassifiedSleepEntry) => {
+    if (!ensureWritableInCurrentMode()) return false;
     if (!sleepService || !user?.id) {
       Alert.alert('Fehler', 'Service nicht verfügbar. Bitte neu anmelden und erneut versuchen.');
       return false;
@@ -2845,6 +2869,7 @@ export default function SleepTrackerScreen() {
     field: 'start_time' | 'end_time',
     newTime: Date,
   ) => {
+    if (!ensureWritableInCurrentMode()) return;
     if (!sleepService || !user?.id || isSplittingSegment || !entry.id) return;
 
     const start = field === 'start_time' ? newTime : new Date(entry.start_time);
@@ -2886,6 +2911,7 @@ export default function SleepTrackerScreen() {
   };
 
   const handleDeleteNightGroup = async (entryIds: string[]): Promise<boolean> => {
+    if (!ensureWritableInCurrentMode()) return false;
     if (!sleepService || !user?.id) return false;
 
     const ids = Array.from(new Set(entryIds.filter((id) => typeof id === 'string' && id.length > 0)));
@@ -2923,6 +2949,7 @@ export default function SleepTrackerScreen() {
 
   // Delete entry
   const handleDeleteEntry = async (entryId: string) => {
+    if (!ensureWritableInCurrentMode()) return;
     Alert.alert(
       'Eintrag löschen',
       'Möchtest du diesen Schlaf-Eintrag wirklich löschen?',
@@ -2933,6 +2960,7 @@ export default function SleepTrackerScreen() {
           style: 'destructive',
           onPress: async () => {
             triggerHaptic();
+            if (!ensureWritableInCurrentMode()) return;
             try {
               if (!sleepService) {
                 Alert.alert('Fehler', 'Service nicht verfügbar');
@@ -3192,9 +3220,10 @@ export default function SleepTrackerScreen() {
   }, [dayEntries, nightWindowSettings, sleepEntries]);
 
   const openNightEditor = useCallback((group: NightGroup) => {
+    if (!ensureWritableInCurrentMode()) return;
     setNightEditorGroup(group);
     setShowNightEditor(true);
-  }, []);
+  }, [ensureWritableInCurrentMode]);
 
   useEffect(() => {
     if (!showNightEditor || !nightEditorGroup || nightGroups.length === 0) return;
@@ -3416,7 +3445,7 @@ export default function SleepTrackerScreen() {
 
   // Action Buttons (Home.tsx style)
   const ActionButtons = () => {
-    const isActionBlocked = isStartingSleep || isStoppingSleep;
+    const isActionBlocked = isStartingSleep || isStoppingSleep || isReadOnlyPreviewMode;
     const isActiveNightSleep = activeSleepEntry?.period === 'night';
     const isNightPaused = Boolean(pausedNightState && !activeSleepEntry);
     const shouldShowStatusLoading = !isLiveStatusLoaded && !activeSleepEntry && !isNightPaused;
@@ -4144,6 +4173,10 @@ export default function SleepTrackerScreen() {
 
 
 
+  const headerSubtitle = isReadOnlyPreviewMode
+    ? 'Vorschau-Modus: nur ansehen'
+    : 'Verfolge das Schlafmuster deines Babys';
+
   return (
     <ThemedBackground style={styles.backgroundImage}>
       <SafeAreaView style={styles.container}>
@@ -4151,7 +4184,7 @@ export default function SleepTrackerScreen() {
         
         <Header 
           title="Schlaf-Tracker"
-          subtitle="Verfolge das Schlafmuster deines Babys"
+          subtitle={headerSubtitle}
           showBackButton
           onBackPress={() => router.push('/(tabs)/home')}
         />
@@ -4169,6 +4202,15 @@ export default function SleepTrackerScreen() {
           statsPage={statsPage}
           onPageChange={setStatsPage}
         />
+
+        {isReadOnlyPreviewMode && (
+          <View style={styles.readOnlyPreviewBanner}>
+            <Text style={styles.readOnlyPreviewTitle}>Nur Vorschau aktiv</Text>
+            <Text style={styles.readOnlyPreviewText}>
+              Du schaust den Babymodus an. Schlaftracking ist hier gesperrt.
+            </Text>
+          </View>
+        )}
 
         <ScrollView
           style={styles.scrollContainer}
@@ -4434,7 +4476,13 @@ export default function SleepTrackerScreen() {
                 </TouchableOpacity>
               )}
                 <TouchableOpacity
-                  style={[styles.actionButton, styles.manualButton, { marginTop: 16 }]}
+                  style={[
+                    styles.actionButton,
+                    styles.manualButton,
+                    { marginTop: 16 },
+                    isReadOnlyPreviewMode && styles.actionDisabled,
+                  ]}
+                  disabled={isReadOnlyPreviewMode}
                   onPress={() => {
                     triggerHaptic();
                     openManualSleepModal();
@@ -4452,13 +4500,13 @@ export default function SleepTrackerScreen() {
               style={[
                 styles.liquidGlassCardWrapper,
                 { width: contentWidth, alignSelf: 'center', marginTop: 16 },
-                (isStartingSleep || isStoppingSleep || !isLiveStatusLoaded) && styles.actionDisabled
+                (isStartingSleep || isStoppingSleep || !isLiveStatusLoaded || isReadOnlyPreviewMode) && styles.actionDisabled
               ]}
-              disabled={isStartingSleep || isStoppingSleep || !isLiveStatusLoaded}
+              disabled={isStartingSleep || isStoppingSleep || !isLiveStatusLoaded || isReadOnlyPreviewMode}
               hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
               pressRetentionOffset={{ top: 20, bottom: 20, left: 18, right: 18 }}
               onPress={() => {
-                if (isStartingSleep || isStoppingSleep || !isLiveStatusLoaded) return;
+                if (isStartingSleep || isStoppingSleep || !isLiveStatusLoaded || isReadOnlyPreviewMode) return;
                 triggerHaptic();
                 openManualSleepModal();
               }}
@@ -5068,6 +5116,28 @@ const styles = StyleSheet.create({
   backgroundImage: { flex: 1, width: '100%', backgroundColor: '#f5eee0' },
   scrollContainer: { flex: 1 },
   scrollContent: { paddingBottom: 140, paddingHorizontal: LAYOUT_PAD },
+  readOnlyPreviewBanner: {
+    marginHorizontal: LAYOUT_PAD,
+    marginTop: 8,
+    marginBottom: 8,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 210, 160, 0.7)',
+    backgroundColor: 'rgba(70, 45, 25, 0.4)',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  readOnlyPreviewTitle: {
+    color: '#FFE2B3',
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  readOnlyPreviewText: {
+    color: 'rgba(255, 240, 220, 0.95)',
+    fontSize: 12,
+    fontWeight: '500',
+  },
 
   // Stats Container (Swipeable)
   statsContainer: {
