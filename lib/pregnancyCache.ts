@@ -1,5 +1,6 @@
 import { supabase, getDueDateWithLinkedUsers } from './supabase';
 import { getRecommendations, LottiRecommendation } from './supabase/recommendations';
+import { parseSafeDate } from './safeDate';
 import {
   CacheStrategy,
   loadWithRevalidate,
@@ -85,7 +86,14 @@ export async function loadDueDateWithCache(
         };
       }
 
-      const due = new Date(result.dueDate);
+      const due = parseSafeDate(result.dueDate);
+      if (!due) {
+        return {
+          date: null,
+          currentWeek: null,
+          currentDay: null,
+        };
+      }
 
       // Berechne die aktuelle SSW
       const now = new Date();

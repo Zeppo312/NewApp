@@ -24,6 +24,8 @@ import { Colors } from "@/constants/Colors";
 import { PlannerAssignee, PlannerEvent, PlannerTodo } from "@/services/planner";
 import TextInputOverlay from "@/components/modals/TextInputOverlay";
 import { useAdaptiveColors } from "@/hooks/useAdaptiveColors";
+import { getSafePickerDate, parseSafeDate } from "@/lib/safeDate";
+import IOSBottomDatePicker from "@/components/modals/IOSBottomDatePicker";
 
 export type PlannerCaptureType = "todo" | "event";
 type FocusField = "title" | "location" | "notes";
@@ -124,7 +126,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
   onDelete,
 }) => {
   const initialStart = useMemo(() => {
-    const d = new Date(baseDate);
+    const d = getSafePickerDate(baseDate, new Date());
     d.setHours(new Date().getHours(), new Date().getMinutes(), 0, 0);
     return d;
   }, [baseDate]);
@@ -161,7 +163,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
 
   const [title, setTitle] = useState("");
   const [notes, setNotes] = useState("");
-  const [startTime, setStartTime] = useState(initialStart);
+  const [startTime, setStartTime] = useState(() => getSafePickerDate(initialStart, new Date()));
   const [endTime, setEndTime] = useState<Date | null>(null);
   const [showEnd, setShowEnd] = useState(type === "event");
   const [dueTime, setDueTime] = useState<Date | null>(null);
@@ -347,8 +349,14 @@ export const PlannerCaptureModal: React.FC<Props> = ({
       }
       if (editingType === "event") {
         const eventItem = item as PlannerEvent;
-        const start = new Date(eventItem.start);
-        const end = new Date(eventItem.end);
+        const fallbackStart = getSafePickerDate(initialStart, new Date());
+        const start = parseSafeDate(eventItem.start) ?? fallbackStart;
+        const fallbackEnd = new Date(start.getTime() + 30 * 60000);
+        const parsedEnd = parseSafeDate(eventItem.end) ?? fallbackEnd;
+        const end =
+          parsedEnd.getTime() <= start.getTime() && !(eventItem.isAllDay ?? false)
+            ? fallbackEnd
+            : parsedEnd;
         const allDay = eventItem.isAllDay ?? false;
         setStartTime(start);
         setEndTime(end);
@@ -363,8 +371,8 @@ export const PlannerCaptureModal: React.FC<Props> = ({
         setReminderMinutes(nextReminder);
       } else {
         const todoItem = item as PlannerTodo;
-        const due = todoItem.dueAt ? new Date(todoItem.dueAt) : null;
-        setStartTime(due ?? new Date(initialStart));
+        const due = parseSafeDate(todoItem.dueAt);
+        setStartTime(due ?? getSafePickerDate(initialStart, new Date()));
         setEndTime(null);
         setShowEnd(false);
         setDueTime(due);
@@ -385,7 +393,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
         setSelectedBabyId(null);
       }
     } else {
-      const reset = new Date(baseDate);
+      const reset = getSafePickerDate(baseDate, new Date());
       reset.setHours(new Date().getHours(), new Date().getMinutes(), 0, 0);
       setCurrentType(type);
       setTitle("");
@@ -435,7 +443,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
     label: string,
     value: Date,
     visible: boolean,
-    toggle: () => void,
+    setVisible: (visible: boolean) => void,
     onChange: (date: Date) => void,
     dateOnly: boolean = false,
   ) => (
@@ -447,7 +455,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
     >
       <TouchableOpacity
         style={styles.selectorHeader}
-        onPress={toggle}
+        onPress={() => setVisible(true)}
         activeOpacity={0.8}
       >
         <Text style={[styles.pickerLabel, { color: theme.textSecondary }]}>
@@ -457,41 +465,32 @@ export const PlannerCaptureModal: React.FC<Props> = ({
           {dateOnly ? formatDate(value) : formatDateTime(value)}
         </Text>
       </TouchableOpacity>
-      {visible && (
-        <View
-          style={[styles.pickerInner, { backgroundColor: theme.blockStrong }]}
-        >
+      {Platform.OS === "ios" ? (
+        <IOSBottomDatePicker
+          visible={visible}
+          title={dateOnly ? `${label} wählen` : label}
+          value={getSafePickerDate(value, new Date())}
+          mode={dateOnly ? "date" : "datetime"}
+          onClose={() => setVisible(false)}
+          onConfirm={(date) => {
+            onChange(date);
+            setVisible(false);
+          }}
+        />
+      ) : (
+        visible && (
           <DateTimePicker
-            value={value}
+            value={getSafePickerDate(value, new Date())}
             mode={dateOnly ? "date" : "datetime"}
-            display={Platform.OS === "ios" ? "inline" : "spinner"}
-            locale={Platform.OS === "ios" ? "de-DE-u-ca-gregory" : undefined}
+            display="default"
             onChange={(event, date) => {
-              if (event?.type === "dismissed") {
-                toggle();
-                return;
-              }
-              if (date) {
-                onChange(date);
-              }
+              setVisible(false);
+              if (event?.type === "dismissed" || !date) return;
+              onChange(date);
             }}
-            style={styles.dateTimePicker}
             themeVariant={isDark ? "dark" : "light"}
           />
-          <View style={styles.pickerActions}>
-            <TouchableOpacity
-              style={[
-                styles.pickerActionButton,
-                { backgroundColor: theme.accentSoft },
-              ]}
-              onPress={toggle}
-            >
-              <Text style={[styles.pickerActionLabel, { color: accentColor }]}>
-                Fertig
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+        )
       )}
     </View>
   );
@@ -504,10 +503,22 @@ export const PlannerCaptureModal: React.FC<Props> = ({
       return;
     }
 
-    if (
-      currentType === "event" &&
-      (!startTime || (!endTime && showEnd && !isAllDay))
-    ) {
+    const safeStart = parseSafeDate(startTime);
+    const safeEnd = endTime ? parseSafeDate(endTime) : null;
+    const safeDue = dueTime ? parseSafeDate(dueTime) : null;
+
+    if (currentType === "event" && !safeStart) {
+      Alert.alert("Ungültige Zeit", "Bitte wähle eine gültige Startzeit.");
+      return;
+    }
+
+    if (currentType === "event" && showEnd && !isAllDay && endTime && !safeEnd) {
+      Alert.alert("Ungültige Zeit", "Bitte wähle eine gültige Endzeit.");
+      return;
+    }
+
+    if (currentType === "todo" && hasDueTime && !safeDue && !safeStart) {
+      Alert.alert("Ungültige Zeit", "Bitte wähle einen gültigen Zeitpunkt.");
       return;
     }
 
@@ -519,7 +530,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
     };
 
     if (currentType === "todo") {
-      payload.dueAt = hasDueTime ? dueTime || startTime : null;
+      payload.dueAt = hasDueTime ? (safeDue ?? safeStart) : null;
       payload.assignee = assignee ?? deriveAssigneeForOwner(defaultOwnerId);
       payload.babyId =
         assignee === "child" ? (selectedBabyId ?? undefined) : undefined;
@@ -528,18 +539,30 @@ export const PlannerCaptureModal: React.FC<Props> = ({
     if (currentType === "event") {
       if (isAllDay) {
         // Ensure all-day events have proper start/end times
-        const allDayStart = new Date(startTime);
+        const allDayStart = new Date(safeStart!);
         allDayStart.setHours(0, 0, 0, 0);
 
         // Use the selected end date for multi-day events
-        const allDayEnd = new Date(endTime ?? startTime);
+        const allDayEnd = new Date(safeEnd ?? safeStart!);
         allDayEnd.setHours(23, 59, 59, 999);
+        if (allDayEnd.getTime() < allDayStart.getTime()) {
+          allDayEnd.setTime(allDayStart.getTime());
+          allDayEnd.setHours(23, 59, 59, 999);
+        }
 
         payload.start = allDayStart;
         payload.end = allDayEnd;
       } else {
-        payload.start = startTime;
-        payload.end = showEnd ? endTime : null;
+        const eventStart = new Date(safeStart!);
+        let eventEnd: Date | null = null;
+        if (showEnd) {
+          eventEnd =
+            safeEnd && safeEnd.getTime() > eventStart.getTime()
+              ? new Date(safeEnd)
+              : new Date(eventStart.getTime() + 30 * 60000);
+        }
+        payload.start = eventStart;
+        payload.end = eventEnd;
       }
 
       payload.location = location.trim() || undefined;
@@ -579,8 +602,9 @@ export const PlannerCaptureModal: React.FC<Props> = ({
   };
 
   const formatDateTime = (date: Date | null) => {
-    if (!date) return "Offen";
-    return date.toLocaleString("de-DE", {
+    const safeDate = parseSafeDate(date);
+    if (!safeDate) return "Offen";
+    return safeDate.toLocaleString("de-DE", {
       day: "2-digit",
       month: "2-digit",
       hour: "2-digit",
@@ -589,8 +613,9 @@ export const PlannerCaptureModal: React.FC<Props> = ({
   };
 
   const formatDate = (date: Date | null) => {
-    if (!date) return "Offen";
-    return date.toLocaleDateString("de-DE", {
+    const safeDate = parseSafeDate(date);
+    if (!safeDate) return "Offen";
+    return safeDate.toLocaleDateString("de-DE", {
       day: "2-digit",
       month: "2-digit",
       year: "numeric",
@@ -897,7 +922,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                           "Fällig",
                           dueTime ?? startTime,
                           showDuePicker,
-                          () => setShowDuePicker((prev) => !prev),
+                          setShowDuePicker,
                           (date) => setDueTime(date),
                         )}
                         <TouchableOpacity
@@ -1241,7 +1266,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                         "Von",
                         startTime,
                         showStartPicker,
-                        () => setShowStartPicker((prev) => !prev),
+                        setShowStartPicker,
                         (date) => {
                           const allDayStart = new Date(date);
                           allDayStart.setHours(0, 0, 0, 0);
@@ -1259,7 +1284,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                         "Bis",
                         endTime ?? startTime,
                         showEndPicker,
-                        () => setShowEndPicker((prev) => !prev),
+                        setShowEndPicker,
                         (date) => {
                           const allDayEnd = new Date(date);
                           allDayEnd.setHours(23, 59, 59, 999);
@@ -1280,7 +1305,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                         "Start",
                         startTime,
                         showStartPicker,
-                        () => setShowStartPicker((prev) => !prev),
+                        setShowStartPicker,
                         (date) => {
                           setStartTime(date);
                           if (showEnd && endTime && endTime < date) {
@@ -1295,7 +1320,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                             "Ende",
                             endTime,
                             showEndPicker,
-                            () => setShowEndPicker((prev) => !prev),
+                            setShowEndPicker,
                             setEndTime,
                           )}
                           {endTime.getTime() !== startTime.getTime() && (

@@ -55,6 +55,7 @@ import { markPaywallShown, shouldShowPaywall } from '@/lib/paywall';
 import { useNotifications } from '@/hooks/useNotifications';
 import { usePartnerNotifications } from '@/hooks/usePartnerNotifications';
 import { sleepActivityService } from '@/lib/sleepActivityService';
+import { parseSafeDate } from '@/lib/safeDate';
 import { cancelBabyReminderNotification } from '@/lib/babyReminderNotifications';
 import { cancelLocalSleepWindowReminders } from '@/lib/sleepWindowReminderNotifications';
 import {
@@ -81,6 +82,7 @@ const NIGHT_SPLASH_COLORS = {
 } as const;
 const SPLASH_PROMO_GIF = require('@/assets/images/App_Werbung.gif');
 const MIN_VALID_MANUAL_DATE = new Date(2000, 0, 1);
+const MAX_VALID_MANUAL_DATE = new Date(2100, 11, 31, 23, 59, 59, 999);
 const BABY_MODE_PREVIEW_READ_ONLY_MESSAGE =
   'Du bist im Babymodus zur Vorschau. Schlaftracking ist erst nach der Geburt moeglich.';
 
@@ -1379,7 +1381,9 @@ export default function SleepTrackerScreen() {
   const isValidManualDate = useCallback((value: unknown): boolean => {
     if (!isFiniteManualDate(value)) return false;
     const timestamp = value.getTime();
-    return timestamp >= MIN_VALID_MANUAL_DATE.getTime() && value.getFullYear() >= 2000;
+    return timestamp >= MIN_VALID_MANUAL_DATE.getTime()
+      && timestamp <= MAX_VALID_MANUAL_DATE.getTime()
+      && value.getFullYear() >= 2000;
   }, [isFiniteManualDate]);
 
   const sanitizeManualDate = useCallback(
@@ -1553,8 +1557,7 @@ export default function SleepTrackerScreen() {
         if (!isMounted) return;
 
         if (data?.birth_date) {
-          const parsed = new Date(data.birth_date);
-          setBabyBirthdate(Number.isNaN(parsed.getTime()) ? null : parsed);
+          setBabyBirthdate(parseSafeDate(data.birth_date));
         } else {
           setBabyBirthdate(null);
         }
@@ -3138,14 +3141,20 @@ export default function SleepTrackerScreen() {
       rangeStart: dayStart,
       rangeEnd: dayEnd,
     });
+    const dayNapIntervals = getMergedIntervalsForEntries(sleepEntries, {
+      rangeStart: dayStart,
+      rangeEnd: dayEnd,
+      // Jeder Tagschlaf zählt als Nap, unabhängig von der Dauer.
+      predicate: (entry) => entry.period === 'day',
+    });
     const totalMinutes = minutesFromMergedIntervals(dayIntervals);
     const longestStretch = dayIntervals.reduce((maxValue, interval) => {
       const minutes = Math.floor((interval.endMs - interval.startMs) / 60000);
       return Math.max(maxValue, Math.max(0, minutes));
     }, 0);
-    const napsCount = dayIntervals.reduce((count, interval) => {
+    const napsCount = dayNapIntervals.reduce((count, interval) => {
       const minutes = Math.floor((interval.endMs - interval.startMs) / 60000);
-      return minutes > 0 && minutes <= 30 ? count + 1 : count;
+      return minutes > 0 ? count + 1 : count;
     }, 0);
 
     const nightSessionSegments = getNightSessionSegmentsForReference(
@@ -4663,6 +4672,7 @@ export default function SleepTrackerScreen() {
                           <DateTimePicker
                             value={safeModalStartTime}
                             minimumDate={MIN_VALID_MANUAL_DATE}
+                            maximumDate={MAX_VALID_MANUAL_DATE}
                             mode="datetime"
                             display="default"
                             themeVariant={isDark ? 'dark' : 'light'}
@@ -4701,6 +4711,7 @@ export default function SleepTrackerScreen() {
                           <DateTimePicker
                             value={safeModalEndPickerTime}
                             minimumDate={MIN_VALID_MANUAL_DATE}
+                            maximumDate={MAX_VALID_MANUAL_DATE}
                             mode="datetime"
                             display="default"
                             themeVariant={isDark ? 'dark' : 'light'}
@@ -4773,13 +4784,21 @@ export default function SleepTrackerScreen() {
                                 </TouchableOpacity>
                               </View>
                               <DateTimePicker
-                                value={(() => { const d = new Date(startPickerDraft); d.setSeconds(0, 0); return d; })()}
+                                value={(() => {
+                                  const d = sanitizeManualDate(startPickerDraft, safeModalStartTime);
+                                  d.setSeconds(0, 0);
+                                  return d;
+                                })()}
                                 minimumDate={MIN_VALID_MANUAL_DATE}
+                                maximumDate={MAX_VALID_MANUAL_DATE}
                                 mode="datetime"
                                 display="spinner"
                                 locale="de-DE"
-                                onChange={(_, d) => {
-                                  if (d) setStartPickerDraft(d);
+                                onChange={(event, d) => {
+                                  if (event.type === 'dismissed') return;
+                                  setStartPickerDraft((prev) =>
+                                    getSafePickerDateFromEvent(event, d, prev)
+                                  );
                                 }}
                                 accentColor={modalAccentColor}
                                 themeVariant={isDark ? 'dark' : 'light'}
@@ -4837,13 +4856,21 @@ export default function SleepTrackerScreen() {
                                 </TouchableOpacity>
                               </View>
                               <DateTimePicker
-                                value={(() => { const d = new Date(endPickerDraft); d.setSeconds(0, 0); return d; })()}
+                                value={(() => {
+                                  const d = sanitizeManualDate(endPickerDraft, safeModalEndPickerTime);
+                                  d.setSeconds(0, 0);
+                                  return d;
+                                })()}
                                 minimumDate={MIN_VALID_MANUAL_DATE}
+                                maximumDate={MAX_VALID_MANUAL_DATE}
                                 mode="datetime"
                                 display="spinner"
                                 locale="de-DE"
-                                onChange={(_, d) => {
-                                  if (d) setEndPickerDraft(d);
+                                onChange={(event, d) => {
+                                  if (event.type === 'dismissed') return;
+                                  setEndPickerDraft((prev) =>
+                                    getSafePickerDateFromEvent(event, d, prev)
+                                  );
                                 }}
                                 accentColor={modalAccentColor}
                                 themeVariant={isDark ? 'dark' : 'light'}

@@ -4,6 +4,7 @@ import { differenceInMonths } from 'date-fns';
 import { getBabyBornStatus, setBabyBornStatus } from '@/lib/supabase';
 import { useAuth } from './AuthContext';
 import { getBabyInfo, saveBabyInfo } from '@/lib/baby';
+import { parseSafeDate } from '@/lib/safeDate';
 import { useActiveBaby } from './ActiveBabyContext';
 
 type BabyStatusSource = 'cache' | 'baby_info' | 'user_settings' | 'default' | 'error' | 'local_action';
@@ -86,10 +87,7 @@ export const BabyStatusProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   );
 
   const parseValidDate = useCallback((value: string | null | undefined) => {
-    if (!value) return null;
-    const parsed = new Date(value);
-    if (Number.isNaN(parsed.getTime())) return null;
-    return parsed;
+    return parseSafeDate(value);
   }, []);
 
   const applyResolvedState = useCallback(

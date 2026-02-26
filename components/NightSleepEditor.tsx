@@ -10,18 +10,21 @@ import {
   ScrollView,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { Colors } from '@/constants/Colors';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { RADIUS } from '@/constants/DesignGuide';
 import type { NightGroup, ClassifiedSleepEntry } from '@/app/(tabs)/sleep-tracker';
+import { parseSafeDate, getSafePickerDate } from '@/lib/safeDate';
 
 // ─── Constants ──────────────────────────────────────────────
 const NIGHT_WINDOW_MINUTES = 990;
 const NIGHT_WINDOW_START_HOUR = 17;
 const NIGHT_WINDOW_START_MINUTES = 30;
+
+const PICKER_MIN_DATE = new Date(2020, 0, 1);
 
 const ACCENT_LIGHT = '#8E4EC6';
 const ACCENT_DARK = '#A26BFF';
@@ -345,9 +348,9 @@ const TimePickerRow = ({
   isDark: boolean;
   textPrimary: string;
   textSecondary: string;
-  /** Wenn true: große Hero-Darstellung mit Datum+Zeit-Picker (datetime-mode) */
+  /** Wenn true: große Hero-Darstellung */
   heroMode?: boolean;
-  /** Wenn true: nur Uhrzeit-Button (groß), kein Label/Datum drumherum */
+  /** Wenn true: kompakte Darstellung für Wachphasen (klickbares Datum + großer Uhrzeit-Button) */
   wakeMode?: boolean;
   /**
    * Optionaler Override für die angezeigte Zeit — wird gesetzt wenn ein verlinkter Picker
@@ -355,50 +358,110 @@ const TimePickerRow = ({
    */
   linkedDisplayTime?: Date;
 }) => {
+  const normalizeDateTime = useCallback((candidate?: Date | null, fallback?: Date): Date => {
+    return parseSafeDate(candidate) ?? parseSafeDate(fallback) ?? new Date();
+  }, []);
   const [showAndroid, setShowAndroid] = useState(false);
+  const [showAndroidDate, setShowAndroidDate] = useState(false);
   const [showIOS, setShowIOS] = useState(false);
-  const [displayTime, setDisplayTime] = useState(time);
-  const [iosDraftTime, setIosDraftTime] = useState(time);
+  const [displayTime, setDisplayTime] = useState<Date>(() => normalizeDateTime(time));
+  const [iosDraftTime, setIosDraftTime] = useState<Date>(() => normalizeDateTime(time));
 
   useEffect(() => {
-    setDisplayTime(time);
-  }, [time.getTime()]);
+    setDisplayTime((prev) => normalizeDateTime(time, prev));
+  }, [normalizeDateTime, time]);
 
   // Wenn der Parent einen verlinkten Wert liefert (wegen linked-shift), sofort anzeigen
   useEffect(() => {
     if (linkedDisplayTime) {
-      setDisplayTime(linkedDisplayTime);
+      setDisplayTime((prev) => normalizeDateTime(linkedDisplayTime, prev));
     }
-  }, [linkedDisplayTime?.getTime()]);
+  }, [linkedDisplayTime, normalizeDateTime]);
 
   useEffect(() => {
     if (!showIOS) {
-      setIosDraftTime(displayTime);
+      setIosDraftTime((prev) => normalizeDateTime(displayTime, prev));
     }
-  }, [showIOS, displayTime]);
+  }, [displayTime, normalizeDateTime, showIOS]);
+
+  const getEventCandidateDate = useCallback(
+    (_event: DateTimePickerEvent, nextDate: Date | undefined, fallback: Date) => {
+      // event.nativeEvent.timestamp ist ein UIKit/Android Event-Zeitstempel, kein Datum –
+      // er darf nie als Datum-Kandidat benutzt werden.
+      const fromDate = parseSafeDate(nextDate);
+      if (fromDate) return fromDate;
+
+      return fallback;
+    },
+    []
+  );
+
+  const getSafeDateTimeFromPickerEvent = useCallback(
+    (event: DateTimePickerEvent, nextDate: Date | undefined) => {
+      const fallback = normalizeDateTime(iosDraftTime, displayTime);
+      const candidate = getEventCandidateDate(event, nextDate, fallback);
+      const normalized = normalizeDateTime(candidate, fallback);
+      normalized.setSeconds(0, 0);
+      return normalized;
+    },
+    [displayTime, getEventCandidateDate, iosDraftTime, normalizeDateTime]
+  );
 
   const applyTimeChange = useCallback((nextTime: Date) => {
-    const accepted = onChange(nextTime);
+    const accepted = onChange(normalizeDateTime(nextTime, displayTime));
     if (accepted) {
-      setDisplayTime(nextTime);
+      setDisplayTime(normalizeDateTime(nextTime, displayTime));
     }
-  }, [onChange]);
+  }, [displayTime, normalizeDateTime, onChange]);
+
+  const safeDisplayTime = useMemo(
+    () => normalizeDateTime(displayTime, time),
+    [displayTime, normalizeDateTime, time]
+  );
+  const safeIosDraftDateTime = useMemo(
+    () => normalizeDateTime(iosDraftTime, safeDisplayTime),
+    [iosDraftTime, normalizeDateTime, safeDisplayTime]
+  );
+
+  const applyDateChange = useCallback((nextDate: Date) => {
+    const safeDatePart = normalizeDateTime(nextDate, safeDisplayTime);
+    const merged = new Date(safeDisplayTime);
+    merged.setFullYear(safeDatePart.getFullYear(), safeDatePart.getMonth(), safeDatePart.getDate());
+    merged.setSeconds(0, 0);
+    applyTimeChange(merged);
+  }, [applyTimeChange, normalizeDateTime, safeDisplayTime]);
+
+  const openIOSPicker = useCallback(() => {
+    setIosDraftTime(safeDisplayTime);
+    setShowIOS(true);
+  }, [safeDisplayTime]);
 
   const commitIOSDraft = useCallback(() => {
-    const currentMinute = Math.floor(displayTime.getTime() / 60000);
-    const draftMinute = Math.floor(iosDraftTime.getTime() / 60000);
+    const currentMinute = Math.floor(safeDisplayTime.getTime() / 60000);
+    const draftMinute = Math.floor(safeIosDraftDateTime.getTime() / 60000);
     if (currentMinute !== draftMinute) {
-      applyTimeChange(iosDraftTime);
+      applyTimeChange(safeIosDraftDateTime);
     }
-  }, [applyTimeChange, displayTime, iosDraftTime]);
+  }, [applyTimeChange, safeDisplayTime, safeIosDraftDateTime]);
 
   // ── Hero-Darstellung (Aufgewacht / Eingeschlafen groß) ──────────────
   if (heroMode) {
     return (
       <View style={rowStyles.heroContainer}>
-        <Text style={[rowStyles.heroDayText, { color: textSecondary }]}>
-          {formatShortDayDate(displayTime)}
-        </Text>
+        <TouchableOpacity
+          onPress={() => {
+            if (Platform.OS === 'ios') {
+              openIOSPicker();
+            } else {
+              setShowAndroidDate(true);
+            }
+          }}
+          activeOpacity={0.7}
+        >
+          <Text style={[rowStyles.heroDayText, { color: textSecondary }]}>
+            {formatShortDayDate(safeDisplayTime)}
+          </Text>
+        </TouchableOpacity>
         {Platform.OS === 'ios' ? (
           <>
             <TouchableOpacity
@@ -407,13 +470,12 @@ const TimePickerRow = ({
                 { backgroundColor: isDark ? 'rgba(162,107,255,0.14)' : 'rgba(142,78,198,0.07)' },
               ]}
               onPress={() => {
-                setIosDraftTime(displayTime);
-                setShowIOS(true);
+                openIOSPicker();
               }}
               activeOpacity={0.7}
             >
               <Text style={[rowStyles.heroTimeBtnText, { color: accentColor }]}>
-                {formatClockTime(displayTime)}
+                {formatClockTime(safeDisplayTime)}
               </Text>
             </TouchableOpacity>
 
@@ -462,19 +524,24 @@ const TimePickerRow = ({
                       <Text style={[rowStyles.iosActionText, { color: accentColor }]}>Fertig</Text>
                     </TouchableOpacity>
                   </View>
-                  {/* datetime-Spinner: Datum + Uhrzeit in einem */}
-                  <DateTimePicker
-                    value={(() => { const d = new Date(iosDraftTime); d.setSeconds(0, 0); return d; })()}
-                    mode="datetime"
-                    display="spinner"
-                    locale="de-DE"
-                    onChange={(_, d) => {
-                      if (d) setIosDraftTime(d);
-                    }}
-                    accentColor={accentColor}
-                    themeVariant={isDark ? 'dark' : 'light'}
-                    style={rowStyles.iosSpinnerDatetime}
-                  />
+                  {/* iOS Spinner – nur mounten wenn sichtbar, damit der native Picker
+                      immer frisch mit dem korrekten value initialisiert wird. */}
+                  {showIOS && (
+                    <DateTimePicker
+                      value={getSafePickerDate(safeIosDraftDateTime, safeDisplayTime)}
+                      minimumDate={PICKER_MIN_DATE}
+                      mode="datetime"
+                      display="spinner"
+                      locale="de-DE"
+                      onChange={(event, d) => {
+                        if (event.type === 'dismissed') return;
+                        setIosDraftTime(getSafeDateTimeFromPickerEvent(event, d));
+                      }}
+                      accentColor={accentColor}
+                      themeVariant={isDark ? 'dark' : 'light'}
+                      style={rowStyles.iosSpinnerDatetime}
+                    />
+                  )}
                 </View>
               </View>
             </Modal>
@@ -487,17 +554,28 @@ const TimePickerRow = ({
               activeOpacity={0.7}
             >
               <Text style={[rowStyles.heroTimeBtnText, { color: accentColor }]}>
-                {formatClockTime(displayTime)}
+                {formatClockTime(safeDisplayTime)}
               </Text>
             </TouchableOpacity>
             {showAndroid && (
               <DateTimePicker
-                value={displayTime}
-                mode="datetime"
+                value={safeDisplayTime}
+                mode="time"
                 is24Hour
                 onChange={(_, d) => {
                   setShowAndroid(false);
                   if (d) applyTimeChange(d);
+                }}
+              />
+            )}
+            {showAndroidDate && (
+              <DateTimePicker
+                value={safeDisplayTime}
+                mode="date"
+                onChange={(event, d) => {
+                  setShowAndroidDate(false);
+                  if (event.type === 'dismissed' || !d) return;
+                  applyDateChange(d);
                 }}
               />
             )}
@@ -507,19 +585,33 @@ const TimePickerRow = ({
     );
   }
 
-  // ── Wake-Mode: nur großer Uhrzeit-Button (für Wachphasen-Karten) ──
+  // ── Wake-Mode: kompaktes Datum + großer Uhrzeit-Button (für Wachphasen-Karten) ──
   if (wakeMode) {
     return (
-      <>
+      <View style={rowStyles.wakeModeContainer}>
+        <TouchableOpacity
+          onPress={() => {
+            if (Platform.OS === 'ios') {
+              openIOSPicker();
+            } else {
+              setShowAndroidDate(true);
+            }
+          }}
+          activeOpacity={0.7}
+        >
+          <Text style={[rowStyles.wakeModeDayText, { color: textSecondary }]}>
+            {formatShortDayDate(safeDisplayTime)}
+          </Text>
+        </TouchableOpacity>
         {Platform.OS === 'ios' ? (
           <>
             <TouchableOpacity
               style={[rowStyles.wakeModeBtn, { backgroundColor: isDark ? 'rgba(232,160,130,0.15)' : 'rgba(232,160,130,0.1)' }]}
-              onPress={() => { setIosDraftTime(displayTime); setShowIOS(true); }}
+              onPress={() => { openIOSPicker(); }}
               activeOpacity={0.7}
             >
               <Text style={[rowStyles.wakeModeBtnText, { color: accentColor }]}>
-                {formatClockTime(displayTime)}
+                {formatClockTime(safeDisplayTime)}
               </Text>
             </TouchableOpacity>
             <Modal visible={showIOS} transparent animationType="fade" onRequestClose={() => { commitIOSDraft(); setShowIOS(false); }}>
@@ -536,16 +628,22 @@ const TimePickerRow = ({
                       <Text style={[rowStyles.iosActionText, { color: accentColor }]}>Fertig</Text>
                     </TouchableOpacity>
                   </View>
-                  <DateTimePicker
-                    value={(() => { const d = new Date(iosDraftTime); d.setSeconds(0, 0); return d; })()}
-                    mode="datetime"
-                    display="spinner"
-                    locale="de-DE"
-                    onChange={(_, d) => { if (d) setIosDraftTime(d); }}
-                    accentColor={accentColor}
-                    themeVariant={isDark ? 'dark' : 'light'}
-                    style={rowStyles.iosSpinnerDatetime}
-                  />
+                  {showIOS && (
+                    <DateTimePicker
+                      value={getSafePickerDate(safeIosDraftDateTime, safeDisplayTime)}
+                      minimumDate={PICKER_MIN_DATE}
+                      mode="datetime"
+                      display="spinner"
+                      locale="de-DE"
+                      onChange={(event, d) => {
+                        if (event.type === 'dismissed') return;
+                        setIosDraftTime(getSafeDateTimeFromPickerEvent(event, d));
+                      }}
+                      accentColor={accentColor}
+                      themeVariant={isDark ? 'dark' : 'light'}
+                      style={rowStyles.iosSpinnerDatetime}
+                    />
+                  )}
                 </View>
               </View>
             </Modal>
@@ -557,14 +655,25 @@ const TimePickerRow = ({
               onPress={() => setShowAndroid(true)}
               activeOpacity={0.7}
             >
-              <Text style={[rowStyles.wakeModeBtnText, { color: accentColor }]}>{formatClockTime(displayTime)}</Text>
+              <Text style={[rowStyles.wakeModeBtnText, { color: accentColor }]}>{formatClockTime(safeDisplayTime)}</Text>
             </TouchableOpacity>
             {showAndroid && (
-              <DateTimePicker value={displayTime} mode="datetime" is24Hour onChange={(_, d) => { setShowAndroid(false); if (d) applyTimeChange(d); }} />
+              <DateTimePicker value={safeDisplayTime} mode="time" is24Hour onChange={(_, d) => { setShowAndroid(false); if (d) applyTimeChange(d); }} />
+            )}
+            {showAndroidDate && (
+              <DateTimePicker
+                value={safeDisplayTime}
+                mode="date"
+                onChange={(event, d) => {
+                  setShowAndroidDate(false);
+                  if (event.type === 'dismissed' || !d) return;
+                  applyDateChange(d);
+                }}
+              />
             )}
           </>
         )}
-      </>
+      </View>
     );
   }
 
@@ -573,9 +682,20 @@ const TimePickerRow = ({
     <View style={rowStyles.container}>
       <Text style={[rowStyles.label, { color: textSecondary }]}>{label}</Text>
       <View style={rowStyles.valueColumn}>
-        <Text style={[rowStyles.dayText, { color: textSecondary }]}>
-          {formatShortDayDate(displayTime)}
-        </Text>
+        <TouchableOpacity
+          onPress={() => {
+            if (Platform.OS === 'ios') {
+              openIOSPicker();
+            } else {
+              setShowAndroidDate(true);
+            }
+          }}
+          activeOpacity={0.7}
+        >
+          <Text style={[rowStyles.dayText, { color: textSecondary }]}>
+            {formatShortDayDate(safeDisplayTime)}
+          </Text>
+        </TouchableOpacity>
         {Platform.OS === 'ios' ? (
           <>
             <TouchableOpacity
@@ -584,13 +704,12 @@ const TimePickerRow = ({
                 { backgroundColor: isDark ? 'rgba(162,107,255,0.12)' : 'rgba(142,78,198,0.06)' },
               ]}
               onPress={() => {
-                setIosDraftTime(displayTime);
-                setShowIOS(true);
+                openIOSPicker();
               }}
               activeOpacity={0.7}
             >
               <Text style={[rowStyles.timeBtnText, { color: accentColor }]}>
-                {formatClockTime(displayTime)}
+                {formatClockTime(safeDisplayTime)}
               </Text>
             </TouchableOpacity>
 
@@ -640,19 +759,22 @@ const TimePickerRow = ({
                       <Text style={[rowStyles.iosActionText, { color: accentColor }]}>Fertig</Text>
                     </TouchableOpacity>
                   </View>
-
-                  <DateTimePicker
-                    value={(() => { const d = new Date(iosDraftTime); d.setSeconds(0, 0); return d; })()}
-                    mode="time"
-                    display="spinner"
-                    locale="de-DE"
-                    onChange={(_, d) => {
-                      if (d) setIosDraftTime(d);
-                    }}
-                    accentColor={accentColor}
-                    themeVariant={isDark ? 'dark' : 'light'}
-                    style={rowStyles.iosSpinner}
-                  />
+                  {showIOS && (
+                    <DateTimePicker
+                      value={getSafePickerDate(safeIosDraftDateTime, safeDisplayTime)}
+                      minimumDate={PICKER_MIN_DATE}
+                      mode="datetime"
+                      display="spinner"
+                      locale="de-DE"
+                      onChange={(event, d) => {
+                        if (event.type === 'dismissed') return;
+                        setIosDraftTime(getSafeDateTimeFromPickerEvent(event, d));
+                      }}
+                      accentColor={accentColor}
+                      themeVariant={isDark ? 'dark' : 'light'}
+                      style={rowStyles.iosSpinner}
+                    />
+                  )}
                 </View>
               </View>
             </Modal>
@@ -665,17 +787,28 @@ const TimePickerRow = ({
               activeOpacity={0.7}
             >
               <Text style={[rowStyles.timeBtnText, { color: accentColor }]}>
-                {formatClockTime(displayTime)}
+                {formatClockTime(safeDisplayTime)}
               </Text>
             </TouchableOpacity>
             {showAndroid && (
               <DateTimePicker
-                value={displayTime}
+                value={safeDisplayTime}
                 mode="time"
                 is24Hour
                 onChange={(_, d) => {
                   setShowAndroid(false);
                   if (d) applyTimeChange(d);
+                }}
+              />
+            )}
+            {showAndroidDate && (
+              <DateTimePicker
+                value={safeDisplayTime}
+                mode="date"
+                onChange={(event, d) => {
+                  setShowAndroidDate(false);
+                  if (event.type === 'dismissed' || !d) return;
+                  applyDateChange(d);
                 }}
               />
             )}
@@ -735,6 +868,16 @@ const rowStyles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 18,
     borderRadius: 12,
+  },
+  wakeModeContainer: {
+    alignItems: 'center',
+  },
+  wakeModeDayText: {
+    fontSize: 11,
+    fontWeight: '500',
+    opacity: 0.7,
+    marginBottom: 4,
+    textTransform: 'capitalize',
   },
   wakeModeBtnText: { fontSize: 24, fontWeight: '700', fontVariant: ['tabular-nums'] as any },
   iosModalOverlay: {
@@ -832,34 +975,54 @@ export default function NightSleepEditor({
   }, [nightGroup]);
 
   const entries = optimisticEntries ?? nightGroup.entries;
+  const getSafeStartMs = useCallback((value: Date | string | null | undefined): number => {
+    const parsed = parseSafeDate(value);
+    return parsed ? parsed.getTime() : Number.POSITIVE_INFINITY;
+  }, []);
+  const getSafeEndMs = useCallback((value: Date | string | null | undefined): number => {
+    if (!value) return Date.now();
+    const parsed = parseSafeDate(value);
+    return parsed ? parsed.getTime() : Number.NEGATIVE_INFINITY;
+  }, []);
   const firstEntry = useMemo(() => {
     return entries.reduce((earliest, entry) => {
       if (!earliest) return entry;
-      return new Date(entry.start_time).getTime() < new Date(earliest.start_time).getTime()
+      return getSafeStartMs(entry.start_time) < getSafeStartMs(earliest.start_time)
         ? entry
         : earliest;
     }, entries[0]);
-  }, [entries]);
+  }, [entries, getSafeStartMs]);
   const lastEntry = useMemo(() => {
     return entries.reduce((latest, entry) => {
       if (!latest) return entry;
       // Aktive Einträge (kein end_time) gelten als "jetzt endend" — nicht als negative Unendlichkeit.
       // So gewinnt ein laufender Schlaf immer gegen jeden bereits beendeten Eintrag.
-      const now = Date.now();
-      const latestEnd = latest.end_time ? new Date(latest.end_time).getTime() : now;
-      const currentEnd = entry.end_time ? new Date(entry.end_time).getTime() : now;
+      const latestEnd = getSafeEndMs(latest.end_time);
+      const currentEnd = getSafeEndMs(entry.end_time);
       if (currentEnd > latestEnd) return entry;
       if (currentEnd === latestEnd) {
-        return new Date(entry.start_time).getTime() > new Date(latest.start_time).getTime()
+        return getSafeStartMs(entry.start_time) > getSafeStartMs(latest.start_time)
           ? entry
           : latest;
       }
       return latest;
     }, entries[0]);
-  }, [entries]);
+  }, [entries, getSafeEndMs, getSafeStartMs]);
 
-  const nightStart = nightGroup.start;
-  const nightEnd = nightGroup.end;
+  const nightStart = useMemo(
+    () => parseSafeDate(nightGroup.start) ?? parseSafeDate(firstEntry.start_time) ?? new Date(),
+    [firstEntry.start_time, nightGroup.start]
+  );
+  const nightEnd = useMemo(() => {
+    const fallbackEnd = new Date(nightStart.getTime() + 60 * ONE_MINUTE_MS);
+    const parsedEnd = parseSafeDate(nightGroup.end)
+      ?? (lastEntry.end_time ? parseSafeDate(lastEntry.end_time) : null)
+      ?? fallbackEnd;
+    if (parsedEnd.getTime() <= nightStart.getTime()) {
+      return fallbackEnd;
+    }
+    return parsedEnd;
+  }, [lastEntry.end_time, nightGroup.end, nightStart]);
   const totalSleepMin = nightGroup.totalMinutes;
   const nightSpanMinutes = useMemo(
     () => Math.round((nightEnd.getTime() - nightStart.getTime()) / ONE_MINUTE_MS),
@@ -874,8 +1037,9 @@ export default function NightSleepEditor({
       const prev = entries[i - 1];
       const next = entries[i];
       if (!prev.end_time) continue;
-      const start = new Date(prev.end_time);
-      const end = new Date(next.start_time);
+      const start = parseSafeDate(prev.end_time);
+      const end = parseSafeDate(next.start_time);
+      if (!start || !end) continue;
       const durationSeconds = Math.round((end.getTime() - start.getTime()) / 1000);
       if (durationSeconds > 0) {
         phases.push({ start, end, durationSeconds, prevEntry: prev, nextEntry: next });
@@ -893,14 +1057,16 @@ export default function NightSleepEditor({
     const nightStartKey = `night-start-${firstEntry.id ?? 'no-id'}`;
     const nightEndKey = `night-end-${lastEntry.id ?? 'no-id'}`;
 
-    nextReferenceTimes[nightStartKey] = new Date(firstEntry.start_time);
-    nextReferenceTimes[nightEndKey] = lastEntry.end_time ? new Date(lastEntry.end_time) : new Date();
+    const safeFirstStart = parseSafeDate(firstEntry.start_time) ?? nightStart;
+    const safeLastEnd = lastEntry.end_time ? (parseSafeDate(lastEntry.end_time) ?? nightEnd) : nightEnd;
+    nextReferenceTimes[nightStartKey] = safeFirstStart;
+    nextReferenceTimes[nightEndKey] = safeLastEnd;
 
     for (const phase of wakePhases) {
       const wakeStartKey = `wake-start-${phase.prevEntry.id ?? 'no-id'}-${phase.nextEntry.id ?? 'no-id'}`;
       const wakeEndKey = `wake-end-${phase.prevEntry.id ?? 'no-id'}-${phase.nextEntry.id ?? 'no-id'}`;
-      nextReferenceTimes[wakeStartKey] = new Date(phase.start);
-      nextReferenceTimes[wakeEndKey] = new Date(phase.end);
+      nextReferenceTimes[wakeStartKey] = parseSafeDate(phase.start) ?? safeFirstStart;
+      nextReferenceTimes[wakeEndKey] = parseSafeDate(phase.end) ?? safeLastEnd;
     }
 
     boundaryReferenceTimesRef.current = nextReferenceTimes;
@@ -909,6 +1075,8 @@ export default function NightSleepEditor({
     firstEntry.start_time,
     lastEntry.id,
     lastEntry.end_time,
+    nightEnd,
+    nightStart,
     wakePhases,
   ]);
 
@@ -943,18 +1111,58 @@ export default function NightSleepEditor({
     [onAdjustBoundary]
   );
 
+  const resolveBoundaryTime = useCallback(
+    (
+      candidate: Date,
+      reference: Date,
+      options?: {
+        minExclusive?: Date;
+        maxExclusive?: Date;
+      }
+    ): Date | null => {
+      const safeReference = parseSafeDate(reference);
+      if (!safeReference) return null;
+
+      const safeCandidate = parseSafeDate(candidate) ?? safeReference;
+      const candidateHasDifferentDay = (
+        safeCandidate.getFullYear() !== safeReference.getFullYear()
+        || safeCandidate.getMonth() !== safeReference.getMonth()
+        || safeCandidate.getDate() !== safeReference.getDate()
+      );
+
+      // Wenn der User explizit den Tag geändert hat (Date/Datetime-Picker), Datum beibehalten.
+      // Ansonsten (nur Uhrzeit geändert) weiterhin "nahe am Referenztag" auflösen.
+      const resolved = candidateHasDifferentDay
+        ? safeCandidate
+        : (resolvePickerTimeNearReference(safeCandidate, safeReference, options) ?? safeCandidate);
+      const minMs = options?.minExclusive?.getTime();
+      const maxMs = options?.maxExclusive?.getTime();
+      const resolvedMs = resolved.getTime();
+
+      if (typeof minMs === 'number' && resolvedMs <= minMs) return null;
+      if (typeof maxMs === 'number' && resolvedMs >= maxMs) return null;
+
+      const normalized = new Date(resolved);
+      normalized.setSeconds(0, 0);
+      return normalized;
+    },
+    []
+  );
+
   // ─── Handlers ──────────────────────────────────────────
-  // heroMode-Picker liefert absolutes Datum+Zeit (datetime-mode) → direkt verwenden, kein resolve nötig
+  // Bei reiner Uhrzeit-Eingabe wird der Tag relativ aufgelöst, bei Date/Datetime bleibt der gewählte Tag erhalten.
   const handleChangeNightStart = useCallback((newTime: Date): boolean => {
     const key = `night-start-${firstEntry.id ?? 'no-id'}`;
     const endKey = `night-end-${lastEntry.id ?? 'no-id'}`;
-    const fallbackOriginal = new Date(firstEntry.start_time);
-    const fallbackNightEnd = lastEntry.end_time ? new Date(lastEntry.end_time) : nightEnd;
+    const fallbackOriginal = parseSafeDate(firstEntry.start_time) ?? nightStart;
+    const fallbackNightEnd = lastEntry.end_time
+      ? (parseSafeDate(lastEntry.end_time) ?? nightEnd)
+      : nightEnd;
     const original = boundaryReferenceTimesRef.current[key] ?? fallbackOriginal;
     const currentNightEnd = boundaryReferenceTimesRef.current[endKey] ?? fallbackNightEnd;
 
-    const resolved = new Date(newTime);
-    resolved.setSeconds(0, 0);
+    const resolved = resolveBoundaryTime(newTime, original);
+    if (!resolved) return false;
     if (Math.floor(resolved.getTime() / 60000) === Math.floor(original.getTime() / 60000)) return false;
 
     // Wenn neue Startzeit hinter der Endzeit liegt: Endzeit um gleiche Differenz verschieben
@@ -974,18 +1182,20 @@ export default function NightSleepEditor({
     scheduleBoundaryAdjust(key, firstEntry, 'start_time', resolved);
     hapticLight();
     return true;
-  }, [firstEntry, lastEntry, nightEnd, scheduleBoundaryAdjust]);
+  }, [firstEntry, lastEntry, nightEnd, nightStart, resolveBoundaryTime, scheduleBoundaryAdjust]);
 
   const handleChangeNightEnd = useCallback((newTime: Date): boolean => {
     const key = `night-end-${lastEntry.id ?? 'no-id'}`;
     const startKey = `night-start-${firstEntry.id ?? 'no-id'}`;
-    const fallbackNightStart = new Date(firstEntry.start_time);
-    const fallbackOriginal = lastEntry.end_time ? new Date(lastEntry.end_time) : new Date();
+    const fallbackNightStart = parseSafeDate(firstEntry.start_time) ?? nightStart;
+    const fallbackOriginal = lastEntry.end_time
+      ? (parseSafeDate(lastEntry.end_time) ?? nightEnd)
+      : nightEnd;
     const original = boundaryReferenceTimesRef.current[key] ?? fallbackOriginal;
     const currentNightStart = boundaryReferenceTimesRef.current[startKey] ?? fallbackNightStart;
 
-    const resolved = new Date(newTime);
-    resolved.setSeconds(0, 0);
+    const resolved = resolveBoundaryTime(newTime, original);
+    if (!resolved) return false;
     if (Math.floor(resolved.getTime() / 60000) === Math.floor(original.getTime() / 60000)) return false;
 
     // Wenn neue Endzeit vor der Startzeit liegt: Startzeit um gleiche Differenz verschieben
@@ -1005,18 +1215,22 @@ export default function NightSleepEditor({
     scheduleBoundaryAdjust(key, lastEntry, 'end_time', resolved);
     hapticLight();
     return true;
-  }, [firstEntry, lastEntry, scheduleBoundaryAdjust]);
+  }, [firstEntry, lastEntry, nightEnd, nightStart, resolveBoundaryTime, scheduleBoundaryAdjust]);
 
   const getAutoFixPreview = useCallback(() => {
     if (!lastEntry.end_time) return null;
 
     const startKey = `night-start-${firstEntry.id ?? 'no-id'}`;
     const endKey = `night-end-${lastEntry.id ?? 'no-id'}`;
-    const startReference = boundaryReferenceTimesRef.current[startKey] ?? new Date(firstEntry.start_time);
-    const endReference = boundaryReferenceTimesRef.current[endKey] ?? new Date(lastEntry.end_time);
+    const startReference = boundaryReferenceTimesRef.current[startKey]
+      ?? parseSafeDate(firstEntry.start_time)
+      ?? nightStart;
+    const endReference = boundaryReferenceTimesRef.current[endKey]
+      ?? parseSafeDate(lastEntry.end_time)
+      ?? nightEnd;
     const fixedEnd = inferLikelyNightEndFromClock(startReference, endReference);
     return { endKey, endReference, fixedEnd };
-  }, [firstEntry.id, firstEntry.start_time, lastEntry.id, lastEntry.end_time]);
+  }, [firstEntry.id, firstEntry.start_time, lastEntry.end_time, lastEntry.id, nightEnd, nightStart]);
 
   const handleAutoFixMultiDayNight = useCallback(() => {
     if (isSaving) return;
@@ -1053,13 +1267,13 @@ export default function NightSleepEditor({
     const endKey = `wake-end-${phase.prevEntry.id ?? 'no-id'}-${phase.nextEntry.id ?? 'no-id'}`;
     const original = boundaryReferenceTimesRef.current[startKey] ?? phase.start;
     const currentWakeEnd = boundaryReferenceTimesRef.current[endKey] ?? phase.end;
-    const prevEntryStart = new Date(phase.prevEntry.start_time);
+    const safePrevEntryStart = parseSafeDate(phase.prevEntry.start_time) ?? phase.start;
 
-    // wakeMode verwendet datetime-Picker → absoluten Timestamp direkt verwenden
-    const resolved = new Date(newTime);
-    resolved.setSeconds(0, 0);
-    if (resolved.getTime() <= prevEntryStart.getTime()) return false;
-    if (resolved.getTime() >= currentWakeEnd.getTime()) return false;
+    const resolved = resolveBoundaryTime(newTime, original, {
+      minExclusive: safePrevEntryStart,
+      maxExclusive: currentWakeEnd,
+    });
+    if (!resolved) return false;
     if (Math.floor(resolved.getTime() / 60000) === Math.floor(original.getTime() / 60000)) return false;
 
     boundaryReferenceTimesRef.current[startKey] = resolved;
@@ -1071,20 +1285,22 @@ export default function NightSleepEditor({
     );
     hapticLight();
     return true;
-  }, [scheduleBoundaryAdjust]);
+  }, [resolveBoundaryTime, scheduleBoundaryAdjust]);
 
   const handleChangeWakeEnd = useCallback((phase: WakePhase, newTime: Date): boolean => {
     const endKey = `wake-end-${phase.prevEntry.id ?? 'no-id'}-${phase.nextEntry.id ?? 'no-id'}`;
     const startKey = `wake-start-${phase.prevEntry.id ?? 'no-id'}-${phase.nextEntry.id ?? 'no-id'}`;
     const original = boundaryReferenceTimesRef.current[endKey] ?? phase.end;
     const currentWakeStart = boundaryReferenceTimesRef.current[startKey] ?? phase.start;
-    const nextEntryEnd = phase.nextEntry.end_time ? new Date(phase.nextEntry.end_time) : undefined;
+    const nextEntryEnd = phase.nextEntry.end_time
+      ? (parseSafeDate(phase.nextEntry.end_time) ?? undefined)
+      : undefined;
 
-    // wakeMode verwendet datetime-Picker → absoluten Timestamp direkt verwenden
-    const resolved = new Date(newTime);
-    resolved.setSeconds(0, 0);
-    if (resolved.getTime() <= currentWakeStart.getTime()) return false;
-    if (nextEntryEnd && resolved.getTime() >= nextEntryEnd.getTime()) return false;
+    const resolved = resolveBoundaryTime(newTime, original, {
+      minExclusive: currentWakeStart,
+      maxExclusive: nextEntryEnd,
+    });
+    if (!resolved) return false;
     if (Math.floor(resolved.getTime() / 60000) === Math.floor(original.getTime() / 60000)) return false;
 
     boundaryReferenceTimesRef.current[endKey] = resolved;
@@ -1096,7 +1312,7 @@ export default function NightSleepEditor({
     );
     hapticLight();
     return true;
-  }, [scheduleBoundaryAdjust]);
+  }, [resolveBoundaryTime, scheduleBoundaryAdjust]);
 
   const handleDeleteWake = useCallback((phase: WakePhase) => {
     Alert.alert(
@@ -1113,7 +1329,8 @@ export default function NightSleepEditor({
 
             const toMinuteBucket = (value: Date | string | null | undefined): number | null => {
               if (!value) return null;
-              const ms = new Date(value).getTime();
+              const parsed = parseSafeDate(value);
+              const ms = parsed ? parsed.getTime() : NaN;
               if (!Number.isFinite(ms)) return null;
               return Math.floor(ms / ONE_MINUTE_MS);
             };
@@ -1208,12 +1425,15 @@ export default function NightSleepEditor({
 
   // Add wake phase: find the longest sleep segment and split in the middle
   const handleStartAddWake = useCallback(() => {
+    if (entries.length === 0) return;
+
     // Find longest entry
     let longestIdx = 0;
     let longestDur = 0;
     entries.forEach((entry, i) => {
-      const start = new Date(entry.start_time);
-      const end = entry.end_time ? new Date(entry.end_time) : new Date();
+      const start = parseSafeDate(entry.start_time);
+      const end = entry.end_time ? parseSafeDate(entry.end_time) : new Date();
+      if (!start || !end) return;
       const dur = end.getTime() - start.getTime();
       if (dur > longestDur) {
         longestDur = dur;
@@ -1222,15 +1442,16 @@ export default function NightSleepEditor({
     });
 
     const longest = entries[longestIdx];
+    const longestStart = parseSafeDate(longest.start_time) ?? nightStart;
     const mid = new Date(
-      new Date(longest.start_time).getTime() + longestDur / 2
+      longestStart.getTime() + longestDur / 2
     );
     mid.setSeconds(0, 0);
 
     setNewWakeStart(mid);
     setNewWakeDurationMin(5);
     setAddingWake(true);
-  }, [entries]);
+  }, [entries, nightStart]);
 
   const handleConfirmAddWake = useCallback(async () => {
     if (!newWakeStart || isSubmittingWake) return;
@@ -1241,8 +1462,10 @@ export default function NightSleepEditor({
     // daher kein Datum-Kandidaten-Loop nötig — direkte Suche im passenden Eintrag.
     const wakeStartMs = newWakeStart.getTime();
     const targetEntry = entries.find((entry) => {
-      const start = new Date(entry.start_time).getTime();
-      const end = (entry.end_time ? new Date(entry.end_time) : new Date()).getTime();
+      const start = parseSafeDate(entry.start_time)?.getTime();
+      const end = (entry.end_time ? parseSafeDate(entry.end_time) : new Date())?.getTime();
+      if (typeof start !== 'number' || !Number.isFinite(start)) return false;
+      if (typeof end !== 'number' || !Number.isFinite(end)) return false;
       return wakeStartMs >= start && wakeStartMs < end;
     }) ?? null;
 
@@ -1302,19 +1525,16 @@ export default function NightSleepEditor({
   const handleChangeNewWakeStart = useCallback((pickedTime: Date): boolean => {
     if (!newWakeStart) return false;
 
-    // wakeMode verwendet datetime-Picker → absoluten Timestamp direkt verwenden
-    const resolved = new Date(pickedTime);
-    resolved.setSeconds(0, 0);
-
-    const earliestAllowedStartMs = nightStart.getTime();
-    const latestAllowedEndMs = nightEnd.getTime() - ONE_MINUTE_MS;
-    if (resolved.getTime() < earliestAllowedStartMs) return false;
-    if (resolved.getTime() >= latestAllowedEndMs) return false;
+    const resolved = resolveBoundaryTime(pickedTime, newWakeStart, {
+      minExclusive: new Date(nightStart.getTime() - ONE_MINUTE_MS),
+      maxExclusive: nightEnd,
+    });
+    if (!resolved) return false;
     if (minutesBucket(resolved) === minutesBucket(newWakeStart)) return false;
 
     setNewWakeStart(resolved);
     return true;
-  }, [newWakeStart, nightEnd, nightStart]);
+  }, [newWakeStart, nightEnd, nightStart, resolveBoundaryTime]);
 
   const handleOpenNightWindowSettings = useCallback(() => {
     onClose();
@@ -1511,9 +1731,6 @@ export default function NightSleepEditor({
                 <View style={styles.wakeCardDuo}>
                   <View style={styles.wakeCardDuoSide}>
                     <Text style={[styles.wakeCardDuoLabel, { color: textSecondary }]}>Von</Text>
-                    <Text style={[styles.wakeCardDuoDate, { color: textSecondary }]}>
-                      {formatShortDayDate(phase.start)}
-                    </Text>
                     <TimePickerRow
                       label="Von"
                       time={phase.start}
@@ -1528,9 +1745,6 @@ export default function NightSleepEditor({
                   <View style={[styles.wakeCardDuoDivider, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }]} />
                   <View style={styles.wakeCardDuoSide}>
                     <Text style={[styles.wakeCardDuoLabel, { color: textSecondary }]}>Bis</Text>
-                    <Text style={[styles.wakeCardDuoDate, { color: textSecondary }]}>
-                      {formatShortDayDate(phase.end)}
-                    </Text>
                     <TimePickerRow
                       label="Bis"
                       time={phase.end}
@@ -1556,13 +1770,10 @@ export default function NightSleepEditor({
             {addingWake && newWakeStart && (
               <View style={[styles.newWakeForm, { backgroundColor: wakeBg, borderColor: wakeColor }]}>
 
-                {/* Von — zwei Spalten: Label + Uhrzeit-Button */}
+                {/* Von — zwei Spalten: Label + kompakter Datum/Zeit-Picker */}
                 <View style={styles.newWakeVonRow}>
                   <View>
                     <Text style={[styles.newWakeFormLabel, { color: textSecondary }]}>Von</Text>
-                    <Text style={[styles.newWakeVonDate, { color: textSecondary }]}>
-                      {formatShortDayDate(newWakeStart)}
-                    </Text>
                   </View>
                   <TimePickerRow
                     label="Von"
@@ -1967,13 +2178,6 @@ const styles = StyleSheet.create({
     opacity: 0.6,
     marginBottom: 2,
   },
-  wakeCardDuoDate: {
-    fontSize: 11,
-    fontWeight: '500',
-    opacity: 0.6,
-    textTransform: 'capitalize',
-    marginBottom: 4,
-  },
   // Neues Wachphasen-Formular
   newWakeForm: {
     borderRadius: 16,
@@ -1994,13 +2198,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-  },
-  newWakeVonDate: {
-    fontSize: 12,
-    fontWeight: '500',
-    opacity: 0.7,
-    marginTop: 2,
-    textTransform: 'capitalize',
   },
   newWakeInnerDivider: {
     height: StyleSheet.hairlineWidth,

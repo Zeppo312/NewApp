@@ -16,6 +16,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { markPaywallShown, shouldShowPaywall } from '@/lib/paywall';
 import { redeemInvitationCodeFixed } from '@/lib/redeemInvitationCodeFixed';
 import * as ImagePicker from 'expo-image-picker';
+import IOSBottomDatePicker from '@/components/modals/IOSBottomDatePicker';
 
 type StepKey =
   | 'firstName'
@@ -314,6 +315,13 @@ export default function GetUserInfoScreen() {
       setDueDate(validDate);
     }
   };
+  const handleDueDateConfirmIOS = (selectedDate: Date) => {
+    const validDate = parseSafeDate(selectedDate);
+    if (validDate) {
+      setDueDate(validDate);
+    }
+    setShowDueDatePicker(false);
+  };
 
   // Handler für Änderungen am Geburtsdatum
   const handleBirthDateChange = (event: any, selectedDate?: Date) => {
@@ -325,6 +333,13 @@ export default function GetUserInfoScreen() {
     if (validDate) {
       setBirthDate(validDate);
     }
+  };
+  const handleBirthDateConfirmIOS = (selectedDate: Date) => {
+    const validDate = parseSafeDate(selectedDate);
+    if (validDate) {
+      setBirthDate(validDate);
+    }
+    setShowBirthDatePicker(false);
   };
 
   const pickBabyPhoto = async () => {
@@ -892,11 +907,11 @@ export default function GetUserInfoScreen() {
               <IconSymbol name="calendar" size={20} color={theme.tabIconDefault} />
             </TouchableOpacity>
 
-            {isBorn && showBirthDatePicker && (
+            {isBorn && showBirthDatePicker && Platform.OS !== 'ios' && (
               <DateTimePicker
                 value={birthDatePickerValue}
                 mode="date"
-                display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                display="default"
                 themeVariant="light"
                 onChange={handleBirthDateChange}
                 minimumDate={MIN_VALID_PROFILE_DATE}
@@ -904,15 +919,41 @@ export default function GetUserInfoScreen() {
               />
             )}
 
-            {!isBorn && showDueDatePicker && (
+            {!isBorn && showDueDatePicker && Platform.OS !== 'ios' && (
               <DateTimePicker
                 value={dueDatePickerValue}
                 mode="date"
-                display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                display="default"
                 themeVariant="light"
                 onChange={handleDueDateChange}
                 minimumDate={MIN_VALID_PROFILE_DATE}
                 maximumDate={maxDueDate}
+              />
+            )}
+            {isBorn && Platform.OS === 'ios' && (
+              <IOSBottomDatePicker
+                visible={showBirthDatePicker}
+                title="Geburtsdatum auswählen"
+                value={birthDatePickerValue}
+                mode="date"
+                minimumDate={MIN_VALID_PROFILE_DATE}
+                maximumDate={maxBirthDate}
+                onClose={() => setShowBirthDatePicker(false)}
+                onConfirm={handleBirthDateConfirmIOS}
+                initialVariant="calendar"
+              />
+            )}
+            {!isBorn && Platform.OS === 'ios' && (
+              <IOSBottomDatePicker
+                visible={showDueDatePicker}
+                title="Geburtstermin auswählen"
+                value={dueDatePickerValue}
+                mode="date"
+                minimumDate={MIN_VALID_PROFILE_DATE}
+                maximumDate={maxDueDate}
+                onClose={() => setShowDueDatePicker(false)}
+                onConfirm={handleDueDateConfirmIOS}
+                initialVariant="calendar"
               />
             )}
           </ThemedView>

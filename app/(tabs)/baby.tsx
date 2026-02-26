@@ -12,7 +12,7 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { saveBabyInfo, BabyInfo } from '@/lib/baby';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { loadBabyInfoWithCache, invalidateBabyCache } from '@/lib/babyCache';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import Header from '@/components/Header';
 import { useSmartBack } from '@/contexts/NavigationContext';
@@ -36,6 +36,8 @@ import {
   DEFAULT_BEDTIME_ANCHOR,
   normalizeBedtimeAnchor,
 } from '@/lib/bedtime';
+import { getSafePickerDate, parseSafeDate } from '@/lib/safeDate';
+import IOSBottomDatePicker from '@/components/modals/IOSBottomDatePicker';
 import {
   differenceInYears,
   differenceInMonths,
@@ -55,6 +57,31 @@ const initialStats = {
 };
 
 const HEADER_TEXT_COLOR = '#7D5A50';
+const MIN_VALID_BABY_DATE = new Date(2000, 0, 1);
+const BEDTIME_SAFE_DATE_OPTIONS = { minYear: 1900 } as const;
+
+const toSafeBedtimeAnchor = (selectedTime: Date | undefined, fallback?: string | null) => {
+  const fallbackAnchor = normalizeBedtimeAnchor(fallback);
+  const fallbackDate = bedtimeAnchorToDate(fallbackAnchor);
+  const safeDate = getSafePickerDate(
+    selectedTime,
+    fallbackDate,
+    BEDTIME_SAFE_DATE_OPTIONS
+  );
+  return dateToBedtimeAnchor(safeDate);
+};
+
+const getCurrentBirthDateBounds = () => {
+  const now = new Date();
+  const maximumDate = now.getTime() < MIN_VALID_BABY_DATE.getTime()
+    ? new Date(MIN_VALID_BABY_DATE.getTime())
+    : now;
+
+  return {
+    minimumDate: MIN_VALID_BABY_DATE,
+    maximumDate,
+  };
+};
 
 const pastelPaletteLight = {
   peach: 'rgba(255, 223, 209, 0.85)',
@@ -144,6 +171,26 @@ export default function BabyScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [backgroundTaskStatus, setBackgroundTaskStatus] = useState<{status: string, isRegistered: boolean} | null>(null);
+  const birthDateBounds = getCurrentBirthDateBounds();
+  const birthDateForDisplay = parseSafeDate(babyInfo.birth_date, birthDateBounds);
+  const birthDatePickerValue = getSafePickerDate(
+    babyInfo.birth_date,
+    birthDateBounds.maximumDate,
+    birthDateBounds
+  );
+  const bedtimeAnchor = useMemo(
+    () => normalizeBedtimeAnchor(babyInfo.preferred_bedtime),
+    [babyInfo.preferred_bedtime]
+  );
+  const bedtimePickerValue = useMemo(
+    () =>
+      getSafePickerDate(
+        bedtimeAnchorToDate(bedtimeAnchor),
+        bedtimeAnchorToDate(DEFAULT_BEDTIME_ANCHOR),
+        BEDTIME_SAFE_DATE_OPTIONS
+      ),
+    [bedtimeAnchor]
+  );
 
   const editParamValue = Array.isArray(params.edit) ? params.edit[0] : params.edit;
   const createdParamValue = Array.isArray(params.created) ? params.created[0] : params.created;
@@ -204,8 +251,10 @@ export default function BabyScreen() {
 
       // Show cached data immediately
       if (data) {
+        const safeBirthDate = parseSafeDate(data.birth_date, getCurrentBirthDateBounds());
         setBabyInfo({
           ...data,
+          birth_date: safeBirthDate ? safeBirthDate.toISOString() : null,
           preferred_bedtime: data.preferred_bedtime
             ? normalizeBedtimeAnchor(data.preferred_bedtime)
             : null,
@@ -216,8 +265,10 @@ export default function BabyScreen() {
       // Refresh in background if stale
       if (isStale) {
         const freshData = await refresh();
+        const safeBirthDate = parseSafeDate(freshData.birth_date, getCurrentBirthDateBounds());
         setBabyInfo({
           ...freshData,
+          birth_date: safeBirthDate ? safeBirthDate.toISOString() : null,
           preferred_bedtime: freshData.preferred_bedtime
             ? normalizeBedtimeAnchor(freshData.preferred_bedtime)
             : null,
@@ -344,7 +395,14 @@ export default function BabyScreen() {
     if (!activeBabyId) return;
 
     try {
-      const { error } = await saveBabyInfo(babyInfo, activeBabyId ?? undefined);
+      const sanitizedBabyInfo: BabyInfo = {
+        ...babyInfo,
+        preferred_bedtime: babyInfo.preferred_bedtime
+          ? normalizeBedtimeAnchor(babyInfo.preferred_bedtime)
+          : null,
+      };
+
+      const { error } = await saveBabyInfo(sanitizedBabyInfo, activeBabyId ?? undefined);
       if (error) {
         console.error('Error saving baby info:', error);
         Alert.alert('Fehler', 'Die Informationen konnten nicht gespeichert werden.');
@@ -355,8 +413,8 @@ export default function BabyScreen() {
         await refreshBabies();
 
         // Speichere relevante Baby-Infos für den Hintergrund-Task
-        if (babyInfo.birth_date) {
-          await saveBabyInfoForBackgroundTask(babyInfo);
+        if (sanitizedBabyInfo.birth_date) {
+          await saveBabyInfoForBackgroundTask(sanitizedBabyInfo);
           console.log('Baby-Infos für Hintergrund-Task gespeichert.');
         }
 
@@ -372,24 +430,52 @@ export default function BabyScreen() {
     }
   };
 
-  const handleDateChange = (event: any, selectedDate?: Date) => {
-    setShowDatePicker(Platform.OS === 'ios');
-    if (selectedDate) {
-      setBabyInfo({
-        ...babyInfo,
-        birth_date: selectedDate.toISOString()
-      });
+  const handleDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
+    if (Platform.OS === 'android') {
+      setShowDatePicker(false);
     }
+    if (event.type === 'dismissed' || !selectedDate) return;
+
+    const safeDate = parseSafeDate(selectedDate, getCurrentBirthDateBounds());
+    if (!safeDate) return;
+    setBabyInfo((prev) => ({
+      ...prev,
+      birth_date: safeDate.toISOString(),
+    }));
   };
 
-  const handleBedtimeChange = (_event: any, selectedTime?: Date) => {
-    setShowBedtimePicker(Platform.OS === 'ios');
-    if (selectedTime) {
-      setBabyInfo({
-        ...babyInfo,
-        preferred_bedtime: dateToBedtimeAnchor(selectedTime),
-      });
+  const handleIOSBirthDateConfirm = (date: Date) => {
+    const safeDate = parseSafeDate(date, getCurrentBirthDateBounds());
+    if (!safeDate) {
+      setShowDatePicker(false);
+      return;
     }
+    setBabyInfo((prev) => ({
+      ...prev,
+      birth_date: safeDate.toISOString(),
+    }));
+    setShowDatePicker(false);
+  };
+
+  const handleBedtimeChangeAndroid = (event: DateTimePickerEvent, selectedTime?: Date) => {
+    if (Platform.OS !== 'android') return;
+    setShowBedtimePicker(false);
+    if (event.type === 'dismissed' || !selectedTime) return;
+
+    const nextAnchor = toSafeBedtimeAnchor(selectedTime, babyInfo.preferred_bedtime);
+    setBabyInfo((prev) => ({
+      ...prev,
+      preferred_bedtime: nextAnchor,
+    }));
+  };
+
+  const handleIOSBedtimeConfirm = (date: Date) => {
+    const nextAnchor = toSafeBedtimeAnchor(date, babyInfo.preferred_bedtime);
+    setBabyInfo((prev) => ({
+      ...prev,
+      preferred_bedtime: nextAnchor,
+    }));
+    setShowBedtimePicker(false);
   };
 
   const computeStats = (birthDate: Date) => {
@@ -424,9 +510,9 @@ export default function BabyScreen() {
   };
 
   const stats = useMemo(() => {
-    if (!babyInfo.birth_date) return initialStats;
-    return computeStats(new Date(babyInfo.birth_date));
-  }, [babyInfo.birth_date]);
+    if (!birthDateForDisplay) return initialStats;
+    return computeStats(birthDateForDisplay);
+  }, [birthDateForDisplay]);
 
   const renderAgeDescription = () => {
     const { years, months, days } = stats;
@@ -489,7 +575,7 @@ export default function BabyScreen() {
   };
 
   const renderInterestingFacts = () => {
-    if (!babyInfo.birth_date) return null;
+    if (!birthDateForDisplay) return null;
 
     const totalMonths = stats.years * 12 + stats.months;
     const heartbeats = Math.round(stats.totalDays * 24 * 60 * getAvgHeartRate(totalMonths));
@@ -743,21 +829,35 @@ export default function BabyScreen() {
                       }}
                     >
                       <ThemedText style={[styles.dateText, { color: textPrimary }]}>
-                        {babyInfo.birth_date
-                          ? new Date(babyInfo.birth_date).toLocaleDateString('de-DE')
+                        {birthDateForDisplay
+                          ? birthDateForDisplay.toLocaleDateString('de-DE')
                           : 'Datum wählen'}
                       </ThemedText>
                       <IconSymbol name="calendar" size={20} color={textPrimary} />
                     </TouchableOpacity>
 
-                    {showDatePicker && (
+                    {showDatePicker && Platform.OS === 'android' && (
                       <DateTimePicker
-                        value={babyInfo.birth_date ? new Date(babyInfo.birth_date) : new Date()}
+                        value={birthDatePickerValue}
                         mode="date"
                         display="default"
                         onChange={handleDateChange}
-                        maximumDate={new Date()}
+                        minimumDate={birthDateBounds.minimumDate}
+                        maximumDate={birthDateBounds.maximumDate}
                         textColor={isDark ? '#FFFFFF' : undefined}
+                      />
+                    )}
+                    {Platform.OS === 'ios' && (
+                      <IOSBottomDatePicker
+                        visible={showDatePicker}
+                        title="Geburtsdatum wählen"
+                        value={birthDatePickerValue}
+                        mode="date"
+                        minimumDate={birthDateBounds.minimumDate}
+                        maximumDate={birthDateBounds.maximumDate}
+                        onClose={() => setShowDatePicker(false)}
+                        onConfirm={handleIOSBirthDateConfirm}
+                        initialVariant="calendar"
                       />
                     )}
                   </View>
@@ -772,7 +872,7 @@ export default function BabyScreen() {
                       }}
                     >
                       <ThemedText style={[styles.dateText, { color: textPrimary }]}>
-                        {normalizeBedtimeAnchor(babyInfo.preferred_bedtime)}
+                        {bedtimeAnchor}
                       </ThemedText>
                       <IconSymbol name="moon.zzz" size={20} color={textPrimary} />
                     </TouchableOpacity>
@@ -781,14 +881,24 @@ export default function BabyScreen() {
                       Diese Uhrzeit wird für die Schlafvorhersage und Schlaffenster-Erinnerungen genutzt.
                     </ThemedText>
 
-                    {showBedtimePicker && (
+                    {showBedtimePicker && Platform.OS === 'android' && (
                       <DateTimePicker
-                        value={bedtimeAnchorToDate(babyInfo.preferred_bedtime)}
+                        value={bedtimePickerValue}
                         mode="time"
                         display="default"
                         is24Hour
-                        onChange={handleBedtimeChange}
+                        onChange={handleBedtimeChangeAndroid}
                         textColor={isDark ? '#FFFFFF' : undefined}
+                      />
+                    )}
+                    {Platform.OS === 'ios' && (
+                      <IOSBottomDatePicker
+                        visible={showBedtimePicker}
+                        title="Schlafenszeit wählen"
+                        value={bedtimePickerValue}
+                        mode="time"
+                        onClose={() => setShowBedtimePicker(false)}
+                        onConfirm={handleIOSBedtimeConfirm}
                       />
                     )}
                   </View>
@@ -861,8 +971,8 @@ export default function BabyScreen() {
                   <View style={styles.infoRow}>
                     <ThemedText style={styles.infoLabel}>Geburtsdatum:</ThemedText>
                     <ThemedText style={styles.infoValue}>
-                      {babyInfo.birth_date
-                        ? new Date(babyInfo.birth_date).toLocaleDateString('de-DE')
+                      {birthDateForDisplay
+                        ? birthDateForDisplay.toLocaleDateString('de-DE')
                         : 'Noch nicht festgelegt'}
                     </ThemedText>
                   </View>
@@ -871,7 +981,7 @@ export default function BabyScreen() {
                     <ThemedText style={styles.infoLabel}>Schlafenszeit:</ThemedText>
                     <ThemedText style={styles.infoValue}>
                       {babyInfo.preferred_bedtime
-                        ? normalizeBedtimeAnchor(babyInfo.preferred_bedtime)
+                        ? bedtimeAnchor
                         : `${DEFAULT_BEDTIME_ANCHOR} (Standard)`}
                     </ThemedText>
                   </View>

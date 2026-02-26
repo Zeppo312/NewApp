@@ -24,6 +24,7 @@ import { ThemedBackground } from '@/components/ThemedBackground';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import Header from '@/components/Header';
 import TextInputOverlay from '@/components/modals/TextInputOverlay';
+import IOSBottomDatePicker from '@/components/modals/IOSBottomDatePicker';
 
 import { Colors } from '@/constants/Colors';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
@@ -71,6 +72,7 @@ const lightenHex = (hex: string, amount = 0.35) => {
 
 const MIN_VALID_PROFILE_DATE_YEAR = 2000;
 const MIN_VALID_PROFILE_DATE = new Date(MIN_VALID_PROFILE_DATE_YEAR, 0, 1);
+const MAX_VALID_PROFILE_DATE = new Date(2100, 11, 31, 23, 59, 59, 999);
 
 const parseSafeDate = (value: unknown): Date | null => {
   if (value === null || value === undefined) return null;
@@ -682,16 +684,30 @@ export default function ProfilScreen() {
   };
 
   const handleDueDateChange = (_: any, selectedDate?: Date) => {
-    setShowDueDatePicker(Platform.OS === 'ios');
+    if (Platform.OS !== 'ios') {
+      setShowDueDatePicker(false);
+    }
     if (selectedDate) setDueDate(parseSafeDate(selectedDate));
   };
   const handleBirthDateChange = (_: any, selectedDate?: Date) => {
-    setShowBirthDatePicker(Platform.OS === 'ios');
+    if (Platform.OS !== 'ios') {
+      setShowBirthDatePicker(false);
+    }
     if (selectedDate) {
       const safeDate = parseSafeDate(selectedDate);
       setBirthDate(safeDate);
       setIsBabyBornForActiveBaby(Boolean(safeDate));
     }
+  };
+  const handleDueDateConfirmIOS = (date: Date) => {
+    setDueDate(parseSafeDate(date));
+    setShowDueDatePicker(false);
+  };
+  const handleBirthDateConfirmIOS = (date: Date) => {
+    const safeDate = parseSafeDate(date);
+    setBirthDate(safeDate);
+    setIsBabyBornForActiveBaby(Boolean(safeDate));
+    setShowBirthDatePicker(false);
   };
   const handleBabyBornChange = (value: boolean) => {
     setIsBabyBornForActiveBaby(value);
@@ -965,13 +981,27 @@ export default function ProfilScreen() {
                         </ThemedText>
                         <IconSymbol name="calendar" size={20} color={textSecondary} />
                       </TouchableOpacity>
-                      {showDueDatePicker && (
+                      {showDueDatePicker && Platform.OS !== 'ios' && (
                         <DateTimePicker
                           value={dueDateForDisplay || new Date()}
                           mode="date"
-                          display={Platform.OS === 'ios' ? 'compact' : 'default'}
+                          display="default"
                           onChange={handleDueDateChange}
                           minimumDate={MIN_VALID_PROFILE_DATE}
+                          maximumDate={MAX_VALID_PROFILE_DATE}
+                        />
+                      )}
+                      {Platform.OS === 'ios' && (
+                        <IOSBottomDatePicker
+                          visible={showDueDatePicker}
+                          title="Geburtstermin auswählen"
+                          value={dueDateForDisplay || new Date()}
+                          mode="date"
+                          minimumDate={MIN_VALID_PROFILE_DATE}
+                          maximumDate={MAX_VALID_PROFILE_DATE}
+                          onClose={() => setShowDueDatePicker(false)}
+                          onConfirm={handleDueDateConfirmIOS}
+                          initialVariant="calendar"
                         />
                       )}
                     </View>
@@ -1076,14 +1106,27 @@ export default function ProfilScreen() {
                             </ThemedText>
                             <IconSymbol name="calendar" size={20} color={textSecondary} />
                           </TouchableOpacity>
-                          {showBirthDatePicker && (
+                          {showBirthDatePicker && Platform.OS !== 'ios' && (
                             <DateTimePicker
                               value={birthDateForDisplay || new Date()}
                               mode="date"
-                              display={Platform.OS === 'ios' ? 'compact' : 'default'}
+                              display="default"
                               onChange={handleBirthDateChange}
                               minimumDate={MIN_VALID_PROFILE_DATE}
                               maximumDate={new Date()}
+                            />
+                          )}
+                          {Platform.OS === 'ios' && (
+                            <IOSBottomDatePicker
+                              visible={showBirthDatePicker}
+                              title="Geburtsdatum auswählen"
+                              value={birthDateForDisplay || new Date()}
+                              mode="date"
+                              minimumDate={MIN_VALID_PROFILE_DATE}
+                              maximumDate={new Date()}
+                              onClose={() => setShowBirthDatePicker(false)}
+                              onConfirm={handleBirthDateConfirmIOS}
+                              initialVariant="calendar"
                             />
                           )}
                         </View>

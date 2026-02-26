@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   StyleSheet,
   ScrollView,
@@ -8,8 +8,6 @@ import {
   Platform,
   StatusBar,
   ActivityIndicator,
-  Modal,
-  Pressable,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -29,6 +27,8 @@ import { generateAndDownloadPDF } from '@/lib/geburtsplan-utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { getSafePickerDate, parseSafeDate } from '@/lib/safeDate';
+import IOSBottomDatePicker from '@/components/modals/IOSBottomDatePicker';
 import { pregnancyWeekInfo } from '@/constants/PregnancyWeekInfo';
 import { pregnancyMotherInfo } from '@/constants/PregnancyMotherInfo';
 import { pregnancyPartnerInfo } from '@/constants/PregnancyPartnerInfo';
@@ -223,6 +223,12 @@ export default function CountdownScreen() {
   const [currentDay, setCurrentDay] = useState<number | null>(null);
   const [daysOverdue, setDaysOverdue] = useState<number>(0);
   const [birthPreparationSectionY, setBirthPreparationSectionY] = useState<number | null>(null);
+  const minDueDate = useMemo(() => {
+    const date = new Date();
+    date.setHours(0, 0, 0, 0);
+    return date;
+  }, []);
+  const maxDueDate = useMemo(() => new Date(2100, 11, 31, 23, 59, 59, 999), []);
 
   const logWithTimestamp = (message: string) => {
     const now = new Date();
@@ -290,7 +296,14 @@ export default function CountdownScreen() {
       if (result.success) {
         logWithTimestamp('Loaded due date with linked users');
         if (result.dueDate) {
-          const resultDueDate = new Date(result.dueDate);
+          const resultDueDate = parseSafeDate(result.dueDate);
+          if (!resultDueDate) {
+            logWithTimestamp('Ungültiger Entbindungstermin aus RPC verworfen');
+            setDueDate(null);
+            setTempDate(new Date());
+            setLinkedUsers([]);
+            return;
+          }
           setDueDate(resultDueDate);
           setTempDate(resultDueDate);
           logWithTimestamp(`Entbindungstermin geladen: ${resultDueDate.toLocaleDateString()}`);
@@ -324,6 +337,7 @@ export default function CountdownScreen() {
         } else {
           logWithTimestamp('No due date found in result');
           setDueDate(null);
+          setTempDate(new Date());
           setLinkedUsers([]);
         }
       } else {
@@ -340,14 +354,21 @@ export default function CountdownScreen() {
         if (error && error.code !== 'PGRST116') {
           console.error('Error loading due date:', error);
         } else if (data && data.due_date) {
-          const loadedDate = new Date(data.due_date);
-          logWithTimestamp(`Loaded local due date: ${loadedDate.toLocaleDateString()}`);
-          setDueDate(loadedDate);
-          setTempDate(loadedDate);
+          const loadedDate = parseSafeDate(data.due_date);
+          if (loadedDate) {
+            logWithTimestamp(`Loaded local due date: ${loadedDate.toLocaleDateString()}`);
+            setDueDate(loadedDate);
+            setTempDate(loadedDate);
+          } else {
+            logWithTimestamp('Ungültiger lokaler Entbindungstermin verworfen');
+            setDueDate(null);
+            setTempDate(new Date());
+          }
           setLinkedUsers([]);
         } else {
           logWithTimestamp('No due date found for user');
           setDueDate(null);
+          setTempDate(new Date());
           setLinkedUsers([]);
         }
       }
@@ -392,20 +413,16 @@ export default function CountdownScreen() {
   };
 
   const handleDateChange = (_event: any, selectedDate?: Date) => {
+    const safeDate = selectedDate ? parseSafeDate(selectedDate) : null;
     if (Platform.OS === 'android') {
       setShowDatePicker(false);
-      if (selectedDate) {
-        setTempDate(selectedDate);
-        saveDueDate(selectedDate);
+      if (safeDate) {
+        setTempDate(safeDate);
+        saveDueDate(safeDate);
       }
     } else {
-      if (selectedDate) setTempDate(selectedDate);
+      if (safeDate) setTempDate(safeDate);
     }
-  };
-
-  const handleIOSConfirm = () => {
-    setShowDatePicker(false);
-    saveDueDate(tempDate);
   };
 
   const handleIOSCancel = () => {
@@ -413,8 +430,18 @@ export default function CountdownScreen() {
     if (dueDate) setTempDate(dueDate);
   };
 
+  const handleIOSConfirm = (date: Date) => {
+    setShowDatePicker(false);
+    const safeDate = getSafePickerDate(date, minDueDate, {
+      minimumDate: minDueDate,
+      maximumDate: maxDueDate,
+    });
+    setTempDate(safeDate);
+    saveDueDate(safeDate);
+  };
+
   const showDatepicker = () => {
-    if (dueDate) setTempDate(dueDate);
+    if (dueDate) setTempDate(getSafePickerDate(dueDate, new Date()));
     else {
       const today = new Date();
       today.setMonth(today.getMonth() + 9);
@@ -526,43 +553,36 @@ export default function CountdownScreen() {
             </TouchableOpacity>
           </LiquidGlassCard>
 
-          {/* iOS DatePicker im Glas-Modal */}
           {Platform.OS === 'ios' && (
-            <Modal transparent visible={showDatePicker} animationType="fade" onRequestClose={() => setShowDatePicker(false)}>
-              <Pressable style={styles.modalOverlay} onPress={handleIOSCancel}>
-                <LiquidGlassCard style={styles.modalGlass} intensity={28} overlayColor={glassOverlay}>
-                  <ThemedText style={[styles.modalTitle, { color: textPrimary }]}>Entbindungstermin wählen</ThemedText>
-                  <DateTimePicker
-                    value={tempDate}
-                    mode="date"
-                    display="spinner"
-                    onChange={handleDateChange}
-                    minimumDate={new Date()}
-                    textColor={isDark ? textPrimary : undefined}
-                    style={styles.datePicker}
-                  />
-                  <View style={styles.modalButtonRow}>
-                    <TouchableOpacity
-                      style={[styles.pillBtn, styles.pillGhost, { borderColor: pillBorderColor, backgroundColor: pillGhostBg }]}
-                      onPress={handleIOSCancel}
-                    >
-                      <ThemedText style={[styles.pillGhostText, { color: textPrimary }]}>Abbrechen</ThemedText>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.pillBtn, styles.pillPrimary, { backgroundColor: accentPurple, borderColor: pillPrimaryBorder }]}
-                      onPress={handleIOSConfirm}
-                    >
-                      <ThemedText style={styles.pillPrimaryText}>Bestätigen</ThemedText>
-                    </TouchableOpacity>
-                  </View>
-                </LiquidGlassCard>
-              </Pressable>
-            </Modal>
+            <IOSBottomDatePicker
+              visible={showDatePicker}
+              title="Entbindungstermin wählen"
+              value={getSafePickerDate(tempDate, minDueDate, {
+                minimumDate: minDueDate,
+                maximumDate: maxDueDate,
+              })}
+              mode="date"
+              minimumDate={minDueDate}
+              maximumDate={maxDueDate}
+              onClose={handleIOSCancel}
+              onConfirm={handleIOSConfirm}
+              initialVariant="calendar"
+            />
           )}
 
           {/* Android DatePicker */}
           {Platform.OS === 'android' && showDatePicker && (
-            <DateTimePicker value={tempDate} mode="date" display="default" onChange={handleDateChange} minimumDate={new Date()} />
+            <DateTimePicker
+              value={getSafePickerDate(tempDate, minDueDate, {
+                minimumDate: minDueDate,
+                maximumDate: maxDueDate,
+              })}
+              mode="date"
+              display="default"
+              onChange={handleDateChange}
+              minimumDate={minDueDate}
+              maximumDate={maxDueDate}
+            />
           )}
 
           {/* Wöchentliche Infos */}

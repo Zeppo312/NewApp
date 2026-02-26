@@ -15,6 +15,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import Header from '@/components/Header';
 import { ThemedText } from '@/components/ThemedText';
+import IOSBottomDatePicker from '@/components/modals/IOSBottomDatePicker';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
@@ -52,6 +53,7 @@ export default function PregnancySetupScreen() {
     d.setHours(0, 0, 0, 0);
     return d;
   }, []);
+  const maxDueDate = useMemo(() => new Date(2100, 11, 31, 23, 59, 59, 999), []);
 
   const [dueDate, setDueDate] = useState<Date | null>(null);
   const [tempDueDate, setTempDueDate] = useState<Date>(makeDefaultDueDate());
@@ -95,11 +97,6 @@ export default function PregnancySetupScreen() {
       setDueDate(selectedDate);
       setShowDatePicker(false);
     }
-  };
-
-  const handleConfirmIOSDate = () => {
-    setDueDate(tempDueDate);
-    setShowDatePicker(false);
   };
 
   const handleCreatePregnancy = async () => {
@@ -202,34 +199,35 @@ export default function PregnancySetupScreen() {
               <ThemedText style={[styles.dateButtonText, { color: textPrimary }]}>{formattedDueDate}</ThemedText>
             </TouchableOpacity>
 
-            {showDatePicker && (
+            {showDatePicker && Platform.OS !== 'ios' && (
               <View style={styles.datePickerContainer}>
                 <DateTimePicker
                   value={tempDueDate}
                   mode="date"
-                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  display="default"
                   onChange={handleDateChange}
                   minimumDate={minDueDate}
+                  maximumDate={maxDueDate}
                   themeVariant={isDark ? 'dark' : 'light'}
-                  textColor={Platform.OS === 'ios' ? (isDark ? '#FFFFFF' : '#5C4033') : undefined}
                 />
-                {Platform.OS === 'ios' && (
-                  <View style={styles.iosActions}>
-                    <TouchableOpacity
-                      style={[styles.iosActionButton, { borderColor: inputBorder }]}
-                      onPress={() => setShowDatePicker(false)}
-                    >
-                      <ThemedText style={[styles.iosActionText, { color: textSecondary }]}>Abbrechen</ThemedText>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.iosActionButton, styles.iosActionPrimary]}
-                      onPress={handleConfirmIOSDate}
-                    >
-                      <ThemedText style={[styles.iosActionText, { color: textPrimary }]}>Übernehmen</ThemedText>
-                    </TouchableOpacity>
-                  </View>
-                )}
               </View>
+            )}
+            {Platform.OS === 'ios' && (
+              <IOSBottomDatePicker
+                visible={showDatePicker}
+                title="Entbindungstermin auswählen"
+                value={tempDueDate}
+                mode="date"
+                minimumDate={minDueDate}
+                maximumDate={maxDueDate}
+                onClose={() => setShowDatePicker(false)}
+                onConfirm={(date) => {
+                  setTempDueDate(date);
+                  setDueDate(date);
+                  setShowDatePicker(false);
+                }}
+                initialVariant="calendar"
+              />
             )}
           </View>
 

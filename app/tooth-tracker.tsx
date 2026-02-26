@@ -21,12 +21,14 @@ import { ThemedText } from '@/components/ThemedText';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import Header from '@/components/Header';
 import TextInputOverlay from '@/components/modals/TextInputOverlay';
+import IOSBottomDatePicker from '@/components/modals/IOSBottomDatePicker';
 import { Colors } from '@/constants/Colors';
 import { GLASS_OVERLAY, GLASS_OVERLAY_DARK, LAYOUT_PAD, LiquidGlassCard, PRIMARY, RADIUS } from '@/constants/DesignGuide';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
+import { parseSafeDate } from '@/lib/safeDate';
 import {
   BABY_TEETH,
   BABY_TEETH_MAP,
@@ -53,6 +55,7 @@ const LOWER_TEETH: ToothDef[] = BABY_TEETH
   .map((tooth) => ({ key: tooth.key, label: tooth.label }));
 
 const ALL_TEETH = [...UPPER_TEETH, ...LOWER_TEETH];
+const MIN_VALID_TOOTH_DATE = new Date(2000, 0, 1);
 
 const SYMPTOM_OPTIONS: Array<{ key: ToothSymptom; label: string }> = [
   { key: 'fever', label: 'Fieber' },
@@ -313,10 +316,22 @@ const toDateOnly = (date: Date) => {
 
 const parseDateOnly = (value: string) => {
   const [year, month, day] = value.split('-').map(Number);
-  const date = new Date();
-  date.setFullYear(year, (month || 1) - 1, day || 1);
-  date.setHours(12, 0, 0, 0);
-  return date;
+  if (Number.isFinite(year) && Number.isFinite(month) && Number.isFinite(day)) {
+    const date = new Date();
+    date.setFullYear(year, (month || 1) - 1, day || 1);
+    date.setHours(12, 0, 0, 0);
+    return date;
+  }
+
+  const parsedFallback = parseSafeDate(value);
+  if (parsedFallback) {
+    parsedFallback.setHours(12, 0, 0, 0);
+    return parsedFallback;
+  }
+
+  const fallback = new Date();
+  fallback.setHours(12, 0, 0, 0);
+  return fallback;
 };
 
 const formatDateLabel = (value: string) => {
@@ -924,12 +939,13 @@ export default function ToothTrackerScreen() {
                     </View>
                   </TouchableOpacity>
 
-                  {showDatePicker && (
+                  {showDatePicker && Platform.OS !== 'ios' && (
                     <View style={styles.datePickerWrap}>
                       <DateTimePicker
                         value={formDate}
                         mode="date"
-                        display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                        display="default"
+                        minimumDate={MIN_VALID_TOOTH_DATE}
                         maximumDate={new Date()}
                         themeVariant={isDark ? 'dark' : 'light'}
                         accentColor={PRIMARY}
@@ -946,6 +962,22 @@ export default function ToothTrackerScreen() {
                         }}
                       />
                     </View>
+                  )}
+                  {Platform.OS === 'ios' && (
+                    <IOSBottomDatePicker
+                      visible={showDatePicker}
+                      title="Durchbruch-Datum wählen"
+                      value={formDate}
+                      mode="date"
+                      minimumDate={MIN_VALID_TOOTH_DATE}
+                      maximumDate={new Date()}
+                      onClose={() => setShowDatePicker(false)}
+                      onConfirm={(date) => {
+                        setFormDate(normalizeEditorDate(date));
+                        setShowDatePicker(false);
+                      }}
+                      initialVariant="calendar"
+                    />
                   )}
                 </View>
               </View>

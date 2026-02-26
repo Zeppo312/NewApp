@@ -23,6 +23,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { ThemedText } from '@/components/ThemedText';
 import Header from '@/components/Header';
+import IOSBottomDatePicker from '@/components/modals/IOSBottomDatePicker';
 import { Colors } from '@/constants/Colors';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { IconSymbol } from '@/components/ui/IconSymbol';
@@ -57,6 +58,7 @@ const CATEGORY_ORDER: MilestoneCategory[] = [
   'schlaf',
   'sonstiges',
 ];
+const MIN_VALID_MILESTONE_DATE = new Date(2000, 0, 1);
 const BABY_MODE_PREVIEW_READ_ONLY_MESSAGE =
   'Du bist im Babymodus zur Vorschau. Meilensteine koennen erst nach der Geburt bearbeitet werden.';
 
@@ -512,12 +514,13 @@ export default function MilestonesScreen() {
                 <IconSymbol name="calendar" size={18} color={textSecondary} />
               </TouchableOpacity>
 
-              {showDatePicker ? (
+              {showDatePicker && Platform.OS !== 'ios' ? (
                 <DateTimePicker
                   value={eventDate}
                   mode="date"
-                  display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                  display="default"
                   themeVariant={isDark ? 'dark' : 'light'}
+                  minimumDate={MIN_VALID_MILESTONE_DATE}
                   onChange={(_, pickedDate) => {
                     setShowDatePicker(false);
                     if (pickedDate) setEventDate(pickedDate);
@@ -525,6 +528,22 @@ export default function MilestonesScreen() {
                   maximumDate={new Date()}
                 />
               ) : null}
+              {Platform.OS === 'ios' && (
+                <IOSBottomDatePicker
+                  visible={showDatePicker}
+                  title="Datum wählen"
+                  value={eventDate}
+                  mode="date"
+                  minimumDate={MIN_VALID_MILESTONE_DATE}
+                  maximumDate={new Date()}
+                  onClose={() => setShowDatePicker(false)}
+                  onConfirm={(date) => {
+                    setEventDate(date);
+                    setShowDatePicker(false);
+                  }}
+                  initialVariant="calendar"
+                />
+              )}
 
               <ThemedText style={[styles.fieldLabel, { color: textSecondary }]}>Notiz (optional)</ThemedText>
               <TextInput

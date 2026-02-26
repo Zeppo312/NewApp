@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { BlurView } from 'expo-blur';
+import { getSafePickerDate } from '@/lib/safeDate';
 
 export type SleepQuality = 'good' | 'medium' | 'bad' | null;
 
@@ -29,13 +30,16 @@ type Props = {
   onSave: (entry: SleepQuickEntry) => void;
 };
 
+const resolvePickerDate = (value?: Date | null, fallback?: Date) =>
+  getSafePickerDate(value, fallback ?? new Date());
+
 const SleepQuickAddModal: React.FC<Props> = ({
   visible,
   initialStart,
   onClose,
   onSave,
 }) => {
-  const [startTime, setStartTime] = useState<Date>(initialStart ?? new Date());
+  const [startTime, setStartTime] = useState<Date>(() => resolvePickerDate(initialStart));
   const [endTime, setEndTime] = useState<Date | null>(null);
   const [quality, setQuality] = useState<SleepQuality>('good');
   const [notes, setNotes] = useState('');
@@ -44,7 +48,7 @@ const SleepQuickAddModal: React.FC<Props> = ({
 
   useEffect(() => {
     if (visible) {
-      const baseStart = initialStart ?? new Date();
+      const baseStart = resolvePickerDate(initialStart);
       setStartTime(baseStart);
       setEndTime(null);
       setQuality('good');
@@ -107,7 +111,7 @@ const SleepQuickAddModal: React.FC<Props> = ({
                 {showStartPicker && (
                   <View style={styles.pickerBlock}>
                     <DateTimePicker
-                      value={startTime}
+                      value={resolvePickerDate(startTime)}
                       mode="datetime"
                       display={Platform.OS === 'ios' ? 'compact' : 'default'}
                       onChange={(_, date) => {
@@ -126,7 +130,7 @@ const SleepQuickAddModal: React.FC<Props> = ({
                 {showEndPicker && (
                   <View style={styles.pickerBlock}>
                     <DateTimePicker
-                      value={endTime ?? new Date()}
+                      value={resolvePickerDate(endTime)}
                       mode="datetime"
                       display={Platform.OS === 'ios' ? 'compact' : 'default'}
                       onChange={(_, date) => {
@@ -337,4 +341,3 @@ const styles = StyleSheet.create({
 });
 
 export default SleepQuickAddModal;
-

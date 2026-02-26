@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { getLinkedUsers, supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { parseSafeDate } from '@/lib/safeDate';
 
 export type PlannerView = 'day' | 'week' | 'month';
 
@@ -172,9 +173,12 @@ function buildEmptyBlocks(date: Date): PlannerBlock[] {
 }
 
 function parseISO(value?: string | null): Date | null {
-  if (!value) return null;
-  const dt = new Date(value);
-  return Number.isNaN(dt.getTime()) ? null : dt;
+  return parseSafeDate(value);
+}
+
+function toSafeISO(value?: string | null): string | null {
+  const parsed = parseISO(value);
+  return parsed ? parsed.toISOString() : null;
 }
 
 function sanitizeReminderMinutes(value?: number | null, fallback = 15) {
@@ -693,8 +697,11 @@ export function usePlannerDay(date: Date) {
         targetDayId = await ensureDayFor(ownerId, normalizedDate);
       }
 
-      if (dueAt) {
-        const dueDate = parseISO(dueAt);
+      const normalizedDueAt =
+        dueAt === undefined ? undefined : dueAt === null ? null : toSafeISO(dueAt);
+
+      if (normalizedDueAt) {
+        const dueDate = parseISO(normalizedDueAt);
         if (dueDate) {
           const dueIso = toDateOnlyISO(dueDate);
           if (dueIso !== dateIso) {
@@ -718,7 +725,7 @@ export function usePlannerDay(date: Date) {
         assignee: convertAssigneePerspective(assignee, viewerId, ownerId),
         baby_id: babyId ?? null,
         notes: notes ?? null,
-        due_at: dueAt ?? null,
+        due_at: normalizedDueAt ?? null,
       };
       const { error: insertError } = await supabase.from('planner_items').insert(payload);
       if (insertError) {
@@ -749,12 +756,21 @@ export function usePlannerDay(date: Date) {
       const ownerId = ownerIdOverride ?? viewerId;
       let targetDayId = ownerId === viewerId ? baseDayIdRef.current : null;
       let targetBlockId = blockId ?? null;
+      const normalizedStart = toSafeISO(start);
+      const parsedStart = parseISO(normalizedStart);
+      if (!normalizedStart || !parsedStart) {
+        setError('Ungültige Startzeit');
+        return;
+      }
+      const normalizedEnd =
+        toSafeISO(end) ??
+        new Date(parsedStart.getTime() + 30 * 60000).toISOString();
 
       if (!targetDayId) {
         targetDayId = await ensureDayFor(ownerId, normalizedDate);
       }
 
-      const startDate = parseISO(start);
+      const startDate = parsedStart;
       if (startDate) {
         const startIso = toDateOnlyISO(startDate);
         if (startIso !== dateIso) {
@@ -773,8 +789,8 @@ export function usePlannerDay(date: Date) {
         block_id: targetBlockId,
         entry_type: 'event' as const,
         title,
-        start_at: start,
-        end_at: end,
+        start_at: normalizedStart,
+        end_at: normalizedEnd,
         location: location ?? null,
         assignee: convertAssigneePerspective(assignee, viewerId, ownerId),
         baby_id: babyId ?? null,
@@ -810,15 +826,18 @@ export function usePlannerDay(date: Date) {
 
       let newDayId: string | undefined;
       if (updates.dueAt !== undefined) {
-        payload.due_at = updates.dueAt ?? null;
-        if (updates.dueAt) {
+        const normalizedDueAt =
+          updates.dueAt === null ? null : toSafeISO(updates.dueAt ?? null);
+        payload.due_at = normalizedDueAt;
+        if (normalizedDueAt) {
           const ownerId = row.user_id ?? user?.id;
-          const dueDate = parseISO(updates.dueAt);
+          const dueDate = parseISO(normalizedDueAt);
+          const currentDueDate = parseISO(row.due_at);
           if (ownerId && dueDate) {
             const nextIso = toDateOnlyISO(dueDate);
             const currentIso =
               (row.day_id && dayDateByIdRef.current[row.day_id]) ||
-              (row.due_at ? toDateOnlyISO(new Date(row.due_at)) : undefined);
+              (currentDueDate ? toDateOnlyISO(currentDueDate) : undefined);
             if (!currentIso || currentIso !== nextIso) {
               const ensured = await ensureDayFor(ownerId, dueDate);
               if (ensured !== row.day_id) {
@@ -854,8 +873,22 @@ export function usePlannerDay(date: Date) {
       const viewerId = user.id;
       const payload: Record<string, any> = {};
       if (updates.title !== undefined) payload.title = updates.title;
-      if (updates.start !== undefined) payload.start_at = updates.start;
-      if (updates.end !== undefined) payload.end_at = updates.end ?? null;
+      const normalizedStart =
+        updates.start === undefined
+          ? undefined
+          : toSafeISO(updates.start ?? null);
+      const normalizedEnd =
+        updates.end === undefined
+          ? undefined
+          : (updates.end === null ? null : toSafeISO(updates.end));
+      if (updates.start !== undefined) {
+        if (!normalizedStart) {
+          setError('Ungültige Startzeit');
+          return;
+        }
+        payload.start_at = normalizedStart;
+      }
+      if (updates.end !== undefined) payload.end_at = normalizedEnd ?? null;
       if (updates.location !== undefined) payload.location = updates.location ?? null;
       if (updates.assignee !== undefined) {
         payload.assignee = convertAssigneePerspective(updates.assignee, viewerId, row.user_id);
@@ -871,14 +904,15 @@ export function usePlannerDay(date: Date) {
       }
 
       let newDayId: string | undefined;
-      if (updates.start !== undefined && updates.start) {
+      if (updates.start !== undefined && normalizedStart) {
         const ownerId = row.user_id ?? user?.id;
-        const nextStartDate = parseISO(updates.start);
+        const nextStartDate = parseISO(normalizedStart);
+        const currentStartDate = parseISO(row.start_at);
         if (ownerId && nextStartDate) {
           const nextIso = toDateOnlyISO(nextStartDate);
           const currentIso =
             (row.day_id && dayDateByIdRef.current[row.day_id]) ||
-            (row.start_at ? toDateOnlyISO(new Date(row.start_at)) : undefined);
+            (currentStartDate ? toDateOnlyISO(currentStartDate) : undefined);
           if (!currentIso || currentIso !== nextIso) {
             const ensured = await ensureDayFor(ownerId, nextStartDate);
             if (ensured !== row.day_id) {
@@ -922,15 +956,20 @@ export function usePlannerDay(date: Date) {
       }
 
       let newDayId: string | undefined;
+      const currentStartDate = parseISO(row.start_at);
+      const currentDueDate = parseISO(row.due_at);
       const currentIso =
         (row.day_id && dayDateByIdRef.current[row.day_id]) ||
-        (row.start_at ? toDateOnlyISO(new Date(row.start_at)) : undefined) ||
-        (row.due_at ? toDateOnlyISO(new Date(row.due_at)) : undefined);
+        (currentStartDate ? toDateOnlyISO(currentStartDate) : undefined) ||
+        (currentDueDate ? toDateOnlyISO(currentDueDate) : undefined);
 
       if (nextType === 'event') {
         if (!updates.start) return;
-        payload.start_at = updates.start;
-        payload.end_at = updates.end ?? null;
+        const normalizedStart = toSafeISO(updates.start);
+        if (!normalizedStart) return;
+        const normalizedEnd = updates.end ? toSafeISO(updates.end) : null;
+        payload.start_at = normalizedStart;
+        payload.end_at = normalizedEnd ?? null;
         payload.location = updates.location ?? null;
         payload.reminder_minutes = sanitizeReminderMinutes(updates.reminderMinutes, 15);
         payload.due_at = null;
@@ -938,7 +977,7 @@ export function usePlannerDay(date: Date) {
         const nextAssignee = updates.assignee ?? 'me';
         payload.assignee = convertAssigneePerspective(nextAssignee, viewerId, ownerId);
 
-        const startDate = parseISO(updates.start);
+        const startDate = parseISO(normalizedStart);
         if (startDate) {
           const nextIso = toDateOnlyISO(startDate);
           if (!currentIso || currentIso !== nextIso) {
@@ -950,7 +989,8 @@ export function usePlannerDay(date: Date) {
           }
         }
       } else {
-        payload.due_at = updates.dueAt ?? null;
+        const normalizedDueAt = updates.dueAt ? toSafeISO(updates.dueAt) : null;
+        payload.due_at = normalizedDueAt ?? null;
         payload.start_at = null;
         payload.end_at = null;
         payload.location = null;
@@ -961,8 +1001,8 @@ export function usePlannerDay(date: Date) {
         const nextAssignee = updates.assignee ?? 'me';
         payload.assignee = convertAssigneePerspective(nextAssignee, viewerId, ownerId);
 
-        if (updates.dueAt) {
-          const dueDate = parseISO(updates.dueAt);
+        if (normalizedDueAt) {
+          const dueDate = parseISO(normalizedDueAt);
           if (dueDate) {
             const nextIso = toDateOnlyISO(dueDate);
             if (!currentIso || currentIso !== nextIso) {
@@ -1027,9 +1067,13 @@ export function usePlannerDay(date: Date) {
       }
       let nextDueAt = row.due_at;
       if (row.due_at) {
-        const due = new Date(row.due_at);
-        due.setDate(due.getDate() + 1);
-        nextDueAt = due.toISOString();
+        const due = parseISO(row.due_at);
+        if (due) {
+          due.setDate(due.getDate() + 1);
+          nextDueAt = due.toISOString();
+        } else {
+          nextDueAt = isoForMinutes(tomorrow, 12 * 60);
+        }
       } else if (row.entry_type === 'todo') {
         nextDueAt = isoForMinutes(tomorrow, 12 * 60);
       }

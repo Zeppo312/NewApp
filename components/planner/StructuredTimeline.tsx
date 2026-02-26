@@ -21,6 +21,7 @@ import { SwipeableListItem } from "./SwipeableListItem";
 import { IconSymbol, type IconSymbolName } from "@/components/ui/IconSymbol";
 import { Colors } from "@/constants/Colors";
 import { useAdaptiveColors } from "@/hooks/useAdaptiveColors";
+import { parseSafeDate } from "@/lib/safeDate";
 
 type Props = {
   date: Date;
@@ -87,9 +88,7 @@ function minutesFromMidnight(date: Date) {
 }
 
 function parseISO(iso?: string) {
-  if (!iso) return undefined;
-  const dt = new Date(iso);
-  return Number.isNaN(dt.getTime()) ? undefined : dt;
+  return parseSafeDate(iso) ?? undefined;
 }
 
 export const StructuredTimeline: React.FC<Props> = ({
@@ -124,8 +123,9 @@ export const StructuredTimeline: React.FC<Props> = ({
     // 2. They span more than 10 hours (600 minutes) - likely a day trip or multi-day event
     const isEffectivelyAllDay = (e: PlannerEvent): boolean => {
       if (e.isAllDay) return true;
-      const start = new Date(e.start);
-      const end = new Date(e.end);
+      const start = parseISO(e.start);
+      const end = parseISO(e.end);
+      if (!start || !end) return false;
       const durationMinutes = (end.getTime() - start.getTime()) / (1000 * 60);
       return durationMinutes >= 600; // 10 hours or more
     };
@@ -142,8 +142,13 @@ export const StructuredTimeline: React.FC<Props> = ({
     let floatingIndex = 0;
 
     timedEvents.forEach((event) => {
-      const start = new Date(event.start);
-      const end = new Date(event.end);
+      const start = parseISO(event.start);
+      if (!start) return;
+      const parsedEnd = parseISO(event.end);
+      const end =
+        parsedEnd && parsedEnd.getTime() > start.getTime()
+          ? parsedEnd
+          : new Date(start.getTime() + 30 * 60000);
       const startMinute = minutesFromMidnight(start);
       const endMinute = Math.max(startMinute + 30, minutesFromMidnight(end));
       const ownerLabel = getOwnerLabel?.(event.userId);

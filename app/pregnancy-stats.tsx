@@ -6,7 +6,6 @@ import {
   ActivityIndicator,
   SafeAreaView,
   Platform,
-  Modal,
   TouchableOpacity,
   Alert
 } from 'react-native';
@@ -23,6 +22,8 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/contexts/AuthContext';
 import { LiquidGlassCard, LAYOUT_PAD, TIMELINE_INSET, TEXT_PRIMARY, GLASS_BORDER, PRIMARY } from '@/constants/DesignGuide';
 import { supabase, updateDueDateAndSync } from '@/lib/supabase';
+import { getSafePickerDate, parseSafeDate } from '@/lib/safeDate';
+import IOSBottomDatePicker from '@/components/modals/IOSBottomDatePicker';
 
 type PregnancyStats = {
   daysLeft: number;
@@ -131,7 +132,14 @@ export default function PregnancyStatsScreen() {
       if (error && error.code !== 'PGRST116') {
         console.error('Error loading due date:', error);
       } else if (data && data.due_date) {
-        setDueDate(new Date(data.due_date));
+        const safeDueDate = parseSafeDate(data.due_date);
+        if (safeDueDate) {
+          setDueDate(safeDueDate);
+          setTempDate(safeDueDate);
+        } else {
+          setDueDate(null);
+          setTempDate(null);
+        }
       }
     } catch (err) {
       console.error('Failed to load due date:', err);
@@ -184,13 +192,18 @@ export default function PregnancyStatsScreen() {
   };
 
   const saveDueDate = async (date: Date) => {
+    const safeDate = parseSafeDate(date);
+    if (!safeDate) {
+      Alert.alert('Fehler', 'Ungültiges Datum.');
+      return;
+    }
     if (!user) {
       Alert.alert('Hinweis', 'Bitte melde dich an, um deinen Geburtstermin zu speichern.');
       return;
     }
 
     try {
-      const result = await updateDueDateAndSync(user.id, date);
+      const result = await updateDueDateAndSync(user.id, safeDate);
 
       if (!result.success) {
         console.error('Error saving due date:', result.error);
@@ -198,7 +211,7 @@ export default function PregnancyStatsScreen() {
         return;
       }
 
-      setDueDate(date);
+      setDueDate(safeDate);
       calculateStats();
 
       const syncedUsers = result.syncResult?.linkedUsers || [];
@@ -215,26 +228,29 @@ export default function PregnancyStatsScreen() {
   };
 
   const handleDateChange = (_event: any, selectedDate?: Date) => {
+    const safeDate = selectedDate ? parseSafeDate(selectedDate) : null;
     if (Platform.OS === 'android') {
       setShowDatePicker(false);
-      if (selectedDate) {
-        saveDueDate(selectedDate);
+      if (safeDate) {
+        saveDueDate(safeDate);
       }
-    } else if (selectedDate) {
-      setTempDate(selectedDate);
+    } else if (safeDate) {
+      setTempDate(safeDate);
     }
   };
 
-  const confirmIOSDate = () => {
-    if (tempDate) {
-      saveDueDate(tempDate);
-    }
+  const confirmIOSDate = (date: Date) => {
+    const safeDate = getSafePickerDate(date, new Date(), {
+      minimumDate: new Date(),
+      maximumDate: new Date(Date.now() + 1000 * 60 * 60 * 24 * 280),
+    });
+    saveDueDate(safeDate);
     setShowDatePicker(false);
   };
 
   const showDatepicker = () => {
     if (Platform.OS === 'ios') {
-      setTempDate(dueDate || new Date());
+      setTempDate(getSafePickerDate(dueDate, new Date()));
       setShowDatePicker(true);
     } else {
       setShowDatePicker(true);
@@ -531,7 +547,10 @@ export default function PregnancyStatsScreen() {
 
                 {Platform.OS === 'android' && showDatePicker && (
                   <DateTimePicker
-                    value={dueDate || new Date()}
+                    value={getSafePickerDate(dueDate, new Date(), {
+                      minimumDate: new Date(),
+                      maximumDate: new Date(Date.now() + 1000 * 60 * 60 * 24 * 280),
+                    })}
                     mode="date"
                     display="spinner"
                     onChange={handleDateChange}
@@ -541,37 +560,20 @@ export default function PregnancyStatsScreen() {
                 )}
 
                 {Platform.OS === 'ios' && (
-                  <Modal
-                    animationType="fade"
-                    transparent
+                  <IOSBottomDatePicker
                     visible={showDatePicker}
-                    onRequestClose={() => setShowDatePicker(false)}
-                  >
-                    <View style={styles.centeredView}>
-                      <View style={styles.modalView}>
-                        <View style={styles.pickerHeader}>
-                          <ThemedText style={styles.pickerTitle}>Geburtstermin auswählen</ThemedText>
-                          <TouchableOpacity onPress={() => setShowDatePicker(false)}>
-                            <IconSymbol name="xmark.circle.fill" size={28} color={PRIMARY} style={{ opacity: 0.9 }} />
-                          </TouchableOpacity>
-                        </View>
-                        <View style={styles.pickerContainer}>
-                          <DateTimePicker
-                            value={tempDate || dueDate || new Date()}
-                            mode="date"
-                            display="spinner"
-                            onChange={handleDateChange}
-                            minimumDate={new Date()}
-                            maximumDate={new Date(Date.now() + 1000 * 60 * 60 * 24 * 280)}
-                            textColor={TEXT_PRIMARY}
-                          />
-                        </View>
-                        <TouchableOpacity style={styles.confirmButton} onPress={confirmIOSDate}>
-                          <ThemedText style={styles.confirmButtonText}>Bestätigen</ThemedText>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  </Modal>
+                    title="Geburtstermin auswählen"
+                    value={getSafePickerDate(tempDate ?? dueDate, new Date(), {
+                      minimumDate: new Date(),
+                      maximumDate: new Date(Date.now() + 1000 * 60 * 60 * 24 * 280),
+                    })}
+                    mode="date"
+                    minimumDate={new Date()}
+                    maximumDate={new Date(Date.now() + 1000 * 60 * 60 * 24 * 280)}
+                    onClose={() => setShowDatePicker(false)}
+                    onConfirm={confirmIOSDate}
+                    initialVariant="calendar"
+                  />
                 )}
               </>
             ) : null}

@@ -16,6 +16,7 @@ import { BlurView } from 'expo-blur';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { Colors } from '@/constants/Colors';
 import { RADIUS } from '@/constants/DesignGuide';
+import { getSafePickerDate } from '@/lib/safeDate';
 
 const ACCENT_LIGHT = '#8E4EC6';
 const ACCENT_DARK = '#A26BFF';
@@ -46,6 +47,9 @@ const formatShortDayDate = (date: Date) =>
     month: '2-digit',
   });
 
+const resolvePickerDate = (value?: Date | null, fallback?: Date) =>
+  getSafePickerDate(value, fallback ?? new Date());
+
 // ─── Reusable time picker button + modal ────────────────────
 const TimePickerField = ({
   label,
@@ -68,10 +72,10 @@ const TimePickerField = ({
 }) => {
   const [showIOS, setShowIOS] = useState(false);
   const [showAndroid, setShowAndroid] = useState(false);
-  const [draft, setDraft] = useState<Date>(time ?? new Date());
+  const [draft, setDraft] = useState<Date>(resolvePickerDate(time));
 
   useEffect(() => {
-    if (!showIOS) setDraft(time ?? new Date());
+    if (!showIOS) setDraft(resolvePickerDate(time));
   }, [showIOS, time]);
 
   const commit = useCallback(() => {
@@ -87,7 +91,7 @@ const TimePickerField = ({
       <TouchableOpacity
         style={[styles.timeCard, { backgroundColor: cardBg, borderColor: cardBorder }]}
         onPress={() => {
-          setDraft(time ?? new Date());
+          setDraft(resolvePickerDate(time));
           if (Platform.OS === 'ios') setShowIOS(true);
           else setShowAndroid(true);
         }}
@@ -147,7 +151,7 @@ const TimePickerField = ({
                 </TouchableOpacity>
               </View>
               <DateTimePicker
-                value={draft}
+                value={resolvePickerDate(draft)}
                 mode="datetime"
                 display="spinner"
                 locale="de-DE"
@@ -164,7 +168,7 @@ const TimePickerField = ({
       {/* Android – native picker */}
       {Platform.OS !== 'ios' && showAndroid && (
         <DateTimePicker
-          value={time ?? new Date()}
+          value={resolvePickerDate(time)}
           mode="datetime"
           is24Hour
           onChange={(_, d) => {
@@ -194,14 +198,14 @@ const SleepQuickAddModal: React.FC<Props> = ({
   const panelBorderColor = isDark ? 'rgba(255,255,255,0.08)' : 'transparent';
   const sectionBg = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)';
 
-  const [startTime, setStartTime] = useState<Date>(initialStart ?? new Date());
+  const [startTime, setStartTime] = useState<Date>(() => resolvePickerDate(initialStart));
   const [endTime, setEndTime] = useState<Date | null>(null);
   const [quality, setQuality] = useState<SleepQuality>('good');
   const [notes, setNotes] = useState('');
 
   useEffect(() => {
     if (visible) {
-      setStartTime(initialStart ?? new Date());
+      setStartTime(resolvePickerDate(initialStart));
       setEndTime(null);
       setQuality('good');
       setNotes('');

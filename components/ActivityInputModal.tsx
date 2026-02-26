@@ -97,6 +97,7 @@ const formatIntInput = (value: number | null | undefined): string => {
 };
 
 const MIN_VALID_MANUAL_DATE = new Date(2000, 0, 1);
+const MAX_VALID_MANUAL_DATE = new Date(2100, 11, 31, 23, 59, 59, 999);
 
 const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   visible,
@@ -179,7 +180,9 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   const isValidManualDate = useCallback((value: unknown): boolean => {
     if (!isFiniteManualDate(value)) return false;
     const timestamp = value.getTime();
-    return timestamp >= MIN_VALID_MANUAL_DATE.getTime() && value.getFullYear() >= 2000;
+    return timestamp >= MIN_VALID_MANUAL_DATE.getTime()
+      && timestamp <= MAX_VALID_MANUAL_DATE.getTime()
+      && value.getFullYear() >= 2000;
   }, [isFiniteManualDate]);
 
   const sanitizeManualDate = useCallback(
@@ -564,6 +567,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
           <DateTimePicker
             value={safeModalStartTime}
             minimumDate={MIN_VALID_MANUAL_DATE}
+            maximumDate={MAX_VALID_MANUAL_DATE}
             mode="datetime"
             display="default"
             themeVariant={isDark ? 'dark' : 'light'}
@@ -596,6 +600,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
           <DateTimePicker
             value={safeModalEndPickerTime}
             minimumDate={MIN_VALID_MANUAL_DATE}
+            maximumDate={MAX_VALID_MANUAL_DATE}
             mode="datetime"
             display="default"
             themeVariant={isDark ? 'dark' : 'light'}
@@ -663,16 +668,20 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
               </View>
               <DateTimePicker
                 value={(() => {
-                  const d = new Date(startPickerDraft);
+                  const d = sanitizeManualDate(startPickerDraft, safeModalStartTime);
                   d.setSeconds(0, 0);
                   return d;
                 })()}
                 minimumDate={MIN_VALID_MANUAL_DATE}
+                maximumDate={MAX_VALID_MANUAL_DATE}
                 mode="datetime"
                 display="spinner"
                 locale="de-DE"
-                onChange={(_, d) => {
-                  if (d) setStartPickerDraft(d);
+                onChange={(event, d) => {
+                  if (event.type === 'dismissed') return;
+                  setStartPickerDraft((prev) =>
+                    getSafePickerDateFromEvent(event, d, prev)
+                  );
                 }}
                 accentColor={theme.accent}
                 themeVariant={isDark ? 'dark' : 'light'}
@@ -731,16 +740,20 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
               </View>
               <DateTimePicker
                 value={(() => {
-                  const d = new Date(endPickerDraft);
+                  const d = sanitizeManualDate(endPickerDraft, safeModalEndPickerTime);
                   d.setSeconds(0, 0);
                   return d;
                 })()}
                 minimumDate={MIN_VALID_MANUAL_DATE}
+                maximumDate={MAX_VALID_MANUAL_DATE}
                 mode="datetime"
                 display="spinner"
                 locale="de-DE"
-                onChange={(_, d) => {
-                  if (d) setEndPickerDraft(d);
+                onChange={(event, d) => {
+                  if (event.type === 'dismissed') return;
+                  setEndPickerDraft((prev) =>
+                    getSafePickerDateFromEvent(event, d, prev)
+                  );
                 }}
                 accentColor={theme.accent}
                 themeVariant={isDark ? 'dark' : 'light'}

@@ -19,8 +19,10 @@ import ActivityCard from '@/components/ActivityCard';
 import { PRIMARY as PLANNER_PRIMARY } from '@/constants/PlannerDesign';
 import FloatingAddButton from '@/components/planner/FloatingAddButton';
 import TextInputOverlay from '@/components/modals/TextInputOverlay';
+import IOSBottomDatePicker from '@/components/modals/IOSBottomDatePicker';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
+import { parseSafeDate } from '@/lib/safeDate';
 
 const SUBJECT_COLORS: Record<WeightSubject, string> = {
   mom: '#5E3DB3',
@@ -30,6 +32,7 @@ const DARK_CHART_COLORS: Partial<Record<WeightSubject, string>> = {
   // Kräftigeres Lila für bessere Sichtbarkeit der Größenkurve auf dunklem Hintergrund
   mom: '#EE4BFF',
 };
+const MIN_VALID_TRACKER_DATE = new Date(2000, 0, 1);
 
 const isBabySubject = (subject: WeightSubject) => subject === 'baby';
 const getWeightUnit = (_subject: WeightSubject) => 'cm';
@@ -231,7 +234,12 @@ export default function SizeTrackerScreen() {
       parsed.setHours(12, 0, 0, 0);
       return parsed;
     }
-    const fallback = new Date(dateStr);
+    const parsedFallback = parseSafeDate(dateStr);
+    if (parsedFallback) {
+      parsedFallback.setHours(12, 0, 0, 0);
+      return parsedFallback;
+    }
+    const fallback = new Date();
     fallback.setHours(12, 0, 0, 0);
     return fallback;
   };
@@ -750,7 +758,7 @@ export default function SizeTrackerScreen() {
                   <Text style={[styles.pickerLabel, { color: headerTextColor }]}>Messdatum</Text>
                   <Text style={[styles.selectorValue, { color: headerTextColor }]}>{formatDisplayDate(weightDate)}</Text>
                 </TouchableOpacity>
-                {showDatePicker && (
+                {showDatePicker && Platform.OS !== 'ios' && (
                   <View
                     style={[
                       styles.pickerInner,
@@ -762,9 +770,10 @@ export default function SizeTrackerScreen() {
                     <DateTimePicker
                       value={weightDate}
                       mode="date"
-                      display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                      display="default"
                       themeVariant={isDark ? 'dark' : 'light'}
                       accentColor={PLANNER_PRIMARY}
+                      minimumDate={MIN_VALID_TRACKER_DATE}
                       onChange={(event, date) => {
                         if (date) {
                           const normalized = new Date(date);
@@ -780,14 +789,25 @@ export default function SizeTrackerScreen() {
                       maximumDate={new Date()}
                       style={styles.dateTimePicker}
                     />
-                    {Platform.OS === 'ios' && (
-                      <View style={styles.datePickerActions}>
-                        <TouchableOpacity style={styles.datePickerCancel} onPress={() => setShowDatePicker(false)}>
-                          <Text style={styles.datePickerCancelText}>Fertig</Text>
-                        </TouchableOpacity>
-                      </View>
-                    )}
                   </View>
+                )}
+                {Platform.OS === 'ios' && (
+                  <IOSBottomDatePicker
+                    visible={showDatePicker}
+                    title="Messdatum wählen"
+                    value={weightDate}
+                    mode="date"
+                    minimumDate={MIN_VALID_TRACKER_DATE}
+                    maximumDate={new Date()}
+                    onClose={() => setShowDatePicker(false)}
+                    onConfirm={(date) => {
+                      const normalized = new Date(date);
+                      normalized.setHours(12, 0, 0, 0);
+                      setWeightDate(normalized);
+                      setShowDatePicker(false);
+                    }}
+                    initialVariant="calendar"
+                  />
                 )}
               </View>
             </View>

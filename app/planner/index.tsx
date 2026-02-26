@@ -51,6 +51,7 @@ import {
 } from "@/constants/DesignGuide";
 import { BabyInfo, listBabies } from "@/lib/baby";
 import { useAdaptiveColors } from "@/hooks/useAdaptiveColors";
+import { parseSafeDate } from "@/lib/safeDate";
 
 function formatDateHeader(d: Date) {
   return new Intl.DateTimeFormat("de-DE", {
@@ -506,7 +507,7 @@ export default function PlannerScreen() {
             };
           }
           const timeStr = item.start_at ?? item.due_at;
-          const time = timeStr ? new Date(timeStr) : null;
+          const time = parseSafeDate(timeStr);
           const hour = time ? time.getHours() + time.getMinutes() / 60 : 12;
           const blockKey =
             WEEK_BLOCKS.find((b) => hour >= b.start && hour < b.end)?.key ??
@@ -688,13 +689,27 @@ export default function PlannerScreen() {
   }, [blocks]);
 
   const handleCaptureSave = (payload: PlannerCapturePayload) => {
+    const safeStart = payload.start ? parseSafeDate(payload.start) : null;
+    const safeEnd = payload.end ? parseSafeDate(payload.end) : null;
+    const safeDueAt = payload.dueAt ? parseSafeDate(payload.dueAt) : null;
+
+    if (payload.type === "event" && !safeStart) {
+      Alert.alert("Ungültige Zeit", "Der Termin enthält keine gültige Startzeit.");
+      return;
+    }
+
+    const eventEnd =
+      safeStart && safeEnd && safeEnd.getTime() > safeStart.getTime()
+        ? safeEnd
+        : safeStart
+          ? new Date(safeStart.getTime() + 30 * 60000)
+          : null;
+
     try {
       if (payload.id && editingItem && editingItem.type !== payload.type) {
-        if (payload.type === "event" && payload.start) {
-          const startIso = payload.start.toISOString();
-          const endIso = (
-            payload.end ?? new Date(payload.start.getTime() + 30 * 60000)
-          ).toISOString();
+        if (payload.type === "event" && safeStart && eventEnd) {
+          const startIso = safeStart.toISOString();
+          const endIso = eventEnd.toISOString();
           convertPlannerItem(payload.id, "event", {
             title: payload.title,
             start: startIso,
@@ -708,8 +723,8 @@ export default function PlannerScreen() {
           const dueIso =
             payload.dueAt === null
               ? null
-              : payload.dueAt
-                ? payload.dueAt.toISOString()
+              : safeDueAt
+                ? safeDueAt.toISOString()
                 : undefined;
           convertPlannerItem(payload.id, payload.type, {
             title: payload.title,
@@ -718,11 +733,9 @@ export default function PlannerScreen() {
             assignee: payload.assignee,
           });
         }
-      } else if (payload.type === "event" && payload.start) {
-        const startIso = payload.start.toISOString();
-        const endIso = (
-          payload.end ?? new Date(payload.start.getTime() + 30 * 60000)
-        ).toISOString();
+      } else if (payload.type === "event" && safeStart && eventEnd) {
+        const startIso = safeStart.toISOString();
+        const endIso = eventEnd.toISOString();
         if (payload.id) {
           updateEvent(payload.id, {
             title: payload.title,
@@ -752,8 +765,8 @@ export default function PlannerScreen() {
         const dueIso =
           payload.dueAt === null
             ? null
-            : payload.dueAt
-              ? payload.dueAt.toISOString()
+            : safeDueAt
+              ? safeDueAt.toISOString()
               : undefined;
         if (payload.id) {
           updateTodo(payload.id, {
@@ -1223,13 +1236,13 @@ export default function PlannerScreen() {
                         type: "todo" as const,
                       })),
                     ].sort((a, b) => {
-                      const timeA = a.time
-                        ? new Date(a.time).getHours() * 60 +
-                          new Date(a.time).getMinutes()
+                      const dateA = parseSafeDate(a.time);
+                      const dateB = parseSafeDate(b.time);
+                      const timeA = dateA
+                        ? dateA.getHours() * 60 + dateA.getMinutes()
                         : 12 * 60;
-                      const timeB = b.time
-                        ? new Date(b.time).getHours() * 60 +
-                          new Date(b.time).getMinutes()
+                      const timeB = dateB
+                        ? dateB.getHours() * 60 + dateB.getMinutes()
                         : 12 * 60;
                       return timeA - timeB;
                     });
@@ -1327,11 +1340,12 @@ export default function PlannerScreen() {
                           {combined.map((item) => {
                             const isAllDayEvent =
                               item.type === "event" && item.isAllDay;
-                            const timeLabel = item.time
+                            const safeTime = parseSafeDate(item.time);
+                            const timeLabel = safeTime
                               ? new Intl.DateTimeFormat("de-DE", {
                                   hour: "2-digit",
                                   minute: "2-digit",
-                                }).format(new Date(item.time))
+                                }).format(safeTime)
                               : "—";
                             const displayLabel = getDisplayAssigneeLabel(
                               item.assignee,
