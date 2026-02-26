@@ -593,6 +593,28 @@ export default function PregnancyHomeScreen() {
     return new Date().toLocaleDateString('de-DE', options);
   };
 
+  const calculatePregnancyProgressPercent = () => {
+    if (!dueDate) return 0;
+
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+
+    const dueDateCopy = new Date(dueDate);
+    dueDateCopy.setHours(0, 0, 0, 0);
+
+    const difference = dueDateCopy.getTime() - now.getTime();
+    const daysLeft = Math.round(difference / (1000 * 60 * 60 * 24));
+
+    const totalDaysInPregnancy = 280;
+    const daysRemaining = Math.max(0, daysLeft);
+    const daysPregnant = totalDaysInPregnancy - daysRemaining;
+    const progress = Math.min(1, Math.max(0, daysPregnant / totalDaysInPregnancy));
+
+    return Math.round(progress * 100);
+  };
+
+  const pregnancyProgressPercent = calculatePregnancyProgressPercent();
+
   const handleFocusRecommendation = (recommendationId?: string | null) => {
     if (!recommendationId) {
       router.push('/lottis-empfehlungen');
@@ -692,9 +714,7 @@ export default function PregnancyHomeScreen() {
                 textShadowOffset: { width: 0, height: 1 },
                 textShadowRadius: 2,
               }]}>
-                {currentWeek
-                  ? Math.min(100, Math.round((currentWeek / 40) * 100))
-                  : 0}%
+                {pregnancyProgressPercent}%
               </ThemedText>
               <ThemedText adaptive={false} style={[styles.statLabel, styles.liquidGlassStatLabel, { color: textSecondary }]}>Fortschritt</ThemedText>
             </View>
