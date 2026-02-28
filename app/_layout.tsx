@@ -27,7 +27,7 @@ import { useNotificationPreferences } from '@/hooks/useNotificationPreferences';
 import { initializePersonalization, predictNextSleepWindow, type SleepWindowPrediction } from '@/lib/sleep-window';
 import { predictNextFeedingTime, type FeedingPrediction } from '@/lib/feeding-interval';
 import { getBabyInfo } from '@/lib/baby';
-import { supabase } from '@/lib/supabase';
+import { supabase, getAppSettings } from '@/lib/supabase';
 import type { SleepEntry } from '@/lib/sleepData';
 import type { BabyCareEntry } from '@/lib/supabase';
 import { preloadAppData } from '@/lib/appCache';
@@ -35,6 +35,7 @@ import { SleepEntriesService } from '@/lib/services/SleepEntriesService';
 import { normalizeBedtimeAnchor } from '@/lib/bedtime';
 import { sleepActivityService } from '@/lib/sleepActivityService';
 import { loadAllVisibleSleepEntries } from '@/lib/sleepSharing';
+import { findFreshActiveSleepEntry } from '@/lib/sleepEntryGuards';
 
 // Importieren der Meilenstein-Task-Definition
 import { defineMilestoneCheckerTask } from '@/tasks/milestoneCheckerTask';
@@ -101,10 +102,74 @@ function RootLayoutNav() {
   const [hasActiveSleepEntry, setHasActiveSleepEntry] = useState(false);
   const [feedingPrediction, setFeedingPrediction] = useState<FeedingPrediction | null>(null);
   const { preferences: notifPrefs } = useNotificationPreferences();
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [notificationSettingsLoaded, setNotificationSettingsLoaded] = useState(false);
   const sleepEntriesService = useMemo(() => {
     if (!userId) return null;
     return new SleepEntriesService(activeBackend, convexClient, userId);
   }, [activeBackend, convexClient, userId]);
+
+  useEffect(() => {
+    if (!userId) {
+      setNotificationsEnabled(false);
+      setNotificationSettingsLoaded(false);
+      return;
+    }
+
+    let mounted = true;
+    setNotificationSettingsLoaded(false);
+
+    const loadNotificationSetting = async () => {
+      try {
+        const { data, error } = await getAppSettings();
+        if (!mounted) return;
+
+        if (error) {
+          console.error('Fehler beim Laden von notifications_enabled:', error);
+          setNotificationsEnabled(true);
+        } else {
+          setNotificationsEnabled(data?.notifications_enabled !== false);
+        }
+      } catch (error) {
+        if (mounted) {
+          console.error('Fehler beim Laden von notifications_enabled:', error);
+          setNotificationsEnabled(true);
+        }
+      } finally {
+        if (mounted) setNotificationSettingsLoaded(true);
+      }
+    };
+
+    void loadNotificationSetting();
+
+    const channel = supabase
+      .channel(`user-settings-notifications-${userId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'user_settings',
+          filter: `user_id=eq.${userId}`,
+        },
+        (payload) => {
+          const nextValue = (payload.new as { notifications_enabled?: unknown } | null)
+            ?.notifications_enabled;
+          if (typeof nextValue === 'boolean') {
+            setNotificationsEnabled(nextValue);
+            setNotificationSettingsLoaded(true);
+            return;
+          }
+          void loadNotificationSetting();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      mounted = false;
+      void supabase.removeChannel(channel);
+    };
+  }, [userId]);
 
   useEffect(() => {
     if (!userId) return;
@@ -115,7 +180,7 @@ function RootLayoutNav() {
 
   // Registriere Push-Notifications und Hintergrundtask, wenn der Benutzer angemeldet ist
   useEffect(() => {
-    if (userId) {
+    if (userId && notificationSettingsLoaded && notificationsEnabled) {
       // Push-Token registrieren für Remote-Notifications
       requestPermissions().catch(error => {
         console.error('Fehler beim Registrieren von Push-Notifications:', error);
@@ -126,7 +191,7 @@ function RootLayoutNav() {
         console.error('Fehler beim Registrieren des Benachrichtigungs-Hintergrundtasks:', error);
       });
     }
-  }, [userId, requestPermissions]);
+  }, [userId, notificationSettingsLoaded, notificationsEnabled, requestPermissions]);
 
   // Sleep Window Prediction für Benachrichtigungen berechnen
   useEffect(() => {
@@ -154,7 +219,7 @@ function RootLayoutNav() {
           return;
         }
 
-        const hasActiveEntry = (entries || []).some((entry) => !entry.end_time);
+        const hasActiveEntry = Boolean(findFreshActiveSleepEntry(entries || []));
         setHasActiveSleepEntry(hasActiveEntry);
         if (hasActiveEntry) {
           // Während ein Sleep-Timer läuft, keine Schlafenszeit-Erinnerung planen.
@@ -262,7 +327,7 @@ function RootLayoutNav() {
         const { success, entries } = await loadAllVisibleSleepEntries();
         if (cancelled || !success || !entries) return;
 
-        const activeEntry = entries.find((entry) => !entry.end_time);
+        const activeEntry = findFreshActiveSleepEntry(entries);
 
         // Kein aktiver Schlaf in DB → stale Activity beenden
         if (!activeEntry?.start_time) {
@@ -311,7 +376,7 @@ function RootLayoutNav() {
   // Sleep Window Notifications Hook (läuft unabhängig vom Screen)
   useSleepWindowNotifications(
     sleepPrediction,
-    notifPrefs.sleepWindowReminder,
+    notificationSettingsLoaded && notificationsEnabled && notifPrefs.sleepWindowReminder,
     userId,
     activeBabyId,
     expoPushToken,
@@ -321,7 +386,7 @@ function RootLayoutNav() {
   // Feeding Reminder Notifications Hook
   useFeedingReminderNotifications(
     feedingPrediction,
-    notifPrefs.feedingReminder,
+    notificationSettingsLoaded && notificationsEnabled && notifPrefs.feedingReminder,
     userId,
     activeBabyId,
     expoPushToken

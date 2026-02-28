@@ -1,4 +1,4 @@
-import { Tabs, useRouter, useSegments } from 'expo-router';
+import { Redirect, Tabs, useRouter, useSegments } from 'expo-router';
 import { useNavigation } from '@react-navigation/native';
 import React, { useEffect, useState } from 'react';
 import { Platform, View, ActivityIndicator } from 'react-native';
@@ -9,12 +9,14 @@ import TabBarBackground from '@/components/ui/TabBarBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 
 export default function TabLayout() {
   const router = useRouter();
   const segments = useSegments();
   const colorScheme = useColorScheme();
+  const { session, loading: authLoading } = useAuth();
   const { isBabyBorn, isLoading, isResolved } = useBabyStatus();
   const [hasInitialResolution, setHasInitialResolution] = useState(false);
   const [isNavigatorReady, setIsNavigatorReady] = useState(false);
@@ -72,12 +74,16 @@ export default function TabLayout() {
     }
   }, [currentRoute, hasInitialResolution, isBabyBorn, isLoading, isNavigatorReady, isResolved, router]);
 
-  if (!hasInitialResolution && (isLoading || !isResolved || !isNavigatorReady)) {
+  if (authLoading || (!hasInitialResolution && (isLoading || !isResolved || !isNavigatorReady))) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
         <ActivityIndicator size="large" color={theme.accent} />
       </View>
     );
+  }
+
+  if (!session) {
+    return <Redirect href="/(auth)/login" />;
   }
 
   // Nur bei dunklem Hintergrundbild die adaptiven Farben verwenden

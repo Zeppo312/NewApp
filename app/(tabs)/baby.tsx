@@ -31,9 +31,8 @@ import { useFocusEffect } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
 import {
-  bedtimeAnchorToDate,
-  dateToBedtimeAnchor,
   DEFAULT_BEDTIME_ANCHOR,
+  isValidBedtimeAnchor,
   normalizeBedtimeAnchor,
 } from '@/lib/bedtime';
 import { getSafePickerDate, parseSafeDate } from '@/lib/safeDate';
@@ -58,17 +57,35 @@ const initialStats = {
 
 const HEADER_TEXT_COLOR = '#7D5A50';
 const MIN_VALID_BABY_DATE = new Date(2000, 0, 1);
-const BEDTIME_SAFE_DATE_OPTIONS = { minYear: 1900 } as const;
 
-const toSafeBedtimeAnchor = (selectedTime: Date | undefined, fallback?: string | null) => {
-  const fallbackAnchor = normalizeBedtimeAnchor(fallback);
-  const fallbackDate = bedtimeAnchorToDate(fallbackAnchor);
-  const safeDate = getSafePickerDate(
-    selectedTime,
-    fallbackDate,
-    BEDTIME_SAFE_DATE_OPTIONS
-  );
-  return dateToBedtimeAnchor(safeDate);
+const formatBedtimeInputValue = (value: string): string => {
+  const digits = value.replace(/\D/g, '').slice(0, 4);
+  if (digits.length <= 2) return digits;
+  if (digits.length === 3) return `${digits.slice(0, 1)}:${digits.slice(1)}`;
+  return `${digits.slice(0, 2)}:${digits.slice(2)}`;
+};
+
+const parseManualBedtimeAnchor = (value: string): string | null => {
+  const trimmed = value.trim();
+  if (!trimmed) return DEFAULT_BEDTIME_ANCHOR;
+
+  const colonMatch = trimmed.match(/^(\d{1,2})\s*:\s*(\d{1,2})$/);
+  if (colonMatch) {
+    const candidate = `${colonMatch[1].padStart(2, '0')}:${colonMatch[2].padStart(2, '0')}`;
+    return isValidBedtimeAnchor(candidate) ? candidate : null;
+  }
+
+  const digits = trimmed.replace(/\D/g, '');
+  if (digits.length === 3) {
+    const candidate = `0${digits.slice(0, 1)}:${digits.slice(1)}`;
+    return isValidBedtimeAnchor(candidate) ? candidate : null;
+  }
+  if (digits.length === 4) {
+    const candidate = `${digits.slice(0, 2)}:${digits.slice(2)}`;
+    return isValidBedtimeAnchor(candidate) ? candidate : null;
+  }
+
+  return null;
 };
 
 const getCurrentBirthDateBounds = () => {
@@ -167,9 +184,10 @@ export default function BabyScreen() {
 
   const [babyInfo, setBabyInfo] = useState<BabyInfo>({});
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [showBedtimePicker, setShowBedtimePicker] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
+  const [bedtimeInput, setBedtimeInput] = useState(DEFAULT_BEDTIME_ANCHOR);
+  const [bedtimeInputError, setBedtimeInputError] = useState<string | null>(null);
   const [backgroundTaskStatus, setBackgroundTaskStatus] = useState<{status: string, isRegistered: boolean} | null>(null);
   const birthDateBounds = getCurrentBirthDateBounds();
   const birthDateForDisplay = parseSafeDate(babyInfo.birth_date, birthDateBounds);
@@ -182,14 +200,31 @@ export default function BabyScreen() {
     () => normalizeBedtimeAnchor(babyInfo.preferred_bedtime),
     [babyInfo.preferred_bedtime]
   );
-  const bedtimePickerValue = useMemo(
-    () =>
-      getSafePickerDate(
-        bedtimeAnchorToDate(bedtimeAnchor),
-        bedtimeAnchorToDate(DEFAULT_BEDTIME_ANCHOR),
-        BEDTIME_SAFE_DATE_OPTIONS
-      ),
-    [bedtimeAnchor]
+
+  const setPreferredBedtimeAnchor = useCallback((anchor: string) => {
+    setBabyInfo((prev) => ({
+      ...prev,
+      preferred_bedtime: anchor,
+    }));
+    setBedtimeInput(anchor);
+    setBedtimeInputError(null);
+  }, []);
+
+  const commitBedtimeInput = useCallback(
+    (rawValue: string, showAlert = false): string | null => {
+      const parsed = parseManualBedtimeAnchor(rawValue);
+      if (!parsed) {
+        const message = 'Bitte Uhrzeit im Format HH:mm eingeben (z.B. 19:30).';
+        setBedtimeInputError(message);
+        if (showAlert) {
+          Alert.alert('Ungültige Schlafenszeit', message);
+        }
+        return null;
+      }
+      setPreferredBedtimeAnchor(parsed);
+      return parsed;
+    },
+    [setPreferredBedtimeAnchor]
   );
 
   const editParamValue = Array.isArray(params.edit) ? params.edit[0] : params.edit;
@@ -202,6 +237,11 @@ export default function BabyScreen() {
       setIsEditing(true);
     }
   }, [autoOpenEdit]);
+
+  useEffect(() => {
+    setBedtimeInput(bedtimeAnchor);
+    setBedtimeInputError(null);
+  }, [bedtimeAnchor, isEditing]);
 
   useEffect(() => {
     if (user) {
@@ -394,12 +434,13 @@ export default function BabyScreen() {
   const handleSave = async () => {
     if (!activeBabyId) return;
 
+    const normalizedBedtime = commitBedtimeInput(bedtimeInput, true);
+    if (!normalizedBedtime) return;
+
     try {
       const sanitizedBabyInfo: BabyInfo = {
         ...babyInfo,
-        preferred_bedtime: babyInfo.preferred_bedtime
-          ? normalizeBedtimeAnchor(babyInfo.preferred_bedtime)
-          : null,
+        preferred_bedtime: normalizedBedtime,
       };
 
       const { error } = await saveBabyInfo(sanitizedBabyInfo, activeBabyId ?? undefined);
@@ -455,27 +496,6 @@ export default function BabyScreen() {
       birth_date: safeDate.toISOString(),
     }));
     setShowDatePicker(false);
-  };
-
-  const handleBedtimeChangeAndroid = (event: DateTimePickerEvent, selectedTime?: Date) => {
-    if (Platform.OS !== 'android') return;
-    setShowBedtimePicker(false);
-    if (event.type === 'dismissed' || !selectedTime) return;
-
-    const nextAnchor = toSafeBedtimeAnchor(selectedTime, babyInfo.preferred_bedtime);
-    setBabyInfo((prev) => ({
-      ...prev,
-      preferred_bedtime: nextAnchor,
-    }));
-  };
-
-  const handleIOSBedtimeConfirm = (date: Date) => {
-    const nextAnchor = toSafeBedtimeAnchor(date, babyInfo.preferred_bedtime);
-    setBabyInfo((prev) => ({
-      ...prev,
-      preferred_bedtime: nextAnchor,
-    }));
-    setShowBedtimePicker(false);
   };
 
   const computeStats = (birthDate: Date) => {
@@ -864,43 +884,43 @@ export default function BabyScreen() {
 
                   <View style={styles.inputRow}>
                     <ThemedText style={styles.label}>Schlafenszeit (Nacht):</ThemedText>
-                    <TouchableOpacity
-                      style={[styles.glassDateButton, { backgroundColor: inputBackground, borderColor: inputBorder }]}
-                      onPress={() => {
-                        triggerHaptic();
-                        setShowBedtimePicker(true);
+
+                    <TextInput
+                      style={[styles.glassInput, styles.bedtimeManualInput, { color: textPrimary, backgroundColor: inputBackground, borderColor: inputBorder }]}
+                      value={bedtimeInput}
+                      onChangeText={(text) => {
+                        setBedtimeInput(formatBedtimeInputValue(text));
+                        setBedtimeInputError(null);
                       }}
-                    >
-                      <ThemedText style={[styles.dateText, { color: textPrimary }]}>
-                        {bedtimeAnchor}
+                      onBlur={() => {
+                        if (!isEditing) return;
+                        commitBedtimeInput(bedtimeInput);
+                      }}
+                      onSubmitEditing={() => {
+                        commitBedtimeInput(bedtimeInput);
+                      }}
+                      placeholder="HH:mm (z.B. 19:30)"
+                      placeholderTextColor={textTertiary}
+                      keyboardType={Platform.OS === 'ios' ? 'numbers-and-punctuation' : 'numeric'}
+                      maxLength={5}
+                      autoCorrect={false}
+                      autoCapitalize="none"
+                      returnKeyType="done"
+                    />
+                    {bedtimeInputError ? (
+                      <ThemedText
+                        style={[
+                          styles.bedtimeValidationText,
+                          { color: isDark ? '#FFB3B3' : '#C0392B' },
+                        ]}
+                      >
+                        {bedtimeInputError}
                       </ThemedText>
-                      <IconSymbol name="moon.zzz" size={20} color={textPrimary} />
-                    </TouchableOpacity>
+                    ) : null}
 
                     <ThemedText style={[styles.photoHintText, { color: textSecondary, textAlign: 'left', marginTop: 8, marginBottom: 0 }]}>
                       Diese Uhrzeit wird für die Schlafvorhersage und Schlaffenster-Erinnerungen genutzt.
                     </ThemedText>
-
-                    {showBedtimePicker && Platform.OS === 'android' && (
-                      <DateTimePicker
-                        value={bedtimePickerValue}
-                        mode="time"
-                        display="default"
-                        is24Hour
-                        onChange={handleBedtimeChangeAndroid}
-                        textColor={isDark ? '#FFFFFF' : undefined}
-                      />
-                    )}
-                    {Platform.OS === 'ios' && (
-                      <IOSBottomDatePicker
-                        visible={showBedtimePicker}
-                        title="Schlafenszeit wählen"
-                        value={bedtimePickerValue}
-                        mode="time"
-                        onClose={() => setShowBedtimePicker(false)}
-                        onConfirm={handleIOSBedtimeConfirm}
-                      />
-                    )}
                   </View>
 
                   <View style={styles.inputRow}>
@@ -1300,6 +1320,14 @@ const styles = StyleSheet.create({
   },
   dateText: {
     fontSize: 16,
+  },
+  bedtimeManualInput: {
+    marginTop: 10,
+  },
+  bedtimeValidationText: {
+    marginTop: 6,
+    fontSize: 12,
+    fontWeight: '600',
   },
   buttonRow: {
     flexDirection: 'row',

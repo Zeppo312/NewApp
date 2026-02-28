@@ -115,6 +115,29 @@ serve(async (req) => {
     const { user_id, notification_type, reminder_minutes } = payload.notification;
     const { baby_name } = payload.planner_item;
 
+    const { data: recipientSettings, error: recipientSettingsError } = await supabase
+      .from('user_settings')
+      .select('notifications_enabled')
+      .eq('user_id', user_id)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (recipientSettingsError) {
+      console.error('❌ Error fetching recipient notification settings:', recipientSettingsError);
+    }
+
+    if (recipientSettings?.notifications_enabled === false) {
+      console.log('⏭️ Notifications disabled for recipient, skipping push send');
+      return new Response(
+        JSON.stringify({ message: 'Notifications disabled for recipient' }),
+        {
+          headers: { 'Content-Type': 'application/json' },
+          status: 200,
+        }
+      );
+    }
+
     // Get user's name for personalization
     const { data: profile } = await supabase
       .from('profiles')

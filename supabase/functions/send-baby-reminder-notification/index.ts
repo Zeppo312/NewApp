@@ -54,6 +54,26 @@ serve(async (req: Request) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    const { data: recipientSettings, error: recipientSettingsError } = await supabase
+      .from('user_settings')
+      .select('notifications_enabled')
+      .eq('user_id', reminder.user_id)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (recipientSettingsError) {
+      console.error('❌ Error fetching recipient notification settings:', recipientSettingsError);
+    }
+
+    if (recipientSettings?.notifications_enabled === false) {
+      console.log('⏭️ Notifications disabled for recipient, skipping push send');
+      return new Response(JSON.stringify({ message: 'Notifications disabled for recipient' }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 200,
+      });
+    }
+
     const { data: tokens, error: tokenError } = await supabase
       .from('user_push_tokens')
       .select('token')

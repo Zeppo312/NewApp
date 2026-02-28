@@ -24,6 +24,7 @@ import BabySwitcherButton from '@/components/BabySwitcherButton';
 import { loadCachedHomeData, cacheHomeData, isCacheFresh } from '@/lib/homeCache';
 import { getLocalProfileName } from '@/lib/localProfile';
 import { buildFeedingOverview } from '@/lib/feedingOverview';
+import { loadAllVisibleSleepEntries } from '@/lib/sleepSharing';
 
 // Tägliche Tipps für Mamas
 const dailyTips = [
@@ -651,37 +652,47 @@ export default function HomeScreen() {
         return 0;
       }
 
-      const startIso = startOfDay.toISOString();
-      const endIso = endOfDay.toISOString();
-      const overlapFilter = [
-        `and(start_time.lte.${endIso},end_time.is.null)`,
-        `and(start_time.lte.${endIso},end_time.gte.${startIso})`
-      ].join(',');
-
-      let sleepQuery = supabase
-        .from('sleep_entries')
-        .select('start_time,end_time')
-        .eq('user_id', user.id)
-        .or(overlapFilter);
-
-      if (activeBabyId) {
-        sleepQuery = sleepQuery.eq('baby_id', activeBabyId);
-      }
-
-      const { data, error } = await sleepQuery;
-
-      if (error || !data) {
-        console.error('Error loading sleep entries for today:', error);
+      const { success, entries, error } = await loadAllVisibleSleepEntries(activeBabyId ?? undefined);
+      if (!success || !entries) {
+        console.error('Error loading visible sleep entries for today:', error);
         setTodaySleepMinutes(0);
         return 0;
       }
 
-      const totalMinutes = data.reduce((sum, entry) => {
-        const entryStart = new Date(entry.start_time);
-        const rawEnd = entry.end_time ? new Date(entry.end_time) : new Date();
-        const clampedStart = entryStart < startOfDay ? startOfDay : entryStart;
-        const clampedEnd = rawEnd > endOfDay ? endOfDay : rawEnd;
-        const diff = clampedEnd.getTime() - clampedStart.getTime();
+      const now = new Date();
+      const intervals = entries
+        .map((entry) => {
+          const entryStart = new Date(entry.start_time);
+          const entryEnd = entry.end_time ? new Date(entry.end_time) : now;
+          const isValid = Number.isFinite(entryStart.getTime()) && Number.isFinite(entryEnd.getTime()) && entryEnd > entryStart;
+          const overlapsToday = entryStart <= endOfDay && entryEnd >= startOfDay;
+
+          if (!isValid || !overlapsToday) {
+            return null;
+          }
+
+          // Für die Home-Kachel den vollständigen Schlafblock zählen (ab Startzeit),
+          // sobald er den heutigen Tag berührt.
+          return { start: entryStart, end: entryEnd };
+        })
+        .filter((interval): interval is { start: Date; end: Date } => interval !== null)
+        .sort((a, b) => a.start.getTime() - b.start.getTime());
+
+      const mergedIntervals = intervals.reduce<Array<{ start: Date; end: Date }>>((acc, interval) => {
+        const last = acc[acc.length - 1];
+        if (!last || interval.start.getTime() > last.end.getTime()) {
+          acc.push(interval);
+          return acc;
+        }
+
+        if (interval.end.getTime() > last.end.getTime()) {
+          last.end = interval.end;
+        }
+        return acc;
+      }, []);
+
+      const totalMinutes = mergedIntervals.reduce((sum, interval) => {
+        const diff = interval.end.getTime() - interval.start.getTime();
         return diff > 0 ? sum + Math.round(diff / 60000) : sum;
       }, 0);
 

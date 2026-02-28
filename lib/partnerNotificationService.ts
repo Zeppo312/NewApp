@@ -1,6 +1,7 @@
 import * as Notifications from 'expo-notifications';
 import { supabase } from './supabase';
 import { getCachedUser } from './supabase';
+import { getAppSettings } from './supabase';
 
 interface PartnerActivityNotification {
   id: string;
@@ -78,6 +79,11 @@ export async function pollPartnerActivities(): Promise<number> {
     }
 
     const userId = userData.user.id;
+
+    const { data: appSettings } = await getAppSettings();
+    if (appSettings?.notifications_enabled === false) {
+      return 0;
+    }
 
     // Query unread notifications for this user
     const { data: notifications, error: notifError } = await supabase

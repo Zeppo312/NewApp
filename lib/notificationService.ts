@@ -4,6 +4,7 @@ import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { supabase } from './supabase';
 import { getCachedUser } from './supabase';
+import { getAppSettings } from './supabase';
 
 import * as TaskManager from 'expo-task-manager';
 import { router } from 'expo-router';
@@ -310,6 +311,12 @@ export async function checkForNewNotifications() {
   try {
     const { data: userData } = await getCachedUser();
     if (!userData?.user) return;
+
+    const { data: appSettings } = await getAppSettings();
+    if (appSettings?.notifications_enabled === false) {
+      console.log('Notifications disabled in app settings. Skipping background notification check.');
+      return;
+    }
 
     console.log('Prüfe auf neue Benachrichtigungen im Hintergrund...');
 

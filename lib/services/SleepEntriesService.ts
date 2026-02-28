@@ -3,6 +3,11 @@ import { supabase } from '@/lib/supabase';
 import type { ConvexReactClient } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { BackendType } from '@/contexts/BackendContext';
+import {
+  getAutoCloseEndTimeISO,
+  isStaleActiveSleepEntry,
+  MAX_ACTIVE_SLEEP_DURATION_MINUTES,
+} from '@/lib/sleepEntryGuards';
 
 /**
  * SleepEntriesService
@@ -60,6 +65,39 @@ export class SleepEntriesService extends BaseDataService {
     super(activeBackend, convexClient, userId);
   }
 
+  private async autoCloseStaleActiveEntries(entries: SleepEntry[]): Promise<SleepEntry[]> {
+    const nowMs = Date.now();
+    const nextEntries = [...entries];
+
+    for (let index = 0; index < nextEntries.length; index += 1) {
+      const entry = nextEntries[index];
+      if (!entry.id || !isStaleActiveSleepEntry(entry, nowMs)) continue;
+
+      const autoCloseEnd = getAutoCloseEndTimeISO(entry);
+      if (!autoCloseEnd) continue;
+
+      const updateResult = await this.updateEntry(entry.id, {
+        end_time: autoCloseEnd,
+        duration_minutes: MAX_ACTIVE_SLEEP_DURATION_MINUTES,
+      });
+
+      if (updateResult.primary.error || !updateResult.primary.data) {
+        console.warn(
+          `[SleepEntriesService] Failed to auto-close stale active sleep entry ${entry.id}:`,
+          updateResult.primary.error
+        );
+        continue;
+      }
+
+      nextEntries[index] = updateResult.primary.data;
+      console.warn(
+        `[SleepEntriesService] Auto-closed stale active sleep entry ${entry.id} after ${MAX_ACTIVE_SLEEP_DURATION_MINUTES} minutes.`
+      );
+    }
+
+    return nextEntries;
+  }
+
   /**
    * Get all visible sleep entries for a user (including partner/shared entries)
    */
@@ -115,7 +153,21 @@ export class SleepEntriesService extends BaseDataService {
       }
     };
 
-    return this.readFromActive(this.activeBackend, supabaseOperation, convexOperation);
+    const readResult = await this.readFromActive(
+      this.activeBackend,
+      supabaseOperation,
+      convexOperation
+    );
+
+    if (!readResult.data) {
+      return readResult;
+    }
+
+    const sanitizedEntries = await this.autoCloseStaleActiveEntries(readResult.data);
+    return {
+      ...readResult,
+      data: sanitizedEntries,
+    };
   }
 
   /**

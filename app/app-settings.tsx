@@ -16,6 +16,7 @@ import { exportUserData } from '@/lib/dataExport';
 import { deleteUserAccount, deleteUserData } from '@/lib/profile';
 import { sleepActivityService } from '@/lib/sleepActivityService';
 import { loadAllVisibleSleepEntries } from '@/lib/sleepSharing';
+import { findFreshActiveSleepEntry } from '@/lib/sleepEntryGuards';
 import {
   DEFAULT_NIGHT_WINDOW_SETTINGS,
   loadNightWindowSettings,
@@ -457,7 +458,7 @@ export default function AppSettingsScreen() {
         throw new Error('Schlafdaten konnten nicht geladen werden.');
       }
 
-      const activeEntry = entries.find((entry) => !entry.end_time);
+      const activeEntry = findFreshActiveSleepEntry(entries);
 
       if (!activeEntry?.start_time) {
         await sleepActivityService.endAllSleepActivities();

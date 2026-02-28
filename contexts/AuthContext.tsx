@@ -172,15 +172,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Abmeldung
   const handleSignOut = async () => {
-    // Alle Caches invalidieren bei Logout
-    invalidateUserCache();
-    await invalidateAllCaches();
+    // Lokalen Auth-State sofort leeren, damit geschützte Screens direkt unmounten.
+    applySession(null);
 
-    const { error } = await signOut();
-    if (!error) {
-      applySession(null);
+    // Cleanup darf Logout nicht abbrechen.
+    invalidateUserCache();
+    try {
+      await invalidateAllCaches();
+    } catch (cacheError) {
+      console.error('Error invalidating caches during sign out:', cacheError);
     }
-    return { error };
+
+    try {
+      const { error } = await signOut();
+      if (error) {
+        console.error('Error signing out from Supabase:', error);
+      }
+      return { error };
+    } catch (error) {
+      console.error('Unexpected sign out error:', error);
+      return { error };
+    }
   };
 
   // Bereitstellung des Kontexts

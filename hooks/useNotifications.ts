@@ -5,6 +5,7 @@ import { Platform } from 'react-native';
 import { router } from 'expo-router';
 import Constants from 'expo-constants';
 import { savePushToken } from '@/lib/notificationService';
+import { getAppSettings } from '@/lib/supabase';
 
 /**
  * Core notification hook for managing notification permissions and listeners
@@ -38,6 +39,18 @@ export function useNotifications() {
    */
   const requestPermissions = useCallback(async () => {
     try {
+      const { data: appSettings, error: appSettingsError } = await getAppSettings();
+      if (appSettingsError) {
+        console.warn('Could not read app notification setting before requesting permissions:', appSettingsError);
+      }
+
+      if (appSettings?.notifications_enabled === false) {
+        console.log('Notifications are disabled in app settings; skipping permission request');
+        setHasPermission(false);
+        setExpoPushToken(null);
+        return false;
+      }
+
       // Only request on physical devices
       if (!Device.isDevice) {
         console.log('Notifications require a physical device');
@@ -114,6 +127,12 @@ export function useNotifications() {
     identifier?: string
   ) => {
     try {
+      const { data: appSettings } = await getAppSettings();
+      if (appSettings?.notifications_enabled === false) {
+        console.log('Notifications are disabled in app settings; skipping local notification');
+        return;
+      }
+
       await Notifications.scheduleNotificationAsync({
         content: {
           title,

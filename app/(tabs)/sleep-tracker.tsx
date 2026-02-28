@@ -66,6 +66,7 @@ import {
   type NightWindowSettings,
 } from '@/lib/nightWindowSettings';
 import NightSleepEditor, { MiniNightTimeline } from '@/components/NightSleepEditor';
+import { isStaleActiveSleepEntry } from '@/lib/sleepEntryGuards';
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 // Typografie helper
@@ -1815,7 +1816,7 @@ export default function SleepTrackerScreen() {
     try {
       const { success, entries } = await loadVisibleSleepEntries(activeBabyId ?? undefined);
       if (success && entries) {
-        const active = entries.find(entry => !entry.end_time);
+        const active = entries.find((entry) => !entry.end_time && !isStaleActiveSleepEntry(entry)) ?? null;
         if (!active) {
           activeEntryPeriodOverridesRef.current = {};
           return null;

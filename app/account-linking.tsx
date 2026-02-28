@@ -108,12 +108,18 @@ export default function AccountLinkingScreen() {
   useEffect(() => { if (user) loadData(); }, [user]);
 
   const loadData = async () => {
+    if (!user?.id) {
+      setInvitations([]);
+      setLinkedUsers([]);
+      return;
+    }
+
     setIsLoading(true);
     try {
-      const invitationsResult = await getUserInvitations(user!.id);
+      const invitationsResult = await getUserInvitations(user.id);
       if (invitationsResult.success) setInvitations(invitationsResult.invitations);
 
-      const linkedUsersResult = await getLinkedUsers(user!.id);
+      const linkedUsersResult = await getLinkedUsers(user.id);
       if (linkedUsersResult.success) setLinkedUsers(linkedUsersResult.linkedUsers);
     } catch (error) {
       console.error('Error loading account linking data:', error);
@@ -124,9 +130,14 @@ export default function AccountLinkingScreen() {
   };
 
   const handleCreateInvitation = async () => {
+    if (!user?.id) {
+      Alert.alert('Fehler', 'Bitte erneut anmelden.');
+      return;
+    }
+
     setIsLoading(true);
     try {
-      const result = await createInvitationLink(user!.id);
+      const result = await createInvitationLink(user.id);
       if (result.success) {
         await Share.share({
           message: `Verbinde dich mit mir in der App! Einladungscode: ${result.invitationCode} • Link: ${result.invitationLink}`,
