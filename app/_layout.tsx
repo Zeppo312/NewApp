@@ -454,7 +454,6 @@ function RootLayoutNav() {
         <Stack.Screen name="index" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="(auth)" />
-        <Stack.Screen name="diary-entries" />
         <Stack.Screen name="community" />
         <Stack.Screen name="notifications" />
         <Stack.Screen name="paywall" />
@@ -462,7 +461,6 @@ function RootLayoutNav() {
         <Stack.Screen name="pregnancy-setup" />
         <Stack.Screen name="milestones" />
         <Stack.Screen name="account-linking" />
-        <Stack.Screen name="sync-test" />
         <Stack.Screen name="+not-found" />
         <Stack.Screen name="auth/callback" />
         <Stack.Screen name="auth/reset-password" />
