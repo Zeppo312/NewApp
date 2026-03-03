@@ -4,7 +4,6 @@ import { ThemedText } from './ThemedText';
 import { ThemedView } from './ThemedView';
 import { Colors } from '@/constants/Colors';
 import { pregnancyWeekCircleInfo } from '@/constants/PregnancyWeekInfo';
-import { babySizeComparison } from '@/constants/BabySizeComparison';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { router } from 'expo-router';
@@ -45,16 +44,13 @@ interface CountdownTimerProps {
   dueDate: Date | null;
   // Darstellung: 'standalone' hat eigenen Card-Look, 'embedded' ist für GlassCards
   variant?: 'standalone' | 'embedded';
-  // Optional: Babygrößen-Block unterhalb ein-/ausblenden
-  showBabySize?: boolean;
   // Optional: eigener Handler beim Tippen auf den Kreis
   onPressRing?: () => void;
 }
 
-const CountdownTimer: React.FC<CountdownTimerProps> = ({ 
+const CountdownTimer: React.FC<CountdownTimerProps> = ({
   dueDate,
   variant = 'standalone',
-  showBabySize = true,
   onPressRing,
 }) => {
   const colorScheme = useColorScheme() ?? 'light';
@@ -186,10 +182,6 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({
 
   const navigateToStats = () => {
     router.push('/pregnancy-stats');
-  };
-
-  const navigateToBabySize = () => {
-    router.push('/baby-size');
   };
 
   // Erhöhe die Größe des Kreises etwas
@@ -408,22 +400,6 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({
         </View>
       </TouchableOpacity>
 
-      {/* Container für die Babygröße */}
-      {showBabySize && currentWeek && currentWeek >= 4 && (
-        <TouchableOpacity
-          style={styles.babySizeContainer}
-          onPress={navigateToBabySize}
-          activeOpacity={0.8}
-        >
-          <ThemedView style={styles.babySizeInnerContainer} lightColor={'transparent'} darkColor={'transparent'}>
-            <ThemedText style={[styles.babySizeLabel, { color: textPrimary }]}>Babygröße:</ThemedText>
-            <ThemedText style={[styles.babySizeValue, { color: accentColor }]}>
-              {babySizeComparison[currentWeek] || "Noch nicht berechenbar"}
-            </ThemedText>
-            <ThemedText style={styles.babySizeTapHint}>Tippen für mehr Details</ThemedText>
-          </ThemedView>
-        </TouchableOpacity>
-      )}
     </ThemedView>
   );
 };
@@ -488,31 +464,6 @@ const styles = StyleSheet.create({
   detailValue: {
     fontSize: FONT_LG,
     fontWeight: 'bold',
-  },
-  babySizeContainer: {
-    marginTop: 15,
-    width: '100%',
-  },
-  babySizeInnerContainer: {
-    padding: 12,
-    borderRadius: 16,
-    width: '100%',
-    alignItems: 'center',
-  },
-  babySizeLabel: {
-    fontSize: FONT_MD,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  babySizeValue: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    marginBottom: 5,
-  },
-  babySizeTapHint: {
-    fontSize: FONT_SM,
-    opacity: 0.6,
-    fontStyle: 'italic',
   },
 });
 

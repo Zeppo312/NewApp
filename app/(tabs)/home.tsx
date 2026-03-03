@@ -300,7 +300,7 @@ export default function HomeScreen() {
   const imageRetryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const androidBlurProps =
     Platform.OS === 'android'
-      ? { experimentalBlurMethod: 'dimezisBlurView' as const, blurReductionFactor: 1 }
+      ? { blurMethod: 'dimezisBlurView' as const, blurReductionFactor: 1 }
       : {};
 
   const rotationCandidates = recommendations;

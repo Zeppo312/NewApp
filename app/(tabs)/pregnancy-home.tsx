@@ -311,7 +311,7 @@ export default function PregnancyHomeScreen() {
 
   const androidBlurProps =
     Platform.OS === 'android'
-      ? { experimentalBlurMethod: 'dimezisBlurView' as const, blurReductionFactor: 1 }
+      ? { blurMethod: 'dimezisBlurView' as const, blurReductionFactor: 1 }
       : {};
 
   const featuredRecommendation = recommendations[0] ?? null;

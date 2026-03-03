@@ -168,7 +168,7 @@ export function GlassCard({
 
   const androidBlurProps: Partial<BlurViewProps> =
     Platform.OS === 'android'
-      ? { experimentalBlurMethod: 'dimezisBlurView', blurReductionFactor: 1 }
+      ? { blurMethod: 'dimezisBlurView', blurReductionFactor: 1 }
       : {};
 
   return (

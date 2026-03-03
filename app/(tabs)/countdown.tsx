@@ -34,10 +34,11 @@ import { pregnancyMotherInfo } from '@/constants/PregnancyMotherInfo';
 import { pregnancyPartnerInfo } from '@/constants/PregnancyPartnerInfo';
 import { pregnancySymptoms } from '@/constants/PregnancySymptoms';
 import { BIRTH_PREP_SECTION_START_WEEK, birthPreparationMeasures } from '@/constants/BirthPreparationMeasures';
+import { babySizeData } from '@/lib/baby-size-data';
 import Header from '@/components/Header';
 
 // Sleep-Tracker Design Tokens
-import { LiquidGlassCard, GLASS_OVERLAY, GLASS_OVERLAY_DARK, LAYOUT_PAD } from '@/constants/DesignGuide';
+import { LiquidGlassCard, GLASS_OVERLAY, GLASS_OVERLAY_DARK, LAYOUT_PAD, SECTION_GAP_BOTTOM } from '@/constants/DesignGuide';
 
 const PRIMARY_TEXT = '#5C4033';
 const SECONDARY_TEXT = '#7D5A50';
@@ -46,6 +47,36 @@ const ACCENT_MINT = '#389D91';
 const ACCENT_ORANGE = '#FF8C42';
 const WARN = '#E57373';
 const TIMELINE_INSET = 8;
+
+const fruitEmoji: Record<string, string> = {
+  'Mohnkorn': '🌱',
+  'Apfelkern': '🍎',
+  'Erbse': '🟢',
+  'Heidelbeere': '🫐',
+  'Himbeere': '🍇',
+  'Erdbeere': '🍓',
+  'Aprikose': '🍑',
+  'Limette': '🍈',
+  'Zwetschge': '🟣',
+  'Pfirsich': '🍑',
+  'Zitrone': '🍋',
+  'Orange': '🍊',
+  'Avocado': '🥑',
+  'Süßkartoffel': '🍠',
+  'Mango': '🥭',
+  'Papaya': '🍈',
+  'Aubergine': '🍆',
+  'Kürbis': '🎃',
+  'Honigmelone': '🍈',
+  'Wassermelone': '🍉',
+};
+
+const getFruitEmoji = (comparison: string): string => {
+  for (const [key, emoji] of Object.entries(fruitEmoji)) {
+    if (comparison.includes(key)) return emoji;
+  }
+  return '🍼';
+};
 
 const toRgba = (hex: string, opacity = 1) => {
   const cleanHex = hex.replace('#', '');
@@ -532,6 +563,37 @@ export default function CountdownScreen() {
             <CountdownTimer dueDate={dueDate} variant="embedded" />
           </LiquidGlassCard>
 
+          {/* Babygröße Highlight */}
+          {currentWeek && currentWeek >= 4 && !isOverdue && (() => {
+            const sizeData = babySizeData.find((d) => d.week === currentWeek);
+            if (!sizeData) return null;
+            const emoji = getFruitEmoji(sizeData.fruitComparison);
+            return (
+              <TouchableOpacity
+                onPress={() => router.push({ pathname: '/baby-size', params: { week: String(currentWeek) } })}
+                activeOpacity={0.9}
+                style={styles.babySizeTouchTarget}
+              >
+                <LiquidGlassCard style={[styles.sectionCard, styles.babySizeCard]} intensity={26} overlayColor={glassOverlay}>
+                  <View style={styles.babySizeRow}>
+                    <View style={[styles.babySizeEmojiWrap, { backgroundColor: isDark ? toRgba(accentPurple, 0.2) : 'rgba(142,78,198,0.12)', borderColor: pillPrimaryBorder }]}>
+                      <ThemedText style={styles.babySizeEmoji}>{emoji}</ThemedText>
+                    </View>
+                    <View style={styles.babySizeTextWrap}>
+                      <ThemedText style={[styles.babySizeFruit, { color: textPrimary }]}>
+                        So groß wie {sizeData.fruitComparison}
+                      </ThemedText>
+                      <ThemedText style={[styles.babySizeMeta, { color: textSecondary }]}>
+                        ca. {sizeData.length} · ca. {sizeData.weight}
+                      </ThemedText>
+                    </View>
+                    <IconSymbol name="chevron.right" size={16} color={textSecondary} />
+                  </View>
+                </LiquidGlassCard>
+              </TouchableOpacity>
+            );
+          })()}
+
           {/* Entbindungstermin */}
           <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={glassOverlay}>
             <ThemedText style={[styles.sectionTitle, { color: textPrimary }]}>Entbindungstermin</ThemedText>
@@ -820,7 +882,7 @@ const styles = StyleSheet.create({
   sectionCard: {
     width: '100%',
     alignSelf: 'center',
-    marginBottom: 16,
+    marginBottom: SECTION_GAP_BOTTOM,
     borderRadius: 22,
     overflow: 'hidden',
   },
@@ -923,6 +985,23 @@ const styles = StyleSheet.create({
     borderWidth: 1.2, borderColor: 'rgba(255,255,255,0.6)',
   },
   badgeText: { fontSize: 13, fontWeight: '700', color: PRIMARY_TEXT },
+
+  // Babygröße Highlight
+  babySizeTouchTarget: {
+    width: '100%',
+    alignSelf: 'center',
+  },
+  babySizeCard: { paddingVertical: 28, paddingHorizontal: 22 },
+  babySizeRow: { flexDirection: 'row', alignItems: 'center', gap: 16, paddingHorizontal: 2 },
+  babySizeEmojiWrap: {
+    width: 68, height: 68, borderRadius: 22,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1.5,
+  },
+  babySizeEmoji: { fontSize: 34, lineHeight: 40 },
+  babySizeTextWrap: { flex: 1 },
+  babySizeFruit: { fontSize: 18, fontWeight: '800' },
+  babySizeMeta: { fontSize: 14, marginTop: 5, opacity: 0.85 },
 
   // Overdue
   overdueBorder: { borderLeftWidth: 4, borderLeftColor: WARN },

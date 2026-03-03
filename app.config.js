@@ -26,6 +26,10 @@ module.exports = function({ config }) {
     },
   ]);
   addPlugin(plugins, 'expo-task-manager');
+  addPlugin(plugins, '@react-native-community/datetimepicker');
+  addPlugin(plugins, 'expo-image');
+  addPlugin(plugins, 'expo-sharing');
+  addPlugin(plugins, './plugins/withLiveActivityModule');
 
   // Konfiguration für Updates
   const updatedConfig = {

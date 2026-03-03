@@ -7,7 +7,6 @@
     "icon": "./assets/images/icon.png",
     "scheme": "com.lottibaby.app",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "appleTeamId": "FWCPXYUKA2",
@@ -103,7 +102,7 @@
       }
     },
     "owner": "janzeppi",
-    "runtimeVersion": "54.0.0",
+    "runtimeVersion": "55.0.0",
     "updates": {
       "url": "https://u.expo.dev/d7120520-e4ff-4967-a797-627a2cb3680b",
       "enabled": true,
