@@ -318,12 +318,15 @@ export default function CountdownScreen() {
 
           const totalDaysInPregnancy = 280;
           const daysRemaining = Math.max(0, daysLeft);
-          const daysPregnant = totalDaysInPregnancy - daysRemaining;
+          const daysPregnant = Math.min(
+            totalDaysInPregnancy,
+            Math.max(0, totalDaysInPregnancy - daysRemaining)
+          );
 
           const weeksPregnant = Math.floor(daysPregnant / 7);
           const daysInCurrentWeek = daysPregnant % 7;
 
-          setCurrentWeek(weeksPregnant + 1);
+          setCurrentWeek(Math.max(1, weeksPregnant + 1));
           setCurrentDay(daysInCurrentWeek);
 
           setDaysOverdue(daysLeft < 0 ? Math.abs(daysLeft) : 0);

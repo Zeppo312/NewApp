@@ -1466,6 +1466,7 @@ export default function HomeScreen() {
               </View>
             </BlurView>
           </TouchableOpacity>
+
         </View>
       </View>
     );

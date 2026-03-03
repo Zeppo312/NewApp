@@ -95,10 +95,14 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({
       // Schwangerschaft dauert ca. 40 Wochen
       const totalDaysInPregnancy = 280; // 40 Wochen * 7 Tage
 
-      // Berechne die Tage der Schwangerschaft
-      // Wir verwenden Math.max, um negative Werte zu vermeiden (falls das Datum in der Vergangenheit liegt)
+      // Berechne die Tage der Schwangerschaft.
+      // Die Werte werden auf den gültigen Bereich einer Schwangerschaft begrenzt,
+      // damit bei einem sehr weit entfernten ET keine SSW 0 oder negativ entsteht.
       const daysRemaining = Math.max(0, days);
-      const daysPregnant = totalDaysInPregnancy - daysRemaining;
+      const daysPregnant = Math.min(
+        totalDaysInPregnancy,
+        Math.max(0, totalDaysInPregnancy - daysRemaining)
+      );
 
       // Berechne SSW und Tag
       const weeksPregnant = Math.floor(daysPregnant / 7);
@@ -106,7 +110,7 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({
       
       // In der SSW-Zählung ist man bereits in der nächsten Woche, selbst bei 0 Tagen
       // Das heißt: 36+6 bedeutet 37. SSW
-      const currentSSW = weeksPregnant + 1;
+      const currentSSW = Math.max(1, weeksPregnant + 1);
 
       setCurrentWeek(currentSSW);
       setCurrentDay(daysInCurrentWeek);
