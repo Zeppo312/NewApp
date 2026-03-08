@@ -13,7 +13,12 @@ import { useBackground } from '@/contexts/BackgroundContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getAppSettings, saveAppSettings, AppSettings } from '@/lib/supabase';
 import { exportUserData } from '@/lib/dataExport';
-import { deleteUserAccount, deleteUserData } from '@/lib/profile';
+import {
+  buildAccountDeletionWarningMessage,
+  deleteUserAccount,
+  deleteUserData,
+  getAccountDeletionRequirements,
+} from '@/lib/profile';
 import { sleepActivityService } from '@/lib/sleepActivityService';
 import { loadAllVisibleSleepEntries } from '@/lib/sleepSharing';
 import { findFreshActiveSleepEntry } from '@/lib/sleepEntryGuards';
@@ -25,6 +30,9 @@ import {
 import Header from '@/components/Header';
 import { LiquidGlassCard, GLASS_OVERLAY, LAYOUT_PAD } from '@/constants/DesignGuide';
 import { useNotificationPreferences } from '@/hooks/useNotificationPreferences';
+import { useNotifications } from '@/hooks/useNotifications';
+import { formatVitaminDReminderTime } from '@/lib/vitaminDReminder';
+import { openSubscriptionManagement } from '@/lib/subscriptionManagement';
 
 // Admin emails - nur diese User sehen Debug Tools
 const ADMIN_EMAILS = [
@@ -74,6 +82,8 @@ export default function AppSettingsScreen() {
   const [showNightWindowStartPicker, setShowNightWindowStartPicker] = useState(false);
   const [showNightWindowEndPicker, setShowNightWindowEndPicker] = useState(false);
   const [isSavingNightWindow, setIsSavingNightWindow] = useState(false);
+  const [isNotificationsExpanded, setIsNotificationsExpanded] = useState(true);
+  const [showVitaminDTimePicker, setShowVitaminDTimePicker] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isDeletingData, setIsDeletingData] = useState(false);
   const [isChangingBackground, setIsChangingBackground] = useState(false);
@@ -96,7 +106,12 @@ export default function AppSettingsScreen() {
   } = useBackground();
 
   // Notification sub-preferences
-  const { preferences: notifPrefs, updatePreference: updateNotifPref } = useNotificationPreferences();
+  const {
+    preferences: notifPrefs,
+    updatePreference: updateNotifPref,
+    updatePreferences: updateNotifPrefs,
+  } = useNotificationPreferences();
+  const { requestPermissions } = useNotifications();
 
   // Check if current user is admin
   const isAdmin = user?.email ? ADMIN_EMAILS.includes(user.email) : false;
@@ -109,6 +124,18 @@ export default function AppSettingsScreen() {
   const primaryIconColor = useLightIcons ? '#FFFFFF' : theme.accent;
   const trailingIconColor = useLightIcons ? 'rgba(255,255,255,0.9)' : theme.tabIconDefault;
   const autoDarkTimeTextColor = useLightIcons ? '#FFFFFF' : '#000000';
+  const vitaminDTimeLabel = formatVitaminDReminderTime(
+    'de-DE',
+    notifPrefs.vitaminDReminderHour,
+    notifPrefs.vitaminDReminderMinute,
+  );
+  const activeNotificationTypes = [
+    notifPrefs.sleepWindowReminder,
+    notifPrefs.feedingReminder,
+    notifPrefs.vitaminDReminder,
+    notifPrefs.partnerActivity,
+    notifPrefs.plannerReminder,
+  ].filter(Boolean).length;
 
   // no extra width logic; match "Mehr" padding rhythm via ScrollView
 
@@ -121,6 +148,9 @@ export default function AppSettingsScreen() {
   useEffect(() => {
     if (focus === 'night-window') {
       setIsNightWindowExpanded(true);
+    }
+    if (focus === 'notifications') {
+      setIsNotificationsExpanded(true);
     }
   }, [focus]);
 
@@ -223,6 +253,51 @@ export default function AppSettingsScreen() {
 
   const handleToggleNotifications = async (value: boolean) => {
     await handleSaveSettings({ notifications_enabled: value });
+    if (value) {
+      const granted = await requestPermissions();
+      if (!granted) {
+        Alert.alert(
+          'System-Benachrichtigungen fehlen',
+          'Aktiviere Benachrichtigungen bitte auch in den System-Einstellungen, damit Erinnerungen zugestellt werden können.',
+          [
+            { text: 'Später', style: 'cancel' },
+            { text: 'System-Einstellungen', onPress: () => void handleOpenSystemSettings() },
+          ],
+        );
+      }
+    }
+  };
+
+  const handleToggleNotificationPreference = async (
+    key:
+      | 'sleepWindowReminder'
+      | 'feedingReminder'
+      | 'vitaminDReminder'
+      | 'partnerActivity'
+      | 'plannerReminder',
+    value: boolean,
+  ) => {
+    try {
+      await updateNotifPref(key, value);
+    } catch (error) {
+      console.error('Failed to save notification preference:', error);
+      Alert.alert('Fehler', 'Die Benachrichtigungseinstellung konnte nicht gespeichert werden.');
+      return;
+    }
+
+    if (value && settings?.notifications_enabled) {
+      const granted = await requestPermissions();
+      if (!granted) {
+        Alert.alert(
+          'System-Benachrichtigungen fehlen',
+          'Die Kategorie wurde gespeichert. Damit sie wirklich ankommt, aktiviere bitte Benachrichtigungen auch im System.',
+          [
+            { text: 'Später', style: 'cancel' },
+            { text: 'System-Einstellungen', onPress: () => void handleOpenSystemSettings() },
+          ],
+        );
+      }
+    }
   };
 
   const handleToggleAutoDarkMode = async (value: boolean) => {
@@ -338,6 +413,28 @@ export default function AppSettingsScreen() {
       return;
     }
     await updateNightWindowSettings(nightWindowStartTime, formatTime(selectedDate));
+  };
+
+  const handleVitaminDTimeChange = async (
+    event: DateTimePickerEvent,
+    selectedDate?: Date,
+  ) => {
+    if (Platform.OS === 'android') {
+      setShowVitaminDTimePicker(false);
+    }
+    if (event.type === 'dismissed' || !selectedDate) {
+      return;
+    }
+
+    try {
+      await updateNotifPrefs({
+        vitaminDReminderHour: selectedDate.getHours(),
+        vitaminDReminderMinute: selectedDate.getMinutes(),
+      });
+    } catch (error) {
+      console.error('Failed to save Vitamin D reminder time:', error);
+      Alert.alert('Fehler', 'Die Uhrzeit für die Vitamin-D-Erinnerung konnte nicht gespeichert werden.');
+    }
   };
 
   const handleChangeBackground = async () => {
@@ -613,6 +710,29 @@ export default function AppSettingsScreen() {
     }
   };
 
+  const confirmAccountDeletion = async (onConfirm: () => void) => {
+    try {
+      const { data: requirements, error } = await getAccountDeletionRequirements();
+      if (error) throw error;
+
+      Alert.alert(
+        'Wichtiger Hinweis',
+        buildAccountDeletionWarningMessage(requirements),
+        [
+          { text: 'Abbrechen', style: 'cancel' },
+          { text: 'Abo verwalten', onPress: () => void openSubscriptionManagement() },
+          { text: 'Trotzdem löschen', style: 'destructive', onPress: onConfirm },
+        ],
+      );
+    } catch (error: any) {
+      console.error('Failed to load account deletion requirements:', error);
+      Alert.alert(
+        'Fehler',
+        error?.message || 'Der Löschhinweis konnte nicht geladen werden. Bitte versuche es erneut.',
+      );
+    }
+  };
+
   const handleDeleteDataRequest = () => {
     if (isDeletingData) return;
     Alert.alert(
@@ -630,7 +750,13 @@ export default function AppSettingsScreen() {
               [
                 { text: 'Abbrechen', style: 'cancel' },
                 { text: 'Nur Daten löschen', style: 'destructive', onPress: () => runDeleteDataFlow(false) },
-                { text: 'Daten + Konto löschen', style: 'destructive', onPress: () => runDeleteDataFlow(true) },
+                {
+                  text: 'Daten + Konto löschen',
+                  style: 'destructive',
+                  onPress: () => {
+                    void confirmAccountDeletion(() => runDeleteDataFlow(true));
+                  },
+                },
               ],
             );
           },
@@ -677,42 +803,84 @@ export default function AppSettingsScreen() {
                 <>
                   {/* Benachrichtigungen-Einstellungen */}
                   <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
-                    <ThemedText style={styles.sectionTitle}>Benachrichtigungen</ThemedText>
-
-                    <View style={styles.rowItem}>
+                    <TouchableOpacity
+                      style={styles.rowItem}
+                      onPress={() => setIsNotificationsExpanded((prev) => !prev)}
+                      activeOpacity={0.82}
+                    >
                       <View style={styles.rowIcon}>
                         <IconSymbol name="bell" size={24} color={primaryIconColor} />
                       </View>
                       <View style={styles.rowContent}>
-                        <ThemedText style={styles.rowTitle}>Benachrichtigungen aktivieren</ThemedText>
-                        <ThemedText style={styles.rowDescription}>Erhalte wichtige Erinnerungen und Updates</ThemedText>
+                        <ThemedText style={styles.rowTitle}>Benachrichtigungen</ThemedText>
+                        <ThemedText style={styles.rowDescription}>
+                          {settings.notifications_enabled
+                            ? `${activeNotificationTypes} Kategorien aktiv`
+                            : 'Global pausiert'}
+                        </ThemedText>
                       </View>
-                      <View style={styles.trailing}>
-                        <Switch
-                          value={settings.notifications_enabled}
-                          onValueChange={handleToggleNotifications}
-                          disabled={isSaving}
-                          trackColor={{ false: '#D1D1D6', true: '#9DBEBB' }}
-                          thumbColor={settings.notifications_enabled ? '#FFFFFF' : '#F4F4F4'}
-                          ios_backgroundColor="#D1D1D6"
+                      <View style={styles.autoDarkTrailing}>
+                        {isSaving ? (
+                          <ActivityIndicator size="small" color={theme.accent} />
+                        ) : null}
+                        <IconSymbol
+                          name={isNotificationsExpanded ? 'chevron.up' : 'chevron.down'}
+                          size={18}
+                          color={trailingIconColor}
                         />
                       </View>
-                    </View>
+                    </TouchableOpacity>
 
-                    {settings.notifications_enabled && (
-                      <>
+                    {isNotificationsExpanded && (
+                      <View style={styles.expandedSection}>
+                        <View style={styles.rowItem}>
+                          <View style={styles.rowIcon}>
+                            <IconSymbol name="bell.badge" size={22} color={primaryIconColor} />
+                          </View>
+                          <View style={styles.rowContent}>
+                            <ThemedText style={styles.rowTitle}>Alle Benachrichtigungen</ThemedText>
+                            <ThemedText style={styles.rowDescription}>Aktiviert die komplette Notification-Logik der App</ThemedText>
+                          </View>
+                          <View style={styles.trailing}>
+                            <Switch
+                              value={settings.notifications_enabled}
+                              onValueChange={handleToggleNotifications}
+                              disabled={isSaving}
+                              trackColor={{ false: '#D1D1D6', true: '#9DBEBB' }}
+                              thumbColor={settings.notifications_enabled ? '#FFFFFF' : '#F4F4F4'}
+                              ios_backgroundColor="#D1D1D6"
+                            />
+                          </View>
+                        </View>
+
+                        <TouchableOpacity style={styles.rowItem} onPress={handleOpenSystemSettings} activeOpacity={0.8}>
+                          <View style={styles.rowIcon}>
+                            <IconSymbol name="gearshape" size={21} color={primaryIconColor} />
+                          </View>
+                          <View style={styles.rowContent}>
+                            <ThemedText style={styles.rowTitle}>System-Einstellungen</ThemedText>
+                            <ThemedText style={styles.rowDescription}>Push-Rechte, Banner und Sounds auf dem Gerät prüfen</ThemedText>
+                          </View>
+                          <View style={styles.trailing}>
+                            <IconSymbol name="chevron.right" size={20} color={trailingIconColor} />
+                          </View>
+                        </TouchableOpacity>
+
+                        <ThemedText style={styles.subsectionLabel}>Einzelne Typen</ThemedText>
+
                         <View style={styles.rowItem}>
                           <View style={styles.rowIcon}>
                             <IconSymbol name="moon.zzz" size={22} color={primaryIconColor} />
                           </View>
                           <View style={styles.rowContent}>
-                            <ThemedText style={styles.rowTitle}>Schlaffenster-Erinnerung</ThemedText>
-                            <ThemedText style={styles.rowDescription}>Benachrichtigung vor dem nächsten Schlaffenster</ThemedText>
+                            <ThemedText style={styles.rowTitle}>Schlaffenster</ThemedText>
+                            <ThemedText style={styles.rowDescription}>Lokale und geräteübergreifende Erinnerung vor dem nächsten Schlaffenster</ThemedText>
                           </View>
                           <View style={styles.trailing}>
                             <Switch
                               value={notifPrefs.sleepWindowReminder}
-                              onValueChange={(v) => updateNotifPref('sleepWindowReminder', v)}
+                              onValueChange={(v) => void handleToggleNotificationPreference('sleepWindowReminder', v)}
+                              disabled={!settings.notifications_enabled}
                               trackColor={{ false: '#D1D1D6', true: '#9DBEBB' }}
                               thumbColor={notifPrefs.sleepWindowReminder ? '#FFFFFF' : '#F4F4F4'}
                               ios_backgroundColor="#D1D1D6"
@@ -725,22 +893,135 @@ export default function AppSettingsScreen() {
                             <ThemedText style={{ fontSize: 22 }}>🍼</ThemedText>
                           </View>
                           <View style={styles.rowContent}>
-                            <ThemedText style={styles.rowTitle}>Fütterungs-Erinnerung</ThemedText>
-                            <ThemedText style={styles.rowDescription}>Benachrichtigung wenn es Zeit zum Füttern wird</ThemedText>
+                            <ThemedText style={styles.rowTitle}>Fütterung</ThemedText>
+                            <ThemedText style={styles.rowDescription}>Benachrichtigung kurz bevor die nächste Mahlzeit erwartet wird</ThemedText>
                           </View>
                           <View style={styles.trailing}>
                             <Switch
                               value={notifPrefs.feedingReminder}
-                              onValueChange={(v) => updateNotifPref('feedingReminder', v)}
+                              onValueChange={(v) => void handleToggleNotificationPreference('feedingReminder', v)}
+                              disabled={!settings.notifications_enabled}
                               trackColor={{ false: '#D1D1D6', true: '#9DBEBB' }}
                               thumbColor={notifPrefs.feedingReminder ? '#FFFFFF' : '#F4F4F4'}
                               ios_backgroundColor="#D1D1D6"
                             />
                           </View>
                         </View>
-                      </>
-                    )}
 
+                        <View style={styles.rowItem}>
+                          <View style={styles.rowIcon}>
+                            <IconSymbol name="sun.max" size={21} color={primaryIconColor} />
+                          </View>
+                          <View style={styles.rowContent}>
+                            <ThemedText style={styles.rowTitle}>Vitamin D</ThemedText>
+                            <ThemedText style={styles.rowDescription}>Täglicher Reminder, standardmäßig aktiv</ThemedText>
+                          </View>
+                          <View style={styles.trailing}>
+                            <Switch
+                              value={notifPrefs.vitaminDReminder}
+                              onValueChange={(v) => void handleToggleNotificationPreference('vitaminDReminder', v)}
+                              disabled={!settings.notifications_enabled}
+                              trackColor={{ false: '#D1D1D6', true: '#9DBEBB' }}
+                              thumbColor={notifPrefs.vitaminDReminder ? '#FFFFFF' : '#F4F4F4'}
+                              ios_backgroundColor="#D1D1D6"
+                            />
+                          </View>
+                        </View>
+
+                        {notifPrefs.vitaminDReminder && (
+                          <>
+                            <TouchableOpacity
+                              style={[
+                                styles.rowItem,
+                                !settings.notifications_enabled && styles.disabledRow,
+                              ]}
+                              onPress={() => setShowVitaminDTimePicker(true)}
+                              disabled={!settings.notifications_enabled}
+                              activeOpacity={0.82}
+                            >
+                              <View style={styles.rowIcon}>
+                                <IconSymbol name="clock" size={20} color={primaryIconColor} />
+                              </View>
+                              <View style={styles.rowContent}>
+                                <ThemedText style={styles.rowTitle}>Vitamin-D-Zeit</ThemedText>
+                                <ThemedText style={styles.rowDescription}>Aktuell täglich um {vitaminDTimeLabel}</ThemedText>
+                              </View>
+                              <View style={styles.trailing}>
+                                <IconSymbol name="chevron.right" size={20} color={trailingIconColor} />
+                              </View>
+                            </TouchableOpacity>
+
+                            {showVitaminDTimePicker && (
+                              <View style={styles.autoDarkPickerContainer}>
+                                <DateTimePicker
+                                  mode="time"
+                                  value={new Date(2000, 0, 1, notifPrefs.vitaminDReminderHour, notifPrefs.vitaminDReminderMinute)}
+                                  onChange={handleVitaminDTimeChange}
+                                  is24Hour
+                                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                                  themeVariant={useLightIcons ? 'dark' : 'light'}
+                                  textColor={Platform.OS === 'ios' ? autoDarkTimeTextColor : undefined}
+                                />
+                                {Platform.OS === 'ios' && (
+                                  <TouchableOpacity
+                                    style={styles.autoDarkPickerDone}
+                                    onPress={() => setShowVitaminDTimePicker(false)}
+                                  >
+                                    <ThemedText style={styles.autoDarkPickerDoneText}>Fertig</ThemedText>
+                                  </TouchableOpacity>
+                                )}
+                              </View>
+                            )}
+                          </>
+                        )}
+
+                        <View style={styles.rowItem}>
+                          <View style={styles.rowIcon}>
+                            <IconSymbol name="person.2" size={21} color={primaryIconColor} />
+                          </View>
+                          <View style={styles.rowContent}>
+                            <ThemedText style={styles.rowTitle}>Partner-Aktivitäten</ThemedText>
+                            <ThemedText style={styles.rowDescription}>Pushs bei Schlaf, Füttern und Wickeln vom Partner</ThemedText>
+                          </View>
+                          <View style={styles.trailing}>
+                            <Switch
+                              value={notifPrefs.partnerActivity}
+                              onValueChange={(v) => void handleToggleNotificationPreference('partnerActivity', v)}
+                              disabled={!settings.notifications_enabled}
+                              trackColor={{ false: '#D1D1D6', true: '#9DBEBB' }}
+                              thumbColor={notifPrefs.partnerActivity ? '#FFFFFF' : '#F4F4F4'}
+                              ios_backgroundColor="#D1D1D6"
+                            />
+                          </View>
+                        </View>
+
+                        <View style={styles.rowItem}>
+                          <View style={styles.rowIcon}>
+                            <IconSymbol name="calendar" size={21} color={primaryIconColor} />
+                          </View>
+                          <View style={styles.rowContent}>
+                            <ThemedText style={styles.rowTitle}>Planner</ThemedText>
+                            <ThemedText style={styles.rowDescription}>Pushs für Termine, Fälligkeiten und überfällige Aufgaben</ThemedText>
+                          </View>
+                          <View style={styles.trailing}>
+                            <Switch
+                              value={notifPrefs.plannerReminder}
+                              onValueChange={(v) => void handleToggleNotificationPreference('plannerReminder', v)}
+                              disabled={!settings.notifications_enabled}
+                              trackColor={{ false: '#D1D1D6', true: '#9DBEBB' }}
+                              thumbColor={notifPrefs.plannerReminder ? '#FFFFFF' : '#F4F4F4'}
+                              ios_backgroundColor="#D1D1D6"
+                            />
+                          </View>
+                        </View>
+
+                        {!settings.notifications_enabled && (
+                          <ThemedText style={styles.inlineNote}>
+                            Einzelne Kategorien bleiben gespeichert, werden aber erst wieder aktiv, wenn globale Benachrichtigungen eingeschaltet sind.
+                          </ThemedText>
+                        )}
+                      </View>
+                    )}
                   </LiquidGlassCard>
 
                   <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
@@ -1281,6 +1562,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+  },
+  expandedSection: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(0,0,0,0.08)',
+    paddingBottom: 10,
+  },
+  subsectionLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    opacity: 0.72,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 4,
+  },
+  inlineNote: {
+    fontSize: 13,
+    opacity: 0.75,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 2,
   },
   autoDarkScheduleContainer: {
     borderTopWidth: StyleSheet.hairlineWidth,

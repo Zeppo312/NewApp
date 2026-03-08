@@ -100,8 +100,8 @@ const ActivityCard: React.FC<ActivityCardProps> = ({ entry, onDelete, onEdit, ma
     }
     if (entry.entry_type === 'sleep') {
       // Verwende die bereits berechneten Werte aus dem Sleep-Tracker
-      if (entry.emoji && entry.label) {
-        return { emoji: entry.emoji, label: entry.label };
+      if (customEmoji && customLabel) {
+        return { emoji: customEmoji, label: customLabel };
       }
       // Fallback falls die Werte nicht gesetzt sind
       return { emoji: '💤', label: 'Schlaf' };

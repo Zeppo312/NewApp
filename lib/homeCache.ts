@@ -12,6 +12,19 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
  */
 
 const CACHE_VERSION = '1.0.0';
+
+const parseCachedValue = <T>(value: string | null, fallback: T): T => {
+  if (value === null) {
+    return fallback;
+  }
+
+  try {
+    return JSON.parse(value) as T;
+  } catch (error) {
+    console.error('Failed to parse cached home data entry:', error);
+    return fallback;
+  }
+};
 const CACHE_KEYS = {
   BABY_INFO: 'home_cache_baby_info',
   DIARY_ENTRIES: 'home_cache_diary_entries',
@@ -123,33 +136,15 @@ export async function loadCachedHomeData(): Promise<CachedHomeData | null> {
     }
 
     // Parse gecachte Daten
-    const babyInfo = cache[CACHE_KEYS.BABY_INFO]
-      ? JSON.parse(cache[CACHE_KEYS.BABY_INFO])
-      : null;
-    const diaryEntries = cache[CACHE_KEYS.DIARY_ENTRIES]
-      ? JSON.parse(cache[CACHE_KEYS.DIARY_ENTRIES])
-      : [];
-    const dailyEntries = cache[CACHE_KEYS.DAILY_ENTRIES]
-      ? JSON.parse(cache[CACHE_KEYS.DAILY_ENTRIES])
-      : [];
-    const todaySleepMinutes = cache[CACHE_KEYS.SLEEP_MINUTES]
-      ? JSON.parse(cache[CACHE_KEYS.SLEEP_MINUTES])
-      : 0;
-    const currentPhase = cache[CACHE_KEYS.CURRENT_PHASE]
-      ? JSON.parse(cache[CACHE_KEYS.CURRENT_PHASE])
-      : null;
-    const phaseProgress = cache[CACHE_KEYS.PHASE_PROGRESS]
-      ? JSON.parse(cache[CACHE_KEYS.PHASE_PROGRESS])
-      : null;
-    const milestones = cache[CACHE_KEYS.MILESTONES]
-      ? JSON.parse(cache[CACHE_KEYS.MILESTONES])
-      : [];
-    const recommendations = cache[CACHE_KEYS.RECOMMENDATIONS]
-      ? JSON.parse(cache[CACHE_KEYS.RECOMMENDATIONS])
-      : [];
-    const userName = cache[CACHE_KEYS.USER_NAME]
-      ? JSON.parse(cache[CACHE_KEYS.USER_NAME])
-      : '';
+    const babyInfo = parseCachedValue(cache[CACHE_KEYS.BABY_INFO] ?? null, null);
+    const diaryEntries = parseCachedValue(cache[CACHE_KEYS.DIARY_ENTRIES] ?? null, []);
+    const dailyEntries = parseCachedValue(cache[CACHE_KEYS.DAILY_ENTRIES] ?? null, []);
+    const todaySleepMinutes = parseCachedValue(cache[CACHE_KEYS.SLEEP_MINUTES] ?? null, 0);
+    const currentPhase = parseCachedValue(cache[CACHE_KEYS.CURRENT_PHASE] ?? null, null);
+    const phaseProgress = parseCachedValue(cache[CACHE_KEYS.PHASE_PROGRESS] ?? null, null);
+    const milestones = parseCachedValue(cache[CACHE_KEYS.MILESTONES] ?? null, []);
+    const recommendations = parseCachedValue(cache[CACHE_KEYS.RECOMMENDATIONS] ?? null, []);
+    const userName = parseCachedValue(cache[CACHE_KEYS.USER_NAME] ?? null, '');
 
     return {
       babyInfo,

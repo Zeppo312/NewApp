@@ -8,7 +8,6 @@ import { View, ActivityIndicator, Text } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 import * as Notifications from 'expo-notifications';
-import * as TaskManager from 'expo-task-manager';
 
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
@@ -19,11 +18,11 @@ import { NavigationProvider } from '@/contexts/NavigationContext';
 import { ConvexProvider, useConvex } from '@/contexts/ConvexContext';
 import { BackendProvider, useBackend } from '@/contexts/BackendContext';
 import { BackgroundProvider } from '@/contexts/BackgroundContext';
-import { checkForNewNotifications, registerBackgroundNotificationTask, BACKGROUND_NOTIFICATION_TASK } from '@/lib/notificationService';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useSleepWindowNotifications } from '@/hooks/useSleepWindowNotifications';
 import { useFeedingReminderNotifications } from '@/hooks/useFeedingReminderNotifications';
 import { useNotificationPreferences } from '@/hooks/useNotificationPreferences';
+import { useVitaminDReminderNotifications } from '@/hooks/useVitaminDReminderNotifications';
 import { initializePersonalization, predictNextSleepWindow, type SleepWindowPrediction } from '@/lib/sleep-window';
 import { predictNextFeedingTime, type FeedingPrediction } from '@/lib/feeding-interval';
 import { getBabyInfo } from '@/lib/baby';
@@ -57,21 +56,9 @@ Sentry.init({
   // spotlight: __DEV__,
 });
 
-// Task für Meilenstein-Benachrichtigungen definieren
-// Dies muss auf Root-Ebene der App geschehen, damit der Task auch im Hintergrund funktioniert
+// Task-Definition früh registrieren. Ohne native Registrierung läuft daraus
+// derzeit kein systemischer Background-Fetch.
 defineMilestoneCheckerTask();
-
-// Definiere den Background-Task für Benachrichtigungen
-TaskManager.defineTask(BACKGROUND_NOTIFICATION_TASK, async () => {
-  try {
-    console.log('Führe Benachrichtigungs-Hintergrundtask aus...');
-    await checkForNewNotifications();
-    return "newData";
-  } catch (error) {
-    console.error('Error in background notification task:', error);
-    return "failed";
-  }
-});
 
 // Konfiguriere das Verhalten von Benachrichtigungen für die gesamte App
 Notifications.setNotificationHandler({
@@ -101,7 +88,7 @@ function RootLayoutNav() {
   const [sleepPrediction, setSleepPrediction] = useState<SleepWindowPrediction | null>(null);
   const [hasActiveSleepEntry, setHasActiveSleepEntry] = useState(false);
   const [feedingPrediction, setFeedingPrediction] = useState<FeedingPrediction | null>(null);
-  const { preferences: notifPrefs } = useNotificationPreferences();
+  const { preferences: notifPrefs, isLoaded: notificationPreferencesLoaded } = useNotificationPreferences();
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [notificationSettingsLoaded, setNotificationSettingsLoaded] = useState(false);
   const sleepEntriesService = useMemo(() => {
@@ -178,17 +165,12 @@ function RootLayoutNav() {
     });
   }, [userId, activeBabyId]);
 
-  // Registriere Push-Notifications und Hintergrundtask, wenn der Benutzer angemeldet ist
+  // Registriere Push-Notifications, wenn der Benutzer angemeldet ist
   useEffect(() => {
     if (userId && notificationSettingsLoaded && notificationsEnabled) {
       // Push-Token registrieren für Remote-Notifications
       requestPermissions().catch(error => {
         console.error('Fehler beim Registrieren von Push-Notifications:', error);
-      });
-
-      // Hintergrundtask registrieren (für Polling, falls nötig)
-      registerBackgroundNotificationTask().catch(error => {
-        console.error('Fehler beim Registrieren des Benachrichtigungs-Hintergrundtasks:', error);
       });
     }
   }, [userId, notificationSettingsLoaded, notificationsEnabled, requestPermissions]);
@@ -376,7 +358,10 @@ function RootLayoutNav() {
   // Sleep Window Notifications Hook (läuft unabhängig vom Screen)
   useSleepWindowNotifications(
     sleepPrediction,
-    notificationSettingsLoaded && notificationsEnabled && notifPrefs.sleepWindowReminder,
+    notificationSettingsLoaded &&
+      notificationPreferencesLoaded &&
+      notificationsEnabled &&
+      notifPrefs.sleepWindowReminder,
     userId,
     activeBabyId,
     expoPushToken,
@@ -386,10 +371,23 @@ function RootLayoutNav() {
   // Feeding Reminder Notifications Hook
   useFeedingReminderNotifications(
     feedingPrediction,
-    notificationSettingsLoaded && notificationsEnabled && notifPrefs.feedingReminder,
+    notificationSettingsLoaded &&
+      notificationPreferencesLoaded &&
+      notificationsEnabled &&
+      notifPrefs.feedingReminder,
     userId,
     activeBabyId,
     expoPushToken
+  );
+
+  useVitaminDReminderNotifications(
+    notificationSettingsLoaded &&
+      notificationPreferencesLoaded &&
+      notificationsEnabled &&
+      notifPrefs.vitaminDReminder,
+    notifPrefs.vitaminDReminderHour,
+    notifPrefs.vitaminDReminderMinute,
+    userId,
   );
 
   // Wir verwenden jetzt die index.tsx Datei als Einstiegspunkt, die die Weiterleitung basierend auf dem Auth-Status übernimmt
@@ -457,6 +455,7 @@ function RootLayoutNav() {
         <Stack.Screen name="community" />
         <Stack.Screen name="notifications" />
         <Stack.Screen name="paywall" />
+        <Stack.Screen name="subscription" />
         <Stack.Screen name="pregnancy-stats" />
         <Stack.Screen name="pregnancy-setup" />
         <Stack.Screen name="milestones" />

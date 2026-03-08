@@ -497,7 +497,7 @@ type CentralTimerProps = {
   pulseAnim: Animated.Value;
 };
 
-const CentralTimer = React.memo(({
+function CentralTimerComponent({
   activeSleepEntry,
   isStartingSleep,
   isStoppingSleep,
@@ -508,7 +508,7 @@ const CentralTimer = React.memo(({
   textPrimary,
   textSecondary,
   pulseAnim,
-}: CentralTimerProps) => {
+}: CentralTimerProps) {
   const [elapsedTime, setElapsedTime] = useState(0);
   const [currentTime, setCurrentTime] = useState(() => new Date());
   const ringSize = screenWidth * 0.75;
@@ -635,7 +635,9 @@ const CentralTimer = React.memo(({
       </Animated.View>
     </View>
   );
-});
+}
+
+const CentralTimer = React.memo(CentralTimerComponent);
 
 const StatusMetricsBar = ({
   stats,
@@ -1191,7 +1193,7 @@ export default function SleepTrackerScreen() {
   const { convexClient } = useConvex();
   const { activeBabyId } = useActiveBaby();
   const { isReadOnlyPreviewMode } = useBabyStatus();
-  const sleepService = user ? useSleepEntriesService() : null;
+  const sleepService = useSleepEntriesService(user?.id);
   const paywallCheckInFlight = useRef(false);
   const triggerHaptic = useCallback(() => {
     try {
@@ -5034,7 +5036,7 @@ export default function SleepTrackerScreen() {
                 <Text style={{ fontWeight: '700', color: textPrimary }}>Schlafdruck</Text> (je länger wach, desto müder) und <Text style={{ fontWeight: '700', color: textPrimary }}>innere Uhr / Tagesrhythmus</Text> (morgens oft länger wach, nachmittags schneller müde).{'\n\n'}
                 Dieses Zusammenspiel ist ein zentrales, etabliertes Rahmenmodell der Schlafforschung (Two-Process Model: homeostatisch + circadian).{'\n\n'}
                 Was Eltern in der Praxis brauchen, ist deshalb meist keine perfekte Minute, sondern eine stressarme Orientierung: Wann wird es wahrscheinlich Zeit, das Baby hinzulegen – ohne starr nach Uhr zu leben?{'\n\n'}
-                <Text style={{ fontStyle: 'italic' }}>Wichtig: Für „die eine richtige Wake-Window-Zahl" gibt es nicht die große harte Evidenz – Babys sind zu individuell. Viele Expert:innen betonen daher: Fenster als Orientierung ja, aber flexibel bleiben und Babyzeichen mitdenken.</Text>
+                <Text style={{ fontStyle: 'italic' }}>Wichtig: Für „die eine richtige Wake-Window-Zahl“ gibt es nicht die große harte Evidenz – Babys sind zu individuell. Viele Expert:innen betonen daher: Fenster als Orientierung ja, aber flexibel bleiben und Babyzeichen mitdenken.</Text>
               </Text>
 
               <Text style={[styles.sleepInfoSubheading, { color: textPrimary }]}>Unser Ansatz</Text>
@@ -5046,7 +5048,7 @@ export default function SleepTrackerScreen() {
                   <Text style={{ fontWeight: '700', color: textPrimary }}>Robust</Text> statt hektisch – Caps, Puffer, Ausreißer werden gedämpft
                 </Text>
                 <Text style={[styles.sleepInfoBullet, { color: textSecondary }]}>
-                  <Text style={{ fontWeight: '700', color: textPrimary }}>Individuell</Text> statt „One size fits all" – dein Baby kalibriert das Modell über die Zeit
+                  <Text style={{ fontWeight: '700', color: textPrimary }}>Individuell</Text> statt „One size fits all“ – dein Baby kalibriert das Modell über die Zeit
                 </Text>
                 <Text style={[styles.sleepInfoBullet, { color: textSecondary }]}>
                   <Text style={{ fontWeight: '700', color: textPrimary }}>Entlastend</Text> statt Druck – wir geben ein Fenster, nicht einen starren Termin
@@ -5092,7 +5094,7 @@ export default function SleepTrackerScreen() {
               <Text style={[styles.sleepInfoStep, { color: textPrimary }]}>7) Clamp + Zeitfenster</Text>
               <Text style={[styles.sleepInfoBody, { color: textSecondary }]}>
                 Wachfenster wird auf 30–300 Min begrenzt. Dann berechnen wir Frühest-/Spätestzeit mit ±25–30% Puffer.{'\n\n'}
-                <Text style={{ fontWeight: '600' }}>Extra:</Text> Wenn das Baby bereits länger wach ist als Fenster + 15 Min Gnadenfrist → Empfehlung: „Jetzt hinlegen".
+                <Text style={{ fontWeight: '600' }}>Extra:</Text> Wenn das Baby bereits länger wach ist als Fenster + 15 Min Gnadenfrist → Empfehlung: „Jetzt hinlegen“.
               </Text>
 
               <View style={[styles.sleepInfoSafety, { backgroundColor: isDark ? 'rgba(255,155,155,0.1)' : 'rgba(255,155,155,0.08)', borderColor: isDark ? 'rgba(255,155,155,0.2)' : 'rgba(255,155,155,0.15)' }]}>

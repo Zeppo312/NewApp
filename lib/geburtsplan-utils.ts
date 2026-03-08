@@ -539,7 +539,7 @@ export const generateAndDownloadPDF = async (babyIconBase64: string | null, setI
     }
 
     // Generiere das PDF mit expo-print
-    const printOptions: Print.PrintToFileOptions = {
+    const printOptions: Parameters<typeof Print.printToFileAsync>[0] = {
       html: htmlContent,
       base64: false,
       ...(Platform.OS === 'ios'

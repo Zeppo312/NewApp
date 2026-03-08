@@ -1,12 +1,13 @@
-import { supabase } from './supabase';
-import { getCachedUser } from './supabase';
-import { getCachedPremiumStatus, getCachedUserSettings } from './appCache';
+import { getCachedUser, supabase } from './supabase';
+import { getCachedPremiumStatus, getCachedUserProfile, getCachedUserSettings } from './appCache';
 
 export const PAYWALL_INTERVAL_MS = 2 * 60 * 60 * 1000; // 2 Stunden
-export const PAYWALL_ACCOUNT_CREATION_GRACE_MS = 24 * 60 * 60 * 1000; // 24 Stunden
+export const PAYWALL_TRIAL_DAYS = 14;
+export const PAYWALL_ACCOUNT_CREATION_GRACE_MS = PAYWALL_TRIAL_DAYS * 24 * 60 * 60 * 1000; // 14 Tage
 
 export type PaywallState = {
   isPro: boolean;
+  isAdmin: boolean;
   lastShownAt: Date | null;
   accountCreatedAt: Date | null;
 };
@@ -21,8 +22,14 @@ const resolveAccountCreatedAt = (user: any): Date | null => {
   return parseDate(user?.created_at);
 };
 
-const mapRowToState = (settings: any, isPro: boolean, accountCreatedAt: Date | null): PaywallState => ({
+const mapRowToState = (
+  settings: any,
+  isPro: boolean,
+  isAdmin: boolean,
+  accountCreatedAt: Date | null,
+): PaywallState => ({
   isPro,
+  isAdmin,
   lastShownAt: parseDate(settings?.paywall_last_shown_at),
   accountCreatedAt,
 });
@@ -30,21 +37,23 @@ const mapRowToState = (settings: any, isPro: boolean, accountCreatedAt: Date | n
 export const fetchPaywallState = async (): Promise<PaywallState> => {
   const { data: userData } = await getCachedUser();
   if (!userData.user) {
-    return { isPro: false, lastShownAt: null, accountCreatedAt: null };
+    return { isPro: false, isAdmin: false, lastShownAt: null, accountCreatedAt: null };
   }
 
   try {
     // Nutze gecachte Daten für bessere Performance
-    const [isPro, settings] = await Promise.all([
+    const [isPro, settings, profile] = await Promise.all([
       getCachedPremiumStatus(),
       getCachedUserSettings(),
+      getCachedUserProfile(),
     ]);
 
     const accountCreatedAt = resolveAccountCreatedAt(userData.user);
-    return mapRowToState(settings, isPro, accountCreatedAt);
+    const isAdmin = profile?.is_admin === true;
+    return mapRowToState(settings, isPro, isAdmin, accountCreatedAt);
   } catch (err) {
     console.error('Exception while fetching paywall state:', err);
-    return { isPro: false, lastShownAt: null, accountCreatedAt: null };
+    return { isPro: false, isAdmin: false, lastShownAt: null, accountCreatedAt: null };
   }
 };
 
@@ -52,7 +61,7 @@ export const shouldShowPaywall = async (
   intervalMs: number = PAYWALL_INTERVAL_MS,
 ): Promise<{ shouldShow: boolean; state: PaywallState }> => {
   const state = await fetchPaywallState();
-  if (state.isPro) {
+  if (state.isPro || state.isAdmin) {
     return { shouldShow: false, state };
   }
 

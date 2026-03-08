@@ -50,20 +50,44 @@ export async function getLinkedUsersWithDetails(): Promise<{
 
     console.log('getLinkedUsersWithDetails: Suche verknüpfte Benutzer für', user.user.id);
 
-    // Verwende die neue RPC-Funktion für account_links
-    const { data, error } = await supabase.rpc(
-      'get_linked_users_with_details',
-      { p_user_id: user.user.id }
-    );
+    // Verwende die stabilere Info-RPC als Primärquelle. Die gleichnamige
+    // *_with_details-Funktion wurde im Repo mehrfach mit unterschiedlichem
+    // Rückgabeformat definiert.
+    const { data, error } = await supabase.rpc('get_linked_users_with_info', {
+      p_user_id: user.user.id,
+    });
 
     console.log('getLinkedUsersWithDetails: Ergebnis', JSON.stringify(data), 'Fehler:', error);
 
     if (error) {
-      console.error('Fehler beim Laden der verknüpften Benutzer:', error);
-      return { success: false, error: error.message };
+      console.warn('getLinkedUsersWithDetails: RPC fehlgeschlagen, Fallback auf Direktabfrage');
+      return await getLinkedUsersAlternative();
     }
 
-    return { success: true, linkedUsers: data || [] };
+    const rawLinkedUsers = Array.isArray((data as any)?.linkedUsers)
+      ? (data as any).linkedUsers
+      : Array.isArray(data)
+        ? data
+        : [];
+
+    const linkedUsers: ConnectedUser[] = rawLinkedUsers.map((entry: any) => {
+      const firstName = typeof entry?.firstName === 'string' ? entry.firstName : '';
+      const lastName = typeof entry?.lastName === 'string' ? entry.lastName : '';
+      const fullName = `${firstName} ${lastName}`.trim();
+
+      return {
+        userId: String(entry?.userId ?? ''),
+        displayName:
+          (typeof entry?.displayName === 'string' && entry.displayName.trim().length > 0)
+            ? entry.displayName
+            : fullName || 'Unbekannter Benutzer',
+        linkRole: typeof entry?.linkRole === 'string' ? entry.linkRole : undefined,
+        relationship: typeof entry?.relationshipType === 'string' ? entry.relationshipType : undefined,
+        status: 'accepted',
+      };
+    }).filter((entry: ConnectedUser) => entry.userId.length > 0);
+
+    return { success: true, linkedUsers };
   } catch (error) {
     console.error('Fehler beim Laden der verknüpften Benutzer:', error);
     return { success: false, error: String(error) };
@@ -734,8 +758,11 @@ export async function checkForActiveSleepEntry(babyId?: string): Promise<{
     }
     
     // Wenn es Partner gibt, prüfe auch deren aktive Einträge
-    let partnerEntry = null;
-    let partnerName = null;
+    let partnerEntry: {
+      user_id: string;
+      profiles?: { display_name?: string | null } | null;
+    } | null = null;
+    let partnerName: string | undefined;
     
     if (partnerIds.length > 0) {
       let partnerQuery = supabase
@@ -755,13 +782,14 @@ export async function checkForActiveSleepEntry(babyId?: string): Promise<{
       if (partnerError) {
         console.error('checkForActiveSleepEntry: Fehler beim Prüfen aktiver Partner-Einträge:', partnerError);
       } else if (partnerData && partnerData.length > 0) {
-        partnerEntry = partnerData[0];
+        const activePartnerEntry = partnerData[0];
+        partnerEntry = activePartnerEntry;
         // Versuche, den Namen des Partners zu ermitteln
-        if (partnerEntry.profiles?.display_name) {
-          partnerName = partnerEntry.profiles.display_name;
+        if (activePartnerEntry.profiles?.display_name) {
+          partnerName = activePartnerEntry.profiles.display_name;
         } else {
           // Nutze die linkedUsers Liste, um den Namen zu finden
-          const matchingPartner = linkedUsers?.find(user => user.userId === partnerEntry.user_id);
+          const matchingPartner = linkedUsers?.find(user => user.userId === activePartnerEntry.user_id);
           partnerName = matchingPartner?.displayName || 'Dein Partner';
         }
       }

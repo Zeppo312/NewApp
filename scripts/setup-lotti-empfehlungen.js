@@ -32,7 +32,7 @@ async function runMigration() {
     ];
     const migrations = migrationFiles.map(file => ({
       file,
-      sql: fs.readFileSync(path.join(__dirname, '..', 'supabase', 'migrations', file), 'utf8'),
+      sql: fs.readFileSync(path.resolve(process.cwd(), 'supabase', 'migrations', file), 'utf8'),
     }));
 
     console.log('📋 Führe Datenbank-Migrationen aus...');

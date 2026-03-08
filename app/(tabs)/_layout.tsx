@@ -1,7 +1,18 @@
-import { Redirect, Tabs, useRouter, useSegments } from 'expo-router';
-import { useNavigation } from '@react-navigation/native';
-import React, { useEffect, useState } from 'react';
+import {
+  Redirect,
+  useRouter,
+  useSegments,
+  withLayoutContext,
+} from 'expo-router';
+import {
+  BottomTabNavigationEventMap,
+  BottomTabNavigationOptions,
+  createBottomTabNavigator,
+} from '@react-navigation/bottom-tabs';
+import { ParamListBase, TabNavigationState } from '@react-navigation/native';
+import React, { useEffect } from 'react';
 import { Platform, View, ActivityIndicator } from 'react-native';
+import type { ComponentProps } from 'react';
 
 import { HapticTab } from '@/components/HapticTab';
 import { IconSymbol } from '@/components/ui/IconSymbol';
@@ -12,41 +23,102 @@ import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 
+const BottomTabNavigator = createBottomTabNavigator().Navigator;
+
+const ExpoTabs = withLayoutContext<
+  BottomTabNavigationOptions,
+  typeof BottomTabNavigator,
+  TabNavigationState<ParamListBase>,
+  BottomTabNavigationEventMap
+>(BottomTabNavigator);
+
+type BottomTabRouter = NonNullable<
+  ComponentProps<typeof BottomTabNavigator>['UNSTABLE_router']
+>;
+
+const createEmptyTabPartialState = () =>
+  ({
+    stale: true,
+    routes: [],
+    history: [],
+    preloadedRouteKeys: [],
+  } as const);
+
+const stableTabRouter: BottomTabRouter = (original) => ({
+  ...original,
+  getRehydratedState(partialState, options) {
+    return original.getRehydratedState(
+      partialState ?? (createEmptyTabPartialState() as any),
+      options
+    );
+  },
+  getStateForAction(state, action, options) {
+    if (action.target && action.target !== state.key) {
+      return null;
+    }
+
+    if (action.type === 'REPLACE') {
+      let nextState = original.getStateForAction(
+        state,
+        {
+          ...action,
+          type: 'JUMP_TO',
+        },
+        options
+      );
+
+      if (
+        !nextState ||
+        nextState.index === undefined ||
+        !Array.isArray(nextState.history)
+      ) {
+        return null;
+      }
+
+      if (nextState.index !== 0) {
+        const previousIndex = nextState.index - 1;
+        nextState = {
+          ...nextState,
+          key: `${nextState.key}-replace`,
+          history: [
+            ...nextState.history.slice(0, previousIndex),
+            ...nextState.history.slice(nextState.index),
+          ],
+        };
+      }
+
+      return nextState;
+    }
+
+    return original.getStateForAction(state, action, options);
+  },
+});
+
+const Tabs = Object.assign(
+  (props: ComponentProps<typeof ExpoTabs>) => (
+    <ExpoTabs {...props} UNSTABLE_router={stableTabRouter} />
+  ),
+  {
+    Screen: ExpoTabs.Screen,
+    Protected: ExpoTabs.Protected,
+  }
+);
+
 export default function TabLayout() {
   const router = useRouter();
   const segments = useSegments();
   const colorScheme = useColorScheme();
   const { session, loading: authLoading } = useAuth();
   const { isBabyBorn, isLoading, isResolved } = useBabyStatus();
-  const [hasInitialResolution, setHasInitialResolution] = useState(false);
-  const [isNavigatorReady, setIsNavigatorReady] = useState(false);
   const theme = Colors[colorScheme ?? 'light'];
   const adaptiveColors = useAdaptiveColors();
-  const navigation = useNavigation();
+  const hasSession = Boolean(session);
   const currentRoute = typeof segments[segments.length - 1] === 'string'
     ? segments[segments.length - 1]
     : null;
 
-  // Navigator-Ready-State tracken
   useEffect(() => {
-    const unsubscribe = navigation.addListener('state', () => {
-      setIsNavigatorReady(true);
-    });
-    // Falls bereits ready (state existiert schon)
-    if (navigation.getState()) {
-      setIsNavigatorReady(true);
-    }
-    return unsubscribe;
-  }, [navigation]);
-
-  useEffect(() => {
-    if (isResolved) {
-      setHasInitialResolution(true);
-    }
-  }, [isResolved]);
-
-  useEffect(() => {
-    if (!hasInitialResolution || isLoading || !isResolved || !isNavigatorReady) return;
+    if (!hasSession || !currentRoute || !isResolved || isLoading) return;
 
     if (currentRoute === 'diary') {
       router.replace(isBabyBorn ? '/(tabs)/home' : '/(tabs)/pregnancy-home');
@@ -72,9 +144,9 @@ export default function TabLayout() {
     if (!isBabyBorn && currentRoute && babyOnlyRoutes.has(currentRoute)) {
       router.replace('/(tabs)/pregnancy-home');
     }
-  }, [currentRoute, hasInitialResolution, isBabyBorn, isLoading, isNavigatorReady, isResolved, router]);
+  }, [currentRoute, hasSession, isBabyBorn, isLoading, isResolved, router]);
 
-  if (authLoading || (!hasInitialResolution && (isLoading || !isResolved || !isNavigatorReady))) {
+  if (authLoading || (hasSession && (!isResolved || isLoading))) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
         <ActivityIndicator size="large" color={theme.accent} />
@@ -82,15 +154,23 @@ export default function TabLayout() {
     );
   }
 
-  if (!session) {
+  if (!hasSession) {
     return <Redirect href="/(auth)/login" />;
   }
 
   // Nur bei dunklem Hintergrundbild die adaptiven Farben verwenden
   const useDarkMode = adaptiveColors.hasCustomBackground && adaptiveColors.isDarkBackground;
+  const getTabVisibilityOptions = (hidden: boolean) =>
+    hidden
+      ? {
+          tabBarButton: () => null,
+          tabBarItemStyle: { display: 'none' as const },
+        }
+      : {};
 
   return (
     <Tabs
+      initialRouteName={isBabyBorn ? 'home' : 'pregnancy-home'}
       screenOptions={{
         tabBarActiveTintColor: useDarkMode ? adaptiveColors.tabIconSelected : theme.tint,
         tabBarInactiveTintColor: useDarkMode ? adaptiveColors.tabIconDefault : undefined,
@@ -114,7 +194,7 @@ export default function TabLayout() {
         options={{
           title: 'Entwicklungssprünge',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="book.fill" color={color} />,
-          href: null, // Aus der Navigation ausblenden
+          ...getTabVisibilityOptions(true),
         }}
       />
       <Tabs.Screen
@@ -122,7 +202,7 @@ export default function TabLayout() {
         options={{
           title: 'Mein Baby',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="person.fill" color={color} />,
-          href: null, // Aus der Navigation ausblenden, aber für die Routing-Funktionalität beibehalten
+          ...getTabVisibilityOptions(true),
         }}
       />
       <Tabs.Screen
@@ -130,7 +210,7 @@ export default function TabLayout() {
         options={{
           title: 'Checkliste',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="checklist" color={color} />,
-          href: null, // Aus der Navigation ausblenden
+          ...getTabVisibilityOptions(true),
         }}
       />
       <Tabs.Screen
@@ -138,7 +218,7 @@ export default function TabLayout() {
         options={{
           title: 'Geburtsplan',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="doc.text.fill" color={color} />,
-          href: null, // Immer ausblenden
+          ...getTabVisibilityOptions(true),
         }}
       />
       <Tabs.Screen
@@ -146,7 +226,7 @@ export default function TabLayout() {
         options={{
           title: 'Mama Selfcare',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="heart.fill" color={color} />,
-          href: null, // Immer ausblenden
+          ...getTabVisibilityOptions(true),
         }}
       />
       <Tabs.Screen
@@ -154,7 +234,7 @@ export default function TabLayout() {
         options={{
           title: 'Babywetter',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="cloud.sun.fill" color={color} />,
-          href: null, // Nicht in der Navigationsleiste anzeigen
+          ...getTabVisibilityOptions(true),
         }}
       />
       <Tabs.Screen
@@ -162,7 +242,7 @@ export default function TabLayout() {
         options={{
           title: 'Gewicht',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="chart.line.uptrend.xyaxis" color={color} />,
-          href: null, // Nicht in der Navigationsleiste anzeigen
+          ...getTabVisibilityOptions(true),
         }}
       />
       <Tabs.Screen
@@ -170,7 +250,7 @@ export default function TabLayout() {
         options={{
           title: 'Größe',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="ruler" color={color} />,
-          href: null, // Nicht in der Navigationsleiste anzeigen
+          ...getTabVisibilityOptions(true),
         }}
       />
 
@@ -181,7 +261,7 @@ export default function TabLayout() {
         options={{
           title: 'Countdown',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="calendar" color={color} />,
-          href: isBabyBorn ? null : undefined,
+          ...getTabVisibilityOptions(isBabyBorn),
         }}
       />
 
@@ -191,7 +271,7 @@ export default function TabLayout() {
         options={{
           title: 'Wehen',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="timer" color={color} />,
-          href: isBabyBorn ? null : undefined,
+          ...getTabVisibilityOptions(isBabyBorn),
         }}
       />
 
@@ -202,7 +282,7 @@ export default function TabLayout() {
         options={{
           title: 'Schlaftracker',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="bed.double.fill" color={color} />,
-          href: isBabyBorn ? undefined : null,
+          ...getTabVisibilityOptions(!isBabyBorn),
         }}
       />
       {/* Tab 2/5: Unser Tag */}
@@ -211,7 +291,7 @@ export default function TabLayout() {
         options={{
           title: 'Unser Tag',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="list.bullet" color={color} />,
-          href: isBabyBorn ? undefined : null, // Nur nach der Geburt anzeigen
+          ...getTabVisibilityOptions(!isBabyBorn),
         }}
       />
 
@@ -222,7 +302,7 @@ export default function TabLayout() {
         options={{
           title: 'Home',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
-          href: isBabyBorn ? null : undefined,
+          ...getTabVisibilityOptions(isBabyBorn),
         }}
       />
 
@@ -232,7 +312,7 @@ export default function TabLayout() {
         options={{
           title: 'Home',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
-          href: isBabyBorn ? undefined : null,
+          ...getTabVisibilityOptions(!isBabyBorn),
         }}
       />
 
@@ -242,7 +322,7 @@ export default function TabLayout() {
         options={{
           title: 'Community',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="bubble.left.and.bubble.right.fill" color={color} />,
-          href: undefined, // Immer anzeigen, unabhängig vom Baby-Status
+          ...getTabVisibilityOptions(false),
         }}
       />
 
@@ -252,7 +332,7 @@ export default function TabLayout() {
         options={{
           title: 'Debug',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="wrench.fill" color={color} />,
-          href: null, // Immer ausblenden
+          ...getTabVisibilityOptions(true),
         }}
       />
 
@@ -262,7 +342,7 @@ export default function TabLayout() {
         options={{
           title: 'Mehr',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="ellipsis.circle.fill" color={color} />,
-          href: undefined, // Immer anzeigen, unabhängig vom Baby-Status
+          ...getTabVisibilityOptions(false),
         }}
       />
     </Tabs>

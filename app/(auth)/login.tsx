@@ -107,10 +107,8 @@ export default function LoginScreen() {
 
     try {
       setIsLoading(true);
-      console.log('Starting authentication process...');
 
       if (isRegistering) {
-        console.log('Registering user');
         // Registrierung mit Supabase
         const { data, error: signUpError } = await signUpWithEmail(email, password);
 
@@ -119,15 +117,9 @@ export default function LoginScreen() {
           throw signUpError;
         }
 
-        console.log('Registration successful:', {
-          hasUser: !!data?.user,
-          hasSession: !!data?.session,
-        });
-
         // Wenn die Registrierung erfolgreich war
         if (data && data.user) {
           // Bei Supabase wird nach der Registrierung automatisch ein OTP gesendet
-          console.log('Registration successful, redirecting to OTP verification...');
           router.replace({
             pathname: './verify-otp',
             params: {
@@ -138,7 +130,6 @@ export default function LoginScreen() {
           return;
         } else if (data && !data.user) {
           // Registrierung erfolgreich, aber User muss OTP bestätigen
-          console.log('Registration pending OTP verification...');
           router.replace({
             pathname: './verify-otp', 
             params: {
@@ -149,7 +140,6 @@ export default function LoginScreen() {
           return;
         }
       } else {
-        console.log('Signing in user');
         // Anmeldung mit Supabase
         const { data, error: signInError } = await signInWithEmail(email, password);
 
@@ -157,11 +147,6 @@ export default function LoginScreen() {
           console.error('Sign in error:', signInError);
           throw signInError;
         }
-
-        console.log('Sign in successful:', {
-          hasUser: !!data?.user,
-          hasSession: !!data?.session,
-        });
 
         // Session explizit bestätigen, damit der Root-Guard nicht in einen Login-Redirect fällt
         const session = data?.session ?? await waitForAuthenticatedSession();
@@ -205,18 +190,12 @@ export default function LoginScreen() {
     setIsLoading(true);
     
     try {
-      console.log('Starting Apple Sign-In...');
       const { data, error: appleError } = await signInWithApple();
       
       if (appleError) {
         console.error('Apple Sign-In error:', appleError);
         throw appleError;
       }
-      
-      console.log('Apple Sign-In successful:', {
-        hasUser: !!data?.user,
-        hasSession: !!data?.session,
-      });
       
       // Check if this is a new user or existing user
       if (data && data.user) {
@@ -233,7 +212,6 @@ export default function LoginScreen() {
         
         // If profile is incomplete or doesn't exist, go to onboarding
         if (!profileData || !profileData.first_name) {
-          console.log('New Apple user, redirecting to onboarding');
           router.replace('../getUserInfo');
         } else {
           // Existing user -> zentraler Root-Guard entscheidet über Startscreen

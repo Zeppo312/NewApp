@@ -198,7 +198,7 @@ export const refreshRecipes = async () => {
 
 export const fetchMyRecipes = async (): Promise<{
   data: RecipeRecord[];
-  error: PostgrestError | null;
+  error: PostgrestError | Error | null;
 }> => {
   try {
     const { data: authData, error: authError } = await getCachedUser();
@@ -207,7 +207,7 @@ export const fetchMyRecipes = async (): Promise<{
     }
     const userId = authData.user?.id;
     if (!userId) {
-      return { data: [], error: new Error('Benutzer ist nicht angemeldet.') as any };
+      return { data: [], error: new Error('Benutzer ist nicht angemeldet.') };
     }
 
     const { data, error } = await supabase

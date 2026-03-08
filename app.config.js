@@ -41,8 +41,10 @@ module.exports = function({ config }) {
       checkAutomatically: 'ON_LOAD',
       fallbackToCacheTimeout: 0
     },
-    // Einheitliche Runtime-Version für alle Builds
-    runtimeVersion: "1.0.0",
+    ios: {
+      ...config.ios,
+      version: config.version,
+    },
     // Zusätzliche Expo-Konfiguration
     extra: {
       ...config.extra,
@@ -53,16 +55,6 @@ module.exports = function({ config }) {
     },
     // Plugins konfigurieren
     plugins,
-    // iOS-spezifische Konfiguration 
-    ios: {
-      ...config.ios,
-      infoPlist: {
-        ...(config.ios?.infoPlist || {}),
-        BGTaskSchedulerPermittedIdentifiers: [
-          "CONTRACTION_TIMER_TASK"
-        ]
-      }
-    }
   };
 
   return updatedConfig;

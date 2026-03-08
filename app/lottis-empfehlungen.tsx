@@ -737,7 +737,7 @@ export default function LottisEmpfehlungenScreen() {
                       placeholderTextColor={theme.tabIconDefault}
                     />
                     <ThemedText style={styles.fieldHint}>
-                      Optional: Standard ist "Zum Produkt"
+                      Optional: Standard ist „Zum Produkt“
                     </ThemedText>
                   </View>
 

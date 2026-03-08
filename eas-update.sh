@@ -15,6 +15,8 @@ fi
 
 echo "✅ Im LottiBaby Projektverzeichnis"
 
+node ./scripts/prep-eas-update.js || exit 1
+
 # EAS Update erstellen
 echo ""
 echo "📦 Erstelle EAS Update..."
@@ -28,4 +30,3 @@ echo "🔄 Benutzer erhalten das Update beim nächsten App-Start"
 echo ""
 echo "📊 Update-Status prüfen:"
 echo "eas update:list"
-

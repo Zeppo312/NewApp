@@ -1,6 +1,6 @@
 import React from 'react';
 import { SafeAreaView, ScrollView, StatusBar, StyleSheet, View } from 'react-native';
-import { Stack, useRouter } from 'expo-router';
+import { Stack } from 'expo-router';
 
 import Header from '@/components/Header';
 import { ThemedBackground } from '@/components/ThemedBackground';
@@ -8,8 +8,6 @@ import { ThemedText } from '@/components/ThemedText';
 import { LAYOUT_PAD } from '@/constants/DesignGuide';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
-
-const PLACEHOLDER = '[Bitte ergänzen]';
 
 const BulletList = ({ items }: { items: string[] }) => (
   <View style={styles.list}>
@@ -29,7 +27,6 @@ const Section = ({ title, children }: { title: string; children: React.ReactNode
 );
 
 export default function ImpressumScreen() {
-  const router = useRouter();
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
 
@@ -44,7 +41,6 @@ export default function ImpressumScreen() {
             title="Impressum"
             subtitle="Anbieterkennzeichnung"
             showBackButton
-            onBackPress={() => router.push('/more')}
           />
 
           <ScrollView contentContainerStyle={styles.content}>

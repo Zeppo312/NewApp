@@ -86,7 +86,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let subscription: { unsubscribe: () => void } | null = null;
     try {
       const authListener = supabase.auth.onAuthStateChange((_event, nextSession) => {
-        console.log('Auth state changed:', _event, nextSession ? 'session exists' : 'no session');
         applySessionSafe(nextSession);
       });
 
@@ -102,8 +101,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           .then((result) => {
             if (!result.success) {
               console.warn('Supabase connection check warning:', result.error);
-            } else {
-              console.log('Supabase connection check: ok');
             }
           })
           .catch((connectionError) => {
@@ -111,8 +108,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           });
 
         // Abrufen der aktuellen Session beim Start
-        const nextSession = await refreshSession();
-        console.log('Got session:', nextSession ? 'session exists' : 'no session');
+        await refreshSession();
       } catch (error) {
         console.error('Error initializing auth:', error);
         // Bei einem Fehler setzen wir den Benutzer auf null

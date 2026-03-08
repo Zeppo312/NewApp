@@ -6,7 +6,6 @@ import { supabase } from './supabase';
 import { getCachedUser } from './supabase';
 import { getAppSettings } from './supabase';
 
-import * as TaskManager from 'expo-task-manager';
 import { router } from 'expo-router';
 
 // Konfiguriere das Verhalten von Benachrichtigungen
@@ -19,9 +18,6 @@ Notifications.setNotificationHandler({
     shouldShowList: true,
   }),
 });
-
-// Definiere den Hintergrund-Task-Namen
-export const BACKGROUND_NOTIFICATION_TASK = 'background-notification-task';
 
 // Diese Funktion registriert das Gerät für Push-Benachrichtigungen
 export async function registerForPushNotificationsAsync() {
@@ -181,6 +177,10 @@ export function navigateToNotificationTarget(type: string, referenceId: string) 
         navigateToPlannerItem(referenceId);
         break;
 
+      case 'vitamin_d_reminder':
+        router.push('/(tabs)/daily_old' as any);
+        break;
+
       default:
         // Standardmäßig zur Community-Ansicht
         console.log('Unknown notification type:', type);
@@ -237,9 +237,10 @@ async function navigateToPlannerItem(plannerItemId: string) {
     }
 
     // Extract day from the nested planner_days object
-    const day = Array.isArray(plannerItem.planner_days)
-      ? plannerItem.planner_days[0]?.day
-      : plannerItem.planner_days?.day;
+    const plannerDays = plannerItem.planner_days as { day?: string | null } | Array<{ day?: string | null }> | null;
+    const day = Array.isArray(plannerDays)
+      ? plannerDays[0]?.day ?? undefined
+      : plannerDays?.day ?? undefined;
 
     // Navigiere zum Planner mit dem spezifischen Datum und Item
     router.push({
@@ -285,8 +286,8 @@ export function setupNotificationListeners(
 
   // Funktion zum Aufräumen der Listener
   return () => {
-    Notifications.removeNotificationSubscription(foregroundSubscription);
-    Notifications.removeNotificationSubscription(responseSubscription);
+    foregroundSubscription.remove();
+    responseSubscription.remove();
   };
 }
 
@@ -306,7 +307,7 @@ async function markNotificationAsRead(notificationId: string) {
   }
 }
 
-// Benachrichtigungen manuell im Hintergrund überprüfen
+// Benachrichtigungen per explizitem Polling prüfen
 export async function checkForNewNotifications() {
   try {
     const { data: userData } = await getCachedUser();
@@ -393,25 +394,3 @@ export async function checkForNewNotifications() {
     console.error('Fehler bei der Hintergrundaktualisierung:', error);
   }
 }
-
-// Background-Task für Benachrichtigungen registrieren
-export async function registerBackgroundNotificationTask() {
-  console.log('Registriere Hintergrundaufgabe für Benachrichtigungen...');
-  try {
-    // Registriere den Task für Background Fetch (jetzt nur noch TaskManager)
-    // Task muss mit TaskManager.defineTask definiert werden (sollte an anderer Stelle im Code sein)
-    const isRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_NOTIFICATION_TASK);
-    if (!isRegistered) {
-      // Hier ggf. weitere Logik, falls Task nicht registriert ist
-      console.log('Task war noch nicht registriert.');
-    }
-    console.log('Hintergrundaufgabe erfolgreich geprüft/registriert');
-    return true;
-  } catch (error) {
-    console.error('Fehler beim Registrieren der Hintergrundaufgabe:', error);
-    return false;
-  }
-}
-
-// Prüfe, ob der Background-Task registriert ist
- 

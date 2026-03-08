@@ -10,7 +10,7 @@ type TableExportConfig = {
   userColumn?: string;
   single?: boolean;
   orderBy?: { column: string; ascending?: boolean };
-  queryBuilder?: (userId: string) => ReturnType<typeof supabase.from>;
+  queryBuilder?: (userId: string) => any;
 };
 
 export type UserDataExportResult = {
@@ -73,6 +73,9 @@ const escapeHtml = (value: string) =>
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+
+const getFileSize = (info: FileSystem.FileInfo | null | undefined) =>
+  info && 'size' in info && typeof info.size === 'number' ? info.size : undefined;
 
 export const exportUserData = async (format: 'pdf' | 'json' = 'pdf'): Promise<UserDataExportResult> => {
   try {
@@ -183,7 +186,7 @@ export const exportUserData = async (format: 'pdf' | 'json' = 'pdf'): Promise<Us
         fileUri,
         summary,
         warnings,
-        bytesWritten: typeof info?.size === 'number' ? info.size : json.length,
+        bytesWritten: getFileSize(info) ?? json.length,
         shared,
       };
     }
@@ -261,7 +264,7 @@ export const exportUserData = async (format: 'pdf' | 'json' = 'pdf'): Promise<Us
       fileUri: pdfUri,
       summary,
       warnings,
-      bytesWritten: typeof info?.size === 'number' ? info.size : undefined,
+      bytesWritten: getFileSize(info),
       shared,
     };
   } catch (error) {

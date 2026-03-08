@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, ReactNode } from 'react';
-import { Animated, Easing } from 'react-native';
+import { Animated, Easing, ViewStyle } from 'react-native';
 
 interface SlideInViewProps {
   children: ReactNode;
@@ -81,29 +81,23 @@ export default function SlideInView({
   }, [visible, delay, duration, easing]);
 
   // Bestimme die Transformations-Range basierend auf der Richtung
-  const getTransform = () => {
-    let translateProperty;
-    let range;
+  const getTransform = (): Animated.WithAnimatedObject<ViewStyle> => {
+    let range: [number, number];
 
     switch (direction) {
       case 'up':
-        translateProperty = 'translateY';
         range = [50, 0];
         break;
       case 'down':
-        translateProperty = 'translateY';
         range = [-50, 0];
         break;
       case 'left':
-        translateProperty = 'translateX';
         range = [50, 0];
         break;
       case 'right':
-        translateProperty = 'translateX';
         range = [-50, 0];
         break;
       default:
-        translateProperty = 'translateY';
         range = [50, 0];
     }
 
@@ -112,8 +106,15 @@ export default function SlideInView({
       outputRange: range,
     });
 
+    if (direction === 'left' || direction === 'right') {
+      return {
+        transform: [{ translateX: translateOutput }],
+        opacity: opacityValue,
+      };
+    }
+
     return {
-      transform: [{ [translateProperty]: translateOutput }],
+      transform: [{ translateY: translateOutput }],
       opacity: opacityValue,
     };
   };
@@ -124,4 +125,3 @@ export default function SlideInView({
 
   return <Animated.View style={getTransform()}>{children}</Animated.View>;
 }
-

@@ -29,8 +29,8 @@ import { getAppSettings } from '@/lib/supabase';
 export function useNotifications() {
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [expoPushToken, setExpoPushToken] = useState<string | null>(null);
-  const notificationListener = useRef<Notifications.Subscription>();
-  const responseListener = useRef<Notifications.Subscription>();
+  const notificationListener = useRef<Notifications.EventSubscription | null>(null);
+  const responseListener = useRef<Notifications.EventSubscription | null>(null);
 
   /**
    * Request notification permissions from the user
@@ -222,6 +222,10 @@ export function useNotifications() {
           } as any);
           break;
 
+        case 'vitamin_d_reminder':
+          router.push('/(tabs)/daily_old' as any);
+          break;
+
         default:
           console.log('Unknown notification type:', type);
       }
@@ -248,8 +252,8 @@ export function useNotifications() {
     return () => {
       notificationListener.current?.remove();
       responseListener.current?.remove();
-      notificationListener.current = undefined;
-      responseListener.current = undefined;
+      notificationListener.current = null;
+      responseListener.current = null;
     };
   }, [handleNotificationNavigation]);
 

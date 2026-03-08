@@ -164,6 +164,7 @@ export interface UserProfile {
   avatar_url?: string;
   due_date?: string;
   is_baby_born?: boolean;
+  is_admin?: boolean;
   [key: string]: any;
 }
 
@@ -231,6 +232,14 @@ export const getCachedPremiumStatus = async (): Promise<boolean> => {
   if (!userData.user) return false;
 
   try {
+    const profile = await getCachedUserProfile();
+    if (profile?.is_admin === true) {
+      const status: PremiumStatus = { isPro: true, checkedAt: Date.now() };
+      setToMemory(key, status, ttl);
+      await setToStorage(key, status);
+      return true;
+    }
+
     const isPro = await hasRevenueCatEntitlement(userData.user.id);
     const status: PremiumStatus = { isPro, checkedAt: Date.now() };
 

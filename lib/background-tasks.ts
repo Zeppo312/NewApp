@@ -98,7 +98,8 @@ export const formatTime = (seconds: number): string => {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 };
 
-// Register the background fetch
+// No system background fetch is registered here; the timer relies on persisted
+// state and foreground/local notification updates.
 
 // Setup notifications
 export const setupNotifications = async () => {
@@ -115,6 +116,8 @@ export const setupNotifications = async () => {
       shouldShowAlert: true,
       shouldPlaySound: false,
       shouldSetBadge: false,
+      shouldShowBanner: true,
+      shouldShowList: true,
     }),
   });
 
@@ -170,12 +173,6 @@ export const startContractionTimer = async () => {
   
   // Update notification
   await updateTimerNotification(timerData);
-  
-  // Register background task if not already registered
-  const isRegistered = await TaskManager.isTaskRegisteredAsync(CONTRACTION_TIMER_TASK);
-  if (!isRegistered) {
-    await registerBackgroundFetch();
-  }
   
   return timerData;
 };

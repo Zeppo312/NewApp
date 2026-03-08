@@ -781,7 +781,7 @@ export default function CountdownScreen() {
                   <ThemedText style={[styles.infoTitle, { color: warnColor }]}>Wichtige Information</ThemedText>
                 </View>
                 <ThemedText style={[styles.bodyText, { color: textSecondary }]}>
-                  Ab dem errechneten Geburtstermin wird die Schwangerschaft als „überfällig" bezeichnet. Etwa 5–10% aller Schwangerschaften dauern länger als 42 Wochen. Die meisten Geburten finden jedoch bis zu zwei Wochen vor oder nach dem ET statt.
+                  Ab dem errechneten Geburtstermin wird die Schwangerschaft als „überfällig“ bezeichnet. Etwa 5–10% aller Schwangerschaften dauern länger als 42 Wochen. Die meisten Geburten finden jedoch bis zu zwei Wochen vor oder nach dem ET statt.
                 </ThemedText>
                 <ThemedText style={[styles.bodyText, { color: textSecondary }]}>
                   Halte regelmäßigen Kontakt zu deiner Hebamme oder deinem Frauenarzt. In dieser Phase werden häufigere Kontrollen durchgeführt, um das Wohlbefinden deines Babys sicherzustellen.

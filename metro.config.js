@@ -15,11 +15,17 @@ const { getSentryExpoConfig } = require("@sentry/react-native/metro");
 const config = getSentryExpoConfig(__dirname);
 
 const backupBlock = /LottiBaby\.bak_mmap[\\/].*/;
-const combinedBlockList = config.resolver?.blockList
-  ? new RegExp(`${config.resolver.blockList.source}|${backupBlock.source}`)
-  : backupBlock;
+const duplicateNodeModulesBlock = /node_modules[\\/].* \d+(?:[\\/].*)?/;
+const tempNodeModulesBlock = /node_modules[\\/]\.(?!bin(?:[\\/]|$))[^\\/]+-[A-Za-z0-9]{6,}(?:[\\/].*)?/;
+const combinedBlockSources = [
+  config.resolver?.blockList?.source,
+  backupBlock.source,
+  duplicateNodeModulesBlock.source,
+  tempNodeModulesBlock.source
+].filter(Boolean);
+const combinedBlockList = new RegExp(combinedBlockSources.join("|"));
 
-// Ignore the backup repo so Metro doesn't pick up its node_modules or sources
+// Ignore the backup repo and Finder-style duplicate packages so Metro does not crawl them.
 config.resolver = {
   ...config.resolver,
   blockList: combinedBlockList,

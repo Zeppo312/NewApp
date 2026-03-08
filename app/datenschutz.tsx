@@ -1,6 +1,6 @@
 import React from 'react';
 import { SafeAreaView, ScrollView, StatusBar, StyleSheet, View } from 'react-native';
-import { Stack, useRouter } from 'expo-router';
+import { Stack } from 'expo-router';
 
 import Header from '@/components/Header';
 import { ThemedBackground } from '@/components/ThemedBackground';
@@ -44,7 +44,6 @@ const Subsection = ({ title, children }: { title: string; children: React.ReactN
 );
 
 export default function DatenschutzScreen() {
-  const router = useRouter();
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
 
@@ -59,7 +58,6 @@ export default function DatenschutzScreen() {
             title="Datenschutz"
             subtitle="Datenschutzerklärung"
             showBackButton
-            onBackPress={() => router.push('/more')}
           />
 
           <ScrollView contentContainerStyle={styles.content}>
@@ -74,11 +72,11 @@ export default function DatenschutzScreen() {
               <Section title="Präambel">
                 <ThemedText style={styles.paragraph}>
                   Mit der folgenden Datenschutzerklärung möchten wir Sie darüber aufklären, welche Arten Ihrer
-                  personenbezogenen Daten (nachfolgend auch kurz als "Daten" bezeichnet) wir zu welchen Zwecken und in
+                  personenbezogenen Daten (nachfolgend auch kurz als „Daten“ bezeichnet) wir zu welchen Zwecken und in
                   welchem Umfang verarbeiten. Die Datenschutzerklärung gilt für alle von uns durchgeführten
                   Verarbeitungen personenbezogener Daten, sowohl im Rahmen der Erbringung unserer Leistungen als auch
                   insbesondere auf unseren Webseiten, in mobilen Applikationen sowie innerhalb externer Onlinepräsenzen,
-                  wie z. B. unserer Social-Media-Profile (nachfolgend zusammenfassend bezeichnet als "Onlineangebot").
+                  wie z. B. unserer Social-Media-Profile (nachfolgend zusammenfassend bezeichnet als „Onlineangebot“).
                 </ThemedText>
                 <ThemedText style={styles.paragraph}>Die verwendeten Begriffe sind nicht geschlechtsspezifisch.</ThemedText>
                 <ThemedText style={styles.paragraph}>Stand: 3. Februar 2026</ThemedText>
@@ -410,7 +408,7 @@ export default function DatenschutzScreen() {
 
               <Section title="Einsatz von Cookies">
                 <ThemedText style={styles.paragraph}>
-                  Unter dem Begriff „Cookies" werden Funktionen, die Informationen auf Endgeräten der Nutzer speichern und
+                  Unter dem Begriff „Cookies“ werden Funktionen, die Informationen auf Endgeräten der Nutzer speichern und
                   aus ihnen auslesen, verstanden. Cookies können ferner in Bezug auf unterschiedliche Anliegen Einsatz
                   finden, etwa zu Zwecken der Funktionsfähigkeit, der Sicherheit und des Komforts von Onlineangeboten
                   sowie der Erstellung von Analysen der Besucherströme. Wir verwenden Cookies gemäß den gesetzlichen
@@ -546,7 +544,7 @@ export default function DatenschutzScreen() {
 
               <Section title="Single-Sign-On-Anmeldung">
                 <ThemedText style={styles.paragraph}>
-                  Als "Single-Sign-On" oder "Single-Sign-On-Anmeldung bzw. -Authentifizierung" werden Verfahren
+                  Als „Single-Sign-On“ oder „Single-Sign-On-Anmeldung bzw. -Authentifizierung“ werden Verfahren
                   bezeichnet, die es Nutzern erlauben, sich mit Hilfe eines Nutzerkontos bei einem Anbieter von
                   Single-Sign-On-Verfahren (z. B. einem sozialen Netzwerk), auch bei unserem Onlineangebot, anzumelden.
                   Voraussetzung der Single-Sign-On-Authentifizierung ist, dass die Nutzer bei dem jeweiligen
@@ -558,7 +556,7 @@ export default function DatenschutzScreen() {
                   Die Authentifizierung erfolgt direkt bei dem jeweiligen Single-Sign-On-Anbieter. Im Rahmen einer
                   solchen Authentifizierung erhalten wir eine Nutzer-ID mit der Information, dass der Nutzer unter dieser
                   Nutzer-ID beim jeweiligen Single-Sign-On-Anbieter eingeloggt ist und eine für uns für andere Zwecke
-                  nicht weiter nutzbare ID (sog "User Handle"). Ob uns zusätzliche Daten übermittelt werden, hängt allein
+                  nicht weiter nutzbare ID (sog. „User Handle“). Ob uns zusätzliche Daten übermittelt werden, hängt allein
                   von dem genutzten Single-Sign-On-Verfahren ab, von den gewählten Datenfreigaben im Rahmen der
                   Authentifizierung und zudem davon, welche Daten Nutzer in den Privatsphäre- oder sonstigen Einstellungen
                   des Nutzerkontos beim Single-Sign-On-Anbieter freigegeben haben. Es können je nach
@@ -625,7 +623,7 @@ export default function DatenschutzScreen() {
               <Section title="Blogs und Publikationsmedien">
                 <ThemedText style={styles.paragraph}>
                   Wir nutzen Blogs oder vergleichbare Mittel der Onlinekommunikation und Publikation (nachfolgend
-                  "Publikationsmedium"). Die Daten der Leser werden für die Zwecke des Publikationsmediums nur insoweit
+                  „Publikationsmedium“). Die Daten der Leser werden für die Zwecke des Publikationsmediums nur insoweit
                   verarbeitet, als es für dessen Darstellung und die Kommunikation zwischen Autoren und Lesern oder aus
                   Gründen der Sicherheit erforderlich ist. Im Übrigen verweisen wir auf die Informationen zur
                   Verarbeitung der Besucher unseres Publikationsmediums im Rahmen dieser Datenschutzhinweise.

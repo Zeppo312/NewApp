@@ -642,7 +642,9 @@ export const getContractions = async () => {
     });
 
     if (rpcError) {
-      console.error('Error fetching contractions with sync info:', rpcError);
+      const isBrokenRpcDefinition = rpcError.code === '42803';
+      const log = isBrokenRpcDefinition ? console.warn : console.error;
+      log('Falling back from get_contractions_with_sync_info:', rpcError);
 
       // Fallback auf die alte Methode
       const { data: fallbackData, error: fallbackError } = await supabase
@@ -822,18 +824,77 @@ export const getLinkedUsersWithDetails = async () => {
     const { data: userData } = await getCachedUser();
     if (!userData.user) return { success: false, error: 'Nicht angemeldet' };
 
-    // Verwenden der neuen RPC-Funktion
-    const { data, error } = await supabase.rpc('get_linked_users_with_details', {
-      p_user_id: userData.user.id
+    const userId = userData.user.id;
+
+    // Bevorzugt die ältere, eindeutigere RPC-Funktion. Einige Datenbankstände
+    // haben get_linked_users_with_details nicht oder mit abweichendem Rückgabeformat.
+    const { data: infoData, error: infoError } = await supabase.rpc('get_linked_users_with_info', {
+      p_user_id: userId
     });
 
-    if (error) {
-      console.error('Error fetching linked users with details:', error);
-      return { success: false, error };
+    if (!infoError) {
+      console.log('Linked users with info:', infoData);
+      return infoData;
     }
 
-    console.log('Linked users with details:', data);
-    return data; // Die Funktion gibt { success: true, linkedUsers: [...] } zurück
+    console.warn('Falling back from get_linked_users_with_info to direct query:', infoError);
+
+    const { data: links, error: linksError } = await supabase
+      .from('account_links')
+      .select('creator_id, invited_id, relationship_type, created_at, accepted_at')
+      .or(`creator_id.eq.${userId},invited_id.eq.${userId}`)
+      .eq('status', 'accepted');
+
+    if (linksError) {
+      console.error('Error fetching linked users with direct query:', linksError);
+      return { success: false, error: linksError };
+    }
+
+    const linkedUserIds = Array.from(
+      new Set(
+        (links ?? [])
+          .map((link: any) => (link.creator_id === userId ? link.invited_id : link.creator_id))
+          .filter((id: unknown): id is string => typeof id === 'string' && id.length > 0)
+      )
+    );
+
+    if (linkedUserIds.length === 0) {
+      return { success: true, linkedUsers: [] };
+    }
+
+    const { data: profiles, error: profilesError } = await supabase
+      .from('profiles')
+      .select('id, first_name, last_name, user_role')
+      .in('id', linkedUserIds);
+
+    if (profilesError) {
+      console.error('Error fetching linked user profiles:', profilesError);
+      return { success: false, error: profilesError };
+    }
+
+    const profileById = new Map((profiles ?? []).map((profile: any) => [profile.id, profile]));
+    const normalizedUsers = linkedUserIds.map((linkedUserId) => {
+      const profile = profileById.get(linkedUserId);
+      const link = (links ?? []).find((entry: any) =>
+        (entry.creator_id === userId && entry.invited_id === linkedUserId) ||
+        (entry.invited_id === userId && entry.creator_id === linkedUserId)
+      );
+
+      return {
+        userId: linkedUserId,
+        firstName: profile?.first_name ?? '',
+        lastName: profile?.last_name ?? '',
+        userRole: profile?.user_role ?? null,
+        relationshipType: link?.relationship_type ?? null,
+        createdAt: link?.created_at ?? null,
+        acceptedAt: link?.accepted_at ?? null,
+      };
+    });
+
+    return {
+      success: true,
+      linkedUsers: normalizedUsers,
+    };
   } catch (err) {
     console.error('Failed to fetch linked users with details:', err);
     return { success: false, error: err };
@@ -1367,6 +1428,13 @@ export type AppSettings = {
   user_id?: string;
   theme: 'light' | 'dark' | 'system';
   notifications_enabled: boolean;
+  sleep_window_notifications_enabled: boolean;
+  feeding_notifications_enabled: boolean;
+  vitamin_d_reminder_enabled: boolean;
+  vitamin_d_reminder_hour: number;
+  vitamin_d_reminder_minute: number;
+  partner_notifications_enabled: boolean;
+  planner_notifications_enabled: boolean;
   due_date?: string | null;
   is_baby_born?: boolean;
   preferred_backend?: 'supabase' | 'convex'; // Backend preference for dual-backend architecture
@@ -1397,6 +1465,13 @@ export const getAppSettings = async () => {
     const defaultSettings: AppSettings = {
       theme: 'light',
       notifications_enabled: true,
+      sleep_window_notifications_enabled: true,
+      feeding_notifications_enabled: true,
+      vitamin_d_reminder_enabled: true,
+      vitamin_d_reminder_hour: 9,
+      vitamin_d_reminder_minute: 0,
+      partner_notifications_enabled: true,
+      planner_notifications_enabled: true,
       due_date: null,
       is_baby_born: false
     };

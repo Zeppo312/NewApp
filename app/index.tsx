@@ -4,13 +4,11 @@ import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { View, ActivityIndicator, Text } from 'react-native';
 import { useEffect, useRef, useState } from 'react';
 import { Colors } from '@/constants/Colors';
-import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 
 export default function Index() {
   const { session, loading, refreshSession } = useAuth();
   const { isBabyBorn, isLoading: isBabyStatusLoading, isResolved: isBabyStatusResolved } = useBabyStatus();
-  const colorScheme = useColorScheme() ?? 'light';
   const adaptiveColors = useAdaptiveColors();
   const isDark = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
   const backgroundColor = isDark ? Colors.dark.background : '#FFFFFF';
@@ -68,14 +66,11 @@ export default function Index() {
     return <Redirect href="/(auth)" />;
   }
 
-  // Wenn der Benutzer angemeldet ist, zur entsprechenden Seite navigieren
-  // basierend auf dem isBabyBorn-Status
-
   if (isBabyBorn) {
     console.log('Baby is born, redirecting to home');
     return <Redirect href="/(tabs)/home" />;
-  } else {
-    console.log('Baby is not born yet, redirecting to pregnancy home');
-    return <Redirect href="/(tabs)/pregnancy-home" />;
   }
+
+  console.log('Baby is not born yet, redirecting to pregnancy home');
+  return <Redirect href="/(tabs)/pregnancy-home" />;
 }

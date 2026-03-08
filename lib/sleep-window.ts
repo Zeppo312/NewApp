@@ -34,7 +34,7 @@ export interface SleepWindowPrediction {
 interface NormalizedEntry {
   id?: string;
   start: Date;
-  end?: Date | null;
+  end: Date | null;
   duration: number | null;
   raw: SleepEntry;
 }
@@ -395,7 +395,7 @@ function collectHistoricalWakeWindows(
           .filter((e) => e.end !== null)
           .sort((a, b) => a.end!.getTime() - b.end!.getTime());
         if (sortedPrevDay.length > 0) {
-          previousNapEnd = sortedPrevDay[sortedPrevDay.length - 1].end;
+          previousNapEnd = sortedPrevDay[sortedPrevDay.length - 1]?.end ?? null;
           break;
         }
       }
@@ -734,10 +734,10 @@ export function resetPersonalizationSnapshot(): void {
 }
 
 function normalizeEntries(entries: SleepEntry[]): NormalizedEntry[] {
-  return entries
-    .map((entry) => {
+  const normalizedEntries = entries
+    .map<NormalizedEntry | null>((entry) => {
       const start = parseDate(entry.start_time);
-      const end = entry.end_time ? parseDate(entry.end_time) : undefined;
+      const end = entry.end_time ? parseDate(entry.end_time) : null;
 
       let duration: number | null = entry.duration_minutes ?? null;
       if (duration === null && start && end) {
@@ -755,8 +755,9 @@ function normalizeEntries(entries: SleepEntry[]): NormalizedEntry[] {
         duration,
         raw: entry,
       };
-    })
-    .filter((entry): entry is NormalizedEntry => Boolean(entry));
+    });
+
+  return normalizedEntries.filter((entry): entry is NormalizedEntry => entry !== null);
 }
 
 function getBaselineWindow(

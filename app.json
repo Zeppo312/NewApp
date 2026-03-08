@@ -2,7 +2,7 @@
   "expo": {
     "name": "Lotti Baby",
     "slug": "LottiBaby",
-    "version": "1.0.2",
+    "version": "1.0.5",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "com.lottibaby.app",
@@ -12,24 +12,14 @@
       "appleTeamId": "FWCPXYUKA2",
       "buildNumber": "2",
       "version": "1.0.5",
-      
       "bundleIdentifier": "com.LottiBaby.app",
       "infoPlist": {
-        "NSCalendarsUsageDescription": "Diese App benötigt Zugriff auf deinen Kalender, um Termine zu synchronisieren.",
-        "NSRemindersUsageDescription": "Diese App benötigt Zugriff auf deine Erinnerungen, um Termine zu synchronisieren.",
-        "NSLocationWhenInUseUsageDescription": "Benötigt, um dir wetterbasierte Kleidungsempfehlungen für dein Baby anzuzeigen.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "Benötigt, um dich bei Wetteränderungen auch im Hintergrund zu informieren.",
-        "NSPhotoLibraryUsageDescription": "Benötigt, um Produktbilder für Lottis Empfehlungen aus deiner Fotomediathek auszuwählen.",
-        "UIBackgroundModes": [
-          "processing",
-          "fetch",
-          "remote-notification"
-        ],
+        "NSCalendarsUsageDescription": "Lotti Baby benötigt Zugriff auf deinen Kalender, damit du Planer- und Arzttermine als Kalendereinträge anlegen, aktualisieren und mit Erinnerungen synchronisieren kannst.",
+        "NSCalendarsFullAccessUsageDescription": "Lotti Baby benötigt Zugriff auf deinen Kalender, damit du Planer- und Arzttermine als Kalendereinträge anlegen, aktualisieren und mit Erinnerungen synchronisieren kannst.",
+        "NSRemindersUsageDescription": "Lotti Baby benötigt Zugriff auf deine Erinnerungen, damit kalenderbezogene Termin-Funktionen auf iOS zuverlässig initialisiert werden und du künftige Erinnerungsfunktionen für Termine nutzen kannst.",
+        "NSRemindersFullAccessUsageDescription": "Lotti Baby benötigt Zugriff auf deine Erinnerungen, damit kalenderbezogene Termin-Funktionen auf iOS zuverlässig initialisiert werden und du künftige Erinnerungsfunktionen für Termine nutzen kannst.",
         "NSSupportsLiveActivities": true,
         "NSSupportsLiveActivitiesFrequentUpdates": true,
-        "BGTaskSchedulerPermittedIdentifiers": [
-          "com.LottiBaby.app.backgroundfetch"
-        ],
         "ITSAppUsesNonExemptEncryption": false
       }
     },
@@ -59,7 +49,29 @@
       "@bacons/apple-targets",
       "expo-router",
       "expo-apple-authentication",
-      "expo-calendar",
+      [
+        "expo-calendar",
+        {
+          "calendarPermission": "Lotti Baby benötigt Zugriff auf deinen Kalender, damit du Planer- und Arzttermine als Kalendereinträge anlegen, aktualisieren und mit Erinnerungen synchronisieren kannst.",
+          "remindersPermission": "Lotti Baby benötigt Zugriff auf deine Erinnerungen, damit kalenderbezogene Termin-Funktionen auf iOS zuverlässig initialisiert werden und du künftige Erinnerungsfunktionen für Termine nutzen kannst."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Lotti Baby benötigt Zugriff auf deine Fotomediathek, damit du Bilder für Profile, Meilensteine, Rezepte, Empfehlungen und Beiträge auswählen kannst.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Lotti Baby verwendet deinen Standort nur während der Nutzung, um lokale Wetterdaten abzurufen und passende Kleidungsempfehlungen für dein Baby anzuzeigen.",
+          "locationAlwaysPermission": false,
+          "locationAlwaysAndWhenInUsePermission": false
+        }
+      ],
       [
         "expo-splash-screen",
         {
@@ -70,6 +82,12 @@
         }
       ],
       "expo-font",
+      [
+        "expo-sensors",
+        {
+          "motionPermission": false
+        }
+      ],
       "expo-web-browser",
 
       "expo-task-manager",

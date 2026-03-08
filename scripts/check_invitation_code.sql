@@ -1,6 +1,6 @@
 /**
  * Dieses Skript überprüft einen Einladungscode in der Datenbank
- * 
+ *
  * Verwendung:
  * 1. Öffnen Sie die Supabase SQL-Konsole
  * 2. Kopieren Sie diesen Code in die Konsole
@@ -12,7 +12,7 @@
 \set invitation_code 'X2Y6JSNX'
 
 -- Ausgabe der Einladungscode-Informationen
-SELECT 
+SELECT
   id,
   creator_id,
   invited_id,
@@ -24,9 +24,9 @@ SELECT
   relationship_type,
   invitation_code = :'invitation_code' AS exact_match,
   LOWER(invitation_code) = LOWER(:'invitation_code') AS case_insensitive_match
-FROM 
+FROM
   public.account_links
-WHERE 
+WHERE
   invitation_code = :'invitation_code'
   OR LOWER(invitation_code) = LOWER(:'invitation_code');
 
@@ -38,10 +38,10 @@ BEGIN
   SELECT COUNT(*) INTO v_count
   FROM public.account_links
   WHERE invitation_code = :'invitation_code';
-  
+
   IF v_count = 0 THEN
     RAISE NOTICE 'Der Einladungscode % existiert nicht in der Datenbank.', :'invitation_code';
-    
+
     -- Ähnliche Codes suchen
     RAISE NOTICE 'Suche nach ähnlichen Codes...';
     FOR r IN (
@@ -54,7 +54,7 @@ BEGIN
     END LOOP;
   ELSE
     RAISE NOTICE 'Der Einladungscode % existiert in der Datenbank.', :'invitation_code';
-    
+
     -- Überprüfen, ob der Code gültig ist
     FOR r IN (
       SELECT status, expires_at, creator_id, invited_id
@@ -70,7 +70,7 @@ BEGIN
       ELSE
         RAISE NOTICE 'Der Code ist gültig und kann verwendet werden.';
       END IF;
-      
+
       RAISE NOTICE 'Ersteller-ID: %', r.creator_id;
     END LOOP;
   END IF;

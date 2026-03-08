@@ -38,6 +38,11 @@ export default function NotificationsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const { user } = useAuth();
+  const followHighlightStyle = {
+    backgroundColor: colorScheme === 'dark' ? '#333333' : '#F0F0F0',
+    borderLeftWidth: 4,
+    borderLeftColor: '#9775FA',
+  } as const;
 
   const [activeTab, setActiveTab] = useState(TABS.MESSAGES);
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -453,7 +458,7 @@ export default function NotificationsScreen() {
         style={[
           styles.notificationItem,
           !item.is_read && styles.unreadItem,
-          styles.followerItem
+          followHighlightStyle
         ]}
         onPress={() => {
           console.log('Navigating to profile from follower component:', item.reference_id);
@@ -555,7 +560,7 @@ export default function NotificationsScreen() {
         style={[
           styles.notificationItem,
           !item.is_read && styles.unreadItem,
-          item.type === 'follow' && styles.followItem
+          item.type === 'follow' && followHighlightStyle
         ]}
         onPress={handlePress}
       >
@@ -956,16 +961,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: 'bold',
     marginLeft: 8,
-  },
-  followItem: {
-    backgroundColor: useColorScheme() === 'dark' ? '#333333' : '#F0F0F0',
-    borderLeftWidth: 4,
-    borderLeftColor: '#9775FA',
-  },
-  followerItem: {
-    backgroundColor: useColorScheme() === 'dark' ? '#333333' : '#F0F0F0',
-    borderLeftWidth: 4,
-    borderLeftColor: '#9775FA',
   },
   followTitle: {
     fontSize: 16,

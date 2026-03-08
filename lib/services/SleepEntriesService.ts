@@ -226,6 +226,14 @@ export class SleepEntriesService extends BaseDataService {
           updatedAt: now,
         });
 
+        if (!convexData) {
+          return {
+            primary: { data: null, error: new Error('Entry could not be created') },
+            secondary: { data: null, error: null },
+            success: false,
+          };
+        }
+
         // Map Convex response to SleepEntry
         const mappedData: SleepEntry = {
           id: convexData._id,
@@ -302,7 +310,7 @@ export class SleepEntriesService extends BaseDataService {
       try {
         const now = new Date().toISOString();
         const convexData = await this.convexClient.mutation(api.sleepEntries.updateSleepEntry, {
-          entryId: entryId,
+          entryId: entryId as any,
           startTime: updates.start_time,
           endTime: updates.end_time ?? undefined,
           durationMinutes: updates.duration_minutes ?? undefined,
@@ -380,7 +388,7 @@ export class SleepEntriesService extends BaseDataService {
 
       try {
         const result = await this.convexClient.mutation(api.sleepEntries.deleteSleepEntry, {
-          entryId: entryId,
+          entryId: entryId as any,
         });
 
         return {

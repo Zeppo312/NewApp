@@ -1878,7 +1878,7 @@ export default function NightSleepEditor({
                   Was macht die Korrektur?
                 </Text>
                 <Text style={[styles.infoModalText, { color: textSecondary }]}>
-                  Es wird nur der Zeitpunkt "Aufgewacht" angepasst.
+                  Es wird nur der Zeitpunkt „Aufgewacht“ angepasst.
                 </Text>
                 <Text style={[styles.infoModalText, { color: textSecondary }]}>
                   Die aktuelle Aufgewacht-Uhrzeit bleibt erhalten und der Tag wird automatisch so gewählt, dass die Nachtdauer plausibel ist.

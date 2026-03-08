@@ -47,17 +47,23 @@ import EmptyState from '@/components/EmptyState';
 import ActivityInputModal from '@/components/ActivityInputModal';
 import WeekScroller from '@/components/WeekScroller';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { useAuth } from '@/contexts/AuthContext';
 
 // Removed old managers; using unified baby_care_entries
 import { SupabaseErrorHandler } from '@/lib/errorHandler';
 import { ConnectionStatus } from '@/components/ConnectionStatus';
 
 import { BlurView } from 'expo-blur';
-import { GlassCard, LiquidGlassCard, LAYOUT_PAD, SECTION_GAP_TOP, SECTION_GAP_BOTTOM, PRIMARY, GLASS_OVERLAY, GLASS_BORDER } from '@/constants/DesignGuide';
+import { GlassCard, LiquidGlassCard, LAYOUT_PAD, SECTION_GAP_TOP, SECTION_GAP_BOTTOM, PRIMARY } from '@/constants/DesignGuide';
 import { useNotifications } from '@/hooks/useNotifications';
 import { usePartnerNotifications } from '@/hooks/usePartnerNotifications';
 import { buildFeedingOverview } from '@/lib/feedingOverview';
 import { sleepActivityService } from '@/lib/sleepActivityService';
+import {
+  loadVitaminDReminderState,
+  saveVitaminDCompletion,
+  type VitaminDChecks,
+} from '@/lib/vitaminDReminder';
 
 // Design Tokens now imported from DesignGuide
 
@@ -74,6 +80,12 @@ const WEEK_LEFTOVER = WEEK_CONTENT_WIDTH - (WEEK_COLS_WIDTH + (COLS - 1) * GUTTE
 const MAX_BAR_H = 140;
 const BABY_MODE_PREVIEW_READ_ONLY_MESSAGE =
   'Du bist im Babymodus zur Vorschau. Tracking ist hier nur nach der Geburt moeglich.';
+
+function toDateKey(d: Date) {
+  const copy = new Date(d);
+  copy.setHours(0, 0, 0, 0);
+  return `${copy.getFullYear()}-${String(copy.getMonth() + 1).padStart(2, '0')}-${String(copy.getDate()).padStart(2, '0')}`;
+}
 
 const formatDurationSeconds = (totalSeconds: number): string => {
   const safe = Math.max(0, Math.floor(totalSeconds));
@@ -240,10 +252,14 @@ export default function DailyScreen() {
   const colorScheme = adaptiveColors.effectiveScheme;
   const theme = Colors[colorScheme];
   const isDark = colorScheme === 'dark' || adaptiveColors.isDarkBackground;
+  const { user } = useAuth();
 
   // Dark Mode angepasste Farben
   const textPrimary = isDark ? Colors.dark.textPrimary : PRIMARY;
   const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
+  const vitaminDCompleteColor = isDark ? '#7FD39C' : '#3FA86B';
+  const vitaminDCompleteSoft = isDark ? 'rgba(127,211,156,0.16)' : 'rgba(63,168,107,0.14)';
+  const vitaminDCompleteBorder = isDark ? 'rgba(127,211,156,0.34)' : 'rgba(63,168,107,0.26)';
   const router = useRouter();
   const { quickAction } = useLocalSearchParams<{ quickAction?: string | string[] }>();
   
@@ -292,6 +308,8 @@ export default function DailyScreen() {
   const [splashStatus, setSplashStatus] = useState<string>('');
   const [splashHint, setSplashHint] = useState<string>('');
   const [splashHintEmoji, setSplashHintEmoji] = useState<string>('');
+  const [vitaminDChecks, setVitaminDChecks] = useState<VitaminDChecks>({});
+  const [vitaminDBusy, setVitaminDBusy] = useState(false);
   const splashEmojiParts = useMemo(() => Array.from(splashEmoji), [splashEmoji]);
   const showReadOnlyPreviewAlert = useCallback(() => {
     Alert.alert('Nur Vorschau', BABY_MODE_PREVIEW_READ_ONLY_MESSAGE);
@@ -310,6 +328,115 @@ export default function DailyScreen() {
   useEffect(() => {
     requestPermissions();
   }, [requestPermissions]);
+
+  useEffect(() => {
+    let active = true;
+
+    (async () => {
+      if (!user?.id || !activeBabyId || !isReady) {
+        if (active) {
+          setVitaminDChecks({});
+        }
+        return;
+      }
+
+      try {
+        const checks = await loadVitaminDReminderState(user.id, activeBabyId);
+        if (!active) return;
+        setVitaminDChecks(checks);
+      } catch (error) {
+        console.error('Daily: failed to load Vitamin-D reminder', error);
+        if (active) {
+          setVitaminDChecks({});
+        }
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [activeBabyId, isReady, user?.id]);
+
+  useEffect(() => {
+    if (!user?.id || !activeBabyId || !isReady) {
+      return;
+    }
+
+    let active = true;
+    const channel = supabase
+      .channel(`vitamin-d-habit-checks:${activeBabyId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'baby_daily_habit_checks',
+        },
+        async (payload) => {
+          const nextRecord =
+            payload && typeof payload === 'object' && 'new' in payload
+              ? (payload.new as { baby_id?: string } | null)
+              : null;
+          const previousRecord =
+            payload && typeof payload === 'object' && 'old' in payload
+              ? (payload.old as { baby_id?: string } | null)
+              : null;
+          const changedBabyId = nextRecord?.baby_id ?? previousRecord?.baby_id ?? null;
+
+          if (changedBabyId && changedBabyId !== activeBabyId) {
+            return;
+          }
+
+          try {
+            const checks = await loadVitaminDReminderState(user.id, activeBabyId);
+            if (!active) return;
+            setVitaminDChecks(checks);
+          } catch (error) {
+            console.error('Daily: failed to refresh Vitamin-D state from realtime', error);
+          }
+        },
+      )
+      .subscribe();
+
+    return () => {
+      active = false;
+      supabase.removeChannel(channel);
+    };
+  }, [activeBabyId, isReady, user?.id]);
+
+  const selectedDateKey = useMemo(() => toDateKey(selectedDate), [selectedDate]);
+  const isSelectedDateToday = selectedDateKey === toDateKey(new Date());
+  const isVitaminDCompleted = !!vitaminDChecks[selectedDateKey];
+  const showVitaminDStrip = !!user?.id && !!activeBabyId && !isVitaminDCompleted;
+  const showVitaminDTimelinePoint = !!user?.id && !!activeBabyId;
+
+  const handleToggleVitaminDCompletion = useCallback(async () => {
+    if (!user?.id || !activeBabyId || vitaminDBusy) return;
+    if (!ensureWritableInCurrentMode()) return;
+
+    setVitaminDBusy(true);
+    try {
+      const nextChecks = await saveVitaminDCompletion(
+        user.id,
+        selectedDateKey,
+        !isVitaminDCompleted,
+        activeBabyId,
+      );
+      setVitaminDChecks(nextChecks);
+    } catch (error) {
+      console.error('Daily: failed to save Vitamin-D status', error);
+      Alert.alert('Fehler', 'Der Vitamin-D-Status konnte nicht gespeichert werden.');
+    } finally {
+      setVitaminDBusy(false);
+    }
+  }, [
+    ensureWritableInCurrentMode,
+    activeBabyId,
+    isVitaminDCompleted,
+    selectedDateKey,
+    user?.id,
+    vitaminDBusy,
+  ]);
 
   const queueLiveStopRequestFromUrl = useCallback((incomingUrl: string | null) => {
     if (!incomingUrl) return;
@@ -1769,6 +1896,87 @@ export default function DailyScreen() {
 
               <QuickActionRow onPressAction={handleQuickActionPress} disabled={isReadOnlyPreviewMode} />
 
+              {showVitaminDStrip && (
+                <GlassCard
+                  style={s.vitaminDStrip}
+                  intensity={22}
+                  overlayColor={isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.28)'}
+                  borderColor={isDark ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.58)'}
+                >
+                  <View style={s.vitaminDStripInner}>
+                    <View
+                      style={[
+                        s.vitaminDLeadIcon,
+                        {
+                          backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.28)',
+                          borderColor: isDark ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.58)',
+                        },
+                      ]}
+                    >
+                      <IconSymbol name="checklist" size={15} color={textPrimary} />
+                    </View>
+
+                    <View style={s.vitaminDStripCopy}>
+                      <Text style={[s.vitaminDTitle, { color: textPrimary }]}>Vitamin D</Text>
+                      <View style={s.vitaminDSignalsRow}>
+                        <View style={s.vitaminDSignal}>
+                          <View
+                            style={[
+                              s.vitaminDSignalDot,
+                              {
+                                backgroundColor: isVitaminDCompleted
+                                  ? textPrimary
+                                  : isDark
+                                  ? 'rgba(255,255,255,0.22)'
+                                  : 'rgba(125,90,80,0.28)',
+                              },
+                            ]}
+                          />
+                          <Text style={[s.vitaminDSignalText, { color: textSecondary }]}>
+                            {isSelectedDateToday
+                              ? isVitaminDCompleted
+                                ? 'Heute erledigt'
+                                : 'Heute offen'
+                              : isVitaminDCompleted
+                              ? 'Tag erledigt'
+                              : 'Tag offen'}
+                          </Text>
+                        </View>
+
+                      </View>
+                    </View>
+
+                    <View style={s.vitaminDControlRow}>
+                      <TouchableOpacity
+                        style={[
+                          s.vitaminDIconButton,
+                          isVitaminDCompleted && s.vitaminDIconButtonActive,
+                          (vitaminDBusy || isReadOnlyPreviewMode) && s.actionDisabled,
+                        ]}
+                        activeOpacity={0.85}
+                        onPress={handleToggleVitaminDCompletion}
+                        disabled={vitaminDBusy}
+                        accessibilityRole="button"
+                        accessibilityLabel={
+                          isVitaminDCompleted
+                            ? 'Vitamin-D-Eintrag zurücksetzen'
+                            : 'Vitamin D als gegeben markieren'
+                        }
+                      >
+                        <Text
+                          style={[
+                            s.vitaminDIconButtonMark,
+                            { color: isVitaminDCompleted ? '#ffffff' : textPrimary },
+                          ]}
+                        >
+                          {isVitaminDCompleted ? '✓' : '+'}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </GlassCard>
+              )}
+
               <Text style={[s.sectionTitle, { color: textSecondary }]}>Kennzahlen</Text>
               <KPISection />
 
@@ -1787,6 +1995,111 @@ export default function DailyScreen() {
                 <Text style={[s.sectionTitle, { color: textSecondary }]}>Timeline</Text>
 
                 <View style={s.entriesSection}>
+                  {showVitaminDTimelinePoint && (
+                    <View style={s.vitaminDTimelineItem}>
+                      <View style={s.vitaminDTimelineRail}>
+                        <View
+                          style={[
+                            s.vitaminDTimelineDot,
+                            {
+                              backgroundColor: isVitaminDCompleted
+                                ? vitaminDCompleteColor
+                                : isDark
+                                ? 'rgba(255,255,255,0.26)'
+                                : 'rgba(125,90,80,0.28)',
+                            },
+                          ]}
+                        />
+                        {entries.length > 0 && (
+                          <View
+                            style={[
+                              s.vitaminDTimelineStem,
+                              {
+                                backgroundColor: isDark
+                                  ? 'rgba(255,255,255,0.14)'
+                                  : 'rgba(125,90,80,0.14)',
+                              },
+                            ]}
+                          />
+                        )}
+                      </View>
+
+                      <GlassCard
+                        style={s.vitaminDTimelineChip}
+                        intensity={18}
+                        overlayColor={
+                          isVitaminDCompleted
+                            ? vitaminDCompleteSoft
+                            : isDark
+                            ? 'rgba(255,255,255,0.06)'
+                            : 'rgba(255,255,255,0.22)'
+                        }
+                        borderColor={
+                          isVitaminDCompleted
+                            ? vitaminDCompleteBorder
+                            : isDark
+                            ? 'rgba(255,255,255,0.14)'
+                            : 'rgba(255,255,255,0.5)'
+                        }
+                      >
+                        <View style={s.vitaminDTimelineChipInner}>
+                          <Text
+                            style={[
+                              s.vitaminDTimelineText,
+                              {
+                                color: isVitaminDCompleted
+                                  ? vitaminDCompleteColor
+                                  : textPrimary,
+                              },
+                            ]}
+                          >
+                            {isSelectedDateToday
+                              ? isVitaminDCompleted
+                                ? 'Vitamin D gegeben'
+                                : 'Vitamin D noch offen'
+                              : isVitaminDCompleted
+                              ? 'Vitamin D dokumentiert'
+                              : 'Vitamin D offen'}
+                          </Text>
+
+                          <View style={s.vitaminDTimelineActions}>
+                            <TouchableOpacity
+                              style={[
+                                s.vitaminDTimelineIconButton,
+                                isVitaminDCompleted
+                                  ? {
+                                      borderColor: vitaminDCompleteBorder,
+                                      backgroundColor: vitaminDCompleteSoft,
+                                    }
+                                  : null,
+                                (vitaminDBusy || isReadOnlyPreviewMode) && s.actionDisabled,
+                              ]}
+                              activeOpacity={0.85}
+                              onPress={handleToggleVitaminDCompletion}
+                              disabled={vitaminDBusy}
+                              accessibilityRole="button"
+                              accessibilityLabel="Vitamin-D-Eintrag zurücksetzen"
+                            >
+                              <Text
+                                style={[
+                                  s.vitaminDIconButtonMark,
+                                  {
+                                    color: isVitaminDCompleted
+                                      ? vitaminDCompleteColor
+                                      : textPrimary,
+                                  },
+                                ]}
+                              >
+                                {isVitaminDCompleted ? '✓' : '+'}
+                              </Text>
+                            </TouchableOpacity>
+
+                          </View>
+                        </View>
+                      </GlassCard>
+                    </View>
+                  )}
+
                   {entries.map((item) => (
                     <ActivityCard
                       key={item.id ?? Math.random().toString()}
@@ -1803,7 +2116,9 @@ export default function DailyScreen() {
                       marginHorizontal={8}
                     />
                   ))}
-                  {entries.length === 0 && <EmptyState type="day" message="Tippe auf ein Symbol um einen Eintrag zu erstellen" />}
+                  {entries.length === 0 && !showVitaminDTimelinePoint && (
+                    <EmptyState type="day" message="Tippe auf ein Symbol um einen Eintrag zu erstellen" />
+                  )}
                 </View>
               </View>
             </View>
@@ -1928,6 +2243,140 @@ const s = StyleSheet.create({
     color: '#7D5A50',
     textAlign: 'center',
     width: '100%',
+  },
+  vitaminDStrip: {
+    marginTop: SECTION_GAP_TOP,
+    borderRadius: 18,
+    overflow: 'hidden',
+  },
+  vitaminDStripInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 22,
+    paddingVertical: 15,
+  },
+  vitaminDLeadIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  vitaminDStripCopy: {
+    flex: 1,
+    paddingLeft: 2,
+    paddingRight: 8,
+  },
+  vitaminDSignalsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 4,
+  },
+  vitaminDSignal: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  vitaminDTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: PRIMARY,
+  },
+  vitaminDSignalDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 999,
+  },
+  vitaminDSignalText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  vitaminDControlRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginLeft: 4,
+  },
+  vitaminDIconButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.58)',
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  vitaminDIconButtonActive: {
+    backgroundColor: PRIMARY,
+    borderColor: 'rgba(255,255,255,0.8)',
+  },
+  vitaminDIconButtonSoftActive: {
+    backgroundColor: 'rgba(255,255,255,0.34)',
+    borderColor: 'rgba(255,255,255,0.78)',
+  },
+  vitaminDIconButtonMark: {
+    fontSize: 17,
+    fontWeight: '800',
+    textAlign: 'center',
+    marginTop: -1,
+  },
+  vitaminDTimelineItem: {
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'stretch',
+    paddingHorizontal: 8,
+  },
+  vitaminDTimelineRail: {
+    width: 12,
+    alignItems: 'center',
+    paddingTop: 10,
+  },
+  vitaminDTimelineDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 999,
+  },
+  vitaminDTimelineStem: {
+    width: 1,
+    flex: 1,
+    marginTop: 5,
+  },
+  vitaminDTimelineChip: {
+    flex: 1,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  vitaminDTimelineChipInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+  },
+  vitaminDTimelineText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  vitaminDTimelineActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  vitaminDTimelineIconButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.48)',
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   recipeButtonSection: {

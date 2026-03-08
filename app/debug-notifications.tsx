@@ -247,6 +247,11 @@ export default function DebugNotificationsScreen() {
       day = newDay;
     }
 
+    if (!day) {
+      addLog('❌ ERROR: Could not load or create planner day');
+      return;
+    }
+
     // Create the event
     const { data: event, error: eventError } = await supabase
       .from('planner_items')
@@ -506,7 +511,8 @@ export default function DebugNotificationsScreen() {
     // Baby-Info laden
     const { data: babyInfo, error: babyError } = await getBabyInfo(activeBabyId);
     if (babyError || !babyInfo?.birth_date) {
-      addLog(`❌ Baby-Info Fehler: ${babyError?.message || 'Kein Geburtsdatum'}`);
+      const babyErrorMessage = babyError instanceof Error ? babyError.message : 'Kein Geburtsdatum';
+      addLog(`❌ Baby-Info Fehler: ${babyErrorMessage}`);
       return;
     }
 
@@ -595,7 +601,8 @@ export default function DebugNotificationsScreen() {
     // Baby-Info laden
     const { data: babyInfo, error: babyError } = await getBabyInfo(activeBabyId);
     if (babyError || !babyInfo?.birth_date) {
-      addLog(`❌ Baby-Info Fehler: ${babyError?.message || 'Kein Geburtsdatum'}`);
+      const babyErrorMessage = babyError instanceof Error ? babyError.message : 'Kein Geburtsdatum';
+      addLog(`❌ Baby-Info Fehler: ${babyErrorMessage}`);
       return;
     }
 

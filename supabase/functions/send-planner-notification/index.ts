@@ -117,7 +117,7 @@ serve(async (req) => {
 
     const { data: recipientSettings, error: recipientSettingsError } = await supabase
       .from('user_settings')
-      .select('notifications_enabled')
+      .select('notifications_enabled, planner_notifications_enabled')
       .eq('user_id', user_id)
       .order('updated_at', { ascending: false })
       .limit(1)
@@ -127,7 +127,10 @@ serve(async (req) => {
       console.error('❌ Error fetching recipient notification settings:', recipientSettingsError);
     }
 
-    if (recipientSettings?.notifications_enabled === false) {
+    if (
+      recipientSettings?.notifications_enabled === false ||
+      recipientSettings?.planner_notifications_enabled === false
+    ) {
       console.log('⏭️ Notifications disabled for recipient, skipping push send');
       return new Response(
         JSON.stringify({ message: 'Notifications disabled for recipient' }),

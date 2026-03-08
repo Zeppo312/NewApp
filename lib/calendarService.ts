@@ -19,6 +19,10 @@ const APPOINTMENT_COLORS = {
   other: '#D9D9D9'    // Grau
 };
 
+type WritableCalendarEventDetails = Parameters<typeof Calendar.createEventAsync>[1] & {
+  color?: string;
+};
+
 /**
  * Anfordern der Kalender-Berechtigungen
  * @returns {Promise<boolean>} True, wenn die Berechtigungen erteilt wurden
@@ -45,15 +49,9 @@ export const getDefaultCalendarId = async (): Promise<string> => {
 
     // Auf iOS suchen wir nach dem iCloud-Kalender oder dem ersten verfügbaren Kalender
     if (Platform.OS === 'ios') {
-      // Zuerst versuchen wir, den Standardkalender zu finden
-      let defaultCalendar = calendars.find(cal => cal.isDefaultCalendar);
-
-      // Wenn kein Standardkalender gefunden wurde, suchen wir nach dem iCloud-Kalender
-      if (!defaultCalendar) {
-        defaultCalendar = calendars.find(
-          cal => cal.source && cal.source.name === 'iCloud' && cal.allowsModifications
-        );
-      }
+      let defaultCalendar = calendars.find(
+        cal => cal.source?.name === 'iCloud' && cal.allowsModifications
+      );
 
       // Wenn immer noch kein Kalender gefunden wurde, nehmen wir den ersten, der Änderungen erlaubt
       if (!defaultCalendar) {
@@ -109,7 +107,7 @@ export const addAppointmentToCalendar = async (appointment: Appointment): Promis
     });
 
     // Erstellen des Kalendereintrags
-    const eventDetails = {
+    const eventDetails: WritableCalendarEventDetails = {
       title: appointment.title,
       startDate: appointment.date,
       endDate: new Date(appointment.date.getTime() + 60 * 60 * 1000), // 1 Stunde später
@@ -122,7 +120,7 @@ export const addAppointmentToCalendar = async (appointment: Appointment): Promis
 
     // Auf iOS können wir die Farbe nicht direkt setzen
     if (Platform.OS === 'android') {
-      eventDetails['color'] = APPOINTMENT_COLORS[appointment.type];
+      eventDetails.color = APPOINTMENT_COLORS[appointment.type];
     }
 
     const eventId = await Calendar.createEventAsync(calendarId, eventDetails);
@@ -153,7 +151,7 @@ export const updateAppointmentInCalendar = async (appointment: Appointment): Pro
     });
 
     // Aktualisieren des Kalendereintrags
-    const eventDetails = {
+    const eventDetails: WritableCalendarEventDetails = {
       title: appointment.title,
       startDate: appointment.date,
       endDate: new Date(appointment.date.getTime() + 60 * 60 * 1000), // 1 Stunde später
@@ -164,7 +162,7 @@ export const updateAppointmentInCalendar = async (appointment: Appointment): Pro
 
     // Auf iOS können wir die Farbe nicht direkt setzen
     if (Platform.OS === 'android') {
-      eventDetails['color'] = APPOINTMENT_COLORS[appointment.type];
+      eventDetails.color = APPOINTMENT_COLORS[appointment.type];
     }
 
     await Calendar.updateEventAsync(appointment.calendarEventId, eventDetails);

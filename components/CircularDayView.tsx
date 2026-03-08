@@ -13,6 +13,14 @@ interface CircularDayViewProps {
   onDeleteEntry?: (id: string) => void;
 }
 
+type ActivityPosition = {
+  id: string;
+  x: number;
+  y: number;
+  angle: number;
+  adjusted?: boolean;
+};
+
 const CircularDayView: React.FC<CircularDayViewProps> = ({ entries, onDeleteEntry }) => {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
@@ -133,7 +141,8 @@ const CircularDayView: React.FC<CircularDayViewProps> = ({ entries, onDeleteEntr
       });
 
       // Berechne die Positionen aller Aktivitätspunkte
-      const positions = sortedEntries.map(entry => {
+      const positions = sortedEntries
+        .map<ActivityPosition | null>(entry => {
         try {
           if (!entry.id || !entry.start_time) return null;
           const { angle } = calculateActivityPosition(entry.start_time);
@@ -148,13 +157,14 @@ const CircularDayView: React.FC<CircularDayViewProps> = ({ entries, onDeleteEntr
           console.log('Fehler bei der Berechnung der Position für Eintrag:', entry.id, error);
           return null;
         }
-      }).filter(Boolean);
+      })
+        .filter((position): position is ActivityPosition => position !== null);
 
       // Minimaler Abstand zwischen Punkten
       const minDistance = 55; // Erhöhter Mindestabstand zwischen den Punkten
 
       // Vereinfachte Anpassung der Positionen, um Überlappungen zu vermeiden
-      const adjustedPositions = [];
+      const adjustedPositions: Array<ActivityPosition | null> = [];
 
       // Einfachere Positionsanpassung ohne komplexe Berechnungen
       for (let i = 0; i < positions.length; i++) {
@@ -427,7 +437,7 @@ const CircularDayView: React.FC<CircularDayViewProps> = ({ entries, onDeleteEntr
   };
 
   // Finde die letzte Aktivität mit Fehlerbehandlung
-  let lastActivity = null;
+  let lastActivity: DailyEntry | null = null;
   try {
     if (entries.length > 0) {
       // Filtere ungültige Einträge heraus

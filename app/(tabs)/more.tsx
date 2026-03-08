@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback, useState } from 'react';
 import { StyleSheet, ScrollView, View, TouchableOpacity, Alert, SafeAreaView, StatusBar } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedBackground } from '@/components/ThemedBackground';
@@ -7,10 +7,12 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { Redirect, useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '@/contexts/AuthContext';
 import Header from '@/components/Header';
 import { LiquidGlassCard, GLASS_OVERLAY, LAYOUT_PAD } from '@/constants/DesignGuide';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
+import { getCachedPremiumStatus, invalidatePremiumStatusCache } from '@/lib/appCache';
 
 
 export default function MoreScreen() {
@@ -20,6 +22,7 @@ export default function MoreScreen() {
   const { isBabyBorn } = useBabyStatus();
   const router = useRouter();
   const { session, signOut } = useAuth();
+  const [isPremiumActive, setIsPremiumActive] = useState(false);
 
   // Nur bei dunklem Hintergrundbild die adaptiven Farben verwenden
   const useDarkMode = adaptiveColors.hasCustomBackground && adaptiveColors.isDarkBackground;
@@ -27,9 +30,40 @@ export default function MoreScreen() {
   const iconAccentColor = useLightIcons ? '#FFFFFF' : theme.accent;
   const iconSecondaryColor = useLightIcons ? 'rgba(255,255,255,0.9)' : theme.tabIconDefault;
 
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+
+      const loadPremiumStatus = async () => {
+        try {
+          await invalidatePremiumStatusCache();
+          const isPremium = await getCachedPremiumStatus();
+          if (active) {
+            setIsPremiumActive(isPremium);
+          }
+        } catch (error) {
+          console.error('Failed to refresh premium status:', error);
+          if (active) {
+            setIsPremiumActive(false);
+          }
+        }
+      };
+
+      loadPremiumStatus();
+
+      return () => {
+        active = false;
+      };
+    }, [])
+  );
+
   if (!session) {
     return <Redirect href="/(auth)/login" />;
   }
+
+  const handlePremiumPress = async () => {
+    router.push('/subscription');
+  };
 
   // Abmelden-Funktion
   const handleLogout = async () => {
@@ -78,6 +112,33 @@ export default function MoreScreen() {
         />
         
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
+          <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
+            <ThemedText style={styles.sectionTitle}>
+              Abo
+            </ThemedText>
+
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={handlePremiumPress}
+            >
+              <View style={styles.menuItemIcon}>
+                <IconSymbol name="star.fill" size={24} color={iconAccentColor} />
+              </View>
+              <View style={styles.menuItemContent}>
+                <ThemedText style={styles.menuItemTitle}>
+                  {isPremiumActive ? 'Abo verwalten' : 'Abo ansehen'}
+                </ThemedText>
+                <ThemedText style={styles.menuItemDescription}>
+                  {isPremiumActive
+                    ? 'Sieh nach, welches Abo aktiv ist, und verwalte deinen Zugang'
+                    : 'Sieh deinen Status an oder wähle ein Abo aus'}
+                </ThemedText>
+              </View>
+              <IconSymbol name="chevron.right" size={20} color={iconSecondaryColor} />
+            </TouchableOpacity>
+
+          </LiquidGlassCard>
+
           <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
             <ThemedText style={styles.sectionTitle}>
               Baby & Familie
@@ -262,6 +323,14 @@ export default function MoreScreen() {
             >
               <ThemedText style={styles.legalTitle}>Datenschutz</ThemedText>
               <ThemedText style={styles.legalMeta}>Stand: 03.02.2026</ThemedText>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.legalItem}
+              onPress={() => router.push('/nutzungsbedingungen' as any)}
+            >
+              <ThemedText style={styles.legalTitle}>Nutzungsbedingungen</ThemedText>
+              <ThemedText style={styles.legalMeta}>Stand: 07.03.2026</ThemedText>
             </TouchableOpacity>
 
             <TouchableOpacity

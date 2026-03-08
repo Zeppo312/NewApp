@@ -117,7 +117,7 @@ export const getPoll = async (pollId: string) => {
     }
 
     // Optionen mit Benutzerabstimmungen kombinieren
-    const optionsWithVotes = results.map(option => ({
+    const optionsWithVotes = results.map((option: { option_id: string }) => ({
       ...option,
       has_voted: userVotes ? userVotes.some(vote => vote.option_id === option.option_id) : false
     }));

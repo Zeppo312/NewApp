@@ -56,7 +56,7 @@ serve(async (req: Request) => {
 
     const { data: recipientSettings, error: recipientSettingsError } = await supabase
       .from('user_settings')
-      .select('notifications_enabled')
+      .select('notifications_enabled, sleep_window_notifications_enabled, feeding_notifications_enabled')
       .eq('user_id', reminder.user_id)
       .order('updated_at', { ascending: false })
       .limit(1)
@@ -66,7 +66,15 @@ serve(async (req: Request) => {
       console.error('❌ Error fetching recipient notification settings:', recipientSettingsError);
     }
 
-    if (recipientSettings?.notifications_enabled === false) {
+    const reminderTypeEnabled =
+      reminder.reminder_type === 'sleep_window'
+        ? recipientSettings?.sleep_window_notifications_enabled !== false
+        : recipientSettings?.feeding_notifications_enabled !== false;
+
+    if (
+      recipientSettings?.notifications_enabled === false ||
+      !reminderTypeEnabled
+    ) {
       console.log('⏭️ Notifications disabled for recipient, skipping push send');
       return new Response(JSON.stringify({ message: 'Notifications disabled for recipient' }), {
         headers: { 'Content-Type': 'application/json' },

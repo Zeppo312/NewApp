@@ -38,8 +38,15 @@ import { supabase } from '@/lib/supabase';
 import { getBabyInfo, saveBabyInfo } from '@/lib/baby';
 import { setLocalProfileName } from '@/lib/localProfile';
 import * as ImagePicker from 'expo-image-picker';
-import { uploadProfileAvatar, deleteProfileAvatar, deleteUserAccount } from '@/lib/profile';
+import {
+  buildAccountDeletionWarningMessage,
+  deleteProfileAvatar,
+  deleteUserAccount,
+  getAccountDeletionRequirements,
+  uploadProfileAvatar,
+} from '@/lib/profile';
 import { compressImage } from '@/lib/imageCompression';
+import { openSubscriptionManagement } from '@/lib/subscriptionManagement';
 
 const { width: screenWidth } = Dimensions.get('window');
 const PRIMARY_TEXT = '#7D5A50';
@@ -404,14 +411,30 @@ export default function ProfilScreen() {
 
   const handleDeleteProfileRequest = () => {
     if (isDeletingProfile) return;
-    Alert.alert(
-      'Profil & Konto löschen',
-      'Möchtest du dein Profil und dein Konto wirklich löschen? Alle gespeicherten Daten werden dauerhaft entfernt.',
-      [
-        { text: 'Abbrechen', style: 'cancel' },
-        { text: 'Löschen', style: 'destructive', onPress: deleteProfileAndSignOut },
-      ],
-    );
+    void confirmDeleteProfileRequest();
+  };
+
+  const confirmDeleteProfileRequest = async () => {
+    try {
+      const { data: requirements, error } = await getAccountDeletionRequirements();
+      if (error) throw error;
+
+      Alert.alert(
+        'Profil & Konto löschen',
+        `Möchtest du dein Profil und dein Konto wirklich löschen? Alle gespeicherten Daten werden dauerhaft entfernt.\n\n${buildAccountDeletionWarningMessage(requirements)}`,
+        [
+          { text: 'Abbrechen', style: 'cancel' },
+          { text: 'Abo verwalten', onPress: () => void openSubscriptionManagement() },
+          { text: 'Löschen', style: 'destructive', onPress: deleteProfileAndSignOut },
+        ],
+      );
+    } catch (error: any) {
+      console.error('Failed to load profile deletion requirements:', error);
+      Alert.alert(
+        'Fehler',
+        error?.message || 'Der Löschhinweis konnte nicht geladen werden. Bitte versuche es erneut.',
+      );
+    }
   };
 
   const deleteProfileAndSignOut = async () => {
@@ -436,10 +459,10 @@ export default function ProfilScreen() {
           },
         ],
       );
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error deleting profile:', error);
       setIsDeletingProfile(false);
-      Alert.alert('Fehler', 'Dein Profil konnte nicht gelöscht werden.');
+      Alert.alert('Fehler', error?.message || 'Dein Profil konnte nicht gelöscht werden.');
     }
   };
 
