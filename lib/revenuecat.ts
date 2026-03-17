@@ -27,8 +27,46 @@ let configuredForUserId: string | null = null;
 const isExpoGo = () => Constants.appOwnership === 'expo';
 
 const getRevenueCatApiKey = () => {
-  if (Platform.OS === 'ios') return process.env.EXPO_PUBLIC_RC_IOS_KEY ?? null;
-  if (Platform.OS === 'android') return process.env.EXPO_PUBLIC_RC_ANDROID_KEY ?? null;
+  if (Platform.OS === 'ios') {
+    return process.env.EXPO_PUBLIC_RC_IOS_KEY ?? process.env.EXPO_PUBLIC_REVENUECAT_IOS_API_KEY ?? null;
+  }
+
+  if (Platform.OS === 'android') {
+    return process.env.EXPO_PUBLIC_RC_ANDROID_KEY ?? process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY ?? null;
+  }
+
+  return null;
+};
+
+let didWarnTestKey = false;
+
+export const getRevenueCatConfigurationIssue = () => {
+  if (Platform.OS === 'web') return null;
+
+  const apiKey = getRevenueCatApiKey();
+  if (!apiKey) {
+    return 'RevenueCat API Key fehlt. Setze EXPO_PUBLIC_RC_IOS_KEY/EXPO_PUBLIC_REVENUECAT_IOS_API_KEY (iOS) und/oder EXPO_PUBLIC_RC_ANDROID_KEY/EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY (Android).';
+  }
+
+  if (Platform.OS === 'ios') {
+    if (isExpoGo() && !apiKey.startsWith('test_')) {
+      return 'In Expo Go (Preview API Mode) sind echte Käufe nicht verfügbar. Verwende den RevenueCat Test Store Key (beginnt mit "test_") für EXPO_PUBLIC_RC_IOS_KEY oder nutze eine Development Build/TestFlight für echte Käufe.';
+    }
+
+    if (!isExpoGo() && apiKey.startsWith('test_')) {
+      if (__DEV__) {
+        if (!didWarnTestKey) {
+          didWarnTestKey = true;
+          console.warn(
+            '[RevenueCat] Test-Key erkannt in Development Build. Käufe sind deaktiviert. Für echte Käufe EXPO_PUBLIC_RC_IOS_KEY auf einen appl_-Key setzen.',
+          );
+        }
+        return null;
+      }
+      return 'RevenueCat ist für diesen iOS-Build falsch konfiguriert. In TestFlight und App Store muss EXPO_PUBLIC_RC_IOS_KEY mit "appl_" beginnen.';
+    }
+  }
+
   return null;
 };
 
@@ -36,17 +74,9 @@ export async function initRevenueCat(userId: string) {
   if (Platform.OS === 'web') return;
 
   const apiKey = getRevenueCatApiKey();
-  if (!apiKey) {
-    throw new Error(
-      'RevenueCat API Key fehlt. Setze EXPO_PUBLIC_RC_IOS_KEY (iOS) und/oder EXPO_PUBLIC_RC_ANDROID_KEY (Android).',
-    );
-  }
-
-  if (isExpoGo() && !apiKey.startsWith('test_')) {
-    throw new Error(
-      'In Expo Go (Preview API Mode) sind echte Käufe nicht verfügbar. Verwende den RevenueCat Test Store Key (beginnt mit "test_") für EXPO_PUBLIC_RC_IOS_KEY oder nutze eine Development Build/TestFlight für echte Käufe.',
-    );
-  }
+  const configurationIssue = getRevenueCatConfigurationIssue();
+  if (configurationIssue) throw new Error(configurationIssue);
+  if (!apiKey) throw new Error('RevenueCat API Key fehlt.');
 
   if (configuredForUserId === userId) return;
 

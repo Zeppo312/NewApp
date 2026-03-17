@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Redirect, useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 
@@ -217,7 +218,7 @@ export default function SubscriptionScreen() {
         >
           {/* Status Card */}
           <LiquidGlassCard
-            style={styles.sectionCard}
+            style={[styles.sectionCard, canChoosePlan && styles.sectionCardTinted]}
             intensity={26}
             overlayColor={glassOverlay}
           >
@@ -349,10 +350,56 @@ export default function SubscriptionScreen() {
             )}
           </LiquidGlassCard>
 
+          {/* Hervorgehobener CTA wenn kein Abo */}
+          {!isLoading && canChoosePlan ? (
+            <View style={styles.ctaCard}>
+              <LinearGradient
+                colors={['#6B4FCE', '#8E6BE8']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={StyleSheet.absoluteFill}
+              />
+              <View style={styles.ctaInner}>
+                <View style={styles.ctaIconWrap}>
+                  <IconSymbol name="star.fill" size={26} color="#FFD8B5" />
+                </View>
+                <ThemedText style={styles.ctaTitle}>
+                  Lotti Baby freischalten
+                </ThemedText>
+                <ThemedText style={styles.ctaDescription}>
+                  Wähle dein Abo und nutze alle Funktionen ohne Einschränkung weiter.
+                </ThemedText>
+                <TouchableOpacity
+                  style={styles.ctaButton}
+                  activeOpacity={0.8}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/paywall',
+                      params: {
+                        next: '/subscription',
+                        origin: 'subscription-screen',
+                      },
+                    } as any)
+                  }
+                >
+                  <LinearGradient
+                    colors={['#FFCFAE', '#FEB493']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={StyleSheet.absoluteFill}
+                  />
+                  <ThemedText style={styles.ctaButtonText}>
+                    Jetzt Abo auswählen
+                  </ThemedText>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : null}
+
           {/* Aktionen */}
           {!isLoading && showActions ? (
             <LiquidGlassCard
-              style={styles.sectionCard}
+              style={[styles.sectionCard, canChoosePlan && styles.sectionCardTinted]}
               intensity={26}
               overlayColor={glassOverlay}
             >
@@ -385,49 +432,6 @@ export default function SubscriptionScreen() {
                       ]}
                     >
                       Öffne deine Abo-Verwaltung im App Store oder Google Play
-                    </ThemedText>
-                  </View>
-                  <IconSymbol
-                    name="chevron.right"
-                    size={20}
-                    color={iconSecondaryColor}
-                  />
-                </TouchableOpacity>
-              ) : null}
-
-              {canChoosePlan ? (
-                <TouchableOpacity
-                  style={styles.menuItem}
-                  onPress={() =>
-                    router.push({
-                      pathname: '/paywall',
-                      params: {
-                        next: '/subscription',
-                        origin: 'subscription-screen',
-                      },
-                    } as any)
-                  }
-                >
-                  <View style={styles.menuItemIcon}>
-                    <IconSymbol
-                      name="star.fill"
-                      size={24}
-                      color={iconAccentColor}
-                    />
-                  </View>
-                  <View style={styles.menuItemContent}>
-                    <ThemedText
-                      style={[styles.menuItemTitle, { color: textPrimary }]}
-                    >
-                      Abo auswählen
-                    </ThemedText>
-                    <ThemedText
-                      style={[
-                        styles.menuItemDescription,
-                        { color: textSecondary },
-                      ]}
-                    >
-                      Öffne die Paywall und wähle dein Monats- oder Jahresabo
                     </ThemedText>
                   </View>
                   <IconSymbol
@@ -562,6 +566,11 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     overflow: 'hidden',
   },
+  sectionCardTinted: {
+    borderWidth: 1,
+    borderColor: 'rgba(107,79,206,0.15)',
+    backgroundColor: 'rgba(107,79,206,0.04)',
+  },
   loadingWrap: {
     paddingVertical: 40,
     alignItems: 'center',
@@ -676,6 +685,62 @@ const styles = StyleSheet.create({
   menuItemDescription: {
     fontSize: 13,
     lineHeight: 18,
+  },
+  /* CTA Card */
+  ctaCard: {
+    marginBottom: 16,
+    borderRadius: 22,
+    overflow: 'hidden',
+    shadowColor: '#6B4FCE',
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 8,
+  },
+  ctaInner: {
+    padding: 24,
+    alignItems: 'center',
+  },
+  ctaIconWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  ctaTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#FDFBF6',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  ctaDescription: {
+    fontSize: 14,
+    color: 'rgba(253,251,246,0.85)',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 20,
+    maxWidth: 300,
+  },
+  ctaButton: {
+    width: '100%',
+    paddingVertical: 16,
+    borderRadius: 18,
+    alignItems: 'center',
+    overflow: 'hidden',
+    shadowColor: '#FEB493',
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+  },
+  ctaButtonText: {
+    color: '#5E3DB3',
+    fontSize: 17,
+    fontWeight: '800',
+    letterSpacing: 0.3,
   },
   /* Note row */
   noteRow: {

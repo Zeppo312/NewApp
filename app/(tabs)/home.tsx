@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Animated, Easing, StyleSheet, ScrollView, View, TouchableOpacity, Text, SafeAreaView, StatusBar, Image, ActivityIndicator, RefreshControl, Alert, Platform, StyleProp, ViewStyle } from 'react-native';
 import { CachedImage } from '@/components/CachedImage';
-import { Redirect, useRouter } from 'expo-router';
+import { usePathname, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useFocusEffect } from '@react-navigation/native';
 import { ThemedText } from '@/components/ThemedText';
@@ -262,6 +262,7 @@ export default function HomeScreen() {
   const { user } = useAuth();
   const { activeBabyId } = useActiveBaby();
   const { isBabyBorn } = useBabyStatus();
+  const pathname = usePathname();
   const router = useRouter();
   const DEFAULT_OVERVIEW_HEIGHT = 230;
   const PRODUCT_ROTATION_INITIAL_DELAY_MS = 10000;
@@ -1472,9 +1473,10 @@ export default function HomeScreen() {
     );
   };
 
-  if (!isBabyBorn) {
-    return <Redirect href="/(tabs)/pregnancy-home" />;
-  }
+  // Route-Guard in _layout.tsx handles mode-based redirects centrally.
+  // An inline redirect here fires before isLoading settles and breaks
+  // navigation flows like "Kind anlegen" (which temporarily sets
+  // isBabyBorn=false while navigating to the baby-edit screen).
 
   return (
     <ThemedBackground style={styles.backgroundImage}>

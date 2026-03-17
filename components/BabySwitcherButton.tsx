@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import {
   Alert,
+  InteractionManager,
   Modal,
   Pressable,
   StyleSheet,
@@ -80,6 +81,26 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
     onOpenChange?.(nextIsOpen);
   };
 
+  const navigateFromModal = (
+    href: string | { pathname: string; params?: Record<string, string> },
+    options?: { replace?: boolean; viewMode?: 'baby' | 'pregnancy' | null },
+  ) => {
+    if (options?.viewMode !== undefined) {
+      setTemporaryViewMode(options.viewMode);
+    }
+
+    setModalOpen(false);
+
+    InteractionManager.runAfterInteractions(() => {
+      if (options?.replace) {
+        router.replace(href as any);
+        return;
+      }
+
+      router.push(href as any);
+    });
+  };
+
   const displayInitial = useMemo(() => {
     const name = activeBaby?.name?.trim();
     if (name) return name.charAt(0).toUpperCase();
@@ -102,11 +123,12 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
 
   const handleSelectBaby = async (babyId: string) => {
     try {
-      setTemporaryViewMode(null);
       await setActiveBabyId(babyId);
       const targetRoute = await getHomeRouteForBaby(babyId);
-      setModalOpen(false);
-      router.replace(targetRoute as any);
+      navigateFromModal(targetRoute, {
+        replace: true,
+        viewMode: targetRoute === '/(tabs)/home' ? 'baby' : 'pregnancy',
+      });
     } catch (error) {
       console.error('Error switching active baby:', error);
       setModalOpen(false);
@@ -132,10 +154,17 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
       const created = Array.isArray(data) ? data[0] : data;
       await refreshBabies();
       if (created?.id) {
-        setTemporaryViewMode(null);
         await setActiveBabyId(created.id);
-        setModalOpen(false);
-        router.push({ pathname: '/(tabs)/baby', params: { edit: '1', created: '1' } } as any);
+        navigateFromModal({
+          pathname: '/(tabs)/baby',
+          params: {
+            babyId: created.id,
+            edit: '1',
+            created: '1',
+          },
+        }, {
+          viewMode: 'baby',
+        });
         return;
       }
 
@@ -149,32 +178,8 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
     if (isCreatingPregnancy) return;
     setIsCreatingPregnancy(true);
 
-    const fallbackName = 'Schwangerschaft';
-
     try {
-      const { data, error } = await createBaby({
-        name: fallbackName,
-        baby_gender: 'unknown',
-        birth_date: null,
-      });
-
-      if (error) {
-        console.error('Error creating pregnancy baby:', error);
-        Alert.alert('Fehler', 'Die Schwangerschaft konnte nicht vorbereitet werden.');
-        return;
-      }
-
-      const created = Array.isArray(data) ? data[0] : data;
-      if (!created?.id) {
-        Alert.alert('Fehler', 'Das neue Kind konnte nicht angelegt werden.');
-        return;
-      }
-
-      await refreshBabies();
-      await setActiveBabyId(created.id);
-      setTemporaryViewMode(null);
-      setModalOpen(false);
-      router.push({ pathname: '/pregnancy-setup', params: { babyId: created.id } } as any);
+      navigateFromModal('/pregnancy-setup');
     } catch (error) {
       console.error('Error preparing pregnancy setup:', error);
       Alert.alert('Fehler', 'Die Schwangerschaft konnte nicht vorbereitet werden.');
@@ -241,26 +246,52 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
     );
   };
 
+  const handleEditBaby = async (babyId: string) => {
+    try {
+      await setActiveBabyId(babyId);
+      navigateFromModal({
+        pathname: '/(tabs)/baby',
+        params: {
+          babyId,
+          edit: '1',
+        },
+      }, {
+        viewMode: 'baby',
+      });
+    } catch (error) {
+      console.error('Error opening baby edit screen:', error);
+      Alert.alert('Fehler', 'Das Kind konnte nicht zum Bearbeiten geöffnet werden.');
+    }
+  };
+
   const handleBabyActions = (babyId: string, label: string) => {
     if (deletingBabyId) return;
 
     const canDelete = babies.length > 1;
-    if (!canDelete) {
-      Alert.alert('Verwalten', `"${label}" kann nicht gelöscht werden, weil mindestens ein Kind bestehen bleiben muss.`);
-      return;
+    const actions = [
+      { text: 'Abbrechen', style: 'cancel' as const },
+      {
+        text: 'Bearbeiten',
+        onPress: () => {
+          void handleEditBaby(babyId);
+        },
+      },
+    ];
+
+    if (canDelete) {
+      actions.push({
+        text: 'Kind löschen',
+        style: 'destructive' as const,
+        onPress: () => handleDeleteBaby(babyId, label),
+      });
     }
 
     Alert.alert(
       `"${label}" verwalten`,
-      'Was möchtest du tun?',
-      [
-        { text: 'Abbrechen', style: 'cancel' },
-        {
-          text: 'Kind löschen',
-          style: 'destructive',
-          onPress: () => handleDeleteBaby(babyId, label),
-        },
-      ],
+      canDelete
+        ? 'Was möchtest du tun?'
+        : `"${label}" kann nicht gelöscht werden, weil mindestens ein Kind bestehen bleiben muss.`,
+      actions,
     );
   };
 

@@ -1,5 +1,6 @@
 import {
   Redirect,
+  usePathname,
   useRouter,
   useSegments,
   withLayoutContext,
@@ -10,7 +11,7 @@ import {
   createBottomTabNavigator,
 } from '@react-navigation/bottom-tabs';
 import { ParamListBase, TabNavigationState } from '@react-navigation/native';
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { Platform, View, ActivityIndicator } from 'react-native';
 import type { ComponentProps } from 'react';
 
@@ -107,6 +108,7 @@ const Tabs = Object.assign(
 export default function TabLayout() {
   const router = useRouter();
   const segments = useSegments();
+  const pathname = usePathname();
   const colorScheme = useColorScheme();
   const { session, loading: authLoading } = useAuth();
   const { isBabyBorn, isLoading, isResolved } = useBabyStatus();
@@ -116,9 +118,33 @@ export default function TabLayout() {
   const currentRoute = typeof segments[segments.length - 1] === 'string'
     ? segments[segments.length - 1]
     : null;
+  const isVisibleTabRoute = useMemo(() => {
+    const visibleTabPaths = new Set([
+      '/',
+      '/home',
+      '/pregnancy-home',
+      '/countdown',
+      '/sleep-tracker',
+      '/daily_old',
+      '/diary',
+      '/index',
+      '/baby',
+      '/explore',
+      '/geburtsplan',
+      '/selfcare',
+      '/babyweather',
+      '/weight-tracker',
+      '/size-tracker',
+      '/more',
+      '/community',
+      '/debug',
+    ]);
+
+    return visibleTabPaths.has(pathname);
+  }, [pathname]);
 
   useEffect(() => {
-    if (!hasSession || !currentRoute || !isResolved || isLoading) return;
+    if (!hasSession || !currentRoute || !isResolved || isLoading || !isVisibleTabRoute) return;
 
     if (currentRoute === 'diary') {
       router.replace(isBabyBorn ? '/(tabs)/home' : '/(tabs)/pregnancy-home');
@@ -144,9 +170,9 @@ export default function TabLayout() {
     if (!isBabyBorn && currentRoute && babyOnlyRoutes.has(currentRoute)) {
       router.replace('/(tabs)/pregnancy-home');
     }
-  }, [currentRoute, hasSession, isBabyBorn, isLoading, isResolved, router]);
+  }, [currentRoute, hasSession, isBabyBorn, isLoading, isResolved, isVisibleTabRoute, router]);
 
-  if (authLoading || (hasSession && (!isResolved || isLoading))) {
+  if (authLoading || (hasSession && !isResolved)) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
         <ActivityIndicator size="large" color={theme.accent} />

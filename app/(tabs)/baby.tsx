@@ -174,10 +174,10 @@ export default function BabyScreen() {
   const inputBackground = isDark ? 'rgba(18,18,22,0.76)' : 'rgba(255,255,255,0.85)';
   const inputBorder = isDark ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.35)';
   const { user } = useAuth();
-  const { activeBabyId, refreshBabies, isReady } = useActiveBaby();
+  const { activeBabyId, refreshBabies, isReady, setActiveBabyId } = useActiveBaby();
   const { refreshBabyDetails } = useBabyStatus();
   const router = useRouter();
-  const params = useLocalSearchParams<{ edit?: string | string[]; created?: string | string[] }>();
+  const params = useLocalSearchParams<{ babyId?: string | string[]; edit?: string | string[]; created?: string | string[] }>();
 
   // Set fallback route for smart back navigation
   useSmartBack('/(tabs)/home');
@@ -229,6 +229,8 @@ export default function BabyScreen() {
 
   const editParamValue = Array.isArray(params.edit) ? params.edit[0] : params.edit;
   const createdParamValue = Array.isArray(params.created) ? params.created[0] : params.created;
+  const routeBabyId = Array.isArray(params.babyId) ? params.babyId[0] : params.babyId;
+  const targetBabyId = routeBabyId ?? activeBabyId;
   const autoOpenEdit = editParamValue === '1' || editParamValue === 'true';
   const showCreatedHint = createdParamValue === '1' || createdParamValue === 'true';
 
@@ -242,6 +244,11 @@ export default function BabyScreen() {
     setBedtimeInput(bedtimeAnchor);
     setBedtimeInputError(null);
   }, [bedtimeAnchor, isEditing]);
+
+  useEffect(() => {
+    if (!routeBabyId || routeBabyId === activeBabyId) return;
+    void setActiveBabyId(routeBabyId);
+  }, [activeBabyId, routeBabyId, setActiveBabyId]);
 
   useEffect(() => {
     if (user) {
@@ -277,8 +284,8 @@ export default function BabyScreen() {
     }
   };
 
-  const loadBabyInfo = async () => {
-    if (!activeBabyId) {
+  const loadBabyInfo = useCallback(async () => {
+    if (!targetBabyId) {
       setIsLoading(false);
       return;
     }
@@ -287,7 +294,7 @@ export default function BabyScreen() {
       setIsLoading(true);
 
       // Load with cache - instant if cached
-      const { data, isStale, refresh } = await loadBabyInfoWithCache(activeBabyId);
+      const { data, isStale, refresh } = await loadBabyInfoWithCache(targetBabyId);
 
       // Show cached data immediately
       if (data) {
@@ -323,11 +330,11 @@ export default function BabyScreen() {
       console.error('Failed to load baby info:', err);
       setIsLoading(false);
     }
-  };
+  }, [targetBabyId]);
 
   useFocusEffect(
     useCallback(() => {
-      if (!user || !isReady || !activeBabyId) return;
+      if (!user || !isReady || !targetBabyId) return;
   
       loadBabyInfo();
   
@@ -342,7 +349,7 @@ export default function BabyScreen() {
       );
   
       return () => subscription.remove();
-    }, [user, isReady, activeBabyId, router])
+    }, [user, isReady, targetBabyId, router, loadBabyInfo])
   );
 
   const displayPhoto = babyInfo.photo_url || null;
@@ -432,7 +439,7 @@ export default function BabyScreen() {
   };
 
   const handleSave = async () => {
-    if (!activeBabyId) return;
+    if (!targetBabyId) return;
 
     const normalizedBedtime = commitBedtimeInput(bedtimeInput, true);
     if (!normalizedBedtime) return;
@@ -443,13 +450,16 @@ export default function BabyScreen() {
         preferred_bedtime: normalizedBedtime,
       };
 
-      const { error } = await saveBabyInfo(sanitizedBabyInfo, activeBabyId ?? undefined);
+      const { error } = await saveBabyInfo(sanitizedBabyInfo, targetBabyId);
       if (error) {
         console.error('Error saving baby info:', error);
         Alert.alert('Fehler', 'Die Informationen konnten nicht gespeichert werden.');
       } else {
         Alert.alert('Erfolg', 'Die Informationen wurden erfolgreich gespeichert.');
         setIsEditing(false);
+        if (targetBabyId !== activeBabyId) {
+          await setActiveBabyId(targetBabyId);
+        }
         await refreshBabyDetails();
         await refreshBabies();
 
@@ -460,7 +470,7 @@ export default function BabyScreen() {
         }
 
         // Invalidate cache after save
-        await invalidateBabyCache(activeBabyId);
+        await invalidateBabyCache(targetBabyId);
 
         // Reload fresh data from Supabase
         loadBabyInfo();

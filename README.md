@@ -31,6 +31,7 @@ Diese App verwendet RevenueCat (`react-native-purchases`) für zwei Abos: Monats
   - `EXPO_PUBLIC_RC_ANDROID_KEY` (Android, beginnt i.d.R. mit `goog_…`, optional sobald Android hinzugefügt wird)
 - **EAS Build:** Lege die RevenueCat-Keys als EAS Secret bzw. Environment Variable an, nicht direkt in `eas.json`.
 - **Hinweis zu Expo Go:** In Expo Go läuft `react-native-purchases` im Preview API Mode. Dafür muss `EXPO_PUBLIC_RC_IOS_KEY` der RevenueCat **Test Store Key** sein (beginnt mit `test_…`). Für echte Käufe benötigst du eine Development Build/TestFlight mit dem App-Store Key (`appl_…`).
+- **Wichtig für EAS Update/TestFlight:** `EXPO_PUBLIC_*`-Werte landen im JS-Bundle. Veröffentliche `preview`/`production`-Builds oder OTA-Updates daher nie mit einem iOS-Test-Store-Key (`test_…`), sondern nur mit dem echten App-Store-Key (`appl_…`).
 
 ## 📋 Voraussetzungen
 

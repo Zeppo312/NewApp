@@ -160,7 +160,10 @@ export const BabyStatusProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       }
 
       if (!isActiveBabyReady) {
-        setIsResolved(false);
+        // Nicht isResolved zurücksetzen – das würde den Tab-Navigator in _layout.tsx
+        // unmounten (ActivityIndicator) und beim Remount geht die laufende Navigation
+        // (z.B. zu baby.tsx nach "Kind anlegen") verloren. isLoading=true reicht aus,
+        // um den Routing-Guard zu blockieren.
         setIsLoading(true);
         return;
       }
@@ -191,12 +194,14 @@ export const BabyStatusProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       try {
         let remoteBirthDate: string | null = null;
         let babyInfoError: unknown = null;
+        let hasResolvedActiveBaby = false;
 
         if (activeBabyId) {
           const { data: babyInfoData, error } = await getBabyInfo(activeBabyId);
           babyInfoError = error;
-          if (babyInfoData?.birth_date) {
-            remoteBirthDate = babyInfoData.birth_date;
+          if (!error) {
+            hasResolvedActiveBaby = true;
+            remoteBirthDate = babyInfoData?.birth_date ?? null;
           }
         }
 
@@ -216,7 +221,10 @@ export const BabyStatusProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         }
 
         const fromBabyInfo = Boolean(remoteBirthDate);
-        const fromSettings = !settingsError && settingsIsBabyBorn === true;
+        const fromSettings =
+          !hasResolvedActiveBaby &&
+          !settingsError &&
+          settingsIsBabyBorn === true;
         const resolvedIsBabyBorn = fromBabyInfo || fromSettings;
         const resolvedSource: BabyStatusSource = fromBabyInfo
           ? 'baby_info'
@@ -255,20 +263,24 @@ export const BabyStatusProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     if (!user) return;
     try {
       setTemporaryViewMode(null);
+      setIsBabyBornState(value);
       setIsLoading(true);
       setSource('local_action');
       const targetBabyId = options?.babyId ?? activeBabyId;
 
       if (targetBabyId) {
         if (value) {
-          if (options && Object.prototype.hasOwnProperty.call(options, 'birthDate')) {
-            const { error: saveError } = await saveBabyInfo(
-              { birth_date: options.birthDate ?? null },
-              targetBabyId,
-            );
-            if (saveError) {
-              throw saveError;
-            }
+          const birthDateToPersist =
+            options && Object.prototype.hasOwnProperty.call(options, 'birthDate')
+              ? options.birthDate ?? null
+              : new Date().toISOString();
+
+          const { error: saveError } = await saveBabyInfo(
+            { birth_date: birthDateToPersist },
+            targetBabyId,
+          );
+          if (saveError) {
+            throw saveError;
           }
         } else {
           const { error: saveError } = await saveBabyInfo({ birth_date: null }, targetBabyId);

@@ -1018,7 +1018,7 @@ export default function GetUserInfoScreen() {
                   color={babyGender === 'unknown' ? '#FFFFFF' : theme.tabIconDefault}
                 />
                 <ThemedText style={[styles.genderButtonText, babyGender === 'unknown' && styles.genderButtonTextActive]}>
-                  Weiß noch nicht
+                  Weiß ich noch nicht
                 </ThemedText>
               </TouchableOpacity>
             </View>

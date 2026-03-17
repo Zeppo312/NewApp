@@ -8,7 +8,7 @@ import { ThemedBackground } from '@/components/ThemedBackground';
 import BabySwitcherButton from '@/components/BabySwitcherButton';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import CountdownTimer from '@/components/CountdownTimer';
-import { Redirect, useRouter } from 'expo-router';
+import { usePathname, useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase, getDueDateWithLinkedUsers } from '@/lib/supabase';
 import { getRecommendations, LottiRecommendation } from '@/lib/supabase/recommendations';
@@ -282,6 +282,7 @@ export default function PregnancyHomeScreen() {
   const accentPurple = isDark ? Colors.dark.textAccent : '#5E3DB3';
   const glassCardBg = isDark ? 'rgba(0, 0, 0, 0.22)' : 'rgba(255, 255, 255, 0.04)';
   const glassBlurBg = isDark ? 'rgba(0, 0, 0, 0.25)' : 'rgba(255, 255, 255, 0.35)';
+  const pathname = usePathname();
   const router = useRouter();
   const { user } = useAuth();
   const { isBabyBorn, setIsBabyBorn } = useBabyStatus();
@@ -877,9 +878,9 @@ export default function PregnancyHomeScreen() {
     } as any);
   };
 
-  if (isBabyBorn) {
-    return <Redirect href="/(tabs)/home" />;
-  }
+  // Route-Guard in _layout.tsx handles mode-based redirects centrally.
+  // An inline redirect here fires before isLoading settles and breaks
+  // navigation flows like "Schwangerschaft anlegen".
 
   return (
     <ThemedBackground style={styles.backgroundImage}>
