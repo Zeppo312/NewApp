@@ -42,7 +42,7 @@ const ADMIN_EMAILS = [
 
 const PRESET_OPTIONS = [
   { id: 'default', label: 'Standard' },
-  { id: 'heller', label: 'Heller' },
+  { id: 'verspielt', label: 'Verspielt' },
   { id: 'dunkler', label: 'Dunkler' },
   { id: 'nightmode', label: 'Night Mode' },
   { id: 'shadow', label: 'Shadow' },

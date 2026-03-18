@@ -16,10 +16,10 @@ const BACKGROUND_FILENAME = 'custom_background.jpg';
 /** Gibt den absoluten, aktuell gültigen Pfad zur gespeicherten Hintergrunddatei zurück. */
 const resolveBackgroundUri = () => `${FileSystem.documentDirectory}${BACKGROUND_RELATIVE_PATH}`;
 
-const defaultBackground = require('@/assets/images/Background_Hell.png');
+const defaultBackground = require('@/assets/images/heller-background.png');
 const presetBackgrounds = {
   default: defaultBackground,
-  heller: require('@/assets/images/heller-background.png'),
+  verspielt: require('@/assets/images/Background_Hell.png'),
   dunkler: require('@/assets/images/dunkler-background.png'),
   nightmode: require('@/assets/images/nightmode.png'),
   shadow: require('@/assets/images/Shadow.png'),
@@ -33,7 +33,7 @@ export type BackgroundPreset = keyof typeof presetBackgrounds;
 const isBackgroundSelection = (value: string | null): value is BackgroundSelection => {
   return (
     value === 'default' ||
-    value === 'heller' ||
+    value === 'verspielt' ||
     value === 'dunkler' ||
     value === 'nightmode' ||
     value === 'shadow' ||
@@ -97,8 +97,9 @@ export function BackgroundProvider({ children }: BackgroundProviderProps) {
         }
       }
 
-      const normalizedSelection = isBackgroundSelection(savedSelection)
-        ? savedSelection
+      const migratedSelection = savedSelection === 'heller' ? 'default' : savedSelection;
+      const normalizedSelection = isBackgroundSelection(migratedSelection)
+        ? migratedSelection
         : (persistedCustomUri ? 'custom' : 'default');
       const effectiveSelection = normalizedSelection === 'custom' && !persistedCustomUri
         ? 'default'

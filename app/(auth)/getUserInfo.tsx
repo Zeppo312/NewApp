@@ -36,7 +36,7 @@ const MIN_VALID_PROFILE_DATE = new Date(MIN_VALID_PROFILE_DATE_YEAR, 0, 1);
 
 const ONBOARDING_PRESET_OPTIONS: ReadonlyArray<{ id: BackgroundPreset; label: string }> = [
   { id: 'default', label: 'Standard' },
-  { id: 'heller', label: 'Heller' },
+  { id: 'verspielt', label: 'Verspielt' },
   { id: 'dunkler', label: 'Dunkler' },
   { id: 'nightmode', label: 'Night Mode' },
   { id: 'shadow', label: 'Shadow' },
@@ -46,7 +46,7 @@ const ONBOARDING_PRESET_OPTIONS: ReadonlyArray<{ id: BackgroundPreset; label: st
 
 const PRESET_DARK_MODE_MAP: Record<BackgroundPreset, boolean> = {
   default: false,
-  heller: false,
+  verspielt: false,
   dunkler: true,
   nightmode: true,
   shadow: true,
