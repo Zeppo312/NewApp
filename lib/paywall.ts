@@ -8,6 +8,7 @@ export const PAYWALL_ACCOUNT_CREATION_GRACE_MS = PAYWALL_TRIAL_DAYS * 24 * 60 * 
 export type PaywallState = {
   isPro: boolean;
   isAdmin: boolean;
+  isTrialExpired: boolean;
   lastShownAt: Date | null;
   accountCreatedAt: Date | null;
 };
@@ -27,17 +28,27 @@ const mapRowToState = (
   isPro: boolean,
   isAdmin: boolean,
   accountCreatedAt: Date | null,
-): PaywallState => ({
-  isPro,
-  isAdmin,
-  lastShownAt: parseDate(settings?.paywall_last_shown_at),
-  accountCreatedAt,
-});
+): PaywallState => {
+  const accountAge = accountCreatedAt ? Date.now() - accountCreatedAt.getTime() : null;
+  const isTrialExpired =
+    !isPro &&
+    !isAdmin &&
+    accountAge !== null &&
+    accountAge >= PAYWALL_ACCOUNT_CREATION_GRACE_MS;
+
+  return {
+    isPro,
+    isAdmin,
+    isTrialExpired,
+    lastShownAt: parseDate(settings?.paywall_last_shown_at),
+    accountCreatedAt,
+  };
+};
 
 export const fetchPaywallState = async (): Promise<PaywallState> => {
   const { data: userData } = await getCachedUser();
   if (!userData.user) {
-    return { isPro: false, isAdmin: false, lastShownAt: null, accountCreatedAt: null };
+    return { isPro: false, isAdmin: false, isTrialExpired: false, lastShownAt: null, accountCreatedAt: null };
   }
 
   try {
@@ -53,7 +64,7 @@ export const fetchPaywallState = async (): Promise<PaywallState> => {
     return mapRowToState(settings, isPro, isAdmin, accountCreatedAt);
   } catch (err) {
     console.error('Exception while fetching paywall state:', err);
-    return { isPro: false, isAdmin: false, lastShownAt: null, accountCreatedAt: null };
+    return { isPro: false, isAdmin: false, isTrialExpired: false, lastShownAt: null, accountCreatedAt: null };
   }
 };
 
@@ -63,6 +74,10 @@ export const shouldShowPaywall = async (
   const state = await fetchPaywallState();
   if (state.isPro || state.isAdmin) {
     return { shouldShow: false, state };
+  }
+
+  if (state.isTrialExpired) {
+    return { shouldShow: true, state };
   }
 
   const now = Date.now();

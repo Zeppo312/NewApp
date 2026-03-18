@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Linking, ScrollView, View, Text, StyleSheet, Pressable, Platform, useWindowDimensions } from 'react-native';
+import { BackHandler, Linking, ScrollView, View, Text, StyleSheet, Pressable, Platform, useWindowDimensions } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
@@ -7,6 +7,7 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { useAuth } from '@/contexts/AuthContext';
 import { markPaywallShown, PAYWALL_TRIAL_DAYS } from '@/lib/paywall';
+import { invalidatePremiumStatusCache } from '@/lib/appCache';
 import {
   findRevenueCatPackageByProductId,
   getRevenueCatConfigurationIssue,
@@ -42,13 +43,19 @@ const resolveStorePriceLabel = (storePriceLabel: string | null | undefined, fall
 
 export default function PaywallScreen() {
   const APPLE_EULA_URL = 'https://www.apple.com/legal/internet-services/itunes/dev/stdeula/';
-  const { next, origin, preview } = useLocalSearchParams<{ next?: string; origin?: string; preview?: string }>();
+  const { next, origin, preview, trialExpired } = useLocalSearchParams<{
+    next?: string;
+    origin?: string;
+    preview?: string;
+    trialExpired?: string;
+  }>();
   const router = useRouter();
   const { user } = useAuth();
   const { width } = useWindowDimensions();
 
   const nextRoute = typeof next === 'string' && next.length > 0 ? next : '/(tabs)/home';
   const isAdminPreview = preview === 'admin';
+  const isTrialExpired = trialExpired === '1';
   const [step, setStep] = useState(0);
   const [pendingAction, setPendingAction] = useState<'monthly' | 'yearly' | 'restore' | null>(null);
   const [purchaseError, setPurchaseError] = useState<string | null>(null);
@@ -91,6 +98,15 @@ export default function PaywallScreen() {
     if (isAdminPreview) return;
     markPaywallShown(origin);
   }, [isAdminPreview, origin]);
+
+  useEffect(() => {
+    if (!isTrialExpired || Platform.OS !== 'android') return;
+
+    const handler = BackHandler.addEventListener('hardwareBackPress', () => true);
+    return () => {
+      handler.remove();
+    };
+  }, [isTrialExpired]);
 
   useEffect(() => {
     if (!isPurchasesSupported || !user || !isRevenueCatConfigured) return;
@@ -158,6 +174,7 @@ export default function PaywallScreen() {
         return;
       }
 
+      await invalidatePremiumStatusCache();
       router.replace(nextRoute as any);
     } catch (err: any) {
       if (err?.userCancelled === true) return;
@@ -190,12 +207,14 @@ export default function PaywallScreen() {
     try {
       const restored = await restoreRevenueCatPurchases(user.id);
       if (restored) {
+        await invalidatePremiumStatusCache();
         router.replace(nextRoute as any);
         return;
       }
 
       const current = await hasRevenueCatEntitlement(user.id);
       if (current) {
+        await invalidatePremiumStatusCache();
         router.replace(nextRoute as any);
         return;
       }
@@ -359,6 +378,7 @@ export default function PaywallScreen() {
   );
 
   const handleClose = () => {
+    if (isTrialExpired) return;
     router.back();
   };
 
@@ -372,7 +392,7 @@ export default function PaywallScreen() {
 
   return (
     <ThemedBackground style={styles.shell}>
-      <Stack.Screen options={{ headerShown: false }} />
+      <Stack.Screen options={{ headerShown: false, gestureEnabled: !isTrialExpired }} />
       <LinearGradient
         colors={['#5E4BC4', '#7C63D8', '#D8CDEA', '#F5EEE6']}
         locations={[0, 0.32, 0.72, 1]}
@@ -391,9 +411,13 @@ export default function PaywallScreen() {
               <Text style={styles.logo}>Lotti Baby</Text>
               <Text style={styles.logoSub}>Schwangerschaft bis Baby-Alltag</Text>
             </View>
-            <Pressable onPress={handleClose} hitSlop={8} style={styles.closeButton}>
-              <Text style={styles.closeButtonText}>✕</Text>
-            </Pressable>
+            {isTrialExpired ? (
+              <View style={styles.topBarSpacer} />
+            ) : (
+              <Pressable onPress={handleClose} hitSlop={8} style={styles.closeButton}>
+                <Text style={styles.closeButtonText}>✕</Text>
+              </Pressable>
+            )}
           </View>
 
           <Text style={styles.eyebrow}>
@@ -431,9 +455,11 @@ export default function PaywallScreen() {
                 />
                 <Text style={styles.primaryText}>{CTA_LABEL}</Text>
               </Pressable>
-              <Pressable onPress={handleClose} hitSlop={8} style={styles.skipButton}>
-                <Text style={styles.skipButtonText}>Vielleicht später</Text>
-              </Pressable>
+              {!isTrialExpired ? (
+                <Pressable onPress={handleClose} hitSlop={8} style={styles.skipButton}>
+                  <Text style={styles.skipButtonText}>Vielleicht später</Text>
+                </Pressable>
+              ) : null}
             </View>
           ) : (
             <View style={styles.planStack}>
@@ -534,9 +560,11 @@ export default function PaywallScreen() {
                 </Text>
               </Pressable>
 
-              <Pressable onPress={handleClose} hitSlop={8} style={styles.cancelButton}>
-                <Text style={styles.cancelButtonText}>Vielleicht später</Text>
-              </Pressable>
+              {!isTrialExpired ? (
+                <Pressable onPress={handleClose} hitSlop={8} style={styles.cancelButton}>
+                  <Text style={styles.cancelButtonText}>Vielleicht später</Text>
+                </Pressable>
+              ) : null}
 
               <Text style={styles.legal}>
                 Nach den ersten {trialDaysAfterLabel} ist für die weitere Nutzung ein Abo erforderlich. Zahlung wird bei Kaufbestätigung deinem App-Store/Google-Play-Konto belastet. Abos verlängern sich automatisch, wenn sie nicht rechtzeitig gekündigt werden.
@@ -559,6 +587,11 @@ export default function PaywallScreen() {
                 <Pressable accessibilityRole="link" hitSlop={8} onPress={() => openLegalRoute('/impressum')}>
                   <Text style={styles.legalLink}>Impressum</Text>
                 </Pressable>
+                {isTrialExpired ? (
+                  <Pressable accessibilityRole="link" hitSlop={8} onPress={() => router.push('/dsgvo' as any)}>
+                    <Text style={styles.legalLink}>Konto & Daten verwalten</Text>
+                  </Pressable>
+                ) : null}
               </View>
             </View>
           )}

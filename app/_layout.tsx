@@ -4,7 +4,7 @@ import { Stack, usePathname, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { View, ActivityIndicator, Text } from 'react-native';
+import { AppState, View, ActivityIndicator, Text } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 import * as Notifications from 'expo-notifications';
@@ -81,6 +81,7 @@ const PAYWALL_EXCLUDED_PATHS = new Set([
   '/datenschutz',
   '/impressum',
   '/nutzungsbedingungen',
+  '/dsgvo',
 ]);
 
 // Wrapper-Komponente, die den AuthProvider verwendet
@@ -103,6 +104,7 @@ function RootLayoutNav() {
   const { preferences: notifPrefs, isLoaded: notificationPreferencesLoaded } = useNotificationPreferences();
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [notificationSettingsLoaded, setNotificationSettingsLoaded] = useState(false);
+  const [appStateRevision, setAppStateRevision] = useState(0);
   const paywallCheckInFlight = useRef(false);
   const primarySegment = typeof segments[0] === 'string' ? segments[0] : null;
   const shouldSkipGlobalPaywallCheck = useMemo(() => {
@@ -118,6 +120,18 @@ function RootLayoutNav() {
   }, [activeBackend, convexClient, userId]);
 
   useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        setAppStateRevision((prev) => prev + 1);
+      }
+    });
+
+    return () => {
+      sub.remove();
+    };
+  }, []);
+
+  useEffect(() => {
     if (loading || !userId || !isBabyStatusResolved || shouldSkipGlobalPaywallCheck) {
       return;
     }
@@ -129,17 +143,18 @@ function RootLayoutNav() {
 
     const checkGlobalPaywallGate = async () => {
       try {
-        const { shouldShow } = await shouldShowPaywall();
+        const { shouldShow, state } = await shouldShowPaywall();
         if (!shouldShow || cancelled || !pathname) return;
 
         await markPaywallShown(pathname);
         if (cancelled) return;
 
-        router.push({
+        router.replace({
           pathname: '/paywall',
           params: {
             next: pathname,
             origin: pathname,
+            trialExpired: state.isTrialExpired ? '1' : '0',
           },
         });
       } catch (error) {
@@ -155,7 +170,7 @@ function RootLayoutNav() {
       cancelled = true;
       paywallCheckInFlight.current = false;
     };
-  }, [isBabyStatusResolved, loading, pathname, router, shouldSkipGlobalPaywallCheck, userId]);
+  }, [appStateRevision, isBabyStatusResolved, loading, pathname, router, shouldSkipGlobalPaywallCheck, userId]);
 
   useEffect(() => {
     if (!userId) {
@@ -516,6 +531,7 @@ function RootLayoutNav() {
         <Stack.Screen name="community" />
         <Stack.Screen name="notifications" />
         <Stack.Screen name="paywall" />
+        <Stack.Screen name="dsgvo" />
         <Stack.Screen name="subscription" />
         <Stack.Screen name="pregnancy-stats" />
         <Stack.Screen name="pregnancy-setup" />
