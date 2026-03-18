@@ -51,7 +51,6 @@ import { getBabyInfo } from '@/lib/baby';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { predictNextSleepWindow, updatePersonalizationAfterNap, initializePersonalization, type SleepWindowPrediction } from '@/lib/sleep-window';
 import { normalizeBedtimeAnchor } from '@/lib/bedtime';
-import { markPaywallShown, shouldShowPaywall } from '@/lib/paywall';
 import { useNotifications } from '@/hooks/useNotifications';
 import { usePartnerNotifications } from '@/hooks/usePartnerNotifications';
 import { sleepActivityService } from '@/lib/sleepActivityService';
@@ -1194,7 +1193,6 @@ export default function SleepTrackerScreen() {
   const { activeBabyId } = useActiveBaby();
   const { isReadOnlyPreviewMode } = useBabyStatus();
   const sleepService = useSleepEntriesService(user?.id);
-  const paywallCheckInFlight = useRef(false);
   const triggerHaptic = useCallback(() => {
     try {
       Haptics.selectionAsync();
@@ -1287,32 +1285,6 @@ export default function SleepTrackerScreen() {
       closeNotesEditor();
     }
   }, [showInputModal]);
-
-  const checkPaywallGate = useCallback(async () => {
-    if (paywallCheckInFlight.current || !user) return;
-    paywallCheckInFlight.current = true;
-
-    try {
-      const { shouldShow } = await shouldShowPaywall();
-      if (shouldShow) {
-        await markPaywallShown('sleep-tracker');
-        router.push({
-          pathname: '/paywall',
-          params: { next: '/(tabs)/sleep-tracker', origin: 'sleep-tracker' }
-        });
-      }
-    } catch (err) {
-      console.error('Paywall check on sleep tracker failed:', err);
-    } finally {
-      paywallCheckInFlight.current = false;
-    }
-  }, [router, user]);
-
-  useFocusEffect(
-    useCallback(() => {
-      checkPaywallGate();
-    }, [checkPaywallGate])
-  );
 
   const refreshNightWindowSettings = useCallback(async () => {
     try {

@@ -5,6 +5,7 @@ import { View, ActivityIndicator, Text } from 'react-native';
 import { useEffect, useRef, useState } from 'react';
 import { Colors } from '@/constants/Colors';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
+import { getOnboardingCompletionState } from '@/lib/onboarding';
 
 export default function Index() {
   const { session, loading, refreshSession } = useAuth();
@@ -14,6 +15,8 @@ export default function Index() {
   const backgroundColor = isDark ? Colors.dark.background : '#FFFFFF';
   const textColor = isDark ? Colors.dark.textSecondary : '#7D5A50';
   const [isRecoveringSession, setIsRecoveringSession] = useState(false);
+  const [isCheckingOnboarding, setIsCheckingOnboarding] = useState(false);
+  const [isOnboardingComplete, setIsOnboardingComplete] = useState(false);
   const hasTriedRecoveryRef = useRef(false);
 
   // Debug-Ausgabe
@@ -50,8 +53,41 @@ export default function Index() {
       });
   }, [loading, refreshSession, session]);
 
+  useEffect(() => {
+    if (loading || !session?.user || !isBabyStatusResolved) {
+      setIsCheckingOnboarding(false);
+      setIsOnboardingComplete(false);
+      return;
+    }
+
+    let cancelled = false;
+    setIsCheckingOnboarding(true);
+
+    getOnboardingCompletionState()
+      .then((complete) => {
+        if (!cancelled) {
+          setIsOnboardingComplete(complete);
+        }
+      })
+      .catch((error) => {
+        console.error('Failed to check onboarding completion:', error);
+        if (!cancelled) {
+          setIsOnboardingComplete(false);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsCheckingOnboarding(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isBabyStatusResolved, loading, session?.user]);
+
   // Zeige einen Ladeindikator, während der Authentifizierungsstatus geprüft wird
-  if (loading || isBabyStatusLoading || !isBabyStatusResolved || isRecoveringSession) {
+  if (loading || isBabyStatusLoading || !isBabyStatusResolved || isRecoveringSession || isCheckingOnboarding) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor }}>
         <ActivityIndicator size="large" color="#E9C9B6" />
@@ -64,6 +100,11 @@ export default function Index() {
   if (!session) {
     console.log('No session, redirecting to auth');
     return <Redirect href="/(auth)" />;
+  }
+
+  if (!isOnboardingComplete) {
+    console.log('Onboarding incomplete, redirecting to getUserInfo');
+    return <Redirect href="/(auth)/getUserInfo" />;
   }
 
   if (isBabyBorn) {

@@ -8,7 +8,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Linking from 'expo-linking';
 
 import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { Colors } from '@/constants/Colors';
 import { useAuth } from '@/contexts/AuthContext';
@@ -212,7 +211,7 @@ export default function LoginScreen() {
         
         // If profile is incomplete or doesn't exist, go to onboarding
         if (!profileData || !profileData.first_name) {
-          router.replace('../getUserInfo');
+          router.replace('/(auth)/getUserInfo');
         } else {
           // Existing user -> zentraler Root-Guard entscheidet über Startscreen
           await navigateAfterAuth();

@@ -9,6 +9,7 @@ import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { useConvex } from '@/contexts/ConvexContext';
 import { useBackground, type BackgroundPreset } from '@/contexts/BackgroundContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { invalidateUserProfileCache, invalidateUserSettingsCache } from '@/lib/appCache';
 import { supabase } from '@/lib/supabase';
 import { saveBabyInfo, syncBabiesForLinkedUsers } from '@/lib/baby';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
@@ -519,6 +520,11 @@ export default function GetUserInfoScreen() {
         console.error('Error saving user settings:', settingsResult.error);
         throw new Error('Benutzereinstellungen konnten nicht gespeichert werden.');
       }
+
+      await Promise.all([
+        invalidateUserProfileCache(),
+        invalidateUserSettingsCache(),
+      ]);
 
       if (!partnerFlow) {
         // Speichern der Baby-Informationen (Name, Geschlecht, Geburtsdatum, Gewicht, Größe)

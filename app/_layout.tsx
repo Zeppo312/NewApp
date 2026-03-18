@@ -1,9 +1,9 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router';
+import { Stack, usePathname, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { View, ActivityIndicator, Text } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
@@ -30,6 +30,7 @@ import { supabase, getAppSettings } from '@/lib/supabase';
 import type { SleepEntry } from '@/lib/sleepData';
 import type { BabyCareEntry } from '@/lib/supabase';
 import { preloadAppData } from '@/lib/appCache';
+import { markPaywallShown, shouldShowPaywall } from '@/lib/paywall';
 import { SleepEntriesService } from '@/lib/services/SleepEntriesService';
 import { normalizeBedtimeAnchor } from '@/lib/bedtime';
 import { sleepActivityService } from '@/lib/sleepActivityService';
@@ -74,8 +75,19 @@ Notifications.setNotificationHandler({
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
+const PAYWALL_EXCLUDED_PATHS = new Set([
+  '/',
+  '/paywall',
+  '/datenschutz',
+  '/impressum',
+  '/nutzungsbedingungen',
+]);
+
 // Wrapper-Komponente, die den AuthProvider verwendet
 function RootLayoutNav() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const segments = useSegments();
   const colorScheme = useColorScheme();
   const { loading, user } = useAuth();
   const userId = user?.id ?? null;
@@ -91,10 +103,59 @@ function RootLayoutNav() {
   const { preferences: notifPrefs, isLoaded: notificationPreferencesLoaded } = useNotificationPreferences();
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [notificationSettingsLoaded, setNotificationSettingsLoaded] = useState(false);
+  const paywallCheckInFlight = useRef(false);
+  const primarySegment = typeof segments[0] === 'string' ? segments[0] : null;
+  const shouldSkipGlobalPaywallCheck = useMemo(() => {
+    if (!pathname || PAYWALL_EXCLUDED_PATHS.has(pathname)) {
+      return true;
+    }
+
+    return primarySegment === '(auth)' || primarySegment === 'auth';
+  }, [pathname, primarySegment]);
   const sleepEntriesService = useMemo(() => {
     if (!userId) return null;
     return new SleepEntriesService(activeBackend, convexClient, userId);
   }, [activeBackend, convexClient, userId]);
+
+  useEffect(() => {
+    if (loading || !userId || !isBabyStatusResolved || shouldSkipGlobalPaywallCheck) {
+      return;
+    }
+
+    if (paywallCheckInFlight.current) return;
+
+    let cancelled = false;
+    paywallCheckInFlight.current = true;
+
+    const checkGlobalPaywallGate = async () => {
+      try {
+        const { shouldShow } = await shouldShowPaywall();
+        if (!shouldShow || cancelled || !pathname) return;
+
+        await markPaywallShown(pathname);
+        if (cancelled) return;
+
+        router.push({
+          pathname: '/paywall',
+          params: {
+            next: pathname,
+            origin: pathname,
+          },
+        });
+      } catch (error) {
+        console.error('Global paywall check failed:', error);
+      } finally {
+        paywallCheckInFlight.current = false;
+      }
+    };
+
+    void checkGlobalPaywallGate();
+
+    return () => {
+      cancelled = true;
+      paywallCheckInFlight.current = false;
+    };
+  }, [isBabyStatusResolved, loading, pathname, router, shouldSkipGlobalPaywallCheck, userId]);
 
   useEffect(() => {
     if (!userId) {

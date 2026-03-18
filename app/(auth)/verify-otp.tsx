@@ -148,7 +148,7 @@ export default function VerifyOTPScreen() {
               onPress: () => {
                 const nextParams = invitationCode ? { invitationCode: String(invitationCode) } : {};
                 router.replace({
-                  pathname: '../getUserInfo',
+                  pathname: '/(auth)/getUserInfo',
                   params: nextParams
                 });
               }
