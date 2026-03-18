@@ -80,9 +80,6 @@ const lightenHex = (hex: string, amount = 0.35) => {
 
   return `#${toHex(lightenChannel(r))}${toHex(lightenChannel(g))}${toHex(lightenChannel(b))}`;
 };
-const BABY_MODE_PREVIEW_READ_ONLY_MESSAGE =
-  'Du bist im Babymodus zur Vorschau. Gewichtstracking ist erst nach der Geburt moeglich.';
-
 export default function WeightTrackerScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
@@ -109,7 +106,9 @@ export default function WeightTrackerScreen() {
   // router wird durch die BackButton-Komponente verwaltet
   const insets = useSafeAreaInsets();
   const { activeBaby, activeBabyId, isReady } = useActiveBaby();
-  const { isReadOnlyPreviewMode } = useBabyStatus();
+  const { isReadOnlyPreviewMode, temporaryViewMode } = useBabyStatus();
+  const previewModeLabel = temporaryViewMode === 'pregnancy' ? 'Schwangerschaftsmodus' : 'Babymodus';
+  const readOnlyPreviewMessage = `Du bist im ${previewModeLabel} zur Vorschau. Gewichtstracking ist hier gesperrt.`;
 
   const [weightEntries, setWeightEntries] = useState<WeightEntry[]>([]);
   const [selectedSubject, setSelectedSubject] = useState<WeightSubject>('mom');
@@ -131,7 +130,7 @@ export default function WeightTrackerScreen() {
   const [focusConfig, setFocusConfig] = useState<{ field: 'weight' | 'notes'; label: string; placeholder?: string; multiline?: boolean; keyboardType?: TextInputProps['keyboardType']; inputMode?: TextInputProps['inputMode']; } | null>(null);
   const [focusValue, setFocusValue] = useState('');
   const showReadOnlyPreviewAlert = () => {
-    Alert.alert('Nur Vorschau', BABY_MODE_PREVIEW_READ_ONLY_MESSAGE);
+    Alert.alert('Nur Vorschau', readOnlyPreviewMessage);
   };
   const ensureWritableInCurrentMode = () => {
     if (!isReadOnlyPreviewMode) return true;
@@ -1040,7 +1039,7 @@ export default function WeightTrackerScreen() {
             <View style={styles.readOnlyPreviewBanner}>
               <ThemedText style={styles.readOnlyPreviewTitle}>Nur Vorschau aktiv</ThemedText>
               <ThemedText style={styles.readOnlyPreviewText}>
-                Du schaust den Babymodus an. Gewichtstracking ist hier gesperrt.
+                Du schaust den {previewModeLabel} an. Gewichtstracking ist hier gesperrt.
               </ThemedText>
             </View>
           )}

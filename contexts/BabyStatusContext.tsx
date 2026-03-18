@@ -310,7 +310,9 @@ export const BabyStatusProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       : temporaryViewMode === 'pregnancy'
         ? false
         : isBabyBorn;
-  const isReadOnlyPreviewMode = temporaryViewMode === 'baby' && !isBabyBorn;
+  const isReadOnlyPreviewMode =
+    (temporaryViewMode === 'baby' && !isBabyBorn) ||
+    (temporaryViewMode === 'pregnancy' && isBabyBorn);
 
   return (
     <BabyStatusContext.Provider 

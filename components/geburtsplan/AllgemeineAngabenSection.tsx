@@ -8,10 +8,12 @@ interface AllgemeineAngabenSectionProps {
   data: AllgemeineAngaben;
   onChange: (data: AllgemeineAngaben) => void;
   containerStyle?: StyleProp<ViewStyle>;
+  readOnly?: boolean;
 }
 
-export const AllgemeineAngabenSection: React.FC<AllgemeineAngabenSectionProps> = ({ data, onChange, containerStyle }) => {
+export const AllgemeineAngabenSection: React.FC<AllgemeineAngabenSectionProps> = ({ data, onChange, containerStyle, readOnly = false }) => {
   const handleChange = (field: keyof AllgemeineAngaben, value: string) => {
+    if (readOnly) return;
     onChange({
       ...data,
       [field]: value,
@@ -25,24 +27,28 @@ export const AllgemeineAngabenSection: React.FC<AllgemeineAngabenSectionProps> =
         value={data.mutterName}
         onChangeText={(text) => handleChange('mutterName', text)}
         placeholder="z.B. Lisa Müller"
+        readOnly={readOnly}
       />
       <TextInputField
         label="Entbindungstermin (ET)"
         value={data.entbindungstermin}
         onChangeText={(text) => handleChange('entbindungstermin', text)}
         placeholder="z.B. 01.06.2025"
+        readOnly={readOnly}
       />
       <TextInputField
         label="Geburtsklinik / Hausgeburt"
         value={data.geburtsklinik}
         onChangeText={(text) => handleChange('geburtsklinik', text)}
         placeholder="z.B. Krankenhaus XY"
+        readOnly={readOnly}
       />
       <TextInputField
         label="Begleitperson(en)"
         value={data.begleitpersonen}
         onChangeText={(text) => handleChange('begleitpersonen', text)}
         placeholder="z.B. Max Müller (Partner), Hebamme Laura"
+        readOnly={readOnly}
       />
     </GeburtsplanSection>
   );

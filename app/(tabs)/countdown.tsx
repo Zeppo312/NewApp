@@ -238,7 +238,7 @@ export default function CountdownScreen() {
   const actionMintBg = isDark ? toRgba(accentMint, 0.22) : 'rgba(168,196,193,0.6)';
   const actionWarnBg = isDark ? toRgba(warnColor, 0.2) : 'rgba(255,180,180,0.6)';
   const { user } = useAuth();
-  const { isBabyBorn, setIsBabyBorn } = useBabyStatus();
+  const { isBabyBorn, setIsBabyBorn, isReadOnlyPreviewMode } = useBabyStatus();
   const router = useRouter();
   const scrollViewRef = useRef<ScrollView | null>(null);
 
@@ -254,12 +254,25 @@ export default function CountdownScreen() {
   const [currentDay, setCurrentDay] = useState<number | null>(null);
   const [daysOverdue, setDaysOverdue] = useState<number>(0);
   const [birthPreparationSectionY, setBirthPreparationSectionY] = useState<number | null>(null);
+  const headerSubtitle = isReadOnlyPreviewMode
+    ? 'Vorschau-Modus: nur ansehen'
+    : 'Verfolge die Zeit bis zur Geburt';
   const minDueDate = useMemo(() => {
     const date = new Date();
     date.setHours(0, 0, 0, 0);
     return date;
   }, []);
   const maxDueDate = useMemo(() => new Date(2100, 11, 31, 23, 59, 59, 999), []);
+
+  const showReadOnlyPreviewAlert = () => {
+    Alert.alert('Nur Vorschau', 'Du schaust den Schwangerschaftsmodus an. Der Countdown ist hier gesperrt.');
+  };
+
+  const ensureWritableInCurrentMode = () => {
+    if (!isReadOnlyPreviewMode) return true;
+    showReadOnlyPreviewAlert();
+    return false;
+  };
 
   const logWithTimestamp = (message: string) => {
     const now = new Date();
@@ -414,6 +427,7 @@ export default function CountdownScreen() {
   };
 
   const saveDueDate = async (date: Date) => {
+    if (!ensureWritableInCurrentMode()) return;
     try {
       if (!user) {
         Alert.alert('Hinweis', 'Bitte melde dich an, um deinen Geburtstermin zu speichern.');
@@ -475,6 +489,7 @@ export default function CountdownScreen() {
   };
 
   const showDatepicker = () => {
+    if (!ensureWritableInCurrentMode()) return;
     if (dueDate) setTempDate(getSafePickerDate(dueDate, new Date()));
     else {
       const today = new Date();
@@ -512,6 +527,7 @@ export default function CountdownScreen() {
   };
 
   const handleBabyBorn = async () => {
+    if (!ensureWritableInCurrentMode()) return;
     try {
       await setIsBabyBorn(true);
       const linkedUsersResult = await fetchLinkedUsers(user?.id || '');
@@ -552,10 +568,19 @@ export default function CountdownScreen() {
         <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
         <Header
           title="Countdown"
-          subtitle="Verfolge die Zeit bis zur Geburt"
+          subtitle={headerSubtitle}
           showBackButton
           onBackPress={() => router.push('/(tabs)/pregnancy-home')}
         />
+
+        {isReadOnlyPreviewMode && (
+          <View style={styles.readOnlyPreviewBanner}>
+            <ThemedText style={styles.readOnlyPreviewTitle}>Nur Vorschau aktiv</ThemedText>
+            <ThemedText style={styles.readOnlyPreviewText}>
+              Du schaust den Schwangerschaftsmodus an. Der Countdown ist hier gesperrt.
+            </ThemedText>
+          </View>
+        )}
 
         <ScrollView ref={scrollViewRef} contentContainerStyle={styles.scrollContent}>
           {/* Countdown im Glas-Card */}
@@ -601,7 +626,12 @@ export default function CountdownScreen() {
               Wähle den ET, damit Countdown & Inhalte exakt passen.
             </ThemedText>
 
-            <TouchableOpacity onPress={showDatepicker} activeOpacity={0.9} style={styles.fullWidthAction}>
+            <TouchableOpacity
+              onPress={showDatepicker}
+              activeOpacity={0.9}
+              style={[styles.fullWidthAction, isReadOnlyPreviewMode && styles.actionDisabled]}
+              disabled={isReadOnlyPreviewMode}
+            >
               <BlurView intensity={24} tint={cardBlurTint} style={styles.cardBlur}>
                 <View style={[styles.actionCard, { backgroundColor: actionPurpleBg, borderColor: cardBorderColor }]}>
                   <View style={[styles.actionIcon, { backgroundColor: accentPurple, borderColor: cardBorderColor }]}>
@@ -839,7 +869,12 @@ export default function CountdownScreen() {
 
           {/* Baby geboren */}
           {dueDate && isOverdue && !isBabyBorn && (
-            <TouchableOpacity onPress={handleBabyBorn} activeOpacity={0.9} style={styles.fullWidthAction}>
+            <TouchableOpacity
+              onPress={handleBabyBorn}
+              activeOpacity={0.9}
+              style={[styles.fullWidthAction, isReadOnlyPreviewMode && styles.actionDisabled]}
+              disabled={isReadOnlyPreviewMode}
+            >
               <BlurView intensity={24} tint={cardBlurTint} style={styles.cardBlur}>
                 <View style={[styles.actionCard, { backgroundColor: actionWarnBg, borderColor: cardBorderColor }]}>
                   <View style={[styles.actionIcon, { backgroundColor: warnColor, borderColor: cardBorderColor }]}>
@@ -886,6 +921,30 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     overflow: 'hidden',
   },
+  readOnlyPreviewBanner: {
+    marginHorizontal: LAYOUT_PAD + TIMELINE_INSET,
+    marginTop: 10,
+    marginBottom: 4,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 248, 225, 0.92)',
+    borderWidth: 1,
+    borderColor: 'rgba(229, 180, 77, 0.45)',
+  },
+  readOnlyPreviewTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#8A5A00',
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  readOnlyPreviewText: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#8A5A00',
+    textAlign: 'center',
+  },
   centerCard: { alignItems: 'center', justifyContent: 'center', paddingVertical: 18 },
 
   // Typo
@@ -919,6 +978,9 @@ const styles = StyleSheet.create({
     marginHorizontal: 18,
     marginTop: 8,
     marginBottom: 4,
+  },
+  actionDisabled: {
+    opacity: 0.45,
   },
   cardBlur: { borderRadius: 22, overflow: 'hidden' },
   actionCard: {

@@ -10,6 +10,7 @@ interface TextInputFieldProps {
   placeholder?: string;
   multiline?: boolean;
   numberOfLines?: number;
+  readOnly?: boolean;
 }
 
 export const TextInputField: React.FC<TextInputFieldProps> = ({
@@ -19,6 +20,7 @@ export const TextInputField: React.FC<TextInputFieldProps> = ({
   placeholder,
   multiline = false,
   numberOfLines = 1,
+  readOnly = false,
 }) => {
   const adaptiveColors = useAdaptiveColors();
   const isDark = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
@@ -30,7 +32,8 @@ export const TextInputField: React.FC<TextInputFieldProps> = ({
         style={[
           styles.input,
           multiline && { minHeight: 24 * numberOfLines, textAlignVertical: 'top' },
-          { color: adaptiveColors.text, borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)' }
+          { color: adaptiveColors.text, borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)' },
+          readOnly && styles.inputReadOnly,
         ]}
         value={value}
         onChangeText={onChangeText}
@@ -38,6 +41,7 @@ export const TextInputField: React.FC<TextInputFieldProps> = ({
         placeholderTextColor={isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)'}
         multiline={multiline}
         numberOfLines={numberOfLines}
+        editable={!readOnly}
       />
     </View>
   );
@@ -59,5 +63,8 @@ const styles = StyleSheet.create({
     padding: 10,
     paddingTop: 10,
     width: '100%',
+  },
+  inputReadOnly: {
+    opacity: 0.55,
   },
 });

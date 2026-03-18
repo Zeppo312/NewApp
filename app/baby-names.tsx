@@ -5,7 +5,7 @@ import { ThemedText } from '@/components/ThemedText';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { useRouter, Stack } from 'expo-router';
+import { Stack } from 'expo-router';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import TextInputOverlay from '@/components/modals/TextInputOverlay';
 import Header from '@/components/Header';
@@ -13,6 +13,7 @@ import { LiquidGlassCard, GLASS_OVERLAY, GLASS_OVERLAY_DARK, LAYOUT_PAD } from '
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { isUserAdmin } from '@/lib/supabase/recommendations';
 
 // Fallback-Daten für Babynamen, falls die Datenbank nicht verfügbar ist
@@ -97,8 +98,11 @@ export default function BabyNamesScreen() {
   const modalAccent = isDark ? adaptiveColors.accent : BABY_LILA;
   const modalInputBackground = isDark ? 'rgba(10,10,12,0.62)' : 'rgba(255,255,255,0.96)';
   const modalInputBorderColor = isDark ? 'rgba(255,255,255,0.24)' : 'rgba(142,78,198,0.25)';
-  const router = useRouter();
   const { user } = useAuth();
+  const { isReadOnlyPreviewMode } = useBabyStatus();
+  const headerSubtitle = isReadOnlyPreviewMode
+    ? 'Vorschau-Modus: nur ansehen'
+    : 'Finde den perfekten Namen für dein Baby';
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -131,6 +135,16 @@ export default function BabyNamesScreen() {
   const [focusValue, setFocusValue] = useState('');
   const namesFetchIdRef = useRef(0);
   const PAGE_SIZE = 40;
+
+  const showReadOnlyPreviewAlert = () => {
+    Alert.alert('Nur Vorschau', 'Du schaust den Schwangerschaftsmodus an. Babynamen sind hier gesperrt.');
+  };
+
+  const ensureWritableInCurrentMode = () => {
+    if (!isReadOnlyPreviewMode) return true;
+    showReadOnlyPreviewAlert();
+    return false;
+  };
 
   useEffect(() => {
     if (user) {
@@ -340,6 +354,7 @@ export default function BabyNamesScreen() {
   };
 
   const openFocusEditor = (config: FocusConfig, value: string) => {
+    if (!ensureWritableInCurrentMode()) return;
     setFocusConfig(config);
     setFocusValue(value);
   };
@@ -350,6 +365,7 @@ export default function BabyNamesScreen() {
   };
 
   const saveFocusEditor = (nextValue?: string) => {
+    if (!ensureWritableInCurrentMode()) return;
     if (!focusConfig) return;
     const next = typeof nextValue === 'string' ? nextValue : focusValue;
 
@@ -382,8 +398,10 @@ export default function BabyNamesScreen() {
         styles.modalInput,
         multiline && styles.modalInputMultiline,
         { backgroundColor: modalInputBackground, borderColor: modalInputBorderColor },
+        isReadOnlyPreviewMode && styles.actionDisabled,
       ]}
-      onPress={onPress}
+      onPress={isReadOnlyPreviewMode ? undefined : onPress}
+      disabled={isReadOnlyPreviewMode}
       activeOpacity={0.9}
     >
       <ThemedText
@@ -632,6 +650,7 @@ export default function BabyNamesScreen() {
 
   // Füge einen Namen zu Favoriten hinzu oder entferne ihn
   const toggleFavorite = async (name: string) => {
+    if (!ensureWritableInCurrentMode()) return;
     if (!user) {
       Alert.alert('Hinweis', 'Du musst angemeldet sein, um Favoriten zu speichern.');
       return;
@@ -681,6 +700,7 @@ export default function BabyNamesScreen() {
   };
 
   const handleOpenCreateModal = () => {
+    if (!ensureWritableInCurrentMode()) return;
     setNewName('');
     setPersistedMeaning('');
     setPersistedOrigin('');
@@ -693,6 +713,7 @@ export default function BabyNamesScreen() {
   };
 
   const handleEditName = (item: Name) => {
+    if (!ensureWritableInCurrentMode()) return;
     setEditingNameId(item.id ?? null);
     setEditingOriginalName(item.name);
     setNewName(item.name);
@@ -705,6 +726,7 @@ export default function BabyNamesScreen() {
   };
 
   const handleDeleteName = (item: Name) => {
+    if (!ensureWritableInCurrentMode()) return;
     if (!item.id) return;
     Alert.alert(
       'Name löschen',
@@ -715,6 +737,7 @@ export default function BabyNamesScreen() {
           text: 'Löschen',
           style: 'destructive',
           onPress: async () => {
+            if (!ensureWritableInCurrentMode()) return;
             try {
               setIsCreatingName(true);
               const { error } = await supabase.from('baby_names').delete().eq('id', item.id);
@@ -735,6 +758,7 @@ export default function BabyNamesScreen() {
   };
 
   const handleCreateName = async () => {
+    if (!ensureWritableInCurrentMode()) return;
     if (!isAdmin) {
       Alert.alert('Hinweis', 'Nur Admins können Babynamen hinzufügen.');
       return;
@@ -909,12 +933,14 @@ export default function BabyNamesScreen() {
   };
 
   const handleRemoveBulkEntry = (index: number) => {
+    if (!ensureWritableInCurrentMode()) return;
     setBulkEntries(prev => prev.filter((_, idx) => idx !== index));
     setBulkError(null);
     setBulkErrorIndex(null);
   };
 
   const handleParseBulkSql = () => {
+    if (!ensureWritableInCurrentMode()) return;
     if (!bulkSql.trim()) {
       setBulkError('Bitte zuerst das SQL-Skript einfügen.');
       return;
@@ -956,7 +982,8 @@ export default function BabyNamesScreen() {
           </ThemedText>
           <TouchableOpacity
             onPress={() => handleRemoveBulkEntry(index)}
-            style={[styles.bulkEntryRemove, { backgroundColor: actionButtonBackground }]}
+            style={[styles.bulkEntryRemove, { backgroundColor: actionButtonBackground }, isReadOnlyPreviewMode && styles.actionDisabled]}
+            disabled={isReadOnlyPreviewMode}
           >
             <IconSymbol name="trash" size={16} color="#C94A4A" />
           </TouchableOpacity>
@@ -1111,18 +1138,26 @@ export default function BabyNamesScreen() {
             <View style={styles.nameActions}>
               {isAdmin && item.id && (
                 <>
-                  <TouchableOpacity style={[styles.iconButton, { backgroundColor: actionButtonBackground }]} onPress={() => handleEditName(item)}>
+                  <TouchableOpacity
+                    style={[styles.iconButton, { backgroundColor: actionButtonBackground }, isReadOnlyPreviewMode && styles.actionDisabled]}
+                    onPress={() => handleEditName(item)}
+                    disabled={isReadOnlyPreviewMode}
+                  >
                     <IconSymbol name="pencil" size={18} color={inputTextColor} />
                   </TouchableOpacity>
-                  <TouchableOpacity style={[styles.iconButton, { marginLeft: 6, backgroundColor: actionButtonBackground }]} onPress={() => handleDeleteName(item)}>
+                  <TouchableOpacity
+                    style={[styles.iconButton, { marginLeft: 6, backgroundColor: actionButtonBackground }, isReadOnlyPreviewMode && styles.actionDisabled]}
+                    onPress={() => handleDeleteName(item)}
+                    disabled={isReadOnlyPreviewMode}
+                  >
                     <IconSymbol name="trash" size={18} color="#C94A4A" />
                   </TouchableOpacity>
                 </>
               )}
               <TouchableOpacity
-                style={[styles.favoriteButton, { marginLeft: 8 }]}
+                style={[styles.favoriteButton, { marginLeft: 8 }, isReadOnlyPreviewMode && styles.actionDisabled]}
                 onPress={() => toggleFavorite(item.name)}
-                disabled={isSaving}
+                disabled={isSaving || isReadOnlyPreviewMode}
               >
                 {isSaving && favorites.includes(item.name) === item.isFavorite ? (
                   <ActivityIndicator size="small" color={accentColor} />
@@ -1151,9 +1186,17 @@ export default function BabyNamesScreen() {
           <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
           <Header 
             title="Babynamen" 
-            subtitle="Finde den perfekten Namen für dein Baby"
+            subtitle={headerSubtitle}
             showBackButton 
           />
+          {isReadOnlyPreviewMode && (
+            <View style={styles.readOnlyPreviewBanner}>
+              <ThemedText style={styles.readOnlyPreviewTitle}>Nur Vorschau aktiv</ThemedText>
+              <ThemedText style={styles.readOnlyPreviewText}>
+                Du schaust den Schwangerschaftsmodus an. Babynamen sind hier gesperrt.
+              </ThemedText>
+            </View>
+          )}
           <FlatList
             style={styles.scrollView}
             contentContainerStyle={styles.contentContainer}
@@ -1256,8 +1299,9 @@ export default function BabyNamesScreen() {
 
           {isAdmin && (
             <TouchableOpacity
-              style={[styles.adminFab, { backgroundColor: accentColor }]}
+              style={[styles.adminFab, { backgroundColor: accentColor }, isReadOnlyPreviewMode && styles.actionDisabled]}
               onPress={handleOpenCreateModal}
+              disabled={isReadOnlyPreviewMode}
               activeOpacity={0.9}
             >
               <IconSymbol name="plus" size={22} color="#FFFFFF" />
@@ -1311,9 +1355,9 @@ export default function BabyNamesScreen() {
                     </View>
                     <View style={styles.headerRight}>
                       <TouchableOpacity
-                        style={[styles.headerCircleButton, { backgroundColor: modalAccent }]}
+                        style={[styles.headerCircleButton, { backgroundColor: modalAccent }, (isCreatingName || isReadOnlyPreviewMode) && styles.actionDisabled]}
                         onPress={handleCreateName}
-                        disabled={isCreatingName}
+                        disabled={isCreatingName || isReadOnlyPreviewMode}
                       >
                         {isCreatingName ? (
                           <ActivityIndicator color="#FFFFFF" />
@@ -1337,12 +1381,14 @@ export default function BabyNamesScreen() {
                           backgroundColor: isDark ? 'rgba(233,201,182,0.28)' : 'rgba(142,78,198,0.18)',
                           borderColor: isDark ? 'rgba(233,201,182,0.55)' : 'rgba(142,78,198,0.5)',
                         },
+                        isReadOnlyPreviewMode && styles.actionDisabled,
                       ]}
                       onPress={() => {
                         setCreateMode('single');
                         setBulkError(null);
                         setBulkErrorIndex(null);
                       }}
+                      disabled={isReadOnlyPreviewMode}
                     >
                       <ThemedText
                         style={[
@@ -1368,6 +1414,7 @@ export default function BabyNamesScreen() {
                           borderColor: isDark ? 'rgba(233,201,182,0.55)' : 'rgba(142,78,198,0.5)',
                         },
                         editingNameId && styles.adminModeButtonDisabled,
+                        isReadOnlyPreviewMode && styles.actionDisabled,
                       ]}
                       onPress={() => {
                         if (editingNameId) return;
@@ -1375,7 +1422,7 @@ export default function BabyNamesScreen() {
                         setBulkError(null);
                         setBulkErrorIndex(null);
                       }}
-                      disabled={Boolean(editingNameId)}
+                      disabled={Boolean(editingNameId) || isReadOnlyPreviewMode}
                     >
                       <ThemedText
                         style={[
@@ -1499,6 +1546,7 @@ export default function BabyNamesScreen() {
                               placeholderTextColor={inputPlaceholderColor}
                               multiline
                               textAlignVertical="top"
+                              editable={!isReadOnlyPreviewMode}
                             />
                           </View>
                           <View style={styles.bulkActionsRow}>
@@ -1509,8 +1557,10 @@ export default function BabyNamesScreen() {
                                   backgroundColor: isDark ? 'rgba(233,201,182,0.24)' : 'rgba(142,78,198,0.18)',
                                   borderColor: isDark ? 'rgba(233,201,182,0.5)' : 'rgba(142,78,198,0.35)',
                                 },
+                                isReadOnlyPreviewMode && styles.actionDisabled,
                               ]}
                               onPress={handleParseBulkSql}
+                              disabled={isReadOnlyPreviewMode}
                             >
                               <ThemedText style={[styles.bulkActionButtonText, { color: modalAccent }]}>SQL prüfen</ThemedText>
                             </TouchableOpacity>
@@ -1567,12 +1617,37 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     paddingBottom: 40,
   },
+  readOnlyPreviewBanner: {
+    marginHorizontal: LAYOUT_PAD,
+    marginTop: 10,
+    marginBottom: 4,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 248, 225, 0.92)',
+    borderWidth: 1,
+    borderColor: 'rgba(229, 180, 77, 0.45)',
+  },
+  readOnlyPreviewTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#8A5A00',
+    marginBottom: 4,
+  },
+  readOnlyPreviewText: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#8A5A00',
+  },
   fullWidthCard: {
   },
   glassCard: {
     borderRadius: 22,
     overflow: 'hidden',
     marginBottom: 16,
+  },
+  actionDisabled: {
+    opacity: 0.45,
   },
   searchContainer: {
     marginBottom: 16,

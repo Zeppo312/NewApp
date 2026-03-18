@@ -8,10 +8,10 @@ import { LiquidGlassCard, GLASS_OVERLAY, GLASS_OVERLAY_DARK, LAYOUT_PAD } from '
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
+import { useBabyStatus } from '@/contexts/BabyStatusContext';
 
 // TIMELINE_INSET zentral aus DesignGuide
-import { supabase } from '@/lib/supabase';
-import { getCurrentUser, getGeburtsplan, saveGeburtsplan, saveStructuredGeburtsplan } from '@/lib/supabase';
+import { supabase, getCurrentUser, getGeburtsplan, saveGeburtsplan, saveStructuredGeburtsplan } from '@/lib/supabase';
 import { GeburtsplanData, defaultGeburtsplan } from '@/types/geburtsplan';
 import { Asset } from 'expo-asset';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -107,6 +107,7 @@ export default function GeburtsplanScreen() {
   const iconSecondaryColor = isDark ? adaptiveColors.iconSecondary : theme.tabIconDefault;
   const heroIconBackground = isDark ? 'rgba(142,78,198,0.7)' : 'rgba(142,78,198,0.9)';
   const router = useRouter();
+  const { isReadOnlyPreviewMode } = useBabyStatus();
   const [user, setUser] = useState<any>(null);
   const styles = React.useMemo(
     () => createStyles({ textPrimary, textSecondary, isDark }),
@@ -122,6 +123,19 @@ export default function GeburtsplanScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [babyIconBase64, setBabyIconBase64] = useState<string | null>(null);
+  const headerSubtitle = isReadOnlyPreviewMode
+    ? 'Vorschau-Modus: nur ansehen'
+    : 'Plane deine ideale Geburt\nIndividuell. Klar. Teilbar.';
+
+  const showReadOnlyPreviewAlert = () => {
+    Alert.alert('Nur Vorschau', 'Du schaust den Schwangerschaftsmodus an. Der Geburtsplan ist hier gesperrt.');
+  };
+
+  const ensureWritableInCurrentMode = () => {
+    if (!isReadOnlyPreviewMode) return true;
+    showReadOnlyPreviewAlert();
+    return false;
+  };
 
   // Lade das Baby-Icon beim Start
   useEffect(() => {
@@ -229,6 +243,7 @@ export default function GeburtsplanScreen() {
   };
 
   const handleSaveGeburtsplan = async () => {
+    if (!ensureWritableInCurrentMode()) return;
     if (!user) {
       Alert.alert('Hinweis', 'Bitte melde dich an, um deinen Geburtsplan zu speichern.');
       return;
@@ -286,9 +301,18 @@ export default function GeburtsplanScreen() {
         
         <Header 
           title="Geburtsplan" 
-          subtitle={"Plane deine ideale Geburt\nIndividuell. Klar. Teilbar."}
+          subtitle={headerSubtitle}
           showBackButton 
         />
+
+        {isReadOnlyPreviewMode && (
+          <View style={styles.readOnlyPreviewBanner}>
+            <ThemedText style={styles.readOnlyPreviewTitle}>Nur Vorschau aktiv</ThemedText>
+            <ThemedText style={styles.readOnlyPreviewText}>
+              Du schaust den Schwangerschaftsmodus an. Der Geburtsplan ist hier gesperrt.
+            </ThemedText>
+          </View>
+        )}
         
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
 
@@ -314,10 +338,14 @@ export default function GeburtsplanScreen() {
                     <ThemedText style={styles.switchLabel}>Strukturierter Editor</ThemedText>
                     <Switch
                       value={useStructuredEditor}
-                      onValueChange={setUseStructuredEditor}
+                      onValueChange={(value) => {
+                        if (!ensureWritableInCurrentMode()) return;
+                        setUseStructuredEditor(value);
+                      }}
                       trackColor={{ false: '#D1D1D6', true: '#9DBEBB' }}
                       thumbColor={useStructuredEditor ? '#FFFFFF' : '#F4F4F4'}
                       ios_backgroundColor="#D1D1D6"
+                      disabled={isReadOnlyPreviewMode}
                     />
                   </View>
                 </LiquidGlassCard>
@@ -334,6 +362,7 @@ export default function GeburtsplanScreen() {
                         allgemeineAngaben: newData
                       })}
                       containerStyle={styles.fullWidthCard}
+                      readOnly={isReadOnlyPreviewMode}
                     />
 
                     <GeburtsWuenscheSection
@@ -343,6 +372,7 @@ export default function GeburtsplanScreen() {
                         geburtsWuensche: newData
                       })}
                       containerStyle={styles.fullWidthCard}
+                      readOnly={isReadOnlyPreviewMode}
                     />
 
                     <MedizinischeEingriffeSection
@@ -352,6 +382,7 @@ export default function GeburtsplanScreen() {
                         medizinischeEingriffe: newData
                       })}
                       containerStyle={styles.fullWidthCard}
+                      readOnly={isReadOnlyPreviewMode}
                     />
 
                     <NachDerGeburtSection
@@ -361,6 +392,7 @@ export default function GeburtsplanScreen() {
                         nachDerGeburt: newData
                       })}
                       containerStyle={styles.fullWidthCard}
+                      readOnly={isReadOnlyPreviewMode}
                     />
 
                     <NotfallSection
@@ -370,6 +402,7 @@ export default function GeburtsplanScreen() {
                         notfall: newData
                       })}
                       containerStyle={styles.fullWidthCard}
+                      readOnly={isReadOnlyPreviewMode}
                     />
 
                     <SonstigeWuenscheSection
@@ -379,6 +412,7 @@ export default function GeburtsplanScreen() {
                         sonstigeWuensche: newData
                       })}
                       containerStyle={styles.fullWidthCard}
+                      readOnly={isReadOnlyPreviewMode}
                     />
                   </>
                 ) : (
@@ -395,6 +429,7 @@ export default function GeburtsplanScreen() {
                       placeholderTextColor={isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)'}
                       value={geburtsplan}
                       onChangeText={setGeburtsplan}
+                      editable={!isReadOnlyPreviewMode}
                     />
                   </LiquidGlassCard>
                 )}
@@ -402,9 +437,9 @@ export default function GeburtsplanScreen() {
                 {/* Quick Actions im More-Style */}
                 <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={glassOverlay}>
                   <TouchableOpacity
-                    style={styles.menuItem}
+                    style={[styles.menuItem, isReadOnlyPreviewMode && styles.actionDisabled]}
                     onPress={handleSaveGeburtsplan}
-                    disabled={isSaving}
+                    disabled={isSaving || isReadOnlyPreviewMode}
                   >
                     <View style={styles.menuItemIcon}>
                       <IconSymbol name="tray.and.arrow.down.fill" size={24} color={iconAccentColor} />
@@ -477,6 +512,28 @@ const createStyles = ({
   },
   contentContainer: { paddingHorizontal: LAYOUT_PAD, paddingBottom: 40, paddingTop: 10 },
   fullWidthCard: {
+  },
+  readOnlyPreviewBanner: {
+    marginHorizontal: LAYOUT_PAD,
+    marginTop: 10,
+    marginBottom: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 248, 225, 0.92)',
+    borderWidth: 1,
+    borderColor: 'rgba(229, 180, 77, 0.45)',
+  },
+  readOnlyPreviewTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#8A5A00',
+    marginBottom: 4,
+  },
+  readOnlyPreviewText: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#8A5A00',
   },
   sectionCard: {
     marginBottom: 16,
@@ -555,6 +612,9 @@ const createStyles = ({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)',
     gap: 12,
+  },
+  actionDisabled: {
+    opacity: 0.45,
   },
   menuItemIcon: {
     width: 44,

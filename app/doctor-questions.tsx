@@ -18,6 +18,7 @@ import { ThemedBackground } from '@/components/ThemedBackground';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Stack } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
+import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { DoctorQuestion } from '@/lib/supabase';
 import { useDoctorQuestionsService } from '@/hooks/useDoctorQuestionsService';
 import Header from '@/components/Header';
@@ -42,6 +43,7 @@ export default function DoctorQuestionsScreen() {
   const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
   const glassOverlay = isDark ? GLASS_OVERLAY_DARK : GLASS_OVERLAY;
   const { user } = useAuth();
+  const { isReadOnlyPreviewMode } = useBabyStatus();
   const service = useDoctorQuestionsService();
 
   const [questions, setQuestions] = useState<DoctorQuestion[]>([]);
@@ -60,6 +62,19 @@ export default function DoctorQuestionsScreen() {
 
   const openQuestions = useMemo(() => questions.filter((q) => !q.is_answered), [questions]);
   const answeredQuestions = useMemo(() => questions.filter((q) => q.is_answered), [questions]);
+  const headerSubtitle = isReadOnlyPreviewMode
+    ? 'Vorschau-Modus: nur ansehen'
+    : 'Alles Wichtige für den nächsten Termin';
+
+  const showReadOnlyPreviewAlert = () => {
+    Alert.alert('Nur Vorschau', 'Du schaust den Schwangerschaftsmodus an. Arztfragen sind hier gesperrt.');
+  };
+
+  const ensureWritableInCurrentMode = () => {
+    if (!isReadOnlyPreviewMode) return true;
+    showReadOnlyPreviewAlert();
+    return false;
+  };
 
   useEffect(() => {
     if (user) {
@@ -123,6 +138,7 @@ export default function DoctorQuestionsScreen() {
   };
 
   const handleSaveQuestion = async () => {
+    if (!ensureWritableInCurrentMode()) return;
     if (isSaving) {
       return;
     }
@@ -161,6 +177,7 @@ export default function DoctorQuestionsScreen() {
   };
 
   const handleToggleAnswered = async (question: DoctorQuestion) => {
+    if (!ensureWritableInCurrentMode()) return;
     if (!service) {
       Alert.alert('Fehler', 'Service nicht verfügbar.');
       return;
@@ -198,6 +215,7 @@ export default function DoctorQuestionsScreen() {
   };
 
   const handleDeleteQuestion = async (questionId: string) => {
+    if (!ensureWritableInCurrentMode()) return;
     Alert.alert('Frage löschen', 'Möchtest du diese Frage wirklich löschen?', [
       {
         text: 'Abbrechen',
@@ -207,6 +225,7 @@ export default function DoctorQuestionsScreen() {
         text: 'Löschen',
         style: 'destructive',
         onPress: async () => {
+          if (!ensureWritableInCurrentMode()) return;
           if (!service) {
             Alert.alert('Fehler', 'Service nicht verfügbar.');
             return;
@@ -249,6 +268,7 @@ export default function DoctorQuestionsScreen() {
   };
 
   const handleStartEditAnswer = (question: DoctorQuestion) => {
+    if (!ensureWritableInCurrentMode()) return;
     setEditingAnswer(question.id);
     setAnswerText(question.answer || '');
     setTimeout(() => {
@@ -257,6 +277,7 @@ export default function DoctorQuestionsScreen() {
   };
 
   const handleSaveAnswer = async (questionId: string) => {
+    if (!ensureWritableInCurrentMode()) return;
     if (!service) {
       Alert.alert('Fehler', 'Service nicht verfügbar.');
       return;
@@ -307,6 +328,7 @@ export default function DoctorQuestionsScreen() {
     const isSavingAnswer = isSavingAnswerId === question.id;
     const isDeleting = isDeletingQuestionId === question.id;
     const isQuestionBusy = isToggling || isSavingAnswer || isDeleting;
+    const isQuestionActionDisabled = isQuestionBusy || isReadOnlyPreviewMode;
     const overlayColor = question.is_answered
       ? 'rgba(168,196,162,0.22)'
       : 'rgba(142,78,198,0.18)';
@@ -360,10 +382,10 @@ export default function DoctorQuestionsScreen() {
               style={[
                 styles.actionChip,
                 question.is_answered && styles.actionChipActive,
-                isToggling && styles.buttonDisabled,
+                isQuestionActionDisabled && styles.buttonDisabled,
               ]}
               onPress={() => handleToggleAnswered(question)}
-              disabled={isQuestionBusy}
+              disabled={isQuestionActionDisabled}
               activeOpacity={0.85}
             >
               {isToggling ? (
@@ -412,6 +434,7 @@ export default function DoctorQuestionsScreen() {
                       value={answerText}
                       onChangeText={setAnswerText}
                       multiline
+                      editable={!isReadOnlyPreviewMode}
                     />
                   </GlassCard>
                   <View style={styles.answerButtons}>
@@ -430,9 +453,9 @@ export default function DoctorQuestionsScreen() {
                       <ThemedText style={styles.secondaryButtonText}>Abbrechen</ThemedText>
                     </TouchableOpacity>
                     <TouchableOpacity
-                      style={[styles.primaryPill, isSavingAnswer && styles.buttonDisabled]}
+                      style={[styles.primaryPill, isQuestionActionDisabled && styles.buttonDisabled]}
                       onPress={() => handleSaveAnswer(question.id)}
-                      disabled={isSavingAnswer}
+                      disabled={isQuestionActionDisabled}
                       activeOpacity={0.85}
                     >
                       {isSavingAnswer ? (
@@ -453,7 +476,9 @@ export default function DoctorQuestionsScreen() {
                 </View>
               ) : (
                 <TouchableOpacity
+                  style={isReadOnlyPreviewMode && styles.buttonDisabled}
                   onPress={() => handleStartEditAnswer(question)}
+                  disabled={isReadOnlyPreviewMode}
                   activeOpacity={0.85}
                 >
                   <GlassCard style={styles.answerDisplay}>
@@ -469,9 +494,9 @@ export default function DoctorQuestionsScreen() {
             </View>
 
             <TouchableOpacity
-              style={[styles.deleteButton, isDeleting && styles.buttonDisabled]}
+              style={[styles.deleteButton, isQuestionActionDisabled && styles.buttonDisabled]}
               onPress={() => handleDeleteQuestion(question.id)}
-              disabled={isQuestionBusy}
+              disabled={isQuestionActionDisabled}
               activeOpacity={0.85}
             >
               {isDeleting ? (
@@ -502,9 +527,17 @@ export default function DoctorQuestionsScreen() {
           <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
           <Header
             title="Fragen für den Frauenarzt"
-            subtitle="Alles Wichtige für den nächsten Termin"
+            subtitle={headerSubtitle}
             showBackButton
           />
+          {isReadOnlyPreviewMode && (
+            <View style={styles.readOnlyPreviewBanner}>
+              <ThemedText style={styles.readOnlyPreviewTitle}>Nur Vorschau aktiv</ThemedText>
+              <ThemedText style={styles.readOnlyPreviewText}>
+                Du schaust den Schwangerschaftsmodus an. Arztfragen sind hier gesperrt.
+              </ThemedText>
+            </View>
+          )}
           <ScrollView contentContainerStyle={styles.scrollContent}>
             <GlassCard style={[styles.fullWidthCard, styles.heroCard]}>
               <ThemedText style={[styles.heroTitle, { color: textPrimary }]}>Alles parat für den nächsten Besuch</ThemedText>
@@ -575,15 +608,16 @@ export default function DoctorQuestionsScreen() {
                   value={newQuestion}
                   onChangeText={setNewQuestion}
                   multiline
+                  editable={!isReadOnlyPreviewMode}
                 />
               </View>
               <LiquidGlassCard
-                style={[styles.primaryButton, isSaving && styles.buttonDisabled]}
+                style={[styles.primaryButton, (isSaving || isReadOnlyPreviewMode) && styles.buttonDisabled]}
                 intensity={28}
                 overlayColor="rgba(142,78,198,0.32)"
                 borderColor="rgba(255,255,255,0.35)"
-                onPress={isSaving ? undefined : handleSaveQuestion}
-                activeOpacity={isSaving ? 1 : 0.85}
+                onPress={isSaving || isReadOnlyPreviewMode ? undefined : handleSaveQuestion}
+                activeOpacity={isSaving || isReadOnlyPreviewMode ? 1 : 0.85}
               >
                 <View style={styles.primaryButtonInner}>
                   {isSaving ? (
@@ -736,6 +770,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: LAYOUT_PAD,
     paddingTop: 18,
     paddingBottom: 56,
+  },
+  readOnlyPreviewBanner: {
+    marginHorizontal: LAYOUT_PAD,
+    marginTop: 10,
+    marginBottom: -2,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: RADIUS,
+    backgroundColor: 'rgba(255, 248, 225, 0.92)',
+    borderWidth: 1,
+    borderColor: 'rgba(229, 180, 77, 0.45)',
+  },
+  readOnlyPreviewTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#8A5A00',
+    marginBottom: 4,
+  },
+  readOnlyPreviewText: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#8A5A00',
   },
   fullWidthCard: {
   },

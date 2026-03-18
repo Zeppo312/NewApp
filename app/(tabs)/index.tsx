@@ -8,6 +8,7 @@ import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { useAuth } from '@/contexts/AuthContext';
+import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { saveContraction, getContractions, deleteContraction, updateContraction, syncAllExistingContractions, getLinkedUsersWithDetails } from '@/lib/supabase';
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
@@ -137,6 +138,7 @@ export default function HomeScreen() {
   const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
   const glassOverlay = isDark ? GLASS_OVERLAY_DARK : GLASS_OVERLAY;
   const { user } = useAuth();
+  const { isReadOnlyPreviewMode } = useBabyStatus();
   const appState = useRef(AppState.currentState);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -210,6 +212,19 @@ export default function HomeScreen() {
 
   const rangeTitle =
     selectedTab === 'week' ? 'Wochenansicht' : selectedTab === 'month' ? 'Monatsansicht' : 'Tagesansicht';
+  const headerSubtitle = isReadOnlyPreviewMode
+    ? 'Vorschau-Modus: nur ansehen'
+    : 'Verfolge deine Wehen bis zur Geburt';
+
+  const showReadOnlyPreviewAlert = () => {
+    Alert.alert('Nur Vorschau', 'Du schaust den Schwangerschaftsmodus an. Der Wehen-Tracker ist hier gesperrt.');
+  };
+
+  const ensureWritableInCurrentMode = () => {
+    if (!isReadOnlyPreviewMode) return true;
+    showReadOnlyPreviewAlert();
+    return false;
+  };
 
   const rangeSubtitle = useMemo(() => {
     if (selectedTab === 'week') {
@@ -298,6 +313,7 @@ export default function HomeScreen() {
 
   // Start a new contraction
   const startContraction = async () => {
+    if (!ensureWritableInCurrentMode()) return;
     // Aktuelle Zeit für die neue Wehe
     const now = new Date();
 
@@ -362,6 +378,7 @@ export default function HomeScreen() {
 
   // Funktion zum Speichern der Wehe mit Intensität
   const saveContractionWithIntensity = async (completedContraction: Contraction, intensity: string | null) => {
+    if (!ensureWritableInCurrentMode()) return;
     // Aktualisiere die Wehe mit der Intensität
     const finalContraction: Contraction = {
       ...completedContraction,
@@ -427,6 +444,7 @@ export default function HomeScreen() {
 
   // Stop the current contraction
   const stopContraction = async () => {
+    if (!ensureWritableInCurrentMode()) return;
     if (currentContraction) {
       const endTime = new Date();
       let duration = elapsedTime;
@@ -564,6 +582,7 @@ export default function HomeScreen() {
 
   // Funktion zum Löschen einer Wehe
   const handleDeleteContraction = async (contractionId: string) => {
+    if (!ensureWritableInCurrentMode()) return;
     console.log('Handling delete for contraction ID:', contractionId);
 
     // Wir führen die Löschung direkt aus, da der Bestätigungsdialog bereits in der ContractionItem-Komponente angezeigt wird
@@ -624,6 +643,7 @@ export default function HomeScreen() {
 
   // Funktion zum Bearbeiten der Intensität einer Wehe
   const handleEditContractionIntensity = async (contractionId: string, newIntensity: string) => {
+    if (!ensureWritableInCurrentMode()) return;
     console.log('Handling edit for contraction ID:', contractionId, 'new intensity:', newIntensity);
 
     try {
@@ -842,6 +862,7 @@ export default function HomeScreen() {
   };
 
   const openManualModal = () => {
+    if (!ensureWritableInCurrentMode()) return;
     const now = new Date();
     setManualStartTime(now);
     setManualEndTime(new Date(now.getTime() + 60 * 1000));
@@ -867,6 +888,7 @@ export default function HomeScreen() {
   };
 
   const handleManualSave = async () => {
+    if (!ensureWritableInCurrentMode()) return;
     if (safeManualEndTime <= safeManualStartTime) {
       Alert.alert('Fehler', 'Die Endzeit muss nach der Startzeit liegen.');
       return;
@@ -1004,8 +1026,9 @@ export default function HomeScreen() {
     <View style={styles.cardsGrid}>
       {timerRunning ? (
         <TouchableOpacity
-          style={styles.fullWidthStopButton}
+          style={[styles.fullWidthStopButton, isReadOnlyPreviewMode && styles.actionDisabled]}
           onPress={stopContraction}
+          disabled={isReadOnlyPreviewMode}
           activeOpacity={0.9}
         >
           <BlurView intensity={24} tint={isDark ? "dark" : "light"} style={styles.liquidGlassCardBackground}>
@@ -1032,8 +1055,13 @@ export default function HomeScreen() {
       ) : (
         <>
           <TouchableOpacity
-            style={[styles.liquidGlassCardWrapper, { width: GRID_COL_W, marginRight: GRID_GUTTER }]}
+            style={[
+              styles.liquidGlassCardWrapper,
+              { width: GRID_COL_W, marginRight: GRID_GUTTER },
+              isReadOnlyPreviewMode && styles.actionDisabled,
+            ]}
             onPress={startContraction}
+            disabled={isReadOnlyPreviewMode}
             activeOpacity={0.9}
           >
             <BlurView intensity={24} tint={isDark ? "dark" : "light"} style={styles.liquidGlassCardBackground}>
@@ -1059,8 +1087,13 @@ export default function HomeScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.liquidGlassCardWrapper, { width: GRID_COL_W }]}
+            style={[
+              styles.liquidGlassCardWrapper,
+              { width: GRID_COL_W },
+              isReadOnlyPreviewMode && styles.actionDisabled,
+            ]}
             onPress={openManualModal}
+            disabled={isReadOnlyPreviewMode}
             activeOpacity={0.9}
           >
             <BlurView intensity={24} tint={isDark ? "dark" : "light"} style={styles.liquidGlassCardBackground}>
@@ -1096,10 +1129,19 @@ export default function HomeScreen() {
         
         <Header 
           title="Wehen-Tracker" 
-          subtitle="Verfolge deine Wehen bis zur Geburt" 
+          subtitle={headerSubtitle}
           showBackButton
           onBackPress={() => router.push('/(tabs)/pregnancy-home')}
         />
+
+        {isReadOnlyPreviewMode && (
+          <View style={styles.readOnlyPreviewBanner}>
+            <ThemedText style={styles.readOnlyPreviewTitle}>Nur Vorschau aktiv</ThemedText>
+            <ThemedText style={styles.readOnlyPreviewText}>
+              Du schaust den Schwangerschaftsmodus an. Der Wehen-Tracker ist hier gesperrt.
+            </ThemedText>
+          </View>
+        )}
 
         <ScrollView
           style={styles.container}
@@ -1233,8 +1275,8 @@ export default function HomeScreen() {
                   contractions={filteredContractions}
                   lightColor="rgba(255, 255, 255, 0.8)"
                   darkColor="rgba(50, 50, 50, 0.8)"
-                  onDelete={handleDeleteContraction}
-                  onEdit={handleEditContractionIntensity}
+                  onDelete={isReadOnlyPreviewMode ? undefined : handleDeleteContraction}
+                  onEdit={isReadOnlyPreviewMode ? undefined : handleEditContractionIntensity}
                   containerStyle={styles.fullWidthCard}
                 />
               )}
@@ -1585,6 +1627,28 @@ const styles = StyleSheet.create({
     color: '#7D5A50',
     textAlign: 'center',
   },
+  readOnlyPreviewBanner: {
+    marginHorizontal: LAYOUT_PAD,
+    marginTop: 10,
+    marginBottom: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: RADIUS.lg,
+    backgroundColor: 'rgba(255, 248, 225, 0.92)',
+    borderWidth: 1,
+    borderColor: 'rgba(229, 180, 77, 0.45)',
+  },
+  readOnlyPreviewTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#8A5A00',
+    marginBottom: 4,
+  },
+  readOnlyPreviewText: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#8A5A00',
+  },
   timerWrapper: {
     alignItems: 'center',
     marginBottom: 10,
@@ -1748,6 +1812,9 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderRadius: 22,
     overflow: 'hidden',
+  },
+  actionDisabled: {
+    opacity: 0.45,
   },
   fullWidthStopButton: {
     width: '100%',
