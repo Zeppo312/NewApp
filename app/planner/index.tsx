@@ -21,16 +21,21 @@ import Header from "@/components/Header";
 import { ThemedBackground } from "@/components/ThemedBackground";
 import { ThemedText } from "@/components/ThemedText";
 import { IconSymbol } from "@/components/ui/IconSymbol";
-import GreetingCard from "@/components/planner/GreetingCard";
-import TodayOverviewCard from "@/components/planner/TodayOverviewCard";
+import GreetingCardView from "@/components/planner/GreetingCard";
+import TodayOverviewCardView from "@/components/planner/TodayOverviewCard";
 import { FloatingAddButton } from "@/components/planner/FloatingAddButton";
-import StructuredTimeline from "@/components/planner/StructuredTimeline";
+import StructuredTimelineView from "@/components/planner/StructuredTimeline";
 import { SwipeableListItem } from "@/components/planner/SwipeableListItem";
-import PlannerCaptureModal, {
+import PlannerCaptureModalView, {
   PlannerCapturePayload,
   PlannerCaptureType,
 } from "@/components/planner/PlannerCaptureModal";
-import { PlannerEvent, PlannerTodo, usePlannerDay } from "@/services/planner";
+import {
+  expandRecurringForRange,
+  PlannerEvent,
+  PlannerTodo,
+  usePlannerDay,
+} from "@/services/planner";
 import {
   PRIMARY,
   BACKGROUND,
@@ -191,6 +196,13 @@ export default function PlannerScreen() {
     updateTodo,
     updateEvent,
     convertPlannerItem,
+    addRecurringItem,
+    updateRecurringSeries,
+    updateRecurringOccurrence,
+    toggleRecurringTodo,
+    deleteRecurringSeries,
+    deleteRecurringOccurrence,
+    disableRecurrence,
     refetch,
   } = usePlannerDay(selectedDate);
 
@@ -489,6 +501,47 @@ export default function PlannerScreen() {
           .lte("planner_days.day", endIso);
         if (itemError) throw itemError;
 
+        const { data: recurringSeriesRows, error: recurringSeriesError } =
+          await supabase
+            .from("planner_recurring_items")
+            .select(
+              "id,user_id,entry_type,title,notes,location,assignee,baby_id,is_all_day,due_at_minutes,start_at_minutes,end_at_minutes,repeat_days,starts_on,ends_on,created_at,updated_at",
+            )
+            .in("user_id", ownerIds);
+        if (recurringSeriesError) throw recurringSeriesError;
+
+        const activeRecurringSeries = ((recurringSeriesRows ?? []) as any[]).filter(
+          (item) => item.starts_on <= endIso && (!item.ends_on || item.ends_on >= startIso),
+        );
+        const recurringIds = activeRecurringSeries.map((item) => item.id);
+        const { data: recurringExceptionRows, error: recurringExceptionError } =
+          recurringIds.length
+            ? await supabase
+                .from("planner_recurring_exceptions")
+                .select(
+                  "id,user_id,recurring_item_id,day,deleted,completed,title,notes,location,assignee,baby_id,is_all_day,due_at_minutes,start_at_minutes,end_at_minutes,created_at,updated_at",
+                )
+                .in("recurring_item_id", recurringIds)
+                .gte("day", startIso)
+                .lte("day", endIso)
+            : { data: [], error: null };
+        if (recurringExceptionError) throw recurringExceptionError;
+
+        const recurringMap = expandRecurringForRange(
+          start,
+          end,
+          activeRecurringSeries as any,
+          (recurringExceptionRows ?? []) as any,
+          user.id,
+        );
+        const recurringExpandedRows = Array.from(recurringMap.entries()).flatMap(
+          ([dayIso, items]) =>
+            items.map((item) => ({
+              ...item,
+              planner_days: { day: dayIso },
+            })),
+        );
+
         const agenda: Record<string, any> = {};
         const monthAgg: Record<string, { tasks: number; events: number }> = {};
 
@@ -519,10 +572,10 @@ export default function PlannerScreen() {
           }
         };
 
-        ((itemRows ?? []) as any[]).forEach((item) => {
+        ([...((itemRows ?? []) as any[]), ...recurringExpandedRows] as any[]).forEach((item) => {
           const plannerDay = item?.planner_days as
             | { day?: string }
-            | Array<{ day?: string }>
+            | { day?: string }[]
             | undefined;
           const dayIso = Array.isArray(plannerDay)
             ? plannerDay[0]?.day
@@ -613,9 +666,50 @@ export default function PlannerScreen() {
   };
 
   const handleDeleteItem = async (id: string) => {
-    if (!user?.id) return;
-
     try {
+      if (id.startsWith("exclude:")) {
+        const [, seriesId, occurrenceDate] = id.split(":");
+        if (seriesId && occurrenceDate) {
+          await deleteRecurringOccurrence(seriesId, occurrenceDate);
+          await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        }
+        return;
+      }
+      if (id.startsWith("delete-series:")) {
+        const [, seriesId] = id.split(":");
+        if (seriesId) {
+          await deleteRecurringSeries(seriesId);
+          await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        }
+        return;
+      }
+      const recurring = parseRecurringId(id);
+      if (recurring) {
+        Alert.alert(
+          "Wiederkehrenden Eintrag löschen",
+          "Soll nur dieser Tag oder die gesamte Serie gelöscht werden?",
+          [
+            { text: "Abbrechen", style: "cancel" },
+            {
+              text: "Nur diesen Tag löschen",
+              style: "destructive",
+              onPress: () =>
+                handleDeleteItem(
+                  `exclude:${recurring.seriesId}:${recurring.occurrenceDate}`,
+                ),
+            },
+            {
+              text: "Alle Wiederholungen löschen",
+              style: "destructive",
+              onPress: () =>
+                handleDeleteItem(`delete-series:${recurring.seriesId}`),
+            },
+          ],
+        );
+        return;
+      }
+      if (!user?.id) return;
+
       const { error } = await supabase
         .from("planner_items")
         .delete()
@@ -675,6 +769,63 @@ export default function PlannerScreen() {
     openCapture("event", { type: "event", item: { ...event } });
   };
 
+  const parseRecurringId = (id: string) => {
+    const parts = id.split(":");
+    if (parts.length < 3 || parts[0] !== "recurring") return null;
+    return { seriesId: parts[1], occurrenceDate: parts.slice(2).join(":") };
+  };
+
+  const toMinutes = (date?: Date | null) =>
+    date ? date.getHours() * 60 + date.getMinutes() : null;
+
+  const handleToggleItem = (id: string) => {
+    const recurring = parseRecurringId(id);
+    if (recurring) {
+      toggleRecurringTodo(recurring.seriesId, recurring.occurrenceDate);
+      return;
+    }
+    toggleTodo(id);
+  };
+
+  const handleMoveTomorrow = async (id: string) => {
+    const recurring = parseRecurringId(id);
+    if (!recurring) {
+      await moveToTomorrow(id);
+      return;
+    }
+
+    const todo = findTodoById(id);
+    if (!todo) return;
+
+    const baseDate = todo.dueAt ? parseSafeDate(todo.dueAt) : selectedDate;
+    const tomorrow = new Date(baseDate ?? selectedDate);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const repeatDays = todo.repeatDays ?? [];
+    const tomorrowIsoWeekday = tomorrow.getDay() === 0 ? 7 : tomorrow.getDay();
+    if (!repeatDays.includes(tomorrowIsoWeekday)) {
+      const nextDueAt = todo.dueAt
+        ? tomorrow.toISOString()
+        : (() => {
+            const flexibleDue = new Date(tomorrow);
+            flexibleDue.setHours(12, 0, 0, 0);
+            return flexibleDue.toISOString();
+          })();
+      await addTodo(
+        todo.title,
+        undefined,
+        nextDueAt,
+        todo.notes,
+        todo.assignee ?? "me",
+        todo.babyId,
+        todo.userId,
+      );
+    }
+
+    await deleteRecurringOccurrence(recurring.seriesId, recurring.occurrenceDate);
+    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  };
+
   const selectedDayTimeline = useMemo(() => {
     const allItems = blocks.flatMap((block) =>
       block.items.map((item) => ({ ...item })),
@@ -688,10 +839,14 @@ export default function PlannerScreen() {
     return { todos, events };
   }, [blocks]);
 
-  const handleCaptureSave = (payload: PlannerCapturePayload) => {
+  const handleCaptureSave = async (payload: PlannerCapturePayload) => {
     const safeStart = payload.start ? parseSafeDate(payload.start) : null;
     const safeEnd = payload.end ? parseSafeDate(payload.end) : null;
     const safeDueAt = payload.dueAt ? parseSafeDate(payload.dueAt) : null;
+    const recurringEdit = editingItem ? parseRecurringId(editingItem.item.id) : null;
+    const recurringSeriesId = payload.recurringSeriesId ?? recurringEdit?.seriesId;
+    const recurringOccurrenceDate =
+      payload.recurringOccurrenceDate ?? recurringEdit?.occurrenceDate ?? toDateKey(selectedDate);
 
     if (payload.type === "event" && !safeStart) {
       Alert.alert("Ungültige Zeit", "Der Termin enthält keine gültige Startzeit.");
@@ -705,12 +860,77 @@ export default function PlannerScreen() {
           ? new Date(safeStart.getTime() + 30 * 60000)
           : null;
 
+    const recurringSeriesInput = {
+      entryType: payload.type,
+      title: payload.title,
+      notes: payload.notes,
+      location: payload.location,
+      assignee: payload.assignee,
+      babyId: payload.babyId ?? null,
+      isAllDay: payload.isAllDay,
+      dueAtMinutes: toMinutes(safeDueAt ?? safeStart),
+      startAtMinutes: toMinutes(safeStart),
+      endAtMinutes: toMinutes(eventEnd),
+      repeatDays: payload.repeatDays ?? [],
+      ownerId: payload.ownerId,
+    } as const;
+    const newRecurringInput = {
+      ...recurringSeriesInput,
+      startsOn: recurringOccurrenceDate,
+    } as const;
+
     try {
+      if (payload.repeatEnabled && payload.repeatDays?.length) {
+        if (recurringSeriesId) {
+          if (payload.editScope === "occurrence") {
+            if (
+              editingItem &&
+              editingItem.type !== payload.type
+            ) {
+              Alert.alert(
+                "Nicht unterstützt",
+                "Der Typ kann für nur einen einzelnen Serien-Tag nicht geändert werden.",
+              );
+              return;
+            }
+            await updateRecurringOccurrence(recurringSeriesId, recurringOccurrenceDate, {
+                entryType: payload.type,
+                title: payload.title,
+                notes: payload.notes ?? null,
+                location: payload.type === "event" ? payload.location ?? null : null,
+                assignee: payload.assignee ?? null,
+                babyId: payload.babyId ?? null,
+                isAllDay: payload.type === "event" ? !!payload.isAllDay : false,
+                dueAtMinutes: payload.type === "todo" ? toMinutes(safeDueAt ?? safeStart) : null,
+                startAtMinutes: payload.type === "event" ? toMinutes(safeStart) : null,
+                endAtMinutes: payload.type === "event" ? toMinutes(eventEnd) : null,
+              },
+            );
+          } else {
+            await updateRecurringSeries(recurringSeriesId, recurringSeriesInput);
+          }
+        } else {
+          await addRecurringItem(newRecurringInput);
+        }
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        return;
+      }
+
+      if (!payload.repeatEnabled && recurringSeriesId) {
+        await disableRecurrence(
+          recurringSeriesId,
+          recurringOccurrenceDate,
+          recurringSeriesInput,
+        );
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        return;
+      }
+
       if (payload.id && editingItem && editingItem.type !== payload.type) {
         if (payload.type === "event" && safeStart && eventEnd) {
           const startIso = safeStart.toISOString();
           const endIso = eventEnd.toISOString();
-          convertPlannerItem(payload.id, "event", {
+          await convertPlannerItem(payload.id, "event", {
             title: payload.title,
             start: startIso,
             end: endIso,
@@ -726,7 +946,7 @@ export default function PlannerScreen() {
               : safeDueAt
                 ? safeDueAt.toISOString()
                 : undefined;
-          convertPlannerItem(payload.id, payload.type, {
+          await convertPlannerItem(payload.id, payload.type, {
             title: payload.title,
             dueAt: dueIso,
             notes: payload.notes,
@@ -737,7 +957,7 @@ export default function PlannerScreen() {
         const startIso = safeStart.toISOString();
         const endIso = eventEnd.toISOString();
         if (payload.id) {
-          updateEvent(payload.id, {
+          await updateEvent(payload.id, {
             title: payload.title,
             start: startIso,
             end: endIso,
@@ -764,12 +984,12 @@ export default function PlannerScreen() {
       } else if (payload.type === "todo") {
         const dueIso =
           payload.dueAt === null
-            ? null
-            : safeDueAt
-              ? safeDueAt.toISOString()
-              : undefined;
+              ? null
+              : safeDueAt
+                ? safeDueAt.toISOString()
+                : undefined;
         if (payload.id) {
-          updateTodo(payload.id, {
+          await updateTodo(payload.id, {
             title: payload.title,
             dueAt: dueIso,
             notes: payload.notes,
@@ -777,7 +997,7 @@ export default function PlannerScreen() {
             babyId: payload.babyId,
           });
         } else {
-          addTodo(
+          await addTodo(
             payload.title,
             undefined,
             dueIso,
@@ -788,7 +1008,7 @@ export default function PlannerScreen() {
           );
         }
       }
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } finally {
       setCaptureVisible(false);
       setEditingItem(null);
@@ -935,14 +1155,14 @@ export default function PlannerScreen() {
             <>
               <View style={{ paddingHorizontal: LAYOUT_PAD }}>
                 <View style={{ marginHorizontal: -LAYOUT_PAD }}>
-                  <GreetingCard
+                <GreetingCardView
                     title={greeting.title}
                     subline={greeting.subline}
                     avatarUrl={profileAvatarUrl}
                   />
                 </View>
                 <View style={{ height: 2 }} />
-                <TodayOverviewCard summary={summary} />
+                <TodayOverviewCardView summary={summary} />
                 <View style={{ height: 2 }} />
                 <ThemedText
                   style={[
@@ -954,14 +1174,14 @@ export default function PlannerScreen() {
                 </ThemedText>
               </View>
 
-              <StructuredTimeline
+              <StructuredTimelineView
                 date={selectedDate}
                 events={selectedDayTimeline.events}
                 todos={selectedDayTimeline.todos}
                 getOwnerLabel={getOwnerLabel}
                 getAssigneeLabel={getAssigneeLabel}
-                onToggleTodo={(id) => toggleTodo(id)}
-                onMoveTomorrow={(id) => moveToTomorrow(id)}
+                onToggleTodo={handleToggleItem}
+                onMoveTomorrow={handleMoveTomorrow}
                 onDelete={handleDeleteItem}
                 onEditTodo={handleEditTodo}
                 onEditEvent={handleEditEvent}
@@ -1025,11 +1245,12 @@ export default function PlannerScreen() {
                             title={todo.title}
                             type="todo"
                             completed={todo.completed}
+                            isRecurring={todo.isRecurring}
                             onComplete={() => {
                               setShowCompletedFloatingTodos(true);
-                              toggleTodo(todo.id);
+                              handleToggleItem(todo.id);
                             }}
-                            onMoveTomorrow={() => moveToTomorrow(todo.id)}
+                            onMoveTomorrow={() => handleMoveTomorrow(todo.id)}
                             onDelete={handleDeleteItem}
                             onPress={() => handleEditTodo(todo.id)}
                             showLeadingCheckbox={false}
@@ -1150,8 +1371,9 @@ export default function PlannerScreen() {
                                   title={todo.title}
                                   type="todo"
                                   completed={todo.completed}
-                                  onComplete={() => toggleTodo(todo.id)}
-                                  onMoveTomorrow={() => moveToTomorrow(todo.id)}
+                                  isRecurring={todo.isRecurring}
+                                  onComplete={() => handleToggleItem(todo.id)}
+                                  onMoveTomorrow={() => handleMoveTomorrow(todo.id)}
                                   onDelete={handleDeleteItem}
                                   onPress={() => handleEditTodo(todo.id)}
                                   showLeadingCheckbox={false}
@@ -1611,14 +1833,14 @@ export default function PlannerScreen() {
                 </ThemedText>
               </View>
 
-              <StructuredTimeline
+              <StructuredTimelineView
                 date={selectedDate}
                 events={selectedDayTimeline.events}
                 todos={selectedDayTimeline.todos}
                 getOwnerLabel={getOwnerLabel}
                 getAssigneeLabel={getAssigneeLabel}
-                onToggleTodo={(id) => toggleTodo(id)}
-                onMoveTomorrow={(id) => moveToTomorrow(id)}
+                onToggleTodo={handleToggleItem}
+                onMoveTomorrow={handleMoveTomorrow}
                 onDelete={handleDeleteItem}
                 onEditTodo={handleEditTodo}
                 onEditEvent={handleEditEvent}
@@ -1636,7 +1858,7 @@ export default function PlannerScreen() {
         )}
       </SafeAreaView>
 
-      <PlannerCaptureModal
+      <PlannerCaptureModalView
         visible={captureVisible}
         type={captureType}
         baseDate={selectedDate}

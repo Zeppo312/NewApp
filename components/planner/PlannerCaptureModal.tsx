@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Modal,
   Platform,
@@ -50,6 +50,11 @@ export type PlannerCapturePayload = {
   babyId?: string;
   ownerId?: string;
   isAllDay?: boolean;
+  repeatEnabled?: boolean;
+  repeatDays?: number[];
+  editScope?: "occurrence" | "series";
+  recurringSeriesId?: string;
+  recurringOccurrenceDate?: string;
 };
 
 type OwnerOption = {
@@ -88,6 +93,15 @@ const THEME = {
 };
 
 const REMINDER_OPTIONS = [0, 5, 10, 15, 30, 60, 120, 1440] as const;
+const WEEKDAY_OPTIONS = [
+  { value: 1, label: "Mo" },
+  { value: 2, label: "Di" },
+  { value: 3, label: "Mi" },
+  { value: 4, label: "Do" },
+  { value: 5, label: "Fr" },
+  { value: 6, label: "Sa" },
+  { value: 7, label: "So" },
+] as const;
 
 const formatReminderLabel = (minutes: number) => {
   if (minutes === 0) return "Zum Start";
@@ -183,6 +197,8 @@ export const PlannerCaptureModal: React.FC<Props> = ({
   const [focusValue, setFocusValue] = useState("");
   const [isAllDay, setIsAllDay] = useState(false);
   const [reminderMinutes, setReminderMinutes] = useState<number>(15);
+  const [repeatEnabled, setRepeatEnabled] = useState(false);
+  const [repeatDays, setRepeatDays] = useState<number[]>([]);
 
   const partnerLabel = useMemo(() => {
     if (!ownerOptions || ownerOptions.length === 0) return "Partner";
@@ -247,6 +263,21 @@ export const PlannerCaptureModal: React.FC<Props> = ({
     () => formatReminderLabel(reminderMinutes),
     [reminderMinutes],
   );
+  const sanitizedRepeatDays = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          repeatDays
+            .map((day) => Math.round(day))
+            .filter((day) => day >= 1 && day <= 7),
+        ),
+      ).sort((a, b) => a - b),
+    [repeatDays],
+  );
+  const weekdaysShortcutActive =
+    sanitizedRepeatDays.join(",") === "1,2,3,4,5";
+  const everyDayShortcutActive =
+    sanitizedRepeatDays.join(",") === "1,2,3,4,5,6,7";
 
   const timeRangeSummary = useMemo(() => {
     const dayKey = (date: Date) =>
@@ -322,9 +353,35 @@ export const PlannerCaptureModal: React.FC<Props> = ({
     setShowEnd(true);
   };
 
-  const deriveAssigneeForOwner = (targetOwnerId?: string | null) => {
-    if (!defaultOwnerId || !targetOwnerId) return "me" as PlannerAssignee;
-    return targetOwnerId === defaultOwnerId ? "me" : "partner";
+  const deriveAssigneeForOwner = useCallback(
+    (targetOwnerId?: string | null) => {
+      if (!defaultOwnerId || !targetOwnerId) return "me" as PlannerAssignee;
+      return targetOwnerId === defaultOwnerId ? "me" : "partner";
+    },
+    [defaultOwnerId],
+  );
+
+  const toggleRepeatEnabled = () => {
+    setRepeatEnabled((prev) => {
+      const next = !prev;
+      if (next && sanitizedRepeatDays.length === 0) {
+        setRepeatDays([1, 2, 3, 4, 5]);
+      }
+      if (next && currentType === "todo" && !hasDueTime) {
+        setHasDueTime(true);
+        setDueTime(dueTime ?? startTime);
+      }
+      return next;
+    });
+  };
+
+  const toggleRepeatDay = (day: number) => {
+    setRepeatDays((prev) => {
+      const next = prev.includes(day)
+        ? prev.filter((value) => value !== day)
+        : [...prev, day];
+      return next.sort((a, b) => a - b);
+    });
   };
 
   useEffect(() => {
@@ -392,6 +449,13 @@ export const PlannerCaptureModal: React.FC<Props> = ({
       } else {
         setSelectedBabyId(null);
       }
+      if (item.isRecurring) {
+        setRepeatEnabled(true);
+        setRepeatDays(item.repeatDays?.length ? item.repeatDays : [1, 2, 3, 4, 5]);
+      } else {
+        setRepeatEnabled(false);
+        setRepeatDays([]);
+      }
     } else {
       const reset = getSafePickerDate(baseDate, new Date());
       reset.setHours(new Date().getHours(), new Date().getMinutes(), 0, 0);
@@ -411,8 +475,10 @@ export const PlannerCaptureModal: React.FC<Props> = ({
       setSelectedBabyId(null);
       setIsAllDay(false);
       setReminderMinutes(15);
+      setRepeatEnabled(false);
+      setRepeatDays([]);
     }
-  }, [visible, type, baseDate, editingItem, defaultOwnerId]);
+  }, [visible, type, baseDate, editingItem, defaultOwnerId, initialStart, deriveAssigneeForOwner]);
 
   useEffect(() => {
     if (!visible || assignee !== "child") return;
@@ -430,9 +496,14 @@ export const PlannerCaptureModal: React.FC<Props> = ({
       setShowEnd(true);
     } else {
       setShowEnd(false);
-      setDueTime((prev) => prev);
+      if (repeatEnabled && !hasDueTime) {
+        setHasDueTime(true);
+        setDueTime((prev) => prev ?? startTime);
+      } else {
+        setDueTime((prev) => prev);
+      }
     }
-  }, [currentType, visible]);
+  }, [currentType, visible, repeatEnabled, hasDueTime, startTime, endTime]);
 
   const toggleNotes = () => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -498,8 +569,20 @@ export const PlannerCaptureModal: React.FC<Props> = ({
   const handleSave = () => {
     const trimmedTitle = title.trim();
     const trimmedNotes = notes.trim();
+    const isRecurringEdit = Boolean(editingItem?.item.isRecurring);
+    const recurringSeriesId = editingItem?.item.isRecurring
+      ? editingItem.item.seriesId
+      : undefined;
+    const recurringOccurrenceDate = editingItem?.item.isRecurring
+      ? editingItem.item.occurrenceDate
+      : undefined;
 
     if (trimmedTitle.length === 0) {
+      return;
+    }
+
+    if (repeatEnabled && sanitizedRepeatDays.length === 0) {
+      Alert.alert("Wochentage fehlen", "Bitte wähle mindestens einen Wochentag aus.");
       return;
     }
 
@@ -519,6 +602,28 @@ export const PlannerCaptureModal: React.FC<Props> = ({
 
     if (currentType === "todo" && hasDueTime && !safeDue && !safeStart) {
       Alert.alert("Ungültige Zeit", "Bitte wähle einen gültigen Zeitpunkt.");
+      return;
+    }
+
+    if (repeatEnabled && currentType === "todo" && !hasDueTime) {
+      Alert.alert(
+        "Zeit fehlt",
+        "Wiederkehrende Aufgaben brauchen eine Uhrzeit oder ein Fälligkeitsdatum.",
+      );
+      return;
+    }
+
+    if (
+      repeatEnabled &&
+      currentType === "event" &&
+      safeStart &&
+      safeEnd &&
+      safeStart.toDateString() !== safeEnd.toDateString()
+    ) {
+      Alert.alert(
+        "Nicht unterstützt",
+        "Wiederkehrende Termine können in dieser Version nur am selben Tag stattfinden.",
+      );
       return;
     }
 
@@ -577,12 +682,113 @@ export const PlannerCaptureModal: React.FC<Props> = ({
       payload.id = editingItem.item.id;
     }
 
-    onSave(payload);
-    onClose();
+    if (repeatEnabled && sanitizedRepeatDays.length > 0) {
+      payload.repeatEnabled = true;
+      payload.repeatDays = sanitizedRepeatDays;
+    }
+    if (isRecurringEdit && recurringSeriesId && recurringOccurrenceDate) {
+      payload.recurringSeriesId = recurringSeriesId;
+      payload.recurringOccurrenceDate = recurringOccurrenceDate;
+    }
+
+    const submitPayload = (nextPayload: PlannerCapturePayload) => {
+      onSave(nextPayload);
+      onClose();
+    };
+
+    if (isRecurringEdit && !payload.repeatEnabled) {
+      submitPayload({
+        ...payload,
+        repeatEnabled: false,
+        editScope: "series",
+      });
+      return;
+    }
+
+    if (isRecurringEdit && payload.repeatEnabled) {
+      Alert.alert(
+        "Änderungen speichern",
+        "Soll die Änderung nur für diesen Tag oder für die gesamte Serie gelten?",
+        [
+          { text: "Abbrechen", style: "cancel" },
+          {
+            text: "Nur diesen Tag",
+            onPress: () =>
+              submitPayload({
+                ...payload,
+                editScope: "occurrence",
+              }),
+          },
+          {
+            text: "Gesamte Serie",
+            onPress: () =>
+              submitPayload({
+                ...payload,
+                editScope: "series",
+              }),
+          },
+        ],
+      );
+      return;
+    }
+
+    submitPayload(payload);
   };
 
   const handleDelete = () => {
     if (!editingItem?.item.id || !onDelete) return;
+
+    if (
+      editingItem.item.isRecurring &&
+      editingItem.item.seriesId &&
+      editingItem.item.occurrenceDate
+    ) {
+      Alert.alert(
+        "Wiederkehrenden Eintrag löschen",
+        "Möchtest du nur diesen Tag oder die gesamte Serie löschen?",
+        [
+          { text: "Abbrechen", style: "cancel" },
+          {
+            text: "Nur diesen Tag löschen",
+            style: "destructive",
+            onPress: () => {
+              onDelete(
+                `exclude:${editingItem.item.seriesId}:${editingItem.item.occurrenceDate}`,
+              );
+              onClose();
+            },
+          },
+          {
+            text: "Alle Wiederholungen löschen",
+            style: "destructive",
+            onPress: () => {
+              onDelete(`delete-series:${editingItem.item.seriesId}`);
+              onClose();
+            },
+          },
+        ],
+      );
+      return;
+    }
+
+    if (editingItem.item.isRecurring) {
+      Alert.alert(
+        "Eintrag löschen",
+        "Die Serienmetadaten konnten nicht gelesen werden. Möchtest du diesen Eintrag wirklich löschen?",
+        [
+          { text: "Abbrechen", style: "cancel" },
+          {
+            text: "Löschen",
+            style: "destructive",
+            onPress: () => {
+              onDelete(editingItem.item.id);
+              onClose();
+            },
+          },
+        ],
+      );
+      return;
+    }
 
     Alert.alert(
       "Eintrag löschen",
@@ -834,6 +1040,128 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                   </View>
                 )}
 
+                <View style={styles.section}>
+                  <View style={styles.recurrenceToggleRow}>
+                    <Text style={[styles.sectionLabel, { color: theme.text }]}>
+                      🔄 Wiederholen
+                    </Text>
+                    <TouchableOpacity
+                      style={[
+                        styles.recurrenceToggle,
+                        {
+                          backgroundColor: repeatEnabled
+                            ? accentColor
+                            : theme.field,
+                          borderColor: repeatEnabled ? accentColor : theme.border,
+                        },
+                      ]}
+                      activeOpacity={0.85}
+                      onPress={toggleRepeatEnabled}
+                    >
+                      <Text
+                        style={[
+                          styles.recurrenceToggleText,
+                          { color: repeatEnabled ? "#fff" : theme.text },
+                        ]}
+                      >
+                        {repeatEnabled ? "An" : "Aus"}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {repeatEnabled && (
+                    <View style={styles.recurrenceContent}>
+                      <View style={styles.recurrenceShortcuts}>
+                        <TouchableOpacity
+                          style={[
+                            styles.recurrenceShortcut,
+                            {
+                              backgroundColor: everyDayShortcutActive
+                                ? accentColor
+                                : theme.soft,
+                              borderColor: everyDayShortcutActive
+                                ? accentColor
+                                : theme.border,
+                            },
+                          ]}
+                          activeOpacity={0.85}
+                          onPress={() => setRepeatDays([1, 2, 3, 4, 5, 6, 7])}
+                        >
+                          <Text
+                            style={[
+                              styles.recurrenceShortcutText,
+                              {
+                                color: everyDayShortcutActive ? "#fff" : theme.text,
+                              },
+                            ]}
+                          >
+                            Jeden Tag
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[
+                            styles.recurrenceShortcut,
+                            {
+                              backgroundColor: weekdaysShortcutActive
+                                ? accentColor
+                                : theme.soft,
+                              borderColor: weekdaysShortcutActive
+                                ? accentColor
+                                : theme.border,
+                            },
+                          ]}
+                          activeOpacity={0.85}
+                          onPress={() => setRepeatDays([1, 2, 3, 4, 5])}
+                        >
+                          <Text
+                            style={[
+                              styles.recurrenceShortcutText,
+                              {
+                                color: weekdaysShortcutActive ? "#fff" : theme.text,
+                              },
+                            ]}
+                          >
+                            Wochentags (Mo-Fr)
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+
+                      <View style={styles.weekdaySelector}>
+                        {WEEKDAY_OPTIONS.map((day) => {
+                          const selected = sanitizedRepeatDays.includes(day.value);
+                          return (
+                            <TouchableOpacity
+                              key={day.value}
+                              style={[
+                                styles.weekdayButton,
+                                {
+                                  backgroundColor: selected
+                                    ? accentColor
+                                    : theme.field,
+                                  borderColor: selected
+                                    ? accentColor
+                                    : theme.border,
+                                },
+                              ]}
+                              activeOpacity={0.85}
+                              onPress={() => toggleRepeatDay(day.value)}
+                            >
+                              <Text
+                                style={[
+                                  styles.weekdayLabel,
+                                  { color: selected ? "#fff" : theme.text },
+                                ]}
+                              >
+                                {day.label}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    </View>
+                  )}
+                </View>
+
                 {currentType === "event" && (
                   <View style={styles.section}>
                     <Text style={[styles.sectionLabel, { color: theme.text }]}>
@@ -877,37 +1205,39 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                         },
                       ],
                     )}
-                    <View style={styles.section}>
-                      <Text
-                        style={[
-                          styles.sectionLabelSecondary,
-                          { color: theme.textSecondary },
-                        ]}
-                      >
-                        Erinnerung
-                      </Text>
-                      <TouchableOpacity
-                        style={[
-                          styles.dropdownField,
-                          styles.dropdownFieldCompact,
-                          {
-                            backgroundColor: theme.field,
-                            borderColor: theme.border,
-                          },
-                        ]}
-                        onPress={() => setShowReminderPicker(true)}
-                        activeOpacity={0.85}
-                      >
-                        <Text style={[styles.dropdownValue, { color: theme.text }]}>
-                          {selectedReminderLabel}
-                        </Text>
+                    {!repeatEnabled && (
+                      <View style={styles.section}>
                         <Text
-                          style={[styles.dropdownChevron, { color: theme.textSecondary }]}
+                          style={[
+                            styles.sectionLabelSecondary,
+                            { color: theme.textSecondary },
+                          ]}
                         >
-                          ▾
+                          Erinnerung
                         </Text>
-                      </TouchableOpacity>
-                    </View>
+                        <TouchableOpacity
+                          style={[
+                            styles.dropdownField,
+                            styles.dropdownFieldCompact,
+                            {
+                              backgroundColor: theme.field,
+                              borderColor: theme.border,
+                            },
+                          ]}
+                          onPress={() => setShowReminderPicker(true)}
+                          activeOpacity={0.85}
+                        >
+                          <Text style={[styles.dropdownValue, { color: theme.text }]}>
+                            {selectedReminderLabel}
+                          </Text>
+                          <Text
+                            style={[styles.dropdownChevron, { color: theme.textSecondary }]}
+                          >
+                            ▾
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
                   </View>
                 )}
 
@@ -931,6 +1261,9 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                             { backgroundColor: theme.field },
                           ]}
                           onPress={() => {
+                            if (repeatEnabled) {
+                              return;
+                            }
                             setHasDueTime(false);
                             setDueTime(null);
                             setShowDuePicker(false);
@@ -942,7 +1275,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                               { color: theme.text },
                             ]}
                           >
-                            Kein Datum setzen
+                            {repeatEnabled ? "Zeit erforderlich" : "Kein Datum setzen"}
                           </Text>
                         </TouchableOpacity>
                       </>
@@ -1589,6 +1922,61 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
     color: THEME.textSecondary,
+  },
+  recurrenceToggleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  recurrenceToggle: {
+    minWidth: 72,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  recurrenceToggleText: {
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  recurrenceContent: {
+    gap: 12,
+  },
+  recurrenceShortcuts: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  recurrenceShortcut: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  recurrenceShortcutText: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  weekdaySelector: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  weekdayButton: {
+    minWidth: 42,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  weekdayLabel: {
+    fontSize: 13,
+    fontWeight: "700",
   },
   pickerBlock: {
     backgroundColor: "rgba(255,255,255,0.85)",

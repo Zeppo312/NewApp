@@ -31,6 +31,7 @@ type Props = {
   onPress?: (id: string) => void;
   showLeadingCheckbox?: boolean; // default true for todo
   trailingCheckbox?: boolean; // when true, render checkbox at right instead of left
+  isRecurring?: boolean;
   style?: StyleProp<ViewStyle>;
   titleStyle?: StyleProp<TextStyle>;
   subtitleStyle?: StyleProp<TextStyle>;
@@ -49,6 +50,7 @@ export const SwipeableListItem: React.FC<Props> = ({
   onPress,
   showLeadingCheckbox = true,
   trailingCheckbox = false,
+  isRecurring = false,
   style,
   titleStyle,
   subtitleStyle,
@@ -119,6 +121,10 @@ export const SwipeableListItem: React.FC<Props> = ({
         Haptics.selectionAsync();
         ref.current?.close();
         if (onDelete) {
+          if (isRecurring) {
+            onDelete(id);
+            return;
+          }
           Alert.alert(
             "Eintrag löschen",
             "Möchtest du diesen Eintrag wirklich löschen?",
@@ -153,7 +159,7 @@ export const SwipeableListItem: React.FC<Props> = ({
             ]);
         }}
         accessibilityRole="button"
-        accessibilityLabel={`${type === "todo" ? "Aufgabe" : "Termin"}: ${title}${completed ? ", erledigt" : ""}`}
+        accessibilityLabel={`${type === "todo" ? "Aufgabe" : "Termin"}: ${title}${completed ? ", erledigt" : ""}${isRecurring ? ", wiederkehrend" : ""}`}
         accessibilityHint="Doppeltippen für Optionen, nach rechts wischen zum Erledigen, nach links zum Verschieben auf morgen"
         style={[styles.item, style]}
       >
@@ -192,16 +198,32 @@ export const SwipeableListItem: React.FC<Props> = ({
           </View>
         )}
         <View style={{ flex: 1, minHeight: 32, justifyContent: "center" }}>
-          <Text
-            style={[
-              styles.title,
-              { color: textPrimary },
-              completed && styles.titleDone,
-              titleStyle,
-            ]}
-          >
-            {title}
-          </Text>
+          <View style={styles.titleRow}>
+            <Text
+              style={[
+                styles.title,
+                { color: textPrimary },
+                completed && styles.titleDone,
+                titleStyle,
+              ]}
+              numberOfLines={1}
+            >
+              {title}
+            </Text>
+            {isRecurring && (
+              <View
+                accessible={false}
+                importantForAccessibility="no-hide-descendants"
+              >
+                <IconSymbol
+                  name="arrow.triangle.2.circlepath"
+                  color={textSecondary as any}
+                  size={10}
+                  style={styles.recurringIcon}
+                />
+              </View>
+            )}
+          </View>
           {subtitle ? (
             <Text
               style={[styles.subtitle, { color: textSecondary }, subtitleStyle]}
@@ -256,6 +278,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    minWidth: 0,
+  },
   checkbox: {
     width: 22,
     height: 22,
@@ -274,9 +301,15 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     backgroundColor: "#fff",
   },
-  title: { fontSize: 16, color: TEXT_PRIMARY, fontWeight: "600" },
+  title: {
+    flexShrink: 1,
+    fontSize: 16,
+    color: TEXT_PRIMARY,
+    fontWeight: "600",
+  },
   titleDone: { textDecorationLine: "line-through", opacity: 0.5 },
   subtitle: { fontSize: 12, opacity: 0.7, marginTop: 2, color: TEXT_PRIMARY },
+  recurringIcon: { opacity: 0.7, marginLeft: 4 },
   action: {
     flex: 1,
     justifyContent: "center",

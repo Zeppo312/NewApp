@@ -19,6 +19,11 @@ export type PlannerTodo = {
   babyId?: string;
   userId?: string;
   entryType?: 'todo' | 'note';
+  isRecurring?: boolean;
+  seriesId?: string;
+  occurrenceDate?: string;
+  isRecurringException?: boolean;
+  repeatDays?: number[];
 };
 
 export type PlannerEvent = {
@@ -33,6 +38,11 @@ export type PlannerEvent = {
   blockId?: string;
   userId?: string;
   isAllDay?: boolean;
+  isRecurring?: boolean;
+  seriesId?: string;
+  occurrenceDate?: string;
+  isRecurringException?: boolean;
+  repeatDays?: number[];
 };
 
 export type PlannerBlock = {
@@ -40,7 +50,7 @@ export type PlannerBlock = {
   label: string;
   start: string;
   end: string;
-  items: Array<PlannerTodo | PlannerEvent>;
+  items: (PlannerTodo | PlannerEvent)[];
 };
 
 export type Mood = 'great' | 'good' | 'okay' | 'bad';
@@ -71,7 +81,7 @@ type PlannerDayRow = {
   reflection: string | null;
 };
 
-type PlannerItemRow = {
+export type PlannerItemRow = {
   id: string;
   user_id: string;
   day_id: string;
@@ -90,6 +100,80 @@ type PlannerItemRow = {
   reminder_minutes: number | null;
   created_at: string;
   updated_at: string;
+  is_recurring?: boolean;
+  recurring_series_id?: string | null;
+  recurring_occurrence_date?: string | null;
+  repeat_days?: number[] | null;
+  is_recurring_exception?: boolean;
+};
+
+export type RecurringItemRow = {
+  id: string;
+  user_id: string;
+  entry_type: 'todo' | 'event';
+  title: string;
+  notes: string | null;
+  location: string | null;
+  assignee: PlannerAssignee | null;
+  baby_id: string | null;
+  is_all_day: boolean;
+  due_at_minutes: number | null;
+  start_at_minutes: number | null;
+  end_at_minutes: number | null;
+  repeat_days: number[];
+  starts_on: string;
+  ends_on: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type RecurringExceptionRow = {
+  id: string;
+  user_id: string;
+  recurring_item_id: string;
+  day: string;
+  deleted: boolean;
+  completed: boolean;
+  title: string | null;
+  notes: string | null;
+  location: string | null;
+  assignee: PlannerAssignee | null;
+  baby_id: string | null;
+  is_all_day: boolean | null;
+  due_at_minutes: number | null;
+  start_at_minutes: number | null;
+  end_at_minutes: number | null;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type RecurringSeriesInput = {
+  entryType: 'todo' | 'event';
+  title: string;
+  notes?: string;
+  location?: string;
+  assignee?: PlannerAssignee;
+  babyId?: string | null;
+  isAllDay?: boolean;
+  dueAtMinutes?: number | null;
+  startAtMinutes?: number | null;
+  endAtMinutes?: number | null;
+  repeatDays: number[];
+  ownerId?: string;
+  startsOn?: string;
+};
+
+export type RecurringOccurrenceOverrideInput = {
+  entryType: 'todo' | 'event';
+  title?: string | null;
+  notes?: string | null;
+  location?: string | null;
+  assignee?: PlannerAssignee | null;
+  babyId?: string | null;
+  isAllDay?: boolean | null;
+  dueAtMinutes?: number | null;
+  startAtMinutes?: number | null;
+  endAtMinutes?: number | null;
 };
 
 type PlannerItemConversion = {
@@ -162,6 +246,40 @@ function isoForMinutes(date: Date, minutes: number) {
   return d.toISOString();
 }
 
+function isoWeekday(date: Date) {
+  const day = date.getDay();
+  return day === 0 ? 7 : day;
+}
+
+function hasRecurringOverride(exception?: RecurringExceptionRow | null) {
+  if (!exception) return false;
+  return (
+    exception.title !== null ||
+    exception.notes !== null ||
+    exception.location !== null ||
+    exception.assignee !== null ||
+    exception.baby_id !== null ||
+    exception.is_all_day !== null ||
+    exception.due_at_minutes !== null ||
+    exception.start_at_minutes !== null ||
+    exception.end_at_minutes !== null
+  );
+}
+
+function cloneDate(date: Date) {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function parseDateOnly(dateIso: string) {
+  const [year, month, day] = dateIso.split('-').map((part) => Number(part));
+  if (!year || !month || !day) return null;
+  const parsed = new Date(year, month - 1, day);
+  parsed.setHours(0, 0, 0, 0);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
 function buildEmptyBlocks(date: Date): PlannerBlock[] {
   return BLOCK_DEFS.map((def, index) => ({
     id: `empty_${def.key}_${index}`,
@@ -185,6 +303,22 @@ function sanitizeReminderMinutes(value?: number | null, fallback = 15) {
   if (typeof value !== 'number' || Number.isNaN(value)) return fallback;
   const rounded = Math.round(value);
   return Math.min(10080, Math.max(0, rounded));
+}
+
+function sanitizeMinutesOfDay(value?: number | null) {
+  if (typeof value !== 'number' || Number.isNaN(value)) return null;
+  return Math.min(1439, Math.max(0, Math.round(value)));
+}
+
+function sanitizeRepeatDays(values?: number[] | null) {
+  if (!Array.isArray(values)) return [];
+  return Array.from(
+    new Set(
+      values
+        .map((value) => Math.round(value))
+        .filter((value) => value >= 1 && value <= 7),
+    ),
+  ).sort((a, b) => a - b);
 }
 
 function extractErrorMessage(error: unknown) {
@@ -252,6 +386,120 @@ async function ensurePlannerDayForUser(userId: string, date: Date): Promise<stri
   return dayId;
 }
 
+function buildRecurringPlannerItemRow(
+  series: RecurringItemRow,
+  date: Date,
+  dateIso: string,
+  exception?: RecurringExceptionRow | null,
+): PlannerItemRow | null {
+  if (exception?.deleted) return null;
+
+  const isTodo = series.entry_type === 'todo';
+  const isAllDay = exception?.is_all_day ?? series.is_all_day;
+  const dueAtMinutes = exception?.due_at_minutes ?? series.due_at_minutes;
+  const startAtMinutes =
+    isAllDay
+      ? 0
+      : exception?.start_at_minutes ?? series.start_at_minutes;
+  const endAtMinutes =
+    isAllDay
+      ? (24 * 60) - 1
+      : exception?.end_at_minutes ?? series.end_at_minutes;
+
+  return {
+    id: `recurring:${series.id}:${dateIso}`,
+    user_id: series.user_id,
+    day_id: `recurring-day:${series.id}:${dateIso}`,
+    block_id: null,
+    entry_type: series.entry_type,
+    title: exception?.title ?? series.title,
+    completed: isTodo ? !!exception?.completed : false,
+    assignee: exception?.assignee ?? series.assignee,
+    baby_id: exception?.baby_id ?? series.baby_id,
+    notes: exception?.notes ?? series.notes,
+    location: exception?.location ?? series.location,
+    due_at: isTodo && dueAtMinutes !== null ? isoForMinutes(date, dueAtMinutes) : null,
+    start_at:
+      !isTodo && startAtMinutes !== null ? isoForMinutes(date, startAtMinutes) : null,
+    end_at:
+      !isTodo && endAtMinutes !== null
+        ? new Date(isoForMinutes(date, endAtMinutes)).toISOString()
+        : null,
+    is_all_day: isTodo ? false : isAllDay,
+    reminder_minutes: null,
+    created_at: series.created_at,
+    updated_at: exception?.updated_at ?? series.updated_at,
+    is_recurring: true,
+    recurring_series_id: series.id,
+    recurring_occurrence_date: dateIso,
+    repeat_days: series.repeat_days,
+    is_recurring_exception: hasRecurringOverride(exception),
+  };
+}
+
+export function expandRecurringForDate(
+  date: Date,
+  dateIso: string,
+  series: RecurringItemRow[],
+  exceptions: RecurringExceptionRow[],
+  _baseUserId: string,
+): PlannerItemRow[] {
+  const weekday = isoWeekday(date);
+  const exceptionMap = new Map<string, RecurringExceptionRow>();
+  exceptions.forEach((exception) => {
+    if (exception.day === dateIso) {
+      exceptionMap.set(exception.recurring_item_id, exception);
+    }
+  });
+
+  return series
+    .filter((item) => {
+      const repeatDays = sanitizeRepeatDays(item.repeat_days);
+      if (!repeatDays.includes(weekday)) return false;
+      if (item.starts_on > dateIso) return false;
+      if (item.ends_on && item.ends_on < dateIso) return false;
+      return true;
+    })
+    .map((item) =>
+      buildRecurringPlannerItemRow(item, date, dateIso, exceptionMap.get(item.id) ?? null),
+    )
+    .filter((row): row is PlannerItemRow => !!row);
+}
+
+export function expandRecurringForRange(
+  startDate: Date,
+  endDate: Date,
+  series: RecurringItemRow[],
+  exceptions: RecurringExceptionRow[],
+  baseUserId: string,
+) {
+  const result = new Map<string, PlannerItemRow[]>();
+  const exceptionByDay = new Map<string, RecurringExceptionRow[]>();
+  exceptions.forEach((exception) => {
+    const list = exceptionByDay.get(exception.day) ?? [];
+    list.push(exception);
+    exceptionByDay.set(exception.day, list);
+  });
+
+  const cursor = cloneDate(startDate);
+  const end = cloneDate(endDate);
+  while (cursor.getTime() <= end.getTime()) {
+    const dateIso = toDateOnlyISO(cursor);
+    result.set(
+      dateIso,
+      expandRecurringForDate(
+        cursor,
+        dateIso,
+        series,
+        exceptionByDay.get(dateIso) ?? [],
+        baseUserId,
+      ),
+    );
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return result;
+}
+
 function buildAggregatedData(date: Date, dayRows: PlannerDayRow[], itemRows: PlannerItemRow[], baseUserId: string): LoadedPlannerData {
   const baseDayRow = dayRows.find((row) => row.user_id === baseUserId) ?? null;
   const workingDate = new Date(date);
@@ -303,6 +551,11 @@ function buildAggregatedData(date: Date, dayRows: PlannerDayRow[], itemRows: Pla
         blockId: row.block_id ?? undefined,
         userId: row.user_id,
         isAllDay: isEffectivelyAllDay,
+        isRecurring: !!row.is_recurring,
+        seriesId: row.recurring_series_id ?? undefined,
+        occurrenceDate: row.recurring_occurrence_date ?? undefined,
+        isRecurringException: !!row.is_recurring_exception,
+        repeatDays: row.repeat_days ?? undefined,
       };
       const minute = startDate ? minutesSinceMidnight(startDate) : null;
       const targetIndex =
@@ -330,6 +583,11 @@ function buildAggregatedData(date: Date, dayRows: PlannerDayRow[], itemRows: Pla
       babyId: row.baby_id ?? undefined,
       userId: row.user_id,
       entryType: row.entry_type,
+      isRecurring: !!row.is_recurring,
+      seriesId: row.recurring_series_id ?? undefined,
+      occurrenceDate: row.recurring_occurrence_date ?? undefined,
+      isRecurringException: !!row.is_recurring_exception,
+      repeatDays: row.repeat_days ?? undefined,
     };
     const minute = dueDate ? minutesSinceMidnight(dueDate) : null;
     const targetIndex =
@@ -389,14 +647,12 @@ export function toDateOnlyISO(d: Date) {
 
 export function usePlannerDay(date: Date) {
   const { user } = useAuth();
-  const dateKey = date.getTime();
   const normalizedDate = useMemo(() => {
     const copy = new Date(date);
     copy.setHours(0, 0, 0, 0);
     return copy;
-  }, [dateKey]);
-  const normalizedKey = normalizedDate.getTime();
-  const dateIso = useMemo(() => toDateOnlyISO(normalizedDate), [normalizedKey]);
+  }, [date]);
+  const dateIso = useMemo(() => toDateOnlyISO(normalizedDate), [normalizedDate]);
 
   const [blocks, setBlocks] = useState<PlannerBlock[]>(() => buildEmptyBlocks(normalizedDate));
   const [summary, setSummary] = useState<PlannerDaySummary>(EMPTY_SUMMARY);
@@ -417,7 +673,7 @@ export function usePlannerDay(date: Date) {
     setDayDateById({});
     setFloatingTodos([]);
     setCompletedFloatingTodos([]);
-  }, [normalizedKey, user?.id]);
+  }, [normalizedDate, user?.id]);
 
   useEffect(() => {
     if (!user?.id) {
@@ -447,7 +703,10 @@ export function usePlannerDay(date: Date) {
     };
   }, [user?.id]);
 
-  const linkedKey = useMemo(() => uniqueStrings(linkedUserIds).sort().join(','), [linkedUserIds]);
+  const ownerIds = useMemo(() => {
+    if (!user?.id) return [];
+    return uniqueStrings([user.id, ...linkedUserIds]);
+  }, [linkedUserIds, user?.id]);
 
   const loadPlannerData = useCallback(async (): Promise<LoadedPlannerData> => {
     if (!user?.id) {
@@ -462,8 +721,7 @@ export function usePlannerDay(date: Date) {
       };
     }
 
-    const allUserIds = uniqueStrings([user.id, ...linkedUserIds]);
-    const ownerIds = allUserIds.length > 0 ? allUserIds : [user.id];
+    const scopedOwnerIds = ownerIds.length > 0 ? ownerIds : [user.id];
 
     const ensuredDayId = await ensurePlannerDayForUser(user.id, normalizedDate);
 
@@ -471,7 +729,7 @@ export function usePlannerDay(date: Date) {
       .from('planner_days')
       .select('id,user_id,day,baby_sleep_hours,mood,reflection')
       .eq('day', dateIso)
-      .in('user_id', ownerIds);
+      .in('user_id', scopedOwnerIds);
 
     if (dayError) throw dayError;
 
@@ -500,7 +758,7 @@ export function usePlannerDay(date: Date) {
       .select(
         'id,user_id,day_id,block_id,entry_type,title,completed,assignee,baby_id,notes,location,due_at,start_at,end_at,is_all_day,reminder_minutes,created_at,updated_at',
       )
-      .in('user_id', ownerIds)
+      .in('user_id', scopedOwnerIds)
       .eq('entry_type', 'event')
       .lt('start_at', selectedDayStart.toISOString()) // Started before this day
       .gte('end_at', selectedDayStart.toISOString()); // Ends on or after this day
@@ -517,12 +775,54 @@ export function usePlannerDay(date: Date) {
       }
     });
 
+    const { data: recurringSeriesRows, error: recurringSeriesError } = await supabase
+      .from('planner_recurring_items')
+      .select(
+        'id,user_id,entry_type,title,notes,location,assignee,baby_id,is_all_day,due_at_minutes,start_at_minutes,end_at_minutes,repeat_days,starts_on,ends_on,created_at,updated_at',
+      )
+      .in('user_id', scopedOwnerIds);
+
+    if (recurringSeriesError) throw recurringSeriesError;
+
+    const activeRecurringSeries = ((recurringSeriesRows ?? []) as RecurringItemRow[]).filter((item) => {
+      if (item.starts_on > dateIso) return false;
+      if (item.ends_on && item.ends_on < dateIso) return false;
+      return true;
+    });
+
+    const recurringSeriesIds = activeRecurringSeries.map((item) => item.id);
+    const { data: recurringExceptionRows, error: recurringExceptionError } = recurringSeriesIds.length
+      ? await supabase
+          .from('planner_recurring_exceptions')
+          .select(
+            'id,user_id,recurring_item_id,day,deleted,completed,title,notes,location,assignee,baby_id,is_all_day,due_at_minutes,start_at_minutes,end_at_minutes,created_at,updated_at',
+          )
+          .in('recurring_item_id', recurringSeriesIds)
+          .eq('day', dateIso)
+      : { data: [], error: null };
+
+    if (recurringExceptionError) throw recurringExceptionError;
+
+    const recurringRows = expandRecurringForDate(
+      normalizedDate,
+      dateIso,
+      activeRecurringSeries,
+      (recurringExceptionRows ?? []) as RecurringExceptionRow[],
+      user.id,
+    );
+    recurringRows.forEach((row) => {
+      if (!existingIds.has(row.id)) {
+        allItemRows.push(row);
+        existingIds.add(row.id);
+      }
+    });
+
     const { data: floatingOpenRows, error: floatingOpenError } = await supabase
       .from('planner_items')
       .select(
         'id,user_id,day_id,block_id,entry_type,title,completed,assignee,baby_id,notes,location,due_at,start_at,end_at,is_all_day,reminder_minutes,created_at,updated_at',
       )
-      .in('user_id', ownerIds)
+      .in('user_id', scopedOwnerIds)
       .is('due_at', null)
       .eq('entry_type', 'todo')
       .eq('completed', false)
@@ -540,7 +840,7 @@ export function usePlannerDay(date: Date) {
       .select(
         'id,user_id,day_id,block_id,entry_type,title,completed,assignee,baby_id,notes,location,due_at,start_at,end_at,is_all_day,reminder_minutes,created_at,updated_at',
       )
-      .in('user_id', ownerIds)
+      .in('user_id', scopedOwnerIds)
       .is('due_at', null)
       .eq('entry_type', 'todo')
       .eq('completed', true)
@@ -587,7 +887,7 @@ export function usePlannerDay(date: Date) {
       })),
       baseDayId: aggregated.baseDayId ?? ensuredDayId,
     };
-  }, [user?.id, linkedKey, normalizedKey, dateIso, normalizedDate]);
+  }, [user?.id, ownerIds, dateIso, normalizedDate]);
 
   const itemsMapRef = useRef<Record<string, PlannerItemRow>>({});
   const baseDayIdRef = useRef<string | null>(null);
@@ -1088,7 +1388,425 @@ export function usePlannerDay(date: Date) {
       }
       await reloadSilently();
     },
-    [reloadSilently, normalizedKey, ensureDayFor, user?.id],
+    [reloadSilently, normalizedDate, ensureDayFor, user?.id],
+  );
+
+  const addRecurringItem = useCallback(
+    async (input: RecurringSeriesInput) => {
+      if (!user?.id) return;
+      const viewerId = user.id;
+      const ownerId = input.ownerId ?? viewerId;
+      const repeatDays = sanitizeRepeatDays(input.repeatDays);
+      if (!repeatDays.length) {
+        setError('Bitte mindestens einen Wochentag wählen');
+        return;
+      }
+
+      const payload = {
+        user_id: ownerId,
+        entry_type: input.entryType,
+        title: input.title,
+        notes: input.notes ?? null,
+        location: input.entryType === 'event' ? input.location ?? null : null,
+        assignee: convertAssigneePerspective(input.assignee ?? 'me', viewerId, ownerId),
+        baby_id: input.babyId ?? null,
+        is_all_day: input.entryType === 'event' ? !!input.isAllDay : false,
+        due_at_minutes: input.entryType === 'todo' ? sanitizeMinutesOfDay(input.dueAtMinutes) : null,
+        start_at_minutes: input.entryType === 'event'
+          ? (input.isAllDay ? 0 : sanitizeMinutesOfDay(input.startAtMinutes))
+          : null,
+        end_at_minutes: input.entryType === 'event'
+          ? (input.isAllDay ? (24 * 60) - 1 : sanitizeMinutesOfDay(input.endAtMinutes))
+          : null,
+        repeat_days: repeatDays,
+        starts_on: input.startsOn ?? dateIso,
+      };
+
+      const { error: insertError } = await supabase
+        .from('planner_recurring_items')
+        .insert(payload);
+      if (insertError) {
+        setError(extractErrorMessage(insertError));
+        console.error('Planner: addRecurringItem failed', insertError);
+        return;
+      }
+      await reloadSilently();
+    },
+    [reloadSilently, user?.id, dateIso],
+  );
+
+  const updateRecurringSeries = useCallback(
+    async (seriesId: string, updates: Partial<RecurringSeriesInput>) => {
+      if (!user?.id || !seriesId) return;
+      const { data: existing, error: fetchError } = await supabase
+        .from('planner_recurring_items')
+        .select(
+          'id,user_id,entry_type,title,notes,location,assignee,baby_id,is_all_day,due_at_minutes,start_at_minutes,end_at_minutes,repeat_days,starts_on,ends_on',
+        )
+        .eq('id', seriesId)
+        .maybeSingle();
+      if (fetchError) {
+        setError(extractErrorMessage(fetchError));
+        console.error('Planner: updateRecurringSeries fetch failed', fetchError);
+        return;
+      }
+      if (!existing) return;
+
+      const viewerId = user.id;
+      const payload: Record<string, any> = {};
+      if (updates.title !== undefined) payload.title = updates.title;
+      if (updates.notes !== undefined) payload.notes = updates.notes ?? null;
+      if (updates.location !== undefined) payload.location = updates.location ?? null;
+      if (updates.assignee !== undefined) {
+        payload.assignee = convertAssigneePerspective(
+          updates.assignee,
+          viewerId,
+          existing.user_id,
+        );
+      }
+      if (updates.babyId !== undefined) payload.baby_id = updates.babyId ?? null;
+      if (updates.repeatDays !== undefined) {
+        payload.repeat_days = sanitizeRepeatDays(updates.repeatDays);
+      }
+      if (updates.startsOn !== undefined) payload.starts_on = updates.startsOn ?? dateIso;
+
+      const nextEntryType = updates.entryType ?? existing.entry_type;
+      const nextIsAllDay =
+        nextEntryType === 'event'
+          ? (updates.isAllDay ?? existing.is_all_day)
+          : false;
+      if (updates.entryType !== undefined) payload.entry_type = updates.entryType;
+      if (updates.isAllDay !== undefined || updates.entryType !== undefined) {
+        payload.is_all_day = nextIsAllDay;
+      }
+
+      if (nextEntryType === 'todo') {
+        if (updates.dueAtMinutes !== undefined || updates.entryType !== undefined) {
+          payload.due_at_minutes = sanitizeMinutesOfDay(
+            updates.dueAtMinutes ?? existing.due_at_minutes,
+          );
+        }
+        if (updates.entryType !== undefined) {
+          payload.start_at_minutes = null;
+          payload.end_at_minutes = null;
+          payload.location = null;
+          payload.is_all_day = false;
+        }
+      } else {
+        if (
+          updates.startAtMinutes !== undefined ||
+          updates.isAllDay !== undefined ||
+          updates.entryType !== undefined
+        ) {
+          payload.start_at_minutes = nextIsAllDay
+            ? 0
+            : sanitizeMinutesOfDay(updates.startAtMinutes ?? existing.start_at_minutes);
+        }
+        if (
+          updates.endAtMinutes !== undefined ||
+          updates.isAllDay !== undefined ||
+          updates.entryType !== undefined
+        ) {
+          payload.end_at_minutes = nextIsAllDay
+            ? (24 * 60) - 1
+            : sanitizeMinutesOfDay(updates.endAtMinutes ?? existing.end_at_minutes);
+        }
+        if (updates.entryType !== undefined) {
+          payload.due_at_minutes = null;
+        }
+      }
+
+      const { error: updateError } = await supabase
+        .from('planner_recurring_items')
+        .update(payload)
+        .eq('id', seriesId);
+      if (updateError) {
+        setError(extractErrorMessage(updateError));
+        console.error('Planner: updateRecurringSeries failed', updateError);
+        return;
+      }
+      await reloadSilently();
+    },
+    [reloadSilently, user?.id, dateIso],
+  );
+
+  const updateRecurringOccurrence = useCallback(
+    async (
+      seriesId: string,
+      occurrenceDate: string,
+      overrides: RecurringOccurrenceOverrideInput,
+    ) => {
+      if (!user?.id || !seriesId || !occurrenceDate) return;
+      const viewerId = user.id;
+      const { data: series, error: fetchError } = await supabase
+        .from('planner_recurring_items')
+        .select('id,user_id,entry_type')
+        .eq('id', seriesId)
+        .maybeSingle();
+      if (fetchError) {
+        setError(extractErrorMessage(fetchError));
+        console.error('Planner: updateRecurringOccurrence fetch failed', fetchError);
+        return;
+      }
+      if (!series) return;
+
+      const payload: Record<string, any> = {
+        user_id: series.user_id,
+        recurring_item_id: seriesId,
+        day: occurrenceDate,
+        deleted: false,
+      };
+      if (overrides.title !== undefined) payload.title = overrides.title;
+      if (overrides.notes !== undefined) payload.notes = overrides.notes;
+      if (overrides.location !== undefined) payload.location = overrides.location;
+      if (overrides.assignee !== undefined) {
+        payload.assignee =
+          overrides.assignee === null
+            ? null
+            : convertAssigneePerspective(overrides.assignee, viewerId, series.user_id);
+      }
+      if (overrides.babyId !== undefined) payload.baby_id = overrides.babyId;
+      if (overrides.isAllDay !== undefined) payload.is_all_day = overrides.isAllDay;
+      if (series.entry_type === 'todo' && overrides.dueAtMinutes !== undefined) {
+        payload.due_at_minutes = sanitizeMinutesOfDay(overrides.dueAtMinutes);
+      }
+      if (series.entry_type === 'event') {
+        if (overrides.startAtMinutes !== undefined) {
+          payload.start_at_minutes = overrides.isAllDay
+            ? 0
+            : sanitizeMinutesOfDay(overrides.startAtMinutes);
+        }
+        if (overrides.endAtMinutes !== undefined) {
+          payload.end_at_minutes = overrides.isAllDay
+            ? (24 * 60) - 1
+            : sanitizeMinutesOfDay(overrides.endAtMinutes);
+        }
+      }
+
+      const { error: upsertError } = await supabase
+        .from('planner_recurring_exceptions')
+        .upsert(payload, { onConflict: 'recurring_item_id,day' });
+      if (upsertError) {
+        setError(extractErrorMessage(upsertError));
+        console.error('Planner: updateRecurringOccurrence failed', upsertError);
+        return;
+      }
+      await reloadSilently();
+    },
+    [reloadSilently, user?.id],
+  );
+
+  const toggleRecurringTodo = useCallback(
+    async (seriesId: string, occurrenceDate: string = dateIso) => {
+      if (!seriesId || !occurrenceDate) return;
+      const { data: series, error: seriesError } = await supabase
+        .from('planner_recurring_items')
+        .select('id,user_id,entry_type')
+        .eq('id', seriesId)
+        .maybeSingle();
+      if (seriesError) {
+        setError(extractErrorMessage(seriesError));
+        console.error('Planner: toggleRecurringTodo fetch failed', seriesError);
+        return;
+      }
+      if (!series || series.entry_type !== 'todo') return;
+
+      const { data: existing, error: existingError } = await supabase
+        .from('planner_recurring_exceptions')
+        .select(
+          'id,user_id,recurring_item_id,day,deleted,completed,title,notes,location,assignee,baby_id,is_all_day,due_at_minutes,start_at_minutes,end_at_minutes,created_at,updated_at',
+        )
+        .eq('recurring_item_id', seriesId)
+        .eq('day', occurrenceDate)
+        .maybeSingle();
+      if (existingError && existingError.code !== 'PGRST116') {
+        setError(extractErrorMessage(existingError));
+        console.error('Planner: toggleRecurringTodo lookup failed', existingError);
+        return;
+      }
+
+      const nextCompleted = !(existing?.completed ?? false);
+      if (!nextCompleted && existing && !hasRecurringOverride(existing) && !existing.deleted) {
+        const { error: deleteError } = await supabase
+          .from('planner_recurring_exceptions')
+          .delete()
+          .eq('id', existing.id);
+        if (deleteError) {
+          setError(extractErrorMessage(deleteError));
+          console.error('Planner: toggleRecurringTodo cleanup failed', deleteError);
+          return;
+        }
+      } else {
+        const payload = {
+          user_id: series.user_id,
+          recurring_item_id: seriesId,
+          day: occurrenceDate,
+          deleted: false,
+          completed: nextCompleted,
+        };
+        const { error: upsertError } = await supabase
+          .from('planner_recurring_exceptions')
+          .upsert(payload, { onConflict: 'recurring_item_id,day' });
+        if (upsertError) {
+          setError(extractErrorMessage(upsertError));
+          console.error('Planner: toggleRecurringTodo failed', upsertError);
+          return;
+        }
+      }
+      await reloadSilently();
+    },
+    [reloadSilently, dateIso],
+  );
+
+  const deleteRecurringSeries = useCallback(
+    async (seriesId: string) => {
+      if (!seriesId) return;
+      const { error: deleteError } = await supabase
+        .from('planner_recurring_items')
+        .delete()
+        .eq('id', seriesId);
+      if (deleteError) {
+        setError(extractErrorMessage(deleteError));
+        console.error('Planner: deleteRecurringSeries failed', deleteError);
+        return;
+      }
+      await reloadSilently();
+    },
+    [reloadSilently],
+  );
+
+  const deleteRecurringOccurrence = useCallback(
+    async (seriesId: string, occurrenceDate: string = dateIso) => {
+      if (!seriesId || !occurrenceDate) return;
+      const { data: series, error: seriesError } = await supabase
+        .from('planner_recurring_items')
+        .select('id,user_id')
+        .eq('id', seriesId)
+        .maybeSingle();
+      if (seriesError) {
+        setError(extractErrorMessage(seriesError));
+        console.error('Planner: deleteRecurringOccurrence fetch failed', seriesError);
+        return;
+      }
+      if (!series) return;
+
+      const payload = {
+        user_id: series.user_id,
+        recurring_item_id: seriesId,
+        day: occurrenceDate,
+        deleted: true,
+        completed: false,
+      };
+      const { error: upsertError } = await supabase
+        .from('planner_recurring_exceptions')
+        .upsert(payload, { onConflict: 'recurring_item_id,day' });
+      if (upsertError) {
+        setError(extractErrorMessage(upsertError));
+        console.error('Planner: deleteRecurringOccurrence failed', upsertError);
+        return;
+      }
+      await reloadSilently();
+    },
+    [reloadSilently, dateIso],
+  );
+
+  const disableRecurrence = useCallback(
+    async (
+      seriesId: string,
+      fromDateIso: string,
+      currentValues: RecurringSeriesInput,
+    ) => {
+      if (!seriesId || !fromDateIso) return;
+      const fromDate = parseDateOnly(fromDateIso);
+      if (!fromDate) return;
+
+      const { data: series, error: fetchError } = await supabase
+        .from('planner_recurring_items')
+        .select('id,user_id')
+        .eq('id', seriesId)
+        .maybeSingle();
+      if (fetchError) {
+        setError(extractErrorMessage(fetchError));
+        console.error('Planner: disableRecurrence fetch failed', fetchError);
+        return;
+      }
+      if (!series) return;
+
+      const previousDay = cloneDate(fromDate);
+      previousDay.setDate(previousDay.getDate() - 1);
+
+      const { error: updateError } = await supabase
+        .from('planner_recurring_items')
+        .update({ ends_on: toDateOnlyISO(previousDay) })
+        .eq('id', seriesId);
+      if (updateError) {
+        setError(extractErrorMessage(updateError));
+        console.error('Planner: disableRecurrence update failed', updateError);
+        return;
+      }
+
+      const targetDayId = await ensureDayFor(series.user_id, fromDate);
+      const payload =
+        currentValues.entryType === 'todo'
+          ? {
+              user_id: series.user_id,
+              day_id: targetDayId,
+              block_id: null,
+              entry_type: 'todo' as const,
+              title: currentValues.title,
+              completed: false,
+              assignee: user?.id
+                ? convertAssigneePerspective(
+                    currentValues.assignee ?? 'me',
+                    user.id,
+                    series.user_id,
+                  )
+                : currentValues.assignee ?? null,
+              baby_id: currentValues.babyId ?? null,
+              notes: currentValues.notes ?? null,
+              due_at:
+                sanitizeMinutesOfDay(currentValues.dueAtMinutes) !== null
+                  ? isoForMinutes(fromDate, sanitizeMinutesOfDay(currentValues.dueAtMinutes)!)
+                  : null,
+            }
+          : {
+              user_id: series.user_id,
+              day_id: targetDayId,
+              block_id: null,
+              entry_type: 'event' as const,
+              title: currentValues.title,
+              start_at: isoForMinutes(
+                fromDate,
+                currentValues.isAllDay ? 0 : sanitizeMinutesOfDay(currentValues.startAtMinutes) ?? 0,
+              ),
+              end_at: isoForMinutes(
+                fromDate,
+                currentValues.isAllDay
+                  ? (24 * 60) - 1
+                  : sanitizeMinutesOfDay(currentValues.endAtMinutes) ?? 30,
+              ),
+              location: currentValues.location ?? null,
+              assignee: user?.id
+                ? convertAssigneePerspective(
+                    currentValues.assignee ?? 'me',
+                    user.id,
+                    series.user_id,
+                  )
+                : currentValues.assignee ?? null,
+              baby_id: currentValues.babyId ?? null,
+              is_all_day: !!currentValues.isAllDay,
+              reminder_minutes: null,
+            };
+
+      const { error: insertError } = await supabase.from('planner_items').insert(payload);
+      if (insertError) {
+        setError(extractErrorMessage(insertError));
+        console.error('Planner: disableRecurrence insert failed', insertError);
+        return;
+      }
+      await reloadSilently();
+    },
+    [reloadSilently, ensureDayFor, user?.id],
   );
 
   const updateMood = useCallback(
@@ -1145,6 +1863,13 @@ export function usePlannerDay(date: Date) {
     convertPlannerItem,
     toggleTodo,
     moveToTomorrow,
+    addRecurringItem,
+    updateRecurringSeries,
+    updateRecurringOccurrence,
+    toggleRecurringTodo,
+    deleteRecurringSeries,
+    deleteRecurringOccurrence,
+    disableRecurrence,
     updateMood,
     saveReflection,
     refetch: reloadSilently,

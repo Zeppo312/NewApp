@@ -9,37 +9,17 @@ import { useAuth } from '@/contexts/AuthContext';
 import { markPaywallShown, PAYWALL_TRIAL_DAYS } from '@/lib/paywall';
 import { invalidatePremiumStatusCache } from '@/lib/appCache';
 import {
-  findRevenueCatPackageByProductId,
   getRevenueCatConfigurationIssue,
-  getRevenueCatPackages,
   hasRevenueCatEntitlement,
   purchaseMonthlyPackage,
   purchaseYearlyPackage,
   restoreRevenueCatPurchases,
-  REVENUECAT_MONTHLY_PRODUCT_ID,
-  REVENUECAT_YEARLY_PRODUCT_ID,
 } from '@/lib/revenuecat';
 
-const extractCurrencySymbol = (value: string) => {
-  const match = value.match(/[€$£¥]/);
-  return match?.[0] ?? null;
-};
-
-const resolveStorePriceLabel = (storePriceLabel: string | null | undefined, fallbackPriceLabel: string) => {
-  if (typeof storePriceLabel !== 'string') return null;
-
-  const normalizedPriceLabel = storePriceLabel.trim();
-  if (normalizedPriceLabel.length === 0) return null;
-
-  const storeCurrencySymbol = extractCurrencySymbol(normalizedPriceLabel);
-  const fallbackCurrencySymbol = extractCurrencySymbol(fallbackPriceLabel);
-
-  if (storeCurrencySymbol && fallbackCurrencySymbol && storeCurrencySymbol !== fallbackCurrencySymbol) {
-    return null;
-  }
-
-  return normalizedPriceLabel;
-};
+const formatEuroAmount = (value: number) => `${value.toFixed(2).replace('.', ',')} €`;
+const DISPLAY_MONTHLY_PRICE_VALUE = 4.99;
+const DISPLAY_YEARLY_PRICE_VALUE = 44.99;
+const YEARLY_SAVINGS_VALUE = Math.max(0, DISPLAY_MONTHLY_PRICE_VALUE * 12 - DISPLAY_YEARLY_PRICE_VALUE);
 
 export default function PaywallScreen() {
   const APPLE_EULA_URL = 'https://www.apple.com/legal/internet-services/itunes/dev/stdeula/';
@@ -59,15 +39,11 @@ export default function PaywallScreen() {
   const [step, setStep] = useState(0);
   const [pendingAction, setPendingAction] = useState<'monthly' | 'yearly' | 'restore' | null>(null);
   const [purchaseError, setPurchaseError] = useState<string | null>(null);
-  const [monthlyPriceLabel, setMonthlyPriceLabel] = useState<string | null>(null);
-  const [yearlyPriceLabel, setYearlyPriceLabel] = useState<string | null>(null);
   const isPurchasesSupported = Platform.OS !== 'web';
   const isCompactPlanLayout = width < 720;
   const contentMaxWidth = Math.min(width - 40, 760);
 
   const CTA_LABEL = 'Weiter';
-  const MONTHLY_FALLBACK_PRICE = '3,79 €';
-  const YEARLY_FALLBACK_PRICE = '44,99 €';
 
   const revenueCatConfigurationIssue = useMemo(() => {
     if (!isPurchasesSupported) return null;
@@ -85,8 +61,9 @@ export default function PaywallScreen() {
         ? 'Abrechnung über Google Play'
         : 'Abrechnung';
 
-  const monthlyDisplayPrice = monthlyPriceLabel ?? MONTHLY_FALLBACK_PRICE;
-  const yearlyDisplayPrice = yearlyPriceLabel ?? YEARLY_FALLBACK_PRICE;
+  const monthlyDisplayPrice = formatEuroAmount(DISPLAY_MONTHLY_PRICE_VALUE);
+  const yearlyDisplayPrice = formatEuroAmount(DISPLAY_YEARLY_PRICE_VALUE);
+  const yearlySavingsLabel = formatEuroAmount(YEARLY_SAVINGS_VALUE);
   const monthlyPriceText = `${monthlyDisplayPrice} pro Monat`;
   const yearlyPriceText = `${yearlyDisplayPrice} pro Jahr`;
   const introPriceSummary = `Aktuell ${monthlyPriceText} oder ${yearlyPriceText}.`;
@@ -107,42 +84,6 @@ export default function PaywallScreen() {
       handler.remove();
     };
   }, [isTrialExpired]);
-
-  useEffect(() => {
-    if (!isPurchasesSupported || !user || !isRevenueCatConfigured) return;
-
-    let cancelled = false;
-
-    const loadPrices = async () => {
-      try {
-        const packages = await getRevenueCatPackages(user.id);
-        const monthlyPkg = findRevenueCatPackageByProductId(packages, REVENUECAT_MONTHLY_PRODUCT_ID);
-        const yearlyPkg = findRevenueCatPackageByProductId(packages, REVENUECAT_YEARLY_PRODUCT_ID);
-        const monthlyPriceString = monthlyPkg?.product?.priceString;
-        const yearlyPriceString = yearlyPkg?.product?.priceString;
-        const resolvedMonthlyPriceLabel = resolveStorePriceLabel(monthlyPriceString, MONTHLY_FALLBACK_PRICE);
-        const resolvedYearlyPriceLabel = resolveStorePriceLabel(yearlyPriceString, YEARLY_FALLBACK_PRICE);
-
-        if (cancelled) return;
-
-        if (resolvedMonthlyPriceLabel) {
-          setMonthlyPriceLabel(resolvedMonthlyPriceLabel);
-        }
-
-        if (resolvedYearlyPriceLabel) {
-          setYearlyPriceLabel(resolvedYearlyPriceLabel);
-        }
-      } catch (err) {
-        console.warn('RevenueCat offerings load failed', err);
-      }
-    };
-
-    loadPrices();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isPurchasesSupported, isRevenueCatConfigured, user]);
 
   const purchaseAndNavigate = async (plan: 'monthly' | 'yearly') => {
     if (!isPurchasesSupported) {
@@ -519,12 +460,17 @@ export default function PaywallScreen() {
                 >
                   <View style={styles.planBadgeRow}>
                     <Text style={[styles.planBadge, styles.planBadgeYearly]}>Jahresabo</Text>
-                    <Text style={[styles.planSave, styles.planSaveYearly]}>pro Jahr</Text>
+                    <Text style={[styles.planSave, styles.planSaveYearly]}>{yearlySavingsLabel} sparen</Text>
                   </View>
                   <Text style={styles.planTitle}>Günstiger im Jahrespaket</Text>
-                  <Text style={styles.planPrice}>{yearlyDisplayPrice}</Text>
+                  <View style={styles.planPriceRow}>
+                    <Text style={styles.planPrice}>{yearlyDisplayPrice}</Text>
+                    <Text style={styles.planSavingsInline}>Spare {yearlySavingsLabel}</Text>
+                  </View>
                   <Text style={styles.planMeta}>{billingLabel}</Text>
-                  <Text style={styles.planDesc}>Einmal im Jahr zahlen und Lotti Baby nach den ersten {trialDaysAfterLabel} ohne Unterbrechung weiter nutzen.</Text>
+                  <Text style={styles.planDesc}>
+                    Einmal im Jahr zahlen, Lotti Baby nach den ersten {trialDaysAfterLabel} ohne Unterbrechung weiter nutzen und {yearlySavingsLabel} gegenüber dem Monatsabo sparen.
+                  </Text>
                   <View style={styles.planList}>
                     <View style={styles.planListItem}>
                       <View style={[styles.planListDot, styles.planListDotYearly]} />
@@ -1087,6 +1033,20 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#2F1F1B',
     marginBottom: 2,
+  },
+  planPriceRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 2,
+  },
+  planSavingsInline: {
+    flexShrink: 1,
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#7A52D1',
+    textAlign: 'right',
   },
   planMeta: {
     fontSize: 13,

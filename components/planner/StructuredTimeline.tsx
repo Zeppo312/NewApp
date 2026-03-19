@@ -46,6 +46,7 @@ type TimelineEvent = {
   id: string;
   title: string;
   subtitle: string;
+  isRecurring?: boolean;
   minute: number;
   endMinute: number;
   column?: number;
@@ -61,6 +62,7 @@ type TimelineTodo = {
   endMinute: number;
   timeLabel: string;
   assignee: PlannerAssignee;
+  isRecurring?: boolean;
   column?: number;
   totalColumns?: number;
 };
@@ -70,8 +72,6 @@ type TimelineItem = TimelineEvent | TimelineTodo;
 const LINE_X = LAYOUT_PAD + 36;
 const CARD_LEFT = LINE_X + 28;
 const PX_PER_MIN = 1.35;
-const MIN_GAP_PX = 60;
-const MAX_GAP_PX = 160;
 const CARD_VERTICAL_OFFSET = 30;
 
 const toRgba = (hex: string, opacity = 1) => {
@@ -89,6 +89,10 @@ function minutesFromMidnight(date: Date) {
 
 function parseISO(iso?: string) {
   return parseSafeDate(iso) ?? undefined;
+}
+
+function isRecurringId(id: string) {
+  return id.startsWith("recurring:");
 }
 
 export const StructuredTimeline: React.FC<Props> = ({
@@ -112,7 +116,6 @@ export const StructuredTimeline: React.FC<Props> = ({
   const textSecondary = isDark ? Colors.dark.textSecondary : TEXT_PRIMARY;
   const textMuted = isDark ? "rgba(248,240,229,0.72)" : "rgba(125,90,80,0.72)";
   const accentColor = isDark ? adaptiveColors.accent : PRIMARY;
-  const accentEventColor = isDark ? "#E7C8FF" : "#6E4DBD";
   const glassOverlay = isDark ? "rgba(0,0,0,0.35)" : GLASS_OVERLAY;
   const glassBorder = isDark ? "rgba(255,255,255,0.22)" : GLASS_BORDER;
   const blurTint = isDark ? "dark" : "light";
@@ -165,11 +168,13 @@ export const StructuredTimeline: React.FC<Props> = ({
             : "";
       const metaSuffix = metaLabel ? ` · ${metaLabel}` : "";
       const locationSuffix = event.location ? ` · ${event.location}` : "";
+      const recurring = isRecurringId(event.id);
       entries.push({
         kind: "event",
         id: event.id,
         title: event.title,
         subtitle: `${start.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} – ${end.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}${locationSuffix}${metaSuffix}`,
+        isRecurring: recurring,
         minute: startMinute,
         endMinute: endMinute,
       });
@@ -198,6 +203,7 @@ export const StructuredTimeline: React.FC<Props> = ({
             : "";
       const metaSuffix = metaLabel ? ` · ${metaLabel}` : "";
       const timeLabel = `${dueDate ? dueDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Flexibel"}${metaSuffix}`;
+      const recurring = isRecurringId(todo.id);
       entries.push({
         kind: "todo",
         id: todo.id,
@@ -207,6 +213,7 @@ export const StructuredTimeline: React.FC<Props> = ({
         endMinute: endMinute,
         timeLabel,
         assignee: todo.assignee ?? "me",
+        isRecurring: recurring,
       });
       minutesSet.add(dueMinute);
       minutesSet.add(endMinute);
@@ -468,7 +475,7 @@ export const StructuredTimeline: React.FC<Props> = ({
                   activeOpacity={0.9}
                   onPress={readOnly ? undefined : () => onEditEvent?.(event.id)}
                   accessibilityRole="button"
-                  accessibilityLabel={`Ganztägiger Termin ${event.title}`}
+                  accessibilityLabel={`Ganztägiger Termin ${event.title}${event.isRecurring ? ", wiederkehrend" : ""}`}
                   style={styles.allDayEventCard}
                 >
                   <BlurView
@@ -507,15 +514,31 @@ export const StructuredTimeline: React.FC<Props> = ({
                       />
                     </View>
                     <View style={styles.allDayEventBody}>
-                      <ThemedText
-                        style={[
-                          styles.allDayEventTitle,
-                          { color: textPrimary },
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {event.title}
-                      </ThemedText>
+                      <View style={styles.recurringTitleRow}>
+                        <ThemedText
+                          style={[
+                            styles.allDayEventTitle,
+                            styles.recurringTitleText,
+                            { color: textPrimary },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {event.title}
+                        </ThemedText>
+                        {event.isRecurring && (
+                          <View
+                            accessible={false}
+                            importantForAccessibility="no-hide-descendants"
+                          >
+                            <IconSymbol
+                              name="arrow.triangle.2.circlepath"
+                              size={10}
+                              color={textMuted as any}
+                              style={styles.recurringIcon}
+                            />
+                          </View>
+                        )}
+                      </View>
                       {subtitle && (
                         <ThemedText
                           style={[
@@ -617,7 +640,7 @@ export const StructuredTimeline: React.FC<Props> = ({
                   activeOpacity={0.9}
                   onPress={readOnly ? undefined : () => onEditEvent?.(item.id)}
                   accessibilityRole="button"
-                  accessibilityLabel={`Termin ${item.title}`}
+                  accessibilityLabel={`Termin ${item.title}${item.isRecurring ? ", wiederkehrend" : ""}`}
                   style={[
                     styles.eventCard,
                     totalColumns > 1 && { paddingHorizontal: 10 },
@@ -663,16 +686,32 @@ export const StructuredTimeline: React.FC<Props> = ({
                       />
                     </View>
                     <View style={styles.cardBody}>
-                      <ThemedText
-                        style={[
-                          styles.itemTitle,
-                          { color: textPrimary },
-                          totalColumns > 1 && { fontSize: 14 },
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {item.title}
-                      </ThemedText>
+                      <View style={styles.recurringTitleRow}>
+                        <ThemedText
+                          style={[
+                            styles.itemTitle,
+                            styles.recurringTitleText,
+                            { color: textPrimary },
+                            totalColumns > 1 && { fontSize: 14 },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {item.title}
+                        </ThemedText>
+                        {item.isRecurring && (
+                          <View
+                            accessible={false}
+                            importantForAccessibility="no-hide-descendants"
+                          >
+                            <IconSymbol
+                              name="arrow.triangle.2.circlepath"
+                              size={10}
+                              color={textMuted as any}
+                              style={styles.recurringIcon}
+                            />
+                          </View>
+                        )}
+                      </View>
                       <ThemedText
                         style={[
                           styles.eventTime,
@@ -793,6 +832,7 @@ export const StructuredTimeline: React.FC<Props> = ({
                       title={item.title}
                       type="todo"
                       completed={item.completed}
+                      isRecurring={isRecurringId(item.id)}
                       onComplete={
                         readOnly ? undefined : () => onToggleTodo(item.id)
                       }
@@ -903,6 +943,14 @@ const styles = StyleSheet.create({
   },
   allDayEventBody: {
     flex: 1,
+  },
+  recurringTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    minWidth: 0,
+  },
+  recurringTitleText: {
+    flexShrink: 1,
   },
   allDayEventTitle: {
     fontSize: 15,
@@ -1032,6 +1080,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
     color: TEXT_PRIMARY,
+  },
+  recurringIcon: {
+    opacity: 0.7,
+    marginLeft: 4,
   },
   todoCard: {
     paddingVertical: 12,
