@@ -3,7 +3,7 @@ import { useFonts } from 'expo-font';
 import { Stack, usePathname, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, View, ActivityIndicator, Text } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
@@ -29,7 +29,11 @@ import { getBabyInfo } from '@/lib/baby';
 import { supabase, getAppSettings } from '@/lib/supabase';
 import type { SleepEntry } from '@/lib/sleepData';
 import type { BabyCareEntry } from '@/lib/supabase';
-import { preloadAppData } from '@/lib/appCache';
+import {
+  invalidatePremiumStatusCache,
+  invalidateUserProfileCache,
+  preloadAppData,
+} from '@/lib/appCache';
 import { markPaywallShown, shouldShowPaywall } from '@/lib/paywall';
 import { SleepEntriesService } from '@/lib/services/SleepEntriesService';
 import { normalizeBedtimeAnchor } from '@/lib/bedtime';
@@ -119,17 +123,25 @@ function RootLayoutNav() {
     return new SleepEntriesService(activeBackend, convexClient, userId);
   }, [activeBackend, convexClient, userId]);
 
+  const refreshPaywallCaches = useCallback(async () => {
+    await Promise.allSettled([
+      invalidateUserProfileCache(),
+      invalidatePremiumStatusCache(),
+    ]);
+    setAppStateRevision((prev) => prev + 1);
+  }, []);
+
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
-        setAppStateRevision((prev) => prev + 1);
+        void refreshPaywallCaches();
       }
     });
 
     return () => {
       sub.remove();
     };
-  }, []);
+  }, [refreshPaywallCaches]);
 
   useEffect(() => {
     if (loading || !userId || !isBabyStatusResolved || shouldSkipGlobalPaywallCheck) {
@@ -533,10 +545,12 @@ function RootLayoutNav() {
         <Stack.Screen name="paywall" />
         <Stack.Screen name="dsgvo" />
         <Stack.Screen name="subscription" />
+        <Stack.Screen name="paywall-access-admin" />
         <Stack.Screen name="pregnancy-stats" />
         <Stack.Screen name="pregnancy-setup" />
         <Stack.Screen name="milestones" />
         <Stack.Screen name="account-linking" />
+        <Stack.Screen name="invite" />
         <Stack.Screen name="+not-found" />
         <Stack.Screen name="auth/callback" />
         <Stack.Screen name="auth/reset-password" />

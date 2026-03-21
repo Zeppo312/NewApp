@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { StyleSheet, TouchableOpacity, View, TextInput, KeyboardAvoidingView, Platform, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router, Stack } from 'expo-router';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -14,6 +14,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 
 export default function LoginScreen() {
+  const params = useLocalSearchParams<{ invitationCode?: string }>();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -25,14 +26,44 @@ export default function LoginScreen() {
   const primaryTextColor = Colors.light.textPrimary;
   const secondaryTextColor = Colors.light.textSecondary;
   const { signInWithEmail, signUpWithEmail, signInWithApple } = useAuth();
+  const normalizedInvitationCode = showInvitationField && invitationCode
+    ? invitationCode.trim().replace(/\s+/g, '').toUpperCase()
+    : undefined;
+
+  useEffect(() => {
+    if (typeof params.invitationCode !== 'string') return;
+    const nextCode = params.invitationCode.replace(/\s+/g, '').toUpperCase();
+    setInvitationCode(nextCode);
+    setShowInvitationField(true);
+  }, [params.invitationCode]);
 
   // Nach Auth immer über Root-Router gehen, damit ein zentraler Guard
   // den passenden Startscreen anhand des aktuellen Baby-Status auswählt.
   const navigateAfterAuth = async () => {
     try {
+      if (normalizedInvitationCode) {
+        router.replace({
+          pathname: '/account-linking',
+          params: {
+            invitationCode: normalizedInvitationCode,
+          },
+        });
+        return;
+      }
+
       router.replace('/');
     } catch (navError) {
       console.error('Navigation error:', navError);
+      if (normalizedInvitationCode) {
+        router.navigate({
+          pathname: '/account-linking',
+          params: {
+            invitationCode: normalizedInvitationCode,
+          },
+        });
+        return;
+      }
+
       router.navigate('/');
     }
   };
@@ -123,7 +154,7 @@ export default function LoginScreen() {
             pathname: './verify-otp',
             params: {
               email: email,
-              invitationCode: showInvitationField && invitationCode ? invitationCode.trim() : undefined
+              invitationCode: normalizedInvitationCode
             }
           });
           return;
@@ -133,7 +164,7 @@ export default function LoginScreen() {
             pathname: './verify-otp', 
             params: {
               email: email,
-              invitationCode: showInvitationField && invitationCode ? invitationCode.trim() : undefined
+              invitationCode: normalizedInvitationCode
             }
           });
           return;
@@ -211,7 +242,10 @@ export default function LoginScreen() {
         
         // If profile is incomplete or doesn't exist, go to onboarding
         if (!profileData || !profileData.first_name) {
-          router.replace('/(auth)/getUserInfo');
+          router.replace({
+            pathname: '/(auth)/getUserInfo',
+            params: normalizedInvitationCode ? { invitationCode: normalizedInvitationCode } : {},
+          });
         } else {
           // Existing user -> zentraler Root-Guard entscheidet über Startscreen
           await navigateAfterAuth();
@@ -382,8 +416,9 @@ export default function LoginScreen() {
                             placeholder="Einladungscode eingeben"
                             placeholderTextColor="#9D9D9D"
                             value={invitationCode}
-                            onChangeText={setInvitationCode}
+                            onChangeText={(value) => setInvitationCode(value.replace(/\s+/g, '').toUpperCase())}
                             autoCapitalize="characters"
+                            autoCorrect={false}
                           />
                         </View>
                       </>

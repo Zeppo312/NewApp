@@ -1,6 +1,7 @@
 import 'react-native-url-polyfill/auto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
+import * as Linking from 'expo-linking';
 
 // Supabase-Konfiguration
 // Ersetzen Sie diese Werte mit Ihren eigenen Supabase-Projektdaten
@@ -1568,6 +1569,11 @@ export const generateInvitationCode = () => {
   return code;
 };
 
+export const buildInvitationLink = (invitationCode: string) =>
+  Linking.createURL('invite', {
+    queryParams: { code: invitationCode },
+  });
+
 // Funktion zum Erstellen eines Einladungslinks
 export const createInvitationLink = async (userId: string, relationshipType: string = 'partner') => {
   // Generiere einen eindeutigen Code
@@ -1622,7 +1628,7 @@ export const createInvitationLink = async (userId: string, relationshipType: str
   return {
     success: true,
     invitationCode,
-    invitationLink: `wehen-tracker://invite?code=${invitationCode}`
+    invitationLink: buildInvitationLink(invitationCode)
   };
 };
 

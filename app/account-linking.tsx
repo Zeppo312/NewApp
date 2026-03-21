@@ -17,10 +17,12 @@ import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { useAuth } from '@/contexts/AuthContext';
+import { useActiveBaby } from '@/contexts/ActiveBabyContext';
+import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { useConvex } from '@/contexts/ConvexContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { router } from 'expo-router';
-import { createInvitationLink, getUserInvitations, getLinkedUsers, deactivateAccountLink } from '@/lib/supabase';
+import { router, useLocalSearchParams } from 'expo-router';
+import { buildInvitationLink, createInvitationLink, getUserInvitations, getLinkedUsers, deactivateAccountLink } from '@/lib/supabase';
 import { redeemInvitationCodeFixed } from '@/lib/redeemInvitationCodeFixed';
 import Header from '@/components/Header';
 import { ThemedText } from '@/components/ThemedText';
@@ -96,7 +98,10 @@ export default function AccountLinkingScreen() {
   const sharePillBorder = isDark ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.6)';
   const cardBlurTint = isDark ? 'dark' : 'light';
   const { user } = useAuth();
+  const { refreshBabies } = useActiveBaby();
+  const { refreshBabyDetails } = useBabyStatus();
   const { syncUser } = useConvex();
+  const params = useLocalSearchParams<{ invitationCode?: string }>();
 
   const [isLoading, setIsLoading] = useState(false);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
@@ -104,8 +109,17 @@ export default function AccountLinkingScreen() {
   const [invitationCode, setInvitationCode] = useState('');
   const [isRedeeming, setIsRedeeming] = useState(false);
   const [unlinkingId, setUnlinkingId] = useState<string | null>(null);
+  const [autoRedeemAttempted, setAutoRedeemAttempted] = useState(false);
+  const prefilledInvitationCode = typeof params.invitationCode === 'string'
+    ? params.invitationCode.replace(/\s+/g, '').toUpperCase()
+    : '';
 
   useEffect(() => { if (user) loadData(); }, [user]);
+  useEffect(() => {
+    if (prefilledInvitationCode) {
+      setInvitationCode(prefilledInvitationCode);
+    }
+  }, [prefilledInvitationCode]);
 
   const loadData = async () => {
     if (!user?.id) {
@@ -129,6 +143,15 @@ export default function AccountLinkingScreen() {
     }
   };
 
+  const refreshLinkedBabyState = async () => {
+    await Promise.allSettled([
+      loadData(),
+      refreshBabies(),
+      refreshBabyDetails(),
+    ]);
+    void syncUser();
+  };
+
   const handleCreateInvitation = async () => {
     if (!user?.id) {
       Alert.alert('Fehler', 'Bitte erneut anmelden.');
@@ -143,7 +166,7 @@ export default function AccountLinkingScreen() {
           message: `Verbinde dich mit mir in der App! Einladungscode: ${result.invitationCode} • Link: ${result.invitationLink}`,
           title: 'Einladung'
         });
-        loadData();
+        await loadData();
         void syncUser();
       } else {
         Alert.alert('Fehler', 'Der Einladungscode konnte nicht erstellt werden.');
@@ -156,12 +179,12 @@ export default function AccountLinkingScreen() {
     }
   };
 
-  const handleRedeemInvitation = async () => {
-    if (!invitationCode.trim()) {
+  const redeemInvitation = async (rawCode: string, shouldShowSuccessAlert = true) => {
+    if (!rawCode.trim()) {
       Alert.alert('Fehler', 'Bitte gib einen Einladungscode ein.');
       return;
     }
-    const cleanedCode = invitationCode.replace(/\s+/g, '').toUpperCase();
+    const cleanedCode = rawCode.replace(/\s+/g, '').toUpperCase();
 
     setIsRedeeming(true);
     try {
@@ -171,17 +194,13 @@ export default function AccountLinkingScreen() {
       }
       const result = await redeemInvitationCodeFixed(user.id, cleanedCode);
       if (result.success) {
-        const creatorName = result.creatorInfo?.first_name || 'einem anderen Benutzer';
-        Alert.alert('Erfolg', `Code eingelöst. Jetzt verknüpft mit ${creatorName}.`, [
-          {
-            text: 'OK',
-            onPress: () => {
-              setInvitationCode('');
-              loadData();
-              void syncUser();
-            }
-          }
-        ]);
+        const creatorName = result.creatorInfo?.firstName || 'einem anderen Benutzer';
+        setInvitationCode('');
+        await refreshLinkedBabyState();
+
+        if (shouldShowSuccessAlert) {
+          Alert.alert('Erfolg', `Code eingelöst. Jetzt verknüpft mit ${creatorName}.`);
+        }
       } else {
         const errorMessage = result.error?.message ||
           'Der Einladungscode konnte nicht eingelöst werden. Bitte versuche es später erneut.';
@@ -194,6 +213,19 @@ export default function AccountLinkingScreen() {
       setIsRedeeming(false);
     }
   };
+
+  const handleRedeemInvitation = async () => {
+    await redeemInvitation(invitationCode, true);
+  };
+
+  useEffect(() => {
+    if (!user?.id || !prefilledInvitationCode || autoRedeemAttempted || isRedeeming) {
+      return;
+    }
+
+    setAutoRedeemAttempted(true);
+    void redeemInvitation(prefilledInvitationCode, false);
+  }, [autoRedeemAttempted, isRedeeming, prefilledInvitationCode, user?.id]);
 
   const performDeactivateLink = async (link: LinkedUser) => {
     if (!link?.linkId) return;
@@ -412,7 +444,7 @@ export default function AccountLinkingScreen() {
                           <TouchableOpacity
                             onPress={() => {
                               Share.share({
-                                message: `Verbinde dich mit mir! Code: ${inv.invitationCode} • Link: wehen-tracker://invite?code=${inv.invitationCode}`,
+                                message: `Verbinde dich mit mir! Code: ${inv.invitationCode} • Link: ${buildInvitationLink(inv.invitationCode)}`,
                                 title: 'Einladung teilen'
                               });
                             }}

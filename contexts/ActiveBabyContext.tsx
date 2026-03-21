@@ -66,6 +66,29 @@ export const ActiveBabyProvider: React.FC<{ children: React.ReactNode }> = ({
     return String(error);
   }, []);
 
+  const shouldSkipPlaceholderBabyCreation = useCallback(async () => {
+    if (!user?.id) return false;
+
+    try {
+      const { data, error } = await supabase
+        .from('account_links')
+        .select('id, status')
+        .eq('invited_id', user.id)
+        .in('status', ['pending', 'accepted'])
+        .limit(1);
+
+      if (error) {
+        console.error('Error checking incoming account links before placeholder baby creation:', error);
+        return false;
+      }
+
+      return (data?.length ?? 0) > 0;
+    } catch (error) {
+      console.error('Unexpected error checking incoming account links:', error);
+      return false;
+    }
+  }, [user?.id]);
+
   /**
    * Resolves which baby should be active:
    * 1) Stored baby id (AsyncStorage)
@@ -178,6 +201,25 @@ export const ActiveBabyProvider: React.FC<{ children: React.ReactNode }> = ({
 
     // Ensure at least one baby exists
     if (nextBabies.length === 0) {
+      // Give partner sync one final chance before creating a local placeholder baby.
+      const finalSyncResult = await syncBabiesForLinkedUsers();
+      if (finalSyncResult.success) {
+        const { data: reloaded } = await listBabies(true);
+        nextBabies = reloaded ?? [];
+      }
+    }
+
+    if (nextBabies.length === 0) {
+      const skipPlaceholderBabyCreation = await shouldSkipPlaceholderBabyCreation();
+      if (skipPlaceholderBabyCreation) {
+        setBabies([]);
+        setActiveBabyIdState(null);
+        setIsLoading(false);
+        setIsReady(true);
+        setLoadError(null);
+        return;
+      }
+
       const { error: createError } = await createBaby({});
       if (createError) {
         console.error('Error creating default baby:', createError);
@@ -199,7 +241,7 @@ export const ActiveBabyProvider: React.FC<{ children: React.ReactNode }> = ({
 
     setIsLoading(false);
     setIsReady(true);
-  }, [user, resolveActiveBabyId]);
+  }, [formatLoadError, resolveActiveBabyId, shouldSkipPlaceholderBabyCreation, user]);
 
   /**
    * Initial load + reload on login change

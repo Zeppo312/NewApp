@@ -15,13 +15,13 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Canvas, RoundedRect, LinearGradient as SkiaLinearGradient, RadialGradient, Circle, vec } from '@shopify/react-native-skia';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
-import { supabase, addBabyCareEntry } from '@/lib/supabase';
+import { supabase, addBabyCareEntry, getBabyCareEntriesForDate } from '@/lib/supabase';
 import { getRecommendations, LottiRecommendation } from '@/lib/supabase/recommendations';
 import { BlurView } from 'expo-blur';
 import ActivityInputModal from '@/components/ActivityInputModal';
 import SleepQuickAddModal, { SleepQuickEntry } from '@/components/SleepQuickAddModal';
 import BabySwitcherButton from '@/components/BabySwitcherButton';
-import { loadCachedHomeData, cacheHomeData, isCacheFresh } from '@/lib/homeCache';
+import { loadCachedHomeData, cacheHomeData, isCacheFresh, type HomeCacheScope } from '@/lib/homeCache';
 import { getLocalProfileName } from '@/lib/localProfile';
 import { buildFeedingOverview } from '@/lib/feedingOverview';
 import { loadAllVisibleSleepEntries } from '@/lib/sleepSharing';
@@ -260,7 +260,7 @@ export default function HomeScreen() {
   const glassCardBg = isDark ? 'rgba(0, 0, 0, 0.22)' : 'rgba(255, 255, 255, 0.04)';
   const glassBlurBg = isDark ? 'rgba(0, 0, 0, 0.25)' : 'rgba(255, 255, 255, 0.35)';
   const { user } = useAuth();
-  const { activeBabyId } = useActiveBaby();
+  const { activeBabyId, isReady: isActiveBabyReady } = useActiveBaby();
   const { isBabyBorn } = useBabyStatus();
   const pathname = usePathname();
   const router = useRouter();
@@ -471,20 +471,33 @@ export default function HomeScreen() {
   };
 
   useEffect(() => {
-    if (user) {
-      loadData();
+    if (user && isActiveBabyReady) {
+      void loadData();
       // Wähle einen zufälligen Tipp für den Tag
       const randomTip = dailyTips[Math.floor(Math.random() * dailyTips.length)];
       setDailyTip(randomTip);
-    } else {
+    } else if (!user) {
       setIsLoading(false);
     }
-  }, [user, activeBabyId]);
+  }, [user, activeBabyId, isActiveBabyReady]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!user || !isActiveBabyReady) {
+        return;
+      }
+
+      void loadData();
+    }, [user, activeBabyId, isActiveBabyReady, refreshing])
+  );
 
   // Funktion für Pull-to-Refresh
   const onRefresh = async () => {
     setRefreshing(true);
     try {
+      if (!isActiveBabyReady) {
+        return;
+      }
       // Lade die Daten neu
       await loadData();
       // Wähle einen neuen zufälligen Tipp
@@ -499,8 +512,21 @@ export default function HomeScreen() {
 
   const loadData = async () => {
     try {
+      if (!user?.id) {
+        setDailyEntries([]);
+        setTodaySleepMinutes(0);
+        return;
+      }
+
+      const today = new Date();
+      const homeCacheScope: HomeCacheScope = {
+        userId: user.id,
+        babyId: activeBabyId ?? null,
+        dateKey: today.toISOString().split('T')[0],
+      };
+
       // 🆕 Cache-First Strategy: Lade gecachte Daten zuerst
-      const cachedData = await loadCachedHomeData();
+      const cachedData = await loadCachedHomeData(homeCacheScope);
       if (cachedData) {
         console.log('Loading cached home data (age:', new Date().toISOString(), '-', cachedData.lastUpdate, ')');
         // Zeige sofort gecachte Daten für instant load
@@ -520,23 +546,15 @@ export default function HomeScreen() {
       }
 
       // Alltags-Einträge für heute laden
-      const today = new Date();
       const startOfDay = new Date(today);
       startOfDay.setHours(0, 0, 0, 0);
       const endOfDay = new Date(today);
       endOfDay.setHours(23, 59, 59, 999);
 
-      let dailyQuery = supabase
-        .from('baby_care_entries')
-        .select('*')
-        .gte('start_time', startOfDay.toISOString())
-        .lte('start_time', endOfDay.toISOString());
-
-      if (activeBabyId) {
-        dailyQuery = dailyQuery.eq('baby_id', activeBabyId);
-      }
-
-      const { data: dailyData, error: dailyError } = await dailyQuery.order('start_time', { ascending: false });
+      const { data: dailyData, error: dailyError } = await getBabyCareEntriesForDate(
+        today,
+        activeBabyId ?? undefined
+      );
 
       let freshDailyEntries: any[] = [];
       if (!dailyError && dailyData) {
@@ -560,7 +578,7 @@ export default function HomeScreen() {
         dailyEntries: freshDailyEntries,
         todaySleepMinutes: freshSleepMinutes,
         recommendations: freshRecommendations,
-      });
+      }, homeCacheScope);
     } catch (err) {
       console.error('Failed to load home data:', err);
     } finally {
@@ -609,6 +627,12 @@ export default function HomeScreen() {
   // Load only daily entries (for quick refresh after adding entries)
   const loadDailyEntriesOnly = async () => {
     try {
+      if (!user?.id) {
+        setDailyEntries([]);
+        setTodaySleepMinutes(0);
+        return;
+      }
+
       const today = new Date();
       const startOfDay = new Date(today);
       startOfDay.setHours(0, 0, 0, 0);
@@ -617,18 +641,10 @@ export default function HomeScreen() {
 
       console.log('Loading daily entries for date:', today.toISOString());
 
-      // Direct query to baby_care_entries table to ensure fresh data
-      let dailyQuery = supabase
-        .from('baby_care_entries')
-        .select('*')
-        .gte('start_time', startOfDay.toISOString())
-        .lte('start_time', endOfDay.toISOString());
-
-      if (activeBabyId) {
-        dailyQuery = dailyQuery.eq('baby_id', activeBabyId);
-      }
-
-      const { data: dailyData, error } = await dailyQuery.order('start_time', { ascending: false });
+      const { data: dailyData, error } = await getBabyCareEntriesForDate(
+        today,
+        activeBabyId ?? undefined
+      );
 
       if (error) {
         console.error('Error loading daily entries:', error);

@@ -12,8 +12,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import Header from '@/components/Header';
 import { LiquidGlassCard, GLASS_OVERLAY, LAYOUT_PAD } from '@/constants/DesignGuide';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
-import { getCachedPremiumStatus, invalidatePremiumStatusCache } from '@/lib/appCache';
-
+import { fetchPaywallState } from '@/lib/paywall';
+import { getPaywallAccessReasonLabel } from '@/lib/paywallAccess';
 
 export default function MoreScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -22,7 +22,7 @@ export default function MoreScreen() {
   const { isBabyBorn } = useBabyStatus();
   const router = useRouter();
   const { session, signOut } = useAuth();
-  const [isPremiumActive, setIsPremiumActive] = useState(false);
+  const [accessReason, setAccessReason] = useState<'subscription' | 'admin' | 'tester' | 'cooperation_partner' | 'none'>('none');
 
   // Nur bei dunklem Hintergrundbild die adaptiven Farben verwenden
   const useDarkMode = adaptiveColors.hasCustomBackground && adaptiveColors.isDarkBackground;
@@ -34,22 +34,21 @@ export default function MoreScreen() {
     useCallback(() => {
       let active = true;
 
-      const loadPremiumStatus = async () => {
+      const loadAccessState = async () => {
         try {
-          await invalidatePremiumStatusCache();
-          const isPremium = await getCachedPremiumStatus();
+          const state = await fetchPaywallState();
           if (active) {
-            setIsPremiumActive(isPremium);
+            setAccessReason(state.accessReason);
           }
         } catch (error) {
-          console.error('Failed to refresh premium status:', error);
+          console.error('Failed to refresh paywall access state:', error);
           if (active) {
-            setIsPremiumActive(false);
+            setAccessReason('none');
           }
         }
       };
 
-      loadPremiumStatus();
+      void loadAccessState();
 
       return () => {
         active = false;
@@ -64,6 +63,19 @@ export default function MoreScreen() {
   const handlePremiumPress = async () => {
     router.push('/subscription');
   };
+
+  const hasActiveAccess = accessReason !== 'none';
+  const hasSubscription = accessReason === 'subscription';
+  const subscriptionTitle = hasSubscription
+    ? 'Abo verwalten'
+    : hasActiveAccess
+      ? 'Zugang ansehen'
+      : 'Abo ansehen';
+  const subscriptionDescription = hasSubscription
+    ? 'Sieh nach, welches Abo aktiv ist, und verwalte deinen Zugang'
+    : hasActiveAccess
+      ? `${getPaywallAccessReasonLabel(accessReason)}-Zugang aktiv`
+      : 'Sieh deinen Status an oder wähle ein Abo aus';
 
   // Abmelden-Funktion
   const handleLogout = async () => {
@@ -126,12 +138,10 @@ export default function MoreScreen() {
               </View>
               <View style={styles.menuItemContent}>
                 <ThemedText style={styles.menuItemTitle}>
-                  {isPremiumActive ? 'Abo verwalten' : 'Abo ansehen'}
+                  {subscriptionTitle}
                 </ThemedText>
                 <ThemedText style={styles.menuItemDescription}>
-                  {isPremiumActive
-                    ? 'Sieh nach, welches Abo aktiv ist, und verwalte deinen Zugang'
-                    : 'Sieh deinen Status an oder wähle ein Abo aus'}
+                  {subscriptionDescription}
                 </ThemedText>
               </View>
               <IconSymbol name="chevron.right" size={20} color={iconSecondaryColor} />

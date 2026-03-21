@@ -10,6 +10,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase, getCachedUser } from './supabase';
+import type { PaywallAccessRole } from './paywallAccess';
 import { hasRevenueCatEntitlement } from './revenuecat';
 
 // Cache Keys
@@ -165,6 +166,7 @@ export interface UserProfile {
   due_date?: string;
   is_baby_born?: boolean;
   is_admin?: boolean;
+  paywall_access_role?: PaywallAccessRole | null;
   [key: string]: any;
 }
 
@@ -232,14 +234,6 @@ export const getCachedPremiumStatus = async (): Promise<boolean> => {
   if (!userData.user) return false;
 
   try {
-    const profile = await getCachedUserProfile();
-    if (profile?.is_admin === true) {
-      const status: PremiumStatus = { isPro: true, checkedAt: Date.now() };
-      setToMemory(key, status, ttl);
-      await setToStorage(key, status);
-      return true;
-    }
-
     const isPro = await hasRevenueCatEntitlement(userData.user.id);
     const status: PremiumStatus = { isPro, checkedAt: Date.now() };
 
@@ -280,7 +274,7 @@ export const preloadAppData = async (): Promise<void> => {
     if (result.removed > 0) {
       console.log(`Image cache cleanup: ${result.removed} files removed, ${result.freedMB.toFixed(2)} MB freed`);
     }
-  } catch (err) {
+  } catch {
     // imageCache ist optional
   }
 

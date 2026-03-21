@@ -12,6 +12,7 @@ import { useConvex } from '@/contexts/ConvexContext';
 import { useBackground } from '@/contexts/BackgroundContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getAppSettings, saveAppSettings, AppSettings } from '@/lib/supabase';
+import { getCachedUserProfile } from '@/lib/appCache';
 import { exportUserData } from '@/lib/dataExport';
 import {
   buildAccountDeletionWarningMessage,
@@ -33,12 +34,6 @@ import { useNotificationPreferences } from '@/hooks/useNotificationPreferences';
 import { useNotifications } from '@/hooks/useNotifications';
 import { formatVitaminDReminderTime } from '@/lib/vitaminDReminder';
 import { openSubscriptionManagement } from '@/lib/subscriptionManagement';
-
-// Admin emails - nur diese User sehen Debug Tools
-const ADMIN_EMAILS = [
-  'jan.zepp1999@gmail.com',
-  'anyhelptoolate@gmail.com',
-];
 
 const PRESET_OPTIONS = [
   { id: 'default', label: 'Standard' },
@@ -89,6 +84,7 @@ export default function AppSettingsScreen() {
   const [isChangingBackground, setIsChangingBackground] = useState(false);
   const [isSyncingLiveActivities, setIsSyncingLiveActivities] = useState(false);
   const [liveActivitiesStatusText, setLiveActivitiesStatusText] = useState('Status wird geladen...');
+  const [isAdmin, setIsAdmin] = useState(false);
 
   // Convex context
   const { convexClient, lastSyncError } = useConvex();
@@ -113,8 +109,6 @@ export default function AppSettingsScreen() {
   } = useNotificationPreferences();
   const { requestPermissions } = useNotifications();
 
-  // Check if current user is admin
-  const isAdmin = user?.email ? ADMIN_EMAILS.includes(user.email) : false;
   const isAutoDarkWindowActive = autoDarkModeEnabled && colorScheme === 'dark';
   const isBackgroundModeAutoSynced = isAutoDarkWindowActive;
   const effectiveIsDarkBackground = isBackgroundModeAutoSynced
@@ -157,13 +151,15 @@ export default function AppSettingsScreen() {
   const loadSettings = async () => {
     try {
       setIsLoading(true);
-      const [{ data, error }, nightWindowSettings] = await Promise.all([
+      const [{ data, error }, nightWindowSettings, profile] = await Promise.all([
         getAppSettings(),
         loadNightWindowSettings(user?.id),
+        getCachedUserProfile(),
       ]);
 
       setNightWindowStartTime(nightWindowSettings.startTime);
       setNightWindowEndTime(nightWindowSettings.endTime);
+      setIsAdmin(profile?.is_admin === true);
 
       if (error) {
         console.error('Error loading app settings:', error);
@@ -1452,6 +1448,22 @@ export default function AppSettingsScreen() {
                         <View style={styles.rowContent}>
                           <ThemedText style={styles.rowTitle}>Debug Notifications</ThemedText>
                           <ThemedText style={styles.rowDescription}>Benachrichtigungen testen und debuggen</ThemedText>
+                        </View>
+                        <View style={styles.trailing}>
+                          <IconSymbol name="chevron.right" size={20} color={trailingIconColor} />
+                        </View>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={styles.rowItem}
+                        onPress={() => router.push('/paywall-access-admin')}
+                      >
+                        <View style={styles.rowIcon}>
+                          <ThemedText style={{ fontSize: 24 }}>🧾</ThemedText>
+                        </View>
+                        <View style={styles.rowContent}>
+                          <ThemedText style={styles.rowTitle}>Paywall-Zugänge verwalten</ThemedText>
+                          <ThemedText style={styles.rowDescription}>Tester- und Kooperationspartner-Rollen vergeben</ThemedText>
                         </View>
                         <View style={styles.trailing}>
                           <IconSymbol name="chevron.right" size={20} color={trailingIconColor} />

@@ -29,6 +29,11 @@ import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { getCachedUserProfile } from '@/lib/appCache';
 import {
+  getPaywallAccessRoleLabel,
+  isPaywallAccessRole,
+  type PaywallAccessRole,
+} from '@/lib/paywallAccess';
+import {
   getRevenueCatSubscriptionSummary,
   hasRevenueCatEntitlement,
   restoreRevenueCatPurchases,
@@ -38,6 +43,7 @@ import { openSubscriptionManagement } from '@/lib/subscriptionManagement';
 
 type SubscriptionViewState = {
   isAdmin: boolean;
+  accessRole: PaywallAccessRole | null;
   isPremium: boolean;
   planType: RevenueCatPlanType | null;
   productId: string | null;
@@ -47,6 +53,7 @@ type SubscriptionViewState = {
 
 const EMPTY_STATE: SubscriptionViewState = {
   isAdmin: false,
+  accessRole: null,
   isPremium: false,
   planType: null,
   productId: null,
@@ -99,7 +106,24 @@ export default function SubscriptionScreen() {
       if (profile?.is_admin === true) {
         setState({
           isAdmin: true,
+          accessRole: null,
           isPremium: true,
+          planType: null,
+          productId: null,
+          expiresDate: null,
+          willRenew: null,
+        });
+        return;
+      }
+
+      const accessRole = isPaywallAccessRole(profile?.paywall_access_role)
+        ? profile.paywall_access_role
+        : null;
+      if (accessRole) {
+        setState({
+          isAdmin: false,
+          accessRole,
+          isPremium: false,
           planType: null,
           productId: null,
           expiresDate: null,
@@ -115,6 +139,7 @@ export default function SubscriptionScreen() {
 
       setState({
         isAdmin: false,
+        accessRole: null,
         isPremium: fallbackPremium,
         planType: summary.planType,
         productId: summary.productId,
@@ -166,6 +191,8 @@ export default function SubscriptionScreen() {
 
   const planLabel = state.isAdmin
     ? 'Admin-Zugang'
+    : state.accessRole
+      ? `${getPaywallAccessRoleLabel(state.accessRole)}-Zugang`
     : state.planType === 'monthly'
       ? 'Monatsabo'
       : state.planType === 'yearly'
@@ -176,26 +203,31 @@ export default function SubscriptionScreen() {
 
   const statusLabel = state.isAdmin
     ? 'Aktiv durch Admin-Rechte'
+    : state.accessRole
+      ? `Aktiv als ${getPaywallAccessRoleLabel(state.accessRole)}`
     : state.isPremium
       ? 'Abo aktiv'
       : 'Derzeit nicht aktiv';
 
   const detailLabel = state.isAdmin
     ? 'Du siehst den Zustand ohne Paywall. Store-Käufe sind im Admin-Modus nicht nötig.'
+    : state.accessRole
+      ? `Dieser Account umgeht die Paywall aktuell über den Sonderzugang "${getPaywallAccessRoleLabel(state.accessRole)}". Store-Käufe sind dafür nicht nötig.`
     : state.isPremium
       ? state.willRenew === false
         ? 'Dein Abo läuft aktuell, verlängert sich aber nicht automatisch.'
         : 'Dein Abo läuft und die App bleibt ohne Paywall nutzbar.'
       : 'Wenn du Lotti Baby nach der Testphase weiter nutzen möchtest, brauchst du ein aktives Abo.';
 
+  const hasActiveAccess = state.isAdmin || !!state.accessRole || state.isPremium;
   const expirationLabel = formatDate(state.expiresDate);
-  const canManageStore = state.isPremium && !state.isAdmin;
-  const canChoosePlan = !state.isPremium;
-  const canRestore = !state.isAdmin;
+  const canManageStore = state.isPremium && !state.isAdmin && !state.accessRole;
+  const canChoosePlan = !hasActiveAccess;
+  const canRestore = !state.isAdmin && !state.accessRole;
   const showActions = canManageStore || canChoosePlan || canRestore;
 
-  const statusDotColor = state.isPremium ? '#9DBEBB' : '#E9C9B6';
-  const statusText = state.isPremium ? 'Aktiv' : 'Inaktiv';
+  const statusDotColor = hasActiveAccess ? '#9DBEBB' : '#E9C9B6';
+  const statusText = hasActiveAccess ? 'Aktiv' : 'Inaktiv';
 
   return (
     <ThemedBackground style={styles.background}>
@@ -239,9 +271,11 @@ export default function SubscriptionScreen() {
                       name={
                         (state.isAdmin
                           ? 'checkmark.shield.fill'
-                          : state.isPremium
-                            ? 'star.fill'
-                            : 'lock.fill') as any
+                          : state.accessRole
+                            ? 'person.fill'
+                            : state.isPremium
+                              ? 'star.fill'
+                              : 'lock.fill') as any
                       }
                       size={22}
                       color={iconAccentColor}
@@ -318,11 +352,13 @@ export default function SubscriptionScreen() {
                     >
                       {state.isAdmin
                         ? 'Nicht relevant'
-                        : state.willRenew === false
-                          ? 'Beendet'
-                          : state.isPremium
-                            ? 'Automatisch'
-                            : 'Keine'}
+                        : state.accessRole
+                          ? 'Nicht relevant'
+                          : state.willRenew === false
+                            ? 'Beendet'
+                            : state.isPremium
+                              ? 'Automatisch'
+                              : 'Keine'}
                     </ThemedText>
                   </View>
 

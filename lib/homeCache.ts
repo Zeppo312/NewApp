@@ -11,7 +11,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
  * Offline-Support: App funktioniert auch ohne Internet mit gecachten Daten
  */
 
-const CACHE_VERSION = '1.0.0';
+const CACHE_VERSION = '1.1.0';
+
+export interface HomeCacheScope {
+  userId?: string | null;
+  babyId?: string | null;
+  dateKey?: string | null;
+}
 
 const parseCachedValue = <T>(value: string | null, fallback: T): T => {
   if (value === null) {
@@ -39,6 +45,15 @@ const CACHE_KEYS = {
   LAST_UPDATE: 'home_cache_last_update',
 } as const;
 
+const buildScopeSuffix = (scope?: HomeCacheScope): string => {
+  const userPart = scope?.userId?.trim() || 'anonymous';
+  const babyPart = scope?.babyId?.trim() || 'no-baby';
+  const datePart = scope?.dateKey?.trim() || 'no-date';
+  return `${userPart}:${babyPart}:${datePart}`;
+};
+
+const scopedKey = (key: string, scope?: HomeCacheScope): string => `${key}:${buildScopeSuffix(scope)}`;
+
 export interface CachedHomeData {
   babyInfo: any;
   diaryEntries: any[];
@@ -55,41 +70,41 @@ export interface CachedHomeData {
 /**
  * Speichere alle Home-Daten im Cache
  */
-export async function cacheHomeData(data: Partial<CachedHomeData>): Promise<void> {
+export async function cacheHomeData(data: Partial<CachedHomeData>, scope?: HomeCacheScope): Promise<void> {
   try {
     const timestamp = new Date().toISOString();
     const entries: [string, string][] = [
-      [CACHE_KEYS.VERSION, CACHE_VERSION],
-      [CACHE_KEYS.LAST_UPDATE, timestamp],
+      [scopedKey(CACHE_KEYS.VERSION, scope), CACHE_VERSION],
+      [scopedKey(CACHE_KEYS.LAST_UPDATE, scope), timestamp],
     ];
 
     // Nur definierte Felder cachen
     if (data.babyInfo !== undefined) {
-      entries.push([CACHE_KEYS.BABY_INFO, JSON.stringify(data.babyInfo)]);
+      entries.push([scopedKey(CACHE_KEYS.BABY_INFO, scope), JSON.stringify(data.babyInfo)]);
     }
     if (data.diaryEntries !== undefined) {
-      entries.push([CACHE_KEYS.DIARY_ENTRIES, JSON.stringify(data.diaryEntries)]);
+      entries.push([scopedKey(CACHE_KEYS.DIARY_ENTRIES, scope), JSON.stringify(data.diaryEntries)]);
     }
     if (data.dailyEntries !== undefined) {
-      entries.push([CACHE_KEYS.DAILY_ENTRIES, JSON.stringify(data.dailyEntries)]);
+      entries.push([scopedKey(CACHE_KEYS.DAILY_ENTRIES, scope), JSON.stringify(data.dailyEntries)]);
     }
     if (data.todaySleepMinutes !== undefined) {
-      entries.push([CACHE_KEYS.SLEEP_MINUTES, JSON.stringify(data.todaySleepMinutes)]);
+      entries.push([scopedKey(CACHE_KEYS.SLEEP_MINUTES, scope), JSON.stringify(data.todaySleepMinutes)]);
     }
     if (data.currentPhase !== undefined) {
-      entries.push([CACHE_KEYS.CURRENT_PHASE, JSON.stringify(data.currentPhase)]);
+      entries.push([scopedKey(CACHE_KEYS.CURRENT_PHASE, scope), JSON.stringify(data.currentPhase)]);
     }
     if (data.phaseProgress !== undefined) {
-      entries.push([CACHE_KEYS.PHASE_PROGRESS, JSON.stringify(data.phaseProgress)]);
+      entries.push([scopedKey(CACHE_KEYS.PHASE_PROGRESS, scope), JSON.stringify(data.phaseProgress)]);
     }
     if (data.milestones !== undefined) {
-      entries.push([CACHE_KEYS.MILESTONES, JSON.stringify(data.milestones)]);
+      entries.push([scopedKey(CACHE_KEYS.MILESTONES, scope), JSON.stringify(data.milestones)]);
     }
     if (data.recommendations !== undefined) {
-      entries.push([CACHE_KEYS.RECOMMENDATIONS, JSON.stringify(data.recommendations)]);
+      entries.push([scopedKey(CACHE_KEYS.RECOMMENDATIONS, scope), JSON.stringify(data.recommendations)]);
     }
     if (data.userName !== undefined) {
-      entries.push([CACHE_KEYS.USER_NAME, JSON.stringify(data.userName)]);
+      entries.push([scopedKey(CACHE_KEYS.USER_NAME, scope), JSON.stringify(data.userName)]);
     }
 
     await AsyncStorage.multiSet(entries);
@@ -102,49 +117,49 @@ export async function cacheHomeData(data: Partial<CachedHomeData>): Promise<void
 /**
  * Lade gecachte Home-Daten
  */
-export async function loadCachedHomeData(): Promise<CachedHomeData | null> {
+export async function loadCachedHomeData(scope?: HomeCacheScope): Promise<CachedHomeData | null> {
   try {
     const keys = [
-      CACHE_KEYS.VERSION,
-      CACHE_KEYS.LAST_UPDATE,
-      CACHE_KEYS.BABY_INFO,
-      CACHE_KEYS.DIARY_ENTRIES,
-      CACHE_KEYS.DAILY_ENTRIES,
-      CACHE_KEYS.SLEEP_MINUTES,
-      CACHE_KEYS.CURRENT_PHASE,
-      CACHE_KEYS.PHASE_PROGRESS,
-      CACHE_KEYS.MILESTONES,
-      CACHE_KEYS.RECOMMENDATIONS,
-      CACHE_KEYS.USER_NAME,
+      scopedKey(CACHE_KEYS.VERSION, scope),
+      scopedKey(CACHE_KEYS.LAST_UPDATE, scope),
+      scopedKey(CACHE_KEYS.BABY_INFO, scope),
+      scopedKey(CACHE_KEYS.DIARY_ENTRIES, scope),
+      scopedKey(CACHE_KEYS.DAILY_ENTRIES, scope),
+      scopedKey(CACHE_KEYS.SLEEP_MINUTES, scope),
+      scopedKey(CACHE_KEYS.CURRENT_PHASE, scope),
+      scopedKey(CACHE_KEYS.PHASE_PROGRESS, scope),
+      scopedKey(CACHE_KEYS.MILESTONES, scope),
+      scopedKey(CACHE_KEYS.RECOMMENDATIONS, scope),
+      scopedKey(CACHE_KEYS.USER_NAME, scope),
     ];
 
     const values = await AsyncStorage.multiGet(keys);
     const cache = Object.fromEntries(values);
 
     // Prüfe Cache-Version
-    const version = cache[CACHE_KEYS.VERSION];
+    const version = cache[scopedKey(CACHE_KEYS.VERSION, scope)];
     if (version !== CACHE_VERSION) {
       console.log('Cache version mismatch, clearing cache');
-      await clearHomeCache();
+      await clearHomeCache(scope);
       return null;
     }
 
     // Prüfe ob Cache existiert
-    const lastUpdate = cache[CACHE_KEYS.LAST_UPDATE];
+    const lastUpdate = cache[scopedKey(CACHE_KEYS.LAST_UPDATE, scope)];
     if (!lastUpdate) {
       return null;
     }
 
     // Parse gecachte Daten
-    const babyInfo = parseCachedValue(cache[CACHE_KEYS.BABY_INFO] ?? null, null);
-    const diaryEntries = parseCachedValue(cache[CACHE_KEYS.DIARY_ENTRIES] ?? null, []);
-    const dailyEntries = parseCachedValue(cache[CACHE_KEYS.DAILY_ENTRIES] ?? null, []);
-    const todaySleepMinutes = parseCachedValue(cache[CACHE_KEYS.SLEEP_MINUTES] ?? null, 0);
-    const currentPhase = parseCachedValue(cache[CACHE_KEYS.CURRENT_PHASE] ?? null, null);
-    const phaseProgress = parseCachedValue(cache[CACHE_KEYS.PHASE_PROGRESS] ?? null, null);
-    const milestones = parseCachedValue(cache[CACHE_KEYS.MILESTONES] ?? null, []);
-    const recommendations = parseCachedValue(cache[CACHE_KEYS.RECOMMENDATIONS] ?? null, []);
-    const userName = parseCachedValue(cache[CACHE_KEYS.USER_NAME] ?? null, '');
+    const babyInfo = parseCachedValue(cache[scopedKey(CACHE_KEYS.BABY_INFO, scope)] ?? null, null);
+    const diaryEntries = parseCachedValue(cache[scopedKey(CACHE_KEYS.DIARY_ENTRIES, scope)] ?? null, []);
+    const dailyEntries = parseCachedValue(cache[scopedKey(CACHE_KEYS.DAILY_ENTRIES, scope)] ?? null, []);
+    const todaySleepMinutes = parseCachedValue(cache[scopedKey(CACHE_KEYS.SLEEP_MINUTES, scope)] ?? null, 0);
+    const currentPhase = parseCachedValue(cache[scopedKey(CACHE_KEYS.CURRENT_PHASE, scope)] ?? null, null);
+    const phaseProgress = parseCachedValue(cache[scopedKey(CACHE_KEYS.PHASE_PROGRESS, scope)] ?? null, null);
+    const milestones = parseCachedValue(cache[scopedKey(CACHE_KEYS.MILESTONES, scope)] ?? null, []);
+    const recommendations = parseCachedValue(cache[scopedKey(CACHE_KEYS.RECOMMENDATIONS, scope)] ?? null, []);
+    const userName = parseCachedValue(cache[scopedKey(CACHE_KEYS.USER_NAME, scope)] ?? null, '');
 
     return {
       babyInfo,
@@ -167,9 +182,9 @@ export async function loadCachedHomeData(): Promise<CachedHomeData | null> {
 /**
  * Lösche alle gecachten Home-Daten
  */
-export async function clearHomeCache(): Promise<void> {
+export async function clearHomeCache(scope?: HomeCacheScope): Promise<void> {
   try {
-    const keys = Object.values(CACHE_KEYS);
+    const keys = Object.values(CACHE_KEYS).map((key) => scopedKey(key, scope));
     await AsyncStorage.multiRemove(keys);
   } catch (error) {
     console.error('Failed to clear home cache:', error);
@@ -194,12 +209,12 @@ export async function getCacheInfo(): Promise<{
   size: number;
 }> {
   try {
-    const keys = Object.values(CACHE_KEYS);
+    const keys = Object.values(CACHE_KEYS).map((key) => scopedKey(key));
     const values = await AsyncStorage.multiGet(keys);
     const cache = Object.fromEntries(values);
 
-    const version = cache[CACHE_KEYS.VERSION] || null;
-    const lastUpdate = cache[CACHE_KEYS.LAST_UPDATE] || null;
+    const version = cache[scopedKey(CACHE_KEYS.VERSION)] || null;
+    const lastUpdate = cache[scopedKey(CACHE_KEYS.LAST_UPDATE)] || null;
     const size = values.filter(([_, value]) => value !== null).length;
 
     return { version, lastUpdate, size };
