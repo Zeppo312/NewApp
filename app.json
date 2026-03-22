@@ -2,7 +2,7 @@
   "expo": {
     "name": "Lotti Baby",
     "slug": "LottiBaby",
-    "version": "1.0.6",
+    "version": "1.0.10",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "com.lottibaby.app",
@@ -11,7 +11,7 @@
       "supportsTablet": true,
       "appleTeamId": "FWCPXYUKA2",
       "buildNumber": "2",
-      "version": "1.0.6",
+      "version": "1.0.10",
       "bundleIdentifier": "com.LottiBaby.app",
       "infoPlist": {
         "NSCalendarsUsageDescription": "Lotti Baby benötigt Zugriff auf deinen Kalender, damit du Planer- und Arzttermine als Kalendereinträge anlegen, aktualisieren und mit Erinnerungen synchronisieren kannst.",

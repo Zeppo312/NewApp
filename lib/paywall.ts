@@ -2,10 +2,11 @@ import { getCachedUser, supabase } from './supabase';
 import { getCachedPremiumStatus, getCachedUserProfile, getCachedUserSettings } from './appCache';
 import type { PaywallAccessReason, PaywallAccessRole } from './paywallAccess';
 import { isPaywallAccessRole } from './paywallAccess';
+import { DEFAULT_PAYWALL_TRIAL_DAYS } from './paywallDefaults';
+import { getCachedPaywallContent, getPaywallTrialDays } from './paywallContent';
 
 export const PAYWALL_INTERVAL_MS = 2 * 60 * 60 * 1000; // 2 Stunden
-export const PAYWALL_TRIAL_DAYS = 14;
-export const PAYWALL_ACCOUNT_CREATION_GRACE_MS = PAYWALL_TRIAL_DAYS * 24 * 60 * 60 * 1000; // 14 Tage
+export const PAYWALL_TRIAL_DAYS = DEFAULT_PAYWALL_TRIAL_DAYS;
 
 export type PaywallState = {
   isPro: boolean;
@@ -15,6 +16,7 @@ export type PaywallState = {
   isTrialExpired: boolean;
   lastShownAt: Date | null;
   accountCreatedAt: Date | null;
+  trialDays: number;
 };
 
 const parseDate = (value?: string | null): Date | null => {
@@ -33,17 +35,19 @@ const mapRowToState = (
   isAdmin: boolean,
   paywallAccessRole: PaywallAccessRole | null,
   accountCreatedAt: Date | null,
+  trialDays: number,
 ): PaywallState => {
   const accessReason: PaywallAccessReason = isPro
     ? 'subscription'
     : isAdmin
       ? 'admin'
       : paywallAccessRole ?? 'none';
+  const paywallAccountCreationGraceMs = trialDays * 24 * 60 * 60 * 1000;
   const accountAge = accountCreatedAt ? Date.now() - accountCreatedAt.getTime() : null;
   const isTrialExpired =
     accessReason === 'none' &&
     accountAge !== null &&
-    accountAge >= PAYWALL_ACCOUNT_CREATION_GRACE_MS;
+    accountAge >= paywallAccountCreationGraceMs;
 
   return {
     isPro,
@@ -53,6 +57,7 @@ const mapRowToState = (
     isTrialExpired,
     lastShownAt: parseDate(settings?.paywall_last_shown_at),
     accountCreatedAt,
+    trialDays,
   };
 };
 
@@ -67,15 +72,17 @@ export const fetchPaywallState = async (): Promise<PaywallState> => {
       isTrialExpired: false,
       lastShownAt: null,
       accountCreatedAt: null,
+      trialDays: PAYWALL_TRIAL_DAYS,
     };
   }
 
   try {
     // Nutze gecachte Daten für bessere Performance
-    const [isPro, settings, profile] = await Promise.all([
+    const [isPro, settings, profile, paywallContent] = await Promise.all([
       getCachedPremiumStatus(),
       getCachedUserSettings(),
       getCachedUserProfile(),
+      getCachedPaywallContent(),
     ]);
 
     const accountCreatedAt = resolveAccountCreatedAt(userData.user);
@@ -83,7 +90,15 @@ export const fetchPaywallState = async (): Promise<PaywallState> => {
     const paywallAccessRole = isPaywallAccessRole(profile?.paywall_access_role)
       ? profile.paywall_access_role
       : null;
-    return mapRowToState(settings, isPro, isAdmin, paywallAccessRole, accountCreatedAt);
+    const trialDays = getPaywallTrialDays(paywallContent.content);
+    return mapRowToState(
+      settings,
+      isPro,
+      isAdmin,
+      paywallAccessRole,
+      accountCreatedAt,
+      trialDays,
+    );
   } catch (err) {
     console.error('Exception while fetching paywall state:', err);
     return {
@@ -94,6 +109,7 @@ export const fetchPaywallState = async (): Promise<PaywallState> => {
       isTrialExpired: false,
       lastShownAt: null,
       accountCreatedAt: null,
+      trialDays: PAYWALL_TRIAL_DAYS,
     };
   }
 };
@@ -113,7 +129,9 @@ export const shouldShowPaywall = async (
   const now = Date.now();
   if (state.accountCreatedAt) {
     const accountAge = now - state.accountCreatedAt.getTime();
-    if (accountAge < PAYWALL_ACCOUNT_CREATION_GRACE_MS) {
+    const paywallAccountCreationGraceMs =
+      state.trialDays * 24 * 60 * 60 * 1000;
+    if (accountAge < paywallAccountCreationGraceMs) {
       return { shouldShow: false, state };
     }
   }

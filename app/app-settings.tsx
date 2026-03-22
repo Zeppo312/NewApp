@@ -1470,6 +1470,22 @@ export default function AppSettingsScreen() {
                         </View>
                       </TouchableOpacity>
 
+                      <TouchableOpacity
+                        style={styles.rowItem}
+                        onPress={() => router.push('/paywall-content-admin')}
+                      >
+                        <View style={styles.rowIcon}>
+                          <ThemedText style={{ fontSize: 24 }}>✍️</ThemedText>
+                        </View>
+                        <View style={styles.rowContent}>
+                          <ThemedText style={styles.rowTitle}>Paywall-Texte bearbeiten</ThemedText>
+                          <ThemedText style={styles.rowDescription}>Texte der Paywall live anpassen und speichern</ThemedText>
+                        </View>
+                        <View style={styles.trailing}>
+                          <IconSymbol name="chevron.right" size={20} color={trailingIconColor} />
+                        </View>
+                      </TouchableOpacity>
+
                       {/* Convex Status Info */}
                       <View style={[styles.rowItem, styles.infoRow]}>
                         <View style={styles.rowIcon}>

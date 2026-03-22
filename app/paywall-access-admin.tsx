@@ -224,9 +224,7 @@ export default function PaywallAccessAdminScreen() {
             intensity={26}
             overlayColor={glassOverlay}
           >
-            <ThemedText style={[styles.sectionTitle, { color: textPrimary }]}>
-              Nutzer suchen
-            </ThemedText>
+            {/* Search input */}
             <View
               style={[
                 styles.searchInputWrap,
@@ -251,13 +249,16 @@ export default function PaywallAccessAdminScreen() {
                 <ActivityIndicator size="small" color={theme.accent} />
               ) : null}
             </View>
-          </LiquidGlassCard>
 
-          <LiquidGlassCard
-            style={styles.sectionCard}
-            intensity={26}
-            overlayColor={glassOverlay}
-          >
+            {/* Divider */}
+            <View
+              style={[
+                styles.divider,
+                { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(92,64,51,0.08)' },
+              ]}
+            />
+
+            {/* Results / States */}
             {isAuthorizing ? (
               <View style={styles.centerState}>
                 <ActivityIndicator color={theme.accent} />
@@ -267,108 +268,121 @@ export default function PaywallAccessAdminScreen() {
               </View>
             ) : !isAdmin ? (
               <View style={styles.centerState}>
-                <IconSymbol
-                  name="lock.fill"
-                  size={22}
-                  color={iconSecondaryColor}
-                />
+                <View style={[styles.emptyIconCircle, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(92,64,51,0.06)' }]}>
+                  <IconSymbol
+                    name="lock.fill"
+                    size={24}
+                    color={iconSecondaryColor}
+                  />
+                </View>
                 <ThemedText style={[styles.stateText, { color: textSecondary }]}>
-                  Dieser Bereich ist nur für Admins mit `profiles.is_admin = true`.
+                  Dieser Bereich ist nur für Admins.
                 </ThemedText>
               </View>
             ) : results.length === 0 ? (
               <View style={styles.centerState}>
+                <View style={[styles.emptyIconCircle, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(92,64,51,0.06)' }]}>
+                  <IconSymbol
+                    name={trimmedQuery.length >= 2 ? 'person.2' : 'person.2.fill'}
+                    size={24}
+                    color={iconSecondaryColor}
+                  />
+                </View>
                 <ThemedText style={[styles.stateText, { color: textSecondary }]}>
                   {emptyStateText}
                 </ThemedText>
               </View>
             ) : (
               <View style={styles.resultList}>
-                {results.map((item) => {
+                <ThemedText style={[styles.resultCount, { color: textSecondary }]}>
+                  {results.length} {results.length === 1 ? 'Ergebnis' : 'Ergebnisse'}
+                </ThemedText>
+                {results.map((item, index) => {
                   const isUpdating = updatingUserId === item.user_id;
                   const roleLabel = getPaywallAccessRoleLabel(item.paywall_access_role);
                   const isActionDisabled = isUpdating || !!item.is_admin || !item.has_profile;
+                  const isLast = index === results.length - 1;
 
                   return (
-                    <View
-                      key={item.user_id}
-                      style={[
-                        styles.resultCard,
-                        {
-                          borderColor: isDark
-                            ? 'rgba(255,255,255,0.12)'
-                            : 'rgba(92,64,51,0.10)',
-                        },
-                      ]}
-                    >
-                      <View style={styles.resultHeader}>
-                        <View style={styles.resultHeaderText}>
-                          <ThemedText
-                            style={[styles.resultName, { color: textPrimary }]}
-                          >
-                            {[item.first_name, item.last_name].filter(Boolean).join(' ') || item.username || 'Unbenannt'}
-                          </ThemedText>
-                          <ThemedText
-                            style={[styles.resultEmail, { color: textSecondary }]}
-                          >
-                            {item.email ?? 'Keine E-Mail'}
-                          </ThemedText>
-                        </View>
-                        {isUpdating ? (
-                          <ActivityIndicator size="small" color={theme.accent} />
-                        ) : (
-                          <View style={styles.chipWrap}>
-                            {item.is_admin ? (
-                              <View style={[styles.chip, styles.adminChip]}>
-                                <ThemedText style={styles.adminChipText}>Admin</ThemedText>
-                              </View>
-                            ) : null}
-                            <View style={[styles.chip, styles.roleChip]}>
-                              <ThemedText style={styles.roleChipText}>{roleLabel}</ThemedText>
-                            </View>
+                    <View key={item.user_id}>
+                      <View style={styles.resultCard}>
+                        <View style={styles.resultHeader}>
+                          <View style={[styles.avatarCircle, { backgroundColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(125,90,80,0.10)' }]}>
+                            <ThemedText style={[styles.avatarText, { color: textPrimary }]}>
+                              {(item.first_name?.[0] || item.email?.[0] || '?').toUpperCase()}
+                            </ThemedText>
                           </View>
-                        )}
-                      </View>
-
-                      <View style={styles.metaRow}>
-                        {item.username ? (
-                          <ThemedText style={[styles.metaText, { color: textSecondary }]}>
-                            @{item.username}
-                          </ThemedText>
-                        ) : null}
-                        {!item.has_profile ? (
-                          <ThemedText style={[styles.metaWarning, { color: '#C25B5B' }]}>
-                            Profil fehlt
-                          </ThemedText>
-                        ) : null}
-                      </View>
-
-                      <View style={styles.roleButtonRow}>
-                        {ROLE_OPTIONS.map((option) => {
-                          const isSelected = item.paywall_access_role === option.role;
-                          return (
-                            <TouchableOpacity
-                              key={option.label}
-                              style={[
-                                styles.roleButton,
-                                isSelected && styles.roleButtonActive,
-                                isActionDisabled && styles.roleButtonDisabled,
-                              ]}
-                              disabled={isActionDisabled}
-                              onPress={() => handleRoleChange(item, option.role)}
+                          <View style={styles.resultHeaderText}>
+                            <ThemedText
+                              style={[styles.resultName, { color: textPrimary }]}
                             >
-                              <ThemedText
+                              {[item.first_name, item.last_name].filter(Boolean).join(' ') || item.username || 'Unbenannt'}
+                            </ThemedText>
+                            <ThemedText
+                              style={[styles.resultEmail, { color: textSecondary }]}
+                              numberOfLines={1}
+                            >
+                              {item.email ?? 'Keine E-Mail'}
+                              {item.username ? `  ·  @${item.username}` : ''}
+                            </ThemedText>
+                          </View>
+                          {isUpdating ? (
+                            <ActivityIndicator size="small" color={theme.accent} />
+                          ) : (
+                            <View style={styles.chipWrap}>
+                              {item.is_admin ? (
+                                <View style={[styles.chip, styles.adminChip]}>
+                                  <ThemedText style={styles.adminChipText}>Admin</ThemedText>
+                                </View>
+                              ) : null}
+                              {!item.has_profile ? (
+                                <View style={[styles.chip, styles.warningChip]}>
+                                  <ThemedText style={styles.warningChipText}>Kein Profil</ThemedText>
+                                </View>
+                              ) : item.paywall_access_role ? (
+                                <View style={[styles.chip, styles.roleChip]}>
+                                  <ThemedText style={styles.roleChipText}>{roleLabel}</ThemedText>
+                                </View>
+                              ) : null}
+                            </View>
+                          )}
+                        </View>
+
+                        <View style={styles.roleButtonRow}>
+                          {ROLE_OPTIONS.map((option) => {
+                            const isSelected = item.paywall_access_role === option.role;
+                            return (
+                              <TouchableOpacity
+                                key={option.label}
                                 style={[
-                                  styles.roleButtonText,
-                                  isSelected && styles.roleButtonTextActive,
+                                  styles.roleButton,
+                                  isSelected && styles.roleButtonActive,
+                                  isActionDisabled && styles.roleButtonDisabled,
                                 ]}
+                                disabled={isActionDisabled}
+                                onPress={() => handleRoleChange(item, option.role)}
                               >
-                                {option.label}
-                              </ThemedText>
-                            </TouchableOpacity>
-                          );
-                        })}
+                                <ThemedText
+                                  style={[
+                                    styles.roleButtonText,
+                                    isSelected && styles.roleButtonTextActive,
+                                  ]}
+                                >
+                                  {option.label}
+                                </ThemedText>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </View>
                       </View>
+                      {!isLast ? (
+                        <View
+                          style={[
+                            styles.resultDivider,
+                            { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(92,64,51,0.06)' },
+                          ]}
+                        />
+                      ) : null}
                     </View>
                   );
                 })}
@@ -395,85 +409,111 @@ const styles = StyleSheet.create({
     paddingHorizontal: LAYOUT_PAD,
     paddingTop: 12,
     paddingBottom: 40,
-    gap: 16,
   },
   sectionCard: {
     padding: 18,
     borderRadius: 26,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 12,
-  },
   searchInputWrap: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    minHeight: 52,
+    minHeight: 48,
     borderWidth: 1,
-    borderRadius: 16,
+    borderRadius: 14,
     paddingHorizontal: 14,
   },
   searchInput: {
     flex: 1,
     fontSize: 15,
-    paddingVertical: 12,
+    paddingVertical: 10,
+  },
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    marginVertical: 16,
   },
   centerState: {
-    minHeight: 180,
+    minHeight: 120,
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
+    paddingVertical: 8,
+  },
+  emptyIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 2,
   },
   stateText: {
     fontSize: 14,
     textAlign: 'center',
     lineHeight: 20,
+    paddingHorizontal: 12,
   },
   resultList: {
-    gap: 14,
+    gap: 0,
+  },
+  resultCount: {
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 12,
   },
   resultCard: {
-    borderWidth: 1,
-    borderRadius: 18,
-    padding: 14,
-    gap: 10,
+    paddingVertical: 14,
+    gap: 12,
+  },
+  resultDivider: {
+    height: StyleSheet.hairlineWidth,
   },
   resultHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: 12,
   },
-  resultHeaderText: {
-    flex: 1,
-    gap: 4,
+  avatarCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  resultName: {
+  avatarText: {
     fontSize: 16,
     fontWeight: '700',
   },
+  resultHeaderText: {
+    flex: 1,
+    gap: 2,
+  },
+  resultName: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
   resultEmail: {
-    fontSize: 13,
+    fontSize: 12,
   },
   chipWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'flex-end',
-    gap: 8,
+    gap: 6,
   },
   chip: {
     borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
   },
   adminChip: {
     backgroundColor: '#F3D7A5',
   },
   adminChipText: {
     color: '#6A4B14',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
   },
   roleChip: {
@@ -481,28 +521,25 @@ const styles = StyleSheet.create({
   },
   roleChipText: {
     color: '#6A4435',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
   },
-  metaRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
+  warningChip: {
+    backgroundColor: 'rgba(194,91,91,0.12)',
   },
-  metaText: {
-    fontSize: 12,
-  },
-  metaWarning: {
-    fontSize: 12,
-    fontWeight: '600',
+  warningChipText: {
+    color: '#C25B5B',
+    fontSize: 11,
+    fontWeight: '700',
   },
   roleButtonRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
+    paddingLeft: 52,
   },
   roleButton: {
-    minHeight: 38,
+    minHeight: 34,
     borderRadius: 999,
     paddingHorizontal: 14,
     justifyContent: 'center',

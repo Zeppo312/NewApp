@@ -546,6 +546,7 @@ function RootLayoutNav() {
         <Stack.Screen name="dsgvo" />
         <Stack.Screen name="subscription" />
         <Stack.Screen name="paywall-access-admin" />
+        <Stack.Screen name="paywall-content-admin" />
         <Stack.Screen name="pregnancy-stats" />
         <Stack.Screen name="pregnancy-setup" />
         <Stack.Screen name="milestones" />
