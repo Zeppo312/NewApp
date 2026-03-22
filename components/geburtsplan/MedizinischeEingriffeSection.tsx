@@ -10,9 +10,10 @@ interface MedizinischeEingriffeSectionProps {
   data: MedizinischeEingriffe;
   onChange: (data: MedizinischeEingriffe) => void;
   containerStyle?: StyleProp<ViewStyle>;
+  readOnly?: boolean;
 }
 
-export const MedizinischeEingriffeSection: React.FC<MedizinischeEingriffeSectionProps> = ({ data, onChange, containerStyle }) => {
+export const MedizinischeEingriffeSection: React.FC<MedizinischeEingriffeSectionProps> = ({ data, onChange, containerStyle, readOnly = false }) => {
   // Wehenförderung
   const wehenfoerderungOptions = [
     'Nur wenn medizinisch nötig',
@@ -21,6 +22,7 @@ export const MedizinischeEingriffeSection: React.FC<MedizinischeEingriffeSection
   ];
   
   const selectWehenfoerderung = (option: string) => {
+    if (readOnly) return;
     onChange({
       ...data,
       wehenfoerderung: option,
@@ -35,6 +37,7 @@ export const MedizinischeEingriffeSection: React.FC<MedizinischeEingriffeSection
   ];
   
   const selectDammschnitt = (option: string) => {
+    if (readOnly) return;
     onChange({
       ...data,
       dammschnitt: option,
@@ -49,6 +52,7 @@ export const MedizinischeEingriffeSection: React.FC<MedizinischeEingriffeSection
   ];
   
   const selectMonitoring = (option: string) => {
+    if (readOnly) return;
     onChange({
       ...data,
       monitoring: option,
@@ -63,6 +67,7 @@ export const MedizinischeEingriffeSection: React.FC<MedizinischeEingriffeSection
   ];
   
   const selectNotkaiserschnitt = (option: string) => {
+    if (readOnly) return;
     onChange({
       ...data,
       notkaiserschnitt: option,
@@ -78,6 +83,7 @@ export const MedizinischeEingriffeSection: React.FC<MedizinischeEingriffeSection
             label={option}
             selected={data.wehenfoerderung === option}
             onSelect={() => selectWehenfoerderung(option)}
+            disabled={readOnly}
           />
         ))}
       </OptionGroup>
@@ -89,6 +95,7 @@ export const MedizinischeEingriffeSection: React.FC<MedizinischeEingriffeSection
             label={option}
             selected={data.dammschnitt === option}
             onSelect={() => selectDammschnitt(option)}
+            disabled={readOnly}
           />
         ))}
       </OptionGroup>
@@ -100,6 +107,7 @@ export const MedizinischeEingriffeSection: React.FC<MedizinischeEingriffeSection
             label={option}
             selected={data.monitoring === option}
             onSelect={() => selectMonitoring(option)}
+            disabled={readOnly}
           />
         ))}
       </OptionGroup>
@@ -111,6 +119,7 @@ export const MedizinischeEingriffeSection: React.FC<MedizinischeEingriffeSection
             label={option}
             selected={data.notkaiserschnitt === option}
             onSelect={() => selectNotkaiserschnitt(option)}
+            disabled={readOnly}
           />
         ))}
       </OptionGroup>
@@ -118,10 +127,14 @@ export const MedizinischeEingriffeSection: React.FC<MedizinischeEingriffeSection
       <TextInputField
         label="Sonstige Eingriffe / Anmerkungen"
         value={data.sonstigeEingriffe}
-        onChangeText={(text) => onChange({ ...data, sonstigeEingriffe: text })}
+        onChangeText={(text) => {
+          if (readOnly) return;
+          onChange({ ...data, sonstigeEingriffe: text });
+        }}
         multiline
         numberOfLines={3}
         placeholder="Hier kannst du weitere Wünsche zu medizinischen Eingriffen eintragen..."
+        readOnly={readOnly}
       />
     </GeburtsplanSection>
   );

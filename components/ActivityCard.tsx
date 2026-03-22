@@ -3,7 +3,7 @@ import { View, StyleSheet, TouchableOpacity, Animated, Easing } from 'react-nati
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { Colors } from '@/constants/Colors';
-import { useColorScheme } from '@/hooks/useColorScheme';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { DailyEntry } from '@/lib/baby';
 import { Swipeable } from 'react-native-gesture-handler';
@@ -18,8 +18,16 @@ interface ActivityCardProps {
 }
 
 const ActivityCard: React.FC<ActivityCardProps> = ({ entry, onDelete, onEdit, marginHorizontal = 16 }) => {
-  const colorScheme = useColorScheme() ?? 'light';
+  // Adaptive Farben für Dark Mode (basierend auf Hintergrundbild-Einstellung)
+  const adaptiveColors = useAdaptiveColors();
+  const colorScheme = adaptiveColors.effectiveScheme;
   const theme = Colors[colorScheme];
+  const isDark = colorScheme === 'dark' || adaptiveColors.isDarkBackground;
+  // Im Dark Mode alle Texte hell/weiß
+  const textColor = isDark ? Colors.dark.textPrimary : '#7D5A50';
+  const secondaryTextColor = isDark ? Colors.dark.textSecondary : '#333';
+  const tertiaryTextColor = isDark ? Colors.dark.textTertiary : '#666666';
+  const badgeTextColor = isDark ? Colors.dark.textPrimary : '#5E3DB3';
   const [expanded, setExpanded] = useState(false);
   const [pressed, setPressed] = useState(false);
 
@@ -92,8 +100,8 @@ const ActivityCard: React.FC<ActivityCardProps> = ({ entry, onDelete, onEdit, ma
     }
     if (entry.entry_type === 'sleep') {
       // Verwende die bereits berechneten Werte aus dem Sleep-Tracker
-      if (entry.emoji && entry.label) {
-        return { emoji: entry.emoji, label: entry.label };
+      if (customEmoji && customLabel) {
+        return { emoji: customEmoji, label: customLabel };
       }
       // Fallback falls die Werte nicht gesetzt sind
       return { emoji: '💤', label: 'Schlaf' };
@@ -198,10 +206,62 @@ const ActivityCard: React.FC<ActivityCardProps> = ({ entry, onDelete, onEdit, ma
     }
   };
 
+  // BLW-Rezept-Hinweis aus den Notizen ziehen (erste Zeile mit "BLW:")
+  const recipeNote = (() => {
+    if (!entry.notes) return null;
+    const line = entry.notes
+      .split('\n')
+      .map((l) => l.trim())
+      .find((l) => l.toLowerCase().startsWith('blw:'));
+    if (!line) return null;
+    return line.replace(/blw:/i, '').trim();
+  })();
+
+  const weightDateLabel = (entry as any).weightDateLabel as string | undefined;
+
+  // Notizen ohne evtl. BLW-Rezept-Zeile (wird separat als Badge gezeigt)
+  const notesWithoutRecipe = (() => {
+    if (!entry.notes) return null;
+    const lines = entry.notes
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .filter((l) => !l.toLowerCase().startsWith('blw:'));
+    if (lines.length === 0) return null;
+    return lines.join('\n');
+  })();
+
+  const showNotesBadge = !!notesWithoutRecipe;
+  const diaperFeverMeasured = (entry as any).diaper_fever_measured === true;
+  const diaperSuppositoryGiven = (entry as any).diaper_suppository_given === true;
+  const diaperTemperatureRaw = (entry as any).diaper_temperature_c;
+  const diaperSuppositoryDoseRaw = (entry as any).diaper_suppository_dose_mg;
+  const toFiniteNumber = (value: unknown): number | null => {
+    if (value === null || value === undefined || value === '') return null;
+    const parsed = typeof value === 'number' ? value : Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+  const diaperTemperatureValue =
+    toFiniteNumber(diaperTemperatureRaw);
+  const diaperSuppositoryDoseValue =
+    toFiniteNumber(diaperSuppositoryDoseRaw);
+  const showFeverBadge = entry.entry_type === 'diaper' && (diaperFeverMeasured || diaperTemperatureValue !== null);
+  const showSuppositoryBadge =
+    entry.entry_type === 'diaper' && (diaperSuppositoryGiven || diaperSuppositoryDoseValue !== null);
+  const feverBadgeLabel =
+    diaperTemperatureValue !== null
+      ? `🌡️ ${String(diaperTemperatureValue).replace('.', ',')} °C`
+      : '🌡️ Fieber gemessen';
+  const suppositoryBadgeLabel =
+    diaperSuppositoryDoseValue !== null
+      ? `💊 Zäpfchen ${Math.trunc(diaperSuppositoryDoseValue)} mg`
+      : '💊 Zäpfchen gegeben';
+
   // Berechne Dauer
   const duration = entry.end_time
     ? calculateDuration(entry.start_time!, entry.end_time)
     : 0;
+  const showTimePills = !!entry.start_time || (entry.entry_type !== 'diaper' && (!!entry.end_time || duration > 0));
 
   // Rendere Swipe-Aktionen
   const renderRightActions = (
@@ -260,7 +320,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({ entry, onDelete, onEdit, ma
 
               <View style={styles.titleContainer}>
                 <View style={styles.titleRow}>
-                  <ThemedText style={styles.title}>{detail.label}</ThemedText>
+                  <ThemedText style={[styles.title, { color: textColor }]}>{detail.label}</ThemedText>
 
                   <Animated.View
                     style={{
@@ -279,22 +339,53 @@ const ActivityCard: React.FC<ActivityCardProps> = ({ entry, onDelete, onEdit, ma
                     />
                   </Animated.View>
                 </View>
+                {(recipeNote || weightDateLabel || showNotesBadge || showFeverBadge || showSuppositoryBadge) ? (
+                  <View style={styles.badgesWrap}>
+                    {recipeNote ? (
+                      <View style={styles.badgePill}>
+                        <ThemedText style={[styles.badgeText, { color: badgeTextColor }]}>🥄 BLW: {recipeNote}</ThemedText>
+                      </View>
+                    ) : null}
+                    {weightDateLabel ? (
+                      <View style={styles.badgePill}>
+                        <ThemedText style={[styles.badgeText, { color: badgeTextColor }]}>📅 {weightDateLabel}</ThemedText>
+                      </View>
+                    ) : null}
+                    {showNotesBadge ? (
+                      <View style={styles.badgePill}>
+                        <ThemedText style={[styles.badgeText, { color: badgeTextColor }]}>📝 {notesWithoutRecipe}</ThemedText>
+                      </View>
+                    ) : null}
+                    {showFeverBadge ? (
+                      <View style={styles.badgePill}>
+                        <ThemedText style={[styles.badgeText, { color: badgeTextColor }]}>{feverBadgeLabel}</ThemedText>
+                      </View>
+                    ) : null}
+                    {showSuppositoryBadge ? (
+                      <View style={styles.badgePill}>
+                        <ThemedText style={[styles.badgeText, { color: badgeTextColor }]}>{suppositoryBadgeLabel}</ThemedText>
+                      </View>
+                    ) : null}
+                  </View>
+                ) : null}
 
                 {/* Zeiten nur zeigen, wenn vorhanden */}
-                {(entry.start_time || entry.end_time || duration > 0) && (
+                {showTimePills && (
                 <View style={styles.timeRowTop}>
-                  <View style={styles.timePill}>
-                    <ThemedText style={styles.timePillText}>Start {entry.start_time && formatTime(entry.start_time)}</ThemedText>
-                  </View>
-                  {entry.end_time && (
+                  {entry.start_time && (
+                    <View style={styles.timePill}>
+                      <ThemedText style={[styles.timePillText, { color: secondaryTextColor }]}>Start {formatTime(entry.start_time)}</ThemedText>
+                    </View>
+                  )}
+                  {entry.entry_type !== 'diaper' && entry.end_time && (
                     <View style={[styles.timePill, { marginLeft: 6 }]}>
-                      <ThemedText style={styles.timePillText}>Ende {formatTime(entry.end_time)}</ThemedText>
+                      <ThemedText style={[styles.timePillText, { color: secondaryTextColor }]}>Ende {formatTime(entry.end_time)}</ThemedText>
                     </View>
                   )}
 
-                 {duration > 0 && (
+                 {entry.entry_type !== 'diaper' && duration > 0 && (
                     <View style={[styles.timePill, { marginLeft: 6, backgroundColor: 'rgba(94,61,179,0.18)', borderColor: 'rgba(94,61,179,0.35)' }]}>
-                      <ThemedText style={[styles.timePillText, { fontWeight: '700' }]}>{duration} Min</ThemedText>
+                      <ThemedText style={[styles.timePillText, { fontWeight: '700', color: secondaryTextColor }]}>{duration} Min</ThemedText>
                     </View>
                   )}
                 </View>
@@ -356,7 +447,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#7D5A50',
+    // color wird dynamisch gesetzt
     textShadowColor: 'rgba(0,0,0,0.06)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 1,
@@ -368,9 +459,30 @@ const styles = StyleSheet.create({
     marginTop: 8,
     flexWrap: 'wrap'
   },
+  badgesWrap: {
+    marginTop: 6,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'flex-start',
+  },
+  badgePill: {
+    marginRight: 8,
+    marginBottom: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    backgroundColor: 'rgba(94,61,179,0.12)',
+    borderColor: 'rgba(94,61,179,0.28)',
+    borderWidth: 1,
+    borderRadius: 10,
+  },
+  badgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#5E3DB3',
+  },
   time: {
     fontSize: 13,
-    color: '#666666',
+    // color wird dynamisch gesetzt
   },
   timePill: {
     flexDirection: 'row',
@@ -385,16 +497,16 @@ const styles = StyleSheet.create({
   timePillText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#333'
+    // color wird dynamisch gesetzt
   },
   timeSeparator: {
     fontSize: 13,
     marginHorizontal: 4,
-    color: '#666666',
+    // color wird dynamisch gesetzt
   },
   duration: {
     fontSize: 13,
-    color: '#666666',
+    // color wird dynamisch gesetzt
   },
   notesContainer: {
     overflow: 'hidden',
@@ -411,12 +523,12 @@ const styles = StyleSheet.create({
   },
   detailLabel: {
     fontSize: 12,
-    color: '#666',
+    // color wird dynamisch gesetzt
   },
   detailValue: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#333',
+    // color wird dynamisch gesetzt
   },
   actionRow: {
     flexDirection: 'row',

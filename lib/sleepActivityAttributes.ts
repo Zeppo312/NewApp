@@ -5,6 +5,9 @@ export interface SleepActivityAttributes {
   startTime: string;   // ISO-String der Startzeit
   elapsedTimeText?: string;  // Text für die verstrichene Zeit, z.B. "3:42:15"
   quality?: string;   // Schlafqualität (falls eingestellt)
+  babyName?: string;   // Name des Babys für die Live Activity
+  activityType?: 'sleep' | 'feeding';
+  feedingType?: 'BREAST' | 'BOTTLE' | 'SOLIDS';
 }
 
 // Statusattribute für die Activity
@@ -12,6 +15,7 @@ export interface SleepActivityStatus {
   isTracking: boolean;
   elapsedTimeText: string;
   quality?: string;
+  feedingType?: 'BREAST' | 'BOTTLE' | 'SOLIDS';
 }
 
 // Wir verwenden eine eindeutige Activity-ID

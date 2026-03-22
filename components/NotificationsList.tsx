@@ -233,8 +233,8 @@ export const NotificationsList = ({ onNotificationUpdate }: { onNotificationUpda
           params: { post: notification.reference_id }
         } as any);
       } else if (notification.type === 'message') {
-        // Für Direktnachrichten - navigiere zum Chat
-        router.push(`/chat/${notification.sender_id}` as any);
+        // Direktnachricht -> Profil des Absenders anzeigen
+        router.push(`/profile/${notification.sender_id}` as any);
       }
     } catch (error) {
       console.error('Navigationsfehler:', error);

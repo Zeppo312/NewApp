@@ -1,9 +1,12 @@
 import { SleepEntry } from '@/lib/sleepData';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase } from '@/lib/supabase';
 
 export type TimeOfDayBucket = 'morning' | 'midday' | 'afternoon' | 'evening';
 
 export interface SleepWindowPredictionInput {
   userId: string;
+  babyId?: string | null; // Baby-ID für gemeinsame Personalization zwischen Partnern
   birthdate?: string | Date | null;
   entries: SleepEntry[];
   /**
@@ -24,13 +27,14 @@ export interface SleepWindowPrediction {
   windowMinutes: number;
   napIndexToday: number;
   timeOfDayBucket: TimeOfDayBucket;
+  confidence: number;
   debug: Record<string, unknown>;
 }
 
 interface NormalizedEntry {
   id?: string;
   start: Date;
-  end?: Date | null;
+  end: Date | null;
   duration: number | null;
   raw: SleepEntry;
 }
@@ -40,6 +44,16 @@ interface PersonalizationData {
   sampleCount: number;
   lastUpdated: string;
 }
+
+interface PersonalizationStore {
+  [key: string]: PersonalizationData;
+}
+
+// Persistenz-Konfiguration
+const PERSONALIZATION_STORAGE_KEY = 'sleep_personalization_v1';
+const SYNC_DEBOUNCE_MS = 60000; // Nur alle 60 Sekunden syncen
+let lastSyncTime = 0;
+let syncScheduled = false;
 
 interface AgeProfile {
   maxMonths: number;
@@ -62,11 +76,14 @@ const MIN_WINDOW_MINUTES = 30;
 const MAX_WINDOW_MINUTES = 300;
 const EARLY_FLEX_MINUTES = 15;
 const LATE_FLEX_MINUTES = 20;
+const MIN_WINDOW_SPAN_MINUTES = 10;
 const PERSONALIZATION_ALPHA = 0.3;
 const PERSONALIZATION_CLAMP = 60;
-const BEDTIME_BUFFER_MINUTES = 120;
 const AWAKE_OVERRUN_GRACE_MINUTES = 15;
 const JUNIOR_AWAKE_IMMEDIATE_MINUTES = 5;
+
+// 🆕 Dynamischer Bedtime-Gap (statt fixem BEDTIME_BUFFER_MINUTES)
+const MIN_HISTORICAL_SAMPLES = 3;
 
 const AGE_PROFILES: AgeProfile[] = [
   {
@@ -110,10 +127,307 @@ const AGE_PROFILES: AgeProfile[] = [
 const personalizationStore = new Map<string, PersonalizationData>();
 
 /**
+ * 📦 AsyncStorage Persistenz - Lokal speichern
+ */
+async function savePersonalizationToStorage(): Promise<void> {
+  try {
+    const data = Object.fromEntries(personalizationStore.entries());
+    await AsyncStorage.setItem(PERSONALIZATION_STORAGE_KEY, JSON.stringify(data));
+  } catch (error) {
+    console.error('Failed to save personalization to AsyncStorage:', error);
+  }
+}
+
+/**
+ * 📦 AsyncStorage Persistenz - Lokal laden
+ */
+async function loadPersonalizationFromStorage(): Promise<void> {
+  try {
+    const stored = await AsyncStorage.getItem(PERSONALIZATION_STORAGE_KEY);
+    if (stored) {
+      const data: PersonalizationStore = JSON.parse(stored);
+      personalizationStore.clear();
+      for (const [key, value] of Object.entries(data)) {
+        personalizationStore.set(key, value);
+      }
+    }
+  } catch (error) {
+    console.error('Failed to load personalization from AsyncStorage:', error);
+  }
+}
+
+/**
+ * 🔄 Supabase Sync - Nur wenn nötig (debounced)
+ * Speichert Personalization-Daten in Supabase für Partner-Synchronisation
+ * GRACEFUL DEGRADATION: Funktioniert auch ohne Tabelle (nur AsyncStorage)
+ */
+async function syncPersonalizationToSupabase(babyId: string): Promise<void> {
+  if (!babyId) return;
+
+  const now = Date.now();
+  if (now - lastSyncTime < SYNC_DEBOUNCE_MS) {
+    // Zu früh für nächsten Sync - schedule für später
+    if (!syncScheduled) {
+      syncScheduled = true;
+      setTimeout(() => {
+        syncScheduled = false;
+        syncPersonalizationToSupabase(babyId);
+      }, SYNC_DEBOUNCE_MS - (now - lastSyncTime));
+    }
+    return;
+  }
+
+  try {
+    const data = Object.fromEntries(personalizationStore.entries());
+
+    // Upsert in Supabase (baby-spezifisch)
+    const { error } = await supabase
+      .from('sleep_personalization')
+      .upsert({
+        baby_id: babyId,
+        personalization_data: data,
+        updated_at: new Date().toISOString(),
+      }, {
+        onConflict: 'baby_id'
+      });
+
+    if (error) {
+      // Tabelle existiert nicht - kein Problem, AsyncStorage funktioniert weiterhin
+      if (error.code === '42P01') {
+        console.log('Sleep personalization table not yet created - using AsyncStorage only');
+      } else {
+        console.error('Failed to sync personalization to Supabase:', error);
+      }
+    } else {
+      lastSyncTime = now;
+    }
+  } catch (error) {
+    console.error('Failed to sync personalization to Supabase:', error);
+  }
+}
+
+/**
+ * 🔄 Supabase Sync - Daten vom Partner holen
+ * Lädt neueste Personalization-Daten aus Supabase
+ * GRACEFUL DEGRADATION: Funktioniert auch ohne Tabelle (nur AsyncStorage)
+ */
+async function loadPersonalizationFromSupabase(babyId: string): Promise<void> {
+  if (!babyId) return;
+
+  try {
+    const { data, error } = await supabase
+      .from('sleep_personalization')
+      .select('personalization_data, updated_at')
+      .eq('baby_id', babyId)
+      .single();
+
+    if (error) {
+      // Tabelle existiert nicht oder keine Daten - kein Problem
+      if (error.code === '42P01') {
+        console.log('Sleep personalization table not yet created - using AsyncStorage only');
+      } else if (error.code !== 'PGRST116') {
+        // PGRST116 = no rows found (normal)
+        console.error('Failed to load personalization from Supabase:', error);
+      }
+      return;
+    }
+
+    if (data?.personalization_data) {
+      const remoteData: PersonalizationStore = data.personalization_data;
+      const remoteTimestamp = new Date(data.updated_at).getTime();
+
+      // Merge-Strategie: Neueste Daten gewinnen
+      for (const [key, remoteValue] of Object.entries(remoteData)) {
+        const localValue = personalizationStore.get(key);
+
+        if (!localValue) {
+          // Keine lokalen Daten - übernehme remote
+          personalizationStore.set(key, remoteValue);
+        } else {
+          const localTimestamp = new Date(localValue.lastUpdated).getTime();
+
+          // Übernehme neuere Daten
+          if (remoteTimestamp > localTimestamp) {
+            personalizationStore.set(key, remoteValue);
+          }
+        }
+      }
+
+      // Speichere gemergete Daten lokal
+      await savePersonalizationToStorage();
+    }
+  } catch (error) {
+    console.error('Failed to load personalization from Supabase:', error);
+  }
+}
+
+/**
+ * 🚀 Initialisierung beim App-Start
+ * Lädt AsyncStorage, dann Background-Sync mit Supabase
+ */
+export async function initializePersonalization(babyId?: string): Promise<void> {
+  // 1. Schnell: Lade aus AsyncStorage
+  await loadPersonalizationFromStorage();
+
+  // 2. Background: Sync mit Supabase wenn Baby-ID vorhanden
+  if (babyId) {
+    // Non-blocking Background-Sync
+    loadPersonalizationFromSupabase(babyId).catch(err =>
+      console.error('Background personalization sync failed:', err)
+    );
+  }
+}
+
+/**
+ * 1️⃣ Dynamischer Bedtime-Gap basierend auf Alter
+ *
+ * Je älter das Baby, desto größer der Abstand zwischen letztem Nap und Nachtschlaf.
+ * Dies ist eine harte Grenze, keine Empfehlung.
+ */
+function bedtimeGapByAge(ageMonths: number | null): number {
+  if (ageMonths === null) return 90; // Fallback
+
+  if (ageMonths < 4) return 75;   // 1h 15min
+  if (ageMonths < 6) return 90;   // 1h 30min
+  if (ageMonths < 9) return 120;  // 2h
+  if (ageMonths < 12) return 150; // 2h 30min
+  return 180; // 3h
+}
+
+/**
+ * 2️⃣ Circadian Light Bias
+ *
+ * Gleiches Wake-Window fühlt sich zu unterschiedlichen Tageszeiten anders an.
+ * Vormittag → toleriert länger wach
+ * Später Nachmittag → schneller müde
+ *
+ * @param hour - Stunde des Tages (0-23)
+ * @returns Faktor zwischen 0.85 und 1.05
+ */
+function circadianFactor(hour: number): number {
+  if (hour < 9)  return 1.05;  // Morgen: länger wach
+  if (hour < 13) return 1.00;  // Mittag: neutral
+  if (hour < 16) return 0.95;  // Nachmittag: etwas müder
+  if (hour < 18) return 0.90;  // Spätnachmittag: deutlich müder
+  return 0.85;                  // Abend: sehr müde
+}
+
+/**
+ * 3️⃣ Historische Pattern - Trimmed Mean
+ *
+ * Berechnet den Durchschnitt ohne Ausreißer (15% an beiden Enden trimmen).
+ * Robuste Aggregation für historische Wake-Windows.
+ */
+function trimmedMean(values: number[]): number {
+  if (values.length === 0) return 0;
+  if (values.length === 1) return values[0];
+
+  const sorted = [...values].sort((a, b) => a - b);
+  const trimCount = Math.floor(values.length * 0.15);
+
+  if (trimCount === 0) {
+    // Bei sehr wenigen Werten einfach den Durchschnitt nehmen
+    return sorted.reduce((sum, val) => sum + val, 0) / sorted.length;
+  }
+
+  const trimmed = sorted.slice(trimCount, sorted.length - trimCount);
+  return trimmed.reduce((sum, val) => sum + val, 0) / trimmed.length;
+}
+
+/**
+ * 3️⃣ Historische Pattern - Wake-Windows sammeln
+ *
+ * Sammelt Wake-Windows der letzten 7-14 Tage für die gleiche Nap-Position.
+ * Filtert nach: gleichem napIndex, Zeitfenster (7-14 Tage zurück) und optional timeOfDayBucket.
+ */
+function collectHistoricalWakeWindows(
+  entries: NormalizedEntry[],
+  napIndex: number,
+  reference: Date,
+  targetTimeOfDayBucket?: TimeOfDayBucket,
+): number[] {
+  const now = reference;
+  const minDate = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000); // 14 Tage zurück
+  const maxDate = new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000);  // Mindestens 1 Tag alt
+
+  const wakeWindows: number[] = [];
+
+  // Gruppiere Einträge nach Tag
+  const dayGroups = new Map<string, NormalizedEntry[]>();
+
+  for (const entry of entries) {
+    if (!entry.end || entry.duration === null) continue;
+    if (entry.end < minDate || entry.end > maxDate) continue;
+
+    const dayKey = `${entry.end.getFullYear()}-${entry.end.getMonth()}-${entry.end.getDate()}`;
+    if (!dayGroups.has(dayKey)) {
+      dayGroups.set(dayKey, []);
+    }
+    dayGroups.get(dayKey)!.push(entry);
+  }
+
+  // Sortiere alle Tages-Keys chronologisch für Vortags-Lookup
+  const sortedDayKeys = [...dayGroups.keys()].sort();
+
+  // Für jeden Tag: finde den Nap an Position napIndex
+  for (let dayIdx = 0; dayIdx < sortedDayKeys.length; dayIdx++) {
+    const dayKey = sortedDayKeys[dayIdx];
+    const dayEntries = dayGroups.get(dayKey)!;
+    const sortedDay = dayEntries
+      .filter((e) => e.end !== null)
+      .sort((a, b) => a.end!.getTime() - b.end!.getTime());
+
+    if (sortedDay.length < napIndex) continue;
+
+    const targetNapIndex = napIndex - 1; // 0-basiert
+    const currentNap = sortedDay[targetNapIndex];
+    let previousNapEnd: Date | null = null;
+
+    if (targetNapIndex > 0) {
+      // 2.+ Nap: vorheriger Nap desselben Tages
+      const previousNap = sortedDay[targetNapIndex - 1];
+      previousNapEnd = previousNap?.end ?? null;
+    } else {
+      // 1. Nap: letzter Nap des Vortages als Referenz
+      for (let prev = dayIdx - 1; prev >= 0; prev--) {
+        const prevDayEntries = dayGroups.get(sortedDayKeys[prev])!;
+        const sortedPrevDay = prevDayEntries
+          .filter((e) => e.end !== null)
+          .sort((a, b) => a.end!.getTime() - b.end!.getTime());
+        if (sortedPrevDay.length > 0) {
+          previousNapEnd = sortedPrevDay[sortedPrevDay.length - 1]?.end ?? null;
+          break;
+        }
+      }
+    }
+
+    if (!currentNap || !previousNapEnd || !currentNap.start) continue;
+
+    // Optional: Filtere nach timeOfDayBucket für noch präzisere Patterns
+    if (targetTimeOfDayBucket) {
+      const prevBucket = getTimeOfDayBucket(previousNapEnd);
+      if (prevBucket !== targetTimeOfDayBucket) {
+        continue;
+      }
+    }
+
+    const wakeWindow = minutesBetween(currentNap.start, previousNapEnd);
+
+    // Validierung: Wake-Window sollte zwischen 30 und 360 Minuten sein
+    if (wakeWindow >= 30 && wakeWindow <= 360) {
+      wakeWindows.push(wakeWindow);
+    }
+  }
+
+  return wakeWindows;
+}
+
+/**
  * Predict the next sleep window for a baby / toddler based on recent sleep history.
  */
 export async function predictNextSleepWindow({
   userId,
+  babyId,
   birthdate,
   entries,
   anchorBedtime,
@@ -142,28 +456,83 @@ export async function predictNextSleepWindow({
   const { last24hMinutes, todayMinutes } = computeDailySleepStats(completedEntries, now);
   const sleepDebt = baseline.profile.dailyTargetMinutes - last24hMinutes;
 
-  const personalizationKey = getPersonalizationKey(userId, napIndexToday, baseline.timeOfDayBucket);
+  // WICHTIG: Verwende babyId statt userId für gemeinsame Personalization zwischen Partnern
+  const personalizationKey = getPersonalizationKey(babyId || userId, napIndexToday, baseline.timeOfDayBucket);
   const personalizationData = personalizationStore.get(personalizationKey);
   const personalizationOffset = personalizationData?.offsetMinutes ?? 0;
 
   let adjustedWindow = baseline.baselineWindow;
 
+  // 📐 Adjustment-Kette in korrekter Reihenfolge (wichtig!)
+  // 1. baseWakeWindow ✅ (bereits gesetzt)
+
+  // 2. Nap-Dauer-Adjustment ✅
+  let napDurationAdjustment = 0;
   if (lastNapDuration !== null && baseline.targetNapDuration > 0) {
     const varianceRatio = clamp(
       (baseline.targetNapDuration - lastNapDuration) / baseline.targetNapDuration,
       -1,
       1,
     );
-    const durationAdjustment = clamp(varianceRatio * 20, -20, 20);
-    adjustedWindow -= durationAdjustment;
+    napDurationAdjustment = clamp(varianceRatio * 20, -20, 20);
+    adjustedWindow -= napDurationAdjustment;
   }
 
+  // 3. Sleep-Debt-Adjustment ✅
+  let sleepDebtAdjustment = 0;
   if (Math.abs(sleepDebt) > 30) {
-    const debtAdjustment = clamp(sleepDebt / 15, -20, 20);
-    adjustedWindow -= debtAdjustment;
+    sleepDebtAdjustment = clamp(sleepDebt / 15, -20, 20);
+    adjustedWindow -= sleepDebtAdjustment;
   }
 
+  // 4. 🆕 Circadian-Faktor (Tageszeit-Bias)
+  // Nur auf Naps anwenden, nicht auf Nachtschlaf
+  let circadianAdjustment = 1.0;
+  if (lastNapEnd) {
+    const lastNapEndHour = lastNapEnd.getHours();
+    circadianAdjustment = circadianFactor(lastNapEndHour);
+    adjustedWindow *= circadianAdjustment;
+  }
+
+  // 5. 🆕 Historischer Faktor (7-14 Tage Pattern)
+  // Erst mit Bucket-Filter versuchen, dann Fallback ohne
+  let historicalFactor = 1.0;
+  let historicalSampleCount = 0;
+  let historicalWindows = collectHistoricalWakeWindows(
+    completedEntries,
+    napIndexToday,
+    now,
+    baseline.timeOfDayBucket
+  );
+
+  // Fallback: ohne Bucket-Filter wenn nicht genug Samples
+  if (historicalWindows.length < MIN_HISTORICAL_SAMPLES) {
+    historicalWindows = collectHistoricalWakeWindows(
+      completedEntries,
+      napIndexToday,
+      now,
+      undefined
+    );
+  }
+
+  if (historicalWindows.length >= MIN_HISTORICAL_SAMPLES) {
+    const historicalWindow = trimmedMean(historicalWindows);
+    // Sanity check: historicalWindow sollte nicht 0 sein
+    if (historicalWindow > 0 && baseline.baselineWindow > 0) {
+      historicalFactor = clamp(
+        historicalWindow / baseline.baselineWindow,
+        0.9,  // Max 10% kürzer
+        1.1,  // Max 10% länger
+      );
+      adjustedWindow *= historicalFactor;
+      historicalSampleCount = historicalWindows.length;
+    }
+  }
+
+  // 6. EMA-Personalisierung ✅
   adjustedWindow += personalizationOffset;
+
+  // 7. Clamp ✅
   adjustedWindow = clamp(Math.round(adjustedWindow), MIN_WINDOW_MINUTES, MAX_WINDOW_MINUTES);
 
   const flexEarly = Math.max(EARLY_FLEX_MINUTES, Math.min(30, Math.round(adjustedWindow * 0.25)));
@@ -190,13 +559,22 @@ export async function predictNextSleepWindow({
     }
   }
 
-  earliest = new Date(Math.max(earliest.getTime(), now.getTime()));
-
+  // 🆕 Dynamischer Bedtime-Gap basierend auf Alter
   let anchorConstraintApplied = false;
+  let dynamicBedtimeGap = 0;
   if (anchorBedtime) {
     const anchorDate = resolveAnchorDate(anchorBedtime, now);
     if (anchorDate) {
-      const latestAllowed = addMinutes(anchorDate, -BEDTIME_BUFFER_MINUTES);
+      dynamicBedtimeGap = bedtimeGapByAge(ageInMonths);
+
+      // Optional: Letzter Nap braucht mehr Abstand (Nap-Drop-Phase)
+      const profile = getAgeProfile(ageInMonths);
+      const maxNapsForAge = profile.baseWindows.length;
+      if (napIndexToday >= maxNapsForAge) {
+        dynamicBedtimeGap += 15; // +15 Min für letzten Nap
+      }
+
+      const latestAllowed = addMinutes(anchorDate, -dynamicBedtimeGap);
       if (latest.getTime() > latestAllowed.getTime()) {
         latest = latestAllowed;
         anchorConstraintApplied = true;
@@ -204,26 +582,21 @@ export async function predictNextSleepWindow({
     }
   }
 
-  if (awakeOverrideApplied) {
-    earliest = new Date(Math.max(earliest.getTime(), now.getTime()));
-    if (recommendedStart.getTime() < earliest.getTime()) {
-      recommendedStart = earliest;
+  const windowAlreadyPassed = latest.getTime() < now.getTime();
+  if (!windowAlreadyPassed && earliest.getTime() < now.getTime()) {
+    earliest = new Date(now);
+  }
+  if (earliest.getTime() >= latest.getTime()) {
+    const expandedEarliest = addMinutes(latest, -MIN_WINDOW_SPAN_MINUTES);
+    if (!windowAlreadyPassed && expandedEarliest.getTime() < now.getTime()) {
+      earliest = new Date(now);
+    } else {
+      earliest = expandedEarliest;
     }
-  }
 
-  if (awakeOverrideApplied && recommendedStart.getTime() > latest.getTime()) {
-    recommendedStart = new Date(latest);
-  }
-
-  const minStart = now;
-  if (latest.getTime() < minStart.getTime()) {
-    latest = new Date(minStart);
-  }
-  if (earliest.getTime() < minStart.getTime()) {
-    earliest = new Date(minStart);
-  }
-  if (earliest.getTime() > latest.getTime()) {
-    earliest = new Date(latest);
+    if (earliest.getTime() > latest.getTime()) {
+      earliest = new Date(latest);
+    }
   }
   if (recommendedStart.getTime() > latest.getTime()) {
     recommendedStart = new Date(latest);
@@ -237,6 +610,21 @@ export async function predictNextSleepWindow({
     (recommendedStart.getTime() - baselineAnchor.getTime()) / 60000,
   );
 
+  // Berechne Confidence basierend auf historischen und Personalisierungs-Samples
+  // 0-5 Samples: 0.0-0.5, 5-10: 0.5-0.8, 10+: 0.8-1.0
+  const personalizationSampleCount = personalizationData?.sampleCount ?? 0;
+  const totalSamples = historicalSampleCount + personalizationSampleCount;
+  let confidence = 0.0;
+  if (totalSamples >= 8 || historicalSampleCount >= 7) {
+    confidence = 0.9;
+  } else if (totalSamples >= 4 || historicalSampleCount >= 3) {
+    confidence = 0.7;
+  } else if (totalSamples >= 2) {
+    confidence = 0.5;
+  } else {
+    confidence = Math.min(0.4, totalSamples * 0.1);
+  }
+
   return {
     recommendedStart,
     earliest,
@@ -244,6 +632,7 @@ export async function predictNextSleepWindow({
     windowMinutes,
     napIndexToday,
     timeOfDayBucket,
+    confidence,
     debug: {
       now,
       ageInMonths,
@@ -253,7 +642,7 @@ export async function predictNextSleepWindow({
       flexEarly,
       flexLate,
       personalizationOffset,
-      personalizationSampleCount: personalizationData?.sampleCount ?? 0,
+      personalizationSampleCount,
       sleepDebt,
       last24hMinutes,
       todayMinutes,
@@ -265,6 +654,14 @@ export async function predictNextSleepWindow({
       predictedStart,
       anchorBedtime,
       napCountToday,
+      // 🆕 Neue Debug-Felder
+      napDurationAdjustment,
+      sleepDebtAdjustment,
+      circadianAdjustment,
+      circadianHour: lastNapEnd?.getHours() ?? null,
+      historicalFactor,
+      historicalSampleCount,
+      dynamicBedtimeGap,
     },
   };
 }
@@ -273,9 +670,11 @@ export async function predictNextSleepWindow({
  * Update personalization after the actual nap start is known.
  * This function keeps an exponential moving average of the difference
  * between predicted and actual start times for each nap slot & day segment.
+ *
+ * Speichert automatisch in AsyncStorage und syncet mit Supabase (debounced).
  */
 export async function updatePersonalizationAfterNap(
-  userId: string,
+  userIdOrBabyId: string, // Kann userId oder babyId sein - babyId bevorzugt für Partner-Synchronität
   napIndex: number,
   bucket: TimeOfDayBucket,
   recommendedStart: Date,
@@ -287,7 +686,7 @@ export async function updatePersonalizationAfterNap(
     PERSONALIZATION_CLAMP,
   );
 
-  const key = getPersonalizationKey(userId, napIndex, bucket);
+  const key = getPersonalizationKey(userIdOrBabyId, napIndex, bucket);
   const existing = personalizationStore.get(key);
 
   if (!existing) {
@@ -296,18 +695,28 @@ export async function updatePersonalizationAfterNap(
       sampleCount: 1,
       lastUpdated: new Date().toISOString(),
     });
-    return;
+  } else {
+    const alpha = PERSONALIZATION_ALPHA;
+    const newOffset =
+      existing.offsetMinutes + alpha * (diffMinutes - existing.offsetMinutes);
+
+    personalizationStore.set(key, {
+      offsetMinutes: clamp(newOffset, -PERSONALIZATION_CLAMP, PERSONALIZATION_CLAMP),
+      sampleCount: Math.min(existing.sampleCount + 1, 50),
+      lastUpdated: new Date().toISOString(),
+    });
   }
 
-  const alpha = PERSONALIZATION_ALPHA;
-  const newOffset =
-    existing.offsetMinutes + alpha * (diffMinutes - existing.offsetMinutes);
+  // 📦 Speichere lokal in AsyncStorage (schnell)
+  await savePersonalizationToStorage();
 
-  personalizationStore.set(key, {
-    offsetMinutes: clamp(newOffset, -PERSONALIZATION_CLAMP, PERSONALIZATION_CLAMP),
-    sampleCount: Math.min(existing.sampleCount + 1, 50),
-    lastUpdated: new Date().toISOString(),
-  });
+  // 🔄 Sync mit Supabase (debounced, nur wenn babyId)
+  // Non-blocking - läuft im Hintergrund
+  if (userIdOrBabyId.length > 20) { // UUID-Format = babyId
+    syncPersonalizationToSupabase(userIdOrBabyId).catch(err =>
+      console.error('Background personalization sync failed:', err)
+    );
+  }
 }
 
 /**
@@ -325,10 +734,10 @@ export function resetPersonalizationSnapshot(): void {
 }
 
 function normalizeEntries(entries: SleepEntry[]): NormalizedEntry[] {
-  return entries
-    .map((entry) => {
+  const normalizedEntries = entries
+    .map<NormalizedEntry | null>((entry) => {
       const start = parseDate(entry.start_time);
-      const end = entry.end_time ? parseDate(entry.end_time) : undefined;
+      const end = entry.end_time ? parseDate(entry.end_time) : null;
 
       let duration: number | null = entry.duration_minutes ?? null;
       if (duration === null && start && end) {
@@ -346,8 +755,9 @@ function normalizeEntries(entries: SleepEntry[]): NormalizedEntry[] {
         duration,
         raw: entry,
       };
-    })
-    .filter((entry): entry is NormalizedEntry => Boolean(entry));
+    });
+
+  return normalizedEntries.filter((entry): entry is NormalizedEntry => entry !== null);
 }
 
 function getBaselineWindow(
@@ -493,6 +903,7 @@ function resolveAnchorDate(anchor: string, reference: Date): Date | null {
   return anchorDate;
 }
 
-function getPersonalizationKey(userId: string, napIndex: number, bucket: TimeOfDayBucket): string {
-  return `${userId}::${napIndex}::${bucket}`;
+function getPersonalizationKey(idKey: string, napIndex: number, bucket: TimeOfDayBucket): string {
+  // idKey kann babyId oder userId sein - babyId bevorzugt für Partner-Synchronität
+  return `${idKey}::${napIndex}::${bucket}`;
 }

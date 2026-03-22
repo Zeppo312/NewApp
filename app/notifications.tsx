@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { StyleSheet, View, TouchableOpacity, FlatList, ActivityIndicator, Text, SafeAreaView, RefreshControl } from 'react-native';
-import { Stack, router } from 'expo-router';
+import { Stack, router, useFocusEffect } from 'expo-router';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedBackground } from '@/components/ThemedBackground';
@@ -38,6 +38,11 @@ export default function NotificationsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const { user } = useAuth();
+  const followHighlightStyle = {
+    backgroundColor: colorScheme === 'dark' ? '#333333' : '#F0F0F0',
+    borderLeftWidth: 4,
+    borderLeftColor: '#9775FA',
+  } as const;
 
   const [activeTab, setActiveTab] = useState(TABS.MESSAGES);
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -325,43 +330,12 @@ export default function NotificationsScreen() {
     }
   };
   
-  // Lade Daten beim ersten Rendern
-  useEffect(() => {
-    loadFollowedUsers().then(() => loadData());
-    
-    // Echtzeit-Updates für Benachrichtigungen
-    const notificationsSubscription = supabase
-      .channel('notifications_changes')
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'community_notifications',
-        // @ts-ignore - user kommt aus dem AuthContext und ist vom Typ User | null
-        filter: user ? `user_id=eq.${user.id}` : undefined
-      }, () => {
-        loadData();
-      })
-      .subscribe();
-    
-    // Echtzeit-Updates für Nachrichten
-    const messagesSubscription = supabase
-      .channel('messages_changes')
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'direct_messages',
-        // @ts-ignore - user kommt aus dem AuthContext und ist vom Typ User | null
-        filter: user ? `receiver_id=eq.${user.id}` : undefined
-      }, () => {
-        loadData();
-      })
-      .subscribe();
-    
-    return () => {
-      supabase.removeChannel(notificationsSubscription);
-      supabase.removeChannel(messagesSubscription);
-    };
-  }, [user]);
+  // Lade Daten beim Screen-Fokus (ersetzt Realtime für bessere Performance)
+  useFocusEffect(
+    useCallback(() => {
+      loadFollowedUsers().then(() => loadData());
+    }, [user])
+  );
   
   // Markiert eine Benachrichtigung als gelesen und navigiert zu ihrem Ziel
   const handleNotificationPress = async (notification: Notification) => {
@@ -401,11 +375,8 @@ export default function NotificationsScreen() {
           .eq('id', message.id);
       }
       
-      // Zum Chat navigieren
-      router.navigate({
-        pathname: "chat/[id]",
-        params: { id: message.sender_id }
-      } as any);
+      // Chat entfernt -> Profil des Absenders öffnen
+      router.push(`/profile/${message.sender_id}` as any);
     } catch (error) {
       console.error('Fehler beim Öffnen des Chats:', error);
     }
@@ -464,7 +435,7 @@ export default function NotificationsScreen() {
           styles.notificationItem,
           !item.is_read && !isFromCurrentUser && styles.unreadItem // Nur als ungelesen markieren, wenn es eine empfangene Nachricht ist
         ]}
-        onPress={() => router.push(`/chat/${chatPartnerId}` as any)}
+        onPress={() => router.push(`/profile/${chatPartnerId}` as any)}
       >
         <View style={styles.notificationIcon}>
           <IconSymbol name={iconName} size={24} color="#7D5A50" />
@@ -487,7 +458,7 @@ export default function NotificationsScreen() {
         style={[
           styles.notificationItem,
           !item.is_read && styles.unreadItem,
-          styles.followerItem
+          followHighlightStyle
         ]}
         onPress={() => {
           console.log('Navigating to profile from follower component:', item.reference_id);
@@ -578,7 +549,7 @@ export default function NotificationsScreen() {
         router.push(`/profile/${item.reference_id}` as any);
       } else if (item.type === 'message') {
         console.log('Navigating to chat from notification click:', item.reference_id);
-        router.push(`/chat/${item.reference_id}` as any);
+        router.push(`/profile/${item.reference_id}` as any);
       } else {
         handleNotificationPress(item);
       }
@@ -589,7 +560,7 @@ export default function NotificationsScreen() {
         style={[
           styles.notificationItem,
           !item.is_read && styles.unreadItem,
-          item.type === 'follow' && styles.followItem
+          item.type === 'follow' && followHighlightStyle
         ]}
         onPress={handlePress}
       >
@@ -990,16 +961,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: 'bold',
     marginLeft: 8,
-  },
-  followItem: {
-    backgroundColor: useColorScheme() === 'dark' ? '#333333' : '#F0F0F0',
-    borderLeftWidth: 4,
-    borderLeftColor: '#9775FA',
-  },
-  followerItem: {
-    backgroundColor: useColorScheme() === 'dark' ? '#333333' : '#F0F0F0',
-    borderLeftWidth: 4,
-    borderLeftColor: '#9775FA',
   },
   followTitle: {
     fontSize: 16,

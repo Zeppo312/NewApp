@@ -1,0 +1,27 @@
+# Dependencies and local Expo state
+node_modules/
+.expo/
+.expo-shared/
+node_local/
+
+# Generated app and web build artifacts
+dist*/
+web-build/
+
+# Native generated files
+ios/Pods/
+ios/build/
+android/app/build/
+android/.gradle/
+android/build/
+
+# Local-only tooling, metadata, and reports
+.git/
+.github/
+.vscode/
+.claude/
+venv/
+docs/
+backup/
+output/
+ownership-map-out/

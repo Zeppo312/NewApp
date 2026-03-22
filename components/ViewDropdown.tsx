@@ -16,6 +16,8 @@ interface ViewDropdownProps {
 const ViewDropdown: React.FC<ViewDropdownProps> = ({ activeView, onViewChange }) => {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
+  const isDark = colorScheme === 'dark';
+  const activeColor = isDark ? Colors.dark.accent : '#7D5A50';
   const [isOpen, setIsOpen] = useState(false);
   const dropdownAnimation = useRef(new Animated.Value(0)).current;
   const screenWidth = Dimensions.get('window').width;
@@ -130,54 +132,54 @@ const ViewDropdown: React.FC<ViewDropdownProps> = ({ activeView, onViewChange })
             >
               <ThemedView style={styles.menuContent} lightColor="#FFFFFF" darkColor="#1A1A1A">
                 <TouchableOpacity
-                  style={[styles.menuItem, activeView === 'day' && styles.activeMenuItem]}
+                  style={[styles.menuItem, activeView === 'day' && [styles.activeMenuItem, isDark && { backgroundColor: 'rgba(255, 255, 255, 0.1)' }]]}
                   onPress={() => selectView('day')}
                 >
                   <IconSymbol
                     name="list.bullet"
                     size={16}
-                    color={activeView === 'day' ? '#7D5A50' : theme.text}
+                    color={activeView === 'day' ? activeColor : theme.text}
                   />
                   <ThemedText
                     style={[styles.menuItemText, activeView === 'day' && styles.activeMenuItemText]}
                     lightColor={activeView === 'day' ? '#7D5A50' : theme.text}
-                    darkColor={activeView === 'day' ? '#7D5A50' : theme.text}
+                    darkColor={activeView === 'day' ? Colors.dark.accent : theme.text}
                   >
                     Liste
                   </ThemedText>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={[styles.menuItem, activeView === 'timeline' && styles.activeMenuItem]}
+                  style={[styles.menuItem, activeView === 'timeline' && [styles.activeMenuItem, isDark && { backgroundColor: 'rgba(255, 255, 255, 0.1)' }]]}
                   onPress={() => selectView('timeline')}
                 >
                   <IconSymbol
                     name="clock"
                     size={16}
-                    color={activeView === 'timeline' ? '#7D5A50' : theme.text}
+                    color={activeView === 'timeline' ? activeColor : theme.text}
                   />
                   <ThemedText
                     style={[styles.menuItemText, activeView === 'timeline' && styles.activeMenuItemText]}
                     lightColor={activeView === 'timeline' ? '#7D5A50' : theme.text}
-                    darkColor={activeView === 'timeline' ? '#7D5A50' : theme.text}
+                    darkColor={activeView === 'timeline' ? Colors.dark.accent : theme.text}
                   >
                     Timeline
                   </ThemedText>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={[styles.menuItem, activeView === 'week' && styles.activeMenuItem]}
+                  style={[styles.menuItem, activeView === 'week' && [styles.activeMenuItem, isDark && { backgroundColor: 'rgba(255, 255, 255, 0.1)' }]]}
                   onPress={() => selectView('week')}
                 >
                   <IconSymbol
                     name="calendar"
                     size={16}
-                    color={activeView === 'week' ? '#7D5A50' : theme.text}
+                    color={activeView === 'week' ? activeColor : theme.text}
                   />
                   <ThemedText
                     style={[styles.menuItemText, activeView === 'week' && styles.activeMenuItemText]}
                     lightColor={activeView === 'week' ? '#7D5A50' : theme.text}
-                    darkColor={activeView === 'week' ? '#7D5A50' : theme.text}
+                    darkColor={activeView === 'week' ? Colors.dark.accent : theme.text}
                   >
                     Woche
                   </ThemedText>

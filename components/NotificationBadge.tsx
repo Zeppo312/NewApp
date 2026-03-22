@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, Text } from 'react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
@@ -9,13 +9,12 @@ interface NotificationBadgeProps {
   refreshTrigger?: any; // Prop zum manuellen Auslösen einer Aktualisierung
 }
 
-export const NotificationBadge: React.FC<NotificationBadgeProps> = ({ 
+export const NotificationBadge: React.FC<NotificationBadgeProps> = ({
   size = 20,
-  refreshTrigger 
+  refreshTrigger
 }) => {
   const { user } = useAuth();
   const [count, setCount] = useState(0);
-  const timerRef = useRef<number | null>(null);
 
   // Push-Token registrieren und in Supabase speichern
   useEffect(() => {
@@ -71,16 +70,13 @@ export const NotificationBadge: React.FC<NotificationBadgeProps> = ({
     }
   };
 
-  // Setup für Echtzeit-Updates und periodische Aktualisierungen
+  // Setup für Echtzeit-Updates (Polling entfernt - nur noch Realtime!)
   useEffect(() => {
     if (!user) return;
-    
+
     // Initial abrufen
     fetchNotificationCount();
-    
-    // Regelmäßige Aktualisierung alle 5 Sekunden
-    timerRef.current = setInterval(fetchNotificationCount, 5000) as unknown as number;
-    
+
     // Echtzeit-Updates abonnieren für neue Benachrichtigungen
     const subscription = supabase
       .channel('notifications_count')
@@ -94,13 +90,9 @@ export const NotificationBadge: React.FC<NotificationBadgeProps> = ({
         fetchNotificationCount();
       })
       .subscribe();
-    
+
     return () => {
       // Cleanup
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
       supabase.removeChannel(subscription);
     };
   }, [user]);

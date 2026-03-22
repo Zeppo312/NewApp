@@ -1,22 +1,45 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router';
+import { Stack, usePathname, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
-import { View, ActivityIndicator, Text } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AppState, View, ActivityIndicator, Text } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 import * as Notifications from 'expo-notifications';
-import * as TaskManager from 'expo-task-manager';
-
 
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
-import { BabyStatusProvider } from '@/contexts/BabyStatusContext';
+import { BabyStatusProvider, useBabyStatus } from '@/contexts/BabyStatusContext';
+import { ActiveBabyProvider, useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { ThemeProvider as AppThemeProvider } from '@/contexts/ThemeContext';
 import { NavigationProvider } from '@/contexts/NavigationContext';
-import { checkForNewNotifications, registerBackgroundNotificationTask, BACKGROUND_NOTIFICATION_TASK } from '@/lib/notificationService';
+import { ConvexProvider, useConvex } from '@/contexts/ConvexContext';
+import { BackendProvider, useBackend } from '@/contexts/BackendContext';
+import { BackgroundProvider } from '@/contexts/BackgroundContext';
+import { useNotifications } from '@/hooks/useNotifications';
+import { useSleepWindowNotifications } from '@/hooks/useSleepWindowNotifications';
+import { useFeedingReminderNotifications } from '@/hooks/useFeedingReminderNotifications';
+import { useNotificationPreferences } from '@/hooks/useNotificationPreferences';
+import { useVitaminDReminderNotifications } from '@/hooks/useVitaminDReminderNotifications';
+import { initializePersonalization, predictNextSleepWindow, type SleepWindowPrediction } from '@/lib/sleep-window';
+import { predictNextFeedingTime, type FeedingPrediction } from '@/lib/feeding-interval';
+import { getBabyInfo } from '@/lib/baby';
+import { supabase, getAppSettings } from '@/lib/supabase';
+import type { SleepEntry } from '@/lib/sleepData';
+import type { BabyCareEntry } from '@/lib/supabase';
+import {
+  invalidatePremiumStatusCache,
+  invalidateUserProfileCache,
+  preloadAppData,
+} from '@/lib/appCache';
+import { markPaywallShown, shouldShowPaywall } from '@/lib/paywall';
+import { SleepEntriesService } from '@/lib/services/SleepEntriesService';
+import { normalizeBedtimeAnchor } from '@/lib/bedtime';
+import { sleepActivityService } from '@/lib/sleepActivityService';
+import { loadAllVisibleSleepEntries } from '@/lib/sleepSharing';
+import { findFreshActiveSleepEntry } from '@/lib/sleepEntryGuards';
 
 // Importieren der Meilenstein-Task-Definition
 import { defineMilestoneCheckerTask } from '@/tasks/milestoneCheckerTask';
@@ -38,21 +61,9 @@ Sentry.init({
   // spotlight: __DEV__,
 });
 
-// Task für Meilenstein-Benachrichtigungen definieren
-// Dies muss auf Root-Ebene der App geschehen, damit der Task auch im Hintergrund funktioniert
+// Task-Definition früh registrieren. Ohne native Registrierung läuft daraus
+// derzeit kein systemischer Background-Fetch.
 defineMilestoneCheckerTask();
-
-// Definiere den Background-Task für Benachrichtigungen
-TaskManager.defineTask(BACKGROUND_NOTIFICATION_TASK, async () => {
-  try {
-    console.log('Führe Benachrichtigungs-Hintergrundtask aus...');
-    await checkForNewNotifications();
-    return "newData";
-  } catch (error) {
-    console.error('Error in background notification task:', error);
-    return "failed";
-  }
-});
 
 // Konfiguriere das Verhalten von Benachrichtigungen für die gesamte App
 Notifications.setNotificationHandler({
@@ -68,20 +79,404 @@ Notifications.setNotificationHandler({
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
+const PAYWALL_EXCLUDED_PATHS = new Set([
+  '/',
+  '/paywall',
+  '/datenschutz',
+  '/impressum',
+  '/nutzungsbedingungen',
+  '/dsgvo',
+]);
+
 // Wrapper-Komponente, die den AuthProvider verwendet
 function RootLayoutNav() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const segments = useSegments();
   const colorScheme = useColorScheme();
   const { loading, user } = useAuth();
+  const userId = user?.id ?? null;
   const [initialRoute, setInitialRoute] = useState<string | null>(null);
+  const { isResolved: isBabyStatusResolved } = useBabyStatus();
+  const { requestPermissions, expoPushToken } = useNotifications();
+  const { activeBabyId } = useActiveBaby();
+  const { activeBackend } = useBackend();
+  const { convexClient } = useConvex();
+  const [sleepPrediction, setSleepPrediction] = useState<SleepWindowPrediction | null>(null);
+  const [hasActiveSleepEntry, setHasActiveSleepEntry] = useState(false);
+  const [feedingPrediction, setFeedingPrediction] = useState<FeedingPrediction | null>(null);
+  const { preferences: notifPrefs, isLoaded: notificationPreferencesLoaded } = useNotificationPreferences();
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [notificationSettingsLoaded, setNotificationSettingsLoaded] = useState(false);
+  const [appStateRevision, setAppStateRevision] = useState(0);
+  const paywallCheckInFlight = useRef(false);
+  const primarySegment = typeof segments[0] === 'string' ? segments[0] : null;
+  const shouldSkipGlobalPaywallCheck = useMemo(() => {
+    if (!pathname || PAYWALL_EXCLUDED_PATHS.has(pathname)) {
+      return true;
+    }
 
-  // Registriere den Benachrichtigungs-Hintergrundtask, wenn der Benutzer angemeldet ist
+    return primarySegment === '(auth)' || primarySegment === 'auth';
+  }, [pathname, primarySegment]);
+  const sleepEntriesService = useMemo(() => {
+    if (!userId) return null;
+    return new SleepEntriesService(activeBackend, convexClient, userId);
+  }, [activeBackend, convexClient, userId]);
+
+  const refreshPaywallCaches = useCallback(async () => {
+    await Promise.allSettled([
+      invalidateUserProfileCache(),
+      invalidatePremiumStatusCache(),
+    ]);
+    setAppStateRevision((prev) => prev + 1);
+  }, []);
+
   useEffect(() => {
-    if (user) {
-      registerBackgroundNotificationTask().catch(error => {
-        console.error('Fehler beim Registrieren des Benachrichtigungs-Hintergrundtasks:', error);
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        void refreshPaywallCaches();
+      }
+    });
+
+    return () => {
+      sub.remove();
+    };
+  }, [refreshPaywallCaches]);
+
+  useEffect(() => {
+    if (loading || !userId || !isBabyStatusResolved || shouldSkipGlobalPaywallCheck) {
+      return;
+    }
+
+    if (paywallCheckInFlight.current) return;
+
+    let cancelled = false;
+    paywallCheckInFlight.current = true;
+
+    const checkGlobalPaywallGate = async () => {
+      try {
+        const { shouldShow, state } = await shouldShowPaywall();
+        if (!shouldShow || cancelled || !pathname) return;
+
+        await markPaywallShown(pathname);
+        if (cancelled) return;
+
+        router.replace({
+          pathname: '/paywall',
+          params: {
+            next: pathname,
+            origin: pathname,
+            trialExpired: state.isTrialExpired ? '1' : '0',
+          },
+        });
+      } catch (error) {
+        console.error('Global paywall check failed:', error);
+      } finally {
+        paywallCheckInFlight.current = false;
+      }
+    };
+
+    void checkGlobalPaywallGate();
+
+    return () => {
+      cancelled = true;
+      paywallCheckInFlight.current = false;
+    };
+  }, [appStateRevision, isBabyStatusResolved, loading, pathname, router, shouldSkipGlobalPaywallCheck, userId]);
+
+  useEffect(() => {
+    if (!userId) {
+      setNotificationsEnabled(false);
+      setNotificationSettingsLoaded(false);
+      return;
+    }
+
+    let mounted = true;
+    setNotificationSettingsLoaded(false);
+
+    const loadNotificationSetting = async () => {
+      try {
+        const { data, error } = await getAppSettings();
+        if (!mounted) return;
+
+        if (error) {
+          console.error('Fehler beim Laden von notifications_enabled:', error);
+          setNotificationsEnabled(true);
+        } else {
+          setNotificationsEnabled(data?.notifications_enabled !== false);
+        }
+      } catch (error) {
+        if (mounted) {
+          console.error('Fehler beim Laden von notifications_enabled:', error);
+          setNotificationsEnabled(true);
+        }
+      } finally {
+        if (mounted) setNotificationSettingsLoaded(true);
+      }
+    };
+
+    void loadNotificationSetting();
+
+    const channel = supabase
+      .channel(`user-settings-notifications-${userId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'user_settings',
+          filter: `user_id=eq.${userId}`,
+        },
+        (payload) => {
+          const nextValue = (payload.new as { notifications_enabled?: unknown } | null)
+            ?.notifications_enabled;
+          if (typeof nextValue === 'boolean') {
+            setNotificationsEnabled(nextValue);
+            setNotificationSettingsLoaded(true);
+            return;
+          }
+          void loadNotificationSetting();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      mounted = false;
+      void supabase.removeChannel(channel);
+    };
+  }, [userId]);
+
+  useEffect(() => {
+    if (!userId) return;
+    initializePersonalization(activeBabyId ?? undefined).catch((error) => {
+      console.error('Fehler beim Initialisieren der Sleep-Personalisierung:', error);
+    });
+  }, [userId, activeBabyId]);
+
+  // Registriere Push-Notifications, wenn der Benutzer angemeldet ist
+  useEffect(() => {
+    if (userId && notificationSettingsLoaded && notificationsEnabled) {
+      // Push-Token registrieren für Remote-Notifications
+      requestPermissions().catch(error => {
+        console.error('Fehler beim Registrieren von Push-Notifications:', error);
       });
     }
-  }, [user]);
+  }, [userId, notificationSettingsLoaded, notificationsEnabled, requestPermissions]);
+
+  // Sleep Window Prediction für Benachrichtigungen berechnen
+  useEffect(() => {
+    if (!userId || !activeBabyId || !sleepEntriesService) {
+      setSleepPrediction(null);
+      setHasActiveSleepEntry(false);
+      return;
+    }
+
+    const loadSleepPrediction = async () => {
+      try {
+        // Baby-Info laden
+        const { data: babyInfo, error: babyError } = await getBabyInfo(activeBabyId);
+        if (babyError || !babyInfo?.birth_date) {
+          setSleepPrediction(null);
+          return;
+        }
+
+        // Sichtbare Einträge (inkl. Partner) über denselben Service wie im Sleep Tracker laden
+        const { data: entries, error } = await sleepEntriesService.getEntries(activeBabyId ?? undefined);
+
+        if (error) {
+          console.error('Fehler beim Laden der Schlafeinträge für Prediction:', error);
+          setSleepPrediction(null);
+          return;
+        }
+
+        const hasActiveEntry = Boolean(findFreshActiveSleepEntry(entries || []));
+        setHasActiveSleepEntry(hasActiveEntry);
+        if (hasActiveEntry) {
+          // Während ein Sleep-Timer läuft, keine Schlafenszeit-Erinnerung planen.
+          setSleepPrediction(null);
+          return;
+        }
+
+        // Prediction berechnen
+        const anchorBedtime = normalizeBedtimeAnchor(
+          (babyInfo as { preferred_bedtime?: string | null }).preferred_bedtime
+        );
+        const prediction = await predictNextSleepWindow({
+          userId,
+          babyId: activeBabyId ?? undefined,
+          birthdate: babyInfo.birth_date,
+          entries: (entries || []) as SleepEntry[],
+          anchorBedtime,
+        });
+
+        // Nur setzen, wenn Confidence ausreichend ist
+        // Der Hook prüft confidence >= 0.6, gleiche Schwelle hier
+        if (prediction && prediction.confidence >= 0.6) {
+          setSleepPrediction(prediction);
+        } else {
+          setSleepPrediction(null);
+        }
+      } catch (error) {
+        console.error('Fehler beim Berechnen der Sleep Prediction:', error);
+        setSleepPrediction(null);
+      }
+    };
+
+    loadSleepPrediction();
+
+    // Alle 5 Minuten aktualisieren
+    const interval = setInterval(loadSleepPrediction, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [userId, activeBabyId, sleepEntriesService]);
+
+  // Feeding Prediction für Benachrichtigungen berechnen
+  useEffect(() => {
+    if (!userId || !activeBabyId) {
+      setFeedingPrediction(null);
+      return;
+    }
+
+    const loadFeedingPrediction = async () => {
+      try {
+        // Baby-Info laden
+        const { data: babyInfo, error: babyError } = await getBabyInfo(activeBabyId);
+        if (babyError || !babyInfo?.birth_date) {
+          setFeedingPrediction(null);
+          return;
+        }
+
+        // Fütterungseinträge der letzten 7 Tage laden
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+        const { data: entries, error } = await supabase
+          .from('baby_care_entries')
+          .select('*')
+          .eq('baby_id', activeBabyId)
+          .eq('entry_type', 'feeding')
+          .gte('start_time', sevenDaysAgo.toISOString())
+          .order('start_time', { ascending: false });
+
+        if (error) {
+          console.error('Fehler beim Laden der Feeding-Einträge für Prediction:', error);
+          setFeedingPrediction(null);
+          return;
+        }
+
+        const prediction = predictNextFeedingTime({
+          babyBirthDate: babyInfo.birth_date,
+          recentFeedings: (entries || []) as BabyCareEntry[],
+        });
+
+        setFeedingPrediction(prediction);
+      } catch (error) {
+        console.error('Fehler beim Berechnen der Feeding Prediction:', error);
+        setFeedingPrediction(null);
+      }
+    };
+
+    loadFeedingPrediction();
+
+    // Alle 5 Minuten aktualisieren
+    const interval = setInterval(loadFeedingPrediction, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [userId, activeBabyId]);
+
+  // Live Activity nach App-Start / Update wiederherstellen
+  useEffect(() => {
+    if (!userId || !sleepActivityService.isLiveActivitySupported()) return;
+
+    let cancelled = false;
+
+    const restoreLiveActivity = async () => {
+      try {
+        const existing = await sleepActivityService.restoreCurrentActivity();
+        if (cancelled) return;
+
+        // DB-Zustand laden
+        const { success, entries } = await loadAllVisibleSleepEntries();
+        if (cancelled || !success || !entries) return;
+
+        const activeEntry = findFreshActiveSleepEntry(entries);
+
+        // Kein aktiver Schlaf in DB → stale Activity beenden
+        if (!activeEntry?.start_time) {
+          if (existing?.isTracking) {
+            await sleepActivityService.endAllSleepActivities();
+          }
+          return;
+        }
+
+        const startDate = new Date(activeEntry.start_time);
+        if (!Number.isFinite(startDate.getTime())) return;
+
+        // Prüfe ob bestehende Activity zur richtigen Session gehört
+        if (existing?.isTracking) {
+          const existingStart = new Date(existing.startTime).getTime();
+          const dbStart = startDate.getTime();
+          // Gleiche Session (Toleranz 2s) → nichts zu tun
+          if (Number.isFinite(existingStart) && Math.abs(existingStart - dbStart) < 2000) {
+            return;
+          }
+          // Falsche Session → beenden und neu starten
+          await sleepActivityService.endAllSleepActivities();
+          if (cancelled) return;
+        }
+
+        // Baby-Name für die Live Activity laden
+        let babyName: string | undefined;
+        if (activeBabyId) {
+          try {
+            const { data: babyInfo } = await getBabyInfo(activeBabyId);
+            babyName = babyInfo?.name || undefined;
+          } catch { /* Name ist optional */ }
+        }
+
+        await sleepActivityService.startSleepActivity(startDate, babyName);
+      } catch (error) {
+        console.error('Failed to restore live activity on app start:', error);
+      }
+    };
+
+    void restoreLiveActivity();
+
+    return () => { cancelled = true; };
+  }, [userId, activeBabyId]);
+
+  // Sleep Window Notifications Hook (läuft unabhängig vom Screen)
+  useSleepWindowNotifications(
+    sleepPrediction,
+    notificationSettingsLoaded &&
+      notificationPreferencesLoaded &&
+      notificationsEnabled &&
+      notifPrefs.sleepWindowReminder,
+    userId,
+    activeBabyId,
+    expoPushToken,
+    hasActiveSleepEntry
+  );
+
+  // Feeding Reminder Notifications Hook
+  useFeedingReminderNotifications(
+    feedingPrediction,
+    notificationSettingsLoaded &&
+      notificationPreferencesLoaded &&
+      notificationsEnabled &&
+      notifPrefs.feedingReminder,
+    userId,
+    activeBabyId,
+    expoPushToken
+  );
+
+  useVitaminDReminderNotifications(
+    notificationSettingsLoaded &&
+      notificationPreferencesLoaded &&
+      notificationsEnabled &&
+      notifPrefs.vitaminDReminder,
+    notifPrefs.vitaminDReminderHour,
+    notifPrefs.vitaminDReminderMinute,
+    userId,
+  );
 
   // Wir verwenden jetzt die index.tsx Datei als Einstiegspunkt, die die Weiterleitung basierend auf dem Auth-Status übernimmt
   useEffect(() => {
@@ -91,6 +486,14 @@ function RootLayoutNav() {
       setInitialRoute('index');
     }
   }, [loading]);
+
+  // Splash-Screen erst ausblenden, wenn Auth UND Baby-Status aufgelöst sind.
+  // Verhindert das kurze Aufblitzen des Schwangerschafts-Modus beim App-Start.
+  useEffect(() => {
+    if (!loading && isBabyStatusResolved) {
+      SplashScreen.hideAsync().catch(() => {});
+    }
+  }, [loading, isBabyStatusResolved]);
 
   // Zeige einen Ladeindikator, während der Authentifizierungsstatus geprüft wird
   if (loading || !initialRoute) {
@@ -137,17 +540,21 @@ function RootLayoutNav() {
         <Stack.Screen name="index" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="(auth)" />
-        <Stack.Screen name="diary-entries" />
-        <Stack.Screen name="mini-wiki" />
-        <Stack.Screen name="faq" />
         <Stack.Screen name="community" />
-        <Stack.Screen name="chat/[id]" />
         <Stack.Screen name="notifications" />
+        <Stack.Screen name="paywall" />
+        <Stack.Screen name="dsgvo" />
+        <Stack.Screen name="subscription" />
+        <Stack.Screen name="paywall-access-admin" />
+        <Stack.Screen name="paywall-content-admin" />
         <Stack.Screen name="pregnancy-stats" />
+        <Stack.Screen name="pregnancy-setup" />
+        <Stack.Screen name="milestones" />
         <Stack.Screen name="account-linking" />
-        <Stack.Screen name="sync-test" />
+        <Stack.Screen name="invite" />
         <Stack.Screen name="+not-found" />
         <Stack.Screen name="auth/callback" />
+        <Stack.Screen name="auth/reset-password" />
       </Stack>
       <StatusBar hidden={true} />
     </ThemeProvider>
@@ -168,8 +575,16 @@ export default Sentry.wrap(function RootLayout() {
       try {
         // Warten, bis die Schriftarten geladen sind
         if (loaded) {
-          // Simulierte Verzögerung, um sicherzustellen, dass alles bereit ist
-          await new Promise(resolve => setTimeout(resolve, 500));
+          // Preload wichtige App-Daten (User Settings, Profile, Premium Status)
+          // Dies reduziert Supabase-Aufrufe während der App-Nutzung
+          try {
+            await preloadAppData();
+          } catch (preloadError) {
+            console.warn('Preload warning (non-critical):', preloadError);
+          }
+
+          // Kurze Verzögerung, um sicherzustellen, dass alles bereit ist
+          await new Promise(resolve => setTimeout(resolve, 300));
 
           // App ist bereit
           setAppIsReady(true);
@@ -182,16 +597,8 @@ export default Sentry.wrap(function RootLayout() {
     prepare();
   }, [loaded]);
 
-  // Ausblenden des Splash-Screens, wenn die App bereit ist
-  useEffect(() => {
-    if (appIsReady) {
-      try {
-        SplashScreen.hideAsync();
-      } catch (error) {
-        console.error('Error hiding splash screen:', error);
-      }
-    }
-  }, [appIsReady]);
+  // Splash-Screen wird in RootLayoutNav ausgeblendet, sobald Auth + Baby-Status resolved sind.
+  // Dadurch wird verhindert, dass der falsche Modus kurz aufblitzt.
 
   // Anzeigen eines Ladeindikators, wenn die App noch nicht bereit ist
   if (!appIsReady) {
@@ -204,15 +611,24 @@ export default Sentry.wrap(function RootLayout() {
   }
 
   // Umschließen der App mit dem AuthProvider und BabyStatusProvider
+  // ConvexProvider und BackendProvider für Dual-Backend-Architektur hinzugefügt
   return (
     <AuthProvider>
-      <AppThemeProvider>
-        <NavigationProvider>
-          <BabyStatusProvider>
-            <RootLayoutNav />
-          </BabyStatusProvider>
-        </NavigationProvider>
-      </AppThemeProvider>
+      <ConvexProvider>
+        <BackendProvider>
+          <BackgroundProvider>
+            <AppThemeProvider>
+              <NavigationProvider>
+                <ActiveBabyProvider>
+                  <BabyStatusProvider>
+                    <RootLayoutNav />
+                  </BabyStatusProvider>
+                </ActiveBabyProvider>
+              </NavigationProvider>
+            </AppThemeProvider>
+          </BackgroundProvider>
+        </BackendProvider>
+      </ConvexProvider>
     </AuthProvider>
   );
 });

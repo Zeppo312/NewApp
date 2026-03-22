@@ -1,15 +1,39 @@
-import { supabase } from './supabase';
+import { supabase, getCachedUser } from './supabase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// Cache-Konfiguration für Baby-Liste
+const BABY_LIST_CACHE_KEY = 'baby_list_cache_v1';
+const BABY_LIST_CACHE_DURATION_MS = 5 * 60 * 1000; // 5 Minuten Cache
 
 // Typen für die Baby-Informationen
 export interface BabyInfo {
   id?: string;
   name?: string;
   birth_date?: string | null;
+  preferred_bedtime?: string | null;
   weight?: string;
   height?: string;
   photo_url?: string | null;
   baby_gender?: 'male' | 'female' | 'unknown' | string;
 }
+
+export type LinkedBabySelectionOption = {
+  id: string;
+  name?: string;
+  birth_date?: string | null;
+  baby_gender?: 'male' | 'female' | 'unknown' | string;
+  owner_user_id: string;
+  created_at?: string | null;
+  is_shared_between_accounts: boolean;
+  is_owned_by_current_user: boolean;
+};
+
+type ApplyLinkedBabySelectionInput = {
+  currentUserId: string;
+  linkedUserId: string;
+  selectedBabyIds: string[];
+  deleteUnselectedOwnedByCurrentUser?: boolean;
+};
 
 // Typen für die Tagebucheinträge
 export interface DiaryEntry {
@@ -25,6 +49,7 @@ export interface DiaryEntry {
 // Typen für die Alltags-Einträge
 export interface DailyEntry {
   id?: string;
+  baby_id?: string | null;
   entry_date: string;
   entry_type: 'diaper' | 'sleep' | 'feeding' | 'other';
   start_time?: string;
@@ -35,6 +60,10 @@ export interface DailyEntry {
   feeding_volume_ml?: number | null;
   feeding_side?: 'LEFT' | 'RIGHT' | 'BOTH' | null;
   diaper_type?: 'WET' | 'DIRTY' | 'BOTH' | null;
+  diaper_fever_measured?: boolean | null;
+  diaper_temperature_c?: number | null;
+  diaper_suppository_given?: boolean | null;
+  diaper_suppository_dose_mg?: number | null;
 }
 
 // Typen für Entwicklungsphasen
@@ -83,19 +112,329 @@ export interface CurrentPhase {
   updated_at?: string;
 }
 
-// Baby-Informationen
-export const getBabyInfo = async () => {
+/**
+ * Invalidiere Baby-Liste Cache (z.B. nach Baby-Erstellung/-Update)
+ */
+export const invalidateBabyListCache = async () => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
-    if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
+    await AsyncStorage.removeItem(BABY_LIST_CACHE_KEY);
+    try {
+      const { data: userData } = await getCachedUser();
+      if (userData.user?.id) {
+        await AsyncStorage.removeItem(`${BABY_LIST_CACHE_KEY}_${userData.user.id}`);
+      }
+    } catch (userCacheError) {
+      console.error('Failed to invalidate user baby list cache:', userCacheError);
+    }
+  } catch (error) {
+    console.error('Failed to invalidate baby list cache:', error);
+  }
+};
+
+/**
+ * Sync all partner babies for the current user based on accepted account_links.
+ */
+export const syncBabiesForLinkedUsers = async () => {
+  try {
+    const { data: userData } = await getCachedUser();
+    if (!userData.user) return { success: false, error: new Error('Nicht angemeldet') };
+
+    const { data, error } = await supabase.rpc('sync_babies_for_user_links', {
+      p_user_id: userData.user.id,
+    });
+
+    if (error) {
+      console.error('Error syncing linked babies:', error);
+      return { success: false, error };
+    }
+
+    await invalidateBabyListCache();
+    return { success: true, data };
+  } catch (err) {
+    console.error('Failed to sync linked babies:', err);
+    return { success: false, error: err };
+  }
+};
+
+export const getLinkedBabySelectionOptions = async (
+  currentUserId: string,
+  linkedUserId: string,
+) => {
+  try {
+    if (!currentUserId || !linkedUserId) {
+      return { data: null, error: new Error('Fehlende Benutzer-ID für Baby-Auswahl') };
+    }
+
+    const pairUserIds = Array.from(new Set([currentUserId, linkedUserId]));
+    const { data: babies, error: babiesError } = await supabase
+      .from('baby_info')
+      .select('id, user_id, name, birth_date, baby_gender, created_at')
+      .in('user_id', pairUserIds)
+      .order('created_at', { ascending: true });
+
+    if (babiesError) {
+      console.error('Error loading linked baby selection options:', babiesError);
+      return { data: null, error: babiesError };
+    }
+
+    if (!babies?.length) {
+      return { data: [], error: null };
+    }
+
+    const babyIds = babies.map((baby) => baby.id).filter(Boolean);
+    const { data: memberships, error: membershipsError } = await supabase
+      .from('baby_members')
+      .select('baby_id, user_id')
+      .in('baby_id', babyIds)
+      .in('user_id', pairUserIds);
+
+    if (membershipsError) {
+      console.error('Error loading linked baby memberships:', membershipsError);
+      return { data: null, error: membershipsError };
+    }
+
+    const membersByBabyId = new Map<string, Set<string>>();
+    for (const membership of memberships ?? []) {
+      if (!membership?.baby_id || !membership?.user_id) continue;
+      const memberIds = membersByBabyId.get(membership.baby_id) ?? new Set<string>();
+      memberIds.add(membership.user_id);
+      membersByBabyId.set(membership.baby_id, memberIds);
+    }
+
+    const options: LinkedBabySelectionOption[] = babies
+      .filter((baby) => typeof baby.id === 'string' && typeof baby.user_id === 'string')
+      .map((baby) => {
+        const memberIds = membersByBabyId.get(baby.id) ?? new Set<string>();
+        const counterpartUserId = baby.user_id === currentUserId ? linkedUserId : currentUserId;
+
+        return {
+          id: baby.id,
+          name: baby.name ?? '',
+          birth_date: baby.birth_date ?? null,
+          baby_gender: baby.baby_gender ?? 'unknown',
+          owner_user_id: baby.user_id,
+          created_at: baby.created_at ?? null,
+          is_shared_between_accounts: memberIds.has(counterpartUserId),
+          is_owned_by_current_user: baby.user_id === currentUserId,
+        };
+      });
+
+    return { data: options, error: null };
+  } catch (err) {
+    console.error('Failed to load linked baby selection options:', err);
+    return { data: null, error: err };
+  }
+};
+
+export const applyLinkedBabySelection = async ({
+  currentUserId,
+  linkedUserId,
+  selectedBabyIds,
+  deleteUnselectedOwnedByCurrentUser = false,
+}: ApplyLinkedBabySelectionInput) => {
+  try {
+    const selectionResult = await getLinkedBabySelectionOptions(currentUserId, linkedUserId);
+    if (selectionResult.error) {
+      return { data: null, error: selectionResult.error };
+    }
+
+    const options = selectionResult.data ?? [];
+    const selectedSet = new Set(selectedBabyIds);
+    const keptBabies = options.filter((baby) => selectedSet.has(baby.id));
+
+    if (keptBabies.length === 0) {
+      return { data: null, error: new Error('Bitte wähle mindestens ein Baby aus.') };
+    }
+
+    const membershipUpserts: { baby_id: string; user_id: string; role: string }[] = [];
+    const membershipDeletesByUserId = new Map<string, string[]>();
+
+    for (const baby of options) {
+      const counterpartUserId = baby.owner_user_id === currentUserId ? linkedUserId : currentUserId;
+
+      if (selectedSet.has(baby.id)) {
+        if (!baby.is_shared_between_accounts) {
+          membershipUpserts.push({
+            baby_id: baby.id,
+            user_id: counterpartUserId,
+            role: 'partner',
+          });
+        }
+        continue;
+      }
+
+      const babyIds = membershipDeletesByUserId.get(counterpartUserId) ?? [];
+      babyIds.push(baby.id);
+      membershipDeletesByUserId.set(counterpartUserId, babyIds);
+    }
+
+    await invalidateBabyListCache();
+
+    if (membershipUpserts.length > 0) {
+      const { error: upsertError } = await supabase
+        .from('baby_members')
+        .upsert(membershipUpserts, { onConflict: 'baby_id,user_id' });
+
+      if (upsertError) {
+        console.error('Error sharing selected babies with linked user:', upsertError);
+        return { data: null, error: upsertError };
+      }
+    }
+
+    for (const [userId, babyIds] of membershipDeletesByUserId.entries()) {
+      if (babyIds.length === 0) continue;
+
+      const { error: deleteMembershipError } = await supabase
+        .from('baby_members')
+        .delete()
+        .eq('user_id', userId)
+        .in('baby_id', babyIds);
+
+      if (deleteMembershipError) {
+        console.error('Error removing linked baby memberships:', deleteMembershipError);
+        return { data: null, error: deleteMembershipError };
+      }
+    }
+
+    const deletedOwnedBabyIds: string[] = [];
+    if (deleteUnselectedOwnedByCurrentUser) {
+      const ownUnselectedBabyIds = options
+        .filter((baby) => baby.is_owned_by_current_user && !selectedSet.has(baby.id))
+        .map((baby) => baby.id);
+
+      if (ownUnselectedBabyIds.length > 0) {
+        const { error: deleteBabyError } = await supabase
+          .from('baby_info')
+          .delete()
+          .eq('user_id', currentUserId)
+          .in('id', ownUnselectedBabyIds);
+
+        if (deleteBabyError) {
+          console.error('Error deleting unselected owned babies:', deleteBabyError);
+          return { data: null, error: deleteBabyError };
+        }
+
+        deletedOwnedBabyIds.push(...ownUnselectedBabyIds);
+      }
+    }
+
+    await invalidateBabyListCache();
+
+    return {
+      data: {
+        keptBabyIds: keptBabies.map((baby) => baby.id),
+        removedSharedBabyIds: options
+          .filter((baby) => !selectedSet.has(baby.id))
+          .map((baby) => baby.id),
+        deletedOwnedBabyIds,
+      },
+      error: null,
+    };
+  } catch (err) {
+    console.error('Failed to apply linked baby selection:', err);
+    return { data: null, error: err };
+  }
+};
+
+// Baby-Informationen mit Cache
+export const listBabies = async (forceRefresh = false) => {
+  try {
+    const { data: userData } = await getCachedUser();
+    if (!userData.user) {
+      return { data: null, error: new Error('Nicht angemeldet') };
+    }
+
+    const userId = userData.user.id;
+    const cacheKey = `${BABY_LIST_CACHE_KEY}_${userId}`;
+
+    // 1. Versuche Cache zu laden (nur wenn nicht forceRefresh)
+    if (!forceRefresh) {
+      try {
+        const cached = await AsyncStorage.getItem(cacheKey);
+        if (cached) {
+          const { data, timestamp } = JSON.parse(cached);
+          const age = Date.now() - timestamp;
+
+          // Cache ist noch gültig
+          if (age < BABY_LIST_CACHE_DURATION_MS) {
+            return { data, error: null, fromCache: true };
+          }
+        }
+      } catch (cacheError) {
+        console.warn('Cache read failed, fetching fresh data:', cacheError);
+      }
+    }
+
+    const { data, error } = await supabase
+      .from('baby_info')
+      .select(`
+        *,
+        baby_members!inner (
+          role
+        )
+      `)
+      .eq('baby_members.user_id', userId)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.error('Error fetching member baby list:', error);
+    }
+
+    const { data: ownedData, error: ownedError } = await supabase
+      .from('baby_info')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: true });
+
+    if (ownedError) {
+      console.error('Error fetching owned baby list:', ownedError);
+    }
+
+    const combined = [...(data ?? []), ...(ownedData ?? [])];
+    const seen = new Set<string>();
+    const deduped = combined.filter((baby) => {
+      if (!baby?.id || seen.has(baby.id)) return false;
+      seen.add(baby.id);
+      return true;
+    });
+
+    if (deduped.length === 0 && (error || ownedError)) {
+      return { data: null, error: error ?? ownedError };
+    }
+
+    // 2. Speichere im Cache
+    try {
+      await AsyncStorage.setItem(
+        cacheKey,
+        JSON.stringify({
+          data: deduped,
+          timestamp: Date.now(),
+        })
+      );
+    } catch (cacheError) {
+      console.warn('Failed to cache baby list:', cacheError);
+    }
+
+    return { data: deduped, error: null, fromCache: false };
+  } catch (err) {
+    console.error('Failed to list babies:', err);
+    return { data: null, error: err };
+  }
+};
+
+export const getBabyInfo = async (babyId?: string) => {
+  try {
+    if (!babyId) {
+      return { data: null, error: new Error('No babyId provided') };
+    }
 
     const { data, error } = await supabase
       .from('baby_info')
       .select('*')
-      .eq('user_id', userData.user.id)
+      .eq('id', babyId)
       .single();
 
-    if (error && error.code !== 'PGRST116') {
+    if (error) {
       console.error('Error fetching baby info:', error);
       return { data: null, error };
     }
@@ -107,45 +446,132 @@ export const getBabyInfo = async () => {
   }
 };
 
-export const saveBabyInfo = async (info: BabyInfo) => {
+export const createBaby = async (info: BabyInfo = {}) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
-    // Prüfen, ob bereits ein Eintrag existiert
-    const { data: existingData, error: fetchError } = await supabase
+    const userId = userData.user.id;
+
+    // Invalidiere Cache vor Erstellung
+    await invalidateBabyListCache();
+
+    const { data: baby, error } = await supabase
       .from('baby_info')
-      .select('id')
-      .eq('user_id', userData.user.id)
-      .maybeSingle();
+      .insert({
+        user_id: userId,
+        ...info,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
 
-    if (fetchError && fetchError.code !== 'PGRST116') {
-      console.error('Error checking existing baby info:', fetchError);
-      return { data: null, error: fetchError };
+    if (error || !baby) {
+      return { data: null, error };
     }
 
-    let result;
+    const { error: ownerInsertError } = await supabase.from('baby_members').upsert(
+      {
+        baby_id: baby.id,
+        user_id: userId,
+        role: 'owner',
+      },
+      { onConflict: 'baby_id,user_id' },
+    );
 
-    if (existingData && existingData.id) {
-      // Wenn ein Eintrag existiert, aktualisieren wir diesen
-      result = await supabase
-        .from('baby_info')
-        .update({
-          ...info,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', existingData.id);
-    } else {
-      // Wenn kein Eintrag existiert, erstellen wir einen neuen
-      result = await supabase
-        .from('baby_info')
-        .insert({
-          user_id: userData.user.id,
-          ...info,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        });
+    if (ownerInsertError) {
+      console.error('Failed to add owner to baby_members:', ownerInsertError);
     }
+
+    const { data: links, error: linksError } = await supabase
+      .from('account_links')
+      .select('creator_id, invited_id')
+      .eq('status', 'accepted')
+      .or(`creator_id.eq.${userId},invited_id.eq.${userId}`);
+
+    if (linksError) {
+      console.error('Failed to load account links for baby sharing:', linksError);
+    } else if (links?.length) {
+      const partnerIds = new Set<string>();
+      for (const link of links) {
+        if (link.creator_id && link.creator_id !== userId) {
+          partnerIds.add(link.creator_id);
+        }
+        if (link.invited_id && link.invited_id !== userId) {
+          partnerIds.add(link.invited_id);
+        }
+      }
+
+      if (partnerIds.size > 0) {
+        const { error: partnerInsertError } = await supabase
+          .from('baby_members')
+          .upsert(
+            Array.from(partnerIds).map((partnerId) => ({
+              baby_id: baby.id,
+              user_id: partnerId,
+              role: 'partner',
+            })),
+            { onConflict: 'baby_id,user_id' },
+          );
+
+        if (partnerInsertError) {
+          console.error('Failed to share baby with linked users:', partnerInsertError);
+        }
+      }
+    }
+
+    return { data: baby, error: null };
+  } catch (err) {
+    console.error('Failed to create baby info:', err);
+    return { data: null, error: err };
+  }
+};
+
+export const saveBabyInfo = async (info: BabyInfo, babyId?: string) => {
+  try {
+    const { data: userData } = await getCachedUser();
+    if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
+
+    // Invalidiere Cache vor Update
+    await invalidateBabyListCache();
+
+    const targetId = babyId ?? info.id;
+
+    if (targetId) {
+      const { data: existingData, error: fetchError } = await supabase
+        .from('baby_info')
+        .select('id')
+        .eq('id', targetId)
+        .maybeSingle();
+
+      if (fetchError && fetchError.code !== 'PGRST116') {
+        console.error('Error checking existing baby info:', fetchError);
+        return { data: null, error: fetchError };
+      }
+
+      if (existingData?.id) {
+        const result = await supabase
+          .from('baby_info')
+          .update({
+            ...info,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', existingData.id);
+
+        return { data: result.data, error: result.error };
+      }
+    }
+
+    const result = await supabase
+      .from('baby_info')
+      .insert({
+        user_id: userData.user.id,
+        ...info,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .select('*');
 
     return { data: result.data, error: result.error };
   } catch (err) {
@@ -154,17 +580,47 @@ export const saveBabyInfo = async (info: BabyInfo) => {
   }
 };
 
-// Tagebucheinträge
-export const getDiaryEntries = async () => {
+export const deleteBaby = async (babyId: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
+    if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
+    if (!babyId) return { data: null, error: new Error('Keine babyId angegeben') };
+
+    // Invalidiere Cache vor Löschen
+    await invalidateBabyListCache();
+
+    const { error } = await supabase
+      .from('baby_info')
+      .delete()
+      .eq('id', babyId);
+
+    if (error) {
+      console.error('Error deleting baby info:', error);
+      return { data: null, error };
+    }
+
+    return { data: true, error: null };
+  } catch (err) {
+    console.error('Failed to delete baby info:', err);
+    return { data: null, error: err };
+  }
+};
+
+// Tagebucheinträge
+export const getDiaryEntries = async (babyId?: string) => {
+  try {
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
-    const { data, error } = await supabase
-      .from('baby_diary')
-      .select('*')
-      .eq('user_id', userData.user.id)
-      .order('entry_date', { ascending: false });
+    let query = supabase.from('baby_diary').select('*');
+
+    if (babyId) {
+      query = query.eq('baby_id', babyId);
+    } else {
+      query = query.eq('user_id', userData.user.id);
+    }
+
+    const { data, error } = await query.order('entry_date', { ascending: false });
 
     if (error) {
       console.error('Error fetching diary entries:', error);
@@ -178,16 +634,16 @@ export const getDiaryEntries = async () => {
   }
 };
 
-export const saveDiaryEntry = async (entry: DiaryEntry) => {
+export const saveDiaryEntry = async (entry: DiaryEntry, babyId?: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     let result;
 
     if (entry.id) {
       // Wenn ein ID vorhanden ist, aktualisieren wir den Eintrag
-      result = await supabase
+      let updateQuery = supabase
         .from('baby_diary')
         .update({
           ...entry,
@@ -195,12 +651,19 @@ export const saveDiaryEntry = async (entry: DiaryEntry) => {
         })
         .eq('id', entry.id)
         .eq('user_id', userData.user.id);
+
+      if (babyId) {
+        updateQuery = updateQuery.eq('baby_id', babyId);
+      }
+
+      result = await updateQuery;
     } else {
       // Wenn keine ID vorhanden ist, erstellen wir einen neuen Eintrag
       result = await supabase
         .from('baby_diary')
         .insert({
           user_id: userData.user.id,
+          baby_id: babyId ?? null,
           ...entry,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
@@ -214,16 +677,17 @@ export const saveDiaryEntry = async (entry: DiaryEntry) => {
   }
 };
 
-export const deleteDiaryEntry = async (id: string) => {
+export const deleteDiaryEntry = async (id: string, babyId?: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
-    const { data, error } = await supabase
-      .from('baby_diary')
-      .delete()
-      .eq('id', id)
-      .eq('user_id', userData.user.id);
+    let query = supabase.from('baby_diary').delete().eq('id', id).eq('user_id', userData.user.id);
+    if (babyId) {
+      query = query.eq('baby_id', babyId);
+    }
+
+    const { data, error } = await query;
 
     return { data, error };
   } catch (err) {
@@ -233,10 +697,39 @@ export const deleteDiaryEntry = async (id: string) => {
 };
 
 // Alltags-Einträge
-export const getDailyEntries = async (type?: string, date?: Date) => {
+export const getDailyEntries = async (type?: string, date?: Date, babyId?: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
+
+    if (babyId) {
+      let scopedQuery = supabase
+        .from('baby_daily')
+        .select('*')
+        .eq('baby_id', babyId);
+
+      if (type) {
+        scopedQuery = scopedQuery.eq('entry_type', type);
+      }
+
+      if (date) {
+        const startOfDay = new Date(date);
+        startOfDay.setHours(0, 0, 0, 0);
+
+        const endOfDay = new Date(date);
+        endOfDay.setHours(23, 59, 59, 999);
+
+        scopedQuery = scopedQuery.gte('entry_date', startOfDay.toISOString()).lte('entry_date', endOfDay.toISOString());
+      }
+
+      const { data, error } = await scopedQuery.order('entry_date', { ascending: false });
+      if (error) {
+        console.error('Error fetching daily entries:', error);
+        return { data: null, error };
+      }
+
+      return { data, error: null };
+    }
 
     // Verwenden der verbesserten RPC-Funktion, wenn verfügbar
     try {
@@ -259,6 +752,7 @@ export const getDailyEntries = async (type?: string, date?: Date) => {
         const formattedEntries = filteredEntries.map((entry: any) => ({
           id: entry.id,
           user_id: userData.user.id,
+          baby_id: entry.baby_id ?? entry.babyId ?? null,
           entry_date: entry.entryDate,
           entry_type: entry.entryType,
           start_time: entry.startTime,
@@ -311,9 +805,9 @@ export const getDailyEntries = async (type?: string, date?: Date) => {
   }
 };
 
-export const saveDailyEntry = async (entry: DailyEntry) => {
+export const saveDailyEntry = async (entry: DailyEntry, babyId?: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     console.log('Saving daily entry:', entry);
@@ -321,6 +815,21 @@ export const saveDailyEntry = async (entry: DailyEntry) => {
     let result;
 
     if (entry.id) {
+      if (babyId) {
+        result = await supabase
+          .from('baby_daily')
+          .update({
+            ...entry,
+            baby_id: babyId,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', entry.id)
+          .eq('user_id', userData.user.id)
+          .eq('baby_id', babyId);
+
+        return { data: result.data, error: result.error };
+      }
+
       // Wenn ein ID vorhanden ist, aktualisieren wir den Eintrag mit Synchronisation
       console.log('Updating existing entry with ID:', entry.id);
       try {
@@ -340,16 +849,34 @@ export const saveDailyEntry = async (entry: DailyEntry) => {
         console.warn('RPC function not available, falling back to standard update:', rpcError);
 
         // Fallback: Standard-Update verwenden
-        result = await supabase
-          .from('baby_daily')
-          .update({
-            ...entry,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', entry.id)
+      result = await supabase
+        .from('baby_daily')
+        .update({
+          ...entry,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', entry.id)
           .eq('user_id', userData.user.id);
       }
     } else {
+      if (babyId) {
+        result = await supabase
+          .from('baby_daily')
+          .insert({
+            user_id: userData.user.id,
+            baby_id: babyId,
+            entry_date: entry.entry_date,
+            entry_type: entry.entry_type,
+            start_time: entry.start_time,
+            end_time: entry.end_time,
+            notes: entry.notes,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          });
+
+        return { data: result.data, error: result.error };
+      }
+
       // Wenn keine ID vorhanden ist, erstellen wir einen neuen Eintrag mit Synchronisation
       console.log('Creating new entry with data:', {
         user_id: userData.user.id,
@@ -404,14 +931,25 @@ export const saveDailyEntry = async (entry: DailyEntry) => {
   }
 };
 
-export const deleteDailyEntry = async (id: string) => {
+export const deleteDailyEntry = async (id: string, babyId?: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     console.log('Deleting daily entry with ID:', id);
 
     let result;
+
+    if (babyId) {
+      result = await supabase
+        .from('baby_daily')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', userData.user.id)
+        .eq('baby_id', babyId);
+
+      return { data: result.data, error: result.error };
+    }
 
     try {
       // Verwenden der verbesserten RPC-Funktion für die Synchronisation
@@ -470,7 +1008,7 @@ export const getDevelopmentPhases = async () => {
 // Meilensteine für eine bestimmte Phase abrufen
 export const getMilestonesByPhase = async (phaseId: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     // Meilensteine abrufen
@@ -517,7 +1055,7 @@ export const getMilestonesByPhase = async (phaseId: string) => {
 // Aktuelle Phase des Babys abrufen
 export const getCurrentPhase = async () => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     // Aktuelle Phase abrufen
@@ -558,7 +1096,7 @@ export const getCurrentPhase = async () => {
 // Aktuelle Phase des Babys setzen oder aktualisieren
 export const setCurrentPhase = async (phaseId: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     // Prüfen, ob bereits eine aktuelle Phase existiert
@@ -608,7 +1146,7 @@ export const setCurrentPhase = async (phaseId: string) => {
 // Meilenstein als erreicht oder nicht erreicht markieren
 export const toggleMilestone = async (milestoneId: string, isCompleted: boolean) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     // Prüfen, ob bereits ein Fortschritt für diesen Meilenstein existiert
@@ -677,15 +1215,33 @@ export const getPhaseProgress = async (phaseId: string) => {
   }
 };
 
-export const getDailyEntriesForDateRange = async (startDate: Date, endDate: Date) => {
+export const getDailyEntriesForDateRange = async (startDate: Date, endDate: Date, babyId?: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     console.log('Fetching entries from', startDate.toISOString(), 'to', endDate.toISOString());
 
     // Versuche zuerst die RPC-Funktion zu verwenden
     try {
+      if (babyId) {
+        const { data, error } = await supabase
+          .from('baby_daily')
+          .select('*')
+          .eq('baby_id', babyId)
+          .gte('entry_date', startDate.toISOString())
+          .lte('entry_date', endDate.toISOString())
+          .order('entry_date', { ascending: true });
+
+        if (error) {
+          console.error('Error fetching daily entries for date range:', error);
+          return { data: null, error };
+        }
+
+        console.log('Retrieved daily entries with standard query:', data?.length);
+        return { data, error: null };
+      }
+
       const { data: rpcData, error: rpcError } = await supabase.rpc('get_daily_entries_for_date_range', {
         p_user_id: userData.user.id,
         p_start_date: startDate.toISOString(),
@@ -791,33 +1347,27 @@ export interface FeedingEvent {
   updated_at?: string;
 }
 
-export const saveFeedingEvent = async (feedingData: FeedingEvent) => {
+export const saveFeedingEvent = async (
+  feedingData: FeedingEvent,
+  babyId: string
+) => {
   try {
-    const userData = await supabase.auth.getUser();
+    const userData = await getCachedUser();
     if (!userData.data.user) {
       return { data: null, error: new Error('User not authenticated') };
     }
 
-    // Get current baby_id from user profile or use a default
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('baby_id')
-      .eq('id', userData.data.user.id)
-      .single();
-
-    console.log('🍼 Profile data:', profile);
-    console.log('🍼 User ID:', userData.data.user.id);
-    console.log('🍼 Baby ID from profile:', profile?.baby_id);
+    if (!babyId) {
+      return { data: null, error: new Error('No active baby selected') };
+    }
 
     const payload = {
       ...feedingData,
       user_id: userData.data.user.id,
-      baby_id: profile?.baby_id || userData.data.user.id, // fallback to user_id
+      baby_id: babyId,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
-
-    console.log('🍼 Final payload for database:', JSON.stringify(payload, null, 2));
 
     const { data, error } = await supabase
       .from('feeding_events')
@@ -825,22 +1375,17 @@ export const saveFeedingEvent = async (feedingData: FeedingEvent) => {
       .select()
       .single();
 
-    if (error) {
-      console.error('Error saving feeding event:', error);
-      return { data: null, error };
-    }
+    if (error) return { data: null, error };
 
-    console.log('Feeding event saved successfully:', data);
     return { data, error: null };
   } catch (err) {
-    console.error('Failed to save feeding event:', err);
     return { data: null, error: err };
   }
 };
 
 export const updateFeedingEventEnd = async (id: string, endTime: Date) => {
   try {
-    const userData = await supabase.auth.getUser();
+    const userData = await getCachedUser();
     if (!userData.data.user) {
       return { data: null, error: new Error('User not authenticated') };
     }

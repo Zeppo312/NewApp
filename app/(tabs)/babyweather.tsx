@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, View, ScrollView, SafeAreaView, StatusBar, TouchableOpacity, Image, ActivityIndicator, Alert, TextInput, FlatList, Dimensions } from 'react-native';
+import { StyleSheet, View, ScrollView, SafeAreaView, StatusBar, TouchableOpacity, Image, ActivityIndicator, Alert, TextInput, Dimensions } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import * as Location from 'expo-location';
@@ -13,11 +14,12 @@ import { API_KEYS } from '@/lib/config';
 import { Stack } from 'expo-router';
 import Header from '@/components/Header';
 import { useSmartBack } from '@/contexts/NavigationContext';
-import { LiquidGlassCard, LAYOUT_PAD, TIMELINE_INSET } from '@/constants/DesignGuide';
+import { LiquidGlassCard, LAYOUT_PAD, TIMELINE_INSET, GLASS_OVERLAY_DARK, GLASS_BORDER_DARK } from '@/constants/DesignGuide';
 
 const { width: screenWidth } = Dimensions.get('window');
-const contentWidth = screenWidth - 2 * LAYOUT_PAD;
-const TIMELINE_CONTENT_WIDTH = Math.max(screenWidth - LAYOUT_PAD, contentWidth);
+const TIMELINE_CONTENT_WIDTH = screenWidth - LAYOUT_PAD;
+const BLUE_GLASS_OVERLAY = 'rgba(166,205,237,0.18)';
+const BLUE_GLASS_BORDER = 'rgba(166,205,237,0.35)';
 
 // Funktion zum Laden der Bilder
 const getClothingImage = (imageName: string | null) => {
@@ -38,6 +40,8 @@ const getClothingImage = (imageName: string | null) => {
       return require('@/assets/images/Muetze.png');
     case 'Socken.png':
       return require('@/assets/images/Socken.png');
+    case 'Strumpfhose.png':
+      return require('@/assets/images/Strumpfhose.png');
     case 'Shorts.png':
       return require('@/assets/images/Shorts.png');
     case 'Schlafsack.png':
@@ -50,6 +54,24 @@ const getClothingImage = (imageName: string | null) => {
       return require('@/assets/images/DuennerPulli.png');
     case 'Handschuhe.png':
       return require('@/assets/images/Handschuhe.png');
+    case 'Fleecejacke.png':
+      return require('@/assets/images/Fleecejacke.png');
+    case 'Softshellanzug.png':
+      return require('@/assets/images/Softshellanzug.png');
+    case 'Regenjacke.png':
+      return require('@/assets/images/Regenjacke.png');
+    case 'Schal.png':
+      return require('@/assets/images/Schal.png');
+    case 'Halstuch.png':
+      return require('@/assets/images/Halstuch.png');
+    case 'Fuesslinge.png':
+      return require('@/assets/images/Fuesslinge.png');
+    case 'Tragejacke.jpg':
+      return require('@/assets/images/Tragejacke.png');
+    case 'Kinderwagendecke.png':
+      return require('@/assets/images/Kinderwagendecke.png');
+    case 'Schlafanzug.png':
+      return require('@/assets/images/Schlafanzug.png');
     
     default:
       return null;
@@ -93,6 +115,24 @@ type ClothingCategory = 'underwear' | 'top' | 'bottom' | 'mid' | 'outer' | 'acce
 // Kontext-Modi
 type ContextMode = 'stroller' | 'carrier' | 'indoor' | 'sleeping' | 'carSeat';
 
+type TemperatureBand = 'hot' | 'warm' | 'mild' | 'cool' | 'fresh' | 'cold';
+
+// Neues LayerSlot-System (exklusive Auswahl pro Layer)
+type LayerSlot = {
+  base: string | null;
+  bottom: string | null;
+  mid: string | null;
+  outer: string | null;
+  accessories: string[];
+};
+
+// Alternativen für User-Switch (optional)
+type LayerAlternatives = {
+  bottom?: string[];
+  mid?: string[];
+  outer?: string[];
+};
+
 // Erweiterte Kleidungskatalog mit spezifischeren Kategorien
 const clothingCatalogue: Record<ClothingCategory, ClothingItem[]> = {
   underwear: [
@@ -104,56 +144,73 @@ const clothingCatalogue: Record<ClothingCategory, ClothingItem[]> = {
   bottom: [
     { id: '4', name: 'Hose', image: 'Hose.png', recommended: false, category: 'bottom', tempRange: { min: -20, max: 25 } },
     { id: '5', name: 'Shorts', image: 'Shorts.png', recommended: false, category: 'bottom', tempRange: { min: 25, max: 40 } },
+    { id: '16', name: 'Strumpfhose', image: 'Strumpfhose.png', recommended: false, category: 'bottom', tempRange: { min: -15, max: 18 } },
   ],
   mid: [
     { id: '6', name: 'Dünner Pullover', image: 'DuennerPulli.png', recommended: false, category: 'mid', tempRange: { min: 11, max: 20 } },
     { id: '7', name: 'Pullover', image: 'Pullover.png', recommended: false, category: 'mid', tempRange: { min: -20, max: 15 } },
+    { id: '17', name: 'Fleecejacke', image: 'Fleecejacke.png', recommended: false, category: 'mid', tempRange: { min: -10, max: 12 } },
   ],
   outer: [
     { id: '8', name: 'Jacke', image: 'Jacke.png', recommended: false, category: 'outer', tempRange: { min: -20, max: 10 } },
     { id: '9', name: 'Overall', image: 'Overall.png', recommended: false, category: 'outer', tempRange: { min: -20, max: 5 } },
+    { id: '26', name: 'Tragejacke/-cover', image: 'Tragejacke.jpg', recommended: false, category: 'outer', tempRange: { min: -20, max: 15 } },
+    { id: '18', name: 'Softshellanzug', image: 'Softshellanzug.png', recommended: false, category: 'outer', tempRange: { min: 5, max: 15 } },
+    { id: '19', name: 'Regenjacke', image: 'Regenjacke.png', recommended: false, category: 'outer', tempRange: { min: 5, max: 20 } },
   ],
   accessory: [
     { id: '10', name: 'Mütze', image: 'Muetze.png', recommended: false, category: 'accessory', tempRange: { min: -20, max: 15 } },
     { id: '11', name: 'Socken', image: 'Socken.png', recommended: false, category: 'accessory', tempRange: { min: -20, max: 20 } },
     { id: '12', name: 'Handschuhe', image: 'Handschuhe.png', recommended: false, category: 'accessory', tempRange: { min: -20, max: 10 } },
+    { id: '20', name: 'Sonnenhut', image: null, recommended: false, category: 'accessory', tempRange: { min: 20, max: 40 } },
+    { id: '21', name: 'Halstuch', image: 'Halstuch.png', recommended: false, category: 'accessory', tempRange: { min: 8, max: 20 } },
+    { id: '22', name: 'Schal', image: 'Schal.png', recommended: false, category: 'accessory', tempRange: { min: -20, max: 10 } },
+    { id: '23', name: 'Schuhe', image: null, recommended: false, category: 'accessory', tempRange: { min: -10, max: 20 } },
+    { id: '24', name: 'Kinderwagen-Decke', image: 'Kinderwagendecke.png', recommended: false, category: 'accessory', tempRange: { min: -20, max: 15 } },
+    { id: '27', name: 'Füßlinge', image: 'Fuesslinge.png', recommended: false, category: 'accessory', tempRange: { min: -20, max: 15 } },
   ],
   sleep: [
     { id: '13', name: 'Schlafsack 0.5 TOG', image: 'Schlafsack.png', recommended: false, category: 'sleep', tempRange: { min: 24, max: 27 } },
     { id: '14', name: 'Schlafsack 1.0 TOG', image: 'Schlafsack.png', recommended: false, category: 'sleep', tempRange: { min: 20, max: 24 } },
     { id: '15', name: 'Schlafsack 2.5 TOG', image: 'Schlafsack.png', recommended: false, category: 'sleep', tempRange: { min: 16, max: 20 } },
+    { id: '25', name: 'Schlafanzug', image: 'Schlafanzug.png', recommended: false, category: 'sleep', tempRange: { min: 18, max: 24 } },
   ],
 };
 
 // Tipps für verschiedene Wetterbedingungen
-const weatherTips: Record<string, string[]> = {
+const weatherTips: Record<TemperatureBand, string[]> = {
   hot: [
-    'Sonnencreme nicht vergessen - auch im Schatten!',
-    'Hut mit breiter Krempe bietet zusätzlichen Sonnenschutz',
-    'Im Kinderwagen auf ausreichend Luftzirkulation achten',
-    'Besonders mittags (11-15 Uhr) Schatten suchen',
-    'Regelmäßig Flüssigkeit anbieten',
+    'Schatten, Wasser, Sonnenhut – so bleibt es entspannt.',
+    'Leichte Stoffe lassen die Haut atmen.',
+    'Kurze Check-ins: Nacken warm? Dann passt alles.',
+    'In der Mittagssonne lieber eine Pause drinnen machen.',
+    'Luftig im Kinderwagen hilft gegen Hitzestau.',
   ],
   warm: [
-    'Bei Aktivitäten im Freien immer eine dünne Jacke mitnehmen',
-    'Sonnenschutz bei klarem Himmel verwenden',
-    'Eine leichte Decke im Kinderwagen kann bei Wind nützlich sein',
+    'Eine leichte Schicht dabei haben – falls Wind aufzieht.',
+    'Sonnenschutz lohnt sich auch bei milder Sonne.',
+    'Im Kinderwagen hilft eine dünne Decke gegen Zugluft.',
   ],
   mild: [
-    'Kleidung in Schichten, die sich bei Bedarf abnehmen lassen',
-    'Eine dünne Mütze kann bei Wind sinnvoll sein',
-    'Vor dem Schlafengehen ausreichend lüften',
+    'Schichten sind praktisch, wenn das Wetter kippt.',
+    'Eine dünne Mütze kann bei Wind helfen.',
+    'Kurz lüften, dann wieder kuschelig machen.',
   ],
   cool: [
-    'Kalte Hände und Füße im Blick behalten',
-    'Bei längeren Ausflügen Wechselkleidung mitnehmen',
-    'Im Kinderwagen Fußsack verwenden',
+    'Kalte Hände sind ok – der Nacken zählt mehr.',
+    'Für längere Ausflüge Wechselkleidung einpacken.',
+    'Im Kinderwagen schützt ein Fußsack vor Kälte.',
+  ],
+  fresh: [
+    'Windschutz oder Softshell hilft gegen Zugluft.',
+    'Ein Halstuch schützt empfindliche Haut.',
+    'Regenverdeck griffbereit, falls es umschlägt.',
   ],
   cold: [
-    'Mehrere dünne Schichten wärmen besser als eine dicke',
-    'Auf trockene Kleidung achten, besonders nach Aktivitäten',
-    'Wind-Schutz für den Kinderwagen nutzen',
-    'Wechselkleidung mitnehmen',
+    'Mehrere dünne Schichten wärmen oft besser.',
+    'Trocken bleibt warm – nasse Kleidung zügig wechseln.',
+    'Windschutz am Kinderwagen macht viel aus.',
+    'Ein kleines Wechselset beruhigt unterwegs.',
   ],
 };
 
@@ -173,6 +230,73 @@ const contextDescriptions: {[key in ContextMode]: string} = {
   indoor: 'Drinnen',
   sleeping: 'Schlafenszeit',
   carSeat: 'Auto',
+};
+
+const getTemperatureBand = (value: number): TemperatureBand => {
+  if (value >= 28) {
+    return 'hot';
+  }
+  if (value >= 24) {
+    return 'warm';
+  }
+  if (value >= 21) {
+    return 'mild';
+  }
+  if (value >= 16) {
+    return 'cool';
+  }
+  if (value >= 11) {
+    return 'fresh';
+  }
+  return 'cold';
+};
+
+const temperatureBandLabels: Record<TemperatureBand, string> = {
+  hot: 'heiß',
+  warm: 'warm',
+  mild: 'mild',
+  cool: 'kühl',
+  fresh: 'frisch',
+  cold: 'kalt',
+};
+
+const getHeroRecommendation = (band: TemperatureBand, mode: ContextMode): string => {
+  const baseRecommendations: Record<TemperatureBand, string> = {
+    hot: 'Kurzarm & luftig',
+    warm: 'Kurzarm + leichte Schicht',
+    mild: 'Langarm + leichte Schicht',
+    cool: 'Langarm + Schichten',
+    fresh: 'Langarm + warme Schichten',
+    cold: 'Warm einpacken + Schichten',
+  };
+
+  const indoorRecommendations: Record<TemperatureBand, string> = {
+    hot: 'Luftig & leicht',
+    warm: 'Leicht & bequem',
+    mild: 'Langarm + leichte Schicht',
+    cool: 'Langarm + Schichten',
+    fresh: 'Langarm + warme Schichten',
+    cold: 'Warm & kuschelig',
+  };
+
+  const sleepingRecommendations: Record<TemperatureBand, string> = {
+    hot: 'Leichter Schlafsack reicht',
+    warm: 'Leichter Schlafsack + Body',
+    mild: 'Schlafsack + Langarm',
+    cool: 'Schlafsack + warme Schichten',
+    fresh: 'Wärmerer Schlafsack + Schichten',
+    cold: 'Wärmerer Schlafsack + extra Schichten',
+  };
+
+  if (mode === 'sleeping') {
+    return sleepingRecommendations[band];
+  }
+
+  if (mode === 'indoor') {
+    return indoorRecommendations[band];
+  }
+
+  return baseRecommendations[band];
 };
 
 // Header component that will be memoized
@@ -197,9 +321,13 @@ interface HeaderProps {
   errorMessage: string;
   selectedMode: ContextMode;
   setSelectedMode: (mode: ContextMode) => void;
+  feltTemperature: number | null;
+  setFeltTemperature: (value: number | null) => void;
+  feltTemperatureOptions: number[];
   babyAgeMonths: number;
   babyWeightPercentile: number;
-  metaCards: {title: string, content: string, icon: any}[];
+  heroTitle: string;
+  heroSubtitle: string;
 }
 
 const BabyWeatherHeader: React.FC<HeaderProps> = ({ 
@@ -223,11 +351,24 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
   errorMessage,
   selectedMode,
   setSelectedMode,
+  feltTemperature,
+  setFeltTemperature,
+  feltTemperatureOptions,
   babyAgeMonths,
   babyWeightPercentile,
-  metaCards
+  heroTitle,
+  heroSubtitle
 }) => {
   const theme = Colors[colorScheme || 'light'];
+  const adaptiveColors = useAdaptiveColors();
+  const isDark = colorScheme === 'dark' || adaptiveColors.isDarkBackground;
+  const textPrimary = isDark ? Colors.dark.textPrimary : '#5C4033';
+  const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
+  const accentColor = isDark ? adaptiveColors.accent : theme.accent;
+  const iconSecondaryColor = isDark ? adaptiveColors.iconSecondary : theme.tabIconDefault;
+  const glassOverlay = isDark ? GLASS_OVERLAY_DARK : BLUE_GLASS_OVERLAY;
+  const glassBorder = isDark ? GLASS_BORDER_DARK : BLUE_GLASS_BORDER;
+  const autoFeltTemp = weatherData?.feelsLike ?? weatherData?.temperature;
   
   return (
     <View style={styles.headerWrapper}>
@@ -235,12 +376,16 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
         style={styles.infoButton}
         onPress={() => setShowBabyInfo(!showBabyInfo)}
       >
-        <IconSymbol name="info.circle" size={22} color={theme.textSecondary} />
+        <IconSymbol name="info.circle" size={22} color={textSecondary} />
       </TouchableOpacity>
 
       {/* Informations-Popup für Baby-Daten */}
       {showBabyInfo && (
-        <ThemedView style={styles.infoCard} lightColor={theme.cardLight} darkColor={theme.cardDark}>
+        <ThemedView
+          style={styles.infoCard}
+          lightColor={isDark ? 'rgba(12,12,16,0.82)' : theme.cardLight}
+          darkColor={isDark ? 'rgba(12,12,16,0.82)' : theme.cardDark}
+        >
           <ThemedText style={styles.infoTitle}>Baby-Daten für Empfehlungen</ThemedText>
           <View style={styles.infoRow}>
             <ThemedText style={styles.infoLabel}>Alter:</ThemedText>
@@ -257,40 +402,75 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
       )}
 
       {/* Standort-/Postleitzahl-Auswahl */}
-      <LiquidGlassCard style={styles.sectionCard} intensity={26}>
-        <ThemedText style={styles.sectionTitle}>Standort</ThemedText>
+      <LiquidGlassCard
+        style={styles.sectionCard}
+        intensity={26}
+        overlayColor={glassOverlay}
+        borderColor={glassBorder}
+      >
+        <ThemedText style={[styles.sectionTitle, { color: textSecondary }]}>Standort</ThemedText>
         <View style={styles.locationToggle}>
           <TouchableOpacity
             style={[
               styles.locationButton,
-              searchType === 'location' && styles.activeLocationButton
+              {
+                borderColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.3)',
+                backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.12)',
+              },
+              searchType === 'location' && [
+                styles.activeLocationButton,
+                {
+                  borderColor: isDark ? 'rgba(166,205,237,0.58)' : 'rgba(100,150,255,0.75)',
+                  backgroundColor: isDark ? 'rgba(166,205,237,0.18)' : 'rgba(166,205,237,0.35)',
+                },
+              ]
             ]}
             onPress={toggleLocationMode}
           >
-            <IconSymbol name="location.fill" size={20} color={searchType === 'location' ? theme.accent : theme.tabIconDefault} />
-            <ThemedText style={[styles.locationButtonText, searchType === 'location' && styles.activeLocationButtonText]}>Standort</ThemedText>
+            <IconSymbol name="location.fill" size={20} color={searchType === 'location' ? accentColor : iconSecondaryColor} />
+            <ThemedText style={[styles.locationButtonText, { color: textSecondary }, searchType === 'location' && [styles.activeLocationButtonText, { color: textPrimary }]]}>Standort</ThemedText>
           </TouchableOpacity>
           
           <TouchableOpacity
             style={[
               styles.locationButton,
-              searchType === 'zipCode' && styles.activeLocationButton
+              {
+                borderColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.3)',
+                backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.12)',
+              },
+              searchType === 'zipCode' && [
+                styles.activeLocationButton,
+                {
+                  borderColor: isDark ? 'rgba(166,205,237,0.58)' : 'rgba(100,150,255,0.75)',
+                  backgroundColor: isDark ? 'rgba(166,205,237,0.18)' : 'rgba(166,205,237,0.35)',
+                },
+              ]
             ]}
             onPress={switchToZipCodeSearch}
           >
-            <IconSymbol name="number" size={20} color={searchType === 'zipCode' ? theme.accent : theme.tabIconDefault} />
-            <ThemedText style={[styles.locationButtonText, searchType === 'zipCode' && styles.activeLocationButtonText]}>PLZ</ThemedText>
+            <IconSymbol name="number" size={20} color={searchType === 'zipCode' ? accentColor : iconSecondaryColor} />
+            <ThemedText style={[styles.locationButtonText, { color: textSecondary }, searchType === 'zipCode' && [styles.activeLocationButtonText, { color: textPrimary }]]}>PLZ</ThemedText>
           </TouchableOpacity>
           
           <TouchableOpacity
             style={[
               styles.locationButton,
-              searchType === 'cityName' && styles.activeLocationButton
+              {
+                borderColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.3)',
+                backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.12)',
+              },
+              searchType === 'cityName' && [
+                styles.activeLocationButton,
+                {
+                  borderColor: isDark ? 'rgba(166,205,237,0.58)' : 'rgba(100,150,255,0.75)',
+                  backgroundColor: isDark ? 'rgba(166,205,237,0.18)' : 'rgba(166,205,237,0.35)',
+                },
+              ]
             ]}
             onPress={switchToCitySearch}
           >
-            <IconSymbol name="building.2.fill" size={20} color={searchType === 'cityName' ? theme.accent : theme.tabIconDefault} />
-            <ThemedText style={[styles.locationButtonText, searchType === 'cityName' && styles.activeLocationButtonText]}>Stadt</ThemedText>
+            <IconSymbol name="building.2.fill" size={20} color={searchType === 'cityName' ? accentColor : iconSecondaryColor} />
+            <ThemedText style={[styles.locationButtonText, { color: textSecondary }, searchType === 'cityName' && [styles.activeLocationButtonText, { color: textPrimary }]]}>Stadt</ThemedText>
           </TouchableOpacity>
         </View>
 
@@ -299,10 +479,14 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
             <TextInput
               style={[
                 styles.zipCodeInput,
-                { color: theme.text, borderColor: theme.cardLight !== '#FFFFFF' ? theme.cardLight : '#CCCCCC' }
+                {
+                  color: textPrimary,
+                  borderColor: isDark ? 'rgba(255,255,255,0.18)' : (theme.cardLight !== '#FFFFFF' ? theme.cardLight : '#CCCCCC'),
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.18)',
+                }
               ]}
               placeholder="PLZ eingeben (z.B. 10115)"
-              placeholderTextColor={theme.tabIconDefault}
+              placeholderTextColor={iconSecondaryColor}
               value={zipCode}
               onChangeText={handleZipCodeChange}
               keyboardType="numeric"
@@ -313,7 +497,13 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
               disableFullscreenUI={true}
             />
             <TouchableOpacity
-              style={[styles.searchButton, { backgroundColor: theme.accent }]}
+              style={[
+                styles.searchButton,
+                {
+                  backgroundColor: accentColor,
+                  borderColor: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.55)',
+                },
+              ]}
               onPress={handleZipCodeSearch}
             >
               <ThemedText style={styles.searchButtonText}>Suchen</ThemedText>
@@ -326,10 +516,14 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
             <TextInput
               style={[
                 styles.zipCodeInput,
-                { color: theme.text, borderColor: theme.cardLight !== '#FFFFFF' ? theme.cardLight : '#CCCCCC' }
+                {
+                  color: textPrimary,
+                  borderColor: isDark ? 'rgba(255,255,255,0.18)' : (theme.cardLight !== '#FFFFFF' ? theme.cardLight : '#CCCCCC'),
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.18)',
+                }
               ]}
               placeholder="Stadt eingeben (z.B. Berlin)"
-              placeholderTextColor={theme.tabIconDefault}
+              placeholderTextColor={iconSecondaryColor}
               value={cityName}
               onChangeText={handleCityNameChange}
               autoCapitalize="words"
@@ -339,7 +533,13 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
               disableFullscreenUI={true}
             />
             <TouchableOpacity
-              style={[styles.searchButton, { backgroundColor: theme.accent }]}
+              style={[
+                styles.searchButton,
+                {
+                  backgroundColor: accentColor,
+                  borderColor: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.55)',
+                },
+              ]}
               onPress={handleCitySearch}
             >
               <ThemedText style={styles.searchButtonText}>Suchen</ThemedText>
@@ -348,7 +548,7 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
         )}
 
         {weatherData && (
-          <ThemedText style={styles.currentLocation}>
+          <ThemedText style={[styles.currentLocation, { color: textSecondary }]}>
             {weatherData.location || (searchType === 'location' ? 'Aktueller Standort' : searchType === 'zipCode' ? `PLZ ${searchType === 'zipCode' ? zipCode : ''}` : cityName)}
           </ThemedText>
         )}
@@ -356,71 +556,159 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
 
       {isLoading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.accent} />
-          <ThemedText style={styles.loadingText}>Wetterdaten werden geladen...</ThemedText>
+          <ActivityIndicator size="large" color={accentColor} />
+          <ThemedText style={[styles.loadingText, { color: textSecondary }]}>Wetterdaten werden geladen...</ThemedText>
         </View>
       ) : errorMessage ? (
-        <LiquidGlassCard style={styles.errorContainer} intensity={26}>
+        <LiquidGlassCard
+          style={styles.errorContainer}
+          intensity={26}
+          overlayColor={glassOverlay}
+          borderColor={glassBorder}
+        >
           <IconSymbol name="exclamationmark.triangle" size={40} color="#FF6B6B" />
-          <ThemedText style={styles.errorText}>{errorMessage}</ThemedText>
+          <ThemedText style={[styles.errorText, { color: textPrimary }]}>{errorMessage}</ThemedText>
         </LiquidGlassCard>
       ) : (
         <>
           {/* Wetteranzeige */}
-          <LiquidGlassCard style={[styles.sectionCard, styles.weatherCard]} intensity={26}>
-            <ThemedText style={[styles.sectionTitle, styles.weatherTitle]}>Aktuelle Wetterlage</ThemedText>
+          <LiquidGlassCard
+            style={[styles.sectionCard, styles.weatherCard]}
+            intensity={26}
+            overlayColor={glassOverlay}
+            borderColor={glassBorder}
+          >
+            <ThemedText style={[styles.sectionTitle, styles.weatherTitle, { color: textSecondary }]}>Aktuelle Wetterlage</ThemedText>
             
             {/* New weather display layout */}
             <View style={styles.weatherDisplayContainer}>
               {/* Main temperature and icon row */}
               <View style={styles.mainWeatherRow}>
-                <View style={styles.temperatureBox}>
-                  <ThemedText style={styles.temperatureValue} numberOfLines={1} ellipsizeMode="clip">{weatherData?.temperature}°C</ThemedText>
-                  <ThemedText style={styles.feelsLikeValue}>Gefühlt: {weatherData?.feelsLike}°C</ThemedText>
+                <View
+                  style={[
+                    styles.temperatureBox,
+                    {
+                      backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.18)',
+                      borderColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.35)',
+                    },
+                  ]}
+                >
+                  <ThemedText style={[styles.temperatureValue, { color: textPrimary }]} numberOfLines={1} ellipsizeMode="clip">{weatherData?.temperature}°C</ThemedText>
+                  <ThemedText style={[styles.feelsLikeValue, { color: textSecondary }]}>Gefühlt: {weatherData?.feelsLike}°C</ThemedText>
                 </View>
                 
-                <View style={styles.weatherIconBox}>
-                  <IconSymbol name={weatherData?.icon || "cloud.sun.fill"} size={54} color={theme.accent} />
+                <View
+                  style={[
+                    styles.weatherIconBox,
+                    {
+                      backgroundColor: isDark ? 'rgba(166,205,237,0.14)' : 'rgba(166,205,237,0.2)',
+                      borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.35)',
+                    },
+                  ]}
+                >
+                  <IconSymbol name={weatherData?.icon || "cloud.sun.fill"} size={54} color={accentColor} />
                 </View>
               </View>
               
               {/* Weather description */}
-              <View style={styles.weatherDescriptionContainer}>
-                <ThemedText style={styles.weatherDescriptionText}>{weatherData?.description}</ThemedText>
-                <ThemedText style={styles.locationText}>{weatherData?.location || (searchType === 'location' ? 'Aktueller Standort' : searchType === 'zipCode' ? `PLZ ${zipCode}` : cityName)}</ThemedText>
+              <View
+                style={[
+                  styles.weatherDescriptionContainer,
+                  {
+                    backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.12)',
+                    borderColor: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.3)',
+                  },
+                ]}
+              >
+                <ThemedText style={[styles.weatherDescriptionText, { color: textPrimary }]}>{weatherData?.description}</ThemedText>
+                <ThemedText style={[styles.locationText, { color: textSecondary }]}>{weatherData?.location || (searchType === 'location' ? 'Aktueller Standort' : searchType === 'zipCode' ? `PLZ ${zipCode}` : cityName)}</ThemedText>
               </View>
               
               {/* Weather details with smaller icons */}
               <View style={styles.weatherDetailsContainer}>
-                <View style={styles.weatherDetailBox}>
-                  <IconSymbol name="arrow.left.and.right" size={18} color={theme.tabIconDefault} />
-                  <ThemedText style={styles.weatherDetailText}>Wind: {weatherData?.windSpeed} km/h</ThemedText>
+                <View
+                  style={[
+                    styles.weatherDetailBox,
+                    {
+                      backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.12)',
+                      borderColor: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.3)',
+                    },
+                  ]}
+                >
+                  <IconSymbol name="arrow.left.and.right" size={18} color={iconSecondaryColor} />
+                  <ThemedText style={[styles.weatherDetailText, { color: textSecondary }]}>Wind: {weatherData?.windSpeed} km/h</ThemedText>
                 </View>
                 
-                <View style={styles.weatherDetailBox}>
-                  <IconSymbol name="drop.fill" size={18} color={theme.tabIconDefault} />
-                  <ThemedText style={styles.weatherDetailText}>Luftfeuchte: {weatherData?.humidity}%</ThemedText>
+                <View
+                  style={[
+                    styles.weatherDetailBox,
+                    {
+                      backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.12)',
+                      borderColor: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.3)',
+                    },
+                  ]}
+                >
+                  <IconSymbol name="drop.fill" size={18} color={iconSecondaryColor} />
+                  <ThemedText style={[styles.weatherDetailText, { color: textSecondary }]}>Luftfeuchte: {weatherData?.humidity}%</ThemedText>
                 </View>
               </View>
             </View>
           </LiquidGlassCard>
 
+          {heroTitle && heroSubtitle && (
+            <LiquidGlassCard
+              style={[styles.sectionCard, styles.heroCard]}
+              intensity={26}
+              overlayColor={glassOverlay}
+              borderColor={glassBorder}
+              radius={16}
+            >
+              <ThemedText style={[styles.sectionTitle, styles.heroTitle, { color: textSecondary }]}>{heroTitle}</ThemedText>
+              <ThemedText style={[styles.heroSubtitle, { color: textPrimary }]}>{heroSubtitle}</ThemedText>
+            </LiquidGlassCard>
+          )}
+
           {/* Kontext-Auswahl */}
-          <LiquidGlassCard style={[styles.sectionCard]} intensity={26}>
-            <ThemedText style={styles.sectionTitle}>Situation auswählen</ThemedText>
+          <LiquidGlassCard
+            style={[styles.sectionCard]}
+            intensity={26}
+            overlayColor={glassOverlay}
+            borderColor={glassBorder}
+          >
+            <ThemedText style={[styles.sectionTitle, { color: textSecondary }]}>Situation auswählen</ThemedText>
             <View style={styles.contextButtonsContainer}>
               {(Object.keys(contextDescriptions) as ContextMode[]).map((mode) => (
                 <TouchableOpacity
                   key={mode}
                   style={[
                     styles.contextButtonNew,
-                    selectedMode === mode && styles.selectedContextButtonNew
+                    {
+                      borderColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.3)',
+                      backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.12)',
+                    },
+                    selectedMode === mode && [
+                      styles.selectedContextButtonNew,
+                      {
+                        borderColor: isDark ? 'rgba(166,205,237,0.58)' : 'rgba(100,150,255,0.55)',
+                        backgroundColor: isDark ? 'rgba(166,205,237,0.18)' : 'rgba(166,205,237,0.25)',
+                      },
+                    ]
                   ]}
                   onPress={() => setSelectedMode(mode)}
                 >
                   <View style={[
                     styles.contextImageContainer,
-                    selectedMode === mode && styles.selectedContextImageContainer
+                    {
+                      backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.6)',
+                      borderColor: isDark ? 'rgba(255,255,255,0.24)' : 'rgba(255,255,255,0.35)',
+                    },
+                    selectedMode === mode && [
+                      styles.selectedContextImageContainer,
+                      {
+                        backgroundColor: isDark ? 'rgba(166,205,237,0.35)' : 'rgba(166,205,237,0.9)',
+                        borderColor: isDark ? 'rgba(166,205,237,0.65)' : 'rgba(100,150,255,0.55)',
+                      },
+                    ]
                   ]}>
                     <Image 
                       source={getContextImage(mode)} 
@@ -430,7 +718,8 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
                   <ThemedText
                     style={[
                       styles.contextButtonTextNew,
-                      selectedMode === mode && styles.selectedContextButtonTextNew
+                      { color: textSecondary },
+                      selectedMode === mode && [styles.selectedContextButtonTextNew, { color: textPrimary }]
                     ]}
                   >
                     {contextDescriptions[mode]}
@@ -440,29 +729,85 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
             </View>
           </LiquidGlassCard>
 
-          {/* Meta-Cards vor den Kleidungsempfehlungen anzeigen */}
-          {!isLoading && !errorMessage && weatherData && (
-            <View style={styles.metaCardsContainer}>
-              {metaCards.map((card, index) => (
-                <LiquidGlassCard key={index} style={styles.metaCard} intensity={26}>
-                  <View style={styles.metaCardHeader}>
-                    <IconSymbol name={card.icon} size={22} color={theme.accent} />
-                    <ThemedText style={styles.metaCardTitle}>{card.title}</ThemedText>
-                  </View>
-                  <ThemedText style={styles.metaCardContent}>{card.content}</ThemedText>
-                </LiquidGlassCard>
-              ))}
-            </View>
-          )}
-          
-          {/* Neue Überschrift für Kleidungsempfehlungen */}
-          {!isLoading && !errorMessage && weatherData && (
-            <LiquidGlassCard style={styles.sectionCard} intensity={26}>
-              <ThemedText style={styles.sectionTitle}>
-                Empfohlene Kleidung für {contextDescriptions[selectedMode]}
-              </ThemedText>
+          {(selectedMode === 'indoor' || selectedMode === 'sleeping') && (
+            <LiquidGlassCard
+              style={[styles.sectionCard]}
+              intensity={26}
+              overlayColor={glassOverlay}
+              borderColor={glassBorder}
+            >
+              <ThemedText style={[styles.sectionTitle, { color: textSecondary }]}>Gefühlte Temperatur wählen</ThemedText>
+              <View style={styles.feltTempOptions}>
+                <TouchableOpacity
+                  style={[
+                    styles.feltTempButton,
+                    {
+                      borderColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.3)',
+                      backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.12)',
+                    },
+                    feltTemperature === null && [
+                      styles.feltTempButtonActive,
+                      {
+                        borderColor: isDark ? 'rgba(166,205,237,0.58)' : 'rgba(100,150,255,0.55)',
+                        backgroundColor: isDark ? 'rgba(166,205,237,0.18)' : 'rgba(166,205,237,0.25)',
+                      },
+                    ]
+                  ]}
+                  onPress={() => setFeltTemperature(null)}
+                >
+                  <ThemedText
+                    style={[
+                      styles.feltTempButtonText,
+                      { color: textSecondary },
+                      feltTemperature === null && [styles.feltTempButtonTextActive, { color: textPrimary }]
+                    ]}
+                  >
+                    Auto
+                  </ThemedText>
+                </TouchableOpacity>
+                {feltTemperatureOptions.map((temp) => {
+                  const isSelected = feltTemperature === temp;
+                  return (
+                    <TouchableOpacity
+                      key={`felt-${temp}`}
+                      style={[
+                        styles.feltTempButton,
+                        {
+                          borderColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.3)',
+                          backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.12)',
+                        },
+                        isSelected && [
+                          styles.feltTempButtonActive,
+                          {
+                            borderColor: isDark ? 'rgba(166,205,237,0.58)' : 'rgba(100,150,255,0.55)',
+                            backgroundColor: isDark ? 'rgba(166,205,237,0.18)' : 'rgba(166,205,237,0.25)',
+                          },
+                        ]
+                      ]}
+                      onPress={() => setFeltTemperature(temp)}
+                    >
+                      <ThemedText
+                        style={[
+                          styles.feltTempButtonText,
+                          { color: textSecondary },
+                          isSelected && [styles.feltTempButtonTextActive, { color: textPrimary }]
+                        ]}
+                      >
+                        {temp}°C
+                      </ThemedText>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              {autoFeltTemp !== undefined && autoFeltTemp !== null && (
+                <ThemedText style={[styles.feltTempHint, { color: textSecondary }]}>
+                  Aktuell (Wetter): {autoFeltTemp}°C
+                </ThemedText>
+              )}
             </LiquidGlassCard>
           )}
+
+          
         </>
       )}
     </View>
@@ -472,9 +817,18 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
 // Memoize the BabyWeatherHeader to prevent unnecessary rerenders
 const MemoHeader = React.memo(BabyWeatherHeader);
 
+const FELT_TEMPERATURE_OPTIONS = [16, 18, 20, 22, 24, 26];
+
 export default function BabyWeatherScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
+  const adaptiveColors = useAdaptiveColors();
+  const isDark = colorScheme === 'dark' || adaptiveColors.isDarkBackground;
+  const textPrimary = isDark ? Colors.dark.textPrimary : '#5C4033';
+  const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
+  const iconSecondaryColor = isDark ? adaptiveColors.iconSecondary : theme.tabIconDefault;
+  const glassOverlay = isDark ? GLASS_OVERLAY_DARK : BLUE_GLASS_OVERLAY;
+  const glassBorder = isDark ? GLASS_BORDER_DARK : BLUE_GLASS_BORDER;
   const { isBabyBorn, babyAgeMonths, babyWeightPercentile } = useBabyStatus();
   
   // Set fallback route for smart back navigation
@@ -499,8 +853,19 @@ export default function BabyWeatherScreen() {
   const [searchCityName, setSearchCityName] = useState('');
   const [searchType, setSearchType] = useState<'location' | 'zipCode' | 'cityName'>('location');
   const [showBabyInfo, setShowBabyInfo] = useState(false);
-  const [weatherTip, setWeatherTip] = useState<string>('');
   const [metaCards, setMetaCards] = useState<{title: string, content: string, icon: any}[]>([]);
+  const [feltTemperature, setFeltTemperature] = useState<number | null>(null);
+  const [heroTitle, setHeroTitle] = useState('');
+  const [heroSubtitle, setHeroSubtitle] = useState('');
+  const [tipsExpanded, setTipsExpanded] = useState(false);
+
+  // Alternativen-System
+  const [layerAlternatives, setLayerAlternatives] = useState<LayerAlternatives>({});
+  const [currentAlternativeIndex, setCurrentAlternativeIndex] = useState<{
+    bottom?: number;
+    mid?: number;
+    outer?: number;
+  }>({});
 
   // Wetterdaten abrufen
   useEffect(() => {
@@ -671,235 +1036,425 @@ export default function BabyWeatherScreen() {
     }
   };
 
+  // Wechsle zur nächsten Alternative für einen Layer
+  const swapLayerAlternative = (layer: 'bottom' | 'mid' | 'outer') => {
+    const alternatives = layerAlternatives[layer];
+    if (!alternatives || alternatives.length <= 1) return;
+
+    const currentIndex = currentAlternativeIndex[layer] ?? 0;
+    const nextIndex = (currentIndex + 1) % alternatives.length;
+
+    // Speichere neuen Index
+    const newIndices = {
+      ...currentAlternativeIndex,
+      [layer]: nextIndex,
+    };
+
+    setCurrentAlternativeIndex(newIndices);
+
+    // Empfehlungen neu berechnen mit dem NEUEN Index (direkt übergeben)
+    if (weatherData) {
+      updateClothingRecommendations(weatherData.temperature, selectedMode, newIndices);
+    }
+  };
+
   // Kleidungsempfehlungen aktualisieren, wenn sich der Kontext ändert
   useEffect(() => {
     if (weatherData) {
+      // Alternativen-Index zurücksetzen bei Moduswechsel
+      setCurrentAlternativeIndex({});
       updateClothingRecommendations(weatherData.temperature, selectedMode);
     }
   }, [selectedMode, weatherData, babyAgeMonths, babyWeightPercentile]);
 
+  useEffect(() => {
+    if (!weatherData) return;
+    if (selectedMode === 'indoor' || selectedMode === 'sleeping') {
+      updateClothingRecommendations(weatherData.temperature, selectedMode);
+    }
+  }, [feltTemperature]);
+
+  useEffect(() => {
+    setTipsExpanded(false);
+  }, [metaCards]);
+
+  // Helper: Wähle genau EINES aus einer Liste basierend auf Priorität
+  const selectOne = (candidates: string[], priorities: string[]): string | null => {
+    for (const priority of priorities) {
+      if (candidates.includes(priority)) {
+        return priority;
+      }
+    }
+    return candidates[0] || null;
+  };
+
+  // Prioritäten für jede Layer-Kategorie (von höchster zu niedrigster Priorität)
+  const layerPriorities = {
+    bottom: ['Shorts', 'Strumpfhose', 'Hose'],
+    mid: ['Fleecejacke', 'Pullover', 'Dünner Pullover'],
+    outer: ['Overall', 'Tragejacke/-cover', 'Softshellanzug', 'Regenjacke', 'Jacke'],
+  };
+  const carrierOuterPriorities = ['Tragejacke/-cover', 'Jacke', 'Overall'];
+
   // Berechne die Kleidungsempfehlungen basierend auf Temperatur und Kontext
-  const updateClothingRecommendations = (temperature: number, mode: ContextMode) => {
+  const updateClothingRecommendations = (
+    temperature: number,
+    mode: ContextMode,
+    overrideIndices?: { bottom?: number; mid?: number; outer?: number }
+  ) => {
+    // Verwende override indices falls übergeben, sonst state
+    const activeIndices = overrideIndices || currentAlternativeIndex;
     console.log(`Ursprüngliche Temperatur: ${temperature}°C`);
 
-    // 1. Realistische Temperatur bestimmen
-    // Heat Index für Hitze (> 27°C) und Windchill für Kälte (< 10°C)
     const humidity = weatherData?.humidity ?? 50;
     const windSpeed = weatherData?.windSpeed ?? 0;
-    
-    // Gefühlte Temperatur aus der API bevorzugen
-    let adjustedTemp = weatherData?.feelsLike ?? temperature;
-    console.log(`Gefühlte Temperatur aus API: ${adjustedTemp}°C`);
-    
-    // Heat Index berechnen (für höhere Temperaturen)
-    if (temperature > 27 && !weatherData?.feelsLike) {
-      // Vereinfachte Heat Index Formel
+
+    const manualFeltTemp = (mode === 'indoor' || mode === 'sleeping') ? feltTemperature : null;
+    const hasManualFeltTemp = manualFeltTemp !== null && manualFeltTemp !== undefined;
+    if (hasManualFeltTemp) {
+      console.log(`Manuelle gefühlte Temperatur: ${manualFeltTemp}°C`);
+    }
+    let effectiveTemp = manualFeltTemp ?? weatherData?.feelsLike ?? temperature;
+    console.log(`Gefühlte Temperatur Basis: ${effectiveTemp}°C`);
+
+    if (!hasManualFeltTemp && temperature > 27 && !weatherData?.feelsLike) {
       const heatIndex = temperature + (0.05 * humidity);
       console.log(`Berechneter Heat Index: ${heatIndex}°C (bei ${humidity}% Luftfeuchtigkeit)`);
-      adjustedTemp = heatIndex;
+      effectiveTemp = heatIndex;
     }
-    
-    // Windchill berechnen (für niedrigere Temperaturen)
-    if (temperature < 10 && !weatherData?.feelsLike && windSpeed > 5) {
-      // Vereinfachte Windchill Formel
+
+    if (!hasManualFeltTemp && temperature < 10 && !weatherData?.feelsLike && windSpeed > 5) {
       const windChill = temperature - (windSpeed * 0.1);
       console.log(`Berechneter Windchill: ${windChill}°C (bei ${windSpeed} km/h Wind)`);
-      adjustedTemp = windChill;
+      effectiveTemp = windChill;
     }
-    
-    // Kontext-Korrektur addieren
-    const contextModifier = contextModifiers[mode];
+
+    const contextModifier = (hasManualFeltTemp && (mode === 'indoor' || mode === 'sleeping')) ? 0 : contextModifiers[mode];
     console.log(`Kontext-Modifikator: ${contextModifier}°C (${contextDescriptions[mode]})`);
-    adjustedTemp += contextModifier;
-    
-    // Feinkorrektur für Alter
-    const ageModifier = babyAgeMonths < 3 ? -2 : (babyAgeMonths < 6 ? -1 : 0);
+
+    const usePersonalModifiers = !(hasManualFeltTemp && (mode === 'indoor' || mode === 'sleeping'));
+    const ageModifier = usePersonalModifiers ? (babyAgeMonths < 3 ? -2 : (babyAgeMonths < 6 ? -1 : 0)) : 0;
     console.log(`Altersmodifikator: ${ageModifier}°C (${babyAgeMonths} Monate)`);
-    adjustedTemp += ageModifier;
-    
-    // Feinkorrektur für Gewicht
-    const weightModifier = babyWeightPercentile < 25 ? -0.5 : 0;
+
+    const weightModifier = usePersonalModifiers ? (babyWeightPercentile < 25 ? -0.5 : 0) : 0;
     console.log(`Gewichtsmodifikator: ${weightModifier}°C (${babyWeightPercentile}. Perzentile)`);
-    adjustedTemp += weightModifier;
-    
+
+    const modifierSum = ageModifier + weightModifier;
+    let adjustedTemp = effectiveTemp + contextModifier + modifierSum;
     console.log(`Endgültige angepasste Temperatur: ${adjustedTemp}°C`);
 
-    // 2. Temperatur-Bänder definieren
-    let temperatureBand: 'hot' | 'warm' | 'mild' | 'cool' | 'fresh' | 'cold';
-    
-    if (adjustedTemp >= 28) {
-      temperatureBand = 'hot';  // Heiß: ≥ 28°C
-    } else if (adjustedTemp >= 24) {
-      temperatureBand = 'warm'; // Warm: 24-27°C
-    } else if (adjustedTemp >= 21) {
-      temperatureBand = 'mild'; // Mild: 21-23°C  
-    } else if (adjustedTemp >= 16) {
-      temperatureBand = 'cool'; // Kühl: 16-20°C
-    } else if (adjustedTemp >= 11) {
-      temperatureBand = 'fresh'; // Frisch: 11-15°C
-    } else {
-      temperatureBand = 'cold'; // Kalt: ≤ 10°C
-    }
-    
-    console.log(`Temperatur-Band: ${temperatureBand} (${adjustedTemp}°C)`);
+    const temperatureBand = getTemperatureBand(adjustedTemp);
+    console.log(`Temperatur-Band (Außen): ${temperatureBand}`);
 
-    // 3. Regeln pro Band anwenden
-    let recommendations: ClothingItem[] = [];
-    
-    // Basis-Layer (immer Windel)
-    const baseLayer = ['Windel'];
-    
-    // Body-Variante nach Band
-    if (['hot', 'warm'].includes(temperatureBand)) {
-      baseLayer.push('Kurzarmbody');
-    } else {
-      baseLayer.push('Langarmbody');
-    }
-    
-    // Bottom-Layer
-    const bottomLayer: string[] = [];
-    if (temperatureBand === 'hot') {
-      bottomLayer.push('Shorts');
-    } else if (temperatureBand === 'warm' && adjustedTemp >= 25) {
-      bottomLayer.push('Shorts');
-    } else {
-      bottomLayer.push('Hose');
-    }
-    
-    // Mid-Layer (Pullover)
-    const midLayer: string[] = [];
-    if (temperatureBand === 'cool') {
-      midLayer.push('Dünner Pullover');
-    } else if (['fresh', 'cold'].includes(temperatureBand)) {
-      midLayer.push('Pullover');
-    }
-    
-    // Outer-Layer (Jacke / Overall)
-    const outerLayer: string[] = [];
-    if (temperatureBand === 'fresh') {
-      outerLayer.push('Jacke');
-    } else if (temperatureBand === 'cold') {
-      // Spezialfall Autositz - keine dicken Overalls während des Anschnallens
-      if (mode === 'carSeat') {
-        outerLayer.push('Jacke');
-      } else {
-        outerLayer.push('Overall');
-      }
-    }
-    
-    // Accessoires
-    const accessories: string[] = [];
-    if (['cool', 'fresh', 'cold'].includes(temperatureBand)) {
-      accessories.push('Socken');
-    }
-    if (['fresh', 'cold'].includes(temperatureBand)) {
-      accessories.push('Mütze');
-    }
-    if (temperatureBand === 'cold') {
-      accessories.push('Handschuhe');
-    }
+    const indoorReferenceTemp = hasManualFeltTemp ? manualFeltTemp : effectiveTemp;
+    const indoorComfortTemp = Math.min(
+      Math.max(indoorReferenceTemp + (hasManualFeltTemp ? 0 : contextModifiers.indoor) + modifierSum, 16),
+      26
+    );
+    const layeringBand = mode === 'sleeping' ? getTemperatureBand(indoorComfortTemp) : temperatureBand;
+    const referenceTemp = mode === 'sleeping' ? indoorComfortTemp : adjustedTemp;
 
-    // 4. Kontext-Sonderregeln
-    let finalRecommendations: string[] = [];
-    let metaWarnings: string[] = [];
-    
-    // Carrier-Modus: Eine Schicht weniger
-    if (mode === 'carrier' && temperatureBand !== 'hot') {
-      // Eine wärmere Kategorie verwenden (eine Schicht weniger)
-      if (midLayer.length > 0) {
-        midLayer.pop(); // Pullover entfernen
-      } else if (outerLayer.length > 0) {
-        outerLayer.pop(); // Outer-Layer entfernen
-      }
-      metaWarnings.push("In der Trage wird es wärmer - eine Schicht weniger als normal empfohlen.");
-    }
-    
-    // CarSeat-Modus: Warnung zum Anschnallen
-    if (mode === 'carSeat' && temperatureBand === 'cold') {
-      metaWarnings.push("Wichtig: Keine dicken Overalls beim Anschnallen. Jacke erst über dem Gurt platzieren.");
-    }
-    
-    // Schlafmodus: Spezifische Logik für TOG-Schlafsäcke
     if (mode === 'sleeping') {
-      // Nur Basis-Layer verwenden (Windel + Body)
-      finalRecommendations = [...baseLayer];
-      
-      // TOG-Schlafsack je nach Band hinzufügen
-      if (['hot', 'warm'].includes(temperatureBand)) {
-        finalRecommendations.push('Schlafsack 0.5 TOG');
-      } else if (['mild', 'cool'].includes(temperatureBand)) {
-        if (adjustedTemp >= 20) {
-          finalRecommendations.push('Schlafsack 1.0 TOG');
-        } else {
-          finalRecommendations.push('Schlafsack 2.5 TOG');
+      console.log(`Schlaf-Referenztemperatur: ${indoorComfortTemp}°C (Band ${layeringBand})`);
+    }
+
+    const heroTempValue = Math.round(hasManualFeltTemp ? manualFeltTemp : temperature);
+    const heroBandLabel = temperatureBandLabels[temperatureBand] ?? 'mild';
+    const heroTitleText = `Heute ${heroBandLabel} (${heroTempValue}°C)`;
+    const heroSubtitleText = getHeroRecommendation(layeringBand, mode);
+    setHeroTitle(heroTitleText);
+    setHeroSubtitle(heroSubtitleText);
+
+    const description = weatherData?.description?.toLowerCase() ?? '';
+    const iconName = weatherData?.icon ?? '';
+    const requiresRainProtection = description.includes('regen') || iconName.includes('rain') || iconName.includes('drizzle');
+    const indicatesSnow = description.includes('schnee') || iconName.includes('snow');
+    const indicatesWind = description.includes('wind') || windSpeed >= 20;
+
+    // ✨ EXKLUSIVE LayerSlot-Logik: Maximal 1 Teil pro Layer
+    const layers: LayerSlot = {
+      base: null,
+      bottom: null,
+      mid: null,
+      outer: null,
+      accessories: [],
+    };
+
+    // Base Layer (Windel + Body)
+    if (mode === 'sleeping') {
+      layers.base = referenceTemp >= 20 ? 'Kurzarmbody' : 'Langarmbody';
+    } else {
+      layers.base = ['hot', 'warm'].includes(layeringBand) ? 'Kurzarmbody' : 'Langarmbody';
+    }
+
+    // Bottom Layer: Sammle Kandidaten, wähle dann EINEN
+    const bottomCandidates: string[] = [];
+    if (layeringBand === 'hot' || (layeringBand === 'warm' && referenceTemp >= 25)) {
+      bottomCandidates.push('Shorts');
+    } else {
+      if (['fresh', 'cold'].includes(layeringBand)) {
+        bottomCandidates.push('Strumpfhose');
+      }
+      bottomCandidates.push('Hose');
+    }
+
+    // Alternativen speichern, wenn mehrere Optionen vorhanden
+    const alternatives: LayerAlternatives = {};
+    if (bottomCandidates.length > 1) {
+      alternatives.bottom = bottomCandidates;
+    }
+
+    // Wähle die aktuell gewählte Alternative oder die erste
+    const bottomIndex = activeIndices.bottom ?? 0;
+    layers.bottom = bottomCandidates[bottomIndex] || selectOne(bottomCandidates, layerPriorities.bottom);
+
+    // Mid Layer: Sammle Kandidaten, wähle dann EINEN
+    const midCandidates: string[] = [];
+    if (layeringBand === 'cool') {
+      midCandidates.push('Dünner Pullover');
+    } else if (layeringBand === 'fresh') {
+      midCandidates.push('Pullover');
+    } else if (layeringBand === 'cold') {
+      midCandidates.push('Pullover');
+      midCandidates.push('Fleecejacke');
+    }
+
+    if (indicatesWind && ['fresh', 'cold'].includes(layeringBand)) {
+      midCandidates.push('Fleecejacke');
+    }
+
+    // Duplikate entfernen
+    const uniqueMidCandidates = Array.from(new Set(midCandidates));
+    if (uniqueMidCandidates.length > 1) {
+      alternatives.mid = uniqueMidCandidates;
+    }
+
+    const midIndex = activeIndices.mid ?? 0;
+    layers.mid = uniqueMidCandidates[midIndex] || selectOne(uniqueMidCandidates, layerPriorities.mid);
+
+    // Outer Layer: Sammle Kandidaten, wähle dann EINEN
+    const outerCandidates: string[] = [];
+    if (mode === 'carrier') {
+      if (['fresh', 'cold'].includes(layeringBand)) {
+        outerCandidates.push('Jacke');
+        outerCandidates.push('Tragejacke/-cover');
+      }
+      if (layeringBand === 'cold') {
+        outerCandidates.push('Overall');
+      }
+    } else {
+      if (layeringBand === 'fresh') {
+        outerCandidates.push('Jacke');
+      } else if (layeringBand === 'cold' && mode !== 'carSeat') {
+        outerCandidates.push('Overall');
+      }
+
+      if ((requiresRainProtection || indicatesSnow) && layeringBand !== 'hot') {
+        outerCandidates.push('Regenjacke');
+      }
+
+      if (indicatesWind && ['cool', 'fresh', 'cold'].includes(layeringBand)) {
+        outerCandidates.push('Softshellanzug');
+      } else if (layeringBand === 'fresh' && mode === 'stroller') {
+        outerCandidates.push('Softshellanzug');
+      }
+    }
+
+    // Duplikate entfernen
+    const uniqueOuterCandidates = Array.from(new Set(outerCandidates));
+    if (uniqueOuterCandidates.length > 1) {
+      alternatives.outer = uniqueOuterCandidates;
+    }
+
+    const outerIndex = activeIndices.outer ?? 0;
+    const outerPriorities = mode === 'carrier' ? carrierOuterPriorities : layerPriorities.outer;
+    layers.outer = uniqueOuterCandidates[outerIndex] || selectOne(uniqueOuterCandidates, outerPriorities);
+
+    if (mode === 'carrier' && layeringBand === 'cold') {
+      delete alternatives.bottom;
+    }
+
+    // Speichere Alternativen für die UI
+    setLayerAlternatives(alternatives);
+
+    // Accessories (können mehrere sein, aber sinnvoll begrenzt)
+    const accessoriesSet = new Set<string>();
+    const addAccessory = (item: string) => {
+      if (item) {
+        accessoriesSet.add(item);
+      }
+    };
+
+    const isOutdoorMode = mode === 'stroller' || mode === 'carrier' || mode === 'carSeat';
+
+    if (mode !== 'sleeping') {
+      addAccessory('Socken');
+    } else if (['fresh', 'cold'].includes(layeringBand)) {
+      addAccessory('Socken');
+    }
+
+    if (['hot', 'warm', 'mild'].includes(layeringBand) && isOutdoorMode) {
+      addAccessory('Sonnenhut');
+    }
+
+    if (mode === 'carrier' && ['cool', 'fresh', 'cold'].includes(layeringBand)) {
+      addAccessory('Halstuch');
+    } else if (['cool', 'fresh'].includes(layeringBand) && isOutdoorMode) {
+      addAccessory('Halstuch');
+    }
+
+    if (layeringBand === 'cold' && isOutdoorMode && mode !== 'carrier') {
+      addAccessory('Schal');
+    }
+
+    if (['fresh', 'cold'].includes(layeringBand) && isOutdoorMode) {
+      addAccessory('Mütze');
+    }
+
+    if (layeringBand === 'cold' && isOutdoorMode) {
+      addAccessory('Handschuhe');
+    }
+
+    if (babyAgeMonths >= 9 && ['cool', 'fresh', 'cold'].includes(layeringBand) && isOutdoorMode) {
+      addAccessory('Schuhe');
+    }
+
+    if (mode === 'carrier' && babyAgeMonths < 9 && ['cool', 'fresh', 'cold'].includes(layeringBand)) {
+      addAccessory('Füßlinge');
+    }
+
+    if ((mode === 'stroller' || (mode === 'carSeat' && ['fresh', 'cold'].includes(layeringBand))) && ['cool', 'fresh', 'cold'].includes(layeringBand)) {
+      addAccessory('Kinderwagen-Decke');
+    }
+
+    layers.accessories = Array.from(accessoriesSet);
+
+    // 4. Kontext-Sonderregeln (jetzt mit LayerSlot)
+    const metaWarnings = new Set<string>();
+
+    if (mode === 'carrier' && layeringBand !== 'hot') {
+      metaWarnings.add("In der Trage wird es wärmer - bei Bedarf eine Schicht weniger wählen.");
+    }
+
+    if (mode === 'carSeat') {
+      // Im Autositz: Keine dicken Anzüge, nur dünne Jacken
+      if (layers.outer === 'Overall' || layers.outer === 'Softshellanzug') {
+        layers.outer = null;
+      }
+
+      if (layeringBand !== 'hot' && !layers.outer) {
+        layers.outer = 'Jacke';
+      }
+
+      if (['cool', 'fresh', 'cold'].includes(layeringBand)) {
+        metaWarnings.add("Im Autositz nur dünne Jacken tragen und warme Schichten erst nach dem Anschnallen ergänzen.");
+        layers.accessories = layers.accessories.filter(item => item !== 'Handschuhe' && item !== 'Schal');
+        if (!layers.accessories.includes('Kinderwagen-Decke')) {
+          layers.accessories.push('Kinderwagen-Decke');
         }
-      } else { // fresh, cold
+      }
+    }
+
+    // Baue finalRecommendations aus LayerSlot
+    let finalRecommendations: string[] = [];
+
+    if (mode === 'sleeping') {
+      // Schlafen: Windel + Body + ggf. Schlafanzug + Schlafsack + ggf. Socken
+      finalRecommendations.push('Windel');
+      if (layers.base) finalRecommendations.push(layers.base);
+
+      if (referenceTemp < 24) {
+        finalRecommendations.push('Schlafanzug');
+      }
+
+      if (referenceTemp >= 24) {
+        finalRecommendations.push('Schlafsack 0.5 TOG');
+      } else if (referenceTemp >= 20) {
+        finalRecommendations.push('Schlafsack 1.0 TOG');
+      } else {
         finalRecommendations.push('Schlafsack 2.5 TOG');
       }
+
+      const sleepAccessories = layers.accessories.filter(item => item === 'Socken');
+      finalRecommendations.push(...sleepAccessories);
+    } else if (mode === 'indoor') {
+      // Indoor: Base + Bottom + ggf. Mid + Socken
+      finalRecommendations.push('Windel');
+      if (layers.base) finalRecommendations.push(layers.base);
+      if (layers.bottom) finalRecommendations.push(layers.bottom);
+      if (['cool', 'fresh', 'cold'].includes(layeringBand) && layers.mid) {
+        finalRecommendations.push(layers.mid);
+      }
+      const indoorAccessories = layers.accessories.filter(item => item === 'Socken');
+      finalRecommendations.push(...indoorAccessories);
     } else {
-      // Normale Kleidungsempfehlung für Nicht-Schlafmodus
-      finalRecommendations = [...baseLayer, ...bottomLayer, ...midLayer, ...outerLayer, ...accessories];
+      // Outdoor: Alle Layers
+      finalRecommendations.push('Windel');
+      if (layers.base) finalRecommendations.push(layers.base);
+      if (layers.bottom) finalRecommendations.push(layers.bottom);
+      if (mode === 'carrier' && layeringBand === 'cold') {
+        if (!finalRecommendations.includes('Strumpfhose')) {
+          finalRecommendations.push('Strumpfhose');
+        }
+        if (!finalRecommendations.includes('Hose')) {
+          finalRecommendations.push('Hose');
+        }
+      }
+      if (layers.mid) finalRecommendations.push(layers.mid);
+      if (layers.outer) finalRecommendations.push(layers.outer);
+      finalRecommendations.push(...layers.accessories);
     }
-    
+
     console.log("Empfohlene Teile:", finalRecommendations.join(", "));
-    
-    // 5. Meta-Tipps & Warnungen
+
     const cards = [];
-    
-    // Wetter-Tipp hinzufügen 
-    const tipList = weatherTips[temperatureBand];
-    const randomTip = tipList ? tipList[Math.floor(Math.random() * tipList.length)] : '';
-    setWeatherTip(randomTip);
-    
-    cards.push({
-      title: "Tipp des Tages",
-      content: weatherTip,
-      icon: "lightbulb.fill" as any
-    });
-    
-    // Warnungen hinzufügen, falls vorhanden
-    if (metaWarnings.length > 0) {
+
+    const tipList = weatherTips[temperatureBand] ?? [];
+    const randomTip = tipList.length > 0 ? tipList[Math.floor(Math.random() * tipList.length)] : '';
+
+    if (randomTip) {
       cards.push({
-        title: "Wichtiger Hinweis",
-        content: metaWarnings[0],
+        title: "Tipp für heute",
+        content: randomTip,
+        icon: "lightbulb.fill" as any
+      });
+    }
+
+    const warnings = Array.from(metaWarnings);
+    if (warnings.length > 0) {
+      cards.push({
+        title: "Gut zu wissen",
+        content: warnings[0],
         icon: "exclamationmark.triangle.fill" as any
       });
     }
-    
-    // Hitze- oder Kältetipps
+
     if (temperatureBand === 'hot') {
       cards.push({
-        title: "Hitze-Tipp",
-        content: "Denken Sie an Schatten, ausreichend Flüssigkeit, Sonnencreme und einen Sonnenhut.",
+        title: "Hitze-Hinweis",
+        content: "Schatten, trinken, Sonnenhut – kurze Nacken-Checks reichen.",
         icon: "sun.max.fill" as any
       });
     } else if (temperatureBand === 'cold') {
       cards.push({
-        title: "Kälte-Tipp",
-        content: "Mehrere dünne Schichten wärmen besser als eine dicke. Prüfen Sie die Temperatur im Nacken, nicht an Händen oder Füßen.",
+        title: "Kälte-Hinweis",
+        content: "Fühlt sich der Nacken warm an? Dann ist alles gut.",
         icon: "snowflake" as any
       });
     }
-    
+
     setMetaCards(cards);
-    
-    // 6. Empfehlungs-Erstellung - ClothingItems aus dem Katalog filtern
-    let clothingItems: ClothingItem[] = [];
-    
-    // Wandle String-Empfehlungen in ClothingItems um
+
+    const clothingItems: ClothingItem[] = [];
     for (const category in clothingCatalogue) {
       const categoryItems = clothingCatalogue[category as ClothingCategory];
-      
       categoryItems.forEach(item => {
-        // Prüfe, ob das Teil in den Empfehlungen ist
-        const isRecommended = finalRecommendations.includes(item.name);
-        
-        if (isRecommended) {
-          clothingItems.push({...item, recommended: true});
+        if (finalRecommendations.includes(item.name)) {
+          clothingItems.push({ ...item, recommended: true });
         }
       });
     }
-    
+
     setClothingRecommendations(clothingItems);
   };
 
@@ -920,105 +1475,160 @@ export default function BabyWeatherScreen() {
     setSearchType('cityName');
   };
 
-  const renderEmpty = () => (
-    <View style={styles.noRecommendations}>
-      <IconSymbol name="questionmark.circle" size={40} color={theme.tabIconDefault} />
-      <ThemedText style={styles.noRecommendationsText}>
-        Keine spezifischen Empfehlungen für diese Temperatur und Situation.
-      </ThemedText>
-    </View>
-  );
-
   const renderFooter = () => (
-    <ThemedText style={styles.disclaimer}>
+    <ThemedText style={[styles.disclaimer, { color: textSecondary }]}>
       Hinweis: Die Empfehlungen sind Richtwerte und sollten an die individuellen Bedürfnisse deines Babys angepasst werden.
     </ThemedText>
   );
 
-  const renderClothingItem = ({ item }: { item: ClothingItem }) => (
-    <View style={styles.clothingItem}>
-      <View style={styles.clothesPin} />
-      <View style={[
-        styles.clothingItemContent,
-        { backgroundColor: 'rgba(255, 255, 255, 0.85)' }
-      ]}>
-        {item.image ? (
-          <Image source={getClothingImage(item.image)} style={styles.clothingImage} />
+  // Helper: Bestimme welchem Layer ein Item gehört
+  const getItemLayer = (itemName: string): 'bottom' | 'mid' | 'outer' | null => {
+    if (layerAlternatives.bottom?.includes(itemName)) return 'bottom';
+    if (layerAlternatives.mid?.includes(itemName)) return 'mid';
+    if (layerAlternatives.outer?.includes(itemName)) return 'outer';
+    return null;
+  };
+
+  const getDisplayName = (name: string, mode: ContextMode): string => {
+    if (mode === 'carrier') {
+      if (name === 'Strumpfhose') return 'Leggings';
+      if (name === 'Mütze') return 'Wintermütze';
+    }
+    return name;
+  };
+
+  const renderClothingItem = ({ item }: { item: ClothingItem }) => {
+    const itemLayer = getItemLayer(item.name);
+    const hasAlternatives = itemLayer && layerAlternatives[itemLayer] && layerAlternatives[itemLayer]!.length > 1;
+    const alternatives = itemLayer ? layerAlternatives[itemLayer] : null;
+    const currentIndex = itemLayer ? (currentAlternativeIndex[itemLayer] ?? 0) : 0;
+    const nextAlternative = hasAlternatives && alternatives ? alternatives[(currentIndex + 1) % alternatives.length] : null;
+    const displayName = getDisplayName(item.name, selectedMode);
+
+    return (
+      <View style={styles.outfitItem}>
+        <View
+          style={[
+            styles.outfitTile,
+            {
+              backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.7)',
+              borderColor: isDark ? 'rgba(255,255,255,0.24)' : 'rgba(255,255,255,0.5)',
+            },
+          ]}
+        >
+          {item.image ? (
+            <Image source={getClothingImage(item.image)} style={styles.clothingImage} />
+          ) : (
+            <View style={[styles.iconBackground, { backgroundColor: getClothingColor(item.name) }]}>
+              <IconSymbol name={getClothingIcon(item.name)} size={36} color="#FFFFFF" />
+            </View>
+          )}
+          {hasAlternatives && (
+            <TouchableOpacity
+              style={[styles.swapButton, { backgroundColor: isDark ? 'rgba(166,205,237,0.75)' : 'rgba(125, 90, 80, 0.85)' }]}
+              onPress={() => itemLayer && swapLayerAlternative(itemLayer)}
+              accessibilityLabel="Alternative wechseln"
+            >
+              <IconSymbol name="arrow.triangle.2.circlepath" size={16} color="#FFFFFF" />
+            </TouchableOpacity>
+          )}
+        </View>
+        <ThemedText style={[styles.outfitName, { color: textSecondary }]}>{displayName}</ThemedText>
+      </View>
+    );
+  };
+
+  const renderOutfitCard = () => {
+    const recommendedItems = clothingRecommendations.filter(item => item.recommended);
+
+    return (
+      <LiquidGlassCard
+        style={[styles.sectionCard, styles.outfitCard, styles.outfitCardWide]}
+        intensity={26}
+        overlayColor={glassOverlay}
+        borderColor={glassBorder}
+      >
+        <ThemedText style={[styles.sectionTitle, { color: textSecondary }]}>
+          Kleidung für {contextDescriptions[selectedMode]}
+        </ThemedText>
+        {recommendedItems.length > 0 ? (
+          <View style={styles.outfitGrid}>
+            {recommendedItems.map(item => (
+              <View key={item.id} style={styles.outfitGridItem}>
+                {renderClothingItem({ item })}
+              </View>
+            ))}
+          </View>
         ) : (
-          <View style={[
-            styles.iconBackground, 
-            { backgroundColor: getClothingColor(item.name) }
-          ]}>
-            <IconSymbol name={getClothingIcon(item.name)} size={36} color="#FFFFFF" />
+          <View style={styles.noRecommendations}>
+            <IconSymbol name="questionmark.circle" size={32} color={iconSecondaryColor} />
+            <ThemedText style={[styles.noRecommendationsText, { color: textSecondary }]}>
+              Keine spezifischen Empfehlungen für diese Situation.
+            </ThemedText>
           </View>
         )}
-      </View>
-      <ThemedText style={styles.clothingName}>{item.name}</ThemedText>
-    </View>
-  );
+      </LiquidGlassCard>
+    );
+  };
 
-  // Zusätzliches Rendering für Meta-Cards
-  const renderMetaCard = ({ item }: { item: {title: string, content: string, icon: any} }) => (
-    <LiquidGlassCard style={styles.metaCard} intensity={26}>
-      <View style={styles.metaCardHeader}>
-        <IconSymbol name={item.icon} size={22} color={theme.accent} />
-        <ThemedText style={styles.metaCardTitle}>{item.title}</ThemedText>
-      </View>
-      <ThemedText style={styles.metaCardContent}>{item.content}</ThemedText>
-    </LiquidGlassCard>
-  );
+  const renderTipsCard = () => {
+    if (!metaCards || metaCards.length === 0) {
+      return null;
+    }
+
+    const primaryTip = metaCards[0];
+    const extraTips = metaCards.slice(1);
+
+    return (
+      <LiquidGlassCard
+        style={[styles.sectionCard, styles.tipCard]}
+        intensity={26}
+        overlayColor={glassOverlay}
+        borderColor={glassBorder}
+        radius={18}
+      >
+        <View style={styles.tipHeader}>
+          <ThemedText style={[styles.sectionTitle, styles.tipTitle, { color: textSecondary }]}>{primaryTip.title}</ThemedText>
+        </View>
+        <ThemedText style={[styles.tipContent, { color: textPrimary }]}>{primaryTip.content}</ThemedText>
+        {extraTips.length > 0 && (
+          <TouchableOpacity
+            style={styles.tipToggle}
+            onPress={() => setTipsExpanded(!tipsExpanded)}
+          >
+            <ThemedText style={[styles.tipToggleText, { color: textSecondary }]}>
+              {tipsExpanded ? 'Weniger anzeigen' : 'Mehr erfahren'}
+            </ThemedText>
+            <IconSymbol
+              name={tipsExpanded ? 'chevron.up' : 'chevron.down'}
+              size={14}
+              color={iconSecondaryColor}
+            />
+          </TouchableOpacity>
+        )}
+        {tipsExpanded && extraTips.length > 0 && (
+          <View style={styles.tipList}>
+            {extraTips.map((tip, index) => (
+              <View key={`${tip.title}-${index}`} style={styles.tipListItem}>
+                <IconSymbol name={tip.icon} size={16} color={iconSecondaryColor} />
+                <ThemedText style={[styles.tipListText, { color: textSecondary }]}>{tip.content}</ThemedText>
+              </View>
+            ))}
+          </View>
+        )}
+      </LiquidGlassCard>
+    );
+  };
 
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
       <ThemedBackground style={styles.backgroundImage}>
         <SafeAreaView style={styles.container}>
-          <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
+          <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
           
           <Header title="Babywetter" showBackButton />
           
-          {!isLoading && !errorMessage && weatherData ? (
-          <FlatList
-            ListHeaderComponent={
-              <MemoHeader 
-                colorScheme={colorScheme}
-                showBabyInfo={showBabyInfo}
-                setShowBabyInfo={setShowBabyInfo}
-                searchType={searchType}
-                toggleLocationMode={toggleLocationMode}
-                switchToZipCodeSearch={switchToZipCodeSearch}
-                switchToCitySearch={switchToCitySearch}
-                zipCode={zipCode}
-                handleZipCodeChange={handleZipCodeChange}
-                handleZipCodeSearch={handleZipCodeSearch}
-                cityName={cityName}
-                handleCityNameChange={handleCityNameChange}
-                handleCitySearch={handleCitySearch}
-                zipCodeInputRef={zipCodeInputRef}
-                cityNameInputRef={cityNameInputRef}
-                weatherData={weatherData}
-                isLoading={isLoading}
-                errorMessage={errorMessage}
-                selectedMode={selectedMode}
-                setSelectedMode={setSelectedMode}
-                babyAgeMonths={babyAgeMonths}
-                babyWeightPercentile={babyWeightPercentile}
-                metaCards={metaCards}
-              />
-            }
-            ListEmptyComponent={renderEmpty}
-            ListFooterComponent={renderFooter}
-            data={clothingRecommendations.filter(item => item.recommended)}
-            renderItem={renderClothingItem}
-            keyExtractor={item => item.id}
-            numColumns={3}
-            style={styles.scrollView}
-            contentContainerStyle={styles.contentContainer}
-            columnWrapperStyle={styles.columnWrapper}
-            initialNumToRender={9}
-            removeClippedSubviews={false}
-          />
-        ) : (
           <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
             <MemoHeader 
               colorScheme={colorScheme}
@@ -1041,12 +1651,22 @@ export default function BabyWeatherScreen() {
               errorMessage={errorMessage}
               selectedMode={selectedMode}
               setSelectedMode={setSelectedMode}
+              feltTemperature={feltTemperature}
+              setFeltTemperature={setFeltTemperature}
+              feltTemperatureOptions={FELT_TEMPERATURE_OPTIONS}
               babyAgeMonths={babyAgeMonths}
               babyWeightPercentile={babyWeightPercentile}
-              metaCards={metaCards}
+              heroTitle={heroTitle}
+              heroSubtitle={heroSubtitle}
             />
+            {!isLoading && !errorMessage && weatherData && (
+              <>
+                {renderOutfitCard()}
+                {renderTipsCard()}
+                {renderFooter()}
+              </>
+            )}
           </ScrollView>
-        )}
         </SafeAreaView>
       </ThemedBackground>
     </>
@@ -1084,19 +1704,43 @@ function getClothingIcon(name: string): any {
       return 'figure.stand';
     case 'shorts':
       return 'figure.child';
+    case 'strumpfhose':
+      return 'figure.walk';
     case 'dünner pullover':
     case 'pullover':
       return 'person.crop.square.filled.and.at.rectangle.fill';
+    case 'fleecejacke':
+      return 'thermometer.snowflake';
     case 'jacke':
       return 'person.fill';
     case 'overall':
       return 'person.fill.checkmark';
+    case 'softshellanzug':
+      return 'shield.fill';
+    case 'regenjacke':
+      return 'cloud.rain.fill';
     case 'mütze':
       return 'crown.fill';
     case 'socken':
       return 'figure.walk';
     case 'handschuhe':
       return 'hand.raised.fill';
+    case 'sonnenhut':
+      return 'sun.max.fill';
+    case 'halstuch':
+      return 'wind';
+    case 'schal':
+      return 'snowflake';
+    case 'schuhe':
+      return 'shoeprints.fill';
+    case 'kinderwagen-decke':
+      return 'bed.double';
+    case 'tragejacke/-cover':
+      return 'person.2.fill';
+    case 'füßlinge':
+      return 'shoeprints.fill';
+    case 'schlafanzug':
+      return 'moon.stars.fill';
     case 'schlafsack 0.5 tog':
     case 'schlafsack 1.0 tog':
     case 'schlafsack 2.5 tog':
@@ -1118,20 +1762,44 @@ function getClothingColor(name: string): string {
       return '#6495ED';
     case 'shorts':
       return '#87CEFA';
+    case 'strumpfhose':
+      return '#F5DEB3';
     case 'dünner pullover':
       return '#98FB98';
     case 'pullover':
       return '#DDA0DD';
+    case 'fleecejacke':
+      return '#6BA292';
     case 'jacke':
       return '#87CEEB';
     case 'overall':
       return '#4682B4';
+    case 'softshellanzug':
+      return '#7FB3D5';
+    case 'regenjacke':
+      return '#1E90FF';
     case 'mütze':
       return '#FFD700';
     case 'socken':
       return '#FFA07A';
     case 'handschuhe':
       return '#9DD3A8';
+    case 'sonnenhut':
+      return '#FFD39B';
+    case 'halstuch':
+      return '#FF8C69';
+    case 'schal':
+      return '#B22222';
+    case 'schuhe':
+      return '#8B4513';
+    case 'kinderwagen-decke':
+      return '#F0E68C';
+    case 'tragejacke/-cover':
+      return '#C2B1A1';
+    case 'füßlinge':
+      return '#C8A87A';
+    case 'schlafanzug':
+      return '#D6C4B5';
     case 'schlafsack 0.5 tog':
       return '#ADD8E6';
     case 'schlafsack 1.0 tog':
@@ -1155,7 +1823,7 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     paddingHorizontal: LAYOUT_PAD,
-    paddingTop: 16,
+    paddingTop: 12,
     paddingBottom: 40,
     alignItems: 'stretch',
   },
@@ -1179,7 +1847,7 @@ const styles = StyleSheet.create({
     padding: 20,
     borderRadius: 22,
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 4,
     overflow: 'hidden',
   },
   errorText: {
@@ -1260,10 +1928,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   weatherDetailText: {
-    fontSize: 13,
+    fontSize: 12,
     marginLeft: 6,
     color: '#7D5A50',
     fontWeight: '500',
+    lineHeight: 16,
+    flexShrink: 1,
   },
   contextContainer: {
     borderRadius: 15,
@@ -1276,14 +1946,20 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
+    letterSpacing: -0.3,
     color: '#7D5A50',
-    marginBottom: 12,
+    marginBottom: 10,
     textAlign: 'center',
+    paddingHorizontal: 8,
+    paddingTop: 4,
+    lineHeight: 28,
+    flexWrap: 'wrap',
+    width: '100%',
   },
   weatherTitle: {
-    marginBottom: 16,
+    marginBottom: 10,
   },
   contextButtons: {
     flexDirection: 'row',
@@ -1315,8 +1991,8 @@ const styles = StyleSheet.create({
   },
   clothingContainer: {
     borderRadius: 15,
-    padding: 20,
-    marginBottom: 20,
+    padding: 18,
+    marginBottom: 14,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -1324,8 +2000,8 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   clotheslineContainer: {
-    marginTop: 20,
-    marginBottom: 20,
+    marginTop: 14,
+    marginBottom: 14,
     alignItems: 'center',
     position: 'relative',
   },
@@ -1342,9 +2018,81 @@ const styles = StyleSheet.create({
     justifyContent: 'space-around',
     width: '100%',
   },
+  outfitCard: {
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+    marginBottom: 4,
+  },
+  outfitCardWide: {
+    width: TIMELINE_CONTENT_WIDTH,
+    alignSelf: 'center',
+  },
+  outfitHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 14,
+    gap: 10,
+  },
+  outfitHeaderText: {
+    flex: 1,
+  },
+  outfitTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#7D5A50',
+  },
+  outfitSubtitle: {
+    fontSize: 12,
+    marginTop: 2,
+    opacity: 0.7,
+    color: '#7D5A50',
+  },
+  outfitGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  outfitGridItem: {
+    width: '32%',
+    marginBottom: 16,
+    minHeight: 110,
+  },
+  outfitItem: {
+    alignItems: 'center',
+    width: '100%',
+  },
+  outfitTile: {
+    width: 84,
+    height: 84,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.5)',
+    marginBottom: 6,
+  },
+  outfitName: {
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'center',
+    color: '#7D5A50',
+    flexWrap: 'wrap',
+    lineHeight: 16,
+    paddingHorizontal: 2,
+  },
+  altLink: {
+    marginTop: 4,
+  },
+  altLinkText: {
+    fontSize: 10,
+    textAlign: 'center',
+    color: '#A67C52',
+    textDecorationLine: 'underline',
+  },
   clothingItem: {
     alignItems: 'center',
-    marginVertical: 15,
+    marginVertical: 10,
     width: '33%',
   },
   clothesPin: {
@@ -1388,26 +2136,56 @@ const styles = StyleSheet.create({
     marginTop: 4,
     color: '#7D5A50',
   },
+  swapButton: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: 'rgba(125, 90, 80, 0.85)',
+    borderRadius: 15,
+    width: 30,
+    height: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  alternativeHint: {
+    fontSize: 10,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    marginTop: 2,
+    color: '#A67C52',
+  },
   disclaimer: {
     fontSize: 12,
     fontStyle: 'italic',
     marginTop: 15,
+    marginBottom: 10,
     textAlign: 'center',
     opacity: 0.7,
     color: '#7D5A50',
-    alignSelf: 'center',
-    width: TIMELINE_CONTENT_WIDTH,
+    lineHeight: 18,
+    paddingHorizontal: 8,
+    flexWrap: 'wrap',
   },
   noRecommendations: {
     alignItems: 'center',
-    padding: 20,
+    paddingVertical: 18,
+    paddingHorizontal: 10,
     alignSelf: 'center',
-    width: TIMELINE_CONTENT_WIDTH,
+    width: '100%',
   },
   noRecommendationsText: {
     fontSize: 14,
     textAlign: 'center',
     marginTop: 10,
+    lineHeight: 20,
+    paddingHorizontal: 8,
+    color: '#7D5A50',
+    flexWrap: 'wrap',
   },
   locationContainer: {
     borderRadius: 15,
@@ -1438,8 +2216,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.12)',
   },
   activeLocationButton: {
-    borderColor: 'rgba(100,150,255,0.55)',
-    backgroundColor: 'rgba(166,205,237,0.2)',
+    borderColor: 'rgba(100,150,255,0.75)',
+    backgroundColor: 'rgba(166,205,237,0.35)',
   },
   locationButtonText: {
     marginLeft: 6,
@@ -1488,7 +2266,8 @@ const styles = StyleSheet.create({
     fontSize: 13,
     textAlign: 'center',
     opacity: 0.7,
-    marginTop: 8,
+    marginTop: 6,
+    marginBottom: 2,
     color: '#7D5A50',
     fontWeight: '500',
   },
@@ -1533,22 +2312,22 @@ const styles = StyleSheet.create({
   },
   infoButton: {
     position: 'absolute',
-    right: 16,
-    top: 14,
-    padding: 5,
+    right: 10,
+    top: 10,
+    padding: 8,
     zIndex: 10,
   },
   infoCard: {
     width: '100%',
     borderRadius: 22,
-    padding: 18,
-    marginBottom: 20,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    marginBottom: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
-    overflow: 'hidden',
   },
   infoTitle: {
     fontSize: 16,
@@ -1575,10 +2354,118 @@ const styles = StyleSheet.create({
   },
   sectionCard: {
     width: '100%',
-    marginBottom: 20,
+    marginBottom: 4,
     borderRadius: 22,
-    padding: 18,
-    overflow: 'hidden',
+    paddingTop: 18,
+    paddingBottom: 16,
+    paddingHorizontal: 24,
+    alignItems: 'stretch',
+  },
+  heroCard: {
+    paddingVertical: 16,
+    paddingHorizontal: 22,
+    alignItems: 'center',
+    borderRadius: 16,
+  },
+  heroTitle: {
+    marginBottom: 6,
+    textAlign: 'center',
+  },
+  heroSubtitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#7D5A50',
+    textAlign: 'center',
+    opacity: 0.85,
+    lineHeight: 22,
+    paddingHorizontal: 8,
+    paddingBottom: 4,
+    flexWrap: 'wrap',
+  },
+  heroContextPill: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.5)',
+    backgroundColor: 'rgba(255,255,255,0.25)',
+  },
+  heroContextText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#7D5A50',
+  },
+  tipCard: {
+    paddingTop: 18,
+    paddingBottom: 20,
+    paddingHorizontal: 22,
+    borderRadius: 18,
+    marginBottom: 4,
+  },
+  tipHeader: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  tipTitle: {
+    marginBottom: 0,
+    textAlign: 'center',
+  },
+  tipContent: {
+    fontSize: 13,
+    lineHeight: 20,
+    color: '#7D5A50',
+    textAlign: 'center',
+    paddingHorizontal: 10,
+    marginTop: 4,
+    marginBottom: 10,
+    flexWrap: 'wrap',
+  },
+  tipToggle: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    alignSelf: 'center',
+  },
+  tipToggleText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#7D5A50',
+    lineHeight: 16,
+    textAlign: 'center',
+  },
+  tipList: {
+    marginTop: 12,
+    gap: 10,
+    paddingBottom: 6,
+    paddingHorizontal: 12,
+  },
+  tipListItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'flex-start',
+    gap: 8,
+  },
+  tipListText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 18,
+    color: '#7D5A50',
+    opacity: 0.9,
+    textAlign: 'left',
+  },
+  recommendationCard: {
+    paddingVertical: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   stickyContextCard: {
     backgroundColor: 'rgba(255, 255, 255, 0.95)', // Für iOS
@@ -1586,36 +2473,47 @@ const styles = StyleSheet.create({
   },
   columnWrapper: {
     justifyContent: 'space-around',
-    marginVertical: 10,
+    marginVertical: 6,
     width: TIMELINE_CONTENT_WIDTH,
     alignSelf: 'center',
   },
   metaCardsContainer: {
     width: '100%',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   metaCard: {
     width: '100%',
     borderRadius: 22,
-    padding: 18,
-    marginBottom: 14,
-    overflow: 'hidden',
+    paddingVertical: 20,
+    paddingHorizontal: 16,
+    marginBottom: 12,
   },
   metaCardHeader: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     alignItems: 'center',
-    marginBottom: 8,
+    justifyContent: 'center',
+    marginBottom: 12,
+    paddingHorizontal: 2,
+  },
+  metaCardIcon: {
+    marginBottom: 6,
   },
   metaCardTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '700',
     color: '#7D5A50',
-    marginLeft: 8,
+    textAlign: 'center',
+    lineHeight: 24,
+    paddingHorizontal: 4,
+    flexWrap: 'wrap',
   },
   metaCardContent: {
-    fontSize: 14,
+    fontSize: 13,
     lineHeight: 20,
     color: '#7D5A50',
+    paddingHorizontal: 4,
+    textAlign: 'center',
+    flexWrap: 'wrap',
   },
   contextImage: {
     width: 40,
@@ -1625,16 +2523,17 @@ const styles = StyleSheet.create({
   },
   weatherCard: {
     paddingVertical: 16,
-    paddingHorizontal: 16,
+    paddingHorizontal: 22,
   },
   weatherDisplayContainer: {
     width: '100%',
+    paddingHorizontal: 6,
   },
   mainWeatherRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 14,
     paddingHorizontal: 2,
   },
   temperatureBox: {
@@ -1643,7 +2542,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: 'rgba(255,255,255,0.35)',
     borderRadius: 18,
-    padding: 14,
+    padding: 12,
     marginRight: 12,
     minWidth: 130,
     minHeight: 90,
@@ -1659,7 +2558,7 @@ const styles = StyleSheet.create({
   },
   feelsLikeValue: {
     fontSize: 13,
-    marginTop: 4,
+    marginTop: 2,
     opacity: 0.75,
     color: '#7D5A50',
     fontWeight: '600',
@@ -1679,23 +2578,30 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.3)',
     borderRadius: 14,
-    padding: 10,
-    marginBottom: 12,
+    padding: 16,
+    marginBottom: 14,
+    marginHorizontal: 2,
   },
   weatherDescriptionText: {
     fontSize: 15,
     fontWeight: '600',
     color: '#7D5A50',
+    lineHeight: 20,
+    flexWrap: 'wrap',
   },
   locationText: {
     fontSize: 12,
     opacity: 0.7,
     marginTop: 4,
     color: '#7D5A50',
+    lineHeight: 16,
+    flexWrap: 'wrap',
   },
   weatherDetailsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    paddingHorizontal: 4,
+    marginBottom: 8,
   },
   weatherDetailBox: {
     flexDirection: 'row',
@@ -1704,8 +2610,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.3)',
     borderRadius: 14,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
     flex: 0.48,
   },
   tempMainContainer: {
@@ -1736,9 +2642,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
+    marginBottom: 4,
+    paddingHorizontal: 4,
   },
   contextButtonNew: {
     width: '48%',
+    minHeight: 120,
     borderRadius: 18,
     marginBottom: 10,
     borderWidth: 1.5,
@@ -1746,6 +2655,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.12)',
     padding: 12,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   selectedContextButtonNew: {
     borderColor: 'rgba(100,150,255,0.55)',
@@ -1776,5 +2686,51 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
     color: '#7D5A50',
+    lineHeight: 18,
+    paddingHorizontal: 4,
+    flexWrap: 'wrap',
+  },
+  feltTempOptions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  feltTempButton: {
+    width: '30%',
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderRadius: 16,
+    marginBottom: 8,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.3)',
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  feltTempButtonActive: {
+    borderColor: 'rgba(100,150,255,0.55)',
+    backgroundColor: 'rgba(166,205,237,0.25)',
+  },
+  feltTempButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#7D5A50',
+  },
+  feltTempButtonTextActive: {
+    fontWeight: '700',
+    color: '#5D4A40',
+  },
+  feltTempHint: {
+    marginTop: 6,
+    fontSize: 12,
+    textAlign: 'center',
+    opacity: 0.7,
+    color: '#7D5A50',
+    fontWeight: '500',
+  },
+  recommendationTitle: {
+    fontSize: 24,
+    lineHeight: 26,
+    marginBottom: 0,
   },
 });
