@@ -23,6 +23,7 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
+import { getOnboardingCompletionState } from '@/lib/onboarding';
 
 const BottomTabNavigator = createBottomTabNavigator().Navigator;
 
@@ -112,6 +113,8 @@ export default function TabLayout() {
   const colorScheme = useColorScheme();
   const { session, loading: authLoading } = useAuth();
   const { isBabyBorn, isLoading, isResolved } = useBabyStatus();
+  const [isCheckingOnboarding, setIsCheckingOnboarding] = React.useState(false);
+  const [isOnboardingComplete, setIsOnboardingComplete] = React.useState(false);
   const theme = Colors[colorScheme ?? 'light'];
   const adaptiveColors = useAdaptiveColors();
   const hasSession = Boolean(session);
@@ -144,7 +147,40 @@ export default function TabLayout() {
   }, [pathname]);
 
   useEffect(() => {
-    if (!hasSession || !currentRoute || !isResolved || isLoading || !isVisibleTabRoute) return;
+    if (authLoading || !session?.user || !isResolved) {
+      setIsCheckingOnboarding(false);
+      setIsOnboardingComplete(false);
+      return;
+    }
+
+    let cancelled = false;
+    setIsCheckingOnboarding(true);
+
+    getOnboardingCompletionState()
+      .then((complete) => {
+        if (!cancelled) {
+          setIsOnboardingComplete(complete);
+        }
+      })
+      .catch((error) => {
+        console.error('Failed to check onboarding completion on tabs layout:', error);
+        if (!cancelled) {
+          setIsOnboardingComplete(false);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsCheckingOnboarding(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, isResolved, session?.user]);
+
+  useEffect(() => {
+    if (!hasSession || !isOnboardingComplete || !currentRoute || !isResolved || isLoading || !isVisibleTabRoute) return;
 
     if (currentRoute === 'diary') {
       router.replace(isBabyBorn ? '/(tabs)/home' : '/(tabs)/pregnancy-home');
@@ -170,9 +206,9 @@ export default function TabLayout() {
     if (!isBabyBorn && currentRoute && babyOnlyRoutes.has(currentRoute)) {
       router.replace('/(tabs)/pregnancy-home');
     }
-  }, [currentRoute, hasSession, isBabyBorn, isLoading, isResolved, isVisibleTabRoute, router]);
+  }, [currentRoute, hasSession, isBabyBorn, isLoading, isOnboardingComplete, isResolved, isVisibleTabRoute, router]);
 
-  if (authLoading || (hasSession && !isResolved)) {
+  if (authLoading || (hasSession && (!isResolved || isCheckingOnboarding))) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
         <ActivityIndicator size="large" color={theme.accent} />
@@ -182,6 +218,10 @@ export default function TabLayout() {
 
   if (!hasSession) {
     return <Redirect href="/(auth)/login" />;
+  }
+
+  if (!isOnboardingComplete) {
+    return <Redirect href="/(auth)/getUserInfo" />;
   }
 
   // Nur bei dunklem Hintergrundbild die adaptiven Farben verwenden

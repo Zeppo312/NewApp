@@ -1,5 +1,4 @@
-import { supabase } from './supabase';
-import { getCachedUser } from './supabase';
+import { supabase, getCachedUser } from './supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Cache-Konfiguration für Baby-Liste
@@ -17,6 +16,24 @@ export interface BabyInfo {
   photo_url?: string | null;
   baby_gender?: 'male' | 'female' | 'unknown' | string;
 }
+
+export type LinkedBabySelectionOption = {
+  id: string;
+  name?: string;
+  birth_date?: string | null;
+  baby_gender?: 'male' | 'female' | 'unknown' | string;
+  owner_user_id: string;
+  created_at?: string | null;
+  is_shared_between_accounts: boolean;
+  is_owned_by_current_user: boolean;
+};
+
+type ApplyLinkedBabySelectionInput = {
+  currentUserId: string;
+  linkedUserId: string;
+  selectedBabyIds: string[];
+  deleteUnselectedOwnedByCurrentUser?: boolean;
+};
 
 // Typen für die Tagebucheinträge
 export interface DiaryEntry {
@@ -136,6 +153,186 @@ export const syncBabiesForLinkedUsers = async () => {
   } catch (err) {
     console.error('Failed to sync linked babies:', err);
     return { success: false, error: err };
+  }
+};
+
+export const getLinkedBabySelectionOptions = async (
+  currentUserId: string,
+  linkedUserId: string,
+) => {
+  try {
+    if (!currentUserId || !linkedUserId) {
+      return { data: null, error: new Error('Fehlende Benutzer-ID für Baby-Auswahl') };
+    }
+
+    const pairUserIds = Array.from(new Set([currentUserId, linkedUserId]));
+    const { data: babies, error: babiesError } = await supabase
+      .from('baby_info')
+      .select('id, user_id, name, birth_date, baby_gender, created_at')
+      .in('user_id', pairUserIds)
+      .order('created_at', { ascending: true });
+
+    if (babiesError) {
+      console.error('Error loading linked baby selection options:', babiesError);
+      return { data: null, error: babiesError };
+    }
+
+    if (!babies?.length) {
+      return { data: [], error: null };
+    }
+
+    const babyIds = babies.map((baby) => baby.id).filter(Boolean);
+    const { data: memberships, error: membershipsError } = await supabase
+      .from('baby_members')
+      .select('baby_id, user_id')
+      .in('baby_id', babyIds)
+      .in('user_id', pairUserIds);
+
+    if (membershipsError) {
+      console.error('Error loading linked baby memberships:', membershipsError);
+      return { data: null, error: membershipsError };
+    }
+
+    const membersByBabyId = new Map<string, Set<string>>();
+    for (const membership of memberships ?? []) {
+      if (!membership?.baby_id || !membership?.user_id) continue;
+      const memberIds = membersByBabyId.get(membership.baby_id) ?? new Set<string>();
+      memberIds.add(membership.user_id);
+      membersByBabyId.set(membership.baby_id, memberIds);
+    }
+
+    const options: LinkedBabySelectionOption[] = babies
+      .filter((baby) => typeof baby.id === 'string' && typeof baby.user_id === 'string')
+      .map((baby) => {
+        const memberIds = membersByBabyId.get(baby.id) ?? new Set<string>();
+        const counterpartUserId = baby.user_id === currentUserId ? linkedUserId : currentUserId;
+
+        return {
+          id: baby.id,
+          name: baby.name ?? '',
+          birth_date: baby.birth_date ?? null,
+          baby_gender: baby.baby_gender ?? 'unknown',
+          owner_user_id: baby.user_id,
+          created_at: baby.created_at ?? null,
+          is_shared_between_accounts: memberIds.has(counterpartUserId),
+          is_owned_by_current_user: baby.user_id === currentUserId,
+        };
+      });
+
+    return { data: options, error: null };
+  } catch (err) {
+    console.error('Failed to load linked baby selection options:', err);
+    return { data: null, error: err };
+  }
+};
+
+export const applyLinkedBabySelection = async ({
+  currentUserId,
+  linkedUserId,
+  selectedBabyIds,
+  deleteUnselectedOwnedByCurrentUser = false,
+}: ApplyLinkedBabySelectionInput) => {
+  try {
+    const selectionResult = await getLinkedBabySelectionOptions(currentUserId, linkedUserId);
+    if (selectionResult.error) {
+      return { data: null, error: selectionResult.error };
+    }
+
+    const options = selectionResult.data ?? [];
+    const selectedSet = new Set(selectedBabyIds);
+    const keptBabies = options.filter((baby) => selectedSet.has(baby.id));
+
+    if (keptBabies.length === 0) {
+      return { data: null, error: new Error('Bitte wähle mindestens ein Baby aus.') };
+    }
+
+    const membershipUpserts: { baby_id: string; user_id: string; role: string }[] = [];
+    const membershipDeletesByUserId = new Map<string, string[]>();
+
+    for (const baby of options) {
+      const counterpartUserId = baby.owner_user_id === currentUserId ? linkedUserId : currentUserId;
+
+      if (selectedSet.has(baby.id)) {
+        if (!baby.is_shared_between_accounts) {
+          membershipUpserts.push({
+            baby_id: baby.id,
+            user_id: counterpartUserId,
+            role: 'partner',
+          });
+        }
+        continue;
+      }
+
+      const babyIds = membershipDeletesByUserId.get(counterpartUserId) ?? [];
+      babyIds.push(baby.id);
+      membershipDeletesByUserId.set(counterpartUserId, babyIds);
+    }
+
+    await invalidateBabyListCache();
+
+    if (membershipUpserts.length > 0) {
+      const { error: upsertError } = await supabase
+        .from('baby_members')
+        .upsert(membershipUpserts, { onConflict: 'baby_id,user_id' });
+
+      if (upsertError) {
+        console.error('Error sharing selected babies with linked user:', upsertError);
+        return { data: null, error: upsertError };
+      }
+    }
+
+    for (const [userId, babyIds] of membershipDeletesByUserId.entries()) {
+      if (babyIds.length === 0) continue;
+
+      const { error: deleteMembershipError } = await supabase
+        .from('baby_members')
+        .delete()
+        .eq('user_id', userId)
+        .in('baby_id', babyIds);
+
+      if (deleteMembershipError) {
+        console.error('Error removing linked baby memberships:', deleteMembershipError);
+        return { data: null, error: deleteMembershipError };
+      }
+    }
+
+    const deletedOwnedBabyIds: string[] = [];
+    if (deleteUnselectedOwnedByCurrentUser) {
+      const ownUnselectedBabyIds = options
+        .filter((baby) => baby.is_owned_by_current_user && !selectedSet.has(baby.id))
+        .map((baby) => baby.id);
+
+      if (ownUnselectedBabyIds.length > 0) {
+        const { error: deleteBabyError } = await supabase
+          .from('baby_info')
+          .delete()
+          .eq('user_id', currentUserId)
+          .in('id', ownUnselectedBabyIds);
+
+        if (deleteBabyError) {
+          console.error('Error deleting unselected owned babies:', deleteBabyError);
+          return { data: null, error: deleteBabyError };
+        }
+
+        deletedOwnedBabyIds.push(...ownUnselectedBabyIds);
+      }
+    }
+
+    await invalidateBabyListCache();
+
+    return {
+      data: {
+        keptBabyIds: keptBabies.map((baby) => baby.id),
+        removedSharedBabyIds: options
+          .filter((baby) => !selectedSet.has(baby.id))
+          .map((baby) => baby.id),
+        deletedOwnedBabyIds,
+      },
+      error: null,
+    };
+  } catch (err) {
+    console.error('Failed to apply linked baby selection:', err);
+    return { data: null, error: err };
   }
 };
 

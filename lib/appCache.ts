@@ -23,6 +23,18 @@ const CACHE_KEYS = {
   PAYWALL_STATE: 'cache_paywall_state',
 } as const;
 
+const CACHE_KEY_PREFIXES_TO_CLEAR = [
+  CACHE_KEYS.USER_SETTINGS,
+  CACHE_KEYS.USER_PROFILE,
+  CACHE_KEYS.BABY_LIST,
+  CACHE_KEYS.ACTIVE_BABY,
+  CACHE_KEYS.PREMIUM_STATUS,
+  CACHE_KEYS.PAYWALL_STATE,
+  'baby_list_cache_v1',
+  'active_baby_id',
+  'screen_cache_baby_info_',
+] as const;
+
 // Cache Durations (in Millisekunden)
 const CACHE_DURATIONS = {
   USER_SETTINGS: 10 * 60 * 1000,    // 10 Minuten - ändert sich selten
@@ -98,10 +110,38 @@ const setToStorage = async <T>(key: string, data: T): Promise<void> => {
   }
 };
 
+const getScopedCacheKey = (baseKey: string, userId: string): string => {
+  return `${baseKey}:${userId}`;
+};
+
+const removeCacheEntry = async (key: string): Promise<void> => {
+  memoryCache.delete(key);
+  try {
+    await AsyncStorage.removeItem(key);
+  } catch (err) {
+    console.warn(`Failed to remove cache key "${key}":`, err);
+  }
+};
+
+const cleanupLegacyCacheKey = async (baseKey: string): Promise<void> => {
+  await removeCacheEntry(baseKey);
+};
+
+const matchesCachePrefix = (key: string, prefix: string): boolean => {
+  return (
+    key === prefix ||
+    key.startsWith(`${prefix}:`) ||
+    key.startsWith(`${prefix}_`) ||
+    key.startsWith(prefix)
+  );
+};
+
 /**
  * User Settings Cache
  */
 export interface UserSettings {
+  id?: string;
+  user_id?: string;
   theme?: string;
   notifications_enabled?: boolean;
   language?: string;
@@ -110,8 +150,14 @@ export interface UserSettings {
 }
 
 export const getCachedUserSettings = async (): Promise<UserSettings | null> => {
-  const key = CACHE_KEYS.USER_SETTINGS;
+  const { data: userData } = await getCachedUser();
+  const userId = userData.user?.id;
+  if (!userId) return null;
+
+  const key = getScopedCacheKey(CACHE_KEYS.USER_SETTINGS, userId);
   const ttl = CACHE_DURATIONS.USER_SETTINGS;
+
+  void cleanupLegacyCacheKey(CACHE_KEYS.USER_SETTINGS);
 
   // 1. Memory Cache
   const memory = getFromMemory<UserSettings>(key);
@@ -122,14 +168,11 @@ export const getCachedUserSettings = async (): Promise<UserSettings | null> => {
   if (storage) return storage;
 
   // 3. Fetch from Supabase
-  const { data: userData } = await getCachedUser();
-  if (!userData.user) return null;
-
   try {
     const { data, error } = await supabase
       .from('user_settings')
       .select('*')
-      .eq('user_id', userData.user.id)
+      .eq('user_id', userId)
       .order('updated_at', { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -151,8 +194,13 @@ export const getCachedUserSettings = async (): Promise<UserSettings | null> => {
 };
 
 export const invalidateUserSettingsCache = async (): Promise<void> => {
-  memoryCache.delete(CACHE_KEYS.USER_SETTINGS);
-  await AsyncStorage.removeItem(CACHE_KEYS.USER_SETTINGS);
+  const { data: userData } = await getCachedUser();
+  const userId = userData.user?.id;
+
+  await cleanupLegacyCacheKey(CACHE_KEYS.USER_SETTINGS);
+  if (userId) {
+    await removeCacheEntry(getScopedCacheKey(CACHE_KEYS.USER_SETTINGS, userId));
+  }
 };
 
 /**
@@ -162,6 +210,7 @@ export interface UserProfile {
   id: string;
   first_name?: string;
   last_name?: string;
+  user_role?: string;
   avatar_url?: string;
   due_date?: string;
   is_baby_born?: boolean;
@@ -171,8 +220,14 @@ export interface UserProfile {
 }
 
 export const getCachedUserProfile = async (): Promise<UserProfile | null> => {
-  const key = CACHE_KEYS.USER_PROFILE;
+  const { data: userData } = await getCachedUser();
+  const userId = userData.user?.id;
+  if (!userId) return null;
+
+  const key = getScopedCacheKey(CACHE_KEYS.USER_PROFILE, userId);
   const ttl = CACHE_DURATIONS.USER_PROFILE;
+
+  void cleanupLegacyCacheKey(CACHE_KEYS.USER_PROFILE);
 
   const memory = getFromMemory<UserProfile>(key);
   if (memory) return memory;
@@ -180,14 +235,11 @@ export const getCachedUserProfile = async (): Promise<UserProfile | null> => {
   const storage = await getFromStorage<UserProfile>(key, ttl);
   if (storage) return storage;
 
-  const { data: userData } = await getCachedUser();
-  if (!userData.user) return null;
-
   try {
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
-      .eq('id', userData.user.id)
+      .eq('id', userId)
       .maybeSingle();
 
     if (error && (error as any).code !== 'PGRST116') {
@@ -208,8 +260,13 @@ export const getCachedUserProfile = async (): Promise<UserProfile | null> => {
 };
 
 export const invalidateUserProfileCache = async (): Promise<void> => {
-  memoryCache.delete(CACHE_KEYS.USER_PROFILE);
-  await AsyncStorage.removeItem(CACHE_KEYS.USER_PROFILE);
+  const { data: userData } = await getCachedUser();
+  const userId = userData.user?.id;
+
+  await cleanupLegacyCacheKey(CACHE_KEYS.USER_PROFILE);
+  if (userId) {
+    await removeCacheEntry(getScopedCacheKey(CACHE_KEYS.USER_PROFILE, userId));
+  }
 };
 
 /**
@@ -221,8 +278,14 @@ export interface PremiumStatus {
 }
 
 export const getCachedPremiumStatus = async (): Promise<boolean> => {
-  const key = CACHE_KEYS.PREMIUM_STATUS;
+  const { data: userData } = await getCachedUser();
+  const userId = userData.user?.id;
+  if (!userId) return false;
+
+  const key = getScopedCacheKey(CACHE_KEYS.PREMIUM_STATUS, userId);
   const ttl = CACHE_DURATIONS.PREMIUM_STATUS;
+
+  void cleanupLegacyCacheKey(CACHE_KEYS.PREMIUM_STATUS);
 
   const memory = getFromMemory<PremiumStatus>(key);
   if (memory) return memory.isPro;
@@ -230,11 +293,8 @@ export const getCachedPremiumStatus = async (): Promise<boolean> => {
   const storage = await getFromStorage<PremiumStatus>(key, ttl);
   if (storage) return storage.isPro;
 
-  const { data: userData } = await getCachedUser();
-  if (!userData.user) return false;
-
   try {
-    const isPro = await hasRevenueCatEntitlement(userData.user.id);
+    const isPro = await hasRevenueCatEntitlement(userId);
     const status: PremiumStatus = { isPro, checkedAt: Date.now() };
 
     setToMemory(key, status, ttl);
@@ -248,8 +308,13 @@ export const getCachedPremiumStatus = async (): Promise<boolean> => {
 };
 
 export const invalidatePremiumStatusCache = async (): Promise<void> => {
-  memoryCache.delete(CACHE_KEYS.PREMIUM_STATUS);
-  await AsyncStorage.removeItem(CACHE_KEYS.PREMIUM_STATUS);
+  const { data: userData } = await getCachedUser();
+  const userId = userData.user?.id;
+
+  await cleanupLegacyCacheKey(CACHE_KEYS.PREMIUM_STATUS);
+  if (userId) {
+    await removeCacheEntry(getScopedCacheKey(CACHE_KEYS.PREMIUM_STATUS, userId));
+  }
 };
 
 /**
@@ -287,14 +352,18 @@ export const preloadAppData = async (): Promise<void> => {
 export const invalidateAllCaches = async (): Promise<void> => {
   memoryCache.clear();
 
-  await Promise.allSettled([
-    AsyncStorage.removeItem(CACHE_KEYS.USER_SETTINGS),
-    AsyncStorage.removeItem(CACHE_KEYS.USER_PROFILE),
-    AsyncStorage.removeItem(CACHE_KEYS.BABY_LIST),
-    AsyncStorage.removeItem(CACHE_KEYS.ACTIVE_BABY),
-    AsyncStorage.removeItem(CACHE_KEYS.PREMIUM_STATUS),
-    AsyncStorage.removeItem(CACHE_KEYS.PAYWALL_STATE),
-  ]);
+  try {
+    const allKeys = await AsyncStorage.getAllKeys();
+    const matchingKeys = allKeys.filter((key) =>
+      CACHE_KEY_PREFIXES_TO_CLEAR.some((prefix) => matchesCachePrefix(key, prefix))
+    );
+
+    if (matchingKeys.length > 0) {
+      await AsyncStorage.multiRemove(matchingKeys);
+    }
+  } catch (err) {
+    console.warn('Failed to fully invalidate AsyncStorage caches:', err);
+  }
 
   console.log('All caches invalidated');
 };

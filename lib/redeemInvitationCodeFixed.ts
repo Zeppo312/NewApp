@@ -68,6 +68,8 @@ export const redeemInvitationCodeFixed = async (userId: string, invitationCode: 
 
     const linkData = rpcData.linkData ?? rpcData.data ?? null;
     const creatorId = linkData?.creator_id;
+    const invitedId = linkData?.invited_id;
+    const linkedUserId = creatorId === userId ? invitedId ?? null : creatorId ?? null;
 
     if (creatorId) {
       try {
@@ -89,6 +91,7 @@ export const redeemInvitationCodeFixed = async (userId: string, invitationCode: 
     return {
       success: true,
       linkData,
+      linkedUserId,
       creatorInfo: rpcData.creatorInfo ?? null,
       syncedData: rpcData.syncedData ?? null,
     };

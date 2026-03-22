@@ -11,13 +11,14 @@ import { useBackground, type BackgroundPreset } from '@/contexts/BackgroundConte
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { invalidateUserProfileCache, invalidateUserSettingsCache } from '@/lib/appCache';
 import { supabase } from '@/lib/supabase';
-import { saveBabyInfo, syncBabiesForLinkedUsers } from '@/lib/baby';
+import { saveBabyInfo } from '@/lib/baby';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { markPaywallShown, shouldShowPaywall } from '@/lib/paywall';
 import { redeemInvitationCodeFixed } from '@/lib/redeemInvitationCodeFixed';
 import * as ImagePicker from 'expo-image-picker';
 import IOSBottomDatePicker from '@/components/modals/IOSBottomDatePicker';
+import { LinkedBabySelectionModal } from '@/components/LinkedBabySelectionModal';
 
 type StepKey =
   | 'firstName'
@@ -34,7 +35,7 @@ type StepKey =
 const MIN_VALID_PROFILE_DATE_YEAR = 2000;
 const MIN_VALID_PROFILE_DATE = new Date(MIN_VALID_PROFILE_DATE_YEAR, 0, 1);
 
-const ONBOARDING_PRESET_OPTIONS: ReadonlyArray<{ id: BackgroundPreset; label: string }> = [
+const ONBOARDING_PRESET_OPTIONS: readonly { id: BackgroundPreset; label: string }[] = [
   { id: 'default', label: 'Standard' },
   { id: 'verspielt', label: 'Verspielt' },
   { id: 'dunkler', label: 'Dunkler' },
@@ -43,6 +44,8 @@ const ONBOARDING_PRESET_OPTIONS: ReadonlyArray<{ id: BackgroundPreset; label: st
   { id: 'wave', label: 'Wave' },
   { id: 'stone', label: 'Stone' },
 ];
+
+const ONBOARDING_STEP_ORDER: StepKey[] = ['firstName', 'lastName', 'role', 'invitation', 'babyStatus', 'dates', 'babyInfo', 'babyPhoto', 'background', 'summary'];
 
 const PRESET_DARK_MODE_MAP: Record<BackgroundPreset, boolean> = {
   default: false,
@@ -158,17 +161,20 @@ export default function GetUserInfoScreen() {
     dueDate?: string | null;
     isBabyBorn?: boolean | null;
   } | null>(null);
+  const [pendingBabySelection, setPendingBabySelection] = useState<{
+    linkedUserId: string;
+    linkedUserName?: string | null;
+  } | null>(null);
 
   const scrollViewRef = useRef<ScrollView>(null);
 
   // Schrittweise Abfrage
-  const stepOrder: StepKey[] = ['firstName', 'lastName', 'role', 'invitation', 'babyStatus', 'dates', 'babyInfo', 'babyPhoto', 'background', 'summary'];
   const shouldShowInvitationStep = !hasPrefilledInvitationCode
     || (autoRedeemAttempted && !isRedeemingInvitation && invitationStatus !== 'accepted');
   const onboardingSteps = useMemo<StepKey[]>(() => {
     const baseSteps = shouldShowInvitationStep
-      ? stepOrder
-      : stepOrder.filter((step) => step !== 'invitation');
+      ? ONBOARDING_STEP_ORDER
+      : ONBOARDING_STEP_ORDER.filter((step) => step !== 'invitation');
     const defaultSteps = isBabyBorn === true
       ? baseSteps
       : baseSteps.filter((step) => step !== 'babyPhoto');
@@ -261,9 +267,14 @@ export default function GetUserInfoScreen() {
           isBabyBorn: result.syncedData?.isBabyBorn ?? null,
         });
 
-        await syncBabiesForLinkedUsers();
+        if (result.linkedUserId) {
+          setPendingBabySelection({
+            linkedUserId: result.linkedUserId,
+            linkedUserName: partnerName || null,
+          });
+        }
 
-        if (shouldShowSuccessAlert) {
+        if (shouldShowSuccessAlert && !result.linkedUserId) {
           Alert.alert('Einladung verknüpft', partnerName
             ? `Du bist jetzt mit ${partnerName} verbunden.`
             : 'Einladungscode wurde angenommen.');
@@ -544,8 +555,6 @@ export default function GetUserInfoScreen() {
           throw new Error('Baby-Informationen konnten nicht gespeichert werden.');
         }
         await refreshBabyDetails();
-      } else {
-        await syncBabiesForLinkedUsers();
       }
 
       await refreshBabies();
@@ -785,7 +794,7 @@ export default function GetUserInfoScreen() {
                     </View>
                     <View style={styles.infoRowContent}>
                       <ThemedText style={styles.infoRowLabel}>Baby-Daten</ThemedText>
-                      <ThemedText style={styles.infoRowValue}>Vom Partner übernommen</ThemedText>
+                      <ThemedText style={styles.infoRowValue}>Gemeinsam ausgewählt</ThemedText>
                     </View>
                   </View>
                 </View>
@@ -1406,6 +1415,20 @@ export default function GetUserInfoScreen() {
               </View>
             </InputAccessoryView>
           )}
+
+          <LinkedBabySelectionModal
+            visible={Boolean(pendingBabySelection)}
+            currentUserId={user?.id}
+            linkedUserId={pendingBabySelection?.linkedUserId}
+            linkedUserName={pendingBabySelection?.linkedUserName}
+            onApplied={async () => {
+              setPendingBabySelection(null);
+              await Promise.allSettled([
+                refreshBabies(),
+                refreshBabyDetails(),
+              ]);
+            }}
+          />
         </SafeAreaView>
       </TouchableWithoutFeedback>
     </ImageBackground>

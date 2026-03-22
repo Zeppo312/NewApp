@@ -9,6 +9,7 @@ import { ThemedView } from '@/components/ThemedView';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { invalidateAllCaches } from '@/lib/appCache';
 import { verifyOTPToken, resendOTPToken } from '@/lib/supabase';
 
 const OTP_LENGTH = 6;
@@ -146,11 +147,19 @@ export default function VerifyOTPScreen() {
             {
               text: 'Weiter',
               onPress: () => {
-                const nextParams = invitationCode ? { invitationCode: String(invitationCode) } : {};
-                router.replace({
-                  pathname: '/(auth)/getUserInfo',
-                  params: nextParams
-                });
+                void (async () => {
+                  try {
+                    await invalidateAllCaches();
+                  } catch (cacheError) {
+                    console.error('Failed to invalidate caches after OTP verification:', cacheError);
+                  }
+
+                  const nextParams = invitationCode ? { invitationCode: String(invitationCode) } : {};
+                  router.replace({
+                    pathname: '/(auth)/getUserInfo',
+                    params: nextParams
+                  });
+                })();
               }
             }
           ]

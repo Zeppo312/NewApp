@@ -22,7 +22,7 @@ type ActiveBabyContextType = {
   refreshBabies: () => Promise<void>;
 };
 
-const ACTIVE_BABY_STORAGE_KEY = 'active_baby_id';
+const ACTIVE_BABY_STORAGE_KEY_PREFIX = 'active_baby_id';
 
 const ActiveBabyContext = createContext<ActiveBabyContextType | undefined>(
   undefined,
@@ -38,6 +38,10 @@ export const ActiveBabyProvider: React.FC<{ children: React.ReactNode }> = ({
   const [isLoading, setIsLoading] = useState(true);
   const [isReady, setIsReady] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  const getActiveBabyStorageKey = useCallback((userId: string) => {
+    return `${ACTIVE_BABY_STORAGE_KEY_PREFIX}:${userId}`;
+  }, []);
 
   const formatLoadError = useCallback((error: unknown) => {
     if (!error) return null;
@@ -100,7 +104,15 @@ export const ActiveBabyProvider: React.FC<{ children: React.ReactNode }> = ({
    */
   const resolveActiveBabyId = useCallback(
     async (nextBabies: BabyInfo[]): Promise<string | null> => {
-      const storedId = await AsyncStorage.getItem(ACTIVE_BABY_STORAGE_KEY);
+      if (!user?.id) {
+        setActiveBabyIdState(null);
+        return null;
+      }
+
+      const scopedStorageKey = getActiveBabyStorageKey(user.id);
+      const storedId =
+        await AsyncStorage.getItem(scopedStorageKey) ??
+        await AsyncStorage.getItem(ACTIVE_BABY_STORAGE_KEY_PREFIX);
       const firstWithBirthDate = nextBabies.find((b) => Boolean(b.birth_date))?.id ?? null;
 
       const resolvedId =
@@ -111,15 +123,17 @@ export const ActiveBabyProvider: React.FC<{ children: React.ReactNode }> = ({
 
       setActiveBabyIdState(resolvedId);
 
+      await AsyncStorage.removeItem(ACTIVE_BABY_STORAGE_KEY_PREFIX);
+
       if (resolvedId) {
-        await AsyncStorage.setItem(ACTIVE_BABY_STORAGE_KEY, resolvedId);
+        await AsyncStorage.setItem(scopedStorageKey, resolvedId);
       } else {
-        await AsyncStorage.removeItem(ACTIVE_BABY_STORAGE_KEY);
+        await AsyncStorage.removeItem(scopedStorageKey);
       }
 
       return resolvedId;
     },
-    [],
+    [getActiveBabyStorageKey, user?.id],
   );
 
   /**
@@ -256,13 +270,16 @@ export const ActiveBabyProvider: React.FC<{ children: React.ReactNode }> = ({
    * - temporarily sets isReady=false to avoid race conditions
    */
   const setActiveBabyId = useCallback(async (babyId: string) => {
+    if (!user?.id) return;
+
     setIsReady(false);
 
     setActiveBabyIdState(babyId);
-    await AsyncStorage.setItem(ACTIVE_BABY_STORAGE_KEY, babyId);
+    await AsyncStorage.removeItem(ACTIVE_BABY_STORAGE_KEY_PREFIX);
+    await AsyncStorage.setItem(getActiveBabyStorageKey(user.id), babyId);
 
     setIsReady(true);
-  }, []);
+  }, [getActiveBabyStorageKey, user?.id]);
 
   const activeBaby = useMemo(
     () => babies.find((b) => b.id === activeBabyId) ?? null,

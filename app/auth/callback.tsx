@@ -6,16 +6,14 @@ import * as Linking from 'expo-linking';
 import { supabase } from '@/lib/supabase';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedBackground } from '@/components/ThemedBackground';
-import { Colors } from '@/constants/Colors';
-import { useColorScheme } from '@/hooks/useColorScheme';
+import { invalidateAllCaches } from '@/lib/appCache';
+import { getOnboardingCompletionState } from '@/lib/onboarding';
 
 export default function Callback() {
   const router = useRouter();
   const [status, setStatus] = useState('Bestätigung wird verarbeitet...');
   const searchParams = useLocalSearchParams();
   const rawUrl = Linking.useURL();
-  const colorScheme = useColorScheme() ?? 'light';
-  const theme = Colors[colorScheme];
 
   const rawUrlParams = useMemo(() => {
     const params: Record<string, string> = {};
@@ -171,17 +169,13 @@ export default function Callback() {
 
         if (session?.user) {
           setStatus('E-Mail erfolgreich bestätigt!');
-          
-          // Prüfen ob Profil vollständig ist
-          const { data: profileData } = await supabase
-            .from('profiles')
-            .select('first_name')
-            .eq('id', session.user.id)
-            .single();
+
+          await invalidateAllCaches();
+          const onboardingComplete = await getOnboardingCompletionState();
 
           // Kurz warten für bessere UX
           setTimeout(() => {
-            if (!profileData?.first_name) {
+            if (!onboardingComplete) {
               // Neuer User -> Onboarding
               router.replace('/(auth)/getUserInfo');
             } else {

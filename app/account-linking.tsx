@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   StyleSheet,
   ScrollView,
@@ -27,6 +27,7 @@ import { redeemInvitationCodeFixed } from '@/lib/redeemInvitationCodeFixed';
 import Header from '@/components/Header';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedBackground } from '@/components/ThemedBackground';
+import { LinkedBabySelectionModal } from '@/components/LinkedBabySelectionModal';
 import { LiquidGlassCard, GLASS_OVERLAY, GLASS_OVERLAY_DARK, LAYOUT_PAD } from '@/constants/DesignGuide';
 
 type Invitation = {
@@ -110,18 +111,15 @@ export default function AccountLinkingScreen() {
   const [isRedeeming, setIsRedeeming] = useState(false);
   const [unlinkingId, setUnlinkingId] = useState<string | null>(null);
   const [autoRedeemAttempted, setAutoRedeemAttempted] = useState(false);
+  const [pendingBabySelection, setPendingBabySelection] = useState<{
+    linkedUserId: string;
+    linkedUserName?: string | null;
+  } | null>(null);
   const prefilledInvitationCode = typeof params.invitationCode === 'string'
     ? params.invitationCode.replace(/\s+/g, '').toUpperCase()
     : '';
 
-  useEffect(() => { if (user) loadData(); }, [user]);
-  useEffect(() => {
-    if (prefilledInvitationCode) {
-      setInvitationCode(prefilledInvitationCode);
-    }
-  }, [prefilledInvitationCode]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     if (!user?.id) {
       setInvitations([]);
       setLinkedUsers([]);
@@ -141,16 +139,28 @@ export default function AccountLinkingScreen() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [user?.id]);
 
-  const refreshLinkedBabyState = async () => {
+  useEffect(() => {
+    if (user) {
+      void loadData();
+    }
+  }, [loadData, user]);
+
+  useEffect(() => {
+    if (prefilledInvitationCode) {
+      setInvitationCode(prefilledInvitationCode);
+    }
+  }, [prefilledInvitationCode]);
+
+  const refreshLinkedBabyState = useCallback(async () => {
     await Promise.allSettled([
       loadData(),
       refreshBabies(),
       refreshBabyDetails(),
     ]);
     void syncUser();
-  };
+  }, [loadData, refreshBabies, refreshBabyDetails, syncUser]);
 
   const handleCreateInvitation = async () => {
     if (!user?.id) {
@@ -179,7 +189,7 @@ export default function AccountLinkingScreen() {
     }
   };
 
-  const redeemInvitation = async (rawCode: string, shouldShowSuccessAlert = true) => {
+  const redeemInvitation = useCallback(async (rawCode: string, shouldShowSuccessAlert = true) => {
     if (!rawCode.trim()) {
       Alert.alert('Fehler', 'Bitte gib einen Einladungscode ein.');
       return;
@@ -198,6 +208,14 @@ export default function AccountLinkingScreen() {
         setInvitationCode('');
         await refreshLinkedBabyState();
 
+        if (result.linkedUserId) {
+          setPendingBabySelection({
+            linkedUserId: result.linkedUserId,
+            linkedUserName: creatorName || null,
+          });
+          return;
+        }
+
         if (shouldShowSuccessAlert) {
           Alert.alert('Erfolg', `Code eingelöst. Jetzt verknüpft mit ${creatorName}.`);
         }
@@ -212,7 +230,7 @@ export default function AccountLinkingScreen() {
     } finally {
       setIsRedeeming(false);
     }
-  };
+  }, [refreshLinkedBabyState, user?.id]);
 
   const handleRedeemInvitation = async () => {
     await redeemInvitation(invitationCode, true);
@@ -225,7 +243,7 @@ export default function AccountLinkingScreen() {
 
     setAutoRedeemAttempted(true);
     void redeemInvitation(prefilledInvitationCode, false);
-  }, [autoRedeemAttempted, isRedeeming, prefilledInvitationCode, user?.id]);
+  }, [autoRedeemAttempted, isRedeeming, prefilledInvitationCode, redeemInvitation, user?.id]);
 
   const performDeactivateLink = async (link: LinkedUser) => {
     if (!link?.linkId) return;
@@ -460,6 +478,18 @@ export default function AccountLinkingScreen() {
             </>
           )}
         </ScrollView>
+
+        <LinkedBabySelectionModal
+          visible={Boolean(pendingBabySelection)}
+          currentUserId={user?.id}
+          linkedUserId={pendingBabySelection?.linkedUserId}
+          linkedUserName={pendingBabySelection?.linkedUserName}
+          onApplied={async () => {
+            setPendingBabySelection(null);
+            await refreshLinkedBabyState();
+            Alert.alert('Babys übernommen', 'Die gemeinsame Baby-Auswahl wurde gespeichert.');
+          }}
+        />
       </SafeAreaView>
     </ThemedBackground>
   );
