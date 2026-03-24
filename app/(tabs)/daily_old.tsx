@@ -14,6 +14,7 @@ import {
   Animated,
   Dimensions,
 } from 'react-native';
+import DraggableFlatList, { RenderItemParams } from 'react-native-draggable-flatlist';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Linking from 'expo-linking';
 import { Colors } from '@/constants/Colors';
@@ -192,6 +193,7 @@ const TimerBanner: React.FC<{
 };
 
 const QUICK_ACTION_HIDDEN_STORAGE_PREFIX = 'daily_old_hidden_quick_actions';
+const QUICK_ACTION_ORDER_STORAGE_PREFIX = 'daily_old_quick_actions_order';
 
 const quickBtns: QuickActionButtonConfig[] = [
   { action: 'feeding_breast', label: 'Stillen', icon: '🤱' },
@@ -217,20 +219,50 @@ const normalizeHiddenQuickActions = (value: unknown): QuickActionType[] => {
   return QUICK_ACTION_ORDER.filter((action) => hiddenSet.has(action)).slice(0, quickBtns.length - 1);
 };
 
+const normalizeQuickActionOrder = (value: unknown): QuickActionType[] => {
+  if (!Array.isArray(value)) return [...QUICK_ACTION_ORDER];
+
+  const seen = new Set<QuickActionType>();
+  const normalized: QuickActionType[] = [];
+
+  for (const entry of value) {
+    if (typeof entry !== 'string') continue;
+    if (!QUICK_ACTION_ORDER.includes(entry as QuickActionType)) continue;
+    if (seen.has(entry as QuickActionType)) continue;
+    seen.add(entry as QuickActionType);
+    normalized.push(entry as QuickActionType);
+  }
+
+  for (const action of QUICK_ACTION_ORDER) {
+    if (!seen.has(action)) {
+      normalized.push(action);
+    }
+  }
+
+  return normalized;
+};
+
 const buildHiddenQuickActionsStorageKey = (userId?: string | null, babyId?: string | null) =>
   `${QUICK_ACTION_HIDDEN_STORAGE_PREFIX}:${userId ?? 'anonymous'}:${babyId ?? 'default'}`;
+
+const buildQuickActionOrderStorageKey = (userId?: string | null, babyId?: string | null) =>
+  `${QUICK_ACTION_ORDER_STORAGE_PREFIX}:${userId ?? 'anonymous'}:${babyId ?? 'default'}`;
 
 const QuickActionRow: React.FC<{
   onPressAction: (action: QuickActionType) => void;
   onHideAction: (action: QuickActionType) => void;
   onRestoreAction: (action: QuickActionType) => void;
+  onReorderActions: (actions: QuickActionType[]) => void;
   hiddenActions: QuickActionType[];
+  actionOrder: QuickActionType[];
   disabled?: boolean;
 }> = ({
   onPressAction,
   onHideAction,
   onRestoreAction,
+  onReorderActions,
   hiddenActions,
+  actionOrder,
   disabled = false,
 }) => {
   // Adaptive Farben für Dark Mode
@@ -240,31 +272,31 @@ const QuickActionRow: React.FC<{
   const textPrimary = isDark ? Colors.dark.textPrimary : PRIMARY;
   const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
   const hiddenActionSet = useMemo(() => new Set(hiddenActions), [hiddenActions]);
+  const orderedQuickBtns = useMemo(
+    () => actionOrder.map((action) => quickBtns.find((btn) => btn.action === action)).filter((item): item is QuickActionButtonConfig => !!item),
+    [actionOrder],
+  );
   const visibleQuickBtns = useMemo(
-    () => quickBtns.filter(({ action }) => !hiddenActionSet.has(action)),
-    [hiddenActionSet],
+    () => orderedQuickBtns.filter(({ action }) => !hiddenActionSet.has(action)),
+    [hiddenActionSet, orderedQuickBtns],
   );
   const hiddenQuickBtns = useMemo(
-    () => quickBtns.filter(({ action }) => hiddenActionSet.has(action)),
-    [hiddenActionSet],
+    () => orderedQuickBtns.filter(({ action }) => hiddenActionSet.has(action)),
+    [hiddenActionSet, orderedQuickBtns],
   );
   const [isEditMode, setIsEditMode] = useState(false);
 
   const itemWidth = 100 + 16; // Wrapper width + separator
 
-  const quickActionItems = useMemo<QuickActionRowItem[]>(() => {
-    const items: QuickActionRowItem[] = visibleQuickBtns.map((item) => ({
-      key: item.action,
-      type: 'action',
-      item,
-    }));
-
-    if (isEditMode && hiddenQuickBtns.length > 0) {
-      items.push({ key: 'restore-toggle', type: 'restore-toggle' });
-    }
-
-    return items;
-  }, [hiddenQuickBtns.length, isEditMode, visibleQuickBtns]);
+  const quickActionItems = useMemo<QuickActionRowItem[]>(
+    () =>
+      visibleQuickBtns.map((item) => ({
+        key: item.action,
+        type: 'action',
+        item,
+      })),
+    [visibleQuickBtns],
+  );
 
   const handleHidePress = useCallback(
     (action: QuickActionType) => {
@@ -294,7 +326,7 @@ const QuickActionRow: React.FC<{
     );
   }, [hiddenQuickBtns, onRestoreAction]);
 
-  const renderQuickButton = ({ item }: { item: QuickActionRowItem }) => {
+  const renderQuickButton = ({ item, drag }: { item: QuickActionRowItem; drag?: () => void }) => {
     if (item.type === 'restore-toggle') {
       return (
         <View style={s.circleButtonWrap}>
@@ -334,7 +366,14 @@ const QuickActionRow: React.FC<{
               if (isEditMode || disabled) return;
               onPressAction(item.item.action);
             }}
-            onLongPress={() => setIsEditMode((current) => !current)}
+            onLongPress={() => {
+              if (!isEditMode) {
+                setIsEditMode(true);
+                return;
+              }
+
+              drag?.();
+            }}
             delayLongPress={250}
             activeOpacity={isEditMode ? 1 : 0.9}
           >
@@ -374,21 +413,44 @@ const QuickActionRow: React.FC<{
           </TouchableOpacity>
         </View>
       ) : null}
-      <FlatList
-        data={quickActionItems}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        renderItem={renderQuickButton}
-        keyExtractor={(item) => item.key}
-        contentContainerStyle={s.quickScrollContainer}
-        ItemSeparatorComponent={() => <View style={{ width: 16 }} />}
-        decelerationRate="normal"
-        getItemLayout={(_, index) => ({
-          length: itemWidth,
-          offset: itemWidth * index,
-          index,
-        })}
-      />
+      {isEditMode ? (
+        <DraggableFlatList
+          data={quickActionItems}
+          horizontal
+          activationDistance={12}
+          autoscrollSpeed={120}
+          containerStyle={s.quickDragList}
+          contentContainerStyle={s.quickScrollContainer}
+          keyExtractor={(item) => item.key}
+          onDragEnd={({ data }) => {
+            onReorderActions(data.map((entry) => entry.item.action));
+          }}
+          renderItem={({ item, drag }: RenderItemParams<QuickActionRowItem>) => renderQuickButton({ item, drag })}
+          ItemSeparatorComponent={() => <View style={{ width: 16 }} />}
+          ListFooterComponent={
+            hiddenQuickBtns.length > 0 ? (
+              <View style={s.quickActionFooterWrap}>{renderQuickButton({ item: { key: 'restore-toggle', type: 'restore-toggle' } })}</View>
+            ) : null
+          }
+          showsHorizontalScrollIndicator={false}
+        />
+      ) : (
+        <FlatList
+          data={quickActionItems}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          renderItem={({ item }) => renderQuickButton({ item })}
+          keyExtractor={(item) => item.key}
+          contentContainerStyle={s.quickScrollContainer}
+          ItemSeparatorComponent={() => <View style={{ width: 16 }} />}
+          decelerationRate="normal"
+          getItemLayout={(_, index) => ({
+            length: itemWidth,
+            offset: itemWidth * index,
+            index,
+          })}
+        />
+      )}
     </View>
   );
 };
@@ -458,9 +520,14 @@ export default function DailyScreen() {
   const [vitaminDChecks, setVitaminDChecks] = useState<VitaminDChecks>({});
   const [vitaminDBusy, setVitaminDBusy] = useState(false);
   const [hiddenQuickActions, setHiddenQuickActions] = useState<QuickActionType[]>([]);
+  const [quickActionOrder, setQuickActionOrder] = useState<QuickActionType[]>([...QUICK_ACTION_ORDER]);
   const splashEmojiParts = useMemo(() => Array.from(splashEmoji), [splashEmoji]);
   const hiddenQuickActionsStorageKey = useMemo(
     () => buildHiddenQuickActionsStorageKey(user?.id, activeBabyId),
+    [activeBabyId, user?.id],
+  );
+  const quickActionOrderStorageKey = useMemo(
+    () => buildQuickActionOrderStorageKey(user?.id, activeBabyId),
     [activeBabyId, user?.id],
   );
   const showReadOnlyPreviewAlert = useCallback(() => {
@@ -486,20 +553,23 @@ export default function DailyScreen() {
 
     (async () => {
       try {
-        const stored = await AsyncStorage.getItem(hiddenQuickActionsStorageKey);
+        const [storedHiddenActions, storedOrder] = await Promise.all([
+          AsyncStorage.getItem(hiddenQuickActionsStorageKey),
+          AsyncStorage.getItem(quickActionOrderStorageKey),
+        ]);
         if (!isActive) return;
 
-        if (!stored) {
-          setHiddenQuickActions([]);
-          return;
-        }
-
-        const parsed = JSON.parse(stored);
-        setHiddenQuickActions(normalizeHiddenQuickActions(parsed));
+        setHiddenQuickActions(
+          storedHiddenActions ? normalizeHiddenQuickActions(JSON.parse(storedHiddenActions)) : [],
+        );
+        setQuickActionOrder(
+          storedOrder ? normalizeQuickActionOrder(JSON.parse(storedOrder)) : [...QUICK_ACTION_ORDER],
+        );
       } catch (error) {
-        console.error('Daily: failed to load hidden quick actions', error);
+        console.error('Daily: failed to load quick action preferences', error);
         if (isActive) {
           setHiddenQuickActions([]);
+          setQuickActionOrder([...QUICK_ACTION_ORDER]);
         }
       }
     })();
@@ -507,7 +577,7 @@ export default function DailyScreen() {
     return () => {
       isActive = false;
     };
-  }, [hiddenQuickActionsStorageKey]);
+  }, [hiddenQuickActionsStorageKey, quickActionOrderStorageKey]);
 
   const persistHiddenQuickActions = useCallback(
     async (nextActions: QuickActionType[]) => {
@@ -534,6 +604,37 @@ export default function DailyScreen() {
       });
     },
     [persistHiddenQuickActions],
+  );
+
+  const persistQuickActionOrder = useCallback(
+    async (nextOrder: QuickActionType[]) => {
+      try {
+        const normalized = normalizeQuickActionOrder(nextOrder);
+
+        if (normalized.every((action, index) => action === QUICK_ACTION_ORDER[index])) {
+          await AsyncStorage.removeItem(quickActionOrderStorageKey);
+          return;
+        }
+
+        await AsyncStorage.setItem(quickActionOrderStorageKey, JSON.stringify(normalized));
+      } catch (error) {
+        console.error('Daily: failed to save quick action order', error);
+      }
+    },
+    [quickActionOrderStorageKey],
+  );
+
+  const handleReorderQuickActions = useCallback(
+    (visibleActions: QuickActionType[]) => {
+      setQuickActionOrder((current) => {
+        const normalizedCurrent = normalizeQuickActionOrder(current);
+        const hiddenActions = normalizedCurrent.filter((action) => hiddenQuickActions.includes(action));
+        const nextOrder = normalizeQuickActionOrder([...visibleActions, ...hiddenActions]);
+        void persistQuickActionOrder(nextOrder);
+        return nextOrder;
+      });
+    },
+    [hiddenQuickActions, persistQuickActionOrder],
   );
 
   const handleHideQuickAction = useCallback(
@@ -2122,7 +2223,9 @@ export default function DailyScreen() {
                 onPressAction={handleQuickActionPress}
                 onHideAction={handleHideQuickAction}
                 onRestoreAction={handleRestoreQuickAction}
+                onReorderActions={handleReorderQuickActions}
                 hiddenActions={hiddenQuickActions}
+                actionOrder={quickActionOrder}
                 disabled={isReadOnlyPreviewMode}
               />
 
@@ -2707,6 +2810,9 @@ const s = StyleSheet.create({
   // Quick actions as round glass buttons
   quickActionSection: { marginTop: SECTION_GAP_TOP },
   quickScrollContainer: { paddingHorizontal: 4, paddingTop: 2 },
+  quickDragList: {
+    overflow: 'visible',
+  },
   quickActionEditBar: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
@@ -2731,6 +2837,9 @@ const s = StyleSheet.create({
     paddingTop: 4,
     paddingLeft: 4,
     overflow: 'visible',
+  },
+  quickActionFooterWrap: {
+    marginLeft: 16,
   },
   circleButton: {
     width: 96,
