@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   SafeAreaView,
   View,
@@ -106,6 +107,11 @@ type QuickActionType =
   | 'diaper_dirty'
   | 'diaper_both';
 
+type QuickActionButtonConfig = { icon: string; label: string; action: QuickActionType };
+type QuickActionRowItem =
+  | { key: string; type: 'action'; item: QuickActionButtonConfig }
+  | { key: string; type: 'restore-toggle' };
+
 // GlassCard and LiquidGlassCard imported from DesignGuide
 
 // DateSpider as glass pill
@@ -185,7 +191,9 @@ const TimerBanner: React.FC<{
   );
 };
 
-const quickBtns: { icon: string; label: string; action: QuickActionType }[] = [
+const QUICK_ACTION_HIDDEN_STORAGE_PREFIX = 'daily_old_hidden_quick_actions';
+
+const quickBtns: QuickActionButtonConfig[] = [
   { action: 'feeding_breast', label: 'Stillen', icon: '🤱' },
   { action: 'feeding_bottle', label: 'Fläschchen', icon: '🍼' },
   { action: 'feeding_solids', label: 'Beikost', icon: '🥄' },
@@ -194,45 +202,184 @@ const quickBtns: { icon: string; label: string; action: QuickActionType }[] = [
   { action: 'diaper_both', label: 'Beides', icon: '💧💩' },
 ];
 
-const QuickActionRow: React.FC<{ onPressAction: (action: QuickActionType) => void; disabled?: boolean }> = ({
+const QUICK_ACTION_ORDER = quickBtns.map(({ action }) => action);
+
+const normalizeHiddenQuickActions = (value: unknown): QuickActionType[] => {
+  if (!Array.isArray(value)) return [];
+
+  const hiddenSet = new Set<QuickActionType>();
+  for (const entry of value) {
+    if (typeof entry !== 'string') continue;
+    if (!QUICK_ACTION_ORDER.includes(entry as QuickActionType)) continue;
+    hiddenSet.add(entry as QuickActionType);
+  }
+
+  return QUICK_ACTION_ORDER.filter((action) => hiddenSet.has(action)).slice(0, quickBtns.length - 1);
+};
+
+const buildHiddenQuickActionsStorageKey = (userId?: string | null, babyId?: string | null) =>
+  `${QUICK_ACTION_HIDDEN_STORAGE_PREFIX}:${userId ?? 'anonymous'}:${babyId ?? 'default'}`;
+
+const QuickActionRow: React.FC<{
+  onPressAction: (action: QuickActionType) => void;
+  onHideAction: (action: QuickActionType) => void;
+  onRestoreAction: (action: QuickActionType) => void;
+  hiddenActions: QuickActionType[];
+  disabled?: boolean;
+}> = ({
   onPressAction,
+  onHideAction,
+  onRestoreAction,
+  hiddenActions,
   disabled = false,
 }) => {
   // Adaptive Farben für Dark Mode
   const adaptiveColors = useAdaptiveColors();
   const colorScheme = adaptiveColors.effectiveScheme;
   const isDark = colorScheme === 'dark' || adaptiveColors.isDarkBackground;
+  const textPrimary = isDark ? Colors.dark.textPrimary : PRIMARY;
   const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
-
-  const itemWidth = 96 + 16; // Button width + separator
-
-  const renderQuickButton = ({ item }: { item: (typeof quickBtns)[number] }) => (
-    <GlassCard
-      style={s.circleButton}
-      intensity={30}
-      overlayColor="rgba(255,255,255,0.32)"
-      borderColor="rgba(255,255,255,0.70)"
-    >
-      <TouchableOpacity
-        style={[s.circleInner, disabled && s.actionDisabled]}
-        onPress={() => onPressAction(item.action)}
-        activeOpacity={0.9}
-        disabled={disabled}
-      >
-        <Text style={s.circleEmoji}>{item.icon}</Text>
-        <Text style={[s.circleLabel, { color: textSecondary }]}>{item.label}</Text>
-      </TouchableOpacity>
-    </GlassCard>
+  const hiddenActionSet = useMemo(() => new Set(hiddenActions), [hiddenActions]);
+  const visibleQuickBtns = useMemo(
+    () => quickBtns.filter(({ action }) => !hiddenActionSet.has(action)),
+    [hiddenActionSet],
   );
+  const hiddenQuickBtns = useMemo(
+    () => quickBtns.filter(({ action }) => hiddenActionSet.has(action)),
+    [hiddenActionSet],
+  );
+  const [isEditMode, setIsEditMode] = useState(false);
+
+  const itemWidth = 100 + 16; // Wrapper width + separator
+
+  const quickActionItems = useMemo<QuickActionRowItem[]>(() => {
+    const items: QuickActionRowItem[] = visibleQuickBtns.map((item) => ({
+      key: item.action,
+      type: 'action',
+      item,
+    }));
+
+    if (isEditMode && hiddenQuickBtns.length > 0) {
+      items.push({ key: 'restore-toggle', type: 'restore-toggle' });
+    }
+
+    return items;
+  }, [hiddenQuickBtns.length, isEditMode, visibleQuickBtns]);
+
+  const handleHidePress = useCallback(
+    (action: QuickActionType) => {
+      if (visibleQuickBtns.length <= 1) {
+        Alert.alert('Mindestens eine Quick Action', 'Eine Quick Action muss sichtbar bleiben.');
+        return;
+      }
+
+      onHideAction(action);
+    },
+    [onHideAction, visibleQuickBtns.length],
+  );
+
+  const openRestoreMenu = useCallback(() => {
+    if (hiddenQuickBtns.length === 0) return;
+
+    Alert.alert(
+      'Quick Action einblenden',
+      'Welche Action soll wieder sichtbar sein?',
+      [
+        ...hiddenQuickBtns.map((hiddenBtn) => ({
+          text: `${hiddenBtn.icon} ${hiddenBtn.label}`,
+          onPress: () => onRestoreAction(hiddenBtn.action),
+        })),
+        { text: 'Abbrechen', style: 'cancel' as const },
+      ],
+    );
+  }, [hiddenQuickBtns, onRestoreAction]);
+
+  const renderQuickButton = ({ item }: { item: QuickActionRowItem }) => {
+    if (item.type === 'restore-toggle') {
+      return (
+        <View style={s.circleButtonWrap}>
+          <GlassCard
+            style={[s.circleButton, s.circleButtonRestore]}
+            intensity={30}
+            overlayColor="rgba(255,255,255,0.32)"
+            borderColor="rgba(255,255,255,0.70)"
+          >
+            <TouchableOpacity
+              style={s.circleInner}
+              onPress={openRestoreMenu}
+              activeOpacity={0.9}
+            >
+              <View style={[s.quickActionPlusBadge, { backgroundColor: isDark ? '#44C38A' : '#1F9D55' }]}>
+                <Text style={s.quickActionPlusBadgeText}>+</Text>
+              </View>
+              <Text style={[s.quickActionPlusLabel, { color: textPrimary }]}>Zurück</Text>
+              <Text style={[s.quickActionPlusMeta, { color: textSecondary }]}>{hiddenQuickBtns.length} verborgen</Text>
+            </TouchableOpacity>
+          </GlassCard>
+        </View>
+      );
+    }
+
+    return (
+      <View style={s.circleButtonWrap}>
+        <GlassCard
+          style={s.circleButton}
+          intensity={30}
+          overlayColor="rgba(255,255,255,0.32)"
+          borderColor="rgba(255,255,255,0.70)"
+        >
+          <TouchableOpacity
+            style={[s.circleInner, disabled && !isEditMode && s.actionDisabled]}
+            onPress={() => {
+              if (isEditMode || disabled) return;
+              onPressAction(item.item.action);
+            }}
+            onLongPress={() => setIsEditMode((current) => !current)}
+            delayLongPress={250}
+            activeOpacity={isEditMode ? 1 : 0.9}
+          >
+            <Text style={s.circleEmoji}>{item.item.icon}</Text>
+            <Text style={[s.circleLabel, { color: textSecondary }]}>{item.item.label}</Text>
+          </TouchableOpacity>
+        </GlassCard>
+        {isEditMode ? (
+          <TouchableOpacity
+            style={s.quickActionHideBadge}
+            onPress={() => handleHidePress(item.item.action)}
+            activeOpacity={0.85}
+          >
+            <Text style={s.quickActionHideBadgeText}>−</Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
+    );
+  };
 
   return (
     <View style={s.quickActionSection}>
+      {isEditMode ? (
+        <View style={s.quickActionEditBar}>
+          <TouchableOpacity
+            style={[
+              s.quickActionDoneButton,
+              {
+                backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.46)',
+                borderColor: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.72)',
+              },
+            ]}
+            onPress={() => setIsEditMode(false)}
+            activeOpacity={0.85}
+          >
+            <Text style={[s.quickActionDoneText, { color: textPrimary }]}>Fertig</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
       <FlatList
-        data={quickBtns}
+        data={quickActionItems}
         horizontal
         showsHorizontalScrollIndicator={false}
         renderItem={renderQuickButton}
-        keyExtractor={(item) => item.action}
+        keyExtractor={(item) => item.key}
         contentContainerStyle={s.quickScrollContainer}
         ItemSeparatorComponent={() => <View style={{ width: 16 }} />}
         decelerationRate="normal"
@@ -310,7 +457,12 @@ export default function DailyScreen() {
   const [splashHintEmoji, setSplashHintEmoji] = useState<string>('');
   const [vitaminDChecks, setVitaminDChecks] = useState<VitaminDChecks>({});
   const [vitaminDBusy, setVitaminDBusy] = useState(false);
+  const [hiddenQuickActions, setHiddenQuickActions] = useState<QuickActionType[]>([]);
   const splashEmojiParts = useMemo(() => Array.from(splashEmoji), [splashEmoji]);
+  const hiddenQuickActionsStorageKey = useMemo(
+    () => buildHiddenQuickActionsStorageKey(user?.id, activeBabyId),
+    [activeBabyId, user?.id],
+  );
   const showReadOnlyPreviewAlert = useCallback(() => {
     Alert.alert('Nur Vorschau', BABY_MODE_PREVIEW_READ_ONLY_MESSAGE);
   }, []);
@@ -328,6 +480,78 @@ export default function DailyScreen() {
   useEffect(() => {
     requestPermissions();
   }, [requestPermissions]);
+
+  useEffect(() => {
+    let isActive = true;
+
+    (async () => {
+      try {
+        const stored = await AsyncStorage.getItem(hiddenQuickActionsStorageKey);
+        if (!isActive) return;
+
+        if (!stored) {
+          setHiddenQuickActions([]);
+          return;
+        }
+
+        const parsed = JSON.parse(stored);
+        setHiddenQuickActions(normalizeHiddenQuickActions(parsed));
+      } catch (error) {
+        console.error('Daily: failed to load hidden quick actions', error);
+        if (isActive) {
+          setHiddenQuickActions([]);
+        }
+      }
+    })();
+
+    return () => {
+      isActive = false;
+    };
+  }, [hiddenQuickActionsStorageKey]);
+
+  const persistHiddenQuickActions = useCallback(
+    async (nextActions: QuickActionType[]) => {
+      try {
+        if (nextActions.length === 0) {
+          await AsyncStorage.removeItem(hiddenQuickActionsStorageKey);
+          return;
+        }
+
+        await AsyncStorage.setItem(hiddenQuickActionsStorageKey, JSON.stringify(nextActions));
+      } catch (error) {
+        console.error('Daily: failed to save hidden quick actions', error);
+      }
+    },
+    [hiddenQuickActionsStorageKey],
+  );
+
+  const updateHiddenQuickActions = useCallback(
+    (updater: (current: QuickActionType[]) => QuickActionType[]) => {
+      setHiddenQuickActions((current) => {
+        const next = normalizeHiddenQuickActions(updater(current));
+        void persistHiddenQuickActions(next);
+        return next;
+      });
+    },
+    [persistHiddenQuickActions],
+  );
+
+  const handleHideQuickAction = useCallback(
+    (action: QuickActionType) => {
+      updateHiddenQuickActions((current) => {
+        if (current.includes(action)) return current;
+        return [...current, action];
+      });
+    },
+    [updateHiddenQuickActions],
+  );
+
+  const handleRestoreQuickAction = useCallback(
+    (action: QuickActionType) => {
+      updateHiddenQuickActions((current) => current.filter((currentAction) => currentAction !== action));
+    },
+    [updateHiddenQuickActions],
+  );
 
   useEffect(() => {
     let active = true;
@@ -1894,7 +2118,13 @@ export default function DailyScreen() {
                 </TouchableOpacity>
               </View>
 
-              <QuickActionRow onPressAction={handleQuickActionPress} disabled={isReadOnlyPreviewMode} />
+              <QuickActionRow
+                onPressAction={handleQuickActionPress}
+                onHideAction={handleHideQuickAction}
+                onRestoreAction={handleRestoreQuickAction}
+                hiddenActions={hiddenQuickActions}
+                disabled={isReadOnlyPreviewMode}
+              />
 
               {showVitaminDStrip && (
                 <GlassCard
@@ -2131,6 +2361,7 @@ export default function DailyScreen() {
           visible={showInputModal}
           activityType={selectedActivityType}
           initialSubType={selectedSubType}
+          hiddenSubTypes={hiddenQuickActions}
           forceDarkMode={isDark}
           date={selectedDate}
           onClose={() => { setShowInputModal(false); setEditingEntry(null); }}
@@ -2475,7 +2706,32 @@ const s = StyleSheet.create({
 
   // Quick actions as round glass buttons
   quickActionSection: { marginTop: SECTION_GAP_TOP },
-  quickScrollContainer: { paddingHorizontal: 0 },
+  quickScrollContainer: { paddingHorizontal: 4, paddingTop: 2 },
+  quickActionEditBar: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginBottom: 10,
+  },
+  quickActionDoneButton: {
+    minWidth: 84,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  quickActionDoneText: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  circleButtonWrap: {
+    width: 100,
+    height: 100,
+    paddingTop: 4,
+    paddingLeft: 4,
+    overflow: 'visible',
+  },
   circleButton: {
     width: 96,
     height: 96,
@@ -2483,9 +2739,57 @@ const s = StyleSheet.create({
     borderWidth: 1,
     overflow: 'hidden',
   },
+  circleButtonRestore: {
+    justifyContent: 'center',
+  },
   circleInner: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 8 },
   circleEmoji: { fontSize: 26 },
   circleLabel: { marginTop: 6, fontSize: 13, fontWeight: '700', color: '#7D5A50' },
+  quickActionHideBadge: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#E25555',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  quickActionHideBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    lineHeight: 18,
+    fontWeight: '900',
+    marginTop: -1,
+  },
+  quickActionPlusBadge: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  quickActionPlusBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 24,
+    lineHeight: 24,
+    fontWeight: '800',
+  },
+  quickActionPlusLabel: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  quickActionPlusMeta: {
+    marginTop: 4,
+    fontSize: 11,
+    fontWeight: '600',
+    textAlign: 'center',
+    paddingHorizontal: 8,
+  },
 
   // KPI glass cards
   kpiRow: {

@@ -1328,14 +1328,19 @@ export default function SleepTrackerScreen() {
   const lastLiveStopEventRef = useRef<{ url: string; at: number } | null>(null);
   const handledLiveStopRequestIdRef = useRef(0);
   const [liveStopRequestId, setLiveStopRequestId] = useState(0);
+  const handledLivePauseRequestIdRef = useRef(0);
+  const [livePauseRequestId, setLivePauseRequestId] = useState(0);
 
   const queueLiveStopRequestFromUrl = useCallback((incomingUrl: string | null) => {
     if (!incomingUrl) return;
 
     const targetsSleepTracker = incomingUrl.toLowerCase().includes('sleep-tracker');
-    const hasLiveStopParam = /[?&]liveStop=(1|true)(?:&|$)/i.test(incomingUrl);
+    if (!targetsSleepTracker) return;
 
-    if (!targetsSleepTracker || !hasLiveStopParam) {
+    const hasLiveStopParam = /[?&]liveStop=(1|true)(?:&|$)/i.test(incomingUrl);
+    const hasLivePauseParam = /[?&]livePause=(1|true)(?:&|$)/i.test(incomingUrl);
+
+    if (!hasLiveStopParam && !hasLivePauseParam) {
       return;
     }
 
@@ -1346,7 +1351,12 @@ export default function SleepTrackerScreen() {
     }
 
     lastLiveStopEventRef.current = { url: incomingUrl, at: now };
-    setLiveStopRequestId((prev) => prev + 1);
+
+    if (hasLivePauseParam) {
+      setLivePauseRequestId((prev) => prev + 1);
+    } else {
+      setLiveStopRequestId((prev) => prev + 1);
+    }
   }, []);
 
   const isFiniteManualDate = useCallback((value: unknown): value is Date => {
@@ -2316,6 +2326,37 @@ export default function SleepTrackerScreen() {
     isStoppingSleep,
     liveStopRequestId,
     promptSleepQualityForStop,
+  ]);
+
+  useEffect(() => {
+    if (livePauseRequestId === 0) return;
+    if (handledLivePauseRequestIdRef.current === livePauseRequestId) return;
+    if (!isLiveStatusLoaded) return;
+
+    handledLivePauseRequestIdRef.current = livePauseRequestId;
+
+    if (isStoppingSleep) {
+      return;
+    }
+
+    if (!activeSleepEntry?.id) {
+      console.log('Live Activity pause requested, but no active sleep entry exists.');
+      return;
+    }
+
+    if (activeSleepEntry.period !== 'night') {
+      Alert.alert('Hinweis', 'Pause ist nur im Nachtschlaf verfügbar.');
+      return;
+    }
+
+    void handlePauseNightSleep();
+  }, [
+    activeSleepEntry?.id,
+    activeSleepEntry?.period,
+    isLiveStatusLoaded,
+    isStoppingSleep,
+    livePauseRequestId,
+    handlePauseNightSleep,
   ]);
 
   // Handle save entry (compatible with SleepInputModal)

@@ -27,6 +27,7 @@ private enum SleepActivityTheme {
     static let feedingAccentStrong = Color(red: 0.62, green: 0.40, blue: 0.86)
     static let darkBgTop = Color(red: 0.09, green: 0.13, blue: 0.23)
     static let darkBgBottom = Color(red: 0.03, green: 0.05, blue: 0.10)
+    static let sleepPauseButton = Color(red: 0.45, green: 0.80, blue: 1.00)
     static let sleepStopButton = Color(red: 0.95, green: 0.53, blue: 0.66)
     static let feedingStopButton = Color(red: 0.89, green: 0.44, blue: 0.70)
 }
@@ -130,6 +131,10 @@ private struct LiveActivityPresentation {
         case .feeding:
             return URL(string: "com.lottibaby.app://daily_old")!
         }
+    }
+
+    var pauseURL: URL {
+        URL(string: "com.lottibaby.app://sleep-tracker?livePause=1")!
     }
 
     var stopURL: URL {
@@ -267,17 +272,33 @@ private struct SleepActivityMainView: View {
                     .minimumScaleFactor(0.55)
                     .frame(maxWidth: .infinity, alignment: .center)
 
-                    Link(destination: presentation.stopURL) {
-                        Circle()
-                            .fill(presentation.stopButtonColor)
-                            .frame(width: 42, height: 42)
-                            .overlay(
-                                Image(systemName: "stop.fill")
-                                    .font(.system(size: 16, weight: .bold))
-                                    .foregroundStyle(.white)
-                            )
+                    HStack(spacing: 6) {
+                        if presentation.kind == .sleep {
+                            Link(destination: presentation.pauseURL) {
+                                Circle()
+                                    .fill(SleepActivityTheme.sleepPauseButton.opacity(0.85))
+                                    .frame(width: 38, height: 38)
+                                    .overlay(
+                                        Image(systemName: "pause.fill")
+                                            .font(.system(size: 14, weight: .bold))
+                                            .foregroundStyle(.white)
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                        }
+
+                        Link(destination: presentation.stopURL) {
+                            Circle()
+                                .fill(presentation.stopButtonColor)
+                                .frame(width: presentation.kind == .sleep ? 38 : 42, height: presentation.kind == .sleep ? 38 : 42)
+                                .overlay(
+                                    Image(systemName: "stop.fill")
+                                        .font(.system(size: presentation.kind == .sleep ? 14 : 16, weight: .bold))
+                                        .foregroundStyle(.white)
+                                )
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
                 .frame(maxWidth: .infinity)
             }
@@ -359,18 +380,35 @@ struct WidgetLiveActivity: Widget {
                         .monospacedDigit()
                         .frame(maxWidth: .infinity, alignment: .center)
 
-                        Link(destination: presentation.stopURL) {
-                            Label("Stop", systemImage: "stop.fill")
-                                .font(.system(size: 13, weight: .semibold, design: .rounded))
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 6)
-                                .background(
-                                    Capsule()
-                                        .fill(presentation.stopButtonColor.opacity(0.88))
-                                )
-                                .foregroundStyle(.white)
+                        HStack(spacing: 6) {
+                            if presentation.kind == .sleep {
+                                Link(destination: presentation.pauseURL) {
+                                    Label("Pause", systemImage: "pause.fill")
+                                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 6)
+                                        .background(
+                                            Capsule()
+                                                .fill(SleepActivityTheme.sleepPauseButton.opacity(0.88))
+                                        )
+                                        .foregroundStyle(.white)
+                                }
+                                .buttonStyle(.plain)
+                            }
+
+                            Link(destination: presentation.stopURL) {
+                                Label("Stop", systemImage: "stop.fill")
+                                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                    .background(
+                                        Capsule()
+                                            .fill(presentation.stopButtonColor.opacity(0.88))
+                                    )
+                                    .foregroundStyle(.white)
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
                     .frame(maxWidth: .infinity)
                 }

@@ -44,6 +44,7 @@ interface ActivityInputModalProps {
   visible: boolean;
   activityType: ActivityType;
   initialSubType?: string | null;
+  hiddenSubTypes?: string[];
   date?: Date;
   forceDarkMode?: boolean;
   onClose: () => void;
@@ -103,6 +104,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   visible,
   activityType,
   initialSubType,
+  hiddenSubTypes = [],
   date,
   forceDarkMode,
   onClose,
@@ -172,6 +174,40 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   const [diaperTemperatureC, setDiaperTemperatureC] = useState('');
   const [diaperSuppositoryGiven, setDiaperSuppositoryGiven] = useState(false);
   const [diaperSuppositoryDoseMg, setDiaperSuppositoryDoseMg] = useState('');
+  const hiddenSubTypeSet = useMemo(() => new Set(hiddenSubTypes), [hiddenSubTypes]);
+  const isEditingExistingEntry = !!initialData?.id;
+  const feedingOptions = useMemo(() => {
+    const currentEditingType =
+      initialData?.feeding_type === 'BREAST'
+        ? 'breast'
+        : initialData?.feeding_type === 'SOLIDS'
+        ? 'solids'
+        : initialData?.feeding_type === 'BOTTLE'
+        ? 'bottle'
+        : null;
+
+    return [
+      { type: 'breast' as const, label: 'Stillen', icon: '🤱', hiddenKey: 'feeding_breast' },
+      { type: 'bottle' as const, label: 'Flasche', icon: '🍼', hiddenKey: 'feeding_bottle' },
+      { type: 'solids' as const, label: 'Beikost', icon: '🥄', hiddenKey: 'feeding_solids' },
+    ].filter((option) => !hiddenSubTypeSet.has(option.hiddenKey) || (isEditingExistingEntry && currentEditingType === option.type));
+  }, [hiddenSubTypeSet, initialData?.feeding_type, isEditingExistingEntry]);
+  const diaperOptions = useMemo(() => {
+    const currentEditingType =
+      initialData?.diaper_type === 'DIRTY'
+        ? 'dirty'
+        : initialData?.diaper_type === 'BOTH'
+        ? 'both'
+        : initialData?.diaper_type === 'WET'
+        ? 'wet'
+        : null;
+
+    return [
+      { type: 'wet' as const, label: 'Nass', icon: '💧', hiddenKey: 'diaper_wet' },
+      { type: 'dirty' as const, label: 'Voll', icon: '💩', hiddenKey: 'diaper_dirty' },
+      { type: 'both' as const, label: 'Beides', icon: '💧💩', hiddenKey: 'diaper_both' },
+    ].filter((option) => !hiddenSubTypeSet.has(option.hiddenKey) || (isEditingExistingEntry && currentEditingType === option.type));
+  }, [hiddenSubTypeSet, initialData?.diaper_type, isEditingExistingEntry]);
 
   const isFiniteManualDate = useCallback((value: unknown): value is Date => {
     return value instanceof Date && Number.isFinite(value.getTime());
@@ -274,9 +310,18 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
 
     // Standardwerte setzen
     if (activityType === 'feeding') {
-      if (initialData?.feeding_type === 'BREAST') setFeedingType('breast');
-      else if (initialData?.feeding_type === 'SOLIDS') setFeedingType('solids');
-      else setFeedingType('bottle');
+      const preferredFeedingType =
+        initialData?.feeding_type === 'BREAST'
+          ? 'breast'
+          : initialData?.feeding_type === 'SOLIDS'
+          ? 'solids'
+          : 'bottle';
+      const fallbackFeedingType = feedingOptions[0]?.type ?? preferredFeedingType;
+      setFeedingType(
+        feedingOptions.some((option) => option.type === preferredFeedingType)
+          ? preferredFeedingType
+          : fallbackFeedingType
+      );
       setVolumeMl(initialData?.feeding_volume_ml ?? 120);
       setBreastSide(
         initialData?.feeding_side === 'RIGHT' ? 'right' : initialData?.feeding_side === 'BOTH' ? 'both' : 'left'
@@ -289,8 +334,13 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
       const hasTemp = typeof initialData?.diaper_temperature_c === 'number' && Number.isFinite(initialData.diaper_temperature_c);
       const hasDose =
         typeof initialData?.diaper_suppository_dose_mg === 'number' && Number.isFinite(initialData.diaper_suppository_dose_mg);
+      const preferredDiaperType =
+        initialData?.diaper_type === 'DIRTY' ? 'dirty' : initialData?.diaper_type === 'BOTH' ? 'both' : 'wet';
+      const fallbackDiaperType = diaperOptions[0]?.type ?? preferredDiaperType;
       setDiaperType(
-        initialData?.diaper_type === 'DIRTY' ? 'dirty' : initialData?.diaper_type === 'BOTH' ? 'both' : 'wet'
+        diaperOptions.some((option) => option.type === preferredDiaperType)
+          ? preferredDiaperType
+          : fallbackDiaperType
       );
       setDiaperFeverMeasured(initialData?.diaper_fever_measured === true || hasTemp);
       setDiaperTemperatureC(formatTempInput(initialData?.diaper_temperature_c));
@@ -304,7 +354,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
     }
 
     // Hier könnten initialSubType ausgewertet werden
-  }, [visible, initialSubType, date, initialData, activityType, sanitizeManualDate]);
+  }, [visible, initialSubType, date, initialData, activityType, sanitizeManualDate, feedingOptions, diaperOptions]);
 
   // Rezepte laden (Supabase), fallback auf Samples
   useEffect(() => {
@@ -336,6 +386,16 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
 
   // Speichern: Payload für baby_care_entries
   const handleSave = () => {
+    if (activityType === 'feeding' && feedingOptions.length === 0) {
+      Alert.alert('Keine Fütterungsarten sichtbar', 'Blende mindestens eine Fütterungs-Quick-Action wieder ein.');
+      return;
+    }
+
+    if (activityType === 'diaper' && diaperOptions.length === 0) {
+      Alert.alert('Keine Windelarten sichtbar', 'Blende mindestens eine Windel-Quick-Action wieder ein.');
+      return;
+    }
+
     const safeStartTime = sanitizeManualDate(startTime, date ?? new Date());
     const safeEndTime = endTime ? sanitizeManualDate(endTime, safeStartTime) : null;
     const entryDateISO = safeStartTime.toISOString();
@@ -935,31 +995,43 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
         <FixedEmojiText style={styles.sectionTitleEmoji}>🍼</FixedEmojiText>{' '}
         Art der Fütterung
       </Text>
-      <View style={styles.optionsGrid}>
-        {[
-          { type: 'breast', label: 'Stillen', icon: '🤱' },
-          { type: 'bottle', label: 'Flasche', icon: '🍼' },
-          { type: 'solids', label: 'Beikost', icon: '🥄' },
-        ].map((option) => (
-          <TouchableOpacity
-            key={option.type}
-            style={[
-              styles.optionButton,
-              { backgroundColor: theme.lightGray },
-              feedingType === option.type && { backgroundColor: getButtonColor(option.type as FeedingType) }
-            ]}
-            onPress={() => setFeedingType(option.type as FeedingType)}
-          >
-            <FixedEmojiText style={styles.optionIcon}>{option.icon}</FixedEmojiText>
-            <Text style={[styles.optionLabel, { color: feedingType === option.type ? '#FFFFFF' : theme.text }]}>
-              {option.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      {feedingOptions.length > 0 ? (
+        <View style={styles.optionsGrid}>
+          {feedingOptions.map((option) => (
+            <TouchableOpacity
+              key={option.type}
+              style={[
+                styles.optionButton,
+                { backgroundColor: theme.lightGray },
+                feedingType === option.type && { backgroundColor: getButtonColor(option.type as FeedingType) }
+              ]}
+              onPress={() => setFeedingType(option.type as FeedingType)}
+            >
+              <FixedEmojiText style={styles.optionIcon}>{option.icon}</FixedEmojiText>
+              <Text style={[styles.optionLabel, { color: feedingType === option.type ? '#FFFFFF' : theme.text }]}>
+                {option.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      ) : (
+        <View
+          style={[
+            styles.hiddenOptionNotice,
+            {
+              backgroundColor: isDark ? 'rgba(24, 24, 28, 0.92)' : 'rgba(255,255,255,0.82)',
+              borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.08)',
+            },
+          ]}
+        >
+          <Text style={[styles.hiddenOptionNoticeText, { color: theme.textSecondary }]}>
+            Alle Fütterungsarten sind aktuell ausgeblendet.
+          </Text>
+        </View>
+      )}
       <View style={styles.contentContainer}>
-        {feedingType === 'bottle' && renderVolumeControl()}
-        {feedingType === 'breast' && (
+        {feedingOptions.length > 0 && feedingType === 'bottle' && renderVolumeControl()}
+        {feedingOptions.length > 0 && feedingType === 'breast' && (
           <View style={{width: '100%', alignItems: 'center'}}>
             <Text style={[styles.sectionTitle, { color: theme.text }]}>
               <FixedEmojiText style={styles.sectionTitleEmoji}>🤱</FixedEmojiText>{' '}
@@ -969,7 +1041,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
             <Text style={[styles.infoText, { marginTop: 20, color: theme.textSecondary }]}>Wähle die Seite, auf der gestillt wurde.</Text>
           </View>
         )}
-        {feedingType === 'solids' && (
+        {feedingOptions.length > 0 && feedingType === 'solids' && (
           <View style={{width: '100%', alignItems: 'center', paddingTop: 20}}>
             <Text style={[styles.sectionTitle, { color: theme.text }]}>
               <FixedEmojiText style={styles.sectionTitleEmoji}>🥦</FixedEmojiText>{' '}
@@ -1065,32 +1137,45 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
         <FixedEmojiText style={styles.sectionTitleEmoji}>💧</FixedEmojiText>{' '}
         Art der Windel
       </Text>
-      <View style={styles.optionsGrid}>
-        {[
-          { type: 'wet', label: 'Nass', icon: '💧' },
-          { type: 'dirty', label: 'Voll', icon: '💩' },
-          { type: 'both', label: 'Beides', icon: '💧💩' },
-        ].map((option) => (
-          <TouchableOpacity
-            key={option.type}
-            style={[
-              styles.optionButton,
-              { backgroundColor: theme.lightGray },
-              diaperType === option.type && {
-                backgroundColor:
-                  option.type === 'wet' ? '#3498DB' : option.type === 'dirty' ? '#8E5A2B' : theme.green,
-              }
-            ]}
-            onPress={() => setDiaperType(option.type as DiaperType)}
-          >
-            <FixedEmojiText style={styles.optionIcon}>{option.icon}</FixedEmojiText>
-            <Text style={[styles.optionLabel, { color: diaperType === option.type ? '#FFFFFF' : theme.text }]}>
-              {option.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      {diaperOptions.length > 0 ? (
+        <View style={styles.optionsGrid}>
+          {diaperOptions.map((option) => (
+            <TouchableOpacity
+              key={option.type}
+              style={[
+                styles.optionButton,
+                { backgroundColor: theme.lightGray },
+                diaperType === option.type && {
+                  backgroundColor:
+                    option.type === 'wet' ? '#3498DB' : option.type === 'dirty' ? '#8E5A2B' : theme.green,
+                }
+              ]}
+              onPress={() => setDiaperType(option.type as DiaperType)}
+            >
+              <FixedEmojiText style={styles.optionIcon}>{option.icon}</FixedEmojiText>
+              <Text style={[styles.optionLabel, { color: diaperType === option.type ? '#FFFFFF' : theme.text }]}>
+                {option.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      ) : (
+        <View
+          style={[
+            styles.hiddenOptionNotice,
+            {
+              backgroundColor: isDark ? 'rgba(24, 24, 28, 0.92)' : 'rgba(255,255,255,0.82)',
+              borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.08)',
+            },
+          ]}
+        >
+          <Text style={[styles.hiddenOptionNoticeText, { color: theme.textSecondary }]}>
+            Alle Windelarten sind aktuell ausgeblendet.
+          </Text>
+        </View>
+      )}
 
+      {diaperOptions.length > 0 ? (
       <View style={styles.diaperHealthGroup}>
         <TouchableOpacity
           style={[
@@ -1210,8 +1295,11 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
           </TouchableOpacity>
         )}
       </View>
+      ) : null}
 
-      <Text style={[styles.infoText, { marginTop: 20, color: theme.textSecondary }]}>Wähle aus, was auf die Windel zutrifft.</Text>
+      {diaperOptions.length > 0 ? (
+        <Text style={[styles.infoText, { marginTop: 20, color: theme.textSecondary }]}>Wähle aus, was auf die Windel zutrifft.</Text>
+      ) : null}
     </View>
   );
 
@@ -1451,6 +1539,18 @@ const styles = StyleSheet.create({
   optionLabel: {
     fontSize: 14,
     fontWeight: '500',
+    textAlign: 'center',
+  },
+  hiddenOptionNotice: {
+    width: '90%',
+    borderRadius: 18,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  hiddenOptionNoticeText: {
+    fontSize: 13,
+    fontWeight: '600',
     textAlign: 'center',
   },
   contentContainer: {
