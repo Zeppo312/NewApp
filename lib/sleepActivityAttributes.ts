@@ -7,7 +7,7 @@ export interface SleepActivityAttributes {
   quality?: string;   // Schlafqualität (falls eingestellt)
   babyName?: string;   // Name des Babys für die Live Activity
   activityType?: 'sleep' | 'feeding';
-  feedingType?: 'BREAST' | 'BOTTLE' | 'SOLIDS' | 'PUMP';
+  feedingType?: 'BREAST' | 'BOTTLE' | 'SOLIDS' | 'PUMP' | 'WATER';
 }
 
 // Statusattribute für die Activity
@@ -15,7 +15,7 @@ export interface SleepActivityStatus {
   isTracking: boolean;
   elapsedTimeText: string;
   quality?: string;
-  feedingType?: 'BREAST' | 'BOTTLE' | 'SOLIDS' | 'PUMP';
+  feedingType?: 'BREAST' | 'BOTTLE' | 'SOLIDS' | 'PUMP' | 'WATER';
 }
 
 // Wir verwenden eine eindeutige Activity-ID

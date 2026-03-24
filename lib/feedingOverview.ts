@@ -12,6 +12,7 @@ export type FeedingOverview = {
   breastCount: number;
   solidsCount: number;
   pumpCount: number;
+  waterCount: number;
   totalFeedingCount: number;
   detailItems: FeedingDetailItem[];
 };
@@ -59,12 +60,18 @@ export const buildFeedingOverview = (entries: FeedingEntryLike[] | null | undefi
   let breastCount = 0;
   let solidsCount = 0;
   let pumpCount = 0;
+  let waterCount = 0;
   let totalFeedingCount = 0;
 
   for (const entry of entries ?? []) {
     if (entry?.entry_type !== 'feeding') continue;
 
     const kind = resolveFeedingKind(entry);
+    if (entry.feeding_type?.toUpperCase() === 'WATER' || entry.sub_type === 'feeding_water') {
+      waterCount += 1;
+      continue;
+    }
+
     if (kind === 'pump') {
       pumpCount += 1;
       continue;
@@ -110,6 +117,7 @@ export const buildFeedingOverview = (entries: FeedingEntryLike[] | null | undefi
     breastCount,
     solidsCount,
     pumpCount,
+    waterCount,
     totalFeedingCount,
     detailItems,
   };

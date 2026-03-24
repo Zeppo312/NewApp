@@ -15,9 +15,16 @@ interface ActivityCardProps {
   onDelete: (id: string) => void;
   onEdit?: (entry: DailyEntry) => void;
   marginHorizontal?: number;
+  auxiliaryBadgeLabel?: string | null;
 }
 
-const ActivityCard: React.FC<ActivityCardProps> = ({ entry, onDelete, onEdit, marginHorizontal = 16 }) => {
+const ActivityCard: React.FC<ActivityCardProps> = ({
+  entry,
+  onDelete,
+  onEdit,
+  marginHorizontal = 16,
+  auxiliaryBadgeLabel = null,
+}) => {
   // Adaptive Farben für Dark Mode (basierend auf Hintergrundbild-Einstellung)
   const adaptiveColors = useAdaptiveColors();
   const colorScheme = adaptiveColors.effectiveScheme;
@@ -92,6 +99,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({ entry, onDelete, onEdit, ma
       if (entry.feeding_type === 'BREAST') return { emoji: '🤱', label: 'Stillen' };
       if (entry.feeding_type === 'BOTTLE') return { emoji: '🍼', label: `Flasche${entry.feeding_volume_ml ? ` ${entry.feeding_volume_ml}ml` : ''}` };
       if (entry.feeding_type === 'PUMP') return { emoji: '🥛', label: `Abpumpen${entry.feeding_volume_ml ? ` ${entry.feeding_volume_ml}ml` : ''}` };
+      if (entry.feeding_type === 'WATER') return { emoji: '🚰', label: `Wasser${entry.feeding_volume_ml ? ` ${entry.feeding_volume_ml}ml` : ''}` };
       return { emoji: '🥄', label: 'Beikost' };
     }
     if (entry.entry_type === 'diaper') {
@@ -123,6 +131,8 @@ const ActivityCard: React.FC<ActivityCardProps> = ({ entry, onDelete, onEdit, ma
         return 'Beikost';
       case 'PUMP':
         return 'Abpumpen';
+      case 'WATER':
+        return 'Wasser';
       default:
         return '–';
     }
@@ -163,6 +173,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({ entry, onDelete, onEdit, ma
       if (entry.feeding_type === 'BREAST') color = '#8E4EC6';
       else if (entry.feeding_type === 'BOTTLE') color = '#4A90E2';
       else if (entry.feeding_type === 'PUMP') color = '#35B6B4';
+      else if (entry.feeding_type === 'WATER') color = '#4FC3F7';
       else if (entry.feeding_type === 'SOLIDS') color = '#F5A623'; // Beikost Orange
     }
     // Diaper
@@ -343,8 +354,13 @@ const ActivityCard: React.FC<ActivityCardProps> = ({ entry, onDelete, onEdit, ma
                     />
                   </Animated.View>
                 </View>
-                {(recipeNote || weightDateLabel || showNotesBadge || showFeverBadge || showSuppositoryBadge) ? (
+                {(auxiliaryBadgeLabel || recipeNote || weightDateLabel || showNotesBadge || showFeverBadge || showSuppositoryBadge) ? (
                   <View style={styles.badgesWrap}>
+                    {auxiliaryBadgeLabel ? (
+                      <View style={styles.badgePill}>
+                        <ThemedText style={[styles.badgeText, { color: badgeTextColor }]}>{auxiliaryBadgeLabel}</ThemedText>
+                      </View>
+                    ) : null}
                     {recipeNote ? (
                       <View style={styles.badgePill}>
                         <ThemedText style={[styles.badgeText, { color: badgeTextColor }]}>🥄 BLW: {recipeNote}</ThemedText>

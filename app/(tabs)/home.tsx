@@ -885,6 +885,7 @@ export default function HomeScreen() {
     const hasBreastFeedings = feedingOverview.breastCount > 0;
     const hasSolidFeedings = feedingOverview.solidsCount > 0;
     const hasPumpEntries = feedingOverview.pumpCount > 0;
+    const hasWaterEntries = feedingOverview.waterCount > 0;
 
     let feedingStatValue = `${feedingOverview.totalBottleMl}`;
     let feedingStatUnit: 'ml' | 'times' = 'ml';
@@ -898,6 +899,7 @@ export default function HomeScreen() {
           hasBreastFeedings ? `Stillen ${feedingOverview.breastCount}×` : null,
           hasSolidFeedings ? `Beikost ${feedingOverview.solidsCount}×` : null,
           hasPumpEntries ? `Abpumpen ${feedingOverview.pumpCount}×` : null,
+          hasWaterEntries ? `Wasser ${feedingOverview.waterCount}×` : null,
         ]
           .filter(Boolean)
           .join(' • ') || null;
@@ -912,6 +914,7 @@ export default function HomeScreen() {
           todayFeedingsSecondaryDetail = [
             hasSolidFeedings ? `Beikost ${feedingOverview.solidsCount}×` : null,
             hasPumpEntries ? `Abpumpen ${feedingOverview.pumpCount}×` : null,
+            hasWaterEntries ? `Wasser ${feedingOverview.waterCount}×` : null,
           ]
             .filter(Boolean)
             .join(' • ') || null;
@@ -921,13 +924,19 @@ export default function HomeScreen() {
           todayFeedingsSecondaryDetail = [
             hasBreastFeedings ? `Stillen ${feedingOverview.breastCount}×` : null,
             hasPumpEntries ? `Abpumpen ${feedingOverview.pumpCount}×` : null,
+            hasWaterEntries ? `Wasser ${feedingOverview.waterCount}×` : null,
           ]
             .filter(Boolean)
             .join(' • ') || null;
         }
       }
-    } else if (hasPumpEntries) {
-      todayFeedingsSecondaryDetail = `Abpumpen ${feedingOverview.pumpCount}×`;
+    } else if (hasPumpEntries || hasWaterEntries) {
+      todayFeedingsSecondaryDetail = [
+        hasPumpEntries ? `Abpumpen ${feedingOverview.pumpCount}×` : null,
+        hasWaterEntries ? `Wasser ${feedingOverview.waterCount}×` : null,
+      ]
+        .filter(Boolean)
+        .join(' • ') || null;
     }
     const todayDiaperChanges = getTodayDiaperChanges();
 

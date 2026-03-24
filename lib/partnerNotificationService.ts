@@ -208,6 +208,12 @@ function formatNotificationContent(
           title: 'Abpumpen',
           body: `${partnerName} hat Milch abgepumpt um ${time}`
         };
+      case 'WATER':
+        return {
+          emoji: '🚰',
+          title: 'Wasser',
+          body: `${partnerName} hat Wasser gegeben um ${time}`
+        };
       default:
         return {
           emoji: '🍼',

@@ -44,7 +44,7 @@ export type PlannerCapturePayload = {
   start?: Date;
   end?: Date | null;
   location?: string;
-  reminderMinutes?: number;
+  reminderMinutes?: number | null;
   notes?: string;
   assignee?: PlannerAssignee;
   babyId?: string;
@@ -92,7 +92,7 @@ const THEME = {
   divider: "rgba(0,0,0,0.08)",
 };
 
-const REMINDER_OPTIONS = [0, 5, 10, 15, 30, 60, 120, 1440] as const;
+const REMINDER_OPTIONS = [null, 0, 5, 10, 15, 30, 60, 120, 1440] as const;
 const WEEKDAY_OPTIONS = [
   { value: 1, label: "Mo" },
   { value: 2, label: "Di" },
@@ -103,7 +103,8 @@ const WEEKDAY_OPTIONS = [
   { value: 7, label: "So" },
 ] as const;
 
-const formatReminderLabel = (minutes: number) => {
+const formatReminderLabel = (minutes?: number | null) => {
+  if (minutes === null || minutes === undefined) return "Keine Erinnerung";
   if (minutes === 0) return "Zum Start";
   if (minutes === 60) return "1 Std vorher";
   if (minutes === 120) return "2 Std vorher";
@@ -196,7 +197,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
   const [focusConfig, setFocusConfig] = useState<FocusConfig | null>(null);
   const [focusValue, setFocusValue] = useState("");
   const [isAllDay, setIsAllDay] = useState(false);
-  const [reminderMinutes, setReminderMinutes] = useState<number>(15);
+  const [reminderMinutes, setReminderMinutes] = useState<number | null>(15);
   const [repeatEnabled, setRepeatEnabled] = useState(false);
   const [repeatDays, setRepeatDays] = useState<number[]>([]);
 
@@ -424,7 +425,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
         const nextReminder =
           typeof eventItem.reminderMinutes === "number"
             ? Math.max(0, Math.round(eventItem.reminderMinutes))
-            : 15;
+            : null;
         setReminderMinutes(nextReminder);
       } else {
         const todoItem = item as PlannerTodo;
@@ -1751,7 +1752,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                 <ScrollView>
                   {REMINDER_OPTIONS.map((minutes) => (
                     <TouchableOpacity
-                      key={minutes}
+                      key={minutes === null ? "none" : minutes}
                       style={[
                         styles.pickerOption,
                         { borderBottomColor: theme.divider },

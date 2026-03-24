@@ -42,6 +42,7 @@ describe('buildFeedingOverview', () => {
       { entry_type: 'feeding', sub_type: 'feeding_breast' },
       { entry_type: 'feeding', sub_type: 'feeding_solids' },
       { entry_type: 'feeding', sub_type: 'feeding_pump', feeding_volume_ml: 90 },
+      { entry_type: 'feeding', sub_type: 'feeding_water', feeding_volume_ml: 40 },
     ]);
 
     expect(overview.totalBottleMl).toBe(150);
@@ -49,12 +50,14 @@ describe('buildFeedingOverview', () => {
     expect(overview.breastCount).toBe(1);
     expect(overview.solidsCount).toBe(1);
     expect(overview.pumpCount).toBe(1);
+    expect(overview.waterCount).toBe(1);
     expect(overview.totalFeedingCount).toBe(3);
   });
 
   it('keeps meal detail items in fixed order bottle -> breast -> solids', () => {
     const overview = buildFeedingOverview([
       { entry_type: 'feeding', feeding_type: 'PUMP', feeding_volume_ml: 90 },
+      { entry_type: 'feeding', feeding_type: 'WATER', feeding_volume_ml: 40 },
       { entry_type: 'feeding', feeding_type: 'SOLIDS' },
       { entry_type: 'feeding', feeding_type: 'BREAST' },
       { entry_type: 'feeding', feeding_type: 'BOTTLE', feeding_volume_ml: 120 },
@@ -62,6 +65,7 @@ describe('buildFeedingOverview', () => {
 
     expect(overview.detailItems.map((item) => item.key)).toEqual(['bottle', 'breast', 'solids']);
     expect(overview.pumpCount).toBe(1);
+    expect(overview.waterCount).toBe(1);
     expect(overview.totalFeedingCount).toBe(3);
   });
 });

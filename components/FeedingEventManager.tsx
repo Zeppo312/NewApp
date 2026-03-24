@@ -4,7 +4,7 @@ import { FeedingEvent, saveFeedingEvent, updateFeedingEventEnd } from '@/lib/bab
 import { SupabaseErrorHandler } from '@/lib/errorHandler';
 
 export interface FeedingEventData {
-  type: 'feeding_breast' | 'feeding_bottle' | 'feeding_solids' | 'feeding_pump';
+  type: 'feeding_breast' | 'feeding_bottle' | 'feeding_solids' | 'feeding_pump' | 'feeding_water';
   volume_ml?: number;
   side?: 'LEFT' | 'RIGHT' | 'BOTH';
   note?: string;
@@ -14,12 +14,13 @@ export interface FeedingEventData {
 export class FeedingEventManager {
   
   // Map UI types to database types
-  private static mapTypeToDatabase(uiType: string): 'BREAST' | 'BOTTLE' | 'SOLIDS' | 'PUMP' {
-    const typeMap: Record<string, 'BREAST' | 'BOTTLE' | 'SOLIDS' | 'PUMP'> = {
+  private static mapTypeToDatabase(uiType: string): 'BREAST' | 'BOTTLE' | 'SOLIDS' | 'PUMP' | 'WATER' {
+    const typeMap: Record<string, 'BREAST' | 'BOTTLE' | 'SOLIDS' | 'PUMP' | 'WATER'> = {
       'feeding_breast': 'BREAST',
       'feeding_bottle': 'BOTTLE', 
       'feeding_solids': 'SOLIDS',
       'feeding_pump': 'PUMP',
+      'feeding_water': 'WATER',
     };
     return typeMap[uiType] || 'BREAST';
   }

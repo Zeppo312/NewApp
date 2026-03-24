@@ -32,7 +32,7 @@ export type PlannerEvent = {
   start: string;
   end: string;
   location?: string;
-  reminderMinutes?: number;
+  reminderMinutes?: number | null;
   assignee?: PlannerAssignee;
   babyId?: string;
   blockId?: string;
@@ -305,6 +305,11 @@ function sanitizeReminderMinutes(value?: number | null, fallback = 15) {
   return Math.min(10080, Math.max(0, rounded));
 }
 
+function normalizeReminderMinutes(value?: number | null, fallback = 15) {
+  if (value === null) return null;
+  return sanitizeReminderMinutes(value, fallback);
+}
+
 function sanitizeMinutesOfDay(value?: number | null) {
   if (typeof value !== 'number' || Number.isNaN(value)) return null;
   return Math.min(1439, Math.max(0, Math.round(value)));
@@ -545,7 +550,7 @@ function buildAggregatedData(date: Date, dayRows: PlannerDayRow[], itemRows: Pla
         start: (startDate ?? workingDate).toISOString(),
         end: endDate.toISOString(),
         location: row.location ?? undefined,
-        reminderMinutes: sanitizeReminderMinutes(row.reminder_minutes, 15),
+        reminderMinutes: normalizeReminderMinutes(row.reminder_minutes, 15),
         assignee: convertAssigneePerspective(row.assignee, row.user_id, baseUserId),
         babyId: row.baby_id ?? undefined,
         blockId: row.block_id ?? undefined,
@@ -1095,7 +1100,7 @@ export function usePlannerDay(date: Date) {
         assignee: convertAssigneePerspective(assignee, viewerId, ownerId),
         baby_id: babyId ?? null,
         is_all_day: isAllDay ?? false,
-        reminder_minutes: sanitizeReminderMinutes(reminderMinutes, 15),
+        reminder_minutes: normalizeReminderMinutes(reminderMinutes, 15),
       };
       const { error: insertError } = await supabase.from('planner_items').insert(payload);
       if (insertError) {
@@ -1200,7 +1205,10 @@ export function usePlannerDay(date: Date) {
         payload.is_all_day = updates.isAllDay;
       }
       if (updates.reminderMinutes !== undefined) {
-        payload.reminder_minutes = sanitizeReminderMinutes(updates.reminderMinutes, 15);
+        payload.reminder_minutes = normalizeReminderMinutes(
+          updates.reminderMinutes,
+          15,
+        );
       }
 
       let newDayId: string | undefined;
@@ -1271,7 +1279,10 @@ export function usePlannerDay(date: Date) {
         payload.start_at = normalizedStart;
         payload.end_at = normalizedEnd ?? null;
         payload.location = updates.location ?? null;
-        payload.reminder_minutes = sanitizeReminderMinutes(updates.reminderMinutes, 15);
+        payload.reminder_minutes = normalizeReminderMinutes(
+          updates.reminderMinutes,
+          15,
+        );
         payload.due_at = null;
         payload.completed = false;
         const nextAssignee = updates.assignee ?? 'me';

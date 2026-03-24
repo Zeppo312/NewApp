@@ -76,6 +76,12 @@ const getNotificationContent = (
           body: `${partnerName} hat für ${baby} Milch abgepumpt um ${time}`,
           emoji: '🥛',
         };
+      } else if (activitySubtype === 'WATER') {
+        return {
+          title: 'Wasser gegeben',
+          body: `${partnerName} hat ${baby} Wasser gegeben um ${time}`,
+          emoji: '🚰',
+        };
       }
       return {
         title: 'Gefüttert',
