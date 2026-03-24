@@ -138,7 +138,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
     }
   };
 
-  const translateBreastSide = (s?: string | null) => {
+  const translateFeedingSide = (s?: string | null) => {
     switch (s) {
       case 'LEFT':
         return 'Links';
@@ -263,6 +263,11 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
   const showFeverBadge = entry.entry_type === 'diaper' && (diaperFeverMeasured || diaperTemperatureValue !== null);
   const showSuppositoryBadge =
     entry.entry_type === 'diaper' && (diaperSuppositoryGiven || diaperSuppositoryDoseValue !== null);
+  const feedingSideLabel =
+    entry.entry_type === 'feeding' && (entry.feeding_type === 'BREAST' || entry.feeding_type === 'PUMP')
+      ? translateFeedingSide(entry.feeding_side)
+      : null;
+  const showFeedingSideBadge = !!feedingSideLabel && feedingSideLabel !== '–';
   const feverBadgeLabel =
     diaperTemperatureValue !== null
       ? `🌡️ ${String(diaperTemperatureValue).replace('.', ',')} °C`
@@ -354,7 +359,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
                     />
                   </Animated.View>
                 </View>
-                {(auxiliaryBadgeLabel || recipeNote || weightDateLabel || showNotesBadge || showFeverBadge || showSuppositoryBadge) ? (
+                {(auxiliaryBadgeLabel || recipeNote || weightDateLabel || showNotesBadge || showFeverBadge || showSuppositoryBadge || showFeedingSideBadge) ? (
                   <View style={styles.badgesWrap}>
                     {auxiliaryBadgeLabel ? (
                       <View style={styles.badgePill}>
@@ -384,6 +389,11 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
                     {showSuppositoryBadge ? (
                       <View style={styles.badgePill}>
                         <ThemedText style={[styles.badgeText, { color: badgeTextColor }]}>{suppositoryBadgeLabel}</ThemedText>
+                      </View>
+                    ) : null}
+                    {showFeedingSideBadge ? (
+                      <View style={styles.badgePill}>
+                        <ThemedText style={[styles.badgeText, { color: badgeTextColor }]}>↔️ {feedingSideLabel}</ThemedText>
                       </View>
                     ) : null}
                   </View>

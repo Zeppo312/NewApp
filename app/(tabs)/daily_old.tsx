@@ -392,12 +392,14 @@ const buildFeedingOverviewCards = (entries: DailyEntry[]): FeedingOverviewCatego
       bucket.totalMl += normalizeTrackedMl(entry.feeding_volume_ml);
     }
 
-    if (category === 'BREAST') {
-      bucket.totalMinutes += getEntryDurationMinutes(entry);
-
+    if (category === 'BREAST' || category === 'PUMP') {
       if (entry.feeding_side === 'LEFT') bucket.leftCount += 1;
       if (entry.feeding_side === 'RIGHT') bucket.rightCount += 1;
       if (entry.feeding_side === 'BOTH') bucket.bothCount += 1;
+    }
+
+    if (category === 'BREAST') {
+      bucket.totalMinutes += getEntryDurationMinutes(entry);
     }
   }
 
@@ -429,6 +431,16 @@ const buildFeedingOverviewCards = (entries: DailyEntry[]): FeedingOverviewCatego
       secondary = sideSummary || defaultSecondary;
     } else if (key === 'PUMP') {
       metric = bucket.totalMl > 0 ? `${bucket.totalMl} ml abgepumpt` : metric;
+
+      const sideSummary = [
+        bucket.leftCount > 0 ? `L ${bucket.leftCount}` : null,
+        bucket.rightCount > 0 ? `R ${bucket.rightCount}` : null,
+        bucket.bothCount > 0 ? `Beide ${bucket.bothCount}` : null,
+      ]
+        .filter(Boolean)
+        .join(' • ');
+
+      secondary = sideSummary || defaultSecondary;
     }
 
     return {

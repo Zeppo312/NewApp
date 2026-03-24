@@ -24,6 +24,7 @@ export type PlannerTodo = {
   occurrenceDate?: string;
   isRecurringException?: boolean;
   repeatDays?: number[];
+  recurringEndsOn?: string | null;
 };
 
 export type PlannerEvent = {
@@ -43,6 +44,7 @@ export type PlannerEvent = {
   occurrenceDate?: string;
   isRecurringException?: boolean;
   repeatDays?: number[];
+  recurringEndsOn?: string | null;
 };
 
 export type PlannerBlock = {
@@ -105,6 +107,7 @@ export type PlannerItemRow = {
   recurring_occurrence_date?: string | null;
   repeat_days?: number[] | null;
   is_recurring_exception?: boolean;
+  recurring_ends_on?: string | null;
 };
 
 export type RecurringItemRow = {
@@ -161,6 +164,7 @@ export type RecurringSeriesInput = {
   repeatDays: number[];
   ownerId?: string;
   startsOn?: string;
+  endsOn?: string | null;
 };
 
 export type RecurringOccurrenceOverrideInput = {
@@ -439,6 +443,7 @@ function buildRecurringPlannerItemRow(
     recurring_occurrence_date: dateIso,
     repeat_days: series.repeat_days,
     is_recurring_exception: hasRecurringOverride(exception),
+    recurring_ends_on: series.ends_on,
   };
 }
 
@@ -561,6 +566,7 @@ function buildAggregatedData(date: Date, dayRows: PlannerDayRow[], itemRows: Pla
         occurrenceDate: row.recurring_occurrence_date ?? undefined,
         isRecurringException: !!row.is_recurring_exception,
         repeatDays: row.repeat_days ?? undefined,
+        recurringEndsOn: row.recurring_ends_on ?? undefined,
       };
       const minute = startDate ? minutesSinceMidnight(startDate) : null;
       const targetIndex =
@@ -593,6 +599,7 @@ function buildAggregatedData(date: Date, dayRows: PlannerDayRow[], itemRows: Pla
       occurrenceDate: row.recurring_occurrence_date ?? undefined,
       isRecurringException: !!row.is_recurring_exception,
       repeatDays: row.repeat_days ?? undefined,
+      recurringEndsOn: row.recurring_ends_on ?? undefined,
     };
     const minute = dueDate ? minutesSinceMidnight(dueDate) : null;
     const targetIndex =
@@ -1431,6 +1438,7 @@ export function usePlannerDay(date: Date) {
           : null,
         repeat_days: repeatDays,
         starts_on: input.startsOn ?? dateIso,
+        ends_on: input.endsOn ?? null,
       };
 
       const { error: insertError } = await supabase
@@ -1480,6 +1488,7 @@ export function usePlannerDay(date: Date) {
         payload.repeat_days = sanitizeRepeatDays(updates.repeatDays);
       }
       if (updates.startsOn !== undefined) payload.starts_on = updates.startsOn ?? dateIso;
+      if (updates.endsOn !== undefined) payload.ends_on = updates.endsOn;
 
       const nextEntryType = updates.entryType ?? existing.entry_type;
       const nextIsAllDay =

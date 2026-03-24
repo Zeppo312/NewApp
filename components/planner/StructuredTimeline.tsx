@@ -33,6 +33,11 @@ type Props = {
     babyId?: string,
     ownerId?: string,
   ) => string | undefined;
+  getEventColor?: (
+    assignee?: PlannerAssignee,
+    babyId?: string,
+    ownerId?: string,
+  ) => string;
   readOnly?: boolean;
   onToggleTodo: (id: string) => void;
   onMoveTomorrow: (id: string) => void;
@@ -46,6 +51,7 @@ type TimelineEvent = {
   id: string;
   title: string;
   subtitle: string;
+  eventColor: string;
   isRecurring?: boolean;
   minute: number;
   endMinute: number;
@@ -101,6 +107,7 @@ export const StructuredTimeline: React.FC<Props> = ({
   todos,
   getOwnerLabel,
   getAssigneeLabel,
+  getEventColor,
   readOnly = false,
   onToggleTodo,
   onMoveTomorrow,
@@ -169,11 +176,15 @@ export const StructuredTimeline: React.FC<Props> = ({
       const metaSuffix = metaLabel ? ` · ${metaLabel}` : "";
       const locationSuffix = event.location ? ` · ${event.location}` : "";
       const recurring = isRecurringId(event.id);
+      const eventColor =
+        getEventColor?.(event.assignee, event.babyId, event.userId) ??
+        accentColor;
       entries.push({
         kind: "event",
         id: event.id,
         title: event.title,
         subtitle: `${start.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} – ${end.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}${locationSuffix}${metaSuffix}`,
+        eventColor,
         isRecurring: recurring,
         minute: startMinute,
         endMinute: endMinute,
@@ -429,7 +440,7 @@ export const StructuredTimeline: React.FC<Props> = ({
       showNowLine,
       nowTop,
     };
-  }, [date, timedEvents, todos, getOwnerLabel, getAssigneeLabel]);
+  }, [accentColor, date, getAssigneeLabel, getEventColor, getOwnerLabel, timedEvents, todos]);
 
   const { items, positionFor, contentHeight, hourLabels, showNowLine, nowTop } =
     timeline;
@@ -455,6 +466,9 @@ export const StructuredTimeline: React.FC<Props> = ({
                 event.babyId,
                 event.userId,
               );
+              const eventColor =
+                getEventColor?.(event.assignee, event.babyId, event.userId) ??
+                accentColor;
               const metaLabel =
                 assigneeLabel && assigneeLabel !== "Ich"
                   ? assigneeLabel
@@ -488,8 +502,12 @@ export const StructuredTimeline: React.FC<Props> = ({
                       StyleSheet.absoluteFill,
                       styles.cardOverlay,
                       {
-                        backgroundColor: glassOverlay,
-                        borderColor: glassBorder,
+                        backgroundColor: isDark
+                          ? toRgba(eventColor, 0.22)
+                          : toRgba(eventColor, 0.14),
+                        borderColor: isDark
+                          ? toRgba(eventColor, 0.5)
+                          : toRgba(eventColor, 0.34),
                       },
                     ]}
                   />
@@ -499,18 +517,18 @@ export const StructuredTimeline: React.FC<Props> = ({
                         styles.allDayEventIcon,
                         {
                           backgroundColor: isDark
-                            ? toRgba(accentColor, 0.18)
-                            : "rgba(94,61,179,0.1)",
+                            ? toRgba(eventColor, 0.28)
+                            : toRgba(eventColor, 0.18),
                           borderColor: isDark
-                            ? toRgba(accentColor, 0.4)
-                            : "rgba(94,61,179,0.3)",
+                            ? toRgba(eventColor, 0.56)
+                            : toRgba(eventColor, 0.4),
                         },
                       ]}
                     >
                       <IconSymbol
                         name="calendar"
                         size={14}
-                        color={accentColor as any}
+                        color={(isDark ? "#fff" : textPrimary) as any}
                       />
                     </View>
                     <View style={styles.allDayEventBody}>
@@ -656,8 +674,12 @@ export const StructuredTimeline: React.FC<Props> = ({
                       StyleSheet.absoluteFill,
                       styles.cardOverlay,
                       {
-                        backgroundColor: glassOverlay,
-                        borderColor: glassBorder,
+                        backgroundColor: isDark
+                          ? toRgba(item.eventColor, 0.22)
+                          : toRgba(item.eventColor, 0.14),
+                        borderColor: isDark
+                          ? toRgba(item.eventColor, 0.5)
+                          : toRgba(item.eventColor, 0.34),
                       },
                     ]}
                   />
@@ -671,18 +693,18 @@ export const StructuredTimeline: React.FC<Props> = ({
                         totalColumns > 1 && { width: 30, height: 30 },
                         {
                           backgroundColor: isDark
-                            ? "rgba(255,255,255,0.12)"
-                            : "#fff",
+                            ? toRgba(item.eventColor, 0.22)
+                            : toRgba(item.eventColor, 0.14),
                           borderColor: isDark
-                            ? toRgba(accentColor, 0.4)
-                            : "rgba(94,61,179,0.45)",
+                            ? toRgba(item.eventColor, 0.6)
+                            : toRgba(item.eventColor, 0.5),
                         },
                       ]}
                     >
                       <IconSymbol
                         name="calendar"
                         size={totalColumns > 1 ? 12 : 14}
-                        color={accentColor as any}
+                        color={(isDark ? "#fff" : textPrimary) as any}
                       />
                     </View>
                     <View style={styles.cardBody}>

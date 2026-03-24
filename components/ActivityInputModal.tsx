@@ -471,7 +471,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
         'SOLIDS';
 
       const feeding_side =
-        feedingType === 'breast'
+        feedingType === 'breast' || feedingType === 'pump'
           ? (breastSide === 'left' ? 'LEFT' : breastSide === 'right' ? 'RIGHT' : 'BOTH')
           : null;
 
@@ -968,7 +968,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
     </View>
   );
 
-  const renderBreastSideSelector = () => (
+  const renderFeedingSideSelector = () => (
     <View style={styles.sideSelectorContainer}>
       {(['left', 'right', 'both'] as BreastSide[]).map((side) => (
         <TouchableOpacity
@@ -976,7 +976,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
           style={[
             styles.sideSelectorButton,
             { backgroundColor: theme.lightGray },
-            breastSide === side && { backgroundColor: theme.purple, },
+            breastSide === side && { backgroundColor: getButtonColor(feedingType) },
           ]}
           onPress={() => setBreastSide(side)}
         >
@@ -1123,14 +1123,18 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
           </View>
         )}
         {(feedingOptions.length > 0 || isStandaloneSpecialFlow) && (feedingType === 'bottle' || feedingType === 'pump' || feedingType === 'water') && renderVolumeControl()}
-        {feedingOptions.length > 0 && feedingType === 'breast' && (
+        {feedingOptions.length > 0 && (feedingType === 'breast' || feedingType === 'pump') && (
           <View style={{width: '100%', alignItems: 'center'}}>
             <Text style={[styles.sectionTitle, { color: theme.text }]}>
-              <FixedEmojiText style={styles.sectionTitleEmoji}>🤱</FixedEmojiText>{' '}
+              <FixedEmojiText style={styles.sectionTitleEmoji}>{feedingType === 'pump' ? '🥛' : '🤱'}</FixedEmojiText>{' '}
               Seite
             </Text>
-            {renderBreastSideSelector()}
-            <Text style={[styles.infoText, { marginTop: 20, color: theme.textSecondary }]}>Wähle die Seite, auf der gestillt wurde.</Text>
+            {renderFeedingSideSelector()}
+            <Text style={[styles.infoText, { marginTop: 20, color: theme.textSecondary }]}>
+              {feedingType === 'pump'
+                ? 'Wähle die Seite, von der abgepumpt wurde.'
+                : 'Wähle die Seite, auf der gestillt wurde.'}
+            </Text>
           </View>
         )}
         {feedingOptions.length > 0 && feedingType === 'solids' && (

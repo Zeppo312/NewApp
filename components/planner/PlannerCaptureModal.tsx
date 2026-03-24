@@ -55,6 +55,7 @@ export type PlannerCapturePayload = {
   editScope?: "occurrence" | "series";
   recurringSeriesId?: string;
   recurringOccurrenceDate?: string;
+  recurringEndsOn?: Date | null;
 };
 
 type OwnerOption = {
@@ -119,6 +120,23 @@ const toRgba = (hex: string, opacity = 1) => {
   const g = (int >> 8) & 255;
   const b = int & 255;
   return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+};
+
+const parseLocalDateOnly = (value?: string | null) => {
+  if (!value) return null;
+  const [year, month, day] = value.split("-").map((part) => Number(part));
+  if (!year || !month || !day) return null;
+  const parsed = new Date(year, month - 1, day);
+  parsed.setHours(0, 0, 0, 0);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const toDateOnlyKey = (value?: Date | null) => {
+  const safeDate = parseSafeDate(value);
+  if (!safeDate) return null;
+  const copy = new Date(safeDate);
+  copy.setHours(0, 0, 0, 0);
+  return `${copy.getFullYear()}-${String(copy.getMonth() + 1).padStart(2, "0")}-${String(copy.getDate()).padStart(2, "0")}`;
 };
 
 if (
@@ -187,6 +205,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
   const [showDuePicker, setShowDuePicker] = useState(false);
+  const [showRecurrenceEndPicker, setShowRecurrenceEndPicker] = useState(false);
   const [notesExpanded, setNotesExpanded] = useState(false);
   const [currentType, setCurrentType] = useState<PlannerCaptureType>(type);
   const [assignee, setAssignee] = useState<PlannerAssignee>("me");
@@ -200,6 +219,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
   const [reminderMinutes, setReminderMinutes] = useState<number | null>(15);
   const [repeatEnabled, setRepeatEnabled] = useState(false);
   const [repeatDays, setRepeatDays] = useState<number[]>([]);
+  const [recurrenceEndsOn, setRecurrenceEndsOn] = useState<Date | null>(null);
 
   const partnerLabel = useMemo(() => {
     if (!ownerOptions || ownerOptions.length === 0) return "Partner";
@@ -390,6 +410,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
     setShowStartPicker(false);
     setShowEndPicker(false);
     setShowDuePicker(false);
+    setShowRecurrenceEndPicker(false);
     setShowTimeRangeModal(false);
     setShowAssigneePicker(false);
     setShowReminderPicker(false);
@@ -453,9 +474,11 @@ export const PlannerCaptureModal: React.FC<Props> = ({
       if (item.isRecurring) {
         setRepeatEnabled(true);
         setRepeatDays(item.repeatDays?.length ? item.repeatDays : [1, 2, 3, 4, 5]);
+        setRecurrenceEndsOn(parseLocalDateOnly(item.recurringEndsOn));
       } else {
         setRepeatEnabled(false);
         setRepeatDays([]);
+        setRecurrenceEndsOn(null);
       }
     } else {
       const reset = getSafePickerDate(baseDate, new Date());
@@ -478,6 +501,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
       setReminderMinutes(15);
       setRepeatEnabled(false);
       setRepeatDays([]);
+      setRecurrenceEndsOn(null);
     }
   }, [visible, type, baseDate, editingItem, defaultOwnerId, initialStart, deriveAssigneeForOwner]);
 
@@ -590,6 +614,19 @@ export const PlannerCaptureModal: React.FC<Props> = ({
     const safeStart = parseSafeDate(startTime);
     const safeEnd = endTime ? parseSafeDate(endTime) : null;
     const safeDue = dueTime ? parseSafeDate(dueTime) : null;
+    const recurringEndDate = parseSafeDate(recurrenceEndsOn);
+    const normalizedRecurringEnd = recurringEndDate
+      ? new Date(
+          recurringEndDate.getFullYear(),
+          recurringEndDate.getMonth(),
+          recurringEndDate.getDate(),
+        )
+      : null;
+    const recurrenceStartReference = parseLocalDateOnly(recurringOccurrenceDate) ?? (() => {
+      const nextBaseDate = new Date(baseDate);
+      nextBaseDate.setHours(0, 0, 0, 0);
+      return nextBaseDate;
+    })();
 
     if (currentType === "event" && !safeStart) {
       Alert.alert("Ungültige Zeit", "Bitte wähle eine gültige Startzeit.");
@@ -624,6 +661,18 @@ export const PlannerCaptureModal: React.FC<Props> = ({
       Alert.alert(
         "Nicht unterstützt",
         "Wiederkehrende Termine können in dieser Version nur am selben Tag stattfinden.",
+      );
+      return;
+    }
+
+    if (
+      repeatEnabled &&
+      normalizedRecurringEnd &&
+      normalizedRecurringEnd.getTime() < recurrenceStartReference.getTime()
+    ) {
+      Alert.alert(
+        "Enddatum ungültig",
+        "Das Enddatum darf nicht vor dem ersten Termin der Serie liegen.",
       );
       return;
     }
@@ -686,6 +735,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
     if (repeatEnabled && sanitizedRepeatDays.length > 0) {
       payload.repeatEnabled = true;
       payload.repeatDays = sanitizedRepeatDays;
+      payload.recurringEndsOn = normalizedRecurringEnd;
     }
     if (isRecurringEdit && recurringSeriesId && recurringOccurrenceDate) {
       payload.recurringSeriesId = recurringSeriesId;
@@ -707,6 +757,26 @@ export const PlannerCaptureModal: React.FC<Props> = ({
     }
 
     if (isRecurringEdit && payload.repeatEnabled) {
+      const originalRecurringEndsOn = editingItem?.item.recurringEndsOn ?? null;
+      const nextRecurringEndsOn = toDateOnlyKey(payload.recurringEndsOn);
+      if (originalRecurringEndsOn !== nextRecurringEndsOn) {
+        Alert.alert(
+          "Enddatum ändern",
+          "Das Enddatum gilt immer für die gesamte Serie.",
+          [
+            { text: "Abbrechen", style: "cancel" },
+            {
+              text: "Gesamte Serie",
+              onPress: () =>
+                submitPayload({
+                  ...payload,
+                  editScope: "series",
+                }),
+            },
+          ],
+        );
+        return;
+      }
       Alert.alert(
         "Änderungen speichern",
         "Soll die Änderung nur für diesen Tag oder für die gesamte Serie gelten?",
@@ -1159,6 +1229,72 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                           );
                         })}
                       </View>
+                      <Text
+                        style={[
+                          styles.sectionLabelSecondary,
+                          styles.recurrenceMetaLabel,
+                          { color: theme.textSecondary },
+                        ]}
+                      >
+                        Serienende
+                      </Text>
+                      {recurrenceEndsOn ? (
+                        <>
+                          {renderDateSelector(
+                            "Endet am",
+                            recurrenceEndsOn,
+                            showRecurrenceEndPicker,
+                            setShowRecurrenceEndPicker,
+                            (date) => {
+                              const normalized = new Date(date);
+                              normalized.setHours(0, 0, 0, 0);
+                              setRecurrenceEndsOn(normalized);
+                            },
+                            true,
+                          )}
+                          <TouchableOpacity
+                            style={[
+                              styles.timeButton,
+                              { backgroundColor: theme.field },
+                            ]}
+                            onPress={() => {
+                              setRecurrenceEndsOn(null);
+                              setShowRecurrenceEndPicker(false);
+                            }}
+                          >
+                            <Text
+                              style={[
+                                styles.timeButtonLabel,
+                                { color: theme.text },
+                              ]}
+                            >
+                              Ohne Enddatum
+                            </Text>
+                          </TouchableOpacity>
+                        </>
+                      ) : (
+                        <TouchableOpacity
+                          style={[
+                            styles.timeButton,
+                            { backgroundColor: theme.field },
+                          ]}
+                          onPress={() => {
+                            const initialRecurrenceEnd = new Date(baseDate);
+                            initialRecurrenceEnd.setHours(0, 0, 0, 0);
+                            setRecurrenceEndsOn(initialRecurrenceEnd);
+                            setShowRecurrenceEndPicker(true);
+                          }}
+                        >
+                          <Text
+                            style={[
+                              styles.timeButtonLabel,
+                              { color: theme.text },
+                            ]}
+                          >
+                            Enddatum hinzufügen
+                          </Text>
+                        </TouchableOpacity>
+                      )}
                     </View>
                   )}
                 </View>
@@ -1923,6 +2059,9 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
     color: THEME.textSecondary,
+  },
+  recurrenceMetaLabel: {
+    marginTop: 2,
   },
   recurrenceToggleRow: {
     flexDirection: "row",

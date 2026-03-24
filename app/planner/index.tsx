@@ -144,6 +144,12 @@ type LinkedUser = {
   relationshipType?: string | null;
 };
 
+type MonthSummaryDay = {
+  tasks: number;
+  events: number;
+  eventPersonKeys: string[];
+};
+
 function displayNameForLinkedUser(linkedUser: LinkedUser, index: number) {
   const firstName = linkedUser.firstName?.trim();
   const lastName = linkedUser.lastName?.trim();
@@ -216,9 +222,9 @@ export default function PlannerScreen() {
   const [profileAvatarUrl, setProfileAvatarUrl] = useState<string | null>(null);
   const contentTopPadding = Math.max(SECTION_GAP_TOP - 24, 0);
   const [weekAgenda, setWeekAgenda] = useState<Record<string, any>>({});
-  const [monthSummary, setMonthSummary] = useState<
-    Record<string, { tasks: number; events: number }>
-  >({});
+  const [monthSummary, setMonthSummary] = useState<Record<string, MonthSummaryDay>>(
+    {},
+  );
   const [showCompletedFloatingTodos, setShowCompletedFloatingTodos] =
     useState(false);
 
@@ -255,6 +261,73 @@ export default function PlannerScreen() {
       }))
       .filter((opt) => opt.id.length > 0);
   }, [babies]);
+
+  const partnerUserId = useMemo(
+    () => linkedUsers.find((entry) => entry.userId !== user?.id)?.userId,
+    [linkedUsers, user?.id],
+  );
+
+  const eventColorByPersonKey = useMemo(() => {
+    const map: Record<string, string> = {};
+    const selfBaseColor = "#D97A2F";
+    const partnerBaseColor = "#6E4DBD";
+    const boyBasePalette = ["#4F7FCE", "#4CA174", "#369C93"];
+    const girlBasePalette = ["#E49AB8", "#C45243", "#CC6F96"];
+    const neutralBabyBasePalette = ["#4D8DBF", "#7EA63F"];
+    const selfColor = isDark ? lightenHex(selfBaseColor, 0.08) : selfBaseColor;
+    const partnerColor = isDark
+      ? lightenHex(partnerBaseColor, 0.08)
+      : partnerBaseColor;
+    const boyPalette = isDark
+      ? boyBasePalette.map((color) => lightenHex(color, 0.08))
+      : boyBasePalette;
+    const girlPalette = isDark
+      ? girlBasePalette.map((color) => lightenHex(color, 0.08))
+      : girlBasePalette;
+    const neutralBabyPalette = isDark
+      ? neutralBabyBasePalette.map((color) => lightenHex(color, 0.08))
+      : neutralBabyBasePalette;
+
+    if (user?.id) {
+      map[`user:${user.id}`] = selfColor;
+    }
+
+    linkedUsers.forEach((entry) => {
+      map[`user:${entry.userId}`] = partnerColor;
+    });
+
+    let boyIndex = 0;
+    let girlIndex = 0;
+    let neutralIndex = 0;
+    babies.forEach((baby, index) => {
+      if (!baby.id) return;
+      const gender = String(baby.baby_gender ?? "unknown").toLowerCase();
+      let color = neutralBabyPalette[neutralIndex % neutralBabyPalette.length];
+
+      if (gender === "male") {
+        color = boyPalette[boyIndex % boyPalette.length];
+        boyIndex += 1;
+      } else if (gender === "female") {
+        color = girlPalette[girlIndex % girlPalette.length];
+        girlIndex += 1;
+      } else {
+        neutralIndex += 1;
+      }
+
+      map[`baby:${baby.id}`] = color;
+    });
+
+    map.family = accentColor;
+    map.partner = partnerUserId
+      ? map[`user:${partnerUserId}`] ?? partnerColor
+      : partnerColor;
+    map.child =
+      babies.length > 0 && babies[0]?.id
+        ? map[`baby:${babies[0].id}`] ?? boyPalette[0]
+        : boyPalette[0];
+
+    return map;
+  }, [accentColor, babies, isDark, linkedUsers, partnerUserId, user?.id]);
 
   const getOwnerLabel = useCallback(
     (ownerId?: string) => {
@@ -307,6 +380,42 @@ export default function PlannerScreen() {
       return undefined;
     },
     [getAssigneeLabel, getOwnerLabel],
+  );
+
+  const getEventPersonKey = useCallback(
+    (assignee?: string, babyId?: string, ownerId?: string) => {
+      if (assignee === "child") {
+        return babyId ? `baby:${babyId}` : "child";
+      }
+      if (assignee === "family") {
+        return "family";
+      }
+      if (assignee === "partner") {
+        return partnerUserId ? `user:${partnerUserId}` : "partner";
+      }
+      if (ownerId) {
+        return `user:${ownerId}`;
+      }
+      if (user?.id) {
+        return `user:${user.id}`;
+      }
+      return "default";
+    },
+    [partnerUserId, user?.id],
+  );
+
+  const getEventColorByPersonKey = useCallback(
+    (personKey?: string) => {
+      if (!personKey) return accentEventColor;
+      return eventColorByPersonKey[personKey] ?? accentEventColor;
+    },
+    [accentEventColor, eventColorByPersonKey],
+  );
+
+  const getEventColor = useCallback(
+    (assignee?: string, babyId?: string, ownerId?: string) =>
+      getEventColorByPersonKey(getEventPersonKey(assignee, babyId, ownerId)),
+    [getEventColorByPersonKey, getEventPersonKey],
   );
 
   useEffect(() => {
@@ -543,7 +652,7 @@ export default function PlannerScreen() {
         );
 
         const agenda: Record<string, any> = {};
-        const monthAgg: Record<string, { tasks: number; events: number }> = {};
+        const monthAgg: Record<string, MonthSummaryDay> = {};
 
         const assignBlock = (
           dateIso: string,
@@ -581,9 +690,25 @@ export default function PlannerScreen() {
             ? plannerDay[0]?.day
             : plannerDay?.day;
           if (!dayIso) return;
-          if (!monthAgg[dayIso]) monthAgg[dayIso] = { tasks: 0, events: 0 };
+          if (!monthAgg[dayIso]) {
+            monthAgg[dayIso] = { tasks: 0, events: 0, eventPersonKeys: [] };
+          }
           if (item.entry_type === "event") monthAgg[dayIso].events += 1;
           else monthAgg[dayIso].tasks += 1;
+
+          if (item.entry_type === "event") {
+            const personKey = getEventPersonKey(
+              item.assignee,
+              item.baby_id,
+              item.user_id,
+            );
+            if (
+              personKey &&
+              !monthAgg[dayIso].eventPersonKeys.includes(personKey)
+            ) {
+              monthAgg[dayIso].eventPersonKeys.push(personKey);
+            }
+          }
 
           if (item.entry_type === "event") {
             assignBlock(dayIso, item, "event");
@@ -604,7 +729,7 @@ export default function PlannerScreen() {
     if (selectedTab === "week" || selectedTab === "month") {
       loadRange();
     }
-  }, [selectedTab, selectedDate, user?.id, linkedUsers]);
+  }, [getEventPersonKey, linkedUsers, selectedDate, selectedTab, user?.id]);
 
   useEffect(() => {
     if (selectedTab !== "week") return;
@@ -873,6 +998,7 @@ export default function PlannerScreen() {
       endAtMinutes: toMinutes(eventEnd),
       repeatDays: payload.repeatDays ?? [],
       ownerId: payload.ownerId,
+      endsOn: payload.recurringEndsOn ? toDateKey(payload.recurringEndsOn) : null,
     } as const;
     const newRecurringInput = {
       ...recurringSeriesInput,
@@ -1180,6 +1306,7 @@ export default function PlannerScreen() {
                 todos={selectedDayTimeline.todos}
                 getOwnerLabel={getOwnerLabel}
                 getAssigneeLabel={getAssigneeLabel}
+                getEventColor={getEventColor}
                 onToggleTodo={handleToggleItem}
                 onMoveTomorrow={handleMoveTomorrow}
                 onDelete={handleDeleteItem}
@@ -1446,6 +1573,11 @@ export default function PlannerScreen() {
                         assignee: ev.assignee,
                         babyId: ev.baby_id,
                         isAllDay: !!ev.is_all_day,
+                        eventColor: getEventColor(
+                          ev.assignee,
+                          ev.baby_id,
+                          ev.user_id,
+                        ),
                         type: "event" as const,
                       })),
                       ...todos.map((todo: any) => ({
@@ -1562,6 +1694,10 @@ export default function PlannerScreen() {
                           {combined.map((item) => {
                             const isAllDayEvent =
                               item.type === "event" && item.isAllDay;
+                            const eventColor =
+                              item.type === "event"
+                                ? item.eventColor
+                                : accentColor;
                             const safeTime = parseSafeDate(item.time);
                             const timeLabel = safeTime
                               ? new Intl.DateTimeFormat("de-DE", {
@@ -1583,7 +1719,7 @@ export default function PlannerScreen() {
                                     {
                                       backgroundColor:
                                         item.type === "event"
-                                          ? accentEventColor
+                                          ? eventColor
                                           : accentColor,
                                     },
                                   ]}
@@ -1592,11 +1728,25 @@ export default function PlannerScreen() {
                                   {isAllDayEvent ? (
                                     <>
                                       <View style={styles.timelineTitleRow}>
-                                        <IconSymbol
-                                          name="calendar"
-                                          size={12}
-                                          color={accentColor as any}
-                                        />
+                                        <View
+                                          style={[
+                                            styles.inlineEventIconBadge,
+                                            {
+                                              backgroundColor: toRgba(
+                                                eventColor,
+                                                isDark ? 0.9 : 0.82,
+                                              ),
+                                            },
+                                          ]}
+                                        >
+                                          <IconSymbol
+                                            name="calendar"
+                                            size={11}
+                                            color={
+                                              (isDark ? "#fff" : textPrimary) as any
+                                            }
+                                          />
+                                        </View>
                                         <Text
                                           numberOfLines={2}
                                           style={[
@@ -1612,19 +1762,36 @@ export default function PlannerScreen() {
                                             style={[
                                               styles.ownerPill,
                                               {
-                                                backgroundColor: isDark
-                                                  ? "rgba(255,255,255,0.08)"
-                                                  : "rgba(255,255,255,0.24)",
-                                                borderColor: isDark
-                                                  ? "rgba(255,255,255,0.18)"
-                                                  : "rgba(255,255,255,0.5)",
+                                                backgroundColor:
+                                                  item.type === "event"
+                                                    ? toRgba(
+                                                        eventColor,
+                                                        isDark ? 0.26 : 0.18,
+                                                      )
+                                                    : isDark
+                                                      ? "rgba(255,255,255,0.08)"
+                                                      : "rgba(255,255,255,0.24)",
+                                                borderColor:
+                                                  item.type === "event"
+                                                    ? toRgba(
+                                                        eventColor,
+                                                        isDark ? 0.58 : 0.4,
+                                                      )
+                                                    : isDark
+                                                      ? "rgba(255,255,255,0.18)"
+                                                      : "rgba(255,255,255,0.5)",
                                               },
                                             ]}
                                           >
                                             <Text
                                               style={[
                                                 styles.ownerPillText,
-                                                { color: textSecondary },
+                                                {
+                                                  color:
+                                                    item.type === "event"
+                                                      ? eventColor
+                                                      : textSecondary,
+                                                },
                                               ]}
                                             >
                                               {displayLabel}
@@ -1657,19 +1824,36 @@ export default function PlannerScreen() {
                                             style={[
                                               styles.ownerPill,
                                               {
-                                                backgroundColor: isDark
-                                                  ? "rgba(255,255,255,0.08)"
-                                                  : "rgba(255,255,255,0.24)",
-                                                borderColor: isDark
-                                                  ? "rgba(255,255,255,0.18)"
-                                                  : "rgba(255,255,255,0.5)",
+                                                backgroundColor:
+                                                  item.type === "event"
+                                                    ? toRgba(
+                                                        eventColor,
+                                                        isDark ? 0.26 : 0.18,
+                                                      )
+                                                    : isDark
+                                                      ? "rgba(255,255,255,0.08)"
+                                                      : "rgba(255,255,255,0.24)",
+                                                borderColor:
+                                                  item.type === "event"
+                                                    ? toRgba(
+                                                        eventColor,
+                                                        isDark ? 0.58 : 0.4,
+                                                      )
+                                                    : isDark
+                                                      ? "rgba(255,255,255,0.18)"
+                                                      : "rgba(255,255,255,0.5)",
                                               },
                                             ]}
                                           >
                                             <Text
                                               style={[
                                                 styles.ownerPillText,
-                                                { color: textSecondary },
+                                                {
+                                                  color:
+                                                    item.type === "event"
+                                                      ? eventColor
+                                                      : textSecondary,
+                                                },
                                               ]}
                                             >
                                               {displayLabel}
@@ -1743,8 +1927,12 @@ export default function PlannerScreen() {
                       const stats = monthSummary[toDateKey(date)] ?? {
                         tasks: 0,
                         events: 0,
+                        eventPersonKeys: [],
                       };
                       const hasData = stats.tasks > 0 || stats.events > 0;
+                      const monthEventDots = stats.eventPersonKeys
+                        .slice(0, 3)
+                        .map((personKey) => getEventColorByPersonKey(personKey));
                       return (
                         <TouchableOpacity
                           key={date.toISOString()}
@@ -1800,20 +1988,35 @@ export default function PlannerScreen() {
                                 ]}
                               />
                             )}
-                            {isCurrentMonth && (
-                              <View
-                                style={[
-                                  styles.dataDot,
-                                  {
-                                    backgroundColor: isDark
-                                      ? "rgba(255,255,255,0.28)"
-                                      : "rgba(125,90,80,0.35)",
-                                  },
-                                  hasData && styles.dataDotActive,
-                                  hasData && { backgroundColor: accentColor },
-                                ]}
-                              />
-                            )}
+                            {isCurrentMonth &&
+                              monthEventDots.map((color, index) => (
+                                <View
+                                  key={`${toDateKey(date)}-${color}-${index}`}
+                                  style={[
+                                    styles.dataDot,
+                                    {
+                                      backgroundColor: color,
+                                      opacity: isCurrentMonth ? 1 : 0.55,
+                                    },
+                                  ]}
+                                />
+                              ))}
+                            {isCurrentMonth &&
+                              monthEventDots.length === 0 &&
+                              hasData && (
+                                <View
+                                  style={[
+                                    styles.dataDot,
+                                    {
+                                      backgroundColor: isDark
+                                        ? "rgba(255,255,255,0.28)"
+                                        : "rgba(125,90,80,0.35)",
+                                    },
+                                    styles.dataDotActive,
+                                    { backgroundColor: accentColor },
+                                  ]}
+                                />
+                              )}
                           </View>
                         </TouchableOpacity>
                       );
@@ -1839,6 +2042,7 @@ export default function PlannerScreen() {
                 todos={selectedDayTimeline.todos}
                 getOwnerLabel={getOwnerLabel}
                 getAssigneeLabel={getAssigneeLabel}
+                getEventColor={getEventColor}
                 onToggleTodo={handleToggleItem}
                 onMoveTomorrow={handleMoveTomorrow}
                 onDelete={handleDeleteItem}
@@ -2231,6 +2435,13 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: TEXT_PRIMARY,
     flex: 1,
+  },
+  inlineEventIconBadge: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
   },
   todoRowSmall: {
     flexDirection: "row",
