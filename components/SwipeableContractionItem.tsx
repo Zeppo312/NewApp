@@ -187,7 +187,7 @@ const ContractionItem: React.FC<SwipeableContractionItemProps> = ({
               lightColor={theme.text}
               darkColor={theme.text}
             >
-              Abstand:
+              {item.interval && item.interval > 0 ? 'Abstand:' : 'Start:'}
             </ThemedText>
             <ThemedText
               type="defaultSemiBold"
@@ -195,7 +195,7 @@ const ContractionItem: React.FC<SwipeableContractionItemProps> = ({
               lightColor={theme.accent}
               darkColor={theme.accent}
             >
-              {item.interval ? formatTime(item.interval) : '--:--'}
+              {item.interval && item.interval > 0 ? formatTime(item.interval) : formatDateTime(new Date(item.startTime))}
             </ThemedText>
           </ThemedView>
         </View>

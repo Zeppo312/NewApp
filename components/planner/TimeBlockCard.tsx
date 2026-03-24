@@ -5,6 +5,7 @@ import { PlannerBlock, PlannerEvent, PlannerTodo } from '@/services/planner';
 import { ThemedText } from '@/components/ThemedText';
 import SwipeableListItem from './SwipeableListItem';
 import { GLASS_BORDER, GLASS_OVERLAY, LAYOUT_PAD, PRIMARY, TEXT_PRIMARY } from '@/constants/PlannerDesign';
+import { parseSafeDate } from '@/lib/safeDate';
 
 type Props = {
   block: PlannerBlock;
@@ -46,13 +47,19 @@ export const TimeBlockCard: React.FC<Props> = ({ block, initiallyCollapsed = tru
             <View>
               {block.items.map((item) => {
                 const isTodo = 'completed' in item;
+                const eventStart = !isTodo ? parseSafeDate((item as PlannerEvent).start) : null;
+                const eventEnd = !isTodo ? parseSafeDate((item as PlannerEvent).end) : null;
+                const eventTimeLabel =
+                  eventStart && eventEnd
+                    ? `${eventStart.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – ${eventEnd.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                    : 'Zeit offen';
                 return (
                   <SwipeableListItem
                     key={item.id}
                     id={item.id}
                     title={item.title}
                     type={isTodo ? 'todo' : 'event'}
-                    subtitle={!isTodo ? `${new Date((item as PlannerEvent).start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – ${new Date((item as PlannerEvent).end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}${(item as PlannerEvent).location ? ` · ${(item as PlannerEvent).location}` : ''}` : undefined}
+                    subtitle={!isTodo ? `${eventTimeLabel}${(item as PlannerEvent).location ? ` · ${(item as PlannerEvent).location}` : ''}` : undefined}
                     completed={isTodo ? (item as PlannerTodo).completed : undefined}
                     onComplete={(id) => onToggleTodo(id)}
                     onMoveTomorrow={(id) => onMoveTomorrow(id)}
@@ -98,4 +105,3 @@ const styles = StyleSheet.create({
 });
 
 export default TimeBlockCard;
-

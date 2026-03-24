@@ -1,14 +1,17 @@
 import React from 'react';
 import { ImageBackground, ImageBackgroundProps, Dimensions } from 'react-native';
-import { useColorScheme } from '@/hooks/useColorScheme';
+import { useBackground } from '@/contexts/BackgroundContext';
 import { useTheme } from '@/contexts/ThemeContext';
 
 type ThemedBackgroundProps = Omit<ImageBackgroundProps, 'source'> & {
   children: React.ReactNode;
 };
 
+const nightModeBackground = require('@/assets/images/nightmode.png');
+
 /**
  * Eine Komponente, die das richtige Hintergrundbild basierend auf dem aktuellen Farbschema (hell/dunkel) anzeigt.
+ * Unterstützt auch benutzerdefinierte Hintergrundbilder.
  *
  * Verwendung:
  * ```jsx
@@ -18,32 +21,36 @@ type ThemedBackgroundProps = Omit<ImageBackgroundProps, 'source'> & {
  * ```
  */
 export function ThemedBackground({ children, style, resizeMode = "repeat", ...rest }: ThemedBackgroundProps) {
-  const colorScheme = useColorScheme() ?? 'light';
+  const { backgroundSource, hasCustomBackground, selectedBackground } = useBackground();
+  const { autoDarkModeEnabled, colorScheme } = useTheme();
 
   // Bildschirmabmessungen für das Hintergrundbild
   const screenWidth = Dimensions.get('window').width;
   const screenHeight = Dimensions.get('window').height;
 
-  // Wähle das richtige Hintergrundbild basierend auf dem Farbschema
-  const backgroundImage =
-    colorScheme === 'dark'
-      ? require('@/assets/images/Background_Dunkel.png')
-      : require('@/assets/images/Background_Hell.png');
+  const useAutoNightBackground =
+    autoDarkModeEnabled &&
+    colorScheme === 'dark' &&
+    selectedBackground !== 'custom';
+
+  // Custom Hintergründe und der Auto-Nacht-Hintergrund sollen bildschirmfüllend angezeigt werden.
+  const effectiveResizeMode = hasCustomBackground || useAutoNightBackground ? "cover" : resizeMode;
+  const effectiveBackgroundSource = useAutoNightBackground ? nightModeBackground : backgroundSource;
 
   return (
     <ImageBackground
-      source={backgroundImage}
+      source={effectiveBackgroundSource}
       style={[
-        { 
-          width: screenWidth, 
-          height: screenHeight, 
+        {
+          width: screenWidth,
+          height: screenHeight,
           flex: 1,
           justifyContent: 'flex-start',
-          alignItems: 'stretch' 
-        }, 
+          alignItems: 'stretch'
+        },
         style
       ]}
-      resizeMode={resizeMode}
+      resizeMode={effectiveResizeMode}
       {...rest}
     >
       {children}

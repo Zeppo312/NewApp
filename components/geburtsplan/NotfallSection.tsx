@@ -11,13 +11,15 @@ interface NotfallSectionProps {
   data: Notfall;
   onChange: (data: Notfall) => void;
   containerStyle?: StyleProp<ViewStyle>;
+  readOnly?: boolean;
 }
 
-export const NotfallSection: React.FC<NotfallSectionProps> = ({ data, onChange, containerStyle }) => {
+export const NotfallSection: React.FC<NotfallSectionProps> = ({ data, onChange, containerStyle, readOnly = false }) => {
   // Begleitperson im OP
   const begleitpersonOptions = ['Ja', 'Nein', 'wenn möglich'];
   
   const selectBegleitperson = (option: string) => {
+    if (readOnly) return;
     onChange({
       ...data,
       begleitpersonImOP: option,
@@ -26,6 +28,7 @@ export const NotfallSection: React.FC<NotfallSectionProps> = ({ data, onChange, 
 
   // Bonding im OP
   const toggleBondingImOP = () => {
+    if (readOnly) return;
     onChange({
       ...data,
       bondingImOP: !data.bondingImOP,
@@ -36,6 +39,7 @@ export const NotfallSection: React.FC<NotfallSectionProps> = ({ data, onChange, 
   const fotoerlaubnisOptions = ['Ja', 'Nein', 'nur nach Absprache'];
   
   const selectFotoerlaubnis = (option: string) => {
+    if (readOnly) return;
     onChange({
       ...data,
       fotoerlaubnis: option,
@@ -51,6 +55,7 @@ export const NotfallSection: React.FC<NotfallSectionProps> = ({ data, onChange, 
             label={option}
             selected={data.begleitpersonImOP === option}
             onSelect={() => selectBegleitperson(option)}
+            disabled={readOnly}
           />
         ))}
       </OptionGroup>
@@ -60,6 +65,7 @@ export const NotfallSection: React.FC<NotfallSectionProps> = ({ data, onChange, 
           label="Möglichst früh"
           checked={data.bondingImOP}
           onToggle={toggleBondingImOP}
+          disabled={readOnly}
         />
       </OptionGroup>
 
@@ -70,6 +76,7 @@ export const NotfallSection: React.FC<NotfallSectionProps> = ({ data, onChange, 
             label={option}
             selected={data.fotoerlaubnis === option}
             onSelect={() => selectFotoerlaubnis(option)}
+            disabled={readOnly}
           />
         ))}
       </OptionGroup>
@@ -77,10 +84,14 @@ export const NotfallSection: React.FC<NotfallSectionProps> = ({ data, onChange, 
       <TextInputField
         label="Sonstige Wünsche für den Notfall"
         value={data.sonstigeWuensche}
-        onChangeText={(text) => onChange({ ...data, sonstigeWuensche: text })}
+        onChangeText={(text) => {
+          if (readOnly) return;
+          onChange({ ...data, sonstigeWuensche: text });
+        }}
         multiline
         numberOfLines={3}
         placeholder="Hier kannst du weitere Wünsche für den Notfall eintragen..."
+        readOnly={readOnly}
       />
     </GeburtsplanSection>
   );

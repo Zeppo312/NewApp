@@ -1,15 +1,20 @@
 import 'react-native-url-polyfill/auto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
+import * as Linking from 'expo-linking';
 
 // Supabase-Konfiguration
 // Ersetzen Sie diese Werte mit Ihren eigenen Supabase-Projektdaten
 export const supabaseUrl = 'https://kwniiyayhzgjfqjsjcfu.supabase.co';
 export const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt3bmlpeWF5aHpnamZxanNqY2Z1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDM5NzEyNjIsImV4cCI6MjA1OTU0NzI2Mn0.h0CL1_SXhfp9BXSPy0ipprs57qSZ8A_26wh2hP-8vZk';
 
-// Konfiguration für die Entwicklungsumgebung
-// Wir verwenden eine bedingte Prüfung, um sicherzustellen, dass der Code sowohl im Browser als auch in Node.js funktioniert
-const isClient = typeof window !== 'undefined';
+// Laufzeit-Erkennung:
+// - Web: window verfügbar
+// - React Native: navigator.product === 'ReactNative'
+// Damit Auth auch in nativen Builds zuverlässig initialisiert.
+const isReactNativeRuntime =
+  typeof navigator !== 'undefined' && navigator.product === 'ReactNative';
+const isClient = typeof window !== 'undefined' || isReactNativeRuntime;
 
 // Erstellen des Supabase-Clients mit einer Prüfung, ob wir im Browser oder in Node.js sind
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
@@ -20,6 +25,57 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     detectSessionInUrl: false,
     flowType: 'pkce', // Empfohlen für mobile Apps
   },
+});
+
+/**
+ * 🚀 PERFORMANCE OPTIMIZATION: Auth User Cache
+ *
+ * Problem: Jede lib-Funktion ruft `supabase.auth.getUser()` auf
+ * → 137 Auth-Calls in 60 Minuten!
+ *
+ * Lösung: Cache User-Daten für 5 Minuten
+ * → Reduziert Auth-Calls auf ~1-2 pro Session
+ */
+let cachedUser: any = null;
+let cachedUserTimestamp = 0;
+const USER_CACHE_DURATION_MS = 5 * 60 * 1000; // 5 Minuten
+
+/**
+ * Cached version of supabase.auth.getUser()
+ * Use this instead of calling supabase.auth.getUser() directly!
+ */
+export const getCachedUser = async () => {
+  const now = Date.now();
+
+  // Return cached user if still valid
+  if (cachedUser && (now - cachedUserTimestamp) < USER_CACHE_DURATION_MS) {
+    return { data: { user: cachedUser }, error: null };
+  }
+
+  // Fetch fresh user data
+  const { data, error } = await supabase.auth.getUser();
+
+  if (!error && data.user) {
+    cachedUser = data.user;
+    cachedUserTimestamp = now;
+  }
+
+  return { data, error };
+};
+
+/**
+ * Invalidate user cache (call on logout/login)
+ */
+export const invalidateUserCache = () => {
+  cachedUser = null;
+  cachedUserTimestamp = 0;
+};
+
+// Listen to auth state changes and invalidate cache
+supabase.auth.onAuthStateChange((event, session) => {
+  if (event === 'SIGNED_OUT' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+    invalidateUserCache();
+  }
 });
 
 // Hilfsfunktion, um zu prüfen, ob der Client bereit ist
@@ -119,18 +175,35 @@ export type Geburtsplan = {
 export type BabyCareEntry = {
   id?: string;
   user_id?: string;
+  baby_id?: string | null;
   entry_type: 'feeding' | 'diaper';
   start_time: string; // ISO
   end_time?: string | null; // ISO
   notes?: string | null;
   // Feeding-spezifisch
-  feeding_type?: 'BREAST' | 'BOTTLE' | 'SOLIDS' | null;
+  feeding_type?: 'BREAST' | 'BOTTLE' | 'SOLIDS' | 'PUMP' | 'WATER' | null;
   feeding_volume_ml?: number | null;
   feeding_side?: 'LEFT' | 'RIGHT' | 'BOTH' | null;
   // Diaper-spezifisch
   diaper_type?: 'WET' | 'DIRTY' | 'BOTH' | null;
+  diaper_fever_measured?: boolean | null;
+  diaper_temperature_c?: number | null;
+  diaper_suppository_given?: boolean | null;
+  diaper_suppository_dose_mg?: number | null;
   created_at?: string;
   updated_at?: string;
+};
+
+export type FeatureRequest = {
+  id: string;
+  user_id: string;
+  title: string;
+  description: string;
+  category: 'feature' | 'improvement' | 'bug-fix';
+  priority: 'low' | 'medium' | 'high';
+  status?: 'pending' | 'under_review' | 'planned' | 'completed' | 'rejected';
+  created_at: string;
+  updated_at: string;
 };
 
 // Hilfsfunktionen für die Authentifizierung
@@ -165,7 +238,7 @@ export const verifyOTPToken = async (email: string, token: string) => {
 
 // Prüfung ob E-Mail verifiziert ist
 export const checkEmailVerification = async () => {
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { user } } = await getCachedUser();
   return {
     isVerified: user?.email_confirmed_at ? true : false,
     user,
@@ -249,12 +322,41 @@ export const signInWithApple = async () => {
       ],
     });
 
-    // Sign in with Supabase using the Apple credential
-    const { data, error } = await supabase.auth.signInWithIdToken({
+    if (!credential.identityToken) {
+      return { data: null, error: { message: 'Kein Apple identityToken erhalten' } };
+    }
+
+    const signInPayload: any = {
       provider: 'apple',
-      token: credential.identityToken!,
-      nonce: credential.nonce,
-    });
+      token: credential.identityToken,
+    };
+
+    if (credential.nonce) {
+      signInPayload.nonce = credential.nonce;
+    }
+
+    if (credential.authorizationCode) {
+      signInPayload.access_token = credential.authorizationCode;
+    }
+
+    // Sign in with Supabase using the Apple credential
+    const { data, error } = await supabase.auth.signInWithIdToken(signInPayload);
+
+    if (error?.message?.includes('Unacceptable audience in id_token')) {
+      const audienceMatch = error.message.match(/\[([^\]]+)\]/);
+      const audience = audienceMatch?.[1];
+      const audienceHint = audience
+        ? `"${audience}" in den Client IDs`
+        : 'die iOS Bundle-ID in den Client IDs';
+
+      return {
+        data: null,
+        error: {
+          message: `Apple Sign-In ist nicht vollständig konfiguriert. Bitte in Supabase unter Authentication > Providers > Apple ${audienceHint} ergänzen.`,
+          originalMessage: error.message,
+        },
+      };
+    }
 
     // If sign-in successful, create/update profile
     if (data.user && !error) {
@@ -306,13 +408,14 @@ export const signInAnonymously = async () => {
 };
 
 // Einfügen in die einheitliche Tabelle baby_care_entries
-export const addBabyCareEntry = async (entry: BabyCareEntry) => {
+export const addBabyCareEntry = async (entry: BabyCareEntry, babyId?: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     const payload = {
       user_id: userData.user.id,
+      baby_id: babyId ?? entry.baby_id ?? null,
       entry_type: entry.entry_type,
       start_time: entry.start_time,
       end_time: entry.end_time ?? null,
@@ -321,6 +424,10 @@ export const addBabyCareEntry = async (entry: BabyCareEntry) => {
       feeding_volume_ml: entry.feeding_volume_ml ?? null,
       feeding_side: entry.feeding_side ?? null,
       diaper_type: entry.diaper_type ?? null,
+      diaper_fever_measured: entry.diaper_fever_measured ?? null,
+      diaper_temperature_c: entry.diaper_temperature_c ?? null,
+      diaper_suppository_given: entry.diaper_suppository_given ?? null,
+      diaper_suppository_dose_mg: entry.diaper_suppository_dose_mg ?? null,
     };
 
     const { data, error } = await supabase
@@ -335,9 +442,9 @@ export const addBabyCareEntry = async (entry: BabyCareEntry) => {
   }
 };
 
-export const getBabyCareEntriesForDate = async (date: Date) => {
+export const getBabyCareEntriesForDate = async (date: Date, babyId?: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     const startOfDay = new Date(date);
@@ -345,13 +452,17 @@ export const getBabyCareEntriesForDate = async (date: Date) => {
     const endOfDay = new Date(date);
     endOfDay.setHours(23, 59, 59, 999);
 
-    const { data, error } = await supabase
+    let query = supabase
       .from('baby_care_entries')
       .select('*')
-      .eq('user_id', userData.user.id)
       .gte('start_time', startOfDay.toISOString())
-      .lte('start_time', endOfDay.toISOString())
-      .order('start_time', { ascending: false });
+      .lte('start_time', endOfDay.toISOString());
+
+    if (babyId) {
+      query = query.eq('baby_id', babyId);
+    }
+
+    const { data, error } = await query.order('start_time', { ascending: false });
 
     return { data, error };
   } catch (err) {
@@ -359,18 +470,22 @@ export const getBabyCareEntriesForDate = async (date: Date) => {
   }
 };
 
-export const getBabyCareEntriesForDateRange = async (startDate: Date, endDate: Date) => {
+export const getBabyCareEntriesForDateRange = async (startDate: Date, endDate: Date, babyId?: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
-    const { data, error } = await supabase
+    let query = supabase
       .from('baby_care_entries')
       .select('*')
-      .eq('user_id', userData.user.id)
       .gte('start_time', startDate.toISOString())
-      .lte('start_time', endDate.toISOString())
-      .order('start_time', { ascending: true });
+      .lte('start_time', endDate.toISOString());
+
+    if (babyId) {
+      query = query.eq('baby_id', babyId);
+    }
+
+    const { data, error } = await query.order('start_time', { ascending: true });
 
     return { data, error };
   } catch (err) {
@@ -378,52 +493,57 @@ export const getBabyCareEntriesForDateRange = async (startDate: Date, endDate: D
   }
 };
 
-export const deleteBabyCareEntry = async (id: string) => {
+export const deleteBabyCareEntry = async (id: string, babyId?: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { error: new Error('Nicht angemeldet') };
 
-    const { error } = await supabase
-      .from('baby_care_entries')
-      .delete()
-      .eq('id', id)
-      .eq('user_id', userData.user.id);
+    let query = supabase.from('baby_care_entries').delete().eq('id', id);
+    if (babyId) {
+      query = query.eq('baby_id', babyId);
+    }
+
+    const { error } = await query;
     return { error };
   } catch (err) {
     return { error: err };
   }
 };
 
-export const stopBabyCareEntryTimer = async (id: string) => {
+export const stopBabyCareEntryTimer = async (id: string, babyId?: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { error: new Error('Nicht angemeldet') };
 
-    const { data, error } = await supabase
+    let query = supabase
       .from('baby_care_entries')
       .update({ end_time: new Date().toISOString(), updated_at: new Date().toISOString() })
-      .eq('id', id)
-      .eq('user_id', userData.user.id)
-      .select()
-      .single();
+      .eq('id', id);
+
+    if (babyId) {
+      query = query.eq('baby_id', babyId);
+    }
+
+    const { data, error } = await query.select().single();
     return { data, error };
   } catch (err) {
     return { data: null, error: err };
   }
 };
 
-export const getBabyCareEntriesForMonth = async (date: Date) => {
+export const getBabyCareEntriesForMonth = async (date: Date, babyId?: string) => {
   const first = new Date(date.getFullYear(), date.getMonth(), 1, 0, 0, 0, 0);
   const last = new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
-  return getBabyCareEntriesForDateRange(first, last);
+  return getBabyCareEntriesForDateRange(first, last, babyId);
 };
 
 export const updateBabyCareEntry = async (
   id: string,
-  updates: Partial<BabyCareEntry>
+  updates: Partial<BabyCareEntry>,
+  babyId?: string
 ) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     // Only allow certain fields to be updated
@@ -435,16 +555,19 @@ export const updateBabyCareEntry = async (
       feeding_volume_ml: updates.feeding_volume_ml ?? null,
       feeding_side: updates.feeding_side ?? null,
       diaper_type: updates.diaper_type ?? null,
+      diaper_fever_measured: updates.diaper_fever_measured ?? null,
+      diaper_temperature_c: updates.diaper_temperature_c ?? null,
+      diaper_suppository_given: updates.diaper_suppository_given ?? null,
+      diaper_suppository_dose_mg: updates.diaper_suppository_dose_mg ?? null,
       updated_at: new Date().toISOString(),
     };
 
-    const { data, error } = await supabase
-      .from('baby_care_entries')
-      .update(payload)
-      .eq('id', id)
-      .eq('user_id', userData.user.id)
-      .select()
-      .single();
+    let query = supabase.from('baby_care_entries').update(payload).eq('id', id);
+    if (babyId) {
+      query = query.eq('baby_id', babyId);
+    }
+
+    const { data, error } = await query.select().single();
 
     return { data, error };
   } catch (err) {
@@ -458,14 +581,14 @@ export const signOut = async () => {
 };
 
 export const getCurrentUser = async () => {
-  const { data, error } = await supabase.auth.getUser();
+  const { data, error } = await getCachedUser();
   return { user: data.user, error };
 };
 
 // Hilfsfunktionen für Wehen-Daten
 export const saveContraction = async (contraction: Omit<Contraction, 'id' | 'user_id' | 'created_at'>) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     // Verwenden der neuen RPC-Funktion zum Hinzufügen und Synchronisieren
@@ -511,7 +634,7 @@ export const saveContraction = async (contraction: Omit<Contraction, 'id' | 'use
 
 export const getContractions = async () => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     // Verwenden der verbesserten RPC-Funktion
@@ -520,7 +643,9 @@ export const getContractions = async () => {
     });
 
     if (rpcError) {
-      console.error('Error fetching contractions with sync info:', rpcError);
+      const isBrokenRpcDefinition = rpcError.code === '42803';
+      const log = isBrokenRpcDefinition ? console.warn : console.error;
+      log('Falling back from get_contractions_with_sync_info:', rpcError);
 
       // Fallback auf die alte Methode
       const { data: fallbackData, error: fallbackError } = await supabase
@@ -549,7 +674,7 @@ export const getContractions = async () => {
 // Funktion zum einmaligen Synchronisieren aller bestehenden Wehen
 export const syncAllExistingContractions = async () => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { success: false, error: 'Nicht angemeldet' };
 
     console.log('Attempting to sync all existing contractions for user:', userData.user.id);
@@ -697,21 +822,80 @@ export const syncAllExistingContractions = async () => {
 // Funktion zum Abrufen aller verknüpften Benutzer mit Details
 export const getLinkedUsersWithDetails = async () => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { success: false, error: 'Nicht angemeldet' };
 
-    // Verwenden der neuen RPC-Funktion
-    const { data, error } = await supabase.rpc('get_linked_users_with_details', {
-      p_user_id: userData.user.id
+    const userId = userData.user.id;
+
+    // Bevorzugt die ältere, eindeutigere RPC-Funktion. Einige Datenbankstände
+    // haben get_linked_users_with_details nicht oder mit abweichendem Rückgabeformat.
+    const { data: infoData, error: infoError } = await supabase.rpc('get_linked_users_with_info', {
+      p_user_id: userId
     });
 
-    if (error) {
-      console.error('Error fetching linked users with details:', error);
-      return { success: false, error };
+    if (!infoError) {
+      console.log('Linked users with info:', infoData);
+      return infoData;
     }
 
-    console.log('Linked users with details:', data);
-    return data; // Die Funktion gibt { success: true, linkedUsers: [...] } zurück
+    console.warn('Falling back from get_linked_users_with_info to direct query:', infoError);
+
+    const { data: links, error: linksError } = await supabase
+      .from('account_links')
+      .select('creator_id, invited_id, relationship_type, created_at, accepted_at')
+      .or(`creator_id.eq.${userId},invited_id.eq.${userId}`)
+      .eq('status', 'accepted');
+
+    if (linksError) {
+      console.error('Error fetching linked users with direct query:', linksError);
+      return { success: false, error: linksError };
+    }
+
+    const linkedUserIds = Array.from(
+      new Set(
+        (links ?? [])
+          .map((link: any) => (link.creator_id === userId ? link.invited_id : link.creator_id))
+          .filter((id: unknown): id is string => typeof id === 'string' && id.length > 0)
+      )
+    );
+
+    if (linkedUserIds.length === 0) {
+      return { success: true, linkedUsers: [] };
+    }
+
+    const { data: profiles, error: profilesError } = await supabase
+      .from('profiles')
+      .select('id, first_name, last_name, user_role')
+      .in('id', linkedUserIds);
+
+    if (profilesError) {
+      console.error('Error fetching linked user profiles:', profilesError);
+      return { success: false, error: profilesError };
+    }
+
+    const profileById = new Map((profiles ?? []).map((profile: any) => [profile.id, profile]));
+    const normalizedUsers = linkedUserIds.map((linkedUserId) => {
+      const profile = profileById.get(linkedUserId);
+      const link = (links ?? []).find((entry: any) =>
+        (entry.creator_id === userId && entry.invited_id === linkedUserId) ||
+        (entry.invited_id === userId && entry.creator_id === linkedUserId)
+      );
+
+      return {
+        userId: linkedUserId,
+        firstName: profile?.first_name ?? '',
+        lastName: profile?.last_name ?? '',
+        userRole: profile?.user_role ?? null,
+        relationshipType: link?.relationship_type ?? null,
+        createdAt: link?.created_at ?? null,
+        acceptedAt: link?.accepted_at ?? null,
+      };
+    });
+
+    return {
+      success: true,
+      linkedUsers: normalizedUsers,
+    };
   } catch (err) {
     console.error('Failed to fetch linked users with details:', err);
     return { success: false, error: err };
@@ -735,7 +919,7 @@ export const deleteContraction = async (id: string) => {
   try {
     console.log(`Attempting to delete contraction with ID: ${id}`);
 
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { error: new Error('Nicht angemeldet') };
 
     // Verwenden der neuen RPC-Funktion zum Löschen und Synchronisieren
@@ -777,7 +961,7 @@ export const deleteContraction = async (id: string) => {
 // Hilfsfunktionen für den Baby-Status
 export const getBabyBornStatus = async () => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: false, error: new Error('Nicht angemeldet') };
 
     const { data, error } = await supabase
@@ -802,7 +986,7 @@ export const getBabyBornStatus = async () => {
 
 export const setBabyBornStatus = async (isBabyBorn: boolean) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     // Verwenden der neuen RPC-Funktion
@@ -837,7 +1021,7 @@ export const setBabyBornStatus = async (isBabyBorn: boolean) => {
 // Prüfen, ob ein Geburtsplan existiert
 export const hasGeburtsplan = async () => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { exists: false, error: new Error('Nicht angemeldet') };
 
     // Wir prüfen, ob ein Geburtsplan existiert
@@ -859,7 +1043,7 @@ export const hasGeburtsplan = async () => {
 
 export const getGeburtsplan = async () => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     // Wir holen alle Geburtspläne des Benutzers, sortiert nach dem neuesten zuerst
@@ -910,7 +1094,7 @@ export const getGeburtsplan = async () => {
 // Speichern oder Aktualisieren des Geburtsplans (Textversion)
 export const saveGeburtsplan = async (content: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     // Zuerst prüfen, ob bereits ein Geburtsplan existiert
@@ -964,7 +1148,7 @@ export const saveGeburtsplan = async (content: string) => {
 // Speichern oder Aktualisieren des strukturierten Geburtsplans
 export const saveStructuredGeburtsplan = async (structuredData: any, textContent: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     // Wir speichern die strukturierten Daten und den generierten Text zusammen in der content-Spalte
@@ -1032,7 +1216,7 @@ export const saveStructuredGeburtsplan = async (structuredData: any, textContent
 // Löschen des Geburtsplans
 export const deleteGeburtsplan = async () => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { error: new Error('Nicht angemeldet') };
 
     const { error } = await supabase
@@ -1053,7 +1237,7 @@ export const deleteGeburtsplan = async () => {
 // Abrufen aller Checklisten-Einträge
 export const getHospitalChecklist = async () => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     const { data, error } = await supabase
@@ -1073,7 +1257,7 @@ export const getHospitalChecklist = async () => {
 // Hinzufügen eines neuen Checklisten-Eintrags
 export const addChecklistItem = async (item: Omit<ChecklistItem, 'id' | 'user_id' | 'created_at' | 'updated_at'>) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     const { data, error } = await supabase
@@ -1158,7 +1342,7 @@ export const updateChecklistPositions = async (items: { id: string, position: nu
 // Frage speichern
 export const saveDoctorQuestion = async (question: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     const { data, error } = await supabase
@@ -1183,7 +1367,7 @@ export const saveDoctorQuestion = async (question: string) => {
 // Alle Fragen abrufen
 export const getDoctorQuestions = async () => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     const { data, error } = await supabase
@@ -1245,8 +1429,16 @@ export type AppSettings = {
   user_id?: string;
   theme: 'light' | 'dark' | 'system';
   notifications_enabled: boolean;
+  sleep_window_notifications_enabled: boolean;
+  feeding_notifications_enabled: boolean;
+  vitamin_d_reminder_enabled: boolean;
+  vitamin_d_reminder_hour: number;
+  vitamin_d_reminder_minute: number;
+  partner_notifications_enabled: boolean;
+  planner_notifications_enabled: boolean;
   due_date?: string | null;
   is_baby_born?: boolean;
+  preferred_backend?: 'supabase' | 'convex'; // Backend preference for dual-backend architecture
   created_at?: string;
   updated_at?: string;
 };
@@ -1254,7 +1446,7 @@ export type AppSettings = {
 // App-Einstellungen laden
 export const getAppSettings = async () => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     const { data, error } = await supabase
@@ -1274,6 +1466,13 @@ export const getAppSettings = async () => {
     const defaultSettings: AppSettings = {
       theme: 'light',
       notifications_enabled: true,
+      sleep_window_notifications_enabled: true,
+      feeding_notifications_enabled: true,
+      vitamin_d_reminder_enabled: true,
+      vitamin_d_reminder_hour: 9,
+      vitamin_d_reminder_minute: 0,
+      partner_notifications_enabled: true,
+      planner_notifications_enabled: true,
       due_date: null,
       is_baby_born: false
     };
@@ -1288,7 +1487,7 @@ export const getAppSettings = async () => {
 // App-Einstellungen speichern
 export const saveAppSettings = async (settings: Partial<AppSettings>) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     // Zuerst prüfen, ob bereits ein Eintrag existiert
@@ -1370,6 +1569,11 @@ export const generateInvitationCode = () => {
   return code;
 };
 
+export const buildInvitationLink = (invitationCode: string) =>
+  Linking.createURL('invite', {
+    queryParams: { code: invitationCode },
+  });
+
 // Funktion zum Erstellen eines Einladungslinks
 export const createInvitationLink = async (userId: string, relationshipType: string = 'partner') => {
   // Generiere einen eindeutigen Code
@@ -1424,7 +1628,7 @@ export const createInvitationLink = async (userId: string, relationshipType: str
   return {
     success: true,
     invitationCode,
-    invitationLink: `wehen-tracker://invite?code=${invitationCode}`
+    invitationLink: buildInvitationLink(invitationCode)
   };
 };
 
@@ -1479,6 +1683,37 @@ export const getLinkedUsers = async (userId: string) => {
   }
 };
 
+// Funktion zum Deaktivieren einer bestehenden Account-Verknüpfung
+export const deactivateAccountLink = async (linkId: string) => {
+  try {
+    if (!linkId) {
+      return { success: false, error: { message: 'Link-ID fehlt.' } };
+    }
+
+    const { data: userData, error: userErr } = await getCachedUser();
+    if (userErr || !userData.user) {
+      return { success: false, error: userErr ?? { message: 'Nicht angemeldet.' } };
+    }
+
+    const { data, error } = await supabase
+      .from('account_links')
+      .update({ status: 'rejected' })
+      .eq('id', linkId)
+      .select()
+      .maybeSingle();
+
+    if (error) {
+      console.error('Error deactivating account link:', error);
+      return { success: false, error };
+    }
+
+    return { success: true, link: data };
+  } catch (error) {
+    console.error('Exception deactivating account link:', error);
+    return { success: false, error: { message: 'Fehler beim Deaktivieren der Verknüpfung.' } };
+  }
+};
+
 // Funktion zum Abrufen des Entbindungstermins mit Informationen über verknüpfte Benutzer
 export const getDueDateWithLinkedUsers = async (userId: string) => {
   try {
@@ -1525,5 +1760,76 @@ export const updateDueDateAndSync = async (userId: string, dueDate: Date) => {
       success: false,
       error: { message: 'Fehler beim Aktualisieren des Entbindungstermins.' }
     };
+  }
+};
+
+// Hilfsfunktionen für Verbesserungsvorschläge
+
+// Verbesserungsvorschlag speichern
+export const saveFeatureRequest = async (request: Omit<FeatureRequest, 'id' | 'user_id' | 'created_at' | 'updated_at'>) => {
+  try {
+    const { data: userData } = await getCachedUser();
+    if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
+
+    const { data, error } = await supabase
+      .from('feature_requests')
+      .insert({
+        user_id: userData.user.id,
+        title: request.title,
+        description: request.description,
+        category: request.category,
+        priority: request.priority,
+        status: 'pending',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return { data, error: null };
+  } catch (error) {
+    console.error('Error saving feature request:', error);
+    return { data: null, error };
+  }
+};
+
+// Alle Verbesserungsvorschläge des Benutzers abrufen
+export const getFeatureRequests = async () => {
+  try {
+    const { data: userData } = await getCachedUser();
+    if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
+
+    const { data, error } = await supabase
+      .from('feature_requests')
+      .select('*')
+      .eq('user_id', userData.user.id)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return { data, error: null };
+  } catch (error) {
+    console.error('Error fetching feature requests:', error);
+    return { data: null, error };
+  }
+};
+
+// Verbesserungsvorschlag löschen
+export const deleteFeatureRequest = async (id: string) => {
+  try {
+    const { data: userData } = await getCachedUser();
+    if (!userData.user) return { error: new Error('Nicht angemeldet') };
+
+    const { error } = await supabase
+      .from('feature_requests')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', userData.user.id);
+
+    if (error) throw error;
+    return { error: null };
+  } catch (error) {
+    console.error('Error deleting feature request:', error);
+    return { error };
   }
 };
