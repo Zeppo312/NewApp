@@ -1486,6 +1486,22 @@ export default function AppSettingsScreen() {
                         </View>
                       </TouchableOpacity>
 
+                      <TouchableOpacity
+                        style={styles.rowItem}
+                        onPress={() => router.push('/startup-message-admin')}
+                      >
+                        <View style={styles.rowIcon}>
+                          <ThemedText style={{ fontSize: 24 }}>📣</ThemedText>
+                        </View>
+                        <View style={styles.rowContent}>
+                          <ThemedText style={styles.rowTitle}>Startmeldungen verwalten</ThemedText>
+                          <ThemedText style={styles.rowDescription}>Popup-Nachrichten und Update-Hinweise für App-Starts</ThemedText>
+                        </View>
+                        <View style={styles.trailing}>
+                          <IconSymbol name="chevron.right" size={20} color={trailingIconColor} />
+                        </View>
+                      </TouchableOpacity>
+
                       {/* Convex Status Info */}
                       <View style={[styles.rowItem, styles.infoRow]}>
                         <View style={styles.rowIcon}>

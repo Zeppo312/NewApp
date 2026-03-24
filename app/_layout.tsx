@@ -4,11 +4,12 @@ import { Stack, usePathname, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, View, ActivityIndicator, Text } from 'react-native';
+import { AppState, View, ActivityIndicator, Alert, Text } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 import * as Notifications from 'expo-notifications';
 
+import { StartupMessageModal } from '@/components/StartupMessageModal';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { BabyStatusProvider, useBabyStatus } from '@/contexts/BabyStatusContext';
@@ -40,6 +41,11 @@ import { normalizeBedtimeAnchor } from '@/lib/bedtime';
 import { sleepActivityService } from '@/lib/sleepActivityService';
 import { loadAllVisibleSleepEntries } from '@/lib/sleepSharing';
 import { findFreshActiveSleepEntry } from '@/lib/sleepEntryGuards';
+import {
+  acknowledgeStartupMessage,
+  getPendingStartupMessage,
+  type StartupMessage,
+} from '@/lib/startupMessages';
 
 // Importieren der Meilenstein-Task-Definition
 import { defineMilestoneCheckerTask } from '@/tasks/milestoneCheckerTask';
@@ -110,6 +116,7 @@ function RootLayoutNav() {
   const [notificationSettingsLoaded, setNotificationSettingsLoaded] = useState(false);
   const [appStateRevision, setAppStateRevision] = useState(0);
   const paywallCheckInFlight = useRef(false);
+  const startupMessageCheckInFlight = useRef(false);
   const primarySegment = typeof segments[0] === 'string' ? segments[0] : null;
   const shouldSkipGlobalPaywallCheck = useMemo(() => {
     if (!pathname || PAYWALL_EXCLUDED_PATHS.has(pathname)) {
@@ -118,10 +125,23 @@ function RootLayoutNav() {
 
     return primarySegment === '(auth)' || primarySegment === 'auth';
   }, [pathname, primarySegment]);
+  const shouldSkipStartupMessageCheck = useMemo(() => {
+    if (!pathname) {
+      return true;
+    }
+
+    if (primarySegment === '(auth)' || primarySegment === 'auth') {
+      return true;
+    }
+
+    return pathname === '/paywall';
+  }, [pathname, primarySegment]);
   const sleepEntriesService = useMemo(() => {
     if (!userId) return null;
     return new SleepEntriesService(activeBackend, convexClient, userId);
   }, [activeBackend, convexClient, userId]);
+  const [startupMessage, setStartupMessage] = useState<StartupMessage | null>(null);
+  const [isAcknowledgingStartupMessage, setIsAcknowledgingStartupMessage] = useState(false);
 
   const refreshPaywallCaches = useCallback(async () => {
     await Promise.allSettled([
@@ -183,6 +203,70 @@ function RootLayoutNav() {
       paywallCheckInFlight.current = false;
     };
   }, [appStateRevision, isBabyStatusResolved, loading, pathname, router, shouldSkipGlobalPaywallCheck, userId]);
+
+  useEffect(() => {
+    if (loading || !userId || !isBabyStatusResolved || shouldSkipStartupMessageCheck) {
+      if (!userId) {
+        setStartupMessage(null);
+      }
+      return;
+    }
+
+    if (startupMessageCheckInFlight.current || isAcknowledgingStartupMessage) return;
+
+    let cancelled = false;
+    startupMessageCheckInFlight.current = true;
+
+    const checkStartupMessage = async () => {
+      try {
+        const nextMessage = await getPendingStartupMessage();
+        if (cancelled) return;
+        setStartupMessage(nextMessage);
+      } catch (error) {
+        console.error('Startup message check failed:', error);
+      } finally {
+        startupMessageCheckInFlight.current = false;
+      }
+    };
+
+    void checkStartupMessage();
+
+    return () => {
+      cancelled = true;
+      startupMessageCheckInFlight.current = false;
+    };
+  }, [
+    appStateRevision,
+    isAcknowledgingStartupMessage,
+    isBabyStatusResolved,
+    loading,
+    shouldSkipStartupMessageCheck,
+    userId,
+  ]);
+
+  const handleStartupMessageConfirm = useCallback(async () => {
+    if (!startupMessage || isAcknowledgingStartupMessage) {
+      return;
+    }
+
+    const confirmedMessageId = startupMessage.id;
+    setIsAcknowledgingStartupMessage(true);
+
+    try {
+      await acknowledgeStartupMessage(confirmedMessageId);
+      setStartupMessage((current) =>
+        current?.id === confirmedMessageId ? null : current,
+      );
+    } catch (error) {
+      console.error('Failed to acknowledge startup message:', error);
+      Alert.alert(
+        'Fehler',
+        'Die Nachricht konnte gerade nicht bestätigt werden. Bitte versuche es erneut.',
+      );
+    } finally {
+      setIsAcknowledgingStartupMessage(false);
+    }
+  }, [isAcknowledgingStartupMessage, startupMessage]);
 
   useEffect(() => {
     if (!userId) {
@@ -547,6 +631,7 @@ function RootLayoutNav() {
         <Stack.Screen name="subscription" />
         <Stack.Screen name="paywall-access-admin" />
         <Stack.Screen name="paywall-content-admin" />
+        <Stack.Screen name="startup-message-admin" />
         <Stack.Screen name="pregnancy-stats" />
         <Stack.Screen name="pregnancy-setup" />
         <Stack.Screen name="milestones" />
@@ -556,6 +641,14 @@ function RootLayoutNav() {
         <Stack.Screen name="auth/callback" />
         <Stack.Screen name="auth/reset-password" />
       </Stack>
+      <StartupMessageModal
+        visible={Boolean(startupMessage)}
+        message={startupMessage}
+        isSubmitting={isAcknowledgingStartupMessage}
+        onConfirm={() => {
+          void handleStartupMessageConfirm();
+        }}
+      />
       <StatusBar hidden={true} />
     </ThemeProvider>
     </GestureHandlerRootView>
