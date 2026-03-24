@@ -26,7 +26,7 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 
 // Typ-Definitionen
 type ActivityType = 'feeding' | 'diaper' | 'other';
-type FeedingType = 'breast' | 'bottle' | 'solids';
+type FeedingType = 'breast' | 'bottle' | 'solids' | 'pump';
 type DiaperType = 'wet' | 'dirty' | 'both';
 type BreastSide = 'left' | 'right' | 'both';
 type FocusField = 'notes' | 'diaper_temperature_c' | 'diaper_suppository_dose_mg';
@@ -52,7 +52,7 @@ interface ActivityInputModalProps {
   onDelete?: (id: string) => void; // Optional: Nur wenn ein Eintrag bearbeitet wird
   initialData?: Partial<{
     id: string;
-    feeding_type: 'BREAST' | 'BOTTLE' | 'SOLIDS';
+    feeding_type: 'BREAST' | 'BOTTLE' | 'SOLIDS' | 'PUMP';
     feeding_volume_ml: number | null;
     feeding_side: 'LEFT' | 'RIGHT' | 'BOTH' | null;
     diaper_type: 'WET' | 'DIRTY' | 'BOTH' | null;
@@ -176,22 +176,37 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   const [diaperSuppositoryDoseMg, setDiaperSuppositoryDoseMg] = useState('');
   const hiddenSubTypeSet = useMemo(() => new Set(hiddenSubTypes), [hiddenSubTypes]);
   const isEditingExistingEntry = !!initialData?.id;
+  const isStandalonePumpFlow =
+    activityType === 'feeding' &&
+    (initialSubType === 'feeding_pump' || initialData?.feeding_type === 'PUMP');
+  const isPumpSelection = activityType === 'feeding' && feedingType === 'pump';
   const feedingOptions = useMemo(() => {
     const currentEditingType =
       initialData?.feeding_type === 'BREAST'
         ? 'breast'
         : initialData?.feeding_type === 'SOLIDS'
         ? 'solids'
+        : initialData?.feeding_type === 'PUMP'
+        ? 'pump'
         : initialData?.feeding_type === 'BOTTLE'
         ? 'bottle'
         : null;
 
-    return [
+    const options = [
       { type: 'breast' as const, label: 'Stillen', icon: '🤱', hiddenKey: 'feeding_breast' },
       { type: 'bottle' as const, label: 'Flasche', icon: '🍼', hiddenKey: 'feeding_bottle' },
       { type: 'solids' as const, label: 'Beikost', icon: '🥄', hiddenKey: 'feeding_solids' },
-    ].filter((option) => !hiddenSubTypeSet.has(option.hiddenKey) || (isEditingExistingEntry && currentEditingType === option.type));
-  }, [hiddenSubTypeSet, initialData?.feeding_type, isEditingExistingEntry]);
+      { type: 'pump' as const, label: 'Abpumpen', icon: '🥛', hiddenKey: 'feeding_pump' },
+    ];
+
+    const visibleOptions = isStandalonePumpFlow
+      ? options.filter((option) => option.type === 'pump')
+      : options.filter((option) => option.type !== 'pump');
+
+    return visibleOptions.filter(
+      (option) => !hiddenSubTypeSet.has(option.hiddenKey) || (isEditingExistingEntry && currentEditingType === option.type)
+    );
+  }, [hiddenSubTypeSet, initialData?.feeding_type, isEditingExistingEntry, isStandalonePumpFlow]);
   const diaperOptions = useMemo(() => {
     const currentEditingType =
       initialData?.diaper_type === 'DIRTY'
@@ -311,10 +326,20 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
     // Standardwerte setzen
     if (activityType === 'feeding') {
       const preferredFeedingType =
-        initialData?.feeding_type === 'BREAST'
+        initialSubType === 'feeding_breast'
+          ? 'breast'
+          : initialSubType === 'feeding_solids'
+          ? 'solids'
+          : initialSubType === 'feeding_pump'
+          ? 'pump'
+          : initialSubType === 'feeding_bottle'
+          ? 'bottle'
+          : initialData?.feeding_type === 'BREAST'
           ? 'breast'
           : initialData?.feeding_type === 'SOLIDS'
           ? 'solids'
+          : initialData?.feeding_type === 'PUMP'
+          ? 'pump'
           : 'bottle';
       const fallbackFeedingType = feedingOptions[0]?.type ?? preferredFeedingType;
       setFeedingType(
@@ -384,9 +409,15 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
     loadRecipes();
   }, [visible, activityType, feedingType]);
 
+  useEffect(() => {
+    if (feedingType === 'pump') {
+      setStartTimer(false);
+    }
+  }, [feedingType]);
+
   // Speichern: Payload für baby_care_entries
   const handleSave = () => {
-    if (activityType === 'feeding' && feedingOptions.length === 0) {
+    if (activityType === 'feeding' && !isStandalonePumpFlow && feedingOptions.length === 0) {
       Alert.alert('Keine Fütterungsarten sichtbar', 'Blende mindestens eine Fütterungs-Quick-Action wieder ein.');
       return;
     }
@@ -417,6 +448,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
       const feeding_type =
         feedingType === 'breast' ? 'BREAST' :
         feedingType === 'bottle' ? 'BOTTLE' :
+        feedingType === 'pump' ? 'PUMP' :
         'SOLIDS';
 
       const feeding_side =
@@ -427,7 +459,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
       payload = {
         ...base,
         feeding_type,
-        feeding_volume_ml: feedingType === 'bottle' ? volumeMl : null,
+        feeding_volume_ml: feedingType === 'bottle' || feedingType === 'pump' ? volumeMl : null,
         feeding_side,
       };
     } else if (activityType === 'diaper') {
@@ -824,7 +856,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
         </Modal>
       )}
 
-      {activityType === 'feeding' && (
+      {activityType === 'feeding' && feedingType !== 'pump' && (
         <TouchableOpacity
           style={[
             styles.timerToggle,
@@ -876,16 +908,24 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
       case 'breast': return theme.purple;
       case 'bottle': return theme.primary;
       case 'solids': return theme.orange; // Beikost in Orange
+      case 'pump': return '#35B6B4';
       default: return theme.lightGray;
     }
   };
   
   const getModalTitle = () => {
     switch (activityType) {
-      case 'feeding': return 'Neue Fütterung';
+      case 'feeding': return isPumpSelection ? 'Abpumpen' : 'Neue Fütterung';
       case 'diaper': return 'Wickeln';
       default: return 'Neuer Eintrag';
     }
+  };
+
+  const getModalSubtitle = () => {
+    if (isPumpSelection) {
+      return 'Wird separat dokumentiert';
+    }
+    return 'Details eingeben';
   };
 
   // --- RENDER FUNKTIONEN ---
@@ -897,7 +937,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
       </TouchableOpacity>
       <View style={styles.headerCenter}>
         <Text style={[styles.modalTitle, { color: theme.text }]}>{getModalTitle()}</Text>
-        <Text style={[styles.modalSubtitle, { color: theme.textSecondary }]}>Details eingeben</Text>
+        <Text style={[styles.modalSubtitle, { color: theme.textSecondary }]}>{getModalSubtitle()}</Text>
       </View>
       <TouchableOpacity 
         style={[styles.headerButton, { backgroundColor: theme.accent }]} 
@@ -936,7 +976,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
       <View style={{width: '100%', alignItems: 'center'}}>
         <Text style={[styles.sectionTitle, { color: theme.text }]}>
           <FixedEmojiText style={styles.sectionTitleEmoji}>🥛</FixedEmojiText>{' '}
-          Menge (ml)
+          {feedingType === 'pump' ? 'Abgepumpte Menge (ml)' : 'Menge (ml)'}
         </Text>
         <View
           style={[
@@ -992,10 +1032,10 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   const renderFeedingSection = () => (
     <View style={styles.section}>
       <Text style={[styles.sectionTitle, { color: theme.text }]}>
-        <FixedEmojiText style={styles.sectionTitleEmoji}>🍼</FixedEmojiText>{' '}
-        Art der Fütterung
+        <FixedEmojiText style={styles.sectionTitleEmoji}>{feedingType === 'pump' ? '🥛' : '🍼'}</FixedEmojiText>{' '}
+        {feedingType === 'pump' ? 'Abpumpen' : 'Art der Fütterung'}
       </Text>
-      {feedingOptions.length > 0 ? (
+      {!isStandalonePumpFlow && feedingOptions.length > 0 ? (
         <View style={styles.optionsGrid}>
           {feedingOptions.map((option) => (
             <TouchableOpacity
@@ -1014,7 +1054,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
             </TouchableOpacity>
           ))}
         </View>
-      ) : (
+      ) : !isStandalonePumpFlow ? (
         <View
           style={[
             styles.hiddenOptionNotice,
@@ -1028,9 +1068,25 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
             Alle Fütterungsarten sind aktuell ausgeblendet.
           </Text>
         </View>
-      )}
+      ) : null}
       <View style={styles.contentContainer}>
-        {feedingOptions.length > 0 && feedingType === 'bottle' && renderVolumeControl()}
+        {(feedingOptions.length > 0 || isStandalonePumpFlow) && feedingType === 'pump' && (
+          <View
+            style={[
+              styles.pumpNoticeCard,
+              {
+                backgroundColor: isDark ? 'rgba(20, 36, 40, 0.92)' : 'rgba(214, 245, 242, 0.92)',
+                borderColor: isDark ? 'rgba(83, 196, 194, 0.28)' : 'rgba(53, 182, 180, 0.24)',
+              },
+            ]}
+          >
+            <Text style={[styles.pumpNoticeTitle, { color: theme.text }]}>Separater Eintrag</Text>
+            <Text style={[styles.pumpNoticeText, { color: theme.textSecondary }]}>
+              Abpumpen wird dokumentiert, aber nicht als Fütterung oder Mahlzeit mitgezählt.
+            </Text>
+          </View>
+        )}
+        {(feedingOptions.length > 0 || isStandalonePumpFlow) && (feedingType === 'bottle' || feedingType === 'pump') && renderVolumeControl()}
         {feedingOptions.length > 0 && feedingType === 'breast' && (
           <View style={{width: '100%', alignItems: 'center'}}>
             <Text style={[styles.sectionTitle, { color: theme.text }]}>
@@ -1550,6 +1606,26 @@ const styles = StyleSheet.create({
   },
   hiddenOptionNoticeText: {
     fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  pumpNoticeCard: {
+    width: '90%',
+    borderRadius: 18,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    marginBottom: 16,
+  },
+  pumpNoticeTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  pumpNoticeText: {
+    fontSize: 13,
+    lineHeight: 19,
     fontWeight: '600',
     textAlign: 'center',
   },

@@ -91,6 +91,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({ entry, onDelete, onEdit, ma
     if (entry.entry_type === 'feeding') {
       if (entry.feeding_type === 'BREAST') return { emoji: '🤱', label: 'Stillen' };
       if (entry.feeding_type === 'BOTTLE') return { emoji: '🍼', label: `Flasche${entry.feeding_volume_ml ? ` ${entry.feeding_volume_ml}ml` : ''}` };
+      if (entry.feeding_type === 'PUMP') return { emoji: '🥛', label: `Abpumpen${entry.feeding_volume_ml ? ` ${entry.feeding_volume_ml}ml` : ''}` };
       return { emoji: '🥄', label: 'Beikost' };
     }
     if (entry.entry_type === 'diaper') {
@@ -120,6 +121,8 @@ const ActivityCard: React.FC<ActivityCardProps> = ({ entry, onDelete, onEdit, ma
         return 'Flasche';
       case 'SOLIDS':
         return 'Beikost';
+      case 'PUMP':
+        return 'Abpumpen';
       default:
         return '–';
     }
@@ -159,6 +162,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({ entry, onDelete, onEdit, ma
     if (entry.entry_type === 'feeding') {
       if (entry.feeding_type === 'BREAST') color = '#8E4EC6';
       else if (entry.feeding_type === 'BOTTLE') color = '#4A90E2';
+      else if (entry.feeding_type === 'PUMP') color = '#35B6B4';
       else if (entry.feeding_type === 'SOLIDS') color = '#F5A623'; // Beikost Orange
     }
     // Diaper

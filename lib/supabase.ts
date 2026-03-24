@@ -181,7 +181,7 @@ export type BabyCareEntry = {
   end_time?: string | null; // ISO
   notes?: string | null;
   // Feeding-spezifisch
-  feeding_type?: 'BREAST' | 'BOTTLE' | 'SOLIDS' | null;
+  feeding_type?: 'BREAST' | 'BOTTLE' | 'SOLIDS' | 'PUMP' | null;
   feeding_volume_ml?: number | null;
   feeding_side?: 'LEFT' | 'RIGHT' | 'BOTH' | null;
   // Diaper-spezifisch

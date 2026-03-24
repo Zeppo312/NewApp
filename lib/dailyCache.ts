@@ -44,6 +44,8 @@ export const mapCareToDaily = (rows: any[]): any[] =>
           ? 'feeding_breast'
           : r.feeding_type === 'BOTTLE'
           ? 'feeding_bottle'
+          : r.feeding_type === 'PUMP'
+          ? 'feeding_pump'
           : 'feeding_solids'
         : r.entry_type === 'diaper'
         ? r.diaper_type === 'WET'

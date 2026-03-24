@@ -202,6 +202,12 @@ function formatNotificationContent(
           title: 'Beikost',
           body: `${partnerName} hat Beikost gegeben um ${time}`
         };
+      case 'PUMP':
+        return {
+          emoji: '🥛',
+          title: 'Abpumpen',
+          body: `${partnerName} hat Milch abgepumpt um ${time}`
+        };
       default:
         return {
           emoji: '🍼',

@@ -104,6 +104,7 @@ type QuickActionType =
   | 'feeding_breast'
   | 'feeding_bottle'
   | 'feeding_solids'
+  | 'feeding_pump'
   | 'diaper_wet'
   | 'diaper_dirty'
   | 'diaper_both';
@@ -168,6 +169,8 @@ const TimerBanner: React.FC<{
       ? '🤱 Stillen'
       : timer.type === 'BOTTLE'
       ? '🍼 Fläschchen'
+      : timer.type === 'PUMP'
+      ? '🥛 Abpumpen'
       : timer.type === 'SOLIDS'
       ? '🥄 Beikost'
       : '🧷 Wickeln';
@@ -199,6 +202,7 @@ const quickBtns: QuickActionButtonConfig[] = [
   { action: 'feeding_breast', label: 'Stillen', icon: '🤱' },
   { action: 'feeding_bottle', label: 'Fläschchen', icon: '🍼' },
   { action: 'feeding_solids', label: 'Beikost', icon: '🥄' },
+  { action: 'feeding_pump', label: 'Abpumpen', icon: '🥛' },
   { action: 'diaper_wet', label: 'Nass', icon: '💧' },
   { action: 'diaper_dirty', label: 'Voll', icon: '💩' },
   { action: 'diaper_both', label: 'Beides', icon: '💧💩' },
@@ -494,7 +498,7 @@ export default function DailyScreen() {
 
   const [activeTimer, setActiveTimer] = useState<{
     id: string;
-    type: 'BOTTLE' | 'BREAST' | 'SOLIDS' | 'DIAPER';
+    type: 'BOTTLE' | 'BREAST' | 'SOLIDS' | 'PUMP' | 'DIAPER';
     start: number;
   } | null>(null);
   const [isTimerHydrated, setIsTimerHydrated] = useState(false);
@@ -798,7 +802,7 @@ export default function DailyScreen() {
 
   const endBreastfeedingLiveActivity = useCallback(async (timer: {
     id: string;
-    type: 'BOTTLE' | 'BREAST' | 'SOLIDS' | 'DIAPER';
+    type: 'BOTTLE' | 'BREAST' | 'SOLIDS' | 'PUMP' | 'DIAPER';
     start: number;
   } | null) => {
     if (!timer || timer.type !== 'BREAST') {
@@ -944,7 +948,7 @@ export default function DailyScreen() {
     let latestVolume: number | null = null;
 
     for (const entry of allEntries) {
-      if (entry.entry_type !== 'feeding' || entry.feeding_type !== 'BOTTLE') continue;
+      if (entry.entry_type !== 'feeding' || (entry.feeding_type !== 'BOTTLE' && entry.feeding_type !== 'PUMP')) continue;
       const volume = entry.feeding_volume_ml;
       if (volume == null) continue;
       const timeStr = entry.start_time ?? entry.entry_date;
@@ -981,11 +985,11 @@ export default function DailyScreen() {
       }
 
       const openTimers = data ?? [];
-      const validTypeSet = new Set(['BREAST', 'BOTTLE', 'SOLIDS']);
+      const validTypeSet = new Set(['BREAST', 'BOTTLE', 'SOLIDS', 'PUMP']);
       const validOpenTimers = openTimers.filter(
         (
           row,
-        ): row is { id: string; feeding_type: 'BREAST' | 'BOTTLE' | 'SOLIDS'; start_time: string } =>
+        ): row is { id: string; feeding_type: 'BREAST' | 'BOTTLE' | 'SOLIDS' | 'PUMP'; start_time: string } =>
           !!row?.id && !!row?.start_time && typeof row.feeding_type === 'string' && validTypeSet.has(row.feeding_type),
       );
       const current = validOpenTimers[0];
@@ -1187,6 +1191,7 @@ export default function DailyScreen() {
     if (action === 'feeding_breast') setEditingEntry({} as any);
     if (action === 'feeding_bottle') setEditingEntry({} as any);
     if (action === 'feeding_solids') setEditingEntry({} as any);
+    if (action === 'feeding_pump') setEditingEntry({} as any);
     if (action === 'diaper_wet' || action === 'diaper_dirty' || action === 'diaper_both') setEditingEntry({} as any);
     setShowInputModal(true);
   };
@@ -1204,7 +1209,7 @@ export default function DailyScreen() {
         ? { activityType: 'feeding' as const, subType: null }
         : rawAction === 'diaper'
           ? { activityType: 'diaper' as const, subType: null }
-          : rawAction === 'feeding_breast' || rawAction === 'feeding_bottle' || rawAction === 'feeding_solids'
+          : rawAction === 'feeding_breast' || rawAction === 'feeding_bottle' || rawAction === 'feeding_solids' || rawAction === 'feeding_pump'
             ? { activityType: 'feeding' as const, subType: rawAction as QuickActionType }
             : rawAction === 'diaper_wet' || rawAction === 'diaper_dirty' || rawAction === 'diaper_both'
               ? { activityType: 'diaper' as const, subType: rawAction as QuickActionType }
@@ -1235,10 +1240,10 @@ export default function DailyScreen() {
     console.log('handleSaveEntry - Received payload:', JSON.stringify(payload, null, 2));
     console.log('handleSaveEntry - selectedActivityType:', selectedActivityType);
     console.log('handleSaveEntry - selectedSubType:', selectedSubType);
-    const timerRequested = !!options?.startTimer;
+    const timerRequested = !!options?.startTimer && payload?.feeding_type !== 'PUMP';
     
     if (selectedActivityType === 'feeding') {
-      const feedingType = (payload.feeding_type as 'BREAST' | 'BOTTLE' | 'SOLIDS' | undefined) ?? undefined;
+      const feedingType = (payload.feeding_type as 'BREAST' | 'BOTTLE' | 'SOLIDS' | 'PUMP' | undefined) ?? undefined;
       const resolvedStartTime = payload.start_time ?? new Date().toISOString();
       const resolvedEndTime = timerRequested ? null : (payload.end_time ?? resolvedStartTime);
       let data, error;
@@ -1270,7 +1275,7 @@ export default function DailyScreen() {
       }
       if (timerRequested && feedingType) {
         const startMs = new Date(resolvedStartTime).getTime();
-        const timerType = feedingType as 'BREAST' | 'BOTTLE' | 'SOLIDS';
+        const timerType = feedingType as 'BREAST' | 'BOTTLE' | 'SOLIDS' | 'PUMP';
         const nextTimer = {
           id: data?.id || editingEntry?.id || `temp_${Date.now()}`,
           type: timerType,
@@ -1284,9 +1289,9 @@ export default function DailyScreen() {
         }
       }
       showSuccessSplash(
-        feedingType === 'BREAST' ? '#8E4EC6' : feedingType === 'BOTTLE' ? '#4A90E2' : '#F5A623',
-        feedingType === 'BREAST' ? '🤱' : feedingType === 'BOTTLE' ? '🍼' : '🥄',
-        feedingType === 'BREAST' ? 'feeding_breast' : feedingType === 'BOTTLE' ? 'feeding_bottle' : 'feeding_solids',
+        feedingType === 'BREAST' ? '#8E4EC6' : feedingType === 'BOTTLE' ? '#4A90E2' : feedingType === 'PUMP' ? '#35B6B4' : '#F5A623',
+        feedingType === 'BREAST' ? '🤱' : feedingType === 'BOTTLE' ? '🍼' : feedingType === 'PUMP' ? '🥛' : '🥄',
+        feedingType === 'BREAST' ? 'feeding_breast' : feedingType === 'BOTTLE' ? 'feeding_bottle' : feedingType === 'PUMP' ? 'feeding_pump' : 'feeding_solids',
         timerRequested
       );
     } else if (selectedActivityType === 'diaper') {
@@ -1390,6 +1395,13 @@ export default function DailyScreen() {
       setSplashStatus(timerStarted ? 'Timer gestartet...' : '');
       setSplashHint(timerStarted ? 'Stoppe, sobald ihr fertig seid.' : 'Weiter so – ihr wachst gemeinsam!');
       setSplashHintEmoji('');
+      setSplashText('');
+    } else if (kind === 'feeding_pump') {
+      setSplashTitle('Abpumpen gespeichert');
+      setSplashSubtitle('Die abgepumpte Milch ist jetzt dokumentiert.');
+      setSplashStatus('');
+      setSplashHint('So behältst du Menge und Zeitpunkt im Blick');
+      setSplashHintEmoji('🥛');
       setSplashText('');
     } else {
       setSplashTitle(timerStarted ? 'Wickeln läuft' : 'Wickeln gespeichert');
@@ -1630,7 +1642,7 @@ export default function DailyScreen() {
     const maxCount = Math.max(...dayTotals, 4);
 
     // Weekly summary totals
-    const totalFeedings = weekEntries.filter((e) => e.entry_type === 'feeding').length;
+    const totalFeedings = weekEntries.filter((e: any) => e.entry_type === 'feeding' && e.feeding_type !== 'PUMP').length;
     const totalDiapers = weekEntries.filter((e) => e.entry_type === 'diaper').length;
 
     const weekStart = getWeekStart(refDate);
@@ -1699,24 +1711,24 @@ export default function DailyScreen() {
           </View>
         </LiquidGlassCard>
 
-        {/* Füttern diese Woche (Stillen, Fläschchen, Beikost) - EXAKT wie Sleep-Tracker */}
+        {/* Mahlzeiten diese Woche (Stillen, Fläschchen, Beikost) - EXAKT wie Sleep-Tracker */}
         <LiquidGlassCard style={s.chartGlassCard}>
-          <Text style={[s.chartTitle, { color: textSecondary }]}>Füttern diese Woche</Text>
+          <Text style={[s.chartTitle, { color: textSecondary }]}>Mahlzeiten diese Woche</Text>
 
           {/* feste Gesamtbreite = WEEK_CONTENT_WIDTH (wie Timeline) */}
           <View style={[s.chartArea, { width: WEEK_CONTENT_WIDTH, alignSelf: 'center' }]}>
             {weekDays.map((day, i) => {
-              const feedingEntries = getEntriesForDay(day).filter((e) => e.entry_type === 'feeding');
+              const feedingEntries = getEntriesForDay(day).filter((e: any) => e.entry_type === 'feeding' && e.feeding_type !== 'PUMP');
               const breast = feedingEntries.filter((e: any) => e.feeding_type === 'BREAST').length;
               const bottle = feedingEntries.filter((e: any) => e.feeding_type === 'BOTTLE').length;
               const solids = feedingEntries.filter((e: any) => e.feeding_type === 'SOLIDS').length;
               
               const maxFeed = Math.max(4, ...weekDays.flatMap((d) => {
-                const items = getEntriesForDay(d).filter((e) => e.entry_type === 'feeding');
+                const items = getEntriesForDay(d).filter((e: any) => e.entry_type === 'feeding' && e.feeding_type !== 'PUMP');
                 return [
                   items.filter((e: any) => e.feeding_type === 'BREAST').length,
                   items.filter((e: any) => e.feeding_type === 'BOTTLE').length,
-                  items.filter((e: any) => e.feeding_type === 'SOLIDS').length
+                  items.filter((e: any) => e.feeding_type === 'SOLIDS').length,
                 ];
               }));
 
@@ -1780,7 +1792,7 @@ export default function DailyScreen() {
                 <View style={s.statItem}>
                   <Text style={s.statEmoji}>🍼</Text>
                   <Text style={[s.statValue, { color: textPrimary }]}>{totalFeedings}</Text>
-                  <Text style={[s.statLabel, { color: textSecondary }]}>Fütterungen</Text>
+                  <Text style={[s.statLabel, { color: textSecondary }]}>Mahlzeiten</Text>
                 </View>
                 <View style={s.statItem}>
                   <Text style={s.statEmoji}>💧</Text>
@@ -2024,8 +2036,8 @@ export default function DailyScreen() {
             <View style={s.summaryStats}>
               <View style={s.statItem}>
                 <Text style={s.statEmoji}>🍼</Text>
-                <Text style={[s.statValue, { color: textPrimary }]}>{monthEntries.filter(e => e.entry_type === 'feeding').length}</Text>
-                <Text style={[s.statLabel, { color: textSecondary }]}>Fütterungen</Text>
+                <Text style={[s.statValue, { color: textPrimary }]}>{monthEntries.filter((e: any) => e.entry_type === 'feeding' && e.feeding_type !== 'PUMP').length}</Text>
+                <Text style={[s.statLabel, { color: textSecondary }]}>Mahlzeiten</Text>
               </View>
               <View style={s.statItem}>
                 <Text style={s.statEmoji}>💧</Text>
@@ -2048,6 +2060,7 @@ export default function DailyScreen() {
     const hasBottleFeedings = feedingOverview.bottleCount > 0;
     const hasBreastFeedings = feedingOverview.breastCount > 0;
     const hasSolidFeedings = feedingOverview.solidsCount > 0;
+    const hasPumpEntries = feedingOverview.pumpCount > 0;
 
     let feedingStatValue = `${feedingOverview.totalBottleMl}`;
     let feedingStatUnit: 'ml' | 'times' = 'ml';
@@ -2060,6 +2073,7 @@ export default function DailyScreen() {
         feedingSecondaryDetail = [
           hasBreastFeedings ? `Stillen ${feedingOverview.breastCount}×` : null,
           hasSolidFeedings ? `Beikost ${feedingOverview.solidsCount}×` : null,
+          hasPumpEntries ? `Abpumpen ${feedingOverview.pumpCount}×` : null,
         ]
           .filter(Boolean)
           .join(' • ') || null;
@@ -2071,13 +2085,25 @@ export default function DailyScreen() {
         if (useBreastAsPrimary) {
           feedingStatValue = `${feedingOverview.breastCount}`;
           feedingPrimaryDetail = 'Stillen';
-          feedingSecondaryDetail = hasSolidFeedings ? `Beikost ${feedingOverview.solidsCount}×` : null;
+          feedingSecondaryDetail = [
+            hasSolidFeedings ? `Beikost ${feedingOverview.solidsCount}×` : null,
+            hasPumpEntries ? `Abpumpen ${feedingOverview.pumpCount}×` : null,
+          ]
+            .filter(Boolean)
+            .join(' • ') || null;
         } else {
           feedingStatValue = `${feedingOverview.solidsCount}`;
           feedingPrimaryDetail = 'Beikost';
-          feedingSecondaryDetail = hasBreastFeedings ? `Stillen ${feedingOverview.breastCount}×` : null;
+          feedingSecondaryDetail = [
+            hasBreastFeedings ? `Stillen ${feedingOverview.breastCount}×` : null,
+            hasPumpEntries ? `Abpumpen ${feedingOverview.pumpCount}×` : null,
+          ]
+            .filter(Boolean)
+            .join(' • ') || null;
         }
       }
+    } else if (hasPumpEntries) {
+      feedingSecondaryDetail = `Abpumpen ${feedingOverview.pumpCount}×`;
     }
 
     const lastDiaperEntry = diaperEntries
@@ -2097,7 +2123,7 @@ export default function DailyScreen() {
         >
           <View style={s.kpiHeaderRow}>
             <Text style={s.kpiEmoji}>🍼</Text>
-            <Text style={[s.kpiTitle, { color: textSecondary }]}>Fütterung</Text>
+            <Text style={[s.kpiTitle, { color: textSecondary }]}>Mahlzeiten</Text>
           </View>
           <Text style={[s.kpiValue, s.kpiValueCentered, { color: textPrimary }]}>
             {feedingStatValue}
@@ -2485,8 +2511,8 @@ export default function DailyScreen() {
             end_time: editingEntry.end_time ?? null,
           } : (selectedSubType ? {
             // Preselect fields from quick actions
-            feeding_type: selectedSubType === 'feeding_breast' ? 'BREAST' : selectedSubType === 'feeding_bottle' ? 'BOTTLE' : selectedSubType === 'feeding_solids' ? 'SOLIDS' : undefined,
-            feeding_volume_ml: selectedSubType === 'feeding_bottle' ? lastBottleVolumeMl : null,
+            feeding_type: selectedSubType === 'feeding_breast' ? 'BREAST' : selectedSubType === 'feeding_bottle' ? 'BOTTLE' : selectedSubType === 'feeding_solids' ? 'SOLIDS' : selectedSubType === 'feeding_pump' ? 'PUMP' : undefined,
+            feeding_volume_ml: selectedSubType === 'feeding_bottle' || selectedSubType === 'feeding_pump' ? lastBottleVolumeMl : null,
             diaper_type: selectedSubType === 'diaper_wet' ? 'WET' : selectedSubType === 'diaper_dirty' ? 'DIRTY' : selectedSubType === 'diaper_both' ? 'BOTH' : undefined,
             start_time: new Date().toISOString(),
           } : undefined)}
@@ -3133,6 +3159,7 @@ const s = StyleSheet.create({
   chartBarBreast: { backgroundColor: '#8E4EC6' }, // Lila für Stillen
   chartBarBottle: { backgroundColor: '#4A90E2' }, // Blau für Fläschchen
   chartBarSolids: { backgroundColor: '#F5A623' }, // Orange für Beikost
+  chartBarPump: { backgroundColor: '#35B6B4' }, // Türkis für Abpumpen
   chartLabel: {
     fontSize: screenWidth < 360 ? 11 : 12, // responsiv für schmale Geräte
     color: '#5D4A40',           // Dunkler für Glass Hintergrund
@@ -3172,6 +3199,7 @@ const s = StyleSheet.create({
   legendBreast: { backgroundColor: '#8E4EC6' }, // Lila für Stillen
   legendBottle: { backgroundColor: '#4A90E2' }, // Blau für Fläschchen
   legendSolids: { backgroundColor: '#F5A623' }, // Orange für Beikost
+  legendPump: { backgroundColor: '#35B6B4' }, // Türkis für Abpumpen
   daySection: {
     marginBottom: 20,
   },

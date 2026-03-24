@@ -56,7 +56,7 @@ export interface DailyEntry {
   end_time?: string;
   notes?: string;
   // Optional detailed fields for unified baby care entries
-  feeding_type?: 'BREAST' | 'BOTTLE' | 'SOLIDS';
+  feeding_type?: 'BREAST' | 'BOTTLE' | 'SOLIDS' | 'PUMP';
   feeding_volume_ml?: number | null;
   feeding_side?: 'LEFT' | 'RIGHT' | 'BOTH' | null;
   diaper_type?: 'WET' | 'DIRTY' | 'BOTH' | null;
@@ -1337,7 +1337,7 @@ export interface FeedingEvent {
   id?: string;
   user_id?: string;
   baby_id?: string;
-  type: 'BREAST' | 'BOTTLE' | 'SOLIDS'; // matches public.feeding_type
+  type: 'BREAST' | 'BOTTLE' | 'SOLIDS' | 'PUMP'; // matches public.feeding_type
   start_time: string; // timestamp with time zone
   end_time?: string; // timestamp with time zone
   volume_ml?: number; // integer

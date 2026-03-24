@@ -884,6 +884,7 @@ export default function HomeScreen() {
     const hasBottleFeedings = feedingOverview.bottleCount > 0;
     const hasBreastFeedings = feedingOverview.breastCount > 0;
     const hasSolidFeedings = feedingOverview.solidsCount > 0;
+    const hasPumpEntries = feedingOverview.pumpCount > 0;
 
     let feedingStatValue = `${feedingOverview.totalBottleMl}`;
     let feedingStatUnit: 'ml' | 'times' = 'ml';
@@ -896,6 +897,7 @@ export default function HomeScreen() {
         todayFeedingsSecondaryDetail = [
           hasBreastFeedings ? `Stillen ${feedingOverview.breastCount}×` : null,
           hasSolidFeedings ? `Beikost ${feedingOverview.solidsCount}×` : null,
+          hasPumpEntries ? `Abpumpen ${feedingOverview.pumpCount}×` : null,
         ]
           .filter(Boolean)
           .join(' • ') || null;
@@ -907,13 +909,25 @@ export default function HomeScreen() {
         if (useBreastAsPrimary) {
           feedingStatValue = `${feedingOverview.breastCount}`;
           todayFeedingsPrimaryDetail = 'Stillen';
-          todayFeedingsSecondaryDetail = hasSolidFeedings ? `Beikost ${feedingOverview.solidsCount}×` : null;
+          todayFeedingsSecondaryDetail = [
+            hasSolidFeedings ? `Beikost ${feedingOverview.solidsCount}×` : null,
+            hasPumpEntries ? `Abpumpen ${feedingOverview.pumpCount}×` : null,
+          ]
+            .filter(Boolean)
+            .join(' • ') || null;
         } else {
           feedingStatValue = `${feedingOverview.solidsCount}`;
           todayFeedingsPrimaryDetail = 'Beikost';
-          todayFeedingsSecondaryDetail = hasBreastFeedings ? `Stillen ${feedingOverview.breastCount}×` : null;
+          todayFeedingsSecondaryDetail = [
+            hasBreastFeedings ? `Stillen ${feedingOverview.breastCount}×` : null,
+            hasPumpEntries ? `Abpumpen ${feedingOverview.pumpCount}×` : null,
+          ]
+            .filter(Boolean)
+            .join(' • ') || null;
         }
       }
+    } else if (hasPumpEntries) {
+      todayFeedingsSecondaryDetail = `Abpumpen ${feedingOverview.pumpCount}×`;
     }
     const todayDiaperChanges = getTodayDiaperChanges();
 

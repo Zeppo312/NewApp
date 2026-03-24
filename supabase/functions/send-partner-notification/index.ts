@@ -70,6 +70,12 @@ const getNotificationContent = (
           body: `${partnerName} hat ${baby} Beikost gegeben um ${time}`,
           emoji: '🥄',
         };
+      } else if (activitySubtype === 'PUMP') {
+        return {
+          title: 'Milch abgepumpt',
+          body: `${partnerName} hat für ${baby} Milch abgepumpt um ${time}`,
+          emoji: '🥛',
+        };
       }
       return {
         title: 'Gefüttert',
