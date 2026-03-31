@@ -1132,6 +1132,26 @@ export default function PregnancyHomeScreen() {
 
               <TouchableOpacity
                 style={styles.liquidGlassCardWrapper}
+                onPress={() => router.push('/(tabs)/selfcare')}
+                activeOpacity={0.9}
+              >
+                <BlurView
+                  intensity={24}
+                  tint={colorScheme === 'dark' ? 'dark' : 'light'}
+                  style={styles.liquidGlassCardBackground}
+                >
+                  <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(255, 210, 230, 0.6)', borderColor: 'rgba(255, 255, 255, 0.35)' }]}>
+                    <View style={[styles.iconContainer, { backgroundColor: 'rgba(255, 160, 180, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
+                      <IconSymbol name="heart.fill" size={28} color="#FFFFFF" />
+                    </View>
+                    <ThemedText adaptive={false} style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>Mama Selfcare</ThemedText>
+                    <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>Nimm dir Zeit für dich</ThemedText>
+                  </View>
+                </BlurView>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.liquidGlassCardWrapper}
                 onPress={() => router.push('/doctor-questions' as any)}
                 activeOpacity={0.9}
               >
@@ -1146,6 +1166,26 @@ export default function PregnancyHomeScreen() {
                     </View>
                     <ThemedText adaptive={false} style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>Meine Fragen</ThemedText>
                     <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>Fragen für den nächsten Termin</ThemedText>
+                  </View>
+                </BlurView>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.liquidGlassCardWrapper}
+                onPress={() => router.push('/(tabs)/baby')}
+                activeOpacity={0.9}
+              >
+                <BlurView
+                  intensity={24}
+                  tint={colorScheme === 'dark' ? 'dark' : 'light'}
+                  style={styles.liquidGlassCardBackground}
+                >
+                  <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(255, 190, 190, 0.6)', borderColor: 'rgba(255, 255, 255, 0.35)' }]}>
+                    <View style={[styles.iconContainer, { backgroundColor: 'rgba(255, 140, 160, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
+                      <IconSymbol name="person.fill" size={28} color="#FFFFFF" />
+                    </View>
+                    <ThemedText adaptive={false} style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>Mein Baby</ThemedText>
+                    <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>Infos anpassen & Entwicklung sehen</ThemedText>
                   </View>
                 </BlurView>
               </TouchableOpacity>

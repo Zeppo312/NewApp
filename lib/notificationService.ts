@@ -2,9 +2,7 @@ import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
-import { supabase } from './supabase';
-import { getCachedUser } from './supabase';
-import { getAppSettings } from './supabase';
+import { getAppSettings, getCachedUser, supabase } from './supabase';
 
 import { router } from 'expo-router';
 
@@ -146,8 +144,11 @@ export function navigateToNotificationTarget(type: string, referenceId: string) 
 
       // Community notification types
       case 'message':
-        // Chat entfernt -> gehe zur Benachrichtigungsübersicht
-        router.push('/notifications' as any);
+        router.push(`/chat/${referenceId}` as any);
+        break;
+
+      case 'group_message':
+        router.push({ pathname: `/group-chat/${referenceId}`, params: { from: 'notifications' } } as any);
         break;
 
       case 'like_post':
@@ -237,7 +238,7 @@ async function navigateToPlannerItem(plannerItemId: string) {
     }
 
     // Extract day from the nested planner_days object
-    const plannerDays = plannerItem.planner_days as { day?: string | null } | Array<{ day?: string | null }> | null;
+    const plannerDays = plannerItem.planner_days as { day?: string | null } | { day?: string | null }[] | null;
     const day = Array.isArray(plannerDays)
       ? plannerDays[0]?.day ?? undefined
       : plannerDays?.day ?? undefined;
@@ -338,7 +339,9 @@ export async function checkForNewNotifications() {
 
     // Lokale Benachrichtigungen für ungelesene Einträge anzeigen
     if (notifications && notifications.length > 0) {
-      notifications.forEach(async (notification) => {
+      notifications
+        .filter((notification) => notification.type !== 'message')
+        .forEach(async (notification) => {
         // Absenderinformationen abrufen
         const { data: sender } = await supabase
           .from('profiles')

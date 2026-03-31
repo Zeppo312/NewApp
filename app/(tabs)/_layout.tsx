@@ -12,7 +12,7 @@ import {
 } from '@react-navigation/bottom-tabs';
 import { ParamListBase, TabNavigationState } from '@react-navigation/native';
 import React, { useEffect, useMemo } from 'react';
-import { Platform, View, ActivityIndicator } from 'react-native';
+import { Platform, View, ActivityIndicator, Text } from 'react-native';
 import type { ComponentProps } from 'react';
 
 import { HapticTab } from '@/components/HapticTab';
@@ -23,6 +23,7 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
+import { useCommunityUnreadCounts } from '@/hooks/useCommunityUnreadCounts';
 import { getOnboardingCompletionState } from '@/lib/onboarding';
 
 const BottomTabNavigator = createBottomTabNavigator().Navigator;
@@ -112,6 +113,7 @@ export default function TabLayout() {
   const pathname = usePathname();
   const colorScheme = useColorScheme();
   const { session, loading: authLoading } = useAuth();
+  const { unreadCommunityTotal } = useCommunityUnreadCounts(session?.user?.id);
   const { isBabyBorn, isLoading, isResolved } = useBabyStatus();
   const [isCheckingOnboarding, setIsCheckingOnboarding] = React.useState(false);
   const [isOnboardingComplete, setIsOnboardingComplete] = React.useState(false);
@@ -124,6 +126,8 @@ export default function TabLayout() {
   const isVisibleTabRoute = useMemo(() => {
     const visibleTabPaths = new Set([
       '/',
+      '/blog',
+      '/notifications',
       '/home',
       '/pregnancy-home',
       '/countdown',
@@ -233,6 +237,31 @@ export default function TabLayout() {
           tabBarItemStyle: { display: 'none' as const },
         }
       : {};
+  const renderCommunityTabIcon = (color: string) => (
+    <View style={{ width: 32, height: 32, alignItems: 'center', justifyContent: 'center' }}>
+      <IconSymbol size={28} name="bubble.left.and.bubble.right.fill" color={color} />
+      {unreadCommunityTotal > 0 ? (
+        <View
+          style={{
+            position: 'absolute',
+            top: -2,
+            right: -8,
+            minWidth: 18,
+            height: 18,
+            paddingHorizontal: 4,
+            borderRadius: 9,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: '#FF6B6B',
+          }}
+        >
+          <Text style={{ color: '#FFFFFF', fontSize: 10, fontWeight: '700' }}>
+            {unreadCommunityTotal > 99 ? '99+' : unreadCommunityTotal}
+          </Text>
+        </View>
+      ) : null}
+    </View>
+  );
 
   return (
     <Tabs
@@ -382,12 +411,31 @@ export default function TabLayout() {
         }}
       />
 
-      {/* Tab 4/5: Community (in beiden Ansichten) */}
+      {/* Blog bleibt als Route erhalten, ist aber nicht mehr direkt in der unteren Navigation sichtbar */}
+      <Tabs.Screen
+        name="blog"
+        options={{
+          title: 'Blog',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="doc.text.image.fill" color={color} />,
+          ...getTabVisibilityOptions(true),
+        }}
+      />
+
+      <Tabs.Screen
+        name="notifications"
+        options={{
+          title: 'Benachrichtigungen',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="bell.fill" color={color} />,
+          ...getTabVisibilityOptions(true),
+        }}
+      />
+
+      {/* Community-Tab fuer Fragen und Antworten */}
       <Tabs.Screen
         name="community"
         options={{
           title: 'Community',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="bubble.left.and.bubble.right.fill" color={color} />,
+          tabBarIcon: ({ color }) => renderCommunityTabIcon(color),
           ...getTabVisibilityOptions(false),
         }}
       />

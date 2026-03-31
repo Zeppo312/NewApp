@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   StyleSheet,
   ScrollView,
@@ -9,14 +9,12 @@ import {
   SafeAreaView,
   StatusBar,
   Platform,
-  Switch,
   ActivityIndicator,
-  Dimensions,
+  Switch,
 } from 'react-native';
 import { CachedImage } from '@/components/CachedImage';
 import { BlurView } from 'expo-blur';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import { Redirect, router, Stack } from 'expo-router';
+import { Redirect, router, Stack, useLocalSearchParams } from 'expo-router';
 import * as Linking from 'expo-linking';
 
 import { ThemedText } from '@/components/ThemedText';
@@ -24,18 +22,13 @@ import { ThemedBackground } from '@/components/ThemedBackground';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import Header from '@/components/Header';
 import TextInputOverlay from '@/components/modals/TextInputOverlay';
-import IOSBottomDatePicker from '@/components/modals/IOSBottomDatePicker';
 
 import { Colors } from '@/constants/Colors';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { LiquidGlassCard, GLASS_OVERLAY, GLASS_OVERLAY_DARK, LAYOUT_PAD } from '@/constants/DesignGuide';
 
 import { useAuth } from '@/contexts/AuthContext';
-import { useBabyStatus } from '@/contexts/BabyStatusContext';
-import { useActiveBaby } from '@/contexts/ActiveBabyContext';
-import { useConvex } from '@/contexts/ConvexContext';
-import { supabase } from '@/lib/supabase';
-import { getBabyInfo, saveBabyInfo } from '@/lib/baby';
+import { saveAppSettings, supabase } from '@/lib/supabase';
 import { setLocalProfileName } from '@/lib/localProfile';
 import * as ImagePicker from 'expo-image-picker';
 import {
@@ -45,14 +38,11 @@ import {
   getAccountDeletionRequirements,
   uploadProfileAvatar,
 } from '@/lib/profile';
-import { compressImage } from '@/lib/imageCompression';
 import { openSubscriptionManagement } from '@/lib/subscriptionManagement';
 
-const { width: screenWidth } = Dimensions.get('window');
 const PRIMARY_TEXT = '#7D5A50';
 const ACCENT_PURPLE = '#8E4EC6'; // Sleep-Tracker Akzent
 const BABY_BLUE = '#87CEEB';
-const BABY_PINK = '#FFB3C1';
 
 const toRgba = (hex: string, opacity = 1) => {
   const cleanHex = hex.replace('#', '');
@@ -77,43 +67,12 @@ const lightenHex = (hex: string, amount = 0.35) => {
   return `#${toHex(lightenChannel(r))}${toHex(lightenChannel(g))}${toHex(lightenChannel(b))}`;
 };
 
-const MIN_VALID_PROFILE_DATE_YEAR = 2000;
-const MIN_VALID_PROFILE_DATE = new Date(MIN_VALID_PROFILE_DATE_YEAR, 0, 1);
-const MAX_VALID_PROFILE_DATE = new Date(2100, 11, 31, 23, 59, 59, 999);
-
-const parseSafeDate = (value: unknown): Date | null => {
-  if (value === null || value === undefined) return null;
-
-  let parsed: Date;
-
-  if (value instanceof Date) {
-    parsed = new Date(value.getTime());
-  } else if (typeof value === 'number') {
-    const timestamp = Math.abs(value) < 1_000_000_000_000 ? value * 1000 : value;
-    parsed = new Date(timestamp);
-  } else if (typeof value === 'string') {
-    const trimmed = value.trim();
-    if (!trimmed) return null;
-
-    if (/^-?\d+$/.test(trimmed)) {
-      const numericValue = Number(trimmed);
-      const timestamp = Math.abs(numericValue) < 1_000_000_000_000 ? numericValue * 1000 : numericValue;
-      parsed = new Date(timestamp);
-    } else {
-      parsed = new Date(trimmed);
-    }
-  } else {
-    return null;
-  }
-
-  if (Number.isNaN(parsed.getTime()) || parsed.getFullYear() < MIN_VALID_PROFILE_DATE_YEAR) {
-    return null;
-  }
-
-  return parsed;
-};
-
 export default function ProfilScreen() {
+  const params = useLocalSearchParams<{
+    focus?: string | string[];
+    communitySetup?: string | string[];
+    communityAvatar?: string | string[];
+  }>();
   const adaptiveColors = useAdaptiveColors();
   const colorScheme = adaptiveColors.effectiveScheme;
   const isDark = colorScheme === 'dark' || adaptiveColors.isDarkBackground;
@@ -128,44 +87,33 @@ export default function ProfilScreen() {
   const glassSurfaceButton = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.5)';
   const accentPurple = isDark ? lightenHex(ACCENT_PURPLE) : ACCENT_PURPLE;
   const babyBlue = isDark ? lightenHex(BABY_BLUE) : BABY_BLUE;
-  const babyPink = isDark ? lightenHex(BABY_PINK) : BABY_PINK;
   const loadingAccent = adaptiveColors.accent;
   const saveCardBackground = isDark ? toRgba(accentPurple, 0.22) : 'rgba(220,200,255,0.6)';
   const securityCardBackground = isDark ? toRgba(babyBlue, 0.2) : 'rgba(135,206,235,0.45)';
   const dangerCardBackground = isDark ? 'rgba(255,107,107,0.22)' : 'rgba(255,130,130,0.5)';
   const actionDisabledBackground = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(168,168,168,0.5)';
   const { user, session, signOut } = useAuth();
-  const { refreshBabyDetails } = useBabyStatus();
-  const { activeBabyId, refreshBabies } = useActiveBaby();
-  const { syncUser } = useConvex();
+  const requestedFocus = Array.isArray(params.focus) ? params.focus[0] : params.focus;
+  const communitySetup = Array.isArray(params.communitySetup) ? params.communitySetup[0] : params.communitySetup;
+  const communityAvatarParam = Array.isArray(params.communityAvatar)
+    ? params.communityAvatar[0]
+    : params.communityAvatar;
+  const shouldCompleteCommunityUsername = communitySetup === 'username';
 
   // Benutzerinformationen
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName]   = useState('');
+  const [username, setUsername]   = useState('');
   const [email, setEmail]         = useState('');
   const [userRole, setUserRole]   = useState<'mama' | 'papa' | ''>('');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [avatarBase64, setAvatarBase64] = useState<string | null>(null);
   const [avatarRemoved, setAvatarRemoved] = useState(false);
-
-  // Baby-Informationen
-  const [babyName, setBabyName]         = useState('');
-  const [babyGender, setBabyGender]     = useState<'male' | 'female' | ''>('');
-  const [isBabyBornForActiveBaby, setIsBabyBornForActiveBaby] = useState(false);
-  const [dueDate, setDueDate]           = useState<Date | null>(null);
-  const [birthDate, setBirthDate]       = useState<Date | null>(null);
-  const [babyWeight, setBabyWeight]     = useState('');
-  const [babyHeight, setBabyHeight]     = useState('');
-  const [babyPhotoUrl, setBabyPhotoUrl] = useState<string | null>(null);
-  const [babyPhotoPreview, setBabyPhotoPreview] = useState<string | null>(null);
-  const [babyPhotoBase64, setBabyPhotoBase64] = useState<string | null>(null);
-  const [babyPhotoRemoved, setBabyPhotoRemoved] = useState(false);
+  const [communityUseAvatar, setCommunityUseAvatar] = useState(true);
 
   // UI
   const [isLoading, setIsLoading]                   = useState(true);
-  const [showDueDatePicker, setShowDueDatePicker]   = useState(false);
-  const [showBirthDatePicker, setShowBirthDatePicker] = useState(false);
   const [isSaving, setIsSaving]                     = useState(false);
   const [isDeletingAvatar, setIsDeletingAvatar]     = useState(false);
   const [isDeletingProfile, setIsDeletingProfile]   = useState(false);
@@ -174,13 +122,9 @@ export default function ProfilScreen() {
   const [emailOverlayVisible, setEmailOverlayVisible] = useState(false);
   const [emailOverlayValue, setEmailOverlayValue] = useState('');
   const latestLoadRequestIdRef = useRef(0);
+  const usernameInputRef = useRef<TextInput>(null);
 
-  useEffect(() => {
-    if (user) loadUserData();
-    else setIsLoading(false);
-  }, [user, activeBabyId]);
-
-  const loadUserData = async () => {
+  const loadUserData = useCallback(async () => {
     const requestId = ++latestLoadRequestIdRef.current;
     try {
       setIsLoading(true);
@@ -196,17 +140,26 @@ export default function ProfilScreen() {
 
       if (user.email) setEmail(user.email);
 
-      // Profile
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('first_name, last_name, user_role, avatar_url')
-        .eq('id', userId)
-        .single();
+      const [{ data: profileData, error: profileError }, { data: settingsData, error: settingsError }] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('first_name, last_name, username, user_role, avatar_url')
+          .eq('id', userId)
+          .single(),
+        supabase
+          .from('user_settings')
+          .select('community_use_avatar')
+          .eq('user_id', userId)
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ]);
 
       if (!profileError && profileData) {
         if (requestId !== latestLoadRequestIdRef.current) return;
         setFirstName(profileData.first_name || '');
         setLastName(profileData.last_name || '');
+        setUsername(profileData.username || '');
         setUserRole((profileData.user_role as any) || '');
         setAvatarUrl(profileData.avatar_url || null);
         setAvatarPreview(profileData.avatar_url || null);
@@ -218,45 +171,16 @@ export default function ProfilScreen() {
         );
       }
 
-      // Settings
-      const { data: settingsData } = await supabase
-        .from('user_settings')
-        .select('due_date, is_baby_born')
-        .eq('user_id', userId)
-        .order('updated_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (requestId !== latestLoadRequestIdRef.current) return;
-      setDueDate(parseSafeDate(settingsData?.due_date));
-
-      // Baby info
-      const { data: babyData } = await getBabyInfo(activeBabyId ?? undefined);
-      if (requestId !== latestLoadRequestIdRef.current) return;
-      if (babyData) {
-        const parsedBirthDate = parseSafeDate(babyData.birth_date);
-        setBabyName(babyData.name || '');
-        setBabyGender(babyData.baby_gender || '');
-        setBabyWeight(babyData.weight || '');
-        setBabyHeight(babyData.height || '');
-        setBabyPhotoUrl(babyData.photo_url || null);
-        setBabyPhotoPreview(babyData.photo_url || null);
-        setBabyPhotoBase64(null);
-        setBabyPhotoRemoved(false);
-        setBirthDate(parsedBirthDate);
-        setIsBabyBornForActiveBaby(Boolean(parsedBirthDate));
-      } else {
-        setBabyName('');
-        setBabyGender('');
-        setBabyWeight('');
-        setBabyHeight('');
-        setBabyPhotoUrl(null);
-        setBabyPhotoPreview(null);
-        setBabyPhotoBase64(null);
-        setBabyPhotoRemoved(false);
-        setBirthDate(null);
-        setIsBabyBornForActiveBaby(false);
+      if (!settingsError && requestId === latestLoadRequestIdRef.current) {
+        if (typeof settingsData?.community_use_avatar === 'boolean') {
+          setCommunityUseAvatar(settingsData.community_use_avatar);
+        } else if (communityAvatarParam === 'hidden') {
+          setCommunityUseAvatar(false);
+        } else if (communityAvatarParam === 'visible') {
+          setCommunityUseAvatar(true);
+        }
       }
+
     } catch (e) {
       console.error(e);
       if (requestId === latestLoadRequestIdRef.current) {
@@ -267,7 +191,22 @@ export default function ProfilScreen() {
         setIsLoading(false);
       }
     }
-  };
+  }, [communityAvatarParam, user]);
+
+  useEffect(() => {
+    if (user) loadUserData();
+    else setIsLoading(false);
+  }, [loadUserData, user]);
+
+  useEffect(() => {
+    if (requestedFocus !== 'username' || isLoading) return;
+
+    const timeout = setTimeout(() => {
+      usernameInputRef.current?.focus();
+    }, 350);
+
+    return () => clearTimeout(timeout);
+  }, [isLoading, requestedFocus]);
 
   const pickAvatarImage = async () => {
     try {
@@ -317,68 +256,6 @@ export default function ProfilScreen() {
     setAvatarBase64(null);
     setAvatarUrl(null);
     setAvatarRemoved(markRemoved);
-  };
-
-  const pickBabyPhoto = async () => {
-    try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Berechtigung erforderlich', 'Bitte erlaube den Zugriff auf deine Fotos.');
-        return;
-      }
-
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 0.5,
-        base64: true,
-      });
-
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        const asset = result.assets[0];
-        let base64Data: string | null = null;
-
-        if (asset.base64) {
-          base64Data = `data:image/jpeg;base64,${asset.base64}`;
-        } else if (asset.uri) {
-          try {
-            const response = await fetch(asset.uri);
-            const blob = await response.blob();
-            const reader = new FileReader();
-            base64Data = await new Promise((resolve, reject) => {
-              reader.onload = () => resolve(reader.result as string);
-              reader.onerror = reject;
-              reader.readAsDataURL(blob);
-            });
-          } catch (error) {
-            console.error('Fehler bei der Bildkonvertierung:', error);
-            Alert.alert('Fehler', 'Das Bild konnte nicht verarbeitet werden.');
-            return;
-          }
-        }
-
-        if (!base64Data) {
-          Alert.alert('Fehler', 'Das Bild konnte nicht verarbeitet werden.');
-          return;
-        }
-
-        setBabyPhotoPreview(base64Data);
-        setBabyPhotoBase64(base64Data);
-        setBabyPhotoUrl(null);
-        setBabyPhotoRemoved(false);
-      }
-    } catch (error) {
-      console.error('Error picking baby photo:', error);
-      Alert.alert('Fehler', 'Das Babyfoto konnte nicht ausgewählt werden.');
-    }
-  };
-
-  const removeBabyPhoto = () => {
-    setBabyPhotoPreview(null);
-    setBabyPhotoBase64(null);
-    setBabyPhotoUrl(null);
-    setBabyPhotoRemoved(true);
   };
 
   const handleAvatarDeletePress = () => {
@@ -588,12 +465,16 @@ export default function ProfilScreen() {
       return;
     }
 
+    if (shouldCompleteCommunityUsername && !username.trim()) {
+      Alert.alert('Community Username', 'Bitte gib einen Username an, bevor du in der Community schreibst.');
+      usernameInputRef.current?.focus();
+      return;
+    }
+
     setIsSaving(true);
 
     let finalAvatarUrl = avatarUrl;
-    let finalBabyPhoto = babyPhotoUrl;
-    const dueDateForSave = parseSafeDate(dueDate);
-    const birthDateForSave = parseSafeDate(birthDate);
+    const trimmedUsername = username.trim();
 
     try {
       if (avatarBase64) {
@@ -602,17 +483,6 @@ export default function ProfilScreen() {
         finalAvatarUrl = uploadResult.url;
       } else if (avatarRemoved) {
         finalAvatarUrl = null;
-      }
-
-      if (babyPhotoBase64) {
-        // Babyfotos ebenfalls verkleinern (max ~900px, moderat komprimiert)
-        const { dataUrl } = await compressImage(
-          { base64: babyPhotoBase64 },
-          { maxDimension: 900, quality: 0.65 }
-        );
-        finalBabyPhoto = dataUrl;
-      } else if (babyPhotoRemoved) {
-        finalBabyPhoto = null;
       }
 
       // profiles upsert
@@ -624,6 +494,7 @@ export default function ProfilScreen() {
         profileResult = await supabase.from('profiles').update({
           first_name: firstName,
           last_name: lastName,
+          username: trimmedUsername || null,
           user_role: userRole,
           avatar_url: finalAvatarUrl || null,
           updated_at: new Date().toISOString(),
@@ -633,6 +504,7 @@ export default function ProfilScreen() {
           id: user.id,
           first_name: firstName,
           last_name: lastName,
+          username: trimmedUsername || null,
           user_role: userRole,
           avatar_url: finalAvatarUrl || null,
           created_at: new Date().toISOString(),
@@ -642,46 +514,19 @@ export default function ProfilScreen() {
       if (profileResult.error) throw profileResult.error;
       await setLocalProfileName(user.id, firstName, lastName);
 
-      // user_settings upsert
-      const { data: existingSettings } = await supabase
-        .from('user_settings').select('id').eq('user_id', user.id).maybeSingle();
-
-      let settingsResult;
-      const base = {
-        due_date: dueDateForSave ? dueDateForSave.toISOString() : null,
-        is_baby_born: isBabyBornForActiveBaby,
-        theme: 'light',
-        notifications_enabled: true,
-        updated_at: new Date().toISOString(),
-      };
-      if (existingSettings?.id) {
-        settingsResult = await supabase.from('user_settings')
-          .update(base).eq('id', existingSettings.id);
-      } else {
-        settingsResult = await supabase.from('user_settings')
-          .insert({ user_id: user.id, ...base });
-      }
-      if (settingsResult.error) throw settingsResult.error;
-
-      // baby info
-      const { error: babyError } = await saveBabyInfo(
-        {
-          name: babyName,
-          baby_gender: babyGender,
-          birth_date: isBabyBornForActiveBaby && birthDateForSave ? birthDateForSave.toISOString() : null,
-          weight: babyWeight,
-          height: babyHeight,
-          photo_url: finalBabyPhoto,
-        },
-        activeBabyId ?? undefined
-      );
-      if (babyError) throw babyError;
-      await refreshBabyDetails();
-      await refreshBabies();
-      void syncUser();
+      const nextIdentityMode = trimmedUsername ? 'username' : 'real_name';
+      const nextCommunityUseAvatar =
+        shouldCompleteCommunityUsername && communityAvatarParam
+          ? communityAvatarParam !== 'hidden'
+          : communityUseAvatar;
+      const { error: settingsError } = await saveAppSettings({
+        community_identity_mode: nextIdentityMode,
+        community_use_avatar: nextCommunityUseAvatar,
+      });
+      if (settingsError) throw settingsError;
 
       Alert.alert('Erfolg', 'Deine Daten wurden erfolgreich gespeichert.', [
-        { text: 'OK', onPress: () => router.push('/more') },
+        { text: 'OK', onPress: () => router.push(shouldCompleteCommunityUsername ? '/community' : '/more') },
       ]);
     } catch (e: any) {
       console.error(e);
@@ -692,52 +537,8 @@ export default function ProfilScreen() {
       setAvatarPreview(finalAvatarUrl || null);
       setAvatarBase64(null);
       setAvatarRemoved(false);
-      setBabyPhotoUrl(finalBabyPhoto || null);
-      setBabyPhotoPreview(finalBabyPhoto || null);
-      setBabyPhotoBase64(null);
-      setBabyPhotoRemoved(false);
     }
   };
-
-  const formatDate = (date: Date | null) => {
-    const parsed = parseSafeDate(date);
-    return !parsed
-      ? 'Nicht festgelegt'
-      : parsed.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
-  };
-
-  const handleDueDateChange = (_: any, selectedDate?: Date) => {
-    if (Platform.OS !== 'ios') {
-      setShowDueDatePicker(false);
-    }
-    if (selectedDate) setDueDate(parseSafeDate(selectedDate));
-  };
-  const handleBirthDateChange = (_: any, selectedDate?: Date) => {
-    if (Platform.OS !== 'ios') {
-      setShowBirthDatePicker(false);
-    }
-    if (selectedDate) {
-      const safeDate = parseSafeDate(selectedDate);
-      setBirthDate(safeDate);
-      setIsBabyBornForActiveBaby(Boolean(safeDate));
-    }
-  };
-  const handleDueDateConfirmIOS = (date: Date) => {
-    setDueDate(parseSafeDate(date));
-    setShowDueDatePicker(false);
-  };
-  const handleBirthDateConfirmIOS = (date: Date) => {
-    const safeDate = parseSafeDate(date);
-    setBirthDate(safeDate);
-    setIsBabyBornForActiveBaby(Boolean(safeDate));
-    setShowBirthDatePicker(false);
-  };
-  const handleBabyBornChange = (value: boolean) => {
-    setIsBabyBornForActiveBaby(value);
-    if (!value) setBirthDate(null);
-  };
-  const dueDateForDisplay = parseSafeDate(dueDate);
-  const birthDateForDisplay = parseSafeDate(birthDate);
 
   if (!session) {
     return <Redirect href="/(auth)/login" />;
@@ -754,7 +555,7 @@ export default function ProfilScreen() {
             title="Profil"
             subtitle="Persönliche Daten und Babyinfos"
             showBackButton
-            onBackPress={() => router.push('/more')}
+            onBackPress={() => router.push(shouldCompleteCommunityUsername ? '/community' : '/more')}
           />
 
           <ScrollView
@@ -891,6 +692,50 @@ export default function ProfilScreen() {
                     </View>
 
                     <View style={styles.formGroup}>
+                      <ThemedText style={[styles.label, { color: textPrimary }]}>Username</ThemedText>
+                      {shouldCompleteCommunityUsername ? (
+                        <ThemedText style={[styles.helperText, { color: accentPurple }]}>
+                          Lege hier deinen Community-Username fest. Danach geht es direkt zur Community zurueck.
+                        </ThemedText>
+                      ) : null}
+                      <TextInput
+                        ref={usernameInputRef}
+                        style={[styles.inputGlass, { borderColor: glassBorder, backgroundColor: glassSurface, color: textPrimary }]}
+                        value={username}
+                        onChangeText={setUsername}
+                        placeholder="@deinname"
+                        placeholderTextColor={isDark ? '#CFC7BC' : '#9BA0A6'}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                      />
+                    </View>
+
+                    <View style={styles.formGroup}>
+                      <ThemedText style={[styles.label, { color: textPrimary }]}>Community-Profilbild</ThemedText>
+                      <View
+                        style={[
+                          styles.preferenceToggleRow,
+                          { borderColor: glassBorder, backgroundColor: glassSurfaceButton },
+                        ]}
+                      >
+                        <View style={styles.preferenceToggleTextWrap}>
+                          <ThemedText style={[styles.preferenceToggleTitle, { color: textPrimary }]}>
+                            In Community und Benachrichtigungen anzeigen
+                          </ThemedText>
+                          <ThemedText style={[styles.helperText, { color: textSecondary }]}>
+                            Wenn ausgeschaltet, wird statt deines Fotos nur ein Avatar ohne Profilbild genutzt.
+                          </ThemedText>
+                        </View>
+                        <Switch
+                          value={communityUseAvatar}
+                          onValueChange={setCommunityUseAvatar}
+                          trackColor={{ false: '#D9CEC7', true: accentPurple }}
+                          thumbColor="#FFFFFF"
+                        />
+                      </View>
+                    </View>
+
+                    <View style={styles.formGroup}>
                       <ThemedText style={[styles.label, { color: textPrimary }]}>Rolle</ThemedText>
                       <View style={styles.duoRow}>
                         <TouchableOpacity
@@ -947,7 +792,7 @@ export default function ProfilScreen() {
                   </View>
                 </LiquidGlassCard>
 
-                {/* Baby-Infos */}
+                {/* Hinweis: Baby-Daten leben jetzt auf "Mein Baby" */}
                 <LiquidGlassCard
                   style={[
                     styles.sectionCard,
@@ -957,238 +802,19 @@ export default function ProfilScreen() {
                   overlayColor={glassOverlay}
                   borderColor={glassBorder}
                 >
-                  <ThemedText style={[styles.sectionTitle, { color: textPrimary }]}>Baby-Informationen</ThemedText>
+                  <ThemedText style={[styles.sectionTitle, { color: textPrimary }]}>Mein Baby</ThemedText>
                   <View style={styles.cardInner}>
-                    <View style={styles.formGroup}>
-                      <ThemedText style={[styles.label, { color: textPrimary }]}>Babyfoto</ThemedText>
-                      <View style={styles.babyPhotoSelector}>
-                        {babyPhotoPreview ? (
-                          <CachedImage uri={babyPhotoPreview} style={styles.babyPhotoPreview} showLoader={false} />
-                        ) : (
-                          <View style={[styles.babyPhotoPlaceholder, { backgroundColor: glassSurfaceSoft, borderColor: glassBorder }]}>
-                            <IconSymbol name="person.fill" size={40} color="#FFFFFF" />
-                          </View>
-                        )}
-                        <View style={styles.babyPhotoActions}>
-                          <TouchableOpacity
-                            style={[styles.babyPhotoActionButton, { borderColor: glassBorder, backgroundColor: glassSurfaceSoft }]}
-                            onPress={pickBabyPhoto}
-                            activeOpacity={0.9}
-                            disabled={isSaving}
-                          >
-                            <ThemedText style={[styles.babyPhotoActionText, { color: textPrimary }]}>Foto wählen</ThemedText>
-                          </TouchableOpacity>
-                          {!!babyPhotoPreview && (
-                            <TouchableOpacity
-                              style={[styles.babyPhotoActionButton, { borderColor: glassBorder, backgroundColor: glassSurfaceSoft }]}
-                              onPress={removeBabyPhoto}
-                              activeOpacity={0.9}
-                              disabled={isSaving}
-                            >
-                              <ThemedText style={[styles.babyPhotoActionText, { color: textPrimary }]}>Foto entfernen</ThemedText>
-                            </TouchableOpacity>
-                          )}
-                        </View>
-                      </View>
-                    </View>
-
-                    <View style={styles.formGroup}>
-                      <ThemedText style={[styles.label, { color: textPrimary }]}>Errechneter Geburtstermin</ThemedText>
-                      <TouchableOpacity
-                        style={[styles.dateButtonGlass, { borderColor: glassBorder, backgroundColor: glassSurface, shadowColor: 'transparent' }]}
-                        onPress={() => setShowDueDatePicker(true)}
-                        activeOpacity={0.9}
-                      >
-                        <ThemedText style={[styles.dateButtonText, { color: textPrimary }]}>
-                          {dueDateForDisplay ? formatDate(dueDateForDisplay) : 'Geburtstermin auswählen'}
-                        </ThemedText>
-                        <IconSymbol name="calendar" size={20} color={textSecondary} />
-                      </TouchableOpacity>
-                      {showDueDatePicker && Platform.OS !== 'ios' && (
-                        <DateTimePicker
-                          value={dueDateForDisplay || new Date()}
-                          mode="date"
-                          display="default"
-                          onChange={handleDueDateChange}
-                          minimumDate={MIN_VALID_PROFILE_DATE}
-                          maximumDate={MAX_VALID_PROFILE_DATE}
-                        />
-                      )}
-                      {Platform.OS === 'ios' && (
-                        <IOSBottomDatePicker
-                          visible={showDueDatePicker}
-                          title="Geburtstermin auswählen"
-                          value={dueDateForDisplay || new Date()}
-                          mode="date"
-                          minimumDate={MIN_VALID_PROFILE_DATE}
-                          maximumDate={MAX_VALID_PROFILE_DATE}
-                          onClose={() => setShowDueDatePicker(false)}
-                          onConfirm={handleDueDateConfirmIOS}
-                          initialVariant="calendar"
-                        />
-                      )}
-                    </View>
-
-                    <View style={styles.formGroup}>
-                      <ThemedText style={[styles.label, { color: textPrimary }]}>Baby bereits geboren?</ThemedText>
-                      <View style={styles.switchContainer}>
-                        <ThemedText style={[styles.switchLabel, { color: textPrimary }]}>
-                          {isBabyBornForActiveBaby ? 'Ja' : 'Nein'}
-                        </ThemedText>
-                        <Switch
-                          value={isBabyBornForActiveBaby}
-                          onValueChange={handleBabyBornChange}
-                          disabled={isSaving}
-                          trackColor={{ false: '#D1D1D6', true: '#9DBEBB' }}
-                          thumbColor={isBabyBornForActiveBaby ? '#FFFFFF' : '#F4F4F4'}
-                          ios_backgroundColor="#D1D1D6"
-                        />
-                      </View>
-                    </View>
-
-                    <View style={styles.formGroup}>
-                      <ThemedText style={[styles.label, { color: textPrimary }]}>Name des Babys</ThemedText>
-                      <TextInput
-                        style={[styles.inputGlass, { borderColor: glassBorder, backgroundColor: glassSurface, color: textPrimary }]}
-                        value={babyName}
-                        onChangeText={setBabyName}
-                        placeholder="Name deines Babys"
-                        placeholderTextColor={isDark ? '#CFC7BC' : '#9BA0A6'}
-                      />
-                    </View>
-
-                    <View style={styles.formGroup}>
-                      <ThemedText style={[styles.label, { color: textPrimary }]}>Geschlecht</ThemedText>
-                      <View style={styles.duoRow}>
-                        <TouchableOpacity
-                          style={[
-                            styles.pickButton,
-                            { borderColor: glassBorder, backgroundColor: glassSurfaceButton },
-                            babyGender === 'male' && [styles.pickButtonActive, { backgroundColor: babyBlue, borderColor: glassBorderStrong }],
-                          ]}
-                          onPress={() => setBabyGender('male')}
-                          activeOpacity={0.9}
-                        >
-                          <IconSymbol
-                            name="person.fill"
-                            size={24}
-                            color={babyGender === 'male' ? '#FFFFFF' : textSecondary}
-                          />
-                          <ThemedText
-                            style={[
-                              styles.pickButtonText,
-                              { color: textSecondary },
-                              babyGender === 'male' && styles.pickButtonTextActive,
-                            ]}
-                          >
-                            Junge
-                          </ThemedText>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                          style={[
-                            styles.pickButton,
-                            { borderColor: glassBorder, backgroundColor: glassSurfaceButton },
-                            babyGender === 'female' && [styles.pickButtonActive, { backgroundColor: babyPink, borderColor: glassBorderStrong }],
-                          ]}
-                          onPress={() => setBabyGender('female')}
-                          activeOpacity={0.9}
-                        >
-                          <IconSymbol
-                            name="person.fill"
-                            size={24}
-                            color={babyGender === 'female' ? '#FFFFFF' : textSecondary}
-                          />
-                          <ThemedText
-                            style={[
-                              styles.pickButtonText,
-                              { color: textSecondary },
-                              babyGender === 'female' && styles.pickButtonTextActive,
-                            ]}
-                          >
-                            Mädchen
-                          </ThemedText>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-
-                    {isBabyBornForActiveBaby && (
-                      <>
-                        <View style={styles.formGroup}>
-                          <ThemedText style={[styles.label, { color: textPrimary }]}>Geburtsdatum</ThemedText>
-                          <TouchableOpacity
-                            style={[
-                              styles.dateButtonGlass,
-                              { borderColor: glassBorder, backgroundColor: glassSurface, shadowColor: 'transparent' },
-                            ]}
-                            onPress={() => setShowBirthDatePicker(true)}
-                            activeOpacity={0.9}
-                          >
-                            <ThemedText style={[styles.dateButtonText, { color: textPrimary }]}>
-                              {birthDateForDisplay ? formatDate(birthDateForDisplay) : 'Geburtsdatum auswählen'}
-                            </ThemedText>
-                            <IconSymbol name="calendar" size={20} color={textSecondary} />
-                          </TouchableOpacity>
-                          {showBirthDatePicker && Platform.OS !== 'ios' && (
-                            <DateTimePicker
-                              value={birthDateForDisplay || new Date()}
-                              mode="date"
-                              display="default"
-                              onChange={handleBirthDateChange}
-                              minimumDate={MIN_VALID_PROFILE_DATE}
-                              maximumDate={new Date()}
-                            />
-                          )}
-                          {Platform.OS === 'ios' && (
-                            <IOSBottomDatePicker
-                              visible={showBirthDatePicker}
-                              title="Geburtsdatum auswählen"
-                              value={birthDateForDisplay || new Date()}
-                              mode="date"
-                              minimumDate={MIN_VALID_PROFILE_DATE}
-                              maximumDate={new Date()}
-                              onClose={() => setShowBirthDatePicker(false)}
-                              onConfirm={handleBirthDateConfirmIOS}
-                              initialVariant="calendar"
-                            />
-                          )}
-                        </View>
-
-                        <View style={styles.formRow2}>
-                          <View style={[styles.formGroup, { flex: 1 }]}>
-                            <ThemedText style={[styles.label, { color: textPrimary }]}>Geburtsgewicht (g)</ThemedText>
-                            <TextInput
-                              style={[
-                                styles.inputGlass,
-                                styles.numeric,
-                                { borderColor: glassBorder, backgroundColor: glassSurface, color: textPrimary },
-                              ]}
-                              value={babyWeight}
-                              onChangeText={setBabyWeight}
-                              placeholder="z.B. 3500"
-                              placeholderTextColor={isDark ? '#CFC7BC' : '#9BA0A6'}
-                              keyboardType="numeric"
-                            />
-                          </View>
-
-                          <View style={[styles.formGroup, { flex: 1 }]}>
-                            <ThemedText style={[styles.label, { color: textPrimary }]}>Größe (cm)</ThemedText>
-                            <TextInput
-                              style={[
-                                styles.inputGlass,
-                                styles.numeric,
-                                { borderColor: glassBorder, backgroundColor: glassSurface, color: textPrimary },
-                              ]}
-                              value={babyHeight}
-                              onChangeText={setBabyHeight}
-                              placeholder="z.B. 52"
-                              placeholderTextColor={isDark ? '#CFC7BC' : '#9BA0A6'}
-                              keyboardType="numeric"
-                            />
-                          </View>
-                        </View>
-                      </>
-                    )}
+                    <ThemedText style={[styles.sectionHelperText, { color: textSecondary }]}>
+                      {'Baby-Daten, Geburtstermin, Geschlecht und Entwicklung bearbeitest du jetzt gesammelt auf der Seite "Mein Baby".'}
+                    </ThemedText>
+                    <TouchableOpacity
+                      style={[styles.sectionLinkButton, { borderColor: glassBorder, backgroundColor: glassSurfaceButton }]}
+                      onPress={() => router.push('/(tabs)/baby?edit=1')}
+                      activeOpacity={0.9}
+                    >
+                      <IconSymbol name="person.fill" size={20} color={textPrimary} />
+                      <ThemedText style={[styles.sectionLinkButtonText, { color: textPrimary }]}>Zu Mein Baby</ThemedText>
+                    </TouchableOpacity>
                   </View>
                 </LiquidGlassCard>
 
@@ -1329,6 +955,27 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   cardInner: { paddingHorizontal: 20, paddingBottom: 16 },
+  sectionHelperText: {
+    fontSize: 14,
+    lineHeight: 21,
+    textAlign: 'center',
+    marginBottom: 14,
+    paddingHorizontal: 8,
+  },
+  sectionLinkButton: {
+    minHeight: 48,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  sectionLinkButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
 
   formGroup: { marginBottom: 16 },
   formRow2: { flexDirection: 'row', gap: 12 },
@@ -1474,6 +1121,24 @@ const styles = StyleSheet.create({
   // Switch
   switchContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   switchLabel: { fontSize: 16, color: PRIMARY_TEXT, fontWeight: '700' },
+  preferenceToggleRow: {
+    borderWidth: 1.5,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  preferenceToggleTextWrap: {
+    flex: 1,
+    gap: 4,
+  },
+  preferenceToggleTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
 
   // Save Action-Card (wie Sleep-Tracker Karten)
   saveCard: {

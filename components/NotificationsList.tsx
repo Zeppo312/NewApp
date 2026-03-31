@@ -482,7 +482,7 @@ export const NotificationsList = ({ onNotificationUpdate }: { onNotificationUpda
               
               <TouchableOpacity 
                 style={styles.viewAllButton}
-                onPress={() => router.push('/notifications' as any)}
+                onPress={() => router.push('/(tabs)/notifications' as any)}
               >
                 <ThemedText style={[styles.viewAllText, { color: theme.accent }]}>
                   Alle ansehen
@@ -512,7 +512,7 @@ export const NotificationsList = ({ onNotificationUpdate }: { onNotificationUpda
           
           <TouchableOpacity
             style={[styles.allNotificationsButton, { backgroundColor: theme.accent }]}
-            onPress={() => router.push('/notifications' as any)}
+            onPress={() => router.push('/(tabs)/notifications' as any)}
           >
             <ThemedText style={styles.allNotificationsButtonText}>
               Alle Benachrichtigungen

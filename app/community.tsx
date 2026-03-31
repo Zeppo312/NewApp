@@ -434,7 +434,7 @@ export default function CommunityScreen() {
         title="Lotti Baby Blog"
         subtitle="Begleiter durch Schwangerschaft und erstes Jahr"
         showBackButton
-        onBackPress={() => router.push('/(tabs)/home')}
+        onBackPress={() => router.push('/(tabs)/community')}
       />
       {hero}
       {adminPanel}

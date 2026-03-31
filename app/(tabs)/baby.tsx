@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, Image, TextInput, Alert, SafeAreaView, StatusBar, Platform, BackHandler } from 'react-native';
+import { StyleSheet, ScrollView, View, TouchableOpacity, Image, TextInput, Alert, SafeAreaView, StatusBar, Platform, BackHandler, Switch } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedBackground } from '@/components/ThemedBackground';
@@ -12,6 +12,7 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { saveBabyInfo, BabyInfo } from '@/lib/baby';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { loadBabyInfoWithCache, invalidateBabyCache } from '@/lib/babyCache';
+import { supabase } from '@/lib/supabase';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import Header from '@/components/Header';
@@ -57,6 +58,7 @@ const initialStats = {
 
 const HEADER_TEXT_COLOR = '#7D5A50';
 const MIN_VALID_BABY_DATE = new Date(2000, 0, 1);
+const MAX_VALID_DUE_DATE = new Date(2100, 11, 31, 23, 59, 59, 999);
 
 const formatBedtimeInputValue = (value: string): string => {
   const digits = value.replace(/\D/g, '').slice(0, 4);
@@ -175,20 +177,22 @@ export default function BabyScreen() {
   const inputBorder = isDark ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.35)';
   const { user } = useAuth();
   const { activeBabyId, refreshBabies, isReady, setActiveBabyId } = useActiveBaby();
-  const { refreshBabyDetails } = useBabyStatus();
+  const { refreshBabyDetails, isBabyBorn } = useBabyStatus();
   const router = useRouter();
   const params = useLocalSearchParams<{ babyId?: string | string[]; edit?: string | string[]; created?: string | string[] }>();
+  const fallbackHomeRoute = isBabyBorn ? '/(tabs)/home' : '/(tabs)/pregnancy-home';
 
   // Set fallback route for smart back navigation
-  useSmartBack('/(tabs)/home');
+  useSmartBack(fallbackHomeRoute);
 
   const [babyInfo, setBabyInfo] = useState<BabyInfo>({});
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [showDueDatePicker, setShowDueDatePicker] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [dueDate, setDueDate] = useState<Date | null>(null);
+  const [isBabyBornForCurrentBaby, setIsBabyBornForCurrentBaby] = useState(false);
   const [bedtimeInput, setBedtimeInput] = useState(DEFAULT_BEDTIME_ANCHOR);
   const [bedtimeInputError, setBedtimeInputError] = useState<string | null>(null);
-  const [backgroundTaskStatus, setBackgroundTaskStatus] = useState<{status: string, isRegistered: boolean} | null>(null);
   const birthDateBounds = getCurrentBirthDateBounds();
   const birthDateForDisplay = parseSafeDate(babyInfo.birth_date, birthDateBounds);
   const birthDatePickerValue = getSafePickerDate(
@@ -196,6 +200,15 @@ export default function BabyScreen() {
     birthDateBounds.maximumDate,
     birthDateBounds
   );
+  const dueDateBounds = useMemo(
+    () => ({
+      minimumDate: MIN_VALID_BABY_DATE,
+      maximumDate: MAX_VALID_DUE_DATE,
+    }),
+    [],
+  );
+  const dueDateForDisplay = parseSafeDate(dueDate, dueDateBounds);
+  const dueDatePickerValue = getSafePickerDate(dueDate, new Date(), dueDateBounds);
   const bedtimeAnchor = useMemo(
     () => normalizeBedtimeAnchor(babyInfo.preferred_bedtime),
     [babyInfo.preferred_bedtime]
@@ -254,8 +267,6 @@ export default function BabyScreen() {
     if (user) {
       registerForPushNotificationsAsync();
       setupBackgroundTask();
-    } else {
-      setIsLoading(false);
     }
   }, [user]);
   
@@ -274,7 +285,6 @@ export default function BabyScreen() {
         // Status prüfen und speichern (einfacher Check)
         const registered = await isTaskRegistered();
         const status: { status: string; isRegistered: boolean } = { status: registered ? 'REGISTERED' : 'NOT_REGISTERED', isRegistered: !!registered };
-        setBackgroundTaskStatus(status);
         console.log('Background Fetch Status:', status);
       } else {
         console.log('Keine Berechtigung für Benachrichtigungen, Hintergrund-Task nicht registriert.');
@@ -285,16 +295,29 @@ export default function BabyScreen() {
   };
 
   const loadBabyInfo = useCallback(async () => {
-    if (!targetBabyId) {
-      setIsLoading(false);
+    if (!targetBabyId || !user?.id) {
       return;
     }
 
     try {
-      setIsLoading(true);
+      const [
+        { data, isStale, refresh },
+        settingsResult,
+      ] = await Promise.all([
+        loadBabyInfoWithCache(targetBabyId),
+        supabase
+          .from('user_settings')
+          .select('due_date, is_baby_born')
+          .eq('user_id', user.id)
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ]);
 
-      // Load with cache - instant if cached
-      const { data, isStale, refresh } = await loadBabyInfoWithCache(targetBabyId);
+      if (settingsResult.error && settingsResult.error.code !== 'PGRST116') {
+        console.error('Failed to load baby settings:', settingsResult.error);
+      }
+      const settingsData = settingsResult.data;
 
       // Show cached data immediately
       if (data) {
@@ -306,7 +329,8 @@ export default function BabyScreen() {
             ? normalizeBedtimeAnchor(data.preferred_bedtime)
             : null,
         });
-        setIsLoading(false);
+        setIsBabyBornForCurrentBaby(Boolean(settingsData?.is_baby_born ?? safeBirthDate));
+        setDueDate(parseSafeDate(settingsData?.due_date, dueDateBounds));
       }
 
       // Refresh in background if stale
@@ -320,17 +344,15 @@ export default function BabyScreen() {
             ? normalizeBedtimeAnchor(freshData.preferred_bedtime)
             : null,
         });
+        setIsBabyBornForCurrentBaby(Boolean(settingsData?.is_baby_born ?? safeBirthDate));
+        setDueDate(parseSafeDate(settingsData?.due_date, dueDateBounds));
       }
 
       // If no cache, data is already fresh
-      if (!data) {
-        setIsLoading(false);
-      }
     } catch (err) {
       console.error('Failed to load baby info:', err);
-      setIsLoading(false);
     }
-  }, [targetBabyId]);
+  }, [dueDateBounds, targetBabyId, user?.id]);
 
   useFocusEffect(
     useCallback(() => {
@@ -339,7 +361,7 @@ export default function BabyScreen() {
       loadBabyInfo();
   
       const handleHardwareBack = () => {
-        router.push('/(tabs)/home');
+        router.push(fallbackHomeRoute as any);
         return true;
       };
   
@@ -349,7 +371,7 @@ export default function BabyScreen() {
       );
   
       return () => subscription.remove();
-    }, [user, isReady, targetBabyId, router, loadBabyInfo])
+    }, [user, isReady, targetBabyId, router, loadBabyInfo, fallbackHomeRoute])
   );
 
   const displayPhoto = babyInfo.photo_url || null;
@@ -439,14 +461,27 @@ export default function BabyScreen() {
   };
 
   const handleSave = async () => {
-    if (!targetBabyId) return;
+    if (!targetBabyId || !user?.id) return;
 
     const normalizedBedtime = commitBedtimeInput(bedtimeInput, true);
     if (!normalizedBedtime) return;
 
+    const birthDateForSave = isBabyBornForCurrentBaby
+      ? parseSafeDate(babyInfo.birth_date, birthDateBounds)
+      : null;
+    const dueDateForSave = !isBabyBornForCurrentBaby
+      ? parseSafeDate(dueDate, dueDateBounds)
+      : null;
+
+    if (isBabyBornForCurrentBaby && !birthDateForSave) {
+      Alert.alert('Fehlendes Geburtsdatum', 'Bitte trage das Geburtsdatum ein oder markiere, dass dein Baby noch nicht geboren ist.');
+      return;
+    }
+
     try {
       const sanitizedBabyInfo: BabyInfo = {
         ...babyInfo,
+        birth_date: birthDateForSave ? birthDateForSave.toISOString() : null,
         preferred_bedtime: normalizedBedtime,
       };
 
@@ -455,6 +490,37 @@ export default function BabyScreen() {
         console.error('Error saving baby info:', error);
         Alert.alert('Fehler', 'Die Informationen konnten nicht gespeichert werden.');
       } else {
+        const { data: existingSettings, error: existingSettingsError } = await supabase
+          .from('user_settings')
+          .select('id')
+          .eq('user_id', user.id)
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (existingSettingsError && existingSettingsError.code !== 'PGRST116') {
+          throw existingSettingsError;
+        }
+
+        const settingsPayload = {
+          due_date: dueDateForSave ? dueDateForSave.toISOString() : null,
+          is_baby_born: isBabyBornForCurrentBaby,
+          updated_at: new Date().toISOString(),
+        };
+
+        const settingsResult = existingSettings?.id
+          ? await supabase.from('user_settings').update(settingsPayload).eq('id', existingSettings.id)
+          : await supabase.from('user_settings').insert({
+              user_id: user.id,
+              theme: 'light',
+              notifications_enabled: true,
+              ...settingsPayload,
+            });
+
+        if (settingsResult.error) {
+          throw settingsResult.error;
+        }
+
         Alert.alert('Erfolg', 'Die Informationen wurden erfolgreich gespeichert.');
         setIsEditing(false);
         if (targetBabyId !== activeBabyId) {
@@ -506,6 +572,27 @@ export default function BabyScreen() {
       birth_date: safeDate.toISOString(),
     }));
     setShowDatePicker(false);
+  };
+
+  const handleDueDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
+    if (Platform.OS === 'android') {
+      setShowDueDatePicker(false);
+    }
+    if (event.type === 'dismissed' || !selectedDate) return;
+
+    const safeDate = parseSafeDate(selectedDate, dueDateBounds);
+    if (!safeDate) return;
+    setDueDate(safeDate);
+  };
+
+  const handleIOSDueDateConfirm = (date: Date) => {
+    const safeDate = parseSafeDate(date, dueDateBounds);
+    if (!safeDate) {
+      setShowDueDatePicker(false);
+      return;
+    }
+    setDueDate(safeDate);
+    setShowDueDatePicker(false);
   };
 
   const computeStats = (birthDate: Date) => {
@@ -755,7 +842,7 @@ export default function BabyScreen() {
           showBackButton
           onBackPress={() => {
             triggerHaptic();
-            router.push('/(tabs)/home');
+            router.push(fallbackHomeRoute as any);
           }}
         />
         
@@ -850,47 +937,163 @@ export default function BabyScreen() {
                   </View>
 
                   <View style={styles.inputRow}>
-                    <ThemedText style={styles.label}>Geburtsdatum:</ThemedText>
-                    <TouchableOpacity
-                      style={[styles.glassDateButton, { backgroundColor: inputBackground, borderColor: inputBorder }]}
-                      onPress={() => {
-                        triggerHaptic();
-                        setShowDatePicker(true);
-                      }}
-                    >
-                      <ThemedText style={[styles.dateText, { color: textPrimary }]}>
-                        {birthDateForDisplay
-                          ? birthDateForDisplay.toLocaleDateString('de-DE')
-                          : 'Datum wählen'}
+                    <ThemedText style={styles.label}>Baby bereits geboren?</ThemedText>
+                    <View style={[styles.switchRow, { backgroundColor: inputBackground, borderColor: inputBorder }]}>
+                      <ThemedText style={[styles.switchValue, { color: textPrimary }]}>
+                        {isBabyBornForCurrentBaby ? 'Ja' : 'Nein'}
                       </ThemedText>
-                      <IconSymbol name="calendar" size={20} color={textPrimary} />
-                    </TouchableOpacity>
-
-                    {showDatePicker && Platform.OS === 'android' && (
-                      <DateTimePicker
-                        value={birthDatePickerValue}
-                        mode="date"
-                        display="default"
-                        onChange={handleDateChange}
-                        minimumDate={birthDateBounds.minimumDate}
-                        maximumDate={birthDateBounds.maximumDate}
-                        textColor={isDark ? '#FFFFFF' : undefined}
+                      <Switch
+                        value={isBabyBornForCurrentBaby}
+                        onValueChange={(value) => {
+                          setIsBabyBornForCurrentBaby(value);
+                          if (!value) {
+                            setBabyInfo((current) => ({
+                              ...current,
+                              birth_date: null,
+                              weight: '',
+                              height: '',
+                            }));
+                          } else {
+                            setDueDate(null);
+                          }
+                        }}
+                        trackColor={{ false: '#D1D1D6', true: '#9DBEBB' }}
+                        thumbColor={isBabyBornForCurrentBaby ? '#FFFFFF' : '#F4F4F4'}
+                        ios_backgroundColor="#D1D1D6"
                       />
-                    )}
-                    {Platform.OS === 'ios' && (
-                      <IOSBottomDatePicker
-                        visible={showDatePicker}
-                        title="Geburtsdatum wählen"
-                        value={birthDatePickerValue}
-                        mode="date"
-                        minimumDate={birthDateBounds.minimumDate}
-                        maximumDate={birthDateBounds.maximumDate}
-                        onClose={() => setShowDatePicker(false)}
-                        onConfirm={handleIOSBirthDateConfirm}
-                        initialVariant="calendar"
-                      />
-                    )}
+                    </View>
                   </View>
+
+                  <View style={styles.inputRow}>
+                    <ThemedText style={styles.label}>Geschlecht:</ThemedText>
+                    <View style={styles.choiceRow}>
+                      <TouchableOpacity
+                        style={[
+                          styles.choiceButton,
+                          {
+                            backgroundColor: babyInfo.baby_gender === 'male' ? 'rgba(135, 206, 235, 0.9)' : inputBackground,
+                            borderColor: babyInfo.baby_gender === 'male' ? 'rgba(255,255,255,0.65)' : inputBorder,
+                          },
+                        ]}
+                        onPress={() => setBabyInfo({ ...babyInfo, baby_gender: 'male' })}
+                        activeOpacity={0.85}
+                      >
+                        <ThemedText style={[styles.choiceButtonText, { color: babyInfo.baby_gender === 'male' ? '#FFFFFF' : textPrimary }]}>Junge</ThemedText>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.choiceButton,
+                          {
+                            backgroundColor: babyInfo.baby_gender === 'female' ? 'rgba(255, 179, 193, 0.9)' : inputBackground,
+                            borderColor: babyInfo.baby_gender === 'female' ? 'rgba(255,255,255,0.65)' : inputBorder,
+                          },
+                        ]}
+                        onPress={() => setBabyInfo({ ...babyInfo, baby_gender: 'female' })}
+                        activeOpacity={0.85}
+                      >
+                        <ThemedText style={[styles.choiceButtonText, { color: babyInfo.baby_gender === 'female' ? '#FFFFFF' : textPrimary }]}>Mädchen</ThemedText>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.choiceButton,
+                          {
+                            backgroundColor: babyInfo.baby_gender === 'unknown' || !babyInfo.baby_gender ? accentButtonBackground : inputBackground,
+                            borderColor: babyInfo.baby_gender === 'unknown' || !babyInfo.baby_gender ? accentButtonBorder : inputBorder,
+                          },
+                        ]}
+                        onPress={() => setBabyInfo({ ...babyInfo, baby_gender: 'unknown' })}
+                        activeOpacity={0.85}
+                      >
+                        <ThemedText style={[styles.choiceButtonText, { color: textPrimary }]}>Offen</ThemedText>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  {!isBabyBornForCurrentBaby ? (
+                    <View style={styles.inputRow}>
+                      <ThemedText style={styles.label}>Errechneter Geburtstermin:</ThemedText>
+                      <TouchableOpacity
+                        style={[styles.glassDateButton, { backgroundColor: inputBackground, borderColor: inputBorder }]}
+                        onPress={() => {
+                          triggerHaptic();
+                          setShowDueDatePicker(true);
+                        }}
+                      >
+                        <ThemedText style={[styles.dateText, { color: textPrimary }]}>
+                          {dueDateForDisplay ? dueDateForDisplay.toLocaleDateString('de-DE') : 'Termin wählen'}
+                        </ThemedText>
+                        <IconSymbol name="calendar" size={20} color={textPrimary} />
+                      </TouchableOpacity>
+
+                      {showDueDatePicker && Platform.OS === 'android' && (
+                        <DateTimePicker
+                          value={dueDatePickerValue}
+                          mode="date"
+                          display="default"
+                          onChange={handleDueDateChange}
+                          minimumDate={dueDateBounds.minimumDate}
+                          maximumDate={dueDateBounds.maximumDate}
+                          textColor={isDark ? '#FFFFFF' : undefined}
+                        />
+                      )}
+                      {Platform.OS === 'ios' && (
+                        <IOSBottomDatePicker
+                          visible={showDueDatePicker}
+                          title="Geburtstermin wählen"
+                          value={dueDatePickerValue}
+                          mode="date"
+                          minimumDate={dueDateBounds.minimumDate}
+                          maximumDate={dueDateBounds.maximumDate}
+                          onClose={() => setShowDueDatePicker(false)}
+                          onConfirm={handleIOSDueDateConfirm}
+                          initialVariant="calendar"
+                        />
+                      )}
+                    </View>
+                  ) : (
+                    <View style={styles.inputRow}>
+                      <ThemedText style={styles.label}>Geburtsdatum:</ThemedText>
+                      <TouchableOpacity
+                        style={[styles.glassDateButton, { backgroundColor: inputBackground, borderColor: inputBorder }]}
+                        onPress={() => {
+                          triggerHaptic();
+                          setShowDatePicker(true);
+                        }}
+                      >
+                        <ThemedText style={[styles.dateText, { color: textPrimary }]}>
+                          {birthDateForDisplay
+                            ? birthDateForDisplay.toLocaleDateString('de-DE')
+                            : 'Datum wählen'}
+                        </ThemedText>
+                        <IconSymbol name="calendar" size={20} color={textPrimary} />
+                      </TouchableOpacity>
+
+                      {showDatePicker && Platform.OS === 'android' && (
+                        <DateTimePicker
+                          value={birthDatePickerValue}
+                          mode="date"
+                          display="default"
+                          onChange={handleDateChange}
+                          minimumDate={birthDateBounds.minimumDate}
+                          maximumDate={birthDateBounds.maximumDate}
+                          textColor={isDark ? '#FFFFFF' : undefined}
+                        />
+                      )}
+                      {Platform.OS === 'ios' && (
+                        <IOSBottomDatePicker
+                          visible={showDatePicker}
+                          title="Geburtsdatum wählen"
+                          value={birthDatePickerValue}
+                          mode="date"
+                          minimumDate={birthDateBounds.minimumDate}
+                          maximumDate={birthDateBounds.maximumDate}
+                          onClose={() => setShowDatePicker(false)}
+                          onConfirm={handleIOSBirthDateConfirm}
+                          initialVariant="calendar"
+                        />
+                      )}
+                    </View>
+                  )}
 
                   <View style={styles.inputRow}>
                     <ThemedText style={styles.label}>Schlafenszeit (Nacht):</ThemedText>
@@ -933,27 +1136,31 @@ export default function BabyScreen() {
                     </ThemedText>
                   </View>
 
-                  <View style={styles.inputRow}>
-                    <ThemedText style={styles.label}>Gewicht:</ThemedText>
-                    <TextInput
-                      style={[styles.glassInput, { color: textPrimary, backgroundColor: inputBackground, borderColor: inputBorder }]}
-                      value={babyInfo.weight}
-                      onChangeText={(text) => setBabyInfo({ ...babyInfo, weight: text })}
-                      placeholder="z.B. 3250g"
-                      placeholderTextColor={textTertiary}
-                    />
-                  </View>
+                  {isBabyBornForCurrentBaby && (
+                    <>
+                      <View style={styles.inputRow}>
+                        <ThemedText style={styles.label}>Gewicht:</ThemedText>
+                        <TextInput
+                          style={[styles.glassInput, { color: textPrimary, backgroundColor: inputBackground, borderColor: inputBorder }]}
+                          value={babyInfo.weight}
+                          onChangeText={(text) => setBabyInfo({ ...babyInfo, weight: text })}
+                          placeholder="z.B. 3250g"
+                          placeholderTextColor={textTertiary}
+                        />
+                      </View>
 
-                  <View style={styles.inputRow}>
-                    <ThemedText style={styles.label}>Größe:</ThemedText>
-                    <TextInput
-                      style={[styles.glassInput, { color: textPrimary, backgroundColor: inputBackground, borderColor: inputBorder }]}
-                      value={babyInfo.height}
-                      onChangeText={(text) => setBabyInfo({ ...babyInfo, height: text })}
-                      placeholder="z.B. 52cm"
-                      placeholderTextColor={textTertiary}
-                    />
-                  </View>
+                      <View style={styles.inputRow}>
+                        <ThemedText style={styles.label}>Größe:</ThemedText>
+                        <TextInput
+                          style={[styles.glassInput, { color: textPrimary, backgroundColor: inputBackground, borderColor: inputBorder }]}
+                          value={babyInfo.height}
+                          onChangeText={(text) => setBabyInfo({ ...babyInfo, height: text })}
+                          placeholder="z.B. 52cm"
+                          placeholderTextColor={textTertiary}
+                        />
+                      </View>
+                    </>
+                  )}
 
                   <View style={styles.buttonRow}>
                     <TouchableOpacity
@@ -999,11 +1206,25 @@ export default function BabyScreen() {
                   </View>
 
                   <View style={styles.infoRow}>
-                    <ThemedText style={styles.infoLabel}>Geburtsdatum:</ThemedText>
+                    <ThemedText style={styles.infoLabel}>Status:</ThemedText>
                     <ThemedText style={styles.infoValue}>
-                      {birthDateForDisplay
-                        ? birthDateForDisplay.toLocaleDateString('de-DE')
-                        : 'Noch nicht festgelegt'}
+                      {isBabyBornForCurrentBaby ? 'Bereits geboren' : 'Noch in der Schwangerschaft'}
+                    </ThemedText>
+                  </View>
+
+                  <View style={styles.infoRow}>
+                    <ThemedText style={styles.infoLabel}>Geschlecht:</ThemedText>
+                    <ThemedText style={styles.infoValue}>
+                      {genderLabels[babyInfo.baby_gender as keyof typeof genderLabels] || genderLabels.unknown}
+                    </ThemedText>
+                  </View>
+
+                  <View style={styles.infoRow}>
+                    <ThemedText style={styles.infoLabel}>{isBabyBornForCurrentBaby ? 'Geburtsdatum:' : 'Geburtstermin:'}</ThemedText>
+                    <ThemedText style={styles.infoValue}>
+                      {isBabyBornForCurrentBaby
+                        ? (birthDateForDisplay ? birthDateForDisplay.toLocaleDateString('de-DE') : 'Noch nicht festgelegt')
+                        : (dueDateForDisplay ? dueDateForDisplay.toLocaleDateString('de-DE') : 'Noch nicht festgelegt')}
                     </ThemedText>
                   </View>
 
@@ -1016,19 +1237,23 @@ export default function BabyScreen() {
                     </ThemedText>
                   </View>
 
-                  <View style={styles.infoRow}>
-                    <ThemedText style={styles.infoLabel}>Gewicht:</ThemedText>
-                    <ThemedText style={styles.infoValue}>
-                      {babyInfo.weight || 'Noch nicht festgelegt'}
-                    </ThemedText>
-                  </View>
+                  {isBabyBornForCurrentBaby && (
+                    <View style={styles.infoRow}>
+                      <ThemedText style={styles.infoLabel}>Gewicht:</ThemedText>
+                      <ThemedText style={styles.infoValue}>
+                        {babyInfo.weight || 'Noch nicht festgelegt'}
+                      </ThemedText>
+                    </View>
+                  )}
 
-                  <View style={styles.infoRow}>
-                    <ThemedText style={styles.infoLabel}>Größe:</ThemedText>
-                    <ThemedText style={styles.infoValue}>
-                      {babyInfo.height || 'Noch nicht festgelegt'}
-                    </ThemedText>
-                  </View>
+                  {isBabyBornForCurrentBaby && (
+                    <View style={styles.infoRow}>
+                      <ThemedText style={styles.infoLabel}>Größe:</ThemedText>
+                      <ThemedText style={styles.infoValue}>
+                        {babyInfo.height || 'Noch nicht festgelegt'}
+                      </ThemedText>
+                    </View>
+                  )}
 
                   <TouchableOpacity
                     style={[styles.button, styles.editButton, { backgroundColor: accentButtonBackground, borderColor: accentButtonBorder }]}
@@ -1308,6 +1533,37 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     marginBottom: 5,
+  },
+  switchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderRadius: 15,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  switchValue: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  choiceRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  choiceButton: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingVertical: 11,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  choiceButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'center',
   },
   // Glass inputs/buttons
   glassInput: {

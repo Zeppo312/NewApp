@@ -1439,6 +1439,8 @@ export type AppSettings = {
   due_date?: string | null;
   is_baby_born?: boolean;
   preferred_backend?: 'supabase' | 'convex'; // Backend preference for dual-backend architecture
+  community_identity_mode?: 'username' | 'real_name' | null;
+  community_use_avatar?: boolean | null;
   created_at?: string;
   updated_at?: string;
 };

@@ -17,6 +17,7 @@ android/build/
 
 # Local-only tooling, metadata, and reports
 .git/
+.git.backup-corrupt-*/
 .github/
 .vscode/
 .claude/

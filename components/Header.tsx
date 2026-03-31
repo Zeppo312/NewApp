@@ -2,7 +2,6 @@
 
 import React from 'react';
 import { StyleSheet, View, TouchableOpacity } from 'react-native';
-import { useRouter } from 'expo-router';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
@@ -36,7 +35,6 @@ const Header: React.FC<HeaderProps> = ({
 }) => {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
-  const router = useRouter();
   const navigation = useNavigation();
   const adaptiveColors = useAdaptiveColors();
 

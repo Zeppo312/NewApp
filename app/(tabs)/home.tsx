@@ -25,6 +25,7 @@ import { loadCachedHomeData, cacheHomeData, isCacheFresh, type HomeCacheScope } 
 import { getLocalProfileName } from '@/lib/localProfile';
 import { buildFeedingOverview } from '@/lib/feedingOverview';
 import { loadAllVisibleSleepEntries } from '@/lib/sleepSharing';
+import type { SleepEntry } from '@/lib/sleepData';
 
 // Tägliche Tipps für Mamas
 const dailyTips = [
@@ -39,6 +40,112 @@ const dailyTips = [
   "Vertraue deinem Instinkt – du kennst dein Baby am besten.",
   "Vergiss nicht zu essen – deine Energie ist wichtig für dich und dein Baby."
 ];
+
+type HomeActiveTimer = {
+  source: 'sleep' | 'daily';
+  start: number;
+  route: '/(tabs)/sleep-tracker' | '/(tabs)/daily_old';
+  label: string;
+  title: string;
+  hint: string;
+  iconName: string;
+  accentColor: string;
+  accentBackground: string;
+};
+
+function formatDurationSeconds(totalSeconds: number) {
+  const safeSeconds = Math.max(0, totalSeconds);
+  const hours = Math.floor(safeSeconds / 3600);
+  const minutes = Math.floor((safeSeconds % 3600) / 60);
+  const seconds = safeSeconds % 60;
+
+  return [hours, minutes, seconds]
+    .map((value, index) => (index === 0 ? String(value) : String(value).padStart(2, '0')))
+    .join(':');
+}
+
+function buildSleepHomeTimer(entries: SleepEntry[] | undefined): HomeActiveTimer | null {
+  if (!entries?.length) {
+    return null;
+  }
+
+  const activeSleepEntry = entries.find((entry) => {
+    const startMs = new Date(entry.start_time).getTime();
+    return !entry.end_time && Number.isFinite(startMs);
+  });
+
+  if (!activeSleepEntry) {
+    return null;
+  }
+
+  const start = new Date(activeSleepEntry.start_time).getTime();
+  if (!Number.isFinite(start)) {
+    return null;
+  }
+
+  return {
+    source: 'sleep',
+    start,
+    route: '/(tabs)/sleep-tracker',
+    label: 'Sleeptracker',
+    title: 'Schlaf läuft gerade',
+    hint: 'Tippe, um direkt in den Sleeptracker zu springen',
+    iconName: 'moon.fill',
+    accentColor: '#4FA9FF',
+    accentBackground: 'rgba(79, 169, 255, 0.18)',
+  };
+}
+
+function buildDailyHomeTimer(entry: {
+  id?: string | null;
+  feeding_type?: string | null;
+  start_time?: string | null;
+} | null): HomeActiveTimer | null {
+  if (!entry?.start_time) {
+    return null;
+  }
+
+  const start = new Date(entry.start_time).getTime();
+  if (!Number.isFinite(start)) {
+    return null;
+  }
+
+  const feedingType = typeof entry.feeding_type === 'string' ? entry.feeding_type : null;
+  const config =
+    feedingType === 'BREAST'
+      ? { title: 'Stillen läuft', iconName: 'heart.fill', accentColor: '#FF8EB0', accentBackground: 'rgba(255, 142, 176, 0.18)' }
+      : feedingType === 'BOTTLE'
+      ? { title: 'Fläschchen läuft', iconName: 'drop.fill', accentColor: '#F2A65A', accentBackground: 'rgba(242, 166, 90, 0.18)' }
+      : feedingType === 'SOLIDS'
+      ? { title: 'Beikost läuft', iconName: 'fork.knife', accentColor: '#A274FF', accentBackground: 'rgba(162, 116, 255, 0.18)' }
+      : feedingType === 'PUMP'
+      ? { title: 'Abpumpen läuft', iconName: 'drop.circle.fill', accentColor: '#76C7C0', accentBackground: 'rgba(118, 199, 192, 0.18)' }
+      : feedingType === 'WATER'
+      ? { title: 'Wasser läuft', iconName: 'drop.fill', accentColor: '#5BB6E6', accentBackground: 'rgba(91, 182, 230, 0.18)' }
+      : null;
+
+  if (!config) {
+    return null;
+  }
+
+  return {
+    source: 'daily',
+    start,
+    route: '/(tabs)/daily_old',
+    label: 'Unser Tag',
+    title: config.title,
+    hint: 'Tippe, um direkt in Unser Tag weiterzumachen',
+    iconName: config.iconName,
+    accentColor: config.accentColor,
+    accentBackground: config.accentBackground,
+  };
+}
+
+function pickLatestHomeTimer(...timers: (HomeActiveTimer | null)[]): HomeActiveTimer | null {
+  return timers
+    .filter((timer): timer is HomeActiveTimer => timer !== null)
+    .sort((a, b) => b.start - a.start)[0] ?? null;
+}
 
 function GlassBorderGlint({ radius = 30 }: { radius?: number }) {
   const anim = useRef(new Animated.Value(0)).current;
@@ -280,6 +387,8 @@ export default function HomeScreen() {
   const [selectedActivityType, setSelectedActivityType] = useState<'feeding' | 'diaper' | 'other'>('feeding');
   const [selectedSubType, setSelectedSubType] = useState<string | null>(null);
   const [todaySleepMinutes, setTodaySleepMinutes] = useState(0);
+  const [activeHomeTimer, setActiveHomeTimer] = useState<HomeActiveTimer | null>(null);
+  const [activeHomeTimerNow, setActiveHomeTimerNow] = useState(() => Date.now());
   const [showSleepModal, setShowSleepModal] = useState(false);
   const [sleepModalStart, setSleepModalStart] = useState(new Date());
   const [recommendationImageRetryKey, setRecommendationImageRetryKey] = useState(0);
@@ -477,6 +586,7 @@ export default function HomeScreen() {
       const randomTip = dailyTips[Math.floor(Math.random() * dailyTips.length)];
       setDailyTip(randomTip);
     } else if (!user) {
+      setActiveHomeTimer(null);
       setIsLoading(false);
     }
   }, [user, activeBabyId, isActiveBabyReady]);
@@ -490,6 +600,18 @@ export default function HomeScreen() {
       void loadData();
     }, [user, activeBabyId, isActiveBabyReady, refreshing])
   );
+
+  useEffect(() => {
+    if (!activeHomeTimer) {
+      setActiveHomeTimerNow(Date.now());
+      return;
+    }
+
+    const syncNow = () => setActiveHomeTimerNow(Date.now());
+    syncNow();
+    const interval = setInterval(syncNow, 1000);
+    return () => clearInterval(interval);
+  }, [activeHomeTimer]);
 
   // Funktion für Pull-to-Refresh
   const onRefresh = async () => {
@@ -515,6 +637,7 @@ export default function HomeScreen() {
       if (!user?.id) {
         setDailyEntries([]);
         setTodaySleepMinutes(0);
+        setActiveHomeTimer(null);
         return;
       }
 
@@ -562,7 +685,9 @@ export default function HomeScreen() {
         setDailyEntries(dailyData);
       }
 
-      const freshSleepMinutes = await fetchTodaySleepMinutes(startOfDay, endOfDay);
+      const { totalMinutes: freshSleepMinutes, activeSleepTimer } = await fetchTodaySleepMinutes(startOfDay, endOfDay);
+      const activeDailyTimer = await loadActiveDailyTimer();
+      setActiveHomeTimer(pickLatestHomeTimer(activeSleepTimer, activeDailyTimer));
 
       let freshRecommendations: any[] = [];
       try {
@@ -630,6 +755,7 @@ export default function HomeScreen() {
       if (!user?.id) {
         setDailyEntries([]);
         setTodaySleepMinutes(0);
+        setActiveHomeTimer(null);
         return;
       }
 
@@ -656,27 +782,66 @@ export default function HomeScreen() {
         setDailyEntries(dailyData);
       }
 
-      await fetchTodaySleepMinutes(startOfDay, endOfDay);
+      const [{ activeSleepTimer }, activeDailyTimer] = await Promise.all([
+        fetchTodaySleepMinutes(startOfDay, endOfDay),
+        loadActiveDailyTimer(),
+      ]);
+      setActiveHomeTimer(pickLatestHomeTimer(activeSleepTimer, activeDailyTimer));
     } catch (err) {
       console.error('Failed to load daily entries:', err);
     }
   };
 
-  const fetchTodaySleepMinutes = async (startOfDay: Date, endOfDay: Date): Promise<number> => {
+  const loadActiveDailyTimer = async (): Promise<HomeActiveTimer | null> => {
+    if (!activeBabyId) {
+      return null;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('baby_care_entries')
+        .select('id,feeding_type,start_time')
+        .eq('baby_id', activeBabyId)
+        .eq('entry_type', 'feeding')
+        .is('end_time', null)
+        .order('start_time', { ascending: false })
+        .limit(10);
+
+      if (error) {
+        console.error('Error loading active daily timer for home:', error);
+        return null;
+      }
+
+      const openEntries = Array.isArray(data) ? data : [];
+      const activeDailyEntry =
+        openEntries.find((entry) => buildDailyHomeTimer(entry) !== null) ?? null;
+
+      return buildDailyHomeTimer(activeDailyEntry);
+    } catch (error) {
+      console.error('Failed to resolve active daily timer for home:', error);
+      return null;
+    }
+  };
+
+  const fetchTodaySleepMinutes = async (
+    startOfDay: Date,
+    endOfDay: Date
+  ): Promise<{ totalMinutes: number; activeSleepTimer: HomeActiveTimer | null }> => {
     try {
       if (!user?.id) {
         setTodaySleepMinutes(0);
-        return 0;
+        return { totalMinutes: 0, activeSleepTimer: null };
       }
 
       const { success, entries, error } = await loadAllVisibleSleepEntries(activeBabyId ?? undefined);
       if (!success || !entries) {
         console.error('Error loading visible sleep entries for today:', error);
         setTodaySleepMinutes(0);
-        return 0;
+        return { totalMinutes: 0, activeSleepTimer: null };
       }
 
       const now = new Date();
+      const activeSleepTimer = buildSleepHomeTimer(entries);
       const intervals = entries
         .map((entry) => {
           const entryStart = new Date(entry.start_time);
@@ -695,7 +860,7 @@ export default function HomeScreen() {
         .filter((interval): interval is { start: Date; end: Date } => interval !== null)
         .sort((a, b) => a.start.getTime() - b.start.getTime());
 
-      const mergedIntervals = intervals.reduce<Array<{ start: Date; end: Date }>>((acc, interval) => {
+      const mergedIntervals = intervals.reduce<{ start: Date; end: Date }[]>((acc, interval) => {
         const last = acc[acc.length - 1];
         if (!last || interval.start.getTime() > last.end.getTime()) {
           acc.push(interval);
@@ -714,11 +879,11 @@ export default function HomeScreen() {
       }, 0);
 
       setTodaySleepMinutes(totalMinutes);
-      return totalMinutes;
+      return { totalMinutes, activeSleepTimer };
     } catch (error) {
       console.error('Failed to calculate today sleep minutes:', error);
       setTodaySleepMinutes(0);
-      return 0;
+      return { totalMinutes: 0, activeSleepTimer: null };
     }
   };
 
@@ -819,6 +984,9 @@ export default function HomeScreen() {
     const metadataFullName =
       typeof user?.user_metadata?.full_name === 'string' ? user.user_metadata.full_name : '';
     const displayName = userName || metadataFirstName || metadataFullName || 'Mama';
+    const activeTimerElapsedSeconds = activeHomeTimer
+      ? Math.max(0, Math.floor((activeHomeTimerNow - activeHomeTimer.start) / 1000))
+      : 0;
 
     return (
       <View style={[styles.liquidGlassWrapper, styles.greetingCardWrapper]}>
@@ -858,19 +1026,57 @@ export default function HomeScreen() {
               </View>
             </View>
 
-            <View style={styles.tipCard}>
-              <GlassLensOverlay radius={20} />
-              <TipHighlightDots />
-              <View style={styles.tipCardRow}>
-                <View style={styles.tipIconWrap}>
-                  <IconSymbol name="lightbulb.fill" size={18} color="#D6B28C" />
+            {activeHomeTimer ? (
+              <TouchableOpacity
+                style={styles.tipCard}
+                onPress={() => handleNavigate(activeHomeTimer.route)}
+                activeOpacity={0.9}
+              >
+                <GlassLensOverlay radius={20} />
+                <TipHighlightDots />
+                <View style={styles.activeTimerHeader}>
+                  <View style={[styles.activeTimerIconWrap, { backgroundColor: activeHomeTimer.accentBackground }]}>
+                    <IconSymbol name={activeHomeTimer.iconName as any} size={18} color={activeHomeTimer.accentColor} />
+                  </View>
+                  <View style={styles.activeTimerContent}>
+                    <ThemedText adaptive={false} style={[styles.tipLabel, { color: activeHomeTimer.accentColor }]}>
+                      {activeHomeTimer.label}
+                    </ThemedText>
+                    <ThemedText adaptive={false} style={[styles.activeTimerTitle, { color: textPrimary }]}>
+                      {activeHomeTimer.title}
+                    </ThemedText>
+                  </View>
+                  <IconSymbol name="chevron.right" size={16} color={textSecondary} />
                 </View>
-                <View style={styles.tipContent}>
-                  <ThemedText adaptive={false} style={[styles.tipLabel, { color: accentPurple }]}>Tipp des Tages</ThemedText>
-                  <ThemedText adaptive={false} style={[styles.tipText, { color: textPrimary }]}>{dailyTip}</ThemedText>
+
+                <View style={styles.activeTimerStatsRow}>
+                  <ThemedText adaptive={false} style={[styles.activeTimerElapsed, { color: textPrimary }]}>
+                    {formatDurationSeconds(activeTimerElapsedSeconds)}
+                  </ThemedText>
+                  <ThemedText adaptive={false} style={[styles.activeTimerSince, { color: textSecondary }]}>
+                    seit {new Date(activeHomeTimer.start).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
+                  </ThemedText>
+                </View>
+
+                <ThemedText adaptive={false} style={[styles.activeTimerHint, { color: textSecondary }]}>
+                  {activeHomeTimer.hint}
+                </ThemedText>
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.tipCard}>
+                <GlassLensOverlay radius={20} />
+                <TipHighlightDots />
+                <View style={styles.tipCardRow}>
+                  <View style={styles.tipIconWrap}>
+                    <IconSymbol name="lightbulb.fill" size={18} color="#D6B28C" />
+                  </View>
+                  <View style={styles.tipContent}>
+                    <ThemedText adaptive={false} style={[styles.tipLabel, { color: accentPurple }]}>Tipp des Tages</ThemedText>
+                    <ThemedText adaptive={false} style={[styles.tipText, { color: textPrimary }]}>{dailyTip}</ThemedText>
+                  </View>
                 </View>
               </View>
-            </View>
+            )}
           </ThemedView>
         </BlurView>
         <GlassBorderGlint radius={30} />
@@ -1736,6 +1942,54 @@ const styles = StyleSheet.create({
   tipCardRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
+  },
+  activeTimerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  activeTimerIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  activeTimerContent: {
+    flex: 1,
+    marginLeft: 12,
+    marginRight: 12,
+  },
+  activeTimerTitle: {
+    fontSize: 16,
+    lineHeight: 20,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+  },
+  activeTimerStatsRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    marginTop: 14,
+    gap: 12,
+  },
+  activeTimerElapsed: {
+    fontSize: 28,
+    lineHeight: 32,
+    fontWeight: '800',
+    letterSpacing: -0.6,
+    fontVariant: ['tabular-nums'],
+  },
+  activeTimerSince: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '600',
+    textAlign: 'right',
+  },
+  activeTimerHint: {
+    marginTop: 8,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '500',
   },
   tipIconWrap: {
     width: 34,

@@ -19,6 +19,7 @@ RETURNS TABLE (
   last_name TEXT,
   username TEXT,
   user_role TEXT,
+  community_use_avatar BOOLEAN,
   created_at TIMESTAMP WITH TIME ZONE,
   updated_at TIMESTAMP WITH TIME ZONE
 ) 
@@ -33,10 +34,18 @@ BEGIN
     p.last_name,
     p.username,
     p.user_role,
+    settings.community_use_avatar,
     p.created_at,
     p.updated_at
   FROM 
     profiles p
+  LEFT JOIN LATERAL (
+    SELECT us.community_use_avatar
+    FROM public.user_settings us
+    WHERE us.user_id = p.id
+    ORDER BY us.updated_at DESC NULLS LAST
+    LIMIT 1
+  ) settings ON TRUE
   WHERE 
     p.id = user_id_param;
 END;

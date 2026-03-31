@@ -146,6 +146,8 @@ export interface UserSettings {
   notifications_enabled?: boolean;
   language?: string;
   paywall_last_shown_at?: string;
+  community_identity_mode?: 'username' | 'real_name' | null;
+  community_use_avatar?: boolean | null;
   [key: string]: any;
 }
 

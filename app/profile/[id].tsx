@@ -582,16 +582,41 @@ export default function ProfileScreen() {
                   </View>
                 </View>
 
-                {!isOwnProfile && (
-                  <View style={styles.profileActions}>
-                    <FollowButton 
-                      userId={profile.id}
-                      size="medium"
-                      showIcon={false}
-                      onFollowStatusChange={handleFollowStatusChange}
-                      style={styles.followButton}
-                    />
-                  </View>
+                <View style={styles.profileActions}>
+                  {isOwnProfile ? (
+                    <TouchableOpacity
+                      style={[styles.editProfileButton, { backgroundColor: theme.accent }]}
+                      onPress={() => router.push('/profil')}
+                      activeOpacity={0.85}
+                    >
+                      <IconSymbol name="pencil" size={16} color="#FFFFFF" />
+                      <ThemedText style={styles.editProfileButtonText}>Community-Profil bearbeiten</ThemedText>
+                    </TouchableOpacity>
+                  ) : (
+                    <>
+                      <FollowButton
+                        userId={profile.id}
+                        size="medium"
+                        showIcon={false}
+                        onFollowStatusChange={handleFollowStatusChange}
+                        style={styles.followButton}
+                      />
+                      <TouchableOpacity
+                        style={[styles.dmButton, { backgroundColor: theme.accent }]}
+                        onPress={() => router.push(`/chat/${profile.id}` as any)}
+                        activeOpacity={0.85}
+                      >
+                        <IconSymbol name="paperplane.fill" size={16} color="#FFFFFF" />
+                        <ThemedText style={styles.dmButtonText}>Nachricht</ThemedText>
+                      </TouchableOpacity>
+                    </>
+                  )}
+                </View>
+
+                {isOwnProfile && (
+                  <ThemedText style={styles.ownProfileHint}>
+                    Hier siehst du dein oeffentliches Community-Profil. Ueber Bearbeiten passt du Name, Bild und Profildaten an.
+                  </ThemedText>
                 )}
 
                 {mutualFollow && !isOwnProfile && (
@@ -838,6 +863,22 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     marginBottom: 12,
   },
+  editProfileButton: {
+    minWidth: 220,
+    borderRadius: 24,
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  editProfileButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
   followButton: {
     minWidth: 120,
     marginRight: 12,
@@ -863,6 +904,14 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     marginBottom: 8,
+  },
+  ownProfileHint: {
+    textAlign: 'center',
+    fontSize: 13,
+    lineHeight: 19,
+    color: TEXT_MUTED,
+    marginBottom: 8,
+    paddingHorizontal: 8,
   },
   statsContainer: {
     flexDirection: 'row',

@@ -62,6 +62,8 @@ import { useNotifications } from '@/hooks/useNotifications';
 import { usePartnerNotifications } from '@/hooks/usePartnerNotifications';
 import { buildFeedingOverview } from '@/lib/feedingOverview';
 import { sleepActivityService } from '@/lib/sleepActivityService';
+import { cancelBabyReminderNotification } from '@/lib/babyReminderNotifications';
+import { cancelLocalFeedingReminders } from '@/lib/feedingReminderNotifications';
 import {
   loadVitaminDReminderState,
   saveVitaminDCompletion,
@@ -1598,6 +1600,19 @@ export default function DailyScreen() {
           type: timerType,
           start: startMs,
         };
+
+        try {
+          await cancelLocalFeedingReminders();
+          if (user?.id) {
+            await cancelBabyReminderNotification({
+              userId: user.id,
+              babyId: activeBabyId,
+              reminderType: 'feeding',
+            });
+          }
+        } catch (reminderError) {
+          console.error('Failed to cancel pending feeding reminders after timer start:', reminderError);
+        }
 
         setActiveTimer(nextTimer);
 

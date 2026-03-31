@@ -151,30 +151,6 @@ export default function MoreScreen() {
 
           <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
             <ThemedText style={styles.sectionTitle}>
-              Baby & Familie
-            </ThemedText>
-
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={() => router.push('/(tabs)/weight-tracker')}
-            >
-              <View style={styles.menuItemIcon}>
-                <IconSymbol name="chart.line.uptrend.xyaxis" size={24} color={iconAccentColor} />
-              </View>
-              <View style={styles.menuItemContent}>
-                <ThemedText style={styles.menuItemTitle}>
-                  Gewichtskurve
-                </ThemedText>
-                <ThemedText style={styles.menuItemDescription}>
-                  Verfolge deine Gewichtsentwicklung
-                </ThemedText>
-              </View>
-              <IconSymbol name="chevron.right" size={20} color={iconSecondaryColor} />
-            </TouchableOpacity>
-          </LiquidGlassCard>
-
-          <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
-            <ThemedText style={styles.sectionTitle}>
               Wissen & Hilfe
             </ThemedText>
 

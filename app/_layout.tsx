@@ -111,6 +111,7 @@ function RootLayoutNav() {
   const [sleepPrediction, setSleepPrediction] = useState<SleepWindowPrediction | null>(null);
   const [hasActiveSleepEntry, setHasActiveSleepEntry] = useState(false);
   const [feedingPrediction, setFeedingPrediction] = useState<FeedingPrediction | null>(null);
+  const [hasActiveFeedingEntry, setHasActiveFeedingEntry] = useState(false);
   const { preferences: notifPrefs, isLoaded: notificationPreferencesLoaded } = useNotificationPreferences();
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [notificationSettingsLoaded, setNotificationSettingsLoaded] = useState(false);
@@ -417,14 +418,20 @@ function RootLayoutNav() {
   useEffect(() => {
     if (!userId || !activeBabyId) {
       setFeedingPrediction(null);
+      setHasActiveFeedingEntry(false);
       return;
     }
+
+    let cancelled = false;
 
     const loadFeedingPrediction = async () => {
       try {
         // Baby-Info laden
         const { data: babyInfo, error: babyError } = await getBabyInfo(activeBabyId);
+        if (cancelled) return;
+
         if (babyError || !babyInfo?.birth_date) {
+          setHasActiveFeedingEntry(false);
           setFeedingPrediction(null);
           return;
         }
@@ -441,8 +448,18 @@ function RootLayoutNav() {
           .gte('start_time', sevenDaysAgo.toISOString())
           .order('start_time', { ascending: false });
 
+        if (cancelled) return;
+
         if (error) {
           console.error('Fehler beim Laden der Feeding-Einträge für Prediction:', error);
+          setFeedingPrediction(null);
+          return;
+        }
+
+        const hasOpenFeeding = (entries || []).some((entry) => entry.end_time == null);
+        setHasActiveFeedingEntry(hasOpenFeeding);
+
+        if (hasOpenFeeding) {
           setFeedingPrediction(null);
           return;
         }
@@ -459,11 +476,36 @@ function RootLayoutNav() {
       }
     };
 
-    loadFeedingPrediction();
+    void loadFeedingPrediction();
 
     // Alle 5 Minuten aktualisieren
     const interval = setInterval(loadFeedingPrediction, 5 * 60 * 1000);
-    return () => clearInterval(interval);
+
+    const channel = supabase
+      .channel(`feeding-reminder-prediction-${userId}-${activeBabyId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'baby_care_entries',
+          filter: `baby_id=eq.${activeBabyId}`,
+        },
+        (payload) => {
+          const nextRow = payload.new as { entry_type?: unknown } | null;
+          const previousRow = payload.old as { entry_type?: unknown } | null;
+          const entryType = nextRow?.entry_type ?? previousRow?.entry_type;
+          if (entryType !== 'feeding') return;
+          void loadFeedingPrediction();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      void supabase.removeChannel(channel);
+    };
   }, [userId, activeBabyId]);
 
   // Live Activity nach App-Start / Update wiederherstellen
@@ -549,7 +591,8 @@ function RootLayoutNav() {
       notifPrefs.feedingReminder,
     userId,
     activeBabyId,
-    expoPushToken
+    expoPushToken,
+    hasActiveFeedingEntry
   );
 
   useVitaminDReminderNotifications(
@@ -625,7 +668,10 @@ function RootLayoutNav() {
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="community" />
-        <Stack.Screen name="notifications" />
+        <Stack.Screen name="groups/index" />
+        <Stack.Screen name="groups/[groupId]" />
+        <Stack.Screen name="chat/[userId]" />
+        <Stack.Screen name="group-chat/[groupId]" />
         <Stack.Screen name="paywall" />
         <Stack.Screen name="dsgvo" />
         <Stack.Screen name="subscription" />

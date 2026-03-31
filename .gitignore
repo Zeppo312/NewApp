@@ -44,3 +44,7 @@ app-example
 .env.local
 
 .env.local
+
+# accidental local git backups
+.git.backup-*/
+.git.backup-*

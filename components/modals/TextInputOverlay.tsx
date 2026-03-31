@@ -21,6 +21,7 @@ type Props = {
   placeholder?: string;
   multiline?: boolean;
   accentColor?: string;
+  submitLabel?: string;
   keyboardType?: TextInputProps["keyboardType"];
   inputMode?: TextInputProps["inputMode"];
   onClose: () => void;
@@ -36,6 +37,7 @@ const TextInputOverlay: React.FC<Props> = ({
   placeholder,
   multiline,
   accentColor,
+  submitLabel,
   keyboardType,
   inputMode,
   onClose,
@@ -140,7 +142,7 @@ const TextInputOverlay: React.FC<Props> = ({
               ]}
               onPress={handleSubmit}
             >
-              <Text style={styles.actionPrimaryLabel}>Fertig</Text>
+              <Text style={styles.actionPrimaryLabel}>{submitLabel || "Fertig"}</Text>
             </TouchableOpacity>
           </View>
         </BlurView>

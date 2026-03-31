@@ -5,9 +5,11 @@ import {
   cancelBabyReminderNotification,
   upsertBabyReminderNotification,
 } from '@/lib/babyReminderNotifications';
-
-const NOTIFICATION_IDENTIFIER = 'feeding-reminder';
-const NOTIFICATION_TYPE = 'feeding_reminder';
+import {
+  cancelLocalFeedingReminders,
+  FEEDING_REMINDER_IDENTIFIER,
+  FEEDING_REMINDER_TYPE,
+} from '@/lib/feedingReminderNotifications';
 
 /**
  * Hook für Fütterungs-Erinnerungen
@@ -20,7 +22,8 @@ export function useFeedingReminderNotifications(
   enabled: boolean = true,
   userId?: string | null,
   babyId?: string | null,
-  currentDevicePushToken?: string | null
+  currentDevicePushToken?: string | null,
+  hasActiveFeedingEntry: boolean = false,
 ) {
   const lastScheduledRef = useRef<string | null>(null);
   const scheduledNotificationIdRef = useRef<string | null>(null);
@@ -29,34 +32,8 @@ export function useFeedingReminderNotifications(
   const hasRemoteChannel = Boolean(userId && babyId && currentDevicePushToken);
 
   const cancelCurrentScheduledNotification = useCallback(async () => {
-    const idsToCancel = new Set<string>();
     const scheduledId = scheduledNotificationIdRef.current;
-    if (scheduledId) {
-      idsToCancel.add(scheduledId);
-    } else {
-      idsToCancel.add(NOTIFICATION_IDENTIFIER);
-    }
-
-    try {
-      const allScheduled = await Notifications.getAllScheduledNotificationsAsync();
-      for (const item of allScheduled) {
-        const type = (item.content.data as any)?.type;
-        if (item.identifier === NOTIFICATION_IDENTIFIER || type === NOTIFICATION_TYPE) {
-          idsToCancel.add(item.identifier);
-        }
-      }
-    } catch (error) {
-      console.error('Failed to load scheduled feeding reminders:', error);
-    }
-
-    for (const id of idsToCancel) {
-      try {
-        await Notifications.cancelScheduledNotificationAsync(id);
-      } catch (error) {
-        console.error('Failed to cancel feeding reminder:', error);
-      }
-    }
-
+    await cancelLocalFeedingReminders(scheduledId ? [scheduledId] : []);
     scheduledNotificationIdRef.current = null;
   }, []);
 
@@ -86,7 +63,7 @@ export function useFeedingReminderNotifications(
           body,
           scheduleKey,
           payload: {
-            type: 'feeding_reminder',
+            type: FEEDING_REMINDER_TYPE,
             nextFeedingTime: scheduleKey,
             intervalMinutes,
             excludeToken: currentDevicePushToken,
@@ -103,8 +80,8 @@ export function useFeedingReminderNotifications(
     let isMounted = true;
 
     const syncNotification = async () => {
-      // Cancel wenn deaktiviert oder keine Prediction
-      if (!enabled || !prediction) {
+      // Cancel wenn deaktiviert, aktive Feeding-Session läuft oder keine Prediction vorhanden ist.
+      if (!enabled || !prediction || hasActiveFeedingEntry) {
         await Promise.all([
           cancelCurrentScheduledNotification(),
           cancelRemoteReminder(),
@@ -144,12 +121,12 @@ export function useFeedingReminderNotifications(
               sound: true,
               priority: Notifications.AndroidNotificationPriority.HIGH,
               data: {
-                type: 'feeding_reminder',
+                type: FEEDING_REMINDER_TYPE,
                 nextFeedingTime: nextFeeding.toISOString(),
                 intervalMinutes: prediction.intervalMinutes,
               },
             },
-            identifier: NOTIFICATION_IDENTIFIER,
+            identifier: FEEDING_REMINDER_IDENTIFIER,
             trigger: null,
           });
 
@@ -190,12 +167,12 @@ export function useFeedingReminderNotifications(
           sound: true,
           priority: Notifications.AndroidNotificationPriority.HIGH,
           data: {
-            type: 'feeding_reminder',
+            type: FEEDING_REMINDER_TYPE,
             nextFeedingTime: nextFeeding.toISOString(),
             intervalMinutes: prediction.intervalMinutes,
           },
         },
-        identifier: NOTIFICATION_IDENTIFIER,
+        identifier: FEEDING_REMINDER_IDENTIFIER,
         trigger: {
           type: Notifications.SchedulableTriggerInputTypes.DATE,
           date: tenMinBefore,
@@ -235,6 +212,9 @@ export function useFeedingReminderNotifications(
     cancelCurrentScheduledNotification,
     cancelRemoteReminder,
     hasRemoteChannel,
+    hasActiveFeedingEntry,
     syncRemoteReminder,
+    userId,
+    babyId,
   ]);
 }

@@ -1,5 +1,4 @@
-import { supabase } from './supabase';
-import { getCachedUser } from './supabase';
+import { getCachedUser, supabase } from './supabase';
 import { compressImage } from './imageCompression';
 
 // Typdefinitionen
@@ -20,11 +19,11 @@ export interface Post {
   comments_count?: number;
   has_liked?: boolean;
   poll_id?: string; // ID der zugehörigen Umfrage, falls type === 'poll'
-  tags?: Array<{
+  tags?: {
     id: string;
     name: string;
     category: 'trimester' | 'baby_age';
-  }>;
+  }[];
 }
 
 export interface Comment {
@@ -36,6 +35,22 @@ export interface Comment {
   updated_at: string;
   is_anonymous?: boolean;
   // Virtuelle Felder
+  user_name?: string;
+  user_role?: string;
+  user_avatar_url?: string | null;
+  likes_count?: number;
+  has_liked?: boolean;
+  replies?: NestedComment[];
+}
+
+export interface NestedComment {
+  id: string;
+  parent_comment_id: string;
+  user_id: string;
+  content: string;
+  created_at: string;
+  updated_at: string;
+  is_anonymous?: boolean;
   user_name?: string;
   user_role?: string;
   user_avatar_url?: string | null;
@@ -60,6 +75,7 @@ type ProfileLike = {
   last_name?: string | null;
   user_role?: string | null;
   avatar_url?: string | null;
+  community_use_avatar?: boolean | null;
 };
 
 const resolveProfileDisplayName = (profile?: ProfileLike | null) => {
@@ -71,6 +87,11 @@ const resolveProfileDisplayName = (profile?: ProfileLike | null) => {
     return [firstName, lastName].filter(Boolean).join(' ');
   }
   return '';
+};
+
+const resolveCommunityAvatarUrl = (profile?: ProfileLike | null) => {
+  if (!profile?.avatar_url) return null;
+  return profile.community_use_avatar === false ? null : profile.avatar_url;
 };
 
 // Neue Funktion: Benachrichtigung erstellen
@@ -282,7 +303,6 @@ export const getPosts = async (searchQuery: string = '', tagIds: string[] = [], 
 
       // Versuche zuerst, das Profil über die id zu finden
       let profile = null;
-      let profileError = null;
 
       // Direkte SQL-Abfrage, um das Profil zu finden
       const { data: profileData, error: profileErr } = await supabase
@@ -290,7 +310,6 @@ export const getPosts = async (searchQuery: string = '', tagIds: string[] = [], 
 
       if (profileErr) {
         console.error(`Error fetching profile by id for user_id ${post.user_id}:`, profileErr);
-        profileError = profileErr;
       } else if (profileData && profileData.length > 0) {
         profile = profileData[0];
         console.log(`Profile found by id for user_id ${post.user_id}:`, profile);
@@ -426,7 +445,7 @@ export const getPosts = async (searchQuery: string = '', tagIds: string[] = [], 
         ...post,
         user_name: userName,
         user_role: isAnonymous ? 'unknown' : (profile?.user_role || 'unknown'),
-        user_avatar_url: isAnonymous ? null : (profile?.avatar_url || null),
+        user_avatar_url: isAnonymous ? null : resolveCommunityAvatarUrl(profile),
         likes_count: likesCount || 0,
         comments_count: commentsCount || 0,
         has_liked: !!userLike,
@@ -467,7 +486,6 @@ export const getComments = async (postId: string) => {
 
       // Versuche zuerst, das Profil über die id zu finden
       let profile = null;
-      let profileError = null;
 
       // Direkte SQL-Abfrage, um das Profil zu finden
       const { data: profileData, error: profileErr } = await supabase
@@ -475,7 +493,6 @@ export const getComments = async (postId: string) => {
 
       if (profileErr) {
         console.error(`Error fetching profile by id for comment user_id ${comment.user_id}:`, profileErr);
-        profileError = profileErr;
       } else if (profileData && profileData.length > 0) {
         profile = profileData[0];
         console.log(`Profile found by id for comment user_id ${comment.user_id}:`, profile);
@@ -577,7 +594,7 @@ export const getComments = async (postId: string) => {
         ...comment,
         user_name: userName,
         user_role: isAnonymous ? 'unknown' : (profile?.user_role || 'unknown'),
-        user_avatar_url: isAnonymous ? null : (profile?.avatar_url || null),
+        user_avatar_url: isAnonymous ? null : resolveCommunityAvatarUrl(profile),
         likes_count: likesCount || 0,
         has_liked: !!userLike,
         // Stelle sicher, dass is_anonymous immer einen Wert hat
@@ -655,7 +672,7 @@ export const getCommentsPreview = async (postId: string, limit: number = 2) => {
         ...comment,
         user_name: userName,
         user_role: isAnonymous ? 'unknown' : (profile?.user_role || 'unknown'),
-        user_avatar_url: isAnonymous ? null : (profile?.avatar_url || null),
+        user_avatar_url: isAnonymous ? null : resolveCommunityAvatarUrl(profile),
         likes_count: likesCount || 0,
         has_liked: !!userLike,
         is_anonymous: isAnonymous
@@ -670,7 +687,14 @@ export const getCommentsPreview = async (postId: string, limit: number = 2) => {
 };
 
 // Neuen Beitrag erstellen
-export const createPost = async (content: string, isAnonymous: boolean = false, type: 'text' | 'poll' = 'text', pollData?: any, tagIds: string[] = [], imageBase64?: string) => {
+export const createPost = async (
+  content: string,
+  isAnonymous: boolean = false,
+  type: 'text' | 'poll' = 'text',
+  pollData?: any,
+  tagIds: string[] = [],
+  imageBase64?: string,
+) => {
   try {
     const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
@@ -1098,27 +1122,46 @@ export const getNestedComments = async (commentId: string) => {
 
       // Likes für diesen Kommentar zählen
       const { count: likesCount, error: likesError } = await supabase
-        .from('community_comment_likes')
+        .from('community_nested_comment_likes')
         .select('id', { count: 'exact', head: true })
-        .eq('comment_id', comment.id);
+        .eq('nested_comment_id', comment.id);
+
+      if (likesError) {
+        console.error('Error counting nested comment likes:', likesError);
+      }
 
       // Prüfen, ob der aktuelle Benutzer diesen Kommentar geliked hat
       const { data: userLike, error: userLikeError } = await supabase
-        .from('community_comment_likes')
+        .from('community_nested_comment_likes')
         .select('id')
-        .eq('comment_id', comment.id)
+        .eq('nested_comment_id', comment.id)
         .eq('user_id', userData.user.id)
         .maybeSingle();
 
+      if (userLikeError) {
+        console.error('Error checking user nested comment like:', userLikeError);
+      }
+
+      const isAnonymous = comment.is_anonymous === true;
       const displayName = resolveProfileDisplayName(profile) || 'Benutzer';
+      let userName = 'Anonym';
+
+      if (!isAnonymous) {
+        userName = displayName;
+      }
+
+      if (comment.user_id === userData.user.id) {
+        userName = isAnonymous ? 'Anonym (Du)' : `${userName} (Du)`;
+      }
 
       return {
         ...comment,
-        user_name: comment.is_anonymous ? 'Anonym' : displayName,
-        user_role: profile?.user_role || null,
-        user_avatar_url: comment.is_anonymous ? null : (profile?.avatar_url || null),
+        user_name: userName,
+        user_role: isAnonymous ? 'unknown' : (profile?.user_role || 'unknown'),
+        user_avatar_url: isAnonymous ? null : resolveCommunityAvatarUrl(profile),
         likes_count: likesCount || 0,
-        has_liked: !!userLike
+        has_liked: !!userLike,
+        is_anonymous: isAnonymous
       };
     }));
 
@@ -1142,7 +1185,9 @@ export const createReply = async (commentId: string, content: string, isAnonymou
         parent_comment_id: commentId,
         user_id: userData.user.id,
         content,
-        is_anonymous: isAnonymous
+        is_anonymous: isAnonymous,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       })
       .select();
 
