@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Animated, Easing, StyleSheet, ScrollView, View, TouchableOpacity, Text, SafeAreaView, StatusBar, Image, ActivityIndicator, RefreshControl, Alert, Platform, StyleProp, ViewStyle } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CachedImage } from '@/components/CachedImage';
 import { usePathname, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -26,6 +27,7 @@ import { getLocalProfileName } from '@/lib/localProfile';
 import { buildFeedingOverview } from '@/lib/feedingOverview';
 import { loadAllVisibleSleepEntries } from '@/lib/sleepSharing';
 import type { SleepEntry } from '@/lib/sleepData';
+import BaseSortableTileGrid, { type SortableTileGridScrollMetrics } from '@/components/SortableTileGrid';
 
 // Tägliche Tipps für Mamas
 const dailyTips = [
@@ -52,6 +54,240 @@ type HomeActiveTimer = {
   accentColor: string;
   accentBackground: string;
 };
+
+type HomeQuickAccessCardId =
+  | 'recipe-generator'
+  | 'baby'
+  | 'planner'
+  | 'daily'
+  | 'selfcare'
+  | 'babyweather'
+  | 'recommendations'
+  | 'weight-tracker'
+  | 'size-tracker'
+  | 'tooth-tracker'
+  | 'milestones';
+
+type HomeQuickAccessCardConfig = {
+  id: HomeQuickAccessCardId;
+  title: string;
+  description: string;
+  iconName: string;
+  destination: any;
+  cardBackgroundColor: string;
+  iconBackgroundColor: string;
+  blurIntensity?: number;
+};
+
+const HOME_QUICK_ACCESS_ORDER_STORAGE_PREFIX = 'home_quick_access_order';
+const HOME_QUICK_ACCESS_HIDDEN_STORAGE_PREFIX = 'home_quick_access_hidden';
+
+const HOME_QUICK_ACCESS_CARDS: HomeQuickAccessCardConfig[] = [
+  {
+    id: 'recipe-generator',
+    title: 'BLW-Rezepte',
+    description: 'Rezepte entdecken',
+    iconName: 'fork.knife',
+    destination: '/recipe-generator',
+    cardBackgroundColor: 'rgba(168, 196, 193, 0.6)',
+    iconBackgroundColor: 'rgba(168, 196, 193, 0.9)',
+  },
+  {
+    id: 'baby',
+    title: 'Mein Baby',
+    description: 'Alle Infos & Entwicklungen',
+    iconName: 'person.fill',
+    destination: '/(tabs)/baby',
+    cardBackgroundColor: 'rgba(255, 190, 190, 0.6)',
+    iconBackgroundColor: 'rgba(255, 140, 160, 0.9)',
+  },
+  {
+    id: 'planner',
+    title: 'Planer',
+    description: 'Tagesplan & To-dos',
+    iconName: 'calendar',
+    destination: '/planner',
+    cardBackgroundColor: 'rgba(220, 200, 255, 0.6)',
+    iconBackgroundColor: 'rgba(200, 130, 220, 0.9)',
+  },
+  {
+    id: 'daily',
+    title: 'Unser Tag',
+    description: 'Tagesaktivitäten verwalten',
+    iconName: 'list.bullet',
+    destination: '/(tabs)/daily_old',
+    cardBackgroundColor: 'rgba(255, 215, 180, 0.6)',
+    iconBackgroundColor: 'rgba(255, 180, 130, 0.9)',
+  },
+  {
+    id: 'selfcare',
+    title: 'Mama Selfcare',
+    description: 'Nimm dir Zeit für dich',
+    iconName: 'heart.fill',
+    destination: '/(tabs)/selfcare',
+    cardBackgroundColor: 'rgba(255, 210, 230, 0.6)',
+    iconBackgroundColor: 'rgba(255, 160, 180, 0.9)',
+  },
+  {
+    id: 'babyweather',
+    title: 'Babywetter',
+    description: 'Aktuelle Wetterinfos',
+    iconName: 'cloud.sun.fill',
+    destination: '/(tabs)/babyweather',
+    cardBackgroundColor: 'rgba(200, 225, 255, 0.6)',
+    iconBackgroundColor: 'rgba(140, 190, 255, 0.9)',
+    blurIntensity: 16,
+  },
+  {
+    id: 'recommendations',
+    title: 'Lottis Empfehlungen',
+    description: 'Handverlesene Produkte',
+    iconName: 'star.fill',
+    destination: '/lottis-empfehlungen',
+    cardBackgroundColor: 'rgba(255, 235, 200, 0.6)',
+    iconBackgroundColor: 'rgba(255, 200, 120, 0.9)',
+  },
+  {
+    id: 'weight-tracker',
+    title: 'Gewichtskurve',
+    description: 'Gewicht tracken',
+    iconName: 'chart.line.uptrend.xyaxis',
+    destination: '/(tabs)/weight-tracker',
+    cardBackgroundColor: 'rgba(200, 240, 200, 0.6)',
+    iconBackgroundColor: 'rgba(130, 210, 130, 0.9)',
+  },
+  {
+    id: 'size-tracker',
+    title: 'Größenkurve',
+    description: 'Babygröße tracken',
+    iconName: 'ruler',
+    destination: '/(tabs)/size-tracker',
+    cardBackgroundColor: 'rgba(200, 230, 240, 0.6)',
+    iconBackgroundColor: 'rgba(130, 180, 210, 0.9)',
+  },
+  {
+    id: 'tooth-tracker',
+    title: 'Zahn-Tracker',
+    description: 'Erste Zähnchen',
+    iconName: 'mouth.fill',
+    destination: '/tooth-tracker',
+    cardBackgroundColor: 'rgba(200, 220, 255, 0.6)',
+    iconBackgroundColor: 'rgba(150, 180, 240, 0.9)',
+  },
+  {
+    id: 'milestones',
+    title: 'Meilensteine',
+    description: 'Erste Male festhalten',
+    iconName: 'flag.fill',
+    destination: '/milestones',
+    cardBackgroundColor: 'rgba(255, 228, 195, 0.6)',
+    iconBackgroundColor: 'rgba(255, 190, 130, 0.9)',
+  },
+];
+
+const HOME_QUICK_ACCESS_ORDER = HOME_QUICK_ACCESS_CARDS.map(({ id }) => id);
+
+const normalizeHomeQuickAccessOrder = (value: unknown): HomeQuickAccessCardId[] => {
+  if (!Array.isArray(value)) return [...HOME_QUICK_ACCESS_ORDER];
+
+  const seen = new Set<HomeQuickAccessCardId>();
+  const normalized: HomeQuickAccessCardId[] = [];
+
+  for (const entry of value) {
+    if (typeof entry !== 'string') continue;
+    if (!HOME_QUICK_ACCESS_ORDER.includes(entry as HomeQuickAccessCardId)) continue;
+    if (seen.has(entry as HomeQuickAccessCardId)) continue;
+    seen.add(entry as HomeQuickAccessCardId);
+    normalized.push(entry as HomeQuickAccessCardId);
+  }
+
+  for (const id of HOME_QUICK_ACCESS_ORDER) {
+    if (!seen.has(id)) {
+      normalized.push(id);
+    }
+  }
+
+  return normalized;
+};
+
+const buildHomeQuickAccessOrderStorageKey = (userId?: string | null, babyId?: string | null) =>
+  `${HOME_QUICK_ACCESS_ORDER_STORAGE_PREFIX}:${userId ?? 'anonymous'}:${babyId ?? 'default'}`;
+
+const buildHomeQuickAccessHiddenStorageKey = (userId?: string | null, babyId?: string | null) =>
+  `${HOME_QUICK_ACCESS_HIDDEN_STORAGE_PREFIX}:${userId ?? 'anonymous'}:${babyId ?? 'default'}`;
+
+const normalizeHomeQuickAccessHidden = (value: unknown): HomeQuickAccessCardId[] => {
+  if (!Array.isArray(value)) return [];
+
+  const seen = new Set<HomeQuickAccessCardId>();
+  const normalized = value
+    .filter((entry): entry is HomeQuickAccessCardId => {
+      return typeof entry === 'string' && HOME_QUICK_ACCESS_ORDER.includes(entry as HomeQuickAccessCardId);
+    })
+    .filter((entry) => {
+      if (seen.has(entry)) return false;
+      seen.add(entry);
+      return true;
+    })
+    .sort((left, right) => HOME_QUICK_ACCESS_ORDER.indexOf(left) - HOME_QUICK_ACCESS_ORDER.indexOf(right));
+
+  return normalized.slice(0, Math.max(0, HOME_QUICK_ACCESS_ORDER.length - 1));
+};
+
+type SortableQuickAccessGridProps = {
+  items: HomeQuickAccessCardConfig[];
+  order: HomeQuickAccessCardId[];
+  isEditing: boolean;
+  onPressItem: (item: HomeQuickAccessCardConfig) => void;
+  onRequestEditMode: () => void;
+  onOrderChange: (order: HomeQuickAccessCardId[]) => void;
+  onDragStateChange?: (isDragging: boolean) => void;
+  renderTile: (params: { item: HomeQuickAccessCardConfig; isEditing: boolean; isActive: boolean }) => React.ReactNode;
+  scrollConfig?: {
+    metricsRef: React.MutableRefObject<SortableTileGridScrollMetrics>;
+    scrollToOffset: (offsetY: number) => void;
+    slowEdgeThreshold?: number;
+    fastEdgeThreshold?: number;
+    slowSpeed?: number;
+    fastSpeed?: number;
+  };
+  style?: StyleProp<ViewStyle>;
+};
+
+function SortableQuickAccessGrid({
+  items,
+  order,
+  isEditing,
+  onPressItem,
+  onRequestEditMode,
+  onOrderChange,
+  onDragStateChange,
+  renderTile,
+  scrollConfig,
+  style,
+}: SortableQuickAccessGridProps) {
+  const orderedItems = useMemo(
+    () =>
+      order
+        .map((id) => items.find((item) => item.id === id))
+        .filter((item): item is HomeQuickAccessCardConfig => !!item),
+    [items, order],
+  );
+
+  return (
+    <BaseSortableTileGrid
+      items={orderedItems}
+      isEditing={isEditing}
+      onPressItem={onPressItem}
+      onRequestEditMode={onRequestEditMode}
+      onOrderChange={(nextItems) => onOrderChange(nextItems.map(({ id }) => id))}
+      onDragStateChange={onDragStateChange}
+      renderTile={renderTile}
+      scrollConfig={scrollConfig}
+      style={style}
+    />
+  );
+}
 
 function formatDurationSeconds(totalSeconds: number) {
   const safeSeconds = Math.max(0, totalSeconds);
@@ -399,6 +635,16 @@ export default function HomeScreen() {
   const [overviewCarouselWidth, setOverviewCarouselWidth] = useState(0);
   const [overviewIndex, setOverviewIndex] = useState(0);
   const [overviewSummaryHeight, setOverviewSummaryHeight] = useState<number | null>(null);
+  const [quickAccessOrder, setQuickAccessOrder] = useState<HomeQuickAccessCardId[]>([...HOME_QUICK_ACCESS_ORDER]);
+  const [hiddenQuickAccessIds, setHiddenQuickAccessIds] = useState<HomeQuickAccessCardId[]>([]);
+  const [isQuickAccessEditMode, setIsQuickAccessEditMode] = useState(false);
+  const [isQuickAccessDragging, setIsQuickAccessDragging] = useState(false);
+  const mainScrollRef = useRef<ScrollView>(null);
+  const quickAccessScrollMetricsRef = useRef<SortableTileGridScrollMetrics>({
+    offsetY: 0,
+    viewportHeight: 0,
+    contentHeight: 0,
+  });
   const overviewScrollRef = useRef<ScrollView>(null);
   const overviewIndexRef = useRef(0);
   const overviewRotationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -412,11 +658,37 @@ export default function HomeScreen() {
     Platform.OS === 'android'
       ? { blurMethod: 'dimezisBlurView' as const, blurReductionFactor: 1 }
       : {};
+  const quickAccessOrderStorageKey = useMemo(
+    () => buildHomeQuickAccessOrderStorageKey(user?.id, activeBabyId),
+    [activeBabyId, user?.id],
+  );
+  const quickAccessHiddenStorageKey = useMemo(
+    () => buildHomeQuickAccessHiddenStorageKey(user?.id, activeBabyId),
+    [activeBabyId, user?.id],
+  );
+  const quickAccessCardById = useMemo(
+    () => new Map(HOME_QUICK_ACCESS_CARDS.map((card) => [card.id, card] as const)),
+    [],
+  );
+  const hiddenQuickAccessIdSet = useMemo(() => new Set(hiddenQuickAccessIds), [hiddenQuickAccessIds]);
+  const orderedQuickAccessCards = useMemo(
+    () =>
+      quickAccessOrder
+        .map((id) => quickAccessCardById.get(id))
+        .filter((card): card is HomeQuickAccessCardConfig => !!card && !hiddenQuickAccessIdSet.has(card.id)),
+    [hiddenQuickAccessIdSet, quickAccessCardById, quickAccessOrder],
+  );
+  const hiddenQuickAccessCards = useMemo(
+    () =>
+      quickAccessOrder
+        .map((id) => quickAccessCardById.get(id))
+        .filter((card): card is HomeQuickAccessCardConfig => !!card && hiddenQuickAccessIdSet.has(card.id)),
+    [hiddenQuickAccessIdSet, quickAccessCardById, quickAccessOrder],
+  );
 
   const rotationCandidates = recommendations;
 
   const featuredRecommendation = rotationCandidates[productIndex] ?? null;
-
   const triggerHaptic = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
   };
@@ -425,6 +697,94 @@ export default function HomeScreen() {
     triggerHaptic();
     router.push(destination);
   };
+
+  const openQuickAccessEditor = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    setIsQuickAccessEditMode(true);
+  }, []);
+
+  const closeQuickAccessEditor = useCallback(() => {
+    setIsQuickAccessDragging(false);
+    setIsQuickAccessEditMode(false);
+  }, []);
+
+  const persistQuickAccessHiddenIds = useCallback(
+    async (nextHiddenIds: HomeQuickAccessCardId[]) => {
+      try {
+        const normalized = normalizeHomeQuickAccessHidden(nextHiddenIds);
+
+        if (normalized.length === 0) {
+          await AsyncStorage.removeItem(quickAccessHiddenStorageKey);
+          return;
+        }
+
+        await AsyncStorage.setItem(quickAccessHiddenStorageKey, JSON.stringify(normalized));
+      } catch (error) {
+        console.error('Home: failed to save hidden quick access tiles', error);
+      }
+    },
+    [quickAccessHiddenStorageKey],
+  );
+
+  const mergeVisibleOrderIntoQuickAccessOrder = useCallback(
+    (nextVisibleOrder: HomeQuickAccessCardId[]) => {
+      const hiddenIds = new Set(hiddenQuickAccessIds);
+      const visibleQueue = [...nextVisibleOrder];
+      const nextOrder: HomeQuickAccessCardId[] = [];
+
+      for (const id of quickAccessOrder) {
+        if (hiddenIds.has(id)) {
+          nextOrder.push(id);
+          continue;
+        }
+
+        const nextVisibleId = visibleQueue.shift();
+        if (nextVisibleId) {
+          nextOrder.push(nextVisibleId);
+        }
+      }
+
+      nextOrder.push(...visibleQueue);
+      return normalizeHomeQuickAccessOrder(nextOrder);
+    },
+    [hiddenQuickAccessIds, quickAccessOrder],
+  );
+
+  const handleHideQuickAccessCard = useCallback(
+    (itemId: HomeQuickAccessCardId) => {
+      if (orderedQuickAccessCards.length <= 1) {
+        Alert.alert('Hinweis', 'Mindestens eine Schnellzugriff-Kachel muss sichtbar bleiben.');
+        return;
+      }
+
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+      setHiddenQuickAccessIds((currentHiddenIds) => {
+        const nextHiddenIds = normalizeHomeQuickAccessHidden([...currentHiddenIds, itemId]);
+        void persistQuickAccessHiddenIds(nextHiddenIds);
+        return nextHiddenIds;
+      });
+    },
+    [orderedQuickAccessCards.length, persistQuickAccessHiddenIds],
+  );
+
+  const handleRestoreQuickAccessCard = useCallback(
+    (itemId: HomeQuickAccessCardId) => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      setHiddenQuickAccessIds((currentHiddenIds) => {
+        const nextHiddenIds = currentHiddenIds.filter((hiddenId) => hiddenId !== itemId);
+        void persistQuickAccessHiddenIds(nextHiddenIds);
+        return nextHiddenIds;
+      });
+    },
+    [persistQuickAccessHiddenIds],
+  );
+
+  const handleRestoreAllQuickAccessCards = useCallback(() => {
+    if (!hiddenQuickAccessIds.length) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    setHiddenQuickAccessIds([]);
+    void persistQuickAccessHiddenIds([]);
+  }, [hiddenQuickAccessIds.length, persistQuickAccessHiddenIds]);
 
   const buildImageUri = (imageUrl?: string | null, retryKey = recommendationImageRetryKey) => {
     if (!imageUrl) return '';
@@ -519,6 +879,64 @@ export default function HomeScreen() {
       }
     };
   }, [rotationCandidates, PRODUCT_ROTATION_INITIAL_DELAY_MS, PRODUCT_ROTATION_INTERVAL_MS]);
+
+  useEffect(() => {
+    let isActive = true;
+
+    (async () => {
+      try {
+        const [storedOrder, storedHiddenIds] = await Promise.all([
+          AsyncStorage.getItem(quickAccessOrderStorageKey),
+          AsyncStorage.getItem(quickAccessHiddenStorageKey),
+        ]);
+        if (!isActive) return;
+
+        setQuickAccessOrder(
+          storedOrder ? normalizeHomeQuickAccessOrder(JSON.parse(storedOrder)) : [...HOME_QUICK_ACCESS_ORDER],
+        );
+        setHiddenQuickAccessIds(
+          storedHiddenIds ? normalizeHomeQuickAccessHidden(JSON.parse(storedHiddenIds)) : [],
+        );
+      } catch (error) {
+        console.error('Home: failed to load quick access order or hidden tiles', error);
+        if (isActive) {
+          setQuickAccessOrder([...HOME_QUICK_ACCESS_ORDER]);
+          setHiddenQuickAccessIds([]);
+        }
+      }
+    })();
+
+    return () => {
+      isActive = false;
+    };
+  }, [quickAccessHiddenStorageKey, quickAccessOrderStorageKey]);
+
+  const persistQuickAccessOrder = useCallback(
+    async (nextOrder: HomeQuickAccessCardId[]) => {
+      try {
+        const normalized = normalizeHomeQuickAccessOrder(nextOrder);
+
+        if (normalized.every((id, index) => id === HOME_QUICK_ACCESS_ORDER[index])) {
+          await AsyncStorage.removeItem(quickAccessOrderStorageKey);
+          return;
+        }
+
+        await AsyncStorage.setItem(quickAccessOrderStorageKey, JSON.stringify(normalized));
+      } catch (error) {
+        console.error('Home: failed to save quick access order', error);
+      }
+    },
+    [quickAccessOrderStorageKey],
+  );
+
+  const handleReorderQuickAccess = useCallback(
+    (nextVisibleOrder: HomeQuickAccessCardId[]) => {
+      const normalized = mergeVisibleOrderIntoQuickAccessOrder(nextVisibleOrder);
+      setQuickAccessOrder(normalized);
+      void persistQuickAccessOrder(normalized);
+    },
+    [mergeVisibleOrderIntoQuickAccessOrder, persistQuickAccessOrder],
+  );
 
   const stopOverviewRotation = useCallback(() => {
     if (overviewRotationIntervalRef.current) {
@@ -1473,250 +1891,246 @@ export default function HomeScreen() {
     </View>
   );
 
-  // Rendere die Schnellzugriff-Karten
-  const renderQuickAccessCards = () => {
+  const renderQuickAccessCard = (
+    item: HomeQuickAccessCardConfig,
+    options?: { isEditing?: boolean; isActive?: boolean }
+  ) => {
+    const isEditing = options?.isEditing ?? false;
+    const canHideCard = isEditing && orderedQuickAccessCards.length > 1;
+
     return (
-      <View style={styles.cardsSection}>
-           <ThemedText adaptive={false} style={[styles.cardsSectionTitle, styles.liquidGlassText, { color: textSecondary, fontSize: 22 }]}>
-          Schnellzugriff
+      <View
+        style={[
+          styles.liquidGlassCardWrapper,
+          isEditing ? styles.quickAccessEditorCardWrapper : null,
+          options?.isActive ? styles.quickAccessEditorCardWrapperActive : null,
+        ]}
+      >
+        <BlurView
+          {...androidBlurProps}
+          intensity={item.blurIntensity ?? 24}
+          tint={colorScheme === 'dark' ? 'dark' : 'light'}
+          style={styles.liquidGlassCardBackground}
+        >
+          <View
+            style={[
+              styles.card,
+              styles.liquidGlassCard,
+              {
+                backgroundColor: item.cardBackgroundColor,
+                borderColor: 'rgba(255, 255, 255, 0.35)',
+              },
+              isEditing ? styles.quickAccessEditorCard : null,
+            ]}
+          >
+            {canHideCard ? (
+              <TouchableOpacity
+                style={styles.quickAccessHideBadge}
+                onPress={() => handleHideQuickAccessCard(item.id)}
+                activeOpacity={0.85}
+                accessibilityRole="button"
+                accessibilityLabel={`${item.title} ausblenden`}
+              >
+                <IconSymbol name="eye.slash" size={14} color="#FFFFFF" />
+              </TouchableOpacity>
+            ) : null}
+            {isEditing ? (
+              <View style={styles.quickAccessDragBadge}>
+                <IconSymbol name="line.3.horizontal" size={14} color="#FFFFFF" />
+              </View>
+            ) : null}
+            <View
+              style={[
+                styles.iconContainer,
+                {
+                  backgroundColor: item.iconBackgroundColor,
+                  borderRadius: 30,
+                  padding: 8,
+                  marginBottom: 10,
+                  borderWidth: 2,
+                  borderColor: 'rgba(255, 255, 255, 0.4)',
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.3,
+                  shadowRadius: 4,
+                  elevation: 4,
+                },
+              ]}
+            >
+              <IconSymbol name={item.iconName} size={28} color="#FFFFFF" />
+            </View>
+            <ThemedText adaptive={false} style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>
+              {item.title}
+            </ThemedText>
+            <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>
+              {item.description}
+            </ThemedText>
+          </View>
+        </BlurView>
+      </View>
+    );
+  };
+
+  const renderHiddenQuickAccessSection = () => {
+    if (!isQuickAccessEditMode || !hiddenQuickAccessCards.length) {
+      return null;
+    }
+
+    return (
+      <View style={styles.quickAccessHiddenSection}>
+        <View style={styles.quickAccessHiddenHeader}>
+          <View style={styles.quickAccessHiddenHeaderText}>
+            <ThemedText adaptive={false} style={[styles.quickAccessHiddenTitle, { color: textSecondary }]}>
+              Ausgeblendet
+            </ThemedText>
+            <ThemedText adaptive={false} style={[styles.quickAccessHiddenSubtitle, { color: textSecondary }]}>
+              {hiddenQuickAccessCards.length === 1
+                ? '1 Kachel ist ausgeblendet.'
+                : `${hiddenQuickAccessCards.length} Kacheln sind ausgeblendet.`}
+            </ThemedText>
+          </View>
+          <TouchableOpacity
+            style={[
+              styles.quickAccessHiddenRestoreAllButton,
+              {
+                backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.55)',
+                borderColor: isDark ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.8)',
+              },
+            ]}
+            onPress={handleRestoreAllQuickAccessCards}
+            activeOpacity={0.85}
+          >
+            <Text style={[styles.quickAccessHiddenRestoreAllText, { color: textPrimary }]}>Alle einblenden</Text>
+          </TouchableOpacity>
+        </View>
+
+        <ThemedText adaptive={false} style={[styles.quickAccessHiddenHint, { color: textSecondary }]}>
+          Tippe auf eine ausgeblendete Kachel, um sie wieder anzuzeigen.
         </ThemedText>
 
-        <View style={styles.cardsGrid}>
-          <TouchableOpacity
-            style={styles.liquidGlassCardWrapper}
-            onPress={() => handleNavigate('/recipe-generator' as any)}
-            activeOpacity={0.9}
-          >
-            <BlurView 
-              {...androidBlurProps}
-              intensity={24} 
-              tint={colorScheme === 'dark' ? 'dark' : 'light'} 
-              style={styles.liquidGlassCardBackground}
+        <View style={styles.quickAccessHiddenGrid}>
+          {hiddenQuickAccessCards.map((card) => (
+            <TouchableOpacity
+              key={card.id}
+              style={styles.quickAccessHiddenTileWrapper}
+              activeOpacity={0.86}
+              onPress={() => handleRestoreQuickAccessCard(card.id)}
             >
-              <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(168, 196, 193, 0.6)', borderColor: 'rgba(255, 255, 255, 0.35)' }]}>
-                <View style={[styles.iconContainer, { backgroundColor: 'rgba(168, 196, 193, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
-                  <IconSymbol name="fork.knife" size={28} color="#FFFFFF" />
+              <BlurView
+                {...androidBlurProps}
+                intensity={card.blurIntensity ?? 24}
+                tint={colorScheme === 'dark' ? 'dark' : 'light'}
+                style={styles.liquidGlassCardBackground}
+              >
+                <View
+                  style={[
+                    styles.card,
+                    styles.quickAccessHiddenTileCard,
+                    {
+                      backgroundColor: card.cardBackgroundColor,
+                      borderColor: 'rgba(255, 255, 255, 0.28)',
+                    },
+                  ]}
+                >
+                  <View style={styles.quickAccessRestoreBadge}>
+                    <IconSymbol name="arrow.uturn.left" size={14} color="#FFFFFF" />
+                  </View>
+                  <View
+                    style={[
+                      styles.iconContainer,
+                      {
+                        backgroundColor: card.iconBackgroundColor,
+                        borderRadius: 26,
+                        padding: 8,
+                        marginBottom: 10,
+                        borderWidth: 2,
+                        borderColor: 'rgba(255, 255, 255, 0.35)',
+                        shadowColor: '#000',
+                        shadowOffset: { width: 0, height: 2 },
+                        shadowOpacity: 0.3,
+                        shadowRadius: 4,
+                        elevation: 4,
+                      },
+                    ]}
+                  >
+                    <IconSymbol name={card.iconName} size={24} color="#FFFFFF" />
+                  </View>
+                  <ThemedText adaptive={false} style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>
+                    {card.title}
+                  </ThemedText>
+                  <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>
+                    Einblenden
+                  </ThemedText>
                 </View>
-                <ThemedText adaptive={false} style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>BLW-Rezepte</ThemedText>
-                <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>Rezepte entdecken</ThemedText>
-              </View>
-            </BlurView>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.liquidGlassCardWrapper}
-            onPress={() => handleNavigate('/(tabs)/baby')}
-            activeOpacity={0.9}
-          >
-            <BlurView 
-              {...androidBlurProps}
-              intensity={24} 
-              tint={colorScheme === 'dark' ? 'dark' : 'light'} 
-              style={styles.liquidGlassCardBackground}
-            >
-              <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(255, 190, 190, 0.6)', borderColor: 'rgba(255, 255, 255, 0.35)' }]}>
-                <View style={[styles.iconContainer, { backgroundColor: 'rgba(255, 140, 160, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
-                  <IconSymbol name="person.fill" size={28} color="#FFFFFF" />
-                </View>
-                <ThemedText adaptive={false} style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>Mein Baby</ThemedText>
-                <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>Alle Infos & Entwicklungen</ThemedText>
-              </View>
-            </BlurView>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.liquidGlassCardWrapper}
-            onPress={() => handleNavigate('/planner')}
-            activeOpacity={0.9}
-          >
-            <BlurView 
-              {...androidBlurProps}
-              intensity={24} 
-              tint={colorScheme === 'dark' ? 'dark' : 'light'} 
-              style={styles.liquidGlassCardBackground}
-            >
-              <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(220, 200, 255, 0.6)', borderColor: 'rgba(255, 255, 255, 0.35)' }]}>
-                <View style={[styles.iconContainer, { backgroundColor: 'rgba(200, 130, 220, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
-                  <IconSymbol name="calendar" size={28} color="#FFFFFF" />
-                </View>
-                <ThemedText adaptive={false} style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>Planer</ThemedText>
-                <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>Tagesplan & To‑dos</ThemedText>
-              </View>
-            </BlurView>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.liquidGlassCardWrapper}
-            onPress={() => handleNavigate('/(tabs)/daily_old')}
-            activeOpacity={0.9}
-          >
-            <BlurView 
-              {...androidBlurProps}
-              intensity={24} 
-              tint={colorScheme === 'dark' ? 'dark' : 'light'} 
-              style={styles.liquidGlassCardBackground}
-            >
-              <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(255, 215, 180, 0.6)', borderColor: 'rgba(255, 255, 255, 0.35)' }]}>
-                <View style={[styles.iconContainer, { backgroundColor: 'rgba(255, 180, 130, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
-                  <IconSymbol name="list.bullet" size={28} color="#FFFFFF" />
-                </View>
-                <ThemedText adaptive={false} style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>Unser Tag</ThemedText>
-                <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>Tagesaktivitäten verwalten</ThemedText>
-              </View>
-            </BlurView>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.liquidGlassCardWrapper}
-            onPress={() => handleNavigate('/(tabs)/selfcare')}
-            activeOpacity={0.9}
-          >
-            <BlurView 
-              {...androidBlurProps}
-              intensity={24} 
-              tint={colorScheme === 'dark' ? 'dark' : 'light'} 
-              style={styles.liquidGlassCardBackground}
-            >
-              <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(255, 210, 230, 0.6)', borderColor: 'rgba(255, 255, 255, 0.35)' }]}>
-                <View style={[styles.iconContainer, { backgroundColor: 'rgba(255, 160, 180, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
-                  <IconSymbol name="heart.fill" size={28} color="#FFFFFF" />
-                </View>
-                <ThemedText adaptive={false} style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>Mama Selfcare</ThemedText>
-                <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>Nimm dir Zeit für dich</ThemedText>
-              </View>
-            </BlurView>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.liquidGlassCardWrapper}
-            onPress={() => handleNavigate('/(tabs)/babyweather')}
-            activeOpacity={0.9}
-          >
-            <BlurView
-              {...androidBlurProps}
-              intensity={16}
-              tint={colorScheme === 'dark' ? 'dark' : 'light'}
-              style={styles.liquidGlassCardBackground}
-            >
-              <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(200, 225, 255, 0.6)', borderColor: 'rgba(255, 255, 255, 0.35)' }]}>
-                <View style={[styles.iconContainer, { backgroundColor: 'rgba(140, 190, 255, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
-                  <IconSymbol name="cloud.sun.fill" size={28} color="#FFFFFF" />
-                </View>
-                <ThemedText adaptive={false} style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>Babywetter</ThemedText>
-                <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>Aktuelle Wetterinfos</ThemedText>
-              </View>
-            </BlurView>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.liquidGlassCardWrapper}
-            onPress={() => handleNavigate('/lottis-empfehlungen' as any)}
-            activeOpacity={0.9}
-          >
-            <BlurView
-              {...androidBlurProps}
-              intensity={24}
-              tint={colorScheme === 'dark' ? 'dark' : 'light'}
-              style={styles.liquidGlassCardBackground}
-            >
-              <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(255, 235, 200, 0.6)', borderColor: 'rgba(255, 255, 255, 0.35)' }]}>
-                <View style={[styles.iconContainer, { backgroundColor: 'rgba(255, 200, 120, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
-                  <IconSymbol name="star.fill" size={28} color="#FFFFFF" />
-                </View>
-                <ThemedText adaptive={false} style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>Lottis Empfehlungen</ThemedText>
-                <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>Handverlesene Produkte</ThemedText>
-              </View>
-            </BlurView>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.liquidGlassCardWrapper}
-            onPress={() => handleNavigate('/(tabs)/weight-tracker')}
-            activeOpacity={0.9}
-          >
-            <BlurView
-              {...androidBlurProps}
-              intensity={24}
-              tint={colorScheme === 'dark' ? 'dark' : 'light'}
-              style={styles.liquidGlassCardBackground}
-            >
-              <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(200, 240, 200, 0.6)', borderColor: 'rgba(255, 255, 255, 0.35)' }]}>
-                <View style={[styles.iconContainer, { backgroundColor: 'rgba(130, 210, 130, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
-                  <IconSymbol name="chart.line.uptrend.xyaxis" size={28} color="#FFFFFF" />
-                </View>
-                <ThemedText adaptive={false} style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>Gewichtskurve</ThemedText>
-                <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>Gewicht tracken</ThemedText>
-              </View>
-            </BlurView>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.liquidGlassCardWrapper}
-            onPress={() => handleNavigate('/(tabs)/size-tracker')}
-            activeOpacity={0.9}
-          >
-            <BlurView
-              {...androidBlurProps}
-              intensity={24}
-              tint={colorScheme === 'dark' ? 'dark' : 'light'}
-              style={styles.liquidGlassCardBackground}
-            >
-              <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(200, 230, 240, 0.6)', borderColor: 'rgba(255, 255, 255, 0.35)' }]}>
-                <View style={[styles.iconContainer, { backgroundColor: 'rgba(130, 180, 210, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
-                  <IconSymbol name="ruler" size={28} color="#FFFFFF" />
-                </View>
-                <ThemedText adaptive={false} style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>Größenkurve</ThemedText>
-                <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>Babygröße tracken</ThemedText>
-              </View>
-            </BlurView>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.liquidGlassCardWrapper}
-            onPress={() => handleNavigate('/tooth-tracker' as any)}
-            activeOpacity={0.9}
-          >
-            <BlurView
-              {...androidBlurProps}
-              intensity={24}
-              tint={colorScheme === 'dark' ? 'dark' : 'light'}
-              style={styles.liquidGlassCardBackground}
-            >
-              <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(200, 220, 255, 0.6)', borderColor: 'rgba(255, 255, 255, 0.35)' }]}>
-                <View style={[styles.iconContainer, { backgroundColor: 'rgba(150, 180, 240, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
-                  <IconSymbol name="mouth.fill" size={28} color="#FFFFFF" />
-                </View>
-                <ThemedText adaptive={false} style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>Zahn-Tracker</ThemedText>
-                <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>Erste Zähnchen</ThemedText>
-              </View>
-            </BlurView>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.liquidGlassCardWrapper}
-            onPress={() => handleNavigate('/milestones' as any)}
-            activeOpacity={0.9}
-          >
-            <BlurView
-              {...androidBlurProps}
-              intensity={24}
-              tint={colorScheme === 'dark' ? 'dark' : 'light'}
-              style={styles.liquidGlassCardBackground}
-            >
-              <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(255, 228, 195, 0.6)', borderColor: 'rgba(255, 255, 255, 0.35)' }]}>
-                <View style={[styles.iconContainer, { backgroundColor: 'rgba(255, 190, 130, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
-                  <IconSymbol name="flag.fill" size={28} color="#FFFFFF" />
-                </View>
-                <ThemedText adaptive={false} style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>Meilensteine</ThemedText>
-                <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>Erste Male festhalten</ThemedText>
-              </View>
-            </BlurView>
-          </TouchableOpacity>
-
+              </BlurView>
+            </TouchableOpacity>
+          ))}
         </View>
       </View>
     );
   };
+
+  const renderQuickAccessCards = () => (
+    <View style={styles.cardsSection}>
+      <ThemedText adaptive={false} style={[styles.cardsSectionTitle, styles.liquidGlassText, { color: textSecondary, fontSize: 22 }]}>
+        Schnellzugriff
+      </ThemedText>
+
+      {isQuickAccessEditMode ? (
+        <View style={styles.quickAccessEditBar}>
+          <TouchableOpacity
+            style={[
+              styles.quickAccessDoneButton,
+              {
+                backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.55)',
+                borderColor: isDark ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.8)',
+              },
+            ]}
+            onPress={closeQuickAccessEditor}
+            activeOpacity={0.85}
+          >
+            <Text style={[styles.quickAccessDoneText, { color: textPrimary }]}>Fertig</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
+
+      <SortableQuickAccessGrid
+        items={orderedQuickAccessCards}
+        order={orderedQuickAccessCards.map(({ id }) => id)}
+        isEditing={isQuickAccessEditMode}
+        onPressItem={(item) => handleNavigate(item.destination)}
+        onRequestEditMode={openQuickAccessEditor}
+        onOrderChange={handleReorderQuickAccess}
+        onDragStateChange={setIsQuickAccessDragging}
+        scrollConfig={{
+          metricsRef: quickAccessScrollMetricsRef,
+          scrollToOffset: (offsetY) => {
+            quickAccessScrollMetricsRef.current.offsetY = offsetY;
+            mainScrollRef.current?.scrollTo({ y: offsetY, animated: false });
+          },
+          slowEdgeThreshold: 150,
+          fastEdgeThreshold: 52,
+          slowSpeed: 1.4,
+          fastSpeed: 9,
+        }}
+        renderTile={({ item, isEditing, isActive }) =>
+          renderQuickAccessCard(item, { isEditing, isActive })
+        }
+        style={styles.quickAccessGridList}
+      />
+      <ThemedText adaptive={false} style={[styles.quickAccessHint, { color: textSecondary }]}>
+        {isQuickAccessEditMode
+          ? 'Kacheln verschieben, ausblenden und mit "Fertig" speichern.'
+          : 'Lange auf eine Kachel drücken, um die Reihenfolge anzupassen.'}
+      </ThemedText>
+      {isQuickAccessEditMode && hiddenQuickAccessCards.length > 0 ? (
+        <ThemedText adaptive={false} style={[styles.quickAccessHiddenHint, { color: textSecondary }]}>
+          Ausgeblendete Kacheln kannst du unten wieder einblenden.
+        </ThemedText>
+      ) : null}
+      {renderHiddenQuickAccessSection()}
+    </View>
+  );
 
   // Route-Guard in _layout.tsx handles mode-based redirects centrally.
   // An inline redirect here fires before isLoading settles and breaks
@@ -1734,8 +2148,20 @@ export default function HomeScreen() {
           </View>
         ) : (
           <ScrollView 
-            style={styles.scrollView} 
-            contentContainerStyle={styles.contentContainer}
+          ref={mainScrollRef}
+          style={styles.scrollView} 
+          contentContainerStyle={styles.contentContainer}
+          scrollEnabled={!isQuickAccessDragging}
+          onLayout={(event) => {
+            quickAccessScrollMetricsRef.current.viewportHeight = event.nativeEvent.layout.height;
+          }}
+            onContentSizeChange={(_, height) => {
+              quickAccessScrollMetricsRef.current.contentHeight = height;
+            }}
+            onScroll={(event) => {
+              quickAccessScrollMetricsRef.current.offsetY = event.nativeEvent.contentOffset.y;
+            }}
+            scrollEventThrottle={16}
             refreshControl={
               <RefreshControl
                 refreshing={refreshing}
@@ -2335,10 +2761,20 @@ const styles = StyleSheet.create({
   cardsSectionTitle: {
     fontSize: 20,
     fontWeight: '800',
-    marginBottom: 16,
+    marginBottom: 6,
     textAlign: 'center',
     color: '#6B4C3B',
     letterSpacing: -0.3,
+  },
+  quickAccessHint: {
+    fontSize: 13,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  quickAccessHiddenHint: {
+    fontSize: 12,
+    textAlign: 'center',
+    marginBottom: 12,
   },
   cardsGrid: {
     flexDirection: 'row',
@@ -2346,11 +2782,14 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'stretch',
   },
+  quickAccessGridItem: {
+    width: '48%',
+    marginBottom: 14,
+  },
 
   // Liquid Glass Cards
   liquidGlassCardWrapper: {
-    width: '48%',
-    marginBottom: 14,
+    width: '100%',
     borderRadius: 22,
     overflow: 'hidden',
   },
@@ -2375,6 +2814,126 @@ const styles = StyleSheet.create({
   },
   liquidGlassCard: {
     backgroundColor: 'transparent',
+  },
+  quickAccessEditorCardWrapper: {
+    marginBottom: 0,
+  },
+  quickAccessEditorCardWrapperActive: {
+    opacity: 0.92,
+  },
+  quickAccessEditorCard: {
+    minHeight: 132,
+  },
+  quickAccessHideBadge: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(107, 76, 59, 0.32)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+  },
+  quickAccessDragBadge: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(107, 76, 59, 0.32)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+  },
+  quickAccessEditBar: {
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  quickAccessDoneButton: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  quickAccessDoneText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  quickAccessGridList: {
+    flexGrow: 0,
+  },
+  quickAccessGridListContent: {
+    paddingBottom: 12,
+  },
+  quickAccessHiddenSection: {
+    marginTop: 14,
+    padding: 12,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.18)',
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+  },
+  quickAccessHiddenHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 8,
+  },
+  quickAccessHiddenHeaderText: {
+    flex: 1,
+  },
+  quickAccessHiddenTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    letterSpacing: -0.2,
+  },
+  quickAccessHiddenSubtitle: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  quickAccessHiddenRestoreAllButton: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  quickAccessHiddenRestoreAllText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  quickAccessHiddenGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  quickAccessHiddenTileWrapper: {
+    width: '48%',
+    marginBottom: 12,
+  },
+  quickAccessHiddenTileCard: {
+    minHeight: 118,
+    height: 118,
+    paddingVertical: 14,
+    opacity: 0.92,
+  },
+  quickAccessRestoreBadge: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(94, 61, 179, 0.44)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+  },
+  quickAccessEditorRow: {
+    justifyContent: 'space-between',
   },
   iconContainer: {
     width: 54,

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { StyleSheet, View, SafeAreaView, StatusBar, TouchableOpacity, ScrollView, ActivityIndicator, Alert, RefreshControl, Platform, ToastAndroid, Animated, Easing, Text, Image, StyleProp, ViewStyle } from 'react-native';
 import { Colors } from '@/constants/Colors';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
@@ -20,9 +20,11 @@ import { pregnancySymptoms } from '@/constants/PregnancySymptoms';
 import { BIRTH_PREP_SECTION_START_WEEK, birthPreparationMeasures } from '@/constants/BirthPreparationMeasures';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
+import * as Haptics from 'expo-haptics';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Canvas, RoundedRect, LinearGradient as SkiaLinearGradient, RadialGradient, Circle, vec } from '@shopify/react-native-skia';
+import SortableTileGrid, { type SortableTileGridScrollMetrics } from '@/components/SortableTileGrid';
 
 // Tägliche Tipps für Schwangere
 const dailyTips = [
@@ -253,6 +255,176 @@ interface LinkedUser {
   id: string;
 }
 
+type PregnancyQuickAccessCardId =
+  | 'countdown'
+  | 'contraction-tracker'
+  | 'planner'
+  | 'checklist'
+  | 'birth-plan'
+  | 'selfcare'
+  | 'doctor-questions'
+  | 'baby'
+  | 'baby-names'
+  | 'weight-tracker';
+
+type PregnancyQuickAccessCardConfig = {
+  id: PregnancyQuickAccessCardId;
+  title: string;
+  description: string;
+  iconName: string;
+  destination: any;
+  cardBackgroundColor: string;
+  iconBackgroundColor: string;
+};
+
+const PREGNANCY_QUICK_ACCESS_ORDER_STORAGE_PREFIX = 'pregnancy_home_quick_access_order';
+const PREGNANCY_QUICK_ACCESS_HIDDEN_STORAGE_PREFIX = 'pregnancy_home_quick_access_hidden';
+
+const PREGNANCY_QUICK_ACCESS_CARDS: PregnancyQuickAccessCardConfig[] = [
+  {
+    id: 'countdown',
+    title: 'Countdown',
+    description: 'Dein Weg zur Geburt',
+    iconName: 'calendar',
+    destination: { pathname: '/(tabs)/countdown' },
+    cardBackgroundColor: 'rgba(168, 196, 193, 0.6)',
+    iconBackgroundColor: 'rgba(168, 196, 193, 0.9)',
+  },
+  {
+    id: 'contraction-tracker',
+    title: 'Wehen-Tracker',
+    description: 'Wehen messen und verfolgen',
+    iconName: 'timer',
+    destination: '/(tabs)',
+    cardBackgroundColor: 'rgba(255, 190, 190, 0.6)',
+    iconBackgroundColor: 'rgba(255, 140, 160, 0.9)',
+  },
+  {
+    id: 'planner',
+    title: 'Planer',
+    description: 'Tagesplanung & Termine',
+    iconName: 'clock',
+    destination: '/planner',
+    cardBackgroundColor: 'rgba(195, 220, 255, 0.6)',
+    iconBackgroundColor: 'rgba(120, 170, 255, 0.9)',
+  },
+  {
+    id: 'checklist',
+    title: 'Checkliste',
+    description: 'Kliniktasche vorbereiten',
+    iconName: 'checklist',
+    destination: { pathname: '/(tabs)/explore' },
+    cardBackgroundColor: 'rgba(220, 200, 255, 0.6)',
+    iconBackgroundColor: 'rgba(200, 130, 220, 0.9)',
+  },
+  {
+    id: 'birth-plan',
+    title: 'Geburtsplan',
+    description: 'Wünsche für die Geburt',
+    iconName: 'doc.text.fill',
+    destination: { pathname: '/(tabs)/geburtsplan' },
+    cardBackgroundColor: 'rgba(255, 215, 180, 0.6)',
+    iconBackgroundColor: 'rgba(255, 180, 130, 0.9)',
+  },
+  {
+    id: 'selfcare',
+    title: 'Mama Selfcare',
+    description: 'Nimm dir Zeit für dich',
+    iconName: 'heart.fill',
+    destination: '/(tabs)/selfcare',
+    cardBackgroundColor: 'rgba(255, 210, 230, 0.6)',
+    iconBackgroundColor: 'rgba(255, 160, 180, 0.9)',
+  },
+  {
+    id: 'doctor-questions',
+    title: 'Meine Fragen',
+    description: 'Fragen für den nächsten Termin',
+    iconName: 'questionmark.circle',
+    destination: '/doctor-questions',
+    cardBackgroundColor: 'rgba(255, 210, 230, 0.6)',
+    iconBackgroundColor: 'rgba(255, 160, 180, 0.9)',
+  },
+  {
+    id: 'baby',
+    title: 'Mein Baby',
+    description: 'Infos anpassen & Entwicklung sehen',
+    iconName: 'person.fill',
+    destination: '/(tabs)/baby',
+    cardBackgroundColor: 'rgba(255, 190, 190, 0.6)',
+    iconBackgroundColor: 'rgba(255, 140, 160, 0.9)',
+  },
+  {
+    id: 'baby-names',
+    title: 'Babynamen',
+    description: 'Finde den perfekten Namen',
+    iconName: 'person.text.rectangle',
+    destination: '/baby-names',
+    cardBackgroundColor: 'rgba(200, 225, 255, 0.6)',
+    iconBackgroundColor: 'rgba(140, 190, 255, 0.9)',
+  },
+  {
+    id: 'weight-tracker',
+    title: 'Gewichtskurve',
+    description: 'Gewicht tracken',
+    iconName: 'chart.line.uptrend.xyaxis',
+    destination: '/(tabs)/weight-tracker',
+    cardBackgroundColor: 'rgba(200, 240, 200, 0.6)',
+    iconBackgroundColor: 'rgba(130, 210, 130, 0.9)',
+  },
+];
+
+const PREGNANCY_QUICK_ACCESS_ORDER = PREGNANCY_QUICK_ACCESS_CARDS.map(({ id }) => id);
+
+const normalizePregnancyQuickAccessOrder = (value: unknown): PregnancyQuickAccessCardId[] => {
+  if (!Array.isArray(value)) return [...PREGNANCY_QUICK_ACCESS_ORDER];
+
+  const seen = new Set<PregnancyQuickAccessCardId>();
+  const normalized: PregnancyQuickAccessCardId[] = [];
+
+  for (const entry of value) {
+    if (typeof entry !== 'string') continue;
+    if (!PREGNANCY_QUICK_ACCESS_ORDER.includes(entry as PregnancyQuickAccessCardId)) continue;
+    if (seen.has(entry as PregnancyQuickAccessCardId)) continue;
+    seen.add(entry as PregnancyQuickAccessCardId);
+    normalized.push(entry as PregnancyQuickAccessCardId);
+  }
+
+  for (const id of PREGNANCY_QUICK_ACCESS_ORDER) {
+    if (!seen.has(id)) {
+      normalized.push(id);
+    }
+  }
+
+  return normalized;
+};
+
+const buildPregnancyQuickAccessOrderStorageKey = (userId?: string | null) =>
+  `${PREGNANCY_QUICK_ACCESS_ORDER_STORAGE_PREFIX}:${userId ?? 'anonymous'}`;
+
+const buildPregnancyQuickAccessHiddenStorageKey = (userId?: string | null) =>
+  `${PREGNANCY_QUICK_ACCESS_HIDDEN_STORAGE_PREFIX}:${userId ?? 'anonymous'}`;
+
+const normalizePregnancyQuickAccessHidden = (value: unknown): PregnancyQuickAccessCardId[] => {
+  if (!Array.isArray(value)) return [];
+
+  const seen = new Set<PregnancyQuickAccessCardId>();
+  const normalized = value
+    .filter((entry): entry is PregnancyQuickAccessCardId => {
+      return typeof entry === 'string' && PREGNANCY_QUICK_ACCESS_ORDER.includes(entry as PregnancyQuickAccessCardId);
+    })
+    .filter((entry) => {
+      if (seen.has(entry)) return false;
+      seen.add(entry);
+      return true;
+    })
+    .sort(
+      (left, right) =>
+        PREGNANCY_QUICK_ACCESS_ORDER.indexOf(left) - PREGNANCY_QUICK_ACCESS_ORDER.indexOf(right),
+    );
+
+  return normalized.slice(0, Math.max(0, PREGNANCY_QUICK_ACCESS_ORDER.length - 1));
+};
+
 // Konstanten für Überfälligkeits-Informationen
 const overdueInfo = {
   baby: "Dein Baby ist jetzt vollständig entwickelt. Die Plazenta versorgt es weiterhin mit allen notwendigen Nährstoffen. Die Verbindung zwischen euch beiden ist stärker denn je. Das Immunsystem deines Babys wird durch die Übertragung von Antikörpern über die Plazenta weiter gestärkt.",
@@ -301,6 +473,16 @@ export default function PregnancyHomeScreen() {
   const [overviewCarouselWidth, setOverviewCarouselWidth] = useState(0);
   const [overviewIndex, setOverviewIndex] = useState(0);
   const [overviewSummaryHeight, setOverviewSummaryHeight] = useState<number | null>(null);
+  const [quickAccessOrder, setQuickAccessOrder] = useState<PregnancyQuickAccessCardId[]>([...PREGNANCY_QUICK_ACCESS_ORDER]);
+  const [hiddenQuickAccessIds, setHiddenQuickAccessIds] = useState<PregnancyQuickAccessCardId[]>([]);
+  const [isQuickAccessEditMode, setIsQuickAccessEditMode] = useState(false);
+  const [isQuickAccessDragging, setIsQuickAccessDragging] = useState(false);
+  const mainScrollRef = useRef<ScrollView | null>(null);
+  const quickAccessScrollMetricsRef = useRef<SortableTileGridScrollMetrics>({
+    offsetY: 0,
+    viewportHeight: 0,
+    contentHeight: 0,
+  });
   const overviewScrollRef = useRef<ScrollView | null>(null);
   const [recommendations, setRecommendations] = useState<LottiRecommendation[]>([]);
   const [recommendationImageFailed, setRecommendationImageFailed] = useState(false);
@@ -314,6 +496,35 @@ export default function PregnancyHomeScreen() {
     Platform.OS === 'android'
       ? { blurMethod: 'dimezisBlurView' as const, blurReductionFactor: 1 }
       : {};
+  const quickAccessOrderStorageKey = useMemo(
+    () => buildPregnancyQuickAccessOrderStorageKey(user?.id),
+    [user?.id],
+  );
+  const quickAccessHiddenStorageKey = useMemo(
+    () => buildPregnancyQuickAccessHiddenStorageKey(user?.id),
+    [user?.id],
+  );
+  const quickAccessCardById = useMemo(
+    () => new Map(PREGNANCY_QUICK_ACCESS_CARDS.map((card) => [card.id, card] as const)),
+    [],
+  );
+  const hiddenQuickAccessIdSet = useMemo(() => new Set(hiddenQuickAccessIds), [hiddenQuickAccessIds]);
+  const orderedQuickAccessCards = useMemo(
+    () =>
+      quickAccessOrder
+        .map((id) => quickAccessCardById.get(id))
+        .filter(
+          (card): card is PregnancyQuickAccessCardConfig => !!card && !hiddenQuickAccessIdSet.has(card.id),
+        ),
+    [hiddenQuickAccessIdSet, quickAccessCardById, quickAccessOrder],
+  );
+  const hiddenQuickAccessCards = useMemo(
+    () =>
+      quickAccessOrder
+        .map((id) => quickAccessCardById.get(id))
+        .filter((card): card is PregnancyQuickAccessCardConfig => !!card && hiddenQuickAccessIdSet.has(card.id)),
+    [hiddenQuickAccessIdSet, quickAccessCardById, quickAccessOrder],
+  );
 
   const featuredRecommendation = recommendations[0] ?? null;
 
@@ -323,6 +534,94 @@ export default function PregnancyHomeScreen() {
     if (words.length <= limit) return value.trim();
     return `${words.slice(0, limit).join(' ')}...`;
   };
+
+  const openQuickAccessEditor = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    setIsQuickAccessEditMode(true);
+  }, []);
+
+  const closeQuickAccessEditor = useCallback(() => {
+    setIsQuickAccessDragging(false);
+    setIsQuickAccessEditMode(false);
+  }, []);
+
+  const persistQuickAccessHiddenIds = useCallback(
+    async (nextHiddenIds: PregnancyQuickAccessCardId[]) => {
+      try {
+        const normalized = normalizePregnancyQuickAccessHidden(nextHiddenIds);
+
+        if (normalized.length === 0) {
+          await AsyncStorage.removeItem(quickAccessHiddenStorageKey);
+          return;
+        }
+
+        await AsyncStorage.setItem(quickAccessHiddenStorageKey, JSON.stringify(normalized));
+      } catch (error) {
+        console.error('Pregnancy Home: failed to save hidden quick access tiles', error);
+      }
+    },
+    [quickAccessHiddenStorageKey],
+  );
+
+  const mergeVisibleOrderIntoQuickAccessOrder = useCallback(
+    (nextVisibleOrder: PregnancyQuickAccessCardId[]) => {
+      const hiddenIds = new Set(hiddenQuickAccessIds);
+      const visibleQueue = [...nextVisibleOrder];
+      const nextOrder: PregnancyQuickAccessCardId[] = [];
+
+      for (const id of quickAccessOrder) {
+        if (hiddenIds.has(id)) {
+          nextOrder.push(id);
+          continue;
+        }
+
+        const nextVisibleId = visibleQueue.shift();
+        if (nextVisibleId) {
+          nextOrder.push(nextVisibleId);
+        }
+      }
+
+      nextOrder.push(...visibleQueue);
+      return normalizePregnancyQuickAccessOrder(nextOrder);
+    },
+    [hiddenQuickAccessIds, quickAccessOrder],
+  );
+
+  const handleHideQuickAccessCard = useCallback(
+    (itemId: PregnancyQuickAccessCardId) => {
+      if (orderedQuickAccessCards.length <= 1) {
+        Alert.alert('Hinweis', 'Mindestens eine Schnellzugriff-Kachel muss sichtbar bleiben.');
+        return;
+      }
+
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+      setHiddenQuickAccessIds((currentHiddenIds) => {
+        const nextHiddenIds = normalizePregnancyQuickAccessHidden([...currentHiddenIds, itemId]);
+        void persistQuickAccessHiddenIds(nextHiddenIds);
+        return nextHiddenIds;
+      });
+    },
+    [orderedQuickAccessCards.length, persistQuickAccessHiddenIds],
+  );
+
+  const handleRestoreQuickAccessCard = useCallback(
+    (itemId: PregnancyQuickAccessCardId) => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      setHiddenQuickAccessIds((currentHiddenIds) => {
+        const nextHiddenIds = currentHiddenIds.filter((hiddenId) => hiddenId !== itemId);
+        void persistQuickAccessHiddenIds(nextHiddenIds);
+        return nextHiddenIds;
+      });
+    },
+    [persistQuickAccessHiddenIds],
+  );
+
+  const handleRestoreAllQuickAccessCards = useCallback(() => {
+    if (!hiddenQuickAccessIds.length) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    setHiddenQuickAccessIds([]);
+    void persistQuickAccessHiddenIds([]);
+  }, [hiddenQuickAccessIds.length, persistQuickAccessHiddenIds]);
 
   useEffect(() => {
     if (featuredRecommendation?.image_url) {
@@ -350,6 +649,66 @@ export default function PregnancyHomeScreen() {
 
     return () => clearInterval(interval);
   }, [overviewCarouselWidth, OVERVIEW_ROTATION_INTERVAL_MS, OVERVIEW_SLIDE_COUNT]);
+
+  useEffect(() => {
+    let isActive = true;
+
+    (async () => {
+      try {
+        const [storedOrder, storedHiddenIds] = await Promise.all([
+          AsyncStorage.getItem(quickAccessOrderStorageKey),
+          AsyncStorage.getItem(quickAccessHiddenStorageKey),
+        ]);
+        if (!isActive) return;
+
+        setQuickAccessOrder(
+          storedOrder
+            ? normalizePregnancyQuickAccessOrder(JSON.parse(storedOrder))
+            : [...PREGNANCY_QUICK_ACCESS_ORDER],
+        );
+        setHiddenQuickAccessIds(
+          storedHiddenIds ? normalizePregnancyQuickAccessHidden(JSON.parse(storedHiddenIds)) : [],
+        );
+      } catch (error) {
+        console.error('Pregnancy Home: failed to load quick access order or hidden tiles', error);
+        if (isActive) {
+          setQuickAccessOrder([...PREGNANCY_QUICK_ACCESS_ORDER]);
+          setHiddenQuickAccessIds([]);
+        }
+      }
+    })();
+
+    return () => {
+      isActive = false;
+    };
+  }, [quickAccessHiddenStorageKey, quickAccessOrderStorageKey]);
+
+  const persistQuickAccessOrder = useCallback(
+    async (nextOrder: PregnancyQuickAccessCardId[]) => {
+      try {
+        const normalized = normalizePregnancyQuickAccessOrder(nextOrder);
+
+        if (normalized.every((id, index) => id === PREGNANCY_QUICK_ACCESS_ORDER[index])) {
+          await AsyncStorage.removeItem(quickAccessOrderStorageKey);
+          return;
+        }
+
+        await AsyncStorage.setItem(quickAccessOrderStorageKey, JSON.stringify(normalized));
+      } catch (error) {
+        console.error('Pregnancy Home: failed to save quick access order', error);
+      }
+    },
+    [quickAccessOrderStorageKey],
+  );
+
+  const handleReorderQuickAccess = useCallback(
+    (nextVisibleOrder: PregnancyQuickAccessCardId[]) => {
+      const normalized = mergeVisibleOrderIntoQuickAccessOrder(nextVisibleOrder);
+      setQuickAccessOrder(normalized);
+      void persistQuickAccessOrder(normalized);
+    },
+    [mergeVisibleOrderIntoQuickAccessOrder, persistQuickAccessOrder],
+  );
 
   useEffect(() => {
     if (user) {
@@ -878,6 +1237,246 @@ export default function PregnancyHomeScreen() {
     } as any);
   };
 
+  const renderQuickAccessCard = (
+    item: PregnancyQuickAccessCardConfig,
+    options?: { isEditing?: boolean; isActive?: boolean }
+  ) => {
+    const isEditing = options?.isEditing ?? false;
+    const canHideCard = isEditing && orderedQuickAccessCards.length > 1;
+
+    return (
+      <View
+        style={[
+          styles.liquidGlassCardWrapper,
+          isEditing ? styles.quickAccessEditorCardWrapper : null,
+          options?.isActive ? styles.quickAccessEditorCardWrapperActive : null,
+        ]}
+      >
+        <BlurView
+          {...androidBlurProps}
+          intensity={24}
+          tint={colorScheme === 'dark' ? 'dark' : 'light'}
+          style={styles.liquidGlassCardBackground}
+        >
+          <View
+            style={[
+              styles.card,
+              styles.liquidGlassCard,
+              {
+                backgroundColor: item.cardBackgroundColor,
+                borderColor: 'rgba(255, 255, 255, 0.35)',
+              },
+              isEditing ? styles.quickAccessEditorCard : null,
+            ]}
+          >
+            {canHideCard ? (
+              <TouchableOpacity
+                style={styles.quickAccessHideBadge}
+                onPress={() => handleHideQuickAccessCard(item.id)}
+                activeOpacity={0.85}
+                accessibilityRole="button"
+                accessibilityLabel={`${item.title} ausblenden`}
+              >
+                <IconSymbol name="eye.slash" size={14} color="#FFFFFF" />
+              </TouchableOpacity>
+            ) : null}
+            {isEditing ? (
+              <View style={styles.quickAccessDragBadge}>
+                <IconSymbol name="line.3.horizontal" size={14} color="#FFFFFF" />
+              </View>
+            ) : null}
+            <View
+              style={[
+                styles.iconContainer,
+                {
+                  backgroundColor: item.iconBackgroundColor,
+                  borderRadius: 30,
+                  padding: 8,
+                  marginBottom: 10,
+                  borderWidth: 2,
+                  borderColor: 'rgba(255, 255, 255, 0.4)',
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.3,
+                  shadowRadius: 4,
+                  elevation: 4,
+                },
+              ]}
+            >
+              <IconSymbol name={item.iconName} size={28} color="#FFFFFF" />
+            </View>
+            <ThemedText adaptive={false} style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>
+              {item.title}
+            </ThemedText>
+            <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>
+              {item.description}
+            </ThemedText>
+          </View>
+        </BlurView>
+      </View>
+    );
+  };
+
+  const renderHiddenQuickAccessSection = () => {
+    if (!isQuickAccessEditMode || !hiddenQuickAccessCards.length) {
+      return null;
+    }
+
+    return (
+      <View style={styles.quickAccessHiddenSection}>
+        <View style={styles.quickAccessHiddenHeader}>
+          <View style={styles.quickAccessHiddenHeaderText}>
+            <ThemedText adaptive={false} style={[styles.quickAccessHiddenTitle, { color: textSecondary }]}>
+              Ausgeblendet
+            </ThemedText>
+            <ThemedText adaptive={false} style={[styles.quickAccessHiddenSubtitle, { color: textSecondary }]}>
+              {hiddenQuickAccessCards.length === 1
+                ? '1 Kachel ist ausgeblendet.'
+                : `${hiddenQuickAccessCards.length} Kacheln sind ausgeblendet.`}
+            </ThemedText>
+          </View>
+          <TouchableOpacity
+            style={[
+              styles.quickAccessHiddenRestoreAllButton,
+              {
+                backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.55)',
+                borderColor: isDark ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.8)',
+              },
+            ]}
+            onPress={handleRestoreAllQuickAccessCards}
+            activeOpacity={0.85}
+          >
+            <Text style={[styles.quickAccessHiddenRestoreAllText, { color: textPrimary }]}>Alle einblenden</Text>
+          </TouchableOpacity>
+        </View>
+
+        <ThemedText adaptive={false} style={[styles.quickAccessHiddenHint, { color: textSecondary }]}>
+          Tippe auf eine ausgeblendete Kachel, um sie wieder anzuzeigen.
+        </ThemedText>
+
+        <View style={styles.quickAccessHiddenGrid}>
+          {hiddenQuickAccessCards.map((card) => (
+            <TouchableOpacity
+              key={card.id}
+              style={styles.quickAccessHiddenTileWrapper}
+              activeOpacity={0.86}
+              onPress={() => handleRestoreQuickAccessCard(card.id)}
+            >
+              <BlurView
+                {...androidBlurProps}
+                intensity={24}
+                tint={colorScheme === 'dark' ? 'dark' : 'light'}
+                style={styles.liquidGlassCardBackground}
+              >
+                <View
+                  style={[
+                    styles.card,
+                    styles.quickAccessHiddenTileCard,
+                    {
+                      backgroundColor: card.cardBackgroundColor,
+                      borderColor: 'rgba(255, 255, 255, 0.28)',
+                    },
+                  ]}
+                >
+                  <View style={styles.quickAccessRestoreBadge}>
+                    <IconSymbol name="arrow.uturn.left" size={14} color="#FFFFFF" />
+                  </View>
+                  <View
+                    style={[
+                      styles.iconContainer,
+                      {
+                        backgroundColor: card.iconBackgroundColor,
+                        borderRadius: 26,
+                        padding: 8,
+                        marginBottom: 10,
+                        borderWidth: 2,
+                        borderColor: 'rgba(255, 255, 255, 0.35)',
+                        shadowColor: '#000',
+                        shadowOffset: { width: 0, height: 2 },
+                        shadowOpacity: 0.3,
+                        shadowRadius: 4,
+                        elevation: 4,
+                      },
+                    ]}
+                  >
+                    <IconSymbol name={card.iconName} size={24} color="#FFFFFF" />
+                  </View>
+                  <ThemedText adaptive={false} style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>
+                    {card.title}
+                  </ThemedText>
+                  <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>
+                    Einblenden
+                  </ThemedText>
+                </View>
+              </BlurView>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+    );
+  };
+
+  const renderQuickAccessSection = () => (
+    <View style={styles.cardsSection}>
+      <ThemedText adaptive={false} style={[styles.cardsSectionTitle, { color: textSecondary, fontSize: 22 }]}>
+        Schnellzugriff
+      </ThemedText>
+
+      {isQuickAccessEditMode ? (
+        <View style={styles.quickAccessEditBar}>
+          <TouchableOpacity
+            style={[
+              styles.quickAccessDoneButton,
+              {
+                backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.55)',
+                borderColor: isDark ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.8)',
+              },
+            ]}
+            onPress={closeQuickAccessEditor}
+            activeOpacity={0.85}
+          >
+            <Text style={[styles.quickAccessDoneText, { color: textPrimary }]}>Fertig</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
+
+      <SortableTileGrid
+        items={orderedQuickAccessCards}
+        isEditing={isQuickAccessEditMode}
+        onPressItem={(item) => router.push(item.destination)}
+        onRequestEditMode={openQuickAccessEditor}
+        onOrderChange={(data) => handleReorderQuickAccess(data.map(({ id }) => id))}
+        onDragStateChange={setIsQuickAccessDragging}
+        scrollConfig={{
+          metricsRef: quickAccessScrollMetricsRef,
+          scrollToOffset: (offsetY) => {
+            quickAccessScrollMetricsRef.current.offsetY = offsetY;
+            mainScrollRef.current?.scrollTo({ y: offsetY, animated: false });
+          },
+          slowEdgeThreshold: 150,
+          fastEdgeThreshold: 52,
+          slowSpeed: 1.4,
+          fastSpeed: 9,
+        }}
+        renderTile={({ item, isEditing, isActive }) =>
+          renderQuickAccessCard(item, { isEditing, isActive })
+        }
+        style={styles.quickAccessGridList}
+      />
+      <ThemedText adaptive={false} style={[styles.quickAccessHint, { color: textSecondary }]}>
+        {isQuickAccessEditMode
+          ? 'Kacheln verschieben, ausblenden und mit "Fertig" speichern.'
+          : 'Lange auf eine Kachel drücken, um die Reihenfolge anzupassen.'}
+      </ThemedText>
+      {isQuickAccessEditMode && hiddenQuickAccessCards.length > 0 ? (
+        <ThemedText adaptive={false} style={[styles.quickAccessHiddenHint, { color: textSecondary }]}>
+          Ausgeblendete Kacheln kannst du unten wieder einblenden.
+        </ThemedText>
+      ) : null}
+      {renderHiddenQuickAccessSection()}
+    </View>
+  );
+
   // Route-Guard in _layout.tsx handles mode-based redirects centrally.
   // An inline redirect here fires before isLoading settles and breaks
   // navigation flows like "Schwangerschaft anlegen".
@@ -900,8 +1499,20 @@ export default function PregnancyHomeScreen() {
         )}
         
         <ScrollView 
+          ref={mainScrollRef}
           style={styles.scrollView} 
           contentContainerStyle={styles.contentContainer}
+          scrollEnabled={!isQuickAccessDragging}
+          onLayout={(event) => {
+            quickAccessScrollMetricsRef.current.viewportHeight = event.nativeEvent.layout.height;
+          }}
+          onContentSizeChange={(_, height) => {
+            quickAccessScrollMetricsRef.current.contentHeight = height;
+          }}
+          onScroll={(event) => {
+            quickAccessScrollMetricsRef.current.offsetY = event.nativeEvent.contentOffset.y;
+          }}
+          scrollEventThrottle={16}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -1023,214 +1634,7 @@ export default function PregnancyHomeScreen() {
 
           {renderOverviewSection()}
 
-          {/* Schnellzugriff-Cards - Liquid Glass Design */}
-          <View style={styles.cardsSection}>
-            <ThemedText adaptive={false} style={[styles.cardsSectionTitle, { color: textSecondary, fontSize: 22 }]}>
-              Schnellzugriff
-            </ThemedText>
-
-            <View style={styles.cardsGrid}>
-              <TouchableOpacity
-                style={styles.liquidGlassCardWrapper}
-                onPress={() => router.push({ pathname: '/(tabs)/countdown' })}
-                activeOpacity={0.9}
-              >
-                <BlurView 
-                  intensity={24} 
-                  tint={colorScheme === 'dark' ? 'dark' : 'light'} 
-                  style={styles.liquidGlassCardBackground}
-                >
-                  <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(168, 196, 193, 0.6)', borderColor: 'rgba(255, 255, 255, 0.35)' }]}>
-                    <View style={[styles.iconContainer, { backgroundColor: 'rgba(168, 196, 193, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
-                      <IconSymbol name="calendar" size={28} color="#FFFFFF" />
-                    </View>
-                    <ThemedText adaptive={false} style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>Countdown</ThemedText>
-                    <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>Dein Weg zur Geburt</ThemedText>
-                  </View>
-                </BlurView>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.liquidGlassCardWrapper}
-                onPress={() => router.push('/(tabs)' as any)}
-                activeOpacity={0.9}
-              >
-                <BlurView 
-                  intensity={24} 
-                  tint={colorScheme === 'dark' ? 'dark' : 'light'} 
-                  style={styles.liquidGlassCardBackground}
-                >
-                  <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(255, 190, 190, 0.6)', borderColor: 'rgba(255, 255, 255, 0.35)' }]}>
-                    <View style={[styles.iconContainer, { backgroundColor: 'rgba(255, 140, 160, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
-                      <IconSymbol name="timer" size={28} color="#FFFFFF" />
-                    </View>
-                    <ThemedText adaptive={false} style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>Wehen-Tracker</ThemedText>
-                    <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>Wehen messen und verfolgen</ThemedText>
-                  </View>
-                </BlurView>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.liquidGlassCardWrapper}
-                onPress={() => router.push('/planner' as any)}
-                activeOpacity={0.9}
-              >
-                <BlurView
-                  intensity={24}
-                  tint={colorScheme === 'dark' ? 'dark' : 'light'}
-                  style={styles.liquidGlassCardBackground}
-                >
-                  <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(195, 220, 255, 0.6)', borderColor: 'rgba(255, 255, 255, 0.35)' }]}>
-                    <View style={[styles.iconContainer, { backgroundColor: 'rgba(120, 170, 255, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
-                      <IconSymbol name="clock" size={28} color="#FFFFFF" />
-                    </View>
-                    <ThemedText adaptive={false} style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>Planer</ThemedText>
-                    <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>Tagesplanung & Termine</ThemedText>
-                  </View>
-                </BlurView>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.liquidGlassCardWrapper}
-                onPress={() => router.push({ pathname: '/(tabs)/explore' })}
-                activeOpacity={0.9}
-              >
-                <BlurView 
-                  intensity={24} 
-                  tint={colorScheme === 'dark' ? 'dark' : 'light'} 
-                  style={styles.liquidGlassCardBackground}
-                >
-                  <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(220, 200, 255, 0.6)', borderColor: 'rgba(255, 255, 255, 0.35)' }]}>
-                    <View style={[styles.iconContainer, { backgroundColor: 'rgba(200, 130, 220, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
-                      <IconSymbol name="checklist" size={28} color="#FFFFFF" />
-                    </View>
-                    <ThemedText adaptive={false} style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>Checkliste</ThemedText>
-                    <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>Kliniktasche vorbereiten</ThemedText>
-                  </View>
-                </BlurView>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.liquidGlassCardWrapper}
-                onPress={() => router.push({ pathname: '/(tabs)/geburtsplan' })}
-                activeOpacity={0.9}
-              >
-                <BlurView 
-                  intensity={24} 
-                  tint={colorScheme === 'dark' ? 'dark' : 'light'} 
-                  style={styles.liquidGlassCardBackground}
-                >
-                  <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(255, 215, 180, 0.6)', borderColor: 'rgba(255, 255, 255, 0.35)' }]}>
-                    <View style={[styles.iconContainer, { backgroundColor: 'rgba(255, 180, 130, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
-                      <IconSymbol name="doc.text.fill" size={28} color="#FFFFFF" />
-                    </View>
-                    <ThemedText adaptive={false} style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>Geburtsplan</ThemedText>
-                    <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>Wünsche für die Geburt</ThemedText>
-                  </View>
-                </BlurView>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.liquidGlassCardWrapper}
-                onPress={() => router.push('/(tabs)/selfcare')}
-                activeOpacity={0.9}
-              >
-                <BlurView
-                  intensity={24}
-                  tint={colorScheme === 'dark' ? 'dark' : 'light'}
-                  style={styles.liquidGlassCardBackground}
-                >
-                  <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(255, 210, 230, 0.6)', borderColor: 'rgba(255, 255, 255, 0.35)' }]}>
-                    <View style={[styles.iconContainer, { backgroundColor: 'rgba(255, 160, 180, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
-                      <IconSymbol name="heart.fill" size={28} color="#FFFFFF" />
-                    </View>
-                    <ThemedText adaptive={false} style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>Mama Selfcare</ThemedText>
-                    <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>Nimm dir Zeit für dich</ThemedText>
-                  </View>
-                </BlurView>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.liquidGlassCardWrapper}
-                onPress={() => router.push('/doctor-questions' as any)}
-                activeOpacity={0.9}
-              >
-                <BlurView 
-                  intensity={24} 
-                  tint={colorScheme === 'dark' ? 'dark' : 'light'} 
-                  style={styles.liquidGlassCardBackground}
-                >
-                  <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(255, 210, 230, 0.6)', borderColor: 'rgba(255, 255, 255, 0.35)' }]}>
-                    <View style={[styles.iconContainer, { backgroundColor: 'rgba(255, 160, 180, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
-                      <IconSymbol name="questionmark.circle" size={28} color="#FFFFFF" />
-                    </View>
-                    <ThemedText adaptive={false} style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>Meine Fragen</ThemedText>
-                    <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>Fragen für den nächsten Termin</ThemedText>
-                  </View>
-                </BlurView>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.liquidGlassCardWrapper}
-                onPress={() => router.push('/(tabs)/baby')}
-                activeOpacity={0.9}
-              >
-                <BlurView
-                  intensity={24}
-                  tint={colorScheme === 'dark' ? 'dark' : 'light'}
-                  style={styles.liquidGlassCardBackground}
-                >
-                  <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(255, 190, 190, 0.6)', borderColor: 'rgba(255, 255, 255, 0.35)' }]}>
-                    <View style={[styles.iconContainer, { backgroundColor: 'rgba(255, 140, 160, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
-                      <IconSymbol name="person.fill" size={28} color="#FFFFFF" />
-                    </View>
-                    <ThemedText adaptive={false} style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>Mein Baby</ThemedText>
-                    <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>Infos anpassen & Entwicklung sehen</ThemedText>
-                  </View>
-                </BlurView>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.liquidGlassCardWrapper}
-                onPress={() => router.push('/baby-names' as any)}
-                activeOpacity={0.9}
-              >
-                <BlurView
-                  intensity={24}
-                  tint={colorScheme === 'dark' ? 'dark' : 'light'}
-                  style={styles.liquidGlassCardBackground}
-                >
-                  <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(200, 225, 255, 0.6)', borderColor: 'rgba(255, 255, 255, 0.35)' }]}>
-                    <View style={[styles.iconContainer, { backgroundColor: 'rgba(140, 190, 255, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
-                      <IconSymbol name="person.text.rectangle" size={28} color="#FFFFFF" />
-                    </View>
-                    <ThemedText adaptive={false} style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>Babynamen</ThemedText>
-                    <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>Finde den perfekten Namen</ThemedText>
-                  </View>
-                </BlurView>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.liquidGlassCardWrapper}
-                onPress={() => router.push('/(tabs)/weight-tracker')}
-                activeOpacity={0.9}
-              >
-                <BlurView
-                  intensity={24}
-                  tint={colorScheme === 'dark' ? 'dark' : 'light'}
-                  style={styles.liquidGlassCardBackground}
-                >
-                  <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(200, 240, 200, 0.6)', borderColor: 'rgba(255, 255, 255, 0.35)' }]}>
-                    <View style={[styles.iconContainer, { backgroundColor: 'rgba(130, 210, 130, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
-                      <IconSymbol name="chart.line.uptrend.xyaxis" size={28} color="#FFFFFF" />
-                    </View>
-                    <ThemedText adaptive={false} style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>Gewichtskurve</ThemedText>
-                    <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>Gewicht tracken</ThemedText>
-                  </View>
-                </BlurView>
-              </TouchableOpacity>
-            </View>
-          </View>
+          {renderQuickAccessSection()}
         </ScrollView>
       </SafeAreaView>
     </ThemedBackground>
@@ -1970,15 +2374,28 @@ const styles = StyleSheet.create({
   cardsSectionTitle: {
     fontSize: 20,
     fontWeight: '800',
-    marginBottom: 16,
+    marginBottom: 6,
     textAlign: 'center',
     letterSpacing: -0.3,
+  },
+  quickAccessHint: {
+    fontSize: 13,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  quickAccessHiddenHint: {
+    fontSize: 12,
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  quickAccessGridItem: {
+    width: '48%',
+    marginBottom: 14,
   },
 
   // Liquid Glass Cards
   liquidGlassCardWrapper: {
-    width: '48%',
-    marginBottom: 14,
+    width: '100%',
     borderRadius: 22,
     overflow: 'hidden',
   },
@@ -1988,6 +2405,126 @@ const styles = StyleSheet.create({
   },
   liquidGlassCard: {
     backgroundColor: 'transparent',
+  },
+  quickAccessEditorCardWrapper: {
+    marginBottom: 0,
+  },
+  quickAccessEditorCardWrapperActive: {
+    opacity: 0.92,
+  },
+  quickAccessEditorCard: {
+    minHeight: 132,
+  },
+  quickAccessHideBadge: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(107, 76, 59, 0.32)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+  },
+  quickAccessDragBadge: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(107, 76, 59, 0.32)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+  },
+  quickAccessEditBar: {
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  quickAccessDoneButton: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  quickAccessDoneText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  quickAccessGridList: {
+    flexGrow: 0,
+  },
+  quickAccessGridListContent: {
+    paddingBottom: 12,
+  },
+  quickAccessHiddenSection: {
+    marginTop: 14,
+    padding: 12,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.18)',
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+  },
+  quickAccessHiddenHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 8,
+  },
+  quickAccessHiddenHeaderText: {
+    flex: 1,
+  },
+  quickAccessHiddenTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    letterSpacing: -0.2,
+  },
+  quickAccessHiddenSubtitle: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  quickAccessHiddenRestoreAllButton: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  quickAccessHiddenRestoreAllText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  quickAccessHiddenGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  quickAccessHiddenTileWrapper: {
+    width: '48%',
+    marginBottom: 12,
+  },
+  quickAccessHiddenTileCard: {
+    minHeight: 118,
+    height: 118,
+    paddingVertical: 14,
+    opacity: 0.92,
+  },
+  quickAccessRestoreBadge: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(94, 61, 179, 0.44)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+  },
+  quickAccessEditorRow: {
+    justifyContent: 'space-between',
   },
   liquidGlassCardTitle: {
     color: 'rgba(85, 60, 55, 0.95)',
