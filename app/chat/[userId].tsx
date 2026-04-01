@@ -8,7 +8,6 @@ import {
   Platform,
   Pressable,
   StyleSheet,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -26,12 +25,22 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import Header from '@/components/Header';
+import ChatComposer from '@/components/chat/ChatComposer';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Colors } from '@/constants/Colors';
 import { useAuth } from '@/contexts/AuthContext';
+import { useChatAudioPlayback } from '@/hooks/useChatAudioPlayback';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { deleteChatMessage, uploadChatAudio } from '@/lib/chatAudio';
+import {
+  type ChatMessageType,
+  VOICE_MESSAGE_PREVIEW,
+  formatAudioDuration,
+  getAudioProgress,
+  getMessagePreviewText,
+} from '@/lib/chatMessages';
 import { supabase } from '@/lib/supabase';
 
 // ---------------------------------------------------------------------------
@@ -42,7 +51,11 @@ type DirectMessage = {
   id: string;
   sender_id: string;
   receiver_id: string;
-  content: string;
+  content: string | null;
+  message_type: ChatMessageType;
+  audio_storage_path: string | null;
+  audio_duration_ms: number | null;
+  audio_mime_type: string | null;
   created_at: string;
   is_read: boolean;
   reply_to_id: string | null;
@@ -60,6 +73,7 @@ type EnrichedMessage = DirectMessage & {
   showDateSeparator: boolean;
   dateLabel: string;
   quotedContent: string | null;
+  quotedMessageType: ChatMessageType | null;
   quotedSenderId: string | null;
 };
 
@@ -142,6 +156,7 @@ const enrichMessages = (
       showDateSeparator,
       dateLabel: formatDateLabel(msg.created_at),
       quotedContent: quoted?.content ?? null,
+      quotedMessageType: quoted?.message_type ?? null,
       quotedSenderId: quoted?.sender_id ?? null,
     };
   });
@@ -242,7 +257,6 @@ export default function ChatThreadScreen() {
   const theme = Colors[colorScheme];
   const insets = useSafeAreaInsets();
   const flatListRef = useRef<FlatList<EnrichedMessage>>(null);
-  const inputRef = useRef<TextInput>(null);
   const scrollTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   const [partnerName, setPartnerName] = useState('Chat');
@@ -255,6 +269,14 @@ export default function ChatThreadScreen() {
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [firstUnreadId, setFirstUnreadId] = useState<string | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
+  const {
+    activeMessageId,
+    currentTime,
+    isPlaying,
+    loadingMessageId,
+    stopPlayback,
+    togglePlayback,
+  } = useChatAudioPlayback('direct');
 
   const enriched = useMemo(() => enrichMessages(messages, user?.id), [messages, user?.id]);
 
@@ -345,38 +367,19 @@ export default function ChatThreadScreen() {
     try {
       setLoading(true);
 
-      // Try with reply_to_id first; fall back without it if the column
-      // hasn't been created yet (migration not yet applied).
-      let data: DirectMessage[] | null = null;
-
-      const withReply = await supabase
+      const { data, error } = await supabase
         .from('direct_messages')
-        .select('id, sender_id, receiver_id, content, created_at, is_read, reply_to_id')
+        .select(
+          'id, sender_id, receiver_id, content, message_type, audio_storage_path, audio_duration_ms, audio_mime_type, created_at, is_read, reply_to_id',
+        )
         .or(
           `and(sender_id.eq.${user.id},receiver_id.eq.${partnerId}),and(sender_id.eq.${partnerId},receiver_id.eq.${user.id})`,
         )
         .order('created_at', { ascending: true });
-
-      if (withReply.error?.code === '42703') {
-        // Column doesn't exist yet – load without reply_to_id
-        const fallback = await supabase
-          .from('direct_messages')
-          .select('id, sender_id, receiver_id, content, created_at, is_read')
-          .or(
-            `and(sender_id.eq.${user.id},receiver_id.eq.${partnerId}),and(sender_id.eq.${partnerId},receiver_id.eq.${user.id})`,
-          )
-          .order('created_at', { ascending: true });
-
-        if (fallback.error) throw fallback.error;
-        data = (fallback.data || []).map((m) => ({ ...m, reply_to_id: null }));
-      } else if (withReply.error) {
-        throw withReply.error;
-      } else {
-        data = withReply.data || [];
-      }
+      if (error) throw error;
 
       // Find first unread message from partner before marking as read
-      const unreadFromPartner = data.filter(
+      const unreadFromPartner = (data || []).filter(
         (m) => m.sender_id === partnerId && !m.is_read,
       );
       if (unreadFromPartner.length > 0) {
@@ -384,7 +387,7 @@ export default function ChatThreadScreen() {
         setUnreadCount(unreadFromPartner.length);
       }
 
-      setMessages(data);
+      setMessages(data || []);
 
       await supabase
         .from('direct_messages')
@@ -450,7 +453,13 @@ export default function ChatThreadScreen() {
     if (!loading) scrollToBottom(false);
   }, [loading, enriched.length, scrollToBottom]);
 
-  useEffect(() => () => clearPendingScrolls(), [clearPendingScrolls]);
+  useEffect(
+    () => () => {
+      clearPendingScrolls();
+      void stopPlayback();
+    },
+    [clearPendingScrolls, stopPlayback],
+  );
 
   // -----------------------------------------------------------------------
   // Actions
@@ -460,12 +469,11 @@ export default function ChatThreadScreen() {
     (message: DirectMessage) => {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
       setReplyTo(message);
-      inputRef.current?.focus();
     },
     [],
   );
 
-  const handleSend = useCallback(async () => {
+  const handleSendText = useCallback(async () => {
     const content = draft.trim();
     if (!user?.id || !partnerId || !content || sending) return;
     try {
@@ -475,16 +483,10 @@ export default function ChatThreadScreen() {
         sender_id: user.id,
         receiver_id: partnerId,
         content,
+        message_type: 'text',
       };
       if (replyTo?.id) insertPayload.reply_to_id = replyTo.id;
-
-      let insertResult = await supabase.from('direct_messages').insert(insertPayload);
-
-      // If reply_to_id column doesn't exist yet, retry without it
-      if (insertResult.error?.code === '42703' && replyTo?.id) {
-        const { reply_to_id: _dropped, ...fallbackPayload } = insertPayload;
-        insertResult = await supabase.from('direct_messages').insert(fallbackPayload);
-      }
+      const insertResult = await supabase.from('direct_messages').insert(insertPayload);
 
       if (insertResult.error) throw insertResult.error;
       setDraft('');
@@ -500,6 +502,47 @@ export default function ChatThreadScreen() {
     }
   }, [draft, loadMessages, partnerId, replyTo, scrollToBottom, sending, user?.id]);
 
+  const handleSendVoice = useCallback(
+    async ({
+      localUri,
+      durationMs,
+      mimeType,
+    }: {
+      localUri: string;
+      durationMs: number;
+      mimeType: string;
+    }) => {
+      if (!user?.id || !partnerId) return;
+
+      const audioUpload = await uploadChatAudio({
+        scope: 'direct',
+        userId: user.id,
+        localUri,
+      });
+
+      const insertPayload: Record<string, unknown> = {
+        sender_id: user.id,
+        receiver_id: partnerId,
+        content: null,
+        message_type: 'voice',
+        audio_storage_path: audioUpload.storagePath,
+        audio_duration_ms: durationMs,
+        audio_mime_type: mimeType,
+      };
+      if (replyTo?.id) insertPayload.reply_to_id = replyTo.id;
+
+      const { error } = await supabase.from('direct_messages').insert(insertPayload);
+      if (error) throw error;
+
+      setReplyTo(null);
+      setTimeout(() => {
+        void loadMessages();
+        scrollToBottom(true);
+      }, 300);
+    },
+    [loadMessages, partnerId, replyTo, scrollToBottom, user?.id],
+  );
+
   const handleDeleteMessage = useCallback(
     (message: DirectMessage) => {
       if (message.sender_id !== user?.id) return;
@@ -509,24 +552,24 @@ export default function ChatThreadScreen() {
           text: 'Löschen',
           style: 'destructive',
           onPress: async () => {
-            const { error } = await supabase
-              .from('direct_messages')
-              .delete()
-              .eq('id', message.id)
-              .eq('sender_id', user.id);
-            if (error) {
+            try {
+              await deleteChatMessage('direct', message.id);
+            } catch (error) {
               console.error('Fehler beim Löschen der Nachricht:', error);
               Alert.alert('Chat', 'Die Nachricht konnte gerade nicht gelöscht werden.');
               return;
             }
             setMessages((current) => current.filter((item) => item.id !== message.id));
             if (replyTo?.id === message.id) setReplyTo(null);
+            if (activeMessageId === message.id) {
+              void stopPlayback();
+            }
             scrollToBottom(false);
           },
         },
       ]);
     },
-    [replyTo, scrollToBottom, user?.id],
+    [activeMessageId, replyTo, scrollToBottom, stopPlayback, user?.id],
   );
 
   const handleMessageLongPress = useCallback(
@@ -585,7 +628,9 @@ export default function ChatThreadScreen() {
   };
 
   const renderQuoteBlock = (item: EnrichedMessage, isOwnBubble: boolean) => {
-    if (!item.quotedContent) return null;
+    const quotedPreview =
+      item.quotedMessageType === 'voice' ? VOICE_MESSAGE_PREVIEW : item.quotedContent;
+    if (!quotedPreview) return null;
     const quotedIsOwn = item.quotedSenderId === user?.id;
     const accentBarColor = quotedIsOwn ? theme.accent : '#9775FA';
     const quoteBg = isOwnBubble
@@ -613,7 +658,7 @@ export default function ChatThreadScreen() {
           {quotedIsOwn ? 'Du' : partnerName}
         </ThemedText>
         <ThemedText style={[styles.quoteText, { color: quoteTextColor }]} numberOfLines={2}>
-          {item.quotedContent}
+          {quotedPreview}
         </ThemedText>
       </TouchableOpacity>
     );
@@ -658,6 +703,7 @@ export default function ChatThreadScreen() {
           style={[
             styles.messageBubble,
             bubbleRadius,
+            item.message_type === 'voice' && styles.voiceBubble,
             {
               backgroundColor: isOwn ? ownBubbleBg : otherBubbleBg,
               borderWidth: isHighlighted ? 1.5 : 0,
@@ -669,28 +715,109 @@ export default function ChatThreadScreen() {
         >
           {renderQuoteBlock(item, isOwn)}
 
-          <ThemedText
-            style={[styles.messageText, { color: isOwn ? ownTextColor : otherTextColor }]}
-          >
-            {item.content}
-            <ThemedText style={styles.metaSpacer}>
-              {'  '}
-              {formatMessageTime(item.created_at)}
-              {isOwn ? ' \u2713\u2713' : ''}
-            </ThemedText>
-          </ThemedText>
+          {item.message_type === 'voice' ? (
+            <>
+              <View style={styles.voiceRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.voicePlayButton,
+                    {
+                      backgroundColor: isOwn
+                        ? 'rgba(255,255,255,0.18)'
+                        : isDark
+                          ? '#2A2321'
+                          : '#FFFFFF',
+                    },
+                  ]}
+                  onPress={() => void togglePlayback(item)}
+                  activeOpacity={0.8}
+                >
+                  {loadingMessageId === item.id ? (
+                    <ActivityIndicator size="small" color={isOwn ? '#FFFFFF' : theme.accent} />
+                  ) : (
+                    <IconSymbol
+                      name={activeMessageId === item.id && isPlaying ? 'pause.fill' : 'play.fill'}
+                      size={18}
+                      color={isOwn ? '#FFFFFF' : theme.accent}
+                    />
+                  )}
+                </TouchableOpacity>
+                <View style={styles.voiceBody}>
+                  <ThemedText
+                    style={[styles.voiceTitle, { color: isOwn ? ownTextColor : otherTextColor }]}
+                  >
+                    {VOICE_MESSAGE_PREVIEW}
+                  </ThemedText>
+                  <View
+                    style={[
+                      styles.voiceProgressTrack,
+                      {
+                        backgroundColor: isOwn
+                          ? 'rgba(255,255,255,0.24)'
+                          : isDark
+                            ? '#4A3F3B'
+                            : '#E8DDD6',
+                      },
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.voiceProgressFill,
+                        {
+                          backgroundColor: isOwn ? '#FFFFFF' : theme.accent,
+                          width: `${getAudioProgress(
+                            activeMessageId === item.id ? currentTime : 0,
+                            item.audio_duration_ms,
+                          ) * 100}%`,
+                        },
+                      ]}
+                    />
+                  </View>
+                </View>
+              </View>
 
-          <View style={styles.metaFloat}>
-            <ThemedText
-              style={[
-                styles.messageTime,
-                { color: isOwn ? ownMetaColor : otherMetaColor },
-              ]}
-            >
-              {formatMessageTime(item.created_at)}
-            </ThemedText>
-            {isOwn && renderCheckmarks(item)}
-          </View>
+              <View style={styles.voiceFooter}>
+                <ThemedText
+                  style={[styles.messageTime, { color: isOwn ? ownMetaColor : otherMetaColor }]}
+                >
+                  {formatAudioDuration(item.audio_duration_ms)}
+                </ThemedText>
+                <View style={styles.voiceFooterRight}>
+                  <ThemedText
+                    style={[styles.messageTime, { color: isOwn ? ownMetaColor : otherMetaColor }]}
+                  >
+                    {formatMessageTime(item.created_at)}
+                  </ThemedText>
+                  {isOwn && renderCheckmarks(item)}
+                </View>
+              </View>
+            </>
+          ) : (
+            <>
+              <ThemedText
+                style={[styles.messageText, { color: isOwn ? ownTextColor : otherTextColor }]}
+              >
+                {item.content}
+                <ThemedText style={styles.metaSpacer}>
+                  {'  '}
+                  {formatMessageTime(item.created_at)}
+                  {isOwn ? ' \u2713\u2713' : ''}
+                </ThemedText>
+              </ThemedText>
+
+              <View style={styles.metaFloat}>
+                <ThemedText
+                  style={[
+                    styles.messageTime,
+                    { color: isOwn ? ownMetaColor : otherMetaColor },
+                  ]}
+                >
+                  {formatMessageTime(item.created_at)}
+                </ThemedText>
+                {isOwn && renderCheckmarks(item)}
+              </View>
+            </>
+          )}
         </Pressable>
       </View>
     );
@@ -712,8 +839,6 @@ export default function ChatThreadScreen() {
   // -----------------------------------------------------------------------
   // Main render
   // -----------------------------------------------------------------------
-
-  const canSend = draft.trim().length > 0 && !sending;
 
   return (
     <ThemedBackground style={styles.container}>
@@ -785,94 +910,22 @@ export default function ChatThreadScreen() {
             />
           )}
 
-          {/* ---- Reply preview bar ---- */}
-          {replyTo && (
-            <View
-              style={[
-                styles.replyPreview,
-                {
-                  backgroundColor: isDark ? '#2A2321' : '#F9F5F1',
-                  borderTopColor: isDark ? '#3D3330' : '#E8DDD6',
-                },
-              ]}
-            >
-              <View style={[styles.replyPreviewBar, { backgroundColor: theme.accent }]} />
-              <View style={styles.replyPreviewBody}>
-                <ThemedText
-                  style={[
-                    styles.replyPreviewSender,
-                    { color: replyTo.sender_id === user?.id ? theme.accent : '#9775FA' },
-                  ]}
-                  numberOfLines={1}
-                >
-                  {replyTo.sender_id === user?.id ? 'Du' : partnerName}
-                </ThemedText>
-                <ThemedText style={[styles.replyPreviewText, { color: theme.textTertiary }]} numberOfLines={1}>
-                  {replyTo.content}
-                </ThemedText>
-              </View>
-              <TouchableOpacity
-                onPress={() => setReplyTo(null)}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                style={styles.replyPreviewClose}
-              >
-                <IconSymbol name="xmark" size={16} color={theme.textTertiary} />
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {/* ---- Composer ---- */}
-          <View
-            style={[
-              styles.composer,
-              {
-                backgroundColor: isDark ? '#2A2321' : '#F9F5F1',
-                borderTopColor: replyTo ? 'transparent' : isDark ? '#3D3330' : '#E8DDD6',
-                paddingBottom: Math.max(insets.bottom, Platform.OS === 'ios' ? 6 : 10),
-              },
-            ]}
-          >
-            <View
-              style={[
-                styles.inputWrapper,
-                {
-                  backgroundColor: isDark ? '#1F1F1F' : '#FFFFFF',
-                  borderColor: isDark ? '#3D3330' : '#E8DDD6',
-                },
-              ]}
-            >
-              <TextInput
-                ref={inputRef}
-                style={[styles.input, { color: theme.text }]}
-                value={draft}
-                onChangeText={setDraft}
-                placeholder="Nachricht..."
-                placeholderTextColor={theme.textTertiary}
-                multiline
-                onFocus={() => scrollToBottom(true)}
-              />
-            </View>
-
-            <TouchableOpacity
-              style={[
-                styles.sendButton,
-                { backgroundColor: canSend ? theme.accent : isDark ? '#3D3330' : '#E8DDD6' },
-              ]}
-              onPress={() => void handleSend()}
-              disabled={!canSend}
-              activeOpacity={0.7}
-            >
-              {sending ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <IconSymbol
-                  name="paperplane.fill"
-                  size={18}
-                  color={canSend ? '#FFFFFF' : isDark ? '#7A6A60' : '#B0A59E'}
-                />
-              )}
-            </TouchableOpacity>
-          </View>
+          <ChatComposer
+            draft={draft}
+            onChangeDraft={setDraft}
+            sending={sending}
+            onSendText={handleSendText}
+            onSendVoice={handleSendVoice}
+            onInputFocus={() => scrollToBottom(true)}
+            replyPreviewSender={replyTo ? (replyTo.sender_id === user?.id ? 'Du' : partnerName) : null}
+            replyPreviewText={replyTo ? getMessagePreviewText(replyTo) : null}
+            replyPreviewAccentColor={replyTo?.sender_id === user?.id ? theme.accent : '#9775FA'}
+            onCancelReply={replyTo ? () => setReplyTo(null) : undefined}
+            focusToken={replyTo?.id || null}
+            theme={theme}
+            isDark={isDark}
+            bottomInset={insets.bottom}
+          />
         </KeyboardAvoidingView>
       </View>
     </ThemedBackground>
@@ -952,6 +1005,50 @@ const styles = StyleSheet.create({
   },
   messageTime: { fontSize: 11 },
   checkmarks: { fontSize: 13, fontWeight: '700', marginTop: -1 },
+  voiceBubble: {
+    minWidth: 220,
+  },
+  voiceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  voicePlayButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  voiceBody: {
+    flex: 1,
+    gap: 6,
+  },
+  voiceTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  voiceProgressTrack: {
+    height: 4,
+    borderRadius: 999,
+    overflow: 'hidden',
+  },
+  voiceProgressFill: {
+    height: '100%',
+    borderRadius: 999,
+  },
+  voiceFooter: {
+    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  voiceFooterRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
 
   // ---- Quote block inside bubble ----
   quoteBlock: {
@@ -963,55 +1060,6 @@ const styles = StyleSheet.create({
   },
   quoteSender: { fontSize: 12, fontWeight: '700', marginBottom: 1 },
   quoteText: { fontSize: 13, lineHeight: 17 },
-
-  // ---- Reply preview above composer ----
-  replyPreview: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
-  replyPreviewBar: {
-    width: 3,
-    alignSelf: 'stretch',
-    borderRadius: 2,
-    marginRight: 10,
-  },
-  replyPreviewBody: { flex: 1 },
-  replyPreviewSender: { fontSize: 13, fontWeight: '700', marginBottom: 1 },
-  replyPreviewText: { fontSize: 13, lineHeight: 17 },
-  replyPreviewClose: { padding: 6, marginLeft: 8 },
-
-  // ---- Composer ----
-  composer: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 10,
-    paddingTop: 8,
-    paddingBottom: Platform.OS === 'ios' ? 6 : 10,
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 8,
-  },
-  inputWrapper: { flex: 1, borderRadius: 22, borderWidth: 1, overflow: 'hidden' },
-  input: {
-    minHeight: 42,
-    maxHeight: 120,
-    paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'ios' ? 10 : 8,
-    paddingBottom: Platform.OS === 'ios' ? 10 : 8,
-    fontSize: 15,
-    lineHeight: 20,
-    textAlignVertical: 'top',
-  },
-  sendButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: Platform.OS === 'ios' ? 1 : 0,
-  },
 
   // ---- Header avatar ----
   headerAvatar: {

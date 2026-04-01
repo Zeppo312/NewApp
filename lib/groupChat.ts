@@ -1,4 +1,6 @@
+import { deleteChatMessage as deleteChatMessageViaEdge } from '@/lib/chatAudio';
 import { getGroupMembers } from '@/lib/groups';
+import { type ChatMessageType } from '@/lib/chatMessages';
 import { supabase } from '@/lib/supabase';
 
 // ---------------------------------------------------------------------------
@@ -9,7 +11,11 @@ export type GroupChatMessage = {
   id: string;
   group_id: string;
   sender_id: string;
-  content: string;
+  content: string | null;
+  message_type: ChatMessageType;
+  audio_storage_path: string | null;
+  audio_duration_ms: number | null;
+  audio_mime_type: string | null;
   reply_to_id: string | null;
   created_at: string;
 };
@@ -26,6 +32,7 @@ export type EnrichedGroupMessage = GroupChatMessage & {
   showDateSeparator: boolean;
   dateLabel: string;
   quotedContent: string | null;
+  quotedMessageType: ChatMessageType | null;
   quotedSenderId: string | null;
   senderDisplayName: string;
   senderAvatarUrl: string | null;
@@ -107,6 +114,7 @@ export function enrichGroupMessages(
       showDateSeparator,
       dateLabel: formatDateLabel(msg.created_at),
       quotedContent: quoted?.content ?? null,
+      quotedMessageType: quoted?.message_type ?? null,
       quotedSenderId: quoted?.sender_id ?? null,
       senderDisplayName: member?.display_name ?? 'Unbekannt',
       senderAvatarUrl: member?.avatar_url ?? null,
@@ -124,7 +132,7 @@ export async function loadGroupChatMessages(
 ): Promise<GroupChatMessage[]> {
   const { data, error } = await supabase
     .from('community_group_messages')
-    .select('id, group_id, sender_id, content, reply_to_id, created_at')
+    .select('id, group_id, sender_id, content, message_type, audio_storage_path, audio_duration_ms, audio_mime_type, reply_to_id, created_at')
     .eq('group_id', groupId)
     .order('created_at', { ascending: true })
     .limit(limit);
@@ -159,26 +167,42 @@ export async function loadGroupChatMemberProfiles(
 
 export async function sendGroupChatMessage(
   groupId: string,
-  content: string,
-  replyToId?: string | null,
+  payload:
+    | {
+        type: 'text';
+        content: string;
+        replyToId?: string | null;
+      }
+    | {
+        type: 'voice';
+        audioStoragePath: string;
+        audioDurationMs: number;
+        audioMimeType?: string | null;
+        replyToId?: string | null;
+      },
 ) {
-  const payload: Record<string, unknown> = {
+  const insertPayload: Record<string, unknown> = {
     group_id: groupId,
     sender_id: (await supabase.auth.getUser()).data.user?.id,
-    content,
   };
-  if (replyToId) payload.reply_to_id = replyToId;
+  if (payload.type === 'text') {
+    insertPayload.content = payload.content;
+    insertPayload.message_type = 'text';
+  } else {
+    insertPayload.content = null;
+    insertPayload.message_type = 'voice';
+    insertPayload.audio_storage_path = payload.audioStoragePath;
+    insertPayload.audio_duration_ms = payload.audioDurationMs;
+    insertPayload.audio_mime_type = payload.audioMimeType ?? 'audio/mp4';
+  }
+  if (payload.replyToId) insertPayload.reply_to_id = payload.replyToId;
 
-  const { error } = await supabase.from('community_group_messages').insert(payload);
+  const { error } = await supabase.from('community_group_messages').insert(insertPayload);
   if (error) throw error;
 }
 
 export async function deleteGroupChatMessage(messageId: string) {
-  const { error } = await supabase
-    .from('community_group_messages')
-    .delete()
-    .eq('id', messageId);
-  if (error) throw error;
+  await deleteChatMessageViaEdge('group', messageId);
 }
 
 // ---------------------------------------------------------------------------
@@ -219,6 +243,8 @@ export type GroupChatSummary = {
   group_name: string;
   group_visibility: string;
   latest_message_content: string | null;
+  latest_message_type: ChatMessageType | null;
+  latest_message_preview: string | null;
   latest_message_sender_id: string | null;
   latest_message_sender_name?: string;
   latest_message_created_at: string | null;

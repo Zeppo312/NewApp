@@ -14,6 +14,7 @@
       "version": "1.0.12",
       "bundleIdentifier": "com.LottiBaby.app",
       "infoPlist": {
+        "NSMicrophoneUsageDescription": "Lotti Baby benötigt Zugriff auf dein Mikrofon, damit du Sprachnachrichten in Chats aufnehmen kannst.",
         "NSCalendarsUsageDescription": "Lotti Baby benötigt Zugriff auf deinen Kalender, damit du Planer- und Arzttermine als Kalendereinträge anlegen, aktualisieren und mit Erinnerungen synchronisieren kannst.",
         "NSCalendarsFullAccessUsageDescription": "Lotti Baby benötigt Zugriff auf deinen Kalender, damit du Planer- und Arzttermine als Kalendereinträge anlegen, aktualisieren und mit Erinnerungen synchronisieren kannst.",
         "NSRemindersUsageDescription": "Lotti Baby benötigt Zugriff auf deine Erinnerungen, damit kalenderbezogene Termin-Funktionen auf iOS zuverlässig initialisiert werden und du künftige Erinnerungsfunktionen für Termine nutzen kannst.",
@@ -47,11 +48,17 @@
       "favicon": "./assets/images/icon.png"
     },
           "plugins": [
-      "@bacons/apple-targets",
-      "expo-router",
-      "expo-apple-authentication",
-      [
-        "expo-calendar",
+    "@bacons/apple-targets",
+    "expo-router",
+    "expo-apple-authentication",
+    [
+      "expo-audio",
+      {
+        "microphonePermission": "Lotti Baby benötigt Zugriff auf dein Mikrofon, damit du Sprachnachrichten in Chats aufnehmen kannst."
+      }
+    ],
+    [
+      "expo-calendar",
         {
           "calendarPermission": "Lotti Baby benötigt Zugriff auf deinen Kalender, damit du Planer- und Arzttermine als Kalendereinträge anlegen, aktualisieren und mit Erinnerungen synchronisieren kannst.",
           "remindersPermission": "Lotti Baby benötigt Zugriff auf deine Erinnerungen, damit kalenderbezogene Termin-Funktionen auf iOS zuverlässig initialisiert werden und du künftige Erinnerungsfunktionen für Termine nutzen kannst."

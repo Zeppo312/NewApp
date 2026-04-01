@@ -16,7 +16,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 
 import Header from '@/components/Header';
-import CommunityQaFeed from '@/components/community/CommunityQaFeed';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
@@ -37,7 +36,6 @@ import {
   respondToGroupInvite,
   searchProfilesForGroupInvite,
 } from '@/lib/groups';
-import { getGroupChatUnreadCount } from '@/lib/groupChat';
 
 // ── Pastel avatar palette (shared with hub) ──────────────────────
 const AVATAR_LIGHT = [
@@ -113,8 +111,6 @@ export default function GroupDetailScreen() {
   const [joining, setJoining] = useState(false);
   const [processingInvite, setProcessingInvite] = useState(false);
   const [leaving, setLeaving] = useState(false);
-  const [chatUnreadCount, setChatUnreadCount] = useState(0);
-
   const loadGroup = useCallback(async () => {
     if (!resolvedGroupId) {
       setLoading(false);
@@ -145,13 +141,17 @@ export default function GroupDetailScreen() {
     useCallback(() => {
       setLoading(true);
       void loadGroup();
-      if (resolvedGroupId) {
-        getGroupChatUnreadCount(resolvedGroupId)
-          .then(setChatUnreadCount)
-          .catch(() => {});
-      }
     }, [loadGroup, resolvedGroupId]),
   );
+
+  useEffect(() => {
+    if (!loading && group?.is_member) {
+      router.replace({
+        pathname: '/group-chat/[groupId]',
+        params: { groupId: group.id, from: 'groups' },
+      } as any);
+    }
+  }, [group?.id, group?.is_member, loading, router]);
 
   useEffect(() => {
     if (!showInviteModal || !resolvedGroupId) return;
@@ -456,42 +456,18 @@ export default function GroupDetailScreen() {
     );
   }
 
-  // ── Member view ──
+  // ── Member redirect ──
   return (
     <>
-      <CommunityQaFeed
-        groupId={group.id}
-        groupName={group.name}
-        groupDescription={group.description}
-        groupVisibility={group.visibility}
-        showCommunitySegments={false}
-        onBackPress={() => router.push('/groups' as any)}
-        headerRightContent={
-          <View style={styles.headerBtns}>
-            <TouchableOpacity
-              style={[styles.headerBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(200,159,129,0.12)' }]}
-              onPress={() => router.push(`/group-chat/${group.id}` as any)}
-              activeOpacity={0.8}
-            >
-              <IconSymbol name="bubble.left.and.bubble.right.fill" size={17} color={isDark ? '#E9C9B6' : '#C89F81'} />
-              {chatUnreadCount > 0 && (
-                <View style={styles.headerBtnBadge}>
-                  <ThemedText style={styles.headerBtnBadgeText}>
-                    {chatUnreadCount > 9 ? '9+' : chatUnreadCount}
-                  </ThemedText>
-                </View>
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.headerBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(200,159,129,0.12)' }]}
-              onPress={() => setShowSettingsModal(true)}
-              activeOpacity={0.8}
-            >
-              <IconSymbol name="gearshape" size={18} color={isDark ? '#E9C9B6' : '#C89F81'} />
-            </TouchableOpacity>
-          </View>
-        }
-      />
+      <ThemedBackground style={styles.bg}>
+        <ThemedView style={styles.screen}>
+          <SafeAreaView style={styles.safe}>
+            <View style={styles.loadingWrap}>
+              <ActivityIndicator size="large" color="#C89F81" />
+            </View>
+          </SafeAreaView>
+        </ThemedView>
+      </ThemedBackground>
 
       {/* ── Settings modal ── */}
       <Modal

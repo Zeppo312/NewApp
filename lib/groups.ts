@@ -21,6 +21,7 @@ export interface CommunityGroup {
   current_user_membership_status?: GroupMemberStatus | null;
   is_member?: boolean;
   pending_invite_id?: string | null;
+  owner_is_admin?: boolean;
 }
 
 export interface GroupInvite {
@@ -83,6 +84,7 @@ type ProfileRecord = {
   first_name?: string | null;
   last_name?: string | null;
   avatar_url?: string | null;
+  is_admin?: boolean | null;
 };
 
 type GroupMemberProfileRpcRow = {
@@ -145,6 +147,7 @@ const normalizeGroup = (
   membershipMap: Map<string, MembershipRecord>,
   inviteMap: Map<string, InviteRecord>,
   memberCountMap: Map<string, number>,
+  ownerAdminMap: Map<string, boolean>,
 ): CommunityGroup => {
   const membership = membershipMap.get(group.id);
   const invite = inviteMap.get(group.id);
@@ -156,7 +159,21 @@ const normalizeGroup = (
     current_user_membership_status: membership?.status ?? null,
     is_member: membership?.status === 'active',
     pending_invite_id: invite?.status === 'pending' ? invite.id : null,
+    owner_is_admin: ownerAdminMap.get(group.owner_id) === true,
   };
+};
+
+const compareGroups = (a: CommunityGroup, b: CommunityGroup) => {
+  if ((a.owner_is_admin ? 1 : 0) !== (b.owner_is_admin ? 1 : 0)) {
+    return (b.owner_is_admin ? 1 : 0) - (a.owner_is_admin ? 1 : 0);
+  }
+
+  const createdAtDiff = new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+  if (createdAtDiff !== 0) {
+    return createdAtDiff;
+  }
+
+  return a.name.localeCompare(b.name, 'de', { sensitivity: 'base' });
 };
 
 const enrichGroupsForCurrentUser = async (groups: GroupRecord[], userId: string) => {
@@ -165,11 +182,13 @@ const enrichGroupsForCurrentUser = async (groups: GroupRecord[], userId: string)
   }
 
   const groupIds = groups.map((group) => group.id);
+  const ownerIds = [...new Set(groups.map((group) => group.owner_id).filter(Boolean))];
 
   const [
     { data: memberships, error: membershipsError },
     { data: counts, error: countsError },
     { data: invites, error: invitesError },
+    { data: ownerProfiles, error: ownerProfilesError },
   ] = await Promise.all([
     supabase
       .from('community_group_members')
@@ -187,11 +206,20 @@ const enrichGroupsForCurrentUser = async (groups: GroupRecord[], userId: string)
       .eq('invited_user_id', userId)
       .eq('status', 'pending')
       .in('group_id', groupIds),
+    ownerIds.length > 0
+      ? supabase
+          .from('profiles')
+          .select('id, is_admin')
+          .in('id', ownerIds)
+      : Promise.resolve({ data: [], error: null }),
   ]);
 
   if (membershipsError) throw membershipsError;
   if (countsError) throw countsError;
   if (invitesError) throw invitesError;
+  if (ownerProfilesError) {
+    console.warn('Failed to load group owner admin flags:', ownerProfilesError);
+  }
 
   const membershipMap = new Map<string, MembershipRecord>();
   for (const membership of (memberships || []) as MembershipRecord[]) {
@@ -208,7 +236,14 @@ const enrichGroupsForCurrentUser = async (groups: GroupRecord[], userId: string)
     inviteMap.set(invite.group_id, invite);
   }
 
-  return groups.map((group) => normalizeGroup(group, membershipMap, inviteMap, memberCountMap));
+  const ownerAdminMap = new Map<string, boolean>();
+  for (const profile of (ownerProfiles || []) as ProfileRecord[]) {
+    ownerAdminMap.set(profile.id, profile.is_admin === true);
+  }
+
+  return groups
+    .map((group) => normalizeGroup(group, membershipMap, inviteMap, memberCountMap, ownerAdminMap))
+    .sort(compareGroups);
 };
 
 const generateUniqueSlug = async (name: string) => {
@@ -440,6 +475,55 @@ export const getGroupDetails = async (groupId: string) => {
     return { data: enriched, error: null };
   } catch (error) {
     console.error('Failed to load group details:', error);
+    return { data: null, error };
+  }
+};
+
+export const updateGroup = async ({
+  groupId,
+  name,
+  description,
+}: {
+  groupId: string;
+  name: string;
+  description?: string | null;
+}) => {
+  try {
+    const cleanedName = name.trim();
+    if (!cleanedName) {
+      return { data: null, error: new Error('Bitte gib einen Gruppennamen ein.') };
+    }
+
+    const { error } = await supabase
+      .from('community_groups')
+      .update({
+        name: cleanedName,
+        description: description?.trim() || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', groupId);
+
+    if (error) {
+      return { data: null, error };
+    }
+
+    return getGroupDetails(groupId);
+  } catch (error) {
+    console.error('Failed to update group:', error);
+    return { data: null, error };
+  }
+};
+
+export const deleteGroup = async (groupId: string) => {
+  try {
+    const { error } = await supabase
+      .from('community_groups')
+      .delete()
+      .eq('id', groupId);
+
+    return { data: error ? null : true, error };
+  } catch (error) {
+    console.error('Failed to delete group:', error);
     return { data: null, error };
   }
 };

@@ -1,3 +1,4 @@
+/* eslint-disable import/no-unresolved */
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
@@ -16,7 +17,8 @@ interface DirectMessageWebhookPayload {
     id: string;
     sender_id: string;
     receiver_id: string;
-    content: string;
+    content: string | null;
+    message_type: 'text' | 'voice';
     created_at: string;
     is_read: boolean;
   };
@@ -61,7 +63,7 @@ serve(async (req: Request) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { sender_id, receiver_id, content, id } = payload.record;
+    const { sender_id, receiver_id, content, id, message_type } = payload.record;
 
     if (sender_id === receiver_id) {
       return new Response(
@@ -132,7 +134,14 @@ serve(async (req: Request) => {
       );
     }
 
-    const body = content.length > 140 ? `${content.slice(0, 137)}...` : content;
+    const previewText =
+      message_type === 'voice'
+        ? 'Sprachnachricht'
+        : content?.trim()
+          ? content.length > 140
+            ? `${content.slice(0, 137)}...`
+            : content
+          : 'Neue Nachricht';
     const pushPayloads = tokens.map((tokenRecord) =>
       fetch(EXPO_PUSH_URL, {
         method: 'POST',
@@ -140,7 +149,7 @@ serve(async (req: Request) => {
         body: JSON.stringify({
           to: tokenRecord.token,
           title: `Neue Nachricht von ${senderName}`,
-          body,
+          body: previewText,
           sound: 'default',
           priority: 'high',
           data: {
@@ -154,7 +163,7 @@ serve(async (req: Request) => {
     );
 
     const results = await Promise.all(pushPayloads);
-    const errors: Array<{ token: string; error: unknown }> = [];
+    const errors: { token: string; error: unknown }[] = [];
 
     for (let i = 0; i < results.length; i++) {
       const result = results[i];

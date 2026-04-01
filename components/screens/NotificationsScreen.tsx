@@ -21,6 +21,7 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { useCommunityUnreadCounts } from '@/hooks/useCommunityUnreadCounts';
 import { useAuth } from '@/contexts/AuthContext';
+import { getMessagePreviewText, type ChatMessageType } from '@/lib/chatMessages';
 import { supabase } from '@/lib/supabase';
 import { Notification } from '@/lib/community';
 import { navigateToNotificationTarget } from '@/lib/notificationService';
@@ -35,7 +36,11 @@ interface DirectMessage {
   id: string;
   sender_id: string;
   receiver_id: string;
-  content: string;
+  content: string | null;
+  message_type: ChatMessageType;
+  audio_storage_path?: string | null;
+  audio_duration_ms?: number | null;
+  audio_mime_type?: string | null;
   created_at: string;
   is_read: boolean;
   sender_name?: string;
@@ -560,7 +565,8 @@ export default function NotificationsScreen() {
   const renderMessageRow = (item: DirectMessage) => {
     const isFromSelf = user && item.sender_id === user.id;
     const partnerName = isFromSelf ? item.receiver_name || 'Benutzer' : item.sender_name || 'Benutzer';
-    const preview = isFromSelf ? `Du: ${item.content}` : item.content;
+    const previewText = getMessagePreviewText(item);
+    const preview = isFromSelf ? `Du: ${previewText}` : previewText;
     const unreadCount = item.unread_count || 0;
     const unread = unreadCount > 0;
 
@@ -614,8 +620,8 @@ export default function NotificationsScreen() {
   const renderGroupChatRow = (item: GroupChatSummary) => {
     const c = avatarColor(item.group_name, isDark);
     const senderName = item.latest_message_sender_name || 'Jemand';
-    const preview = item.latest_message_content
-      ? `${senderName}: ${item.latest_message_content}`
+    const preview = item.latest_message_preview
+      ? `${senderName}: ${item.latest_message_preview}`
       : 'Noch keine Nachrichten';
     const unread = item.unread_count > 0;
 

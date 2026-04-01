@@ -186,6 +186,8 @@ PODS:
     - ExpoModulesCore
   - ExpoAsset (55.0.8):
     - ExpoModulesCore
+  - ExpoAudio (55.0.9):
+    - ExpoModulesCore
   - ExpoBlur (55.0.8):
     - ExpoModulesCore
   - ExpoCalendar (55.0.9):
@@ -2712,6 +2714,7 @@ DEPENDENCIES:
   - expo-dev-menu-interface (from `../node_modules/expo-dev-menu-interface/ios`)
   - ExpoAppleAuthentication (from `../node_modules/expo-apple-authentication/ios`)
   - ExpoAsset (from `../node_modules/expo-asset/ios`)
+  - ExpoAudio (from `../node_modules/expo-audio/ios`)
   - ExpoBlur (from `../node_modules/expo-blur/ios`)
   - ExpoCalendar (from `../node_modules/expo-calendar/ios`)
   - ExpoCrypto (from `../node_modules/expo-crypto/ios`)
@@ -2884,6 +2887,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/expo-apple-authentication/ios"
   ExpoAsset:
     :path: "../node_modules/expo-asset/ios"
+  ExpoAudio:
+    :path: "../node_modules/expo-audio/ios"
   ExpoBlur:
     :path: "../node_modules/expo-blur/ios"
   ExpoCalendar:
@@ -3160,6 +3165,7 @@ SPEC CHECKSUMS:
   expo-dev-menu-interface: bf6f816d29b45bec038080790963c635e8d588c2
   ExpoAppleAuthentication: 86e97b24bd6687c156c55bb448f570bc29081ace
   ExpoAsset: bdc7bc21fe25d197c3aa7547e14c12c42087d9c9
+  ExpoAudio: 9c6c4b4c9669be8e8892b423cc967c09d801bad4
   ExpoBlur: aaa1443160dec73e53850f1f7010463d645c97d9
   ExpoCalendar: 2685884667fc0b126c7802f0401f7b24e1f2cf4f
   ExpoCrypto: 40320a7d4caa13b1f55691241220d961c7757519
@@ -3302,6 +3308,6 @@ SPEC CHECKSUMS:
   UMAppLoader: 71b50bcc31d86495e52c0b4cd17e2708bf297be3
   Yoga: dd994d8c85dca5cc9b10f5df8c01f9ef1d0da191
 
-PODFILE CHECKSUM: fd1f3b3b9bcd6e9bade965f78fae38a77baa2829
+PODFILE CHECKSUM: 73a622af8558b7d73530932b7fed4ac9634932ad
 
 COCOAPODS: 1.16.2

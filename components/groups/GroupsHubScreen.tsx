@@ -253,6 +253,7 @@ export default function GroupsHubScreen() {
   const [savingGroup, setSavingGroup] = useState(false);
   const [joiningGroupId, setJoiningGroupId] = useState<string | null>(null);
   const [processingInviteId, setProcessingInviteId] = useState<string | null>(null);
+  const [discoverQuery, setDiscoverQuery] = useState('');
 
   const loadData = useCallback(async () => {
     try {
@@ -290,6 +291,31 @@ export default function GroupsHubScreen() {
     [discoverGroups],
   );
 
+  const filterGroupsByQuery = useCallback((groups: CommunityGroup[]) => {
+    const cleanedQuery = discoverQuery.trim().toLowerCase();
+    if (!cleanedQuery) {
+      return groups;
+    }
+
+    return groups.filter((group) => {
+      const searchableText = [group.name, group.description || '']
+        .join(' ')
+        .toLowerCase();
+
+      return searchableText.includes(cleanedQuery);
+    });
+  }, [discoverQuery]);
+
+  const filteredMyGroups = useMemo(
+    () => filterGroupsByQuery(myGroups),
+    [filterGroupsByQuery, myGroups],
+  );
+
+  const filteredDiscoverable = useMemo(
+    () => filterGroupsByQuery(discoverable),
+    [discoverable, filterGroupsByQuery],
+  );
+
   const handleRefresh = useCallback(() => {
     setRefreshing(true);
     void loadData();
@@ -323,7 +349,10 @@ export default function GroupsHubScreen() {
     setNewGroupDescription('');
     setIsPrivateGroup(false);
     await loadData();
-    router.push(`/groups/${data.id}` as any);
+    router.push({
+      pathname: '/group-chat/[groupId]',
+      params: { groupId: data.id, from: 'groups' },
+    } as any);
   }, [isPrivateGroup, loadData, newGroupDescription, newGroupName, router]);
 
   const handleJoinGroup = useCallback(
@@ -338,7 +367,10 @@ export default function GroupsHubScreen() {
       }
 
       await loadData();
-      router.push(`/groups/${group.id}` as any);
+      router.push({
+        pathname: '/group-chat/[groupId]',
+        params: { groupId: group.id, from: 'groups' },
+      } as any);
     },
     [loadData, router],
   );
@@ -362,7 +394,10 @@ export default function GroupsHubScreen() {
       await loadData();
 
       if (accept && data?.id) {
-        router.push(`/groups/${data.id}` as any);
+        router.push({
+          pathname: '/group-chat/[groupId]',
+          params: { groupId: data.id, from: 'groups' },
+        } as any);
       }
     },
     [loadData, router],
@@ -396,6 +431,37 @@ export default function GroupsHubScreen() {
                 />
               }
             >
+              <View style={styles.section}>
+                <SectionHeader
+                  title="Gruppen suchen"
+                  count={filteredDiscoverable.length > 0 ? filteredDiscoverable.length : undefined}
+                  primaryText={primaryText}
+                  tertiaryText={tertiaryText}
+                  isDark={isDark}
+                />
+                <View
+                  style={[
+                    styles.searchRow,
+                    {
+                      backgroundColor: inputBg,
+                      borderColor: cardBorder,
+                    },
+                  ]}
+                >
+                  <IconSymbol name="magnifyingglass" size={15} color={tertiaryText} />
+                  <TextInput
+                    value={discoverQuery}
+                    onChangeText={setDiscoverQuery}
+                    placeholder="Öffentliche Gruppen suchen"
+                    placeholderTextColor={tertiaryText}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    clearButtonMode="while-editing"
+                    style={[styles.searchInput, { color: primaryText }]}
+                  />
+                </View>
+              </View>
+
               {/* ── Pending invites ── */}
               {pendingInvites.length > 0 && (
                 <View style={styles.section}>
@@ -470,13 +536,13 @@ export default function GroupsHubScreen() {
               <View style={styles.section}>
                 <SectionHeader
                   title="Meine Gruppen"
-                  count={myGroups.length}
+                  count={filteredMyGroups.length}
                   primaryText={primaryText}
                   tertiaryText={tertiaryText}
                   isDark={isDark}
                 />
-                {myGroups.length > 0 ? (
-                  myGroups.map((group) => (
+                {filteredMyGroups.length > 0 ? (
+                  filteredMyGroups.map((group) => (
                     <GroupCard
                       key={group.id}
                       group={group}
@@ -484,7 +550,12 @@ export default function GroupsHubScreen() {
                       primaryText={primaryText}
                       secondaryText={secondaryText}
                       tertiaryText={tertiaryText}
-                      onOpen={() => router.push(`/groups/${group.id}` as any)}
+                      onOpen={() =>
+                        router.push({
+                          pathname: '/group-chat/[groupId]',
+                          params: { groupId: group.id, from: 'groups' },
+                        } as any)
+                      }
                     />
                   ))
                 ) : (
@@ -503,10 +574,12 @@ export default function GroupsHubScreen() {
                         <IconSymbol name="person.2" size={24} color="#C89F81" />
                       </View>
                       <ThemedText style={[styles.emptyTitle, { color: primaryText }]}>
-                        Noch keine Gruppen
+                        {discoverQuery.trim() ? 'Keine eigenen Gruppen gefunden' : 'Noch keine Gruppen'}
                       </ThemedText>
                       <ThemedText style={[styles.emptyText, { color: secondaryText }]}>
-                        Erstelle eine eigene Gruppe oder tritt einer{'\n'}öffentlichen Gruppe bei.
+                        {discoverQuery.trim()
+                          ? 'Für deine Suche wurde in deinen Gruppen nichts gefunden.'
+                          : `Erstelle eine eigene Gruppe oder tritt einer${'\n'}öffentlichen Gruppe bei.`}
                       </ThemedText>
                     </View>
                   </LiquidGlassCard>
@@ -517,13 +590,13 @@ export default function GroupsHubScreen() {
               <View style={styles.section}>
                 <SectionHeader
                   title="Entdecken"
-                  count={discoverable.length > 0 ? discoverable.length : undefined}
+                  count={filteredDiscoverable.length > 0 ? filteredDiscoverable.length : undefined}
                   primaryText={primaryText}
                   tertiaryText={tertiaryText}
                   isDark={isDark}
                 />
-                {discoverable.length > 0 ? (
-                  discoverable.map((group) => (
+                {filteredDiscoverable.length > 0 ? (
+                  filteredDiscoverable.map((group) => (
                     <GroupCard
                       key={group.id}
                       group={group}
@@ -531,7 +604,12 @@ export default function GroupsHubScreen() {
                       primaryText={primaryText}
                       secondaryText={secondaryText}
                       tertiaryText={tertiaryText}
-                      onOpen={() => router.push(`/groups/${group.id}` as any)}
+                      onOpen={() =>
+                        router.push({
+                          pathname: '/group-chat/[groupId]',
+                          params: { groupId: group.id, from: 'groups' },
+                        } as any)
+                      }
                       onJoin={() => handleJoinGroup(group)}
                       joining={joiningGroupId === group.id}
                     />
@@ -552,11 +630,12 @@ export default function GroupsHubScreen() {
                         <IconSymbol name="sparkles" size={24} color="#C89F81" />
                       </View>
                       <ThemedText style={[styles.emptyTitle, { color: primaryText }]}>
-                        Keine weiteren Gruppen
+                        {discoverQuery.trim() ? 'Keine Gruppen gefunden' : 'Keine weiteren Gruppen'}
                       </ThemedText>
                       <ThemedText style={[styles.emptyText, { color: secondaryText }]}>
-                        Du bist bereits in allen öffentlichen Gruppen{'\n'}oder es gibt noch keine
-                        weiteren.
+                        {discoverQuery.trim()
+                          ? 'Für deine Suche wurde keine öffentliche Gruppe gefunden.'
+                          : `Du bist bereits in allen öffentlichen Gruppen${'\n'}oder es gibt noch keine weiteren.`}
                       </ThemedText>
                     </View>
                   </LiquidGlassCard>
@@ -729,6 +808,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: LAYOUT_PAD,
     paddingBottom: 36,
     gap: 24,
+  },
+  searchRow: {
+    minHeight: 48,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    paddingVertical: 12,
   },
 
   // ── FAB ──

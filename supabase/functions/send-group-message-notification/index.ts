@@ -1,3 +1,4 @@
+/* eslint-disable import/no-unresolved */
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
@@ -16,7 +17,8 @@ interface GroupMessageWebhookPayload {
     id: string;
     group_id: string;
     sender_id: string;
-    content: string;
+    content: string | null;
+    message_type: 'text' | 'voice';
     created_at: string;
   };
 }
@@ -60,7 +62,7 @@ serve(async (req: Request) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { sender_id, group_id, content, id } = payload.record;
+    const { sender_id, group_id, content, id, message_type } = payload.record;
 
     // 1. Get group name
     const { data: groupData, error: groupError } = await supabase
@@ -161,9 +163,13 @@ serve(async (req: Request) => {
     }
 
     // 5. Send push notifications
-    const body = content.length > 120
-      ? `${content.slice(0, 117)}...`
-      : content;
+    const body = message_type === 'voice'
+      ? 'Sprachnachricht'
+      : content?.trim()
+        ? content.length > 120
+          ? `${content.slice(0, 117)}...`
+          : content
+        : 'Neue Nachricht';
 
     const pushPayloads = tokens.map((tokenRecord) =>
       fetch(EXPO_PUSH_URL, {
@@ -187,7 +193,7 @@ serve(async (req: Request) => {
     );
 
     const results = await Promise.all(pushPayloads);
-    const errors: Array<{ token: string; error: unknown }> = [];
+    const errors: { token: string; error: unknown }[] = [];
 
     for (let i = 0; i < results.length; i++) {
       const result = results[i];

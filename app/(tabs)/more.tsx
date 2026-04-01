@@ -5,7 +5,6 @@ import { ThemedBackground } from '@/components/ThemedBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { Redirect, useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '@/contexts/AuthContext';
@@ -19,7 +18,6 @@ export default function MoreScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const adaptiveColors = useAdaptiveColors();
-  const { isBabyBorn } = useBabyStatus();
   const router = useRouter();
   const { session, signOut } = useAuth();
   const [accessReason, setAccessReason] = useState<'subscription' | 'admin' | 'tester' | 'cooperation_partner' | 'none'>('none');
@@ -142,52 +140,6 @@ export default function MoreScreen() {
                 </ThemedText>
                 <ThemedText style={styles.menuItemDescription}>
                   {subscriptionDescription}
-                </ThemedText>
-              </View>
-              <IconSymbol name="chevron.right" size={20} color={iconSecondaryColor} />
-            </TouchableOpacity>
-
-          </LiquidGlassCard>
-
-          <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
-            <ThemedText style={styles.sectionTitle}>
-              Wissen & Hilfe
-            </ThemedText>
-
-            {/* Geburtsplan-Link (nur vor der Geburt anzeigen) */}
-            {!isBabyBorn && (
-              <TouchableOpacity
-                style={styles.menuItem}
-                onPress={() => router.push('/(tabs)/geburtsplan')}
-              >
-                <View style={styles.menuItemIcon}>
-                  <IconSymbol name="doc.text.fill" size={24} color={iconAccentColor} />
-                </View>
-                <View style={styles.menuItemContent}>
-                  <ThemedText style={styles.menuItemTitle}>
-                    Geburtsplan
-                  </ThemedText>
-                  <ThemedText style={styles.menuItemDescription}>
-                    Erstelle und bearbeite deinen persönlichen Geburtsplan
-                  </ThemedText>
-                </View>
-                <IconSymbol name="chevron.right" size={20} color={iconSecondaryColor} />
-              </TouchableOpacity>
-            )}
-
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={() => router.push('/lottis-empfehlungen')}
-            >
-              <View style={styles.menuItemIcon}>
-                <IconSymbol name="star.fill" size={24} color={iconAccentColor} />
-              </View>
-              <View style={styles.menuItemContent}>
-                <ThemedText style={styles.menuItemTitle}>
-                  Lottis Empfehlungen
-                </ThemedText>
-                <ThemedText style={styles.menuItemDescription}>
-                  Handverlesene Produkte für dich und dein Baby
                 </ThemedText>
               </View>
               <IconSymbol name="chevron.right" size={20} color={iconSecondaryColor} />

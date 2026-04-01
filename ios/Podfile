@@ -23,6 +23,23 @@ platform :ios, podfile_properties['ios.deploymentTarget'] || '15.1'
 
 prepare_react_native_project!
 
+pre_install do |_installer|
+  randombytes_podspec = File.join(
+    __dir__,
+    '..',
+    'node_modules',
+    'react-native-randombytes',
+    'react-native-randombytes.podspec'
+  )
+
+  if File.exist?(randombytes_podspec)
+    contents = File.read(randombytes_podspec)
+    patched = contents.gsub("s.source_files   = '*.{h,m}'", "s.source_files   = 'RNRandomBytes.{h,m}'")
+
+    File.write(randombytes_podspec, patched) if patched != contents
+  end
+end
+
 target 'LottiBaby' do
   use_expo_modules!
 

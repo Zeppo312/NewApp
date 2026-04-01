@@ -65,6 +65,8 @@
 	<string>Lotti Baby benötigt Zugriff auf deinen Kalender, damit du Planer- und Arzttermine als Kalendereinträge anlegen, aktualisieren und mit Erinnerungen synchronisieren kannst.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Expo Dev Launcher uses the local network to discover and connect to development servers running on your computer.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Lotti Baby benötigt Zugriff auf dein Mikrofon, damit du Sprachnachrichten in Chats aufnehmen kannst.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Lotti Baby verwendet deinen Standort nur während der Nutzung, um lokale Wetterdaten abzurufen und passende Kleidungsempfehlungen für dein Baby anzuzeigen.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

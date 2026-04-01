@@ -5,6 +5,7 @@ import {
   FlatList,
   Image,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   StyleSheet,
@@ -15,6 +16,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import * as Haptics from 'expo-haptics';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   Extrapolation,
@@ -26,14 +28,23 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import Header from '@/components/Header';
+import ChatComposer from '@/components/chat/ChatComposer';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Colors } from '@/constants/Colors';
 import { useAuth } from '@/contexts/AuthContext';
+import { useChatAudioPlayback } from '@/hooks/useChatAudioPlayback';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { uploadChatAudio } from '@/lib/chatAudio';
+import {
+  VOICE_MESSAGE_PREVIEW,
+  formatAudioDuration,
+  getAudioProgress,
+  getMessagePreviewText,
+} from '@/lib/chatMessages';
 import { supabase } from '@/lib/supabase';
-import { getGroupDetails } from '@/lib/groups';
+import { type CommunityGroup, deleteGroup, getGroupDetails, updateGroup } from '@/lib/groups';
 import {
   type GroupChatMessage,
   type GroupChatMemberInfo,
@@ -143,11 +154,16 @@ export default function GroupChatScreen() {
   const theme = Colors[colorScheme];
   const insets = useSafeAreaInsets();
   const flatListRef = useRef<FlatList<EnrichedGroupMessage>>(null);
-  const inputRef = useRef<TextInput>(null);
   const scrollTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   const [groupName, setGroupName] = useState('Gruppenchat');
+  const [groupDetails, setGroupDetails] = useState<CommunityGroup | null>(null);
   const [canManage, setCanManage] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingGroupName, setEditingGroupName] = useState('');
+  const [editingGroupDescription, setEditingGroupDescription] = useState('');
+  const [savingGroup, setSavingGroup] = useState(false);
+  const [deletingGroup, setDeletingGroup] = useState(false);
   const [memberMap, setMemberMap] = useState<Map<string, GroupChatMemberInfo>>(new Map());
   const [messages, setMessages] = useState<GroupChatMessage[]>([]);
   const [draft, setDraft] = useState('');
@@ -157,6 +173,14 @@ export default function GroupChatScreen() {
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [firstUnreadId, setFirstUnreadId] = useState<string | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
+  const {
+    activeMessageId,
+    currentTime,
+    isPlaying,
+    loadingMessageId,
+    stopPlayback,
+    togglePlayback,
+  } = useChatAudioPlayback('group');
 
   const enriched = useMemo(
     () => enrichGroupMessages(messages, memberMap, user?.id),
@@ -232,6 +256,7 @@ export default function GroupChatScreen() {
       const { data: details, error } = await getGroupDetails(resolvedGroupId);
       if (error) throw error;
       if (details) {
+        setGroupDetails(details);
         setGroupName(details.name);
         setCanManage(
           details.current_user_role === 'owner' || details.current_user_role === 'admin',
@@ -241,6 +266,8 @@ export default function GroupChatScreen() {
       console.error('Failed to load group details:', e);
     }
   }, [resolvedGroupId]);
+
+  const canEditGroup = groupDetails?.current_user_role === 'owner';
 
   const loadMembers = useCallback(async () => {
     if (!resolvedGroupId) return;
@@ -345,7 +372,13 @@ export default function GroupChatScreen() {
     if (!loading) scrollToBottom(false);
   }, [loading, enriched.length, scrollToBottom]);
 
-  useEffect(() => () => clearPendingScrolls(), [clearPendingScrolls]);
+  useEffect(
+    () => () => {
+      clearPendingScrolls();
+      void stopPlayback();
+    },
+    [clearPendingScrolls, stopPlayback],
+  );
 
   // -----------------------------------------------------------------------
   // Actions
@@ -354,7 +387,6 @@ export default function GroupChatScreen() {
   const handleReply = useCallback((message: GroupChatMessage) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     setReplyTo(message);
-    inputRef.current?.focus();
   }, []);
 
   const handleOpenProfile = useCallback((targetUserId?: string | null) => {
@@ -362,12 +394,16 @@ export default function GroupChatScreen() {
     router.push(`/profile/${targetUserId}` as any);
   }, []);
 
-  const handleSend = useCallback(async () => {
+  const handleSendText = useCallback(async () => {
     const content = draft.trim();
     if (!user?.id || !resolvedGroupId || !content || sending) return;
     try {
       setSending(true);
-      await sendGroupChatMessage(resolvedGroupId, content, replyTo?.id);
+      await sendGroupChatMessage(resolvedGroupId, {
+        type: 'text',
+        content,
+        replyToId: replyTo?.id,
+      });
       setDraft('');
       setReplyTo(null);
       setTimeout(() => scrollToBottom(true), 300);
@@ -377,6 +413,37 @@ export default function GroupChatScreen() {
       setSending(false);
     }
   }, [draft, replyTo, resolvedGroupId, scrollToBottom, sending, user?.id]);
+
+  const handleSendVoice = useCallback(
+    async ({
+      localUri,
+      durationMs,
+      mimeType,
+    }: {
+      localUri: string;
+      durationMs: number;
+      mimeType: string;
+    }) => {
+      if (!user?.id || !resolvedGroupId) return;
+
+      const audioUpload = await uploadChatAudio({
+        scope: 'group',
+        userId: user.id,
+        localUri,
+      });
+
+      await sendGroupChatMessage(resolvedGroupId, {
+        type: 'voice',
+        audioStoragePath: audioUpload.storagePath,
+        audioDurationMs: durationMs,
+        audioMimeType: mimeType,
+        replyToId: replyTo?.id,
+      });
+      setReplyTo(null);
+      setTimeout(() => scrollToBottom(true), 300);
+    },
+    [replyTo, resolvedGroupId, scrollToBottom, user?.id],
+  );
 
   const handleDeleteMessage = useCallback(
     (message: GroupChatMessage) => {
@@ -393,6 +460,9 @@ export default function GroupChatScreen() {
               await deleteGroupChatMessage(message.id);
               setMessages((current) => current.filter((item) => item.id !== message.id));
               if (replyTo?.id === message.id) setReplyTo(null);
+              if (activeMessageId === message.id) {
+                void stopPlayback();
+              }
             } catch (error) {
               console.error('Fehler beim Löschen der Nachricht:', error);
               Alert.alert('Gruppenchat', 'Die Nachricht konnte gerade nicht gelöscht werden.');
@@ -401,8 +471,96 @@ export default function GroupChatScreen() {
         },
       ]);
     },
-    [canManage, replyTo, user?.id],
+    [activeMessageId, canManage, replyTo, stopPlayback, user?.id],
   );
+
+  const handleOpenEditGroup = useCallback(() => {
+    if (!groupDetails || !canEditGroup) return;
+    setEditingGroupName(groupDetails.name);
+    setEditingGroupDescription(groupDetails.description || '');
+    setShowEditModal(true);
+  }, [canEditGroup, groupDetails]);
+
+  const handleSaveGroup = useCallback(async () => {
+    if (!groupDetails || !canEditGroup || savingGroup) return;
+
+    const trimmedName = editingGroupName.trim();
+    if (!trimmedName) {
+      Alert.alert('Gruppe', 'Bitte gib einen Gruppennamen ein.');
+      return;
+    }
+
+    setSavingGroup(true);
+    const { data, error } = await updateGroup({
+      groupId: groupDetails.id,
+      name: trimmedName,
+      description: editingGroupDescription,
+    });
+    setSavingGroup(false);
+
+    if (error || !data) {
+      Alert.alert(
+        'Gruppe',
+        error instanceof Error ? error.message : 'Die Gruppe konnte nicht gespeichert werden.',
+      );
+      return;
+    }
+
+    setGroupDetails(data);
+    setGroupName(data.name);
+    setShowEditModal(false);
+  }, [canEditGroup, editingGroupDescription, editingGroupName, groupDetails, savingGroup]);
+
+  const handleConfirmDeleteGroup = useCallback(async () => {
+    if (!groupDetails || !canEditGroup || deletingGroup) return;
+
+    setDeletingGroup(true);
+    const { error } = await deleteGroup(groupDetails.id);
+    setDeletingGroup(false);
+
+    if (error) {
+      Alert.alert(
+        'Gruppe',
+        error instanceof Error ? error.message : 'Die Gruppe konnte nicht gelöscht werden.',
+      );
+      return;
+    }
+
+    setShowEditModal(false);
+    router.replace('/groups' as any);
+  }, [canEditGroup, deletingGroup, groupDetails]);
+
+  const handleDeleteGroup = useCallback(() => {
+    if (!groupDetails || !canEditGroup || deletingGroup) return;
+
+    Alert.alert(
+      'Gruppe löschen',
+      'Möchtest du diese Gruppe wirklich löschen? Alle Nachrichten und Mitgliedschaften gehen dabei dauerhaft verloren.',
+      [
+        { text: 'Abbrechen', style: 'cancel' },
+        {
+          text: 'Löschen',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert(
+              'Wirklich löschen?',
+              `Die Gruppe "${groupDetails.name}" wird dauerhaft gelöscht.`,
+              [
+                { text: 'Abbrechen', style: 'cancel' },
+                {
+                  text: 'Ja, löschen',
+                  style: 'destructive',
+                  onPress: () => {
+                    void handleConfirmDeleteGroup();
+                  },
+                },
+              ],
+            );
+          },
+        },
+      ],
+    );
+  }, [canEditGroup, deletingGroup, groupDetails, handleConfirmDeleteGroup]);
 
   const handleMessageLongPress = useCallback(
     (message: GroupChatMessage) => {
@@ -474,7 +632,9 @@ export default function GroupChatScreen() {
   };
 
   const renderQuoteBlock = (item: EnrichedGroupMessage, isOwnBubble: boolean) => {
-    if (!item.quotedContent) return null;
+    const quotedPreview =
+      item.quotedMessageType === 'voice' ? VOICE_MESSAGE_PREVIEW : item.quotedContent;
+    if (!quotedPreview) return null;
     const quotedIsOwn = item.quotedSenderId === user?.id;
     const quotedMember = item.quotedSenderId ? memberMap.get(item.quotedSenderId) : null;
     const quotedName = quotedIsOwn ? 'Du' : (quotedMember?.display_name ?? 'Unbekannt');
@@ -499,7 +659,7 @@ export default function GroupChatScreen() {
           {quotedName}
         </ThemedText>
         <ThemedText style={[styles.quoteText, { color: quoteTextColor }]} numberOfLines={2}>
-          {item.quotedContent}
+          {quotedPreview}
         </ThemedText>
       </TouchableOpacity>
     );
@@ -545,6 +705,7 @@ export default function GroupChatScreen() {
             style={[
               styles.messageBubble,
               bubbleRadius,
+              item.message_type === 'voice' && styles.voiceBubble,
               {
                 backgroundColor: isOwn ? ownBubbleBg : otherBubbleBg,
                 borderWidth: isHighlighted ? 1.5 : 0,
@@ -556,23 +717,101 @@ export default function GroupChatScreen() {
           >
             {renderQuoteBlock(item, isOwn)}
 
-            <ThemedText
-              style={[styles.messageText, { color: isOwn ? ownTextColor : otherTextColor }]}
-            >
-              {item.content}
-              <ThemedText style={styles.metaSpacer}>
-                {'  '}
-                {formatMessageTime(item.created_at)}
-              </ThemedText>
-            </ThemedText>
+            {item.message_type === 'voice' ? (
+              <>
+                <View style={styles.voiceRow}>
+                  <TouchableOpacity
+                    style={[
+                      styles.voicePlayButton,
+                      {
+                        backgroundColor: isOwn
+                          ? 'rgba(255,255,255,0.18)'
+                          : isDark
+                            ? '#2A2321'
+                            : '#FFFFFF',
+                      },
+                    ]}
+                    onPress={() => void togglePlayback(item)}
+                    activeOpacity={0.8}
+                  >
+                    {loadingMessageId === item.id ? (
+                      <ActivityIndicator size="small" color={isOwn ? '#FFFFFF' : theme.accent} />
+                    ) : (
+                      <IconSymbol
+                        name={activeMessageId === item.id && isPlaying ? 'pause.fill' : 'play.fill'}
+                        size={18}
+                        color={isOwn ? '#FFFFFF' : theme.accent}
+                      />
+                    )}
+                  </TouchableOpacity>
+                  <View style={styles.voiceBody}>
+                    <ThemedText
+                      style={[styles.voiceTitle, { color: isOwn ? ownTextColor : otherTextColor }]}
+                    >
+                      {VOICE_MESSAGE_PREVIEW}
+                    </ThemedText>
+                    <View
+                      style={[
+                        styles.voiceProgressTrack,
+                        {
+                          backgroundColor: isOwn
+                            ? 'rgba(255,255,255,0.24)'
+                            : isDark
+                              ? '#4A3F3B'
+                              : '#E8DDD6',
+                        },
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.voiceProgressFill,
+                          {
+                            backgroundColor: isOwn ? '#FFFFFF' : theme.accent,
+                            width: `${getAudioProgress(
+                              activeMessageId === item.id ? currentTime : 0,
+                              item.audio_duration_ms,
+                            ) * 100}%`,
+                          },
+                        ]}
+                      />
+                    </View>
+                  </View>
+                </View>
 
-            <View style={styles.metaFloat}>
-              <ThemedText
-                style={[styles.messageTime, { color: isOwn ? ownMetaColor : otherMetaColor }]}
-              >
-                {formatMessageTime(item.created_at)}
-              </ThemedText>
-            </View>
+                <View style={styles.voiceFooter}>
+                  <ThemedText
+                    style={[styles.messageTime, { color: isOwn ? ownMetaColor : otherMetaColor }]}
+                  >
+                    {formatAudioDuration(item.audio_duration_ms)}
+                  </ThemedText>
+                  <ThemedText
+                    style={[styles.messageTime, { color: isOwn ? ownMetaColor : otherMetaColor }]}
+                  >
+                    {formatMessageTime(item.created_at)}
+                  </ThemedText>
+                </View>
+              </>
+            ) : (
+              <>
+                <ThemedText
+                  style={[styles.messageText, { color: isOwn ? ownTextColor : otherTextColor }]}
+                >
+                  {item.content}
+                  <ThemedText style={styles.metaSpacer}>
+                    {'  '}
+                    {formatMessageTime(item.created_at)}
+                  </ThemedText>
+                </ThemedText>
+
+                <View style={styles.metaFloat}>
+                  <ThemedText
+                    style={[styles.messageTime, { color: isOwn ? ownMetaColor : otherMetaColor }]}
+                  >
+                    {formatMessageTime(item.created_at)}
+                  </ThemedText>
+                </View>
+              </>
+            )}
           </Pressable>
         </View>
       </View>
@@ -613,8 +852,6 @@ export default function GroupChatScreen() {
   // Main render
   // -----------------------------------------------------------------------
 
-  const canSend = draft.trim().length > 0 && !sending;
-
   return (
     <ThemedBackground style={styles.container}>
       <View style={[styles.safeArea, { paddingTop: insets.top }]}>
@@ -627,7 +864,7 @@ export default function GroupChatScreen() {
             if (from === 'notifications') {
               router.push('/(tabs)/notifications' as any);
             } else {
-              router.push(`/groups/${resolvedGroupId}` as any);
+              router.push('/groups' as any);
             }
           }}
           showBabySwitcher={false}
@@ -637,6 +874,24 @@ export default function GroupChatScreen() {
                 {groupName.charAt(0).toUpperCase()}
               </ThemedText>
             </View>
+          }
+          rightContent={
+            canEditGroup ? (
+              <TouchableOpacity
+                style={[
+                  styles.headerActionButton,
+                  { backgroundColor: isDark ? '#2A2321' : '#F3ECE7' },
+                ]}
+                onPress={handleOpenEditGroup}
+                activeOpacity={0.75}
+              >
+                <IconSymbol
+                  name="pencil"
+                  size={16}
+                  color={isDark ? '#E9D8C2' : '#7D5A50'}
+                />
+              </TouchableOpacity>
+            ) : null
           }
         />
 
@@ -684,93 +939,151 @@ export default function GroupChatScreen() {
             />
           )}
 
-          {/* ---- Reply preview bar ---- */}
-          {replyTo && (
-            <View
-              style={[
-                styles.replyPreview,
-                {
-                  backgroundColor: isDark ? '#2A2321' : '#F9F5F1',
-                  borderTopColor: isDark ? '#3D3330' : '#E8DDD6',
-                },
-              ]}
-            >
-              <View style={[styles.replyPreviewBar, { backgroundColor: replyToSenderColor }]} />
-              <View style={styles.replyPreviewBody}>
-                <ThemedText
-                  style={[styles.replyPreviewSender, { color: replyToSenderColor }]}
-                  numberOfLines={1}
-                >
-                  {replyToSenderName}
-                </ThemedText>
-                <ThemedText style={[styles.replyPreviewText, { color: theme.textTertiary }]} numberOfLines={1}>
-                  {replyTo.content}
-                </ThemedText>
-              </View>
-              <TouchableOpacity
-                onPress={() => setReplyTo(null)}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                style={styles.replyPreviewClose}
-              >
-                <IconSymbol name="xmark" size={16} color={theme.textTertiary} />
-              </TouchableOpacity>
-            </View>
-          )}
+          <ChatComposer
+            draft={draft}
+            onChangeDraft={setDraft}
+            sending={sending}
+            onSendText={handleSendText}
+            onSendVoice={handleSendVoice}
+            onInputFocus={() => scrollToBottom(true)}
+            replyPreviewSender={replyTo ? replyToSenderName : null}
+            replyPreviewText={replyTo ? getMessagePreviewText(replyTo) : null}
+            replyPreviewAccentColor={replyTo ? replyToSenderColor : theme.accent}
+            onCancelReply={replyTo ? () => setReplyTo(null) : undefined}
+            focusToken={replyTo?.id || null}
+            theme={theme}
+            isDark={isDark}
+            bottomInset={insets.bottom}
+          />
+        </KeyboardAvoidingView>
+      </View>
 
-          {/* ---- Composer ---- */}
-          <View
-            style={[
-              styles.composer,
-              {
-                backgroundColor: isDark ? '#2A2321' : '#F9F5F1',
-                borderTopColor: replyTo ? 'transparent' : isDark ? '#3D3330' : '#E8DDD6',
-                paddingBottom: Math.max(insets.bottom, Platform.OS === 'ios' ? 6 : 10),
-              },
-            ]}
-          >
+      <Modal
+        visible={showEditModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowEditModal(false)}
+      >
+        <KeyboardAvoidingView
+          style={styles.modalFlex}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <View style={styles.modalOverlay}>
             <View
               style={[
-                styles.inputWrapper,
+                styles.modalSheet,
                 {
-                  backgroundColor: isDark ? '#1F1F1F' : '#FFFFFF',
+                  backgroundColor: isDark ? '#1E1916' : '#FFFAF5',
                   borderColor: isDark ? '#3D3330' : '#E8DDD6',
                 },
               ]}
             >
+              <View style={styles.modalHandle}>
+                <View
+                  style={[
+                    styles.handleBar,
+                    {
+                      backgroundColor: isDark
+                        ? 'rgba(255,255,255,0.2)'
+                        : 'rgba(125,90,80,0.15)',
+                    },
+                  ]}
+                />
+              </View>
+
+              <View style={styles.modalHeader}>
+                <TouchableOpacity
+                  onPress={() => setShowEditModal(false)}
+                  activeOpacity={0.7}
+                >
+                  <ThemedText style={[styles.modalCancel, { color: theme.textTertiary }]}>
+                    Abbrechen
+                  </ThemedText>
+                </TouchableOpacity>
+                <ThemedText style={[styles.modalTitle, { color: theme.text }]}>
+                  Gruppe bearbeiten
+                </ThemedText>
+                <View style={styles.modalPlaceholder} />
+              </View>
+
               <TextInput
-                ref={inputRef}
-                style={[styles.input, { color: theme.text }]}
-                value={draft}
-                onChangeText={setDraft}
-                placeholder="Nachricht..."
+                value={editingGroupName}
+                onChangeText={setEditingGroupName}
+                placeholder="Gruppenname"
+                placeholderTextColor={theme.textTertiary}
+                style={[
+                  styles.modalInput,
+                  {
+                    color: theme.text,
+                    backgroundColor: isDark ? '#2A2321' : '#F9F5F1',
+                    borderColor: isDark ? '#3D3330' : '#E8DDD6',
+                  },
+                ]}
+              />
+
+              <TextInput
+                value={editingGroupDescription}
+                onChangeText={setEditingGroupDescription}
+                placeholder="Beschreibung"
                 placeholderTextColor={theme.textTertiary}
                 multiline
-                onFocus={() => scrollToBottom(true)}
+                style={[
+                  styles.modalInput,
+                  styles.modalTextArea,
+                  {
+                    color: theme.text,
+                    backgroundColor: isDark ? '#2A2321' : '#F9F5F1',
+                    borderColor: isDark ? '#3D3330' : '#E8DDD6',
+                  },
+                ]}
               />
-            </View>
 
-            <TouchableOpacity
-              style={[
-                styles.sendButton,
-                { backgroundColor: canSend ? theme.accent : isDark ? '#3D3330' : '#E8DDD6' },
-              ]}
-              onPress={() => void handleSend()}
-              disabled={!canSend}
-              activeOpacity={0.7}
-            >
-              {sending ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <IconSymbol
-                  name="paperplane.fill"
-                  size={18}
-                  color={canSend ? '#FFFFFF' : isDark ? '#7A6A60' : '#B0A59E'}
-                />
-              )}
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.saveGroupButton, { opacity: savingGroup ? 0.7 : 1 }]}
+                onPress={() => void handleSaveGroup()}
+                disabled={savingGroup}
+                activeOpacity={0.85}
+              >
+                <LinearGradient
+                  colors={['#D4A88C', '#C89F81']}
+                  style={styles.saveGroupButtonGradient}
+                >
+                  {savingGroup ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <ThemedText style={styles.saveGroupButtonText}>Speichern</ThemedText>
+                  )}
+                </LinearGradient>
+              </TouchableOpacity>
+
+              {canEditGroup ? (
+                <TouchableOpacity
+                  style={[
+                    styles.deleteGroupButton,
+                    {
+                      borderColor: isDark ? '#5C2B2B' : '#F0C8C3',
+                      backgroundColor: isDark ? 'rgba(214,84,65,0.12)' : '#FFF4F2',
+                      opacity: deletingGroup ? 0.7 : 1,
+                    },
+                  ]}
+                  onPress={handleDeleteGroup}
+                  disabled={deletingGroup}
+                  activeOpacity={0.85}
+                >
+                  {deletingGroup ? (
+                    <ActivityIndicator size="small" color="#D65441" />
+                  ) : (
+                    <>
+                      <IconSymbol name="trash.fill" size={16} color="#D65441" />
+                      <ThemedText style={styles.deleteGroupButtonText}>Gruppe löschen</ThemedText>
+                    </>
+                  )}
+                </TouchableOpacity>
+              ) : null}
+            </View>
           </View>
         </KeyboardAvoidingView>
-      </View>
+      </Modal>
     </ThemedBackground>
   );
 }
@@ -879,6 +1192,45 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   messageTime: { fontSize: 11 },
+  voiceBubble: {
+    minWidth: 220,
+  },
+  voiceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  voicePlayButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  voiceBody: {
+    flex: 1,
+    gap: 6,
+  },
+  voiceTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  voiceProgressTrack: {
+    height: 4,
+    borderRadius: 999,
+    overflow: 'hidden',
+  },
+  voiceProgressFill: {
+    height: '100%',
+    borderRadius: 999,
+  },
+  voiceFooter: {
+    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
 
   // ---- Quote block inside bubble ----
   quoteBlock: {
@@ -891,55 +1243,6 @@ const styles = StyleSheet.create({
   quoteSender: { fontSize: 12, fontWeight: '700', marginBottom: 1 },
   quoteText: { fontSize: 13, lineHeight: 17 },
 
-  // ---- Reply preview above composer ----
-  replyPreview: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
-  replyPreviewBar: {
-    width: 3,
-    alignSelf: 'stretch',
-    borderRadius: 2,
-    marginRight: 10,
-  },
-  replyPreviewBody: { flex: 1 },
-  replyPreviewSender: { fontSize: 13, fontWeight: '700', marginBottom: 1 },
-  replyPreviewText: { fontSize: 13, lineHeight: 17 },
-  replyPreviewClose: { padding: 6, marginLeft: 8 },
-
-  // ---- Composer ----
-  composer: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 10,
-    paddingTop: 8,
-    paddingBottom: Platform.OS === 'ios' ? 6 : 10,
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 8,
-  },
-  inputWrapper: { flex: 1, borderRadius: 22, borderWidth: 1, overflow: 'hidden' },
-  input: {
-    minHeight: 42,
-    maxHeight: 120,
-    paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'ios' ? 10 : 8,
-    paddingBottom: Platform.OS === 'ios' ? 10 : 8,
-    fontSize: 15,
-    lineHeight: 20,
-    textAlignVertical: 'top',
-  },
-  sendButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: Platform.OS === 'ios' ? 1 : 0,
-  },
-
   // ---- Header group avatar ----
   headerGroupAvatar: {
     width: 34,
@@ -951,6 +1254,97 @@ const styles = StyleSheet.create({
   headerGroupInitial: {
     fontSize: 16,
     fontWeight: '800',
+  },
+  headerActionButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // ---- Edit modal ----
+  modalFlex: {
+    flex: 1,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.25)',
+    justifyContent: 'flex-end',
+  },
+  modalSheet: {
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    borderWidth: 1,
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 24,
+    gap: 14,
+  },
+  modalHandle: {
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  handleBar: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  modalCancel: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  modalTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+  },
+  modalPlaceholder: {
+    width: 70,
+  },
+  modalInput: {
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 15,
+  },
+  modalTextArea: {
+    minHeight: 112,
+    textAlignVertical: 'top',
+  },
+  saveGroupButton: {
+    marginTop: 4,
+  },
+  saveGroupButtonGradient: {
+    minHeight: 50,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  saveGroupButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  deleteGroupButton: {
+    minHeight: 50,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  deleteGroupButtonText: {
+    color: '#D65441',
+    fontSize: 15,
+    fontWeight: '700',
   },
 
   // ---- Empty state ----

@@ -11,7 +11,6 @@ import {
   Platform,
   RefreshControl,
   SafeAreaView,
-  ScrollView,
   StatusBar,
   StyleSheet,
   Switch,
@@ -37,6 +36,7 @@ import { useCommunityUnreadCounts } from '@/hooks/useCommunityUnreadCounts';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import {
   type Comment,
+  type CommunityFeedCursor,
   type NestedComment,
   type Post,
   createComment,
@@ -45,9 +45,10 @@ import {
   deleteComment,
   deleteNestedComment,
   deletePost,
+  getCommunityFeedPage,
   getComments,
   getNestedComments,
-  getPosts,
+  getNestedCommentsBatch,
   toggleCommentLike,
   toggleNestedCommentLike,
   togglePostLike,
@@ -78,6 +79,17 @@ type CommunityQaFeedProps = {
   headerExtraContent?: React.ReactNode;
   headerRightContent?: React.ReactNode;
 };
+
+type CommunityFeedFilter = 'all' | 'hot' | 'today' | 'questions';
+
+type CommunityTopicChip = {
+  id: CommunityFeedFilter;
+  label: string;
+  count: number;
+  emoji: string;
+};
+
+const COMMUNITY_FEED_PAGE_SIZE = 20;
 
 // ─── Helpers ────────────────────────────────────────────────────────────
 const formatRelativeDate = (value?: string) => {
@@ -123,6 +135,23 @@ const getAvatarGradient = (name?: string | null): [string, string] => {
     hash = cleaned.charCodeAt(i) + ((hash << 5) - hash);
   }
   return AVATAR_GRADIENTS[Math.abs(hash) % AVATAR_GRADIENTS.length];
+};
+
+const isQuestionPost = (post: Post) => (post.content || '').includes('?');
+
+const isHotPost = (post: Post) => (post.comments_count || 0) >= 3 || (post.likes_count || 0) >= 3;
+
+const isTodayPost = (post: Post) => {
+  const createdAt = new Date(post.created_at).getTime();
+  if (Number.isNaN(createdAt)) return false;
+  return Date.now() - createdAt < 24 * 60 * 60 * 1000;
+};
+
+const COMMUNITY_FILTER_META: Record<CommunityFeedFilter, { label: string; emoji: string }> = {
+  all: { label: 'Alle', emoji: '\uD83D\uDCAC' },
+  hot: { label: 'Beliebt', emoji: '\uD83D\uDD25' },
+  today: { label: 'Heute', emoji: '\u2728' },
+  questions: { label: 'Fragen', emoji: '\u2753' },
 };
 
 // ─── Animated Heart ─────────────────────────────────────────────────────
@@ -214,6 +243,10 @@ export default function CommunityQaFeed({
   const [replyText, setReplyText] = useState('');
   const [isAnonymousReply, setIsAnonymousReply] = useState(false);
   const [isSavingReply, setIsSavingReply] = useState(false);
+  const [selectedFilter, setSelectedFilter] = useState<CommunityFeedFilter>('all');
+  const [feedCursor, setFeedCursor] = useState<CommunityFeedCursor | null>(null);
+  const [hasMorePosts, setHasMorePosts] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
 
   const renderBadge = useCallback((count: number, inline = false) => {
     if (count <= 0) return null;
@@ -240,6 +273,23 @@ export default function CommunityQaFeed({
 
   const hydrateCommentsWithReplies = useCallback(
     async (items: Comment[]) => {
+      if (items.length === 0) {
+        return [];
+      }
+
+      if (!groupId) {
+        const { data, error } = await getNestedCommentsBatch(items.map((comment) => comment.id));
+        if (error) {
+          console.error('Fehler beim Batch-Laden der Antworten auf Kommentare:', error);
+          return items.map((comment) => ({ ...comment, replies: [] }));
+        }
+
+        return items.map((comment) => ({
+          ...comment,
+          replies: data?.[comment.id] || [],
+        }));
+      }
+
       const commentsWithReplies = await Promise.all(
         items.map(async (comment) => ({
           ...comment,
@@ -249,7 +299,7 @@ export default function CommunityQaFeed({
 
       return commentsWithReplies;
     },
-    [loadRepliesForComment],
+    [groupId, loadRepliesForComment],
   );
 
   const closeInlineReplyComposer = useCallback(() => {
@@ -258,25 +308,63 @@ export default function CommunityQaFeed({
     setIsAnonymousReply(false);
   }, []);
 
+  const handleFilterPress = useCallback((filterId: CommunityFeedFilter) => {
+    setSelectedFilter((current) => {
+      if (filterId === 'all') return 'all';
+      return current === filterId ? 'all' : filterId;
+    });
+  }, []);
+
   // ─── Data loading ───────────────────────────────────────────────────
-  const loadPosts = useCallback(async () => {
-    const { data, error } = groupId
-      ? await getGroupPosts(groupId)
-      : await getPosts('', [], undefined);
+  const loadPosts = useCallback(async (
+    mode: 'replace' | 'append' = 'replace',
+    cursorOverride?: CommunityFeedCursor | null,
+  ) => {
+    if (mode === 'append') {
+      setIsLoadingMore(true);
+    }
+
+    if (mode === 'replace') {
+      setFeedCursor(null);
+      setHasMorePosts(true);
+    }
+
+    const { data, error, nextCursor, hasMore } = groupId
+      ? {
+          ...(await getGroupPosts(groupId)),
+          nextCursor: null,
+          hasMore: false,
+        }
+      : await getCommunityFeedPage({
+          limit: COMMUNITY_FEED_PAGE_SIZE,
+          cursor: mode === 'append' ? (cursorOverride ?? null) : null,
+        });
+
     if (error) {
       console.error('Fehler beim Laden der Community-Posts:', error);
       Alert.alert('Community', 'Die Community konnte gerade nicht geladen werden.');
-      setPosts([]);
+      if (mode === 'replace') {
+        setPosts([]);
+        setFeedCursor(null);
+        setHasMorePosts(false);
+      }
     } else {
-      setPosts(data || []);
+      const nextPosts = data || [];
+      setPosts((currentPosts) =>
+        mode === 'append' ? [...currentPosts, ...nextPosts] : nextPosts,
+      );
+      setFeedCursor(nextCursor);
+      setHasMorePosts(hasMore);
     }
+
     setIsLoading(false);
     setIsRefreshing(false);
+    setIsLoadingMore(false);
   }, [groupId]);
 
   useEffect(() => {
     setIsLoading(true);
-    loadPosts();
+    void loadPosts('replace');
   }, [loadPosts]);
 
   const loadCommentsForPost = useCallback(async (post: Post) => {
@@ -300,13 +388,23 @@ export default function CommunityQaFeed({
   useEffect(() => {
     if (!targetPostId || posts.length === 0 || showThreadModal) return;
     const matchingPost = posts.find((post) => post.id === targetPostId);
-    if (matchingPost) loadCommentsForPost(matchingPost);
+    if (matchingPost) {
+      void loadCommentsForPost(matchingPost);
+    }
   }, [loadCommentsForPost, posts, showThreadModal, targetPostId]);
 
   const handleRefresh = useCallback(() => {
     setIsRefreshing(true);
-    loadPosts();
+    void loadPosts('replace');
   }, [loadPosts]);
+
+  const handleLoadMore = useCallback(() => {
+    if (groupId || isLoading || isRefreshing || isLoadingMore || !hasMorePosts || selectedFilter !== 'all') {
+      return;
+    }
+
+    void loadPosts('append', feedCursor);
+  }, [feedCursor, groupId, hasMorePosts, isLoading, isLoadingMore, isRefreshing, loadPosts, selectedFilter]);
 
   // ─── Interactions ───────────────────────────────────────────────────
   const handleTogglePostLike = useCallback(
@@ -564,26 +662,53 @@ export default function CommunityQaFeed({
   }, [groupId]);
 
   // ─── Trending Topics ───────────────────────────────────────────────
-  const trendingTopics = useMemo(() => {
-    const topics: { label: string; count: number; emoji: string }[] = [];
+  const filterCounts = useMemo(() => {
     let questionCount = 0;
     let hotCount = 0;
-    let newCount = 0;
+    let todayCount = 0;
 
-    for (const p of posts) {
-      if ((p.content || '').includes('?')) questionCount++;
-      if ((p.comments_count || 0) >= 3 || (p.likes_count || 0) >= 3) hotCount++;
-      const age = Date.now() - new Date(p.created_at).getTime();
-      if (age < 24 * 60 * 60 * 1000) newCount++;
+    for (const post of posts) {
+      if (isQuestionPost(post)) questionCount++;
+      if (isHotPost(post)) hotCount++;
+      if (isTodayPost(post)) todayCount++;
     }
 
-    if (hotCount > 0) topics.push({ label: 'Beliebt', count: hotCount, emoji: '\uD83D\uDD25' });
-    if (newCount > 0) topics.push({ label: 'Heute', count: newCount, emoji: '\u2728' });
-    if (questionCount > 0) topics.push({ label: 'Fragen', count: questionCount, emoji: '\u2753' });
-    topics.push({ label: 'Alle', count: posts.length, emoji: '\uD83D\uDCAC' });
-
-    return topics;
+    return {
+      all: posts.length,
+      hot: hotCount,
+      today: todayCount,
+      questions: questionCount,
+    } satisfies Record<CommunityFeedFilter, number>;
   }, [posts]);
+
+  const filteredPosts = useMemo(() => {
+    switch (selectedFilter) {
+      case 'hot':
+        return posts.filter(isHotPost);
+      case 'today':
+        return posts.filter(isTodayPost);
+      case 'questions':
+        return posts.filter(isQuestionPost);
+      case 'all':
+      default:
+        return posts;
+    }
+  }, [posts, selectedFilter]);
+
+  const trendingTopics = useMemo(() => {
+    const orderedFilters: CommunityFeedFilter[] = ['hot', 'today', 'questions', 'all'];
+
+    return orderedFilters
+      .filter((filterId) => filterId === 'all' || filterCounts[filterId] > 0 || selectedFilter === filterId)
+      .map((filterId) => ({
+        id: filterId,
+        label: COMMUNITY_FILTER_META[filterId].label,
+        count: filterCounts[filterId],
+        emoji: COMMUNITY_FILTER_META[filterId].emoji,
+      })) satisfies CommunityTopicChip[];
+  }, [filterCounts, selectedFilter]);
+
+  const activeFilterMeta = COMMUNITY_FILTER_META[selectedFilter];
 
   // ─── Avatar Component ─────────────────────────────────────────────
   const Avatar = ({ name, avatarUrl, isAnonymous, size = 44 }: {
@@ -619,7 +744,7 @@ export default function CommunityQaFeed({
       {/* Header */}
       <Header
         title={groupName || 'Community'}
-        subtitle={`${posts.length} ${posts.length === 1 ? 'Beitrag' : 'Beiträge'}`}
+        subtitle={`${filteredPosts.length} ${filteredPosts.length === 1 ? 'Beitrag' : 'Beiträge'}${selectedFilter === 'all' ? '' : ` · ${activeFilterMeta.label}`}`}
         showBackButton={!!groupId}
         onBackPress={onBackPress}
         showBabySwitcher={false}
@@ -699,24 +824,51 @@ export default function CommunityQaFeed({
           </View>
 
           {/* Trending Pills */}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.trendingRow}
-          >
+          <View style={styles.trendingRow}>
             {trendingTopics.map((topic) => (
-              <View
-                key={topic.label}
-                style={[styles.trendingPill, { backgroundColor: cardBg, borderColor: cardBorder }]}
-              >
-                <ThemedText style={styles.trendingEmoji}>{topic.emoji}</ThemedText>
-                <ThemedText style={[styles.trendingLabel, { color: secondaryText }]}>{topic.label}</ThemedText>
-                <View style={[styles.trendingCount, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(200,159,129,0.1)' }]}>
-                  <ThemedText style={[styles.trendingCountText, { color: tertiaryText }]}>{topic.count}</ThemedText>
+              <TouchableOpacity
+                key={topic.id}
+                style={[
+                  styles.trendingPill,
+                  { backgroundColor: cardBg, borderColor: cardBorder },
+                  selectedFilter === topic.id && styles.trendingPillActive,
+                  selectedFilter === topic.id && { borderColor: isDark ? '#E9C9B6' : '#C89F81' },
+                ]}
+                activeOpacity={0.8}
+                onPress={() => handleFilterPress(topic.id)}
+                >
+                  <ThemedText style={styles.trendingEmoji}>{topic.emoji}</ThemedText>
+                <ThemedText
+                  style={[
+                    styles.trendingLabel,
+                    { color: secondaryText },
+                    selectedFilter === topic.id && styles.trendingLabelActive,
+                    selectedFilter === topic.id && { color: primaryText },
+                  ]}
+                >
+                  {topic.label}
+                </ThemedText>
+                <View
+                  style={[
+                    styles.trendingCount,
+                    { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(200,159,129,0.1)' },
+                    selectedFilter === topic.id && styles.trendingCountActive,
+                  ]}
+                >
+                  <ThemedText
+                    style={[
+                      styles.trendingCountText,
+                      { color: tertiaryText },
+                      selectedFilter === topic.id && styles.trendingCountTextActive,
+                      selectedFilter === topic.id && { color: primaryText },
+                    ]}
+                  >
+                    {topic.count}
+                  </ThemedText>
                 </View>
-              </View>
+              </TouchableOpacity>
             ))}
-          </ScrollView>
+          </View>
         </>
       ) : null}
     </View>
@@ -991,20 +1143,31 @@ export default function CommunityQaFeed({
   };
 
   // ─── Empty State ──────────────────────────────────────────────────
+  const isFilterEmpty = selectedFilter !== 'all' && filteredPosts.length === 0;
   const emptyState = (
     <View style={styles.emptyState}>
       <View style={[styles.emptyIconWrap, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(200,159,129,0.08)' }]}>
         <ThemedText style={styles.emptyEmoji}>{'\uD83D\uDCAC'}</ThemedText>
       </View>
-      <ThemedText style={[styles.emptyTitle, { color: primaryText }]}>Noch keine Beiträge</ThemedText>
+      <ThemedText style={[styles.emptyTitle, { color: primaryText }]}>
+        {isFilterEmpty ? `Keine ${activeFilterMeta.label.toLowerCase()} Beiträge` : 'Noch keine Beiträge'}
+      </ThemedText>
       <ThemedText style={[styles.emptyText, { color: tertiaryText }]}>
-        {groupId
+        {isFilterEmpty
+          ? 'Für diesen Filter gibt es aktuell keine passenden Beiträge. Du kannst den Filter zurücksetzen oder später noch einmal nachsehen.'
+          : groupId
           ? 'Starte den Austausch in dieser Gruppe mit dem ersten Beitrag.'
           : 'Sei die Erste! Stelle eine Frage oder teile deine Erfahrungen mit der Community.'}
       </ThemedText>
       <TouchableOpacity
         style={[styles.emptyBtn]}
-        onPress={() => setShowCreateModal(true)}
+        onPress={() => {
+          if (isFilterEmpty) {
+            setSelectedFilter('all');
+            return;
+          }
+          setShowCreateModal(true);
+        }}
         activeOpacity={0.85}
       >
         <LinearGradient
@@ -1014,11 +1177,19 @@ export default function CommunityQaFeed({
           style={styles.emptyBtnGradient}
         >
           <IconSymbol name="plus" size={16} color="#FFFFFF" />
-          <ThemedText style={styles.emptyBtnText}>{groupId ? 'Ersten Beitrag schreiben' : 'Erste Frage stellen'}</ThemedText>
+          <ThemedText style={styles.emptyBtnText}>
+            {isFilterEmpty ? 'Alle Beiträge anzeigen' : groupId ? 'Ersten Beitrag schreiben' : 'Erste Frage stellen'}
+          </ThemedText>
         </LinearGradient>
       </TouchableOpacity>
     </View>
   );
+
+  const listFooter = !groupId && selectedFilter === 'all' && isLoadingMore ? (
+    <View style={styles.listFooter}>
+      <ActivityIndicator size="small" color={isDark ? '#E9C9B6' : '#C89F81'} />
+    </View>
+  ) : null;
 
   // ─── Main Render ──────────────────────────────────────────────────
   return (
@@ -1032,11 +1203,12 @@ export default function CommunityQaFeed({
             </View>
           ) : (
             <FlatList
-              data={posts}
+              data={filteredPosts}
               keyExtractor={(item) => item.id}
               renderItem={renderPost}
               ListHeaderComponent={listHeader}
               ListEmptyComponent={emptyState}
+              ListFooterComponent={listFooter}
               contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 100 }]}
               refreshControl={
                 <RefreshControl
@@ -1046,6 +1218,8 @@ export default function CommunityQaFeed({
                 />
               }
               showsVerticalScrollIndicator={false}
+              onEndReached={handleLoadMore}
+              onEndReachedThreshold={0.35}
             />
           )}
 
@@ -1299,6 +1473,7 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: 'transparent' },
   loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   listContent: { paddingHorizontal: 16, gap: 2 },
+  listFooter: { paddingVertical: 16, alignItems: 'center', justifyContent: 'center' },
 
   // ── Compose Button ──
   composeBtn: {
@@ -1378,7 +1553,15 @@ const styles = StyleSheet.create({
   },
 
   // ── Trending ──
-  trendingRow: { paddingHorizontal: 4, gap: 8, paddingBottom: 16 },
+  trendingRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 8,
+    paddingTop: 2,
+    paddingBottom: 16,
+    paddingHorizontal: 2,
+  },
   trendingPill: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1387,15 +1570,29 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
     gap: 6,
+    alignSelf: 'flex-start',
+  },
+  trendingPillActive: {
+    transform: [{ translateY: -1 }],
+    shadowColor: '#C89F81',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 3,
   },
   trendingEmoji: { fontSize: 14 },
   trendingLabel: { fontSize: 13, fontWeight: '600' },
+  trendingLabelActive: { fontWeight: '700' },
   trendingCount: {
     paddingHorizontal: 7,
     paddingVertical: 2,
     borderRadius: 10,
   },
+  trendingCountActive: {
+    backgroundColor: 'rgba(200,159,129,0.16)',
+  },
   trendingCountText: { fontSize: 11, fontWeight: '700' },
+  trendingCountTextActive: { fontWeight: '800' },
 
   // ── List Header ──
   listHeader: { paddingBottom: 8 },
