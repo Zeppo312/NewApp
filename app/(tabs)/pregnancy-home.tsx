@@ -1052,7 +1052,7 @@ export default function PregnancyHomeScreen() {
 
               <TouchableOpacity
                 style={styles.liquidGlassCardWrapper}
-                onPress={() => router.push({ pathname: '/(tabs)/index' } as any)}
+                onPress={() => router.push('/(tabs)' as any)}
                 activeOpacity={0.9}
               >
                 <BlurView 

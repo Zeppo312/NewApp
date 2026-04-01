@@ -23,6 +23,11 @@ import { formatAudioDuration } from '@/lib/chatMessages';
 
 const MAX_RECORDING_MS = 120_000;
 const CHAT_AUDIO_MIME_TYPE = 'audio/mp4';
+const RECORDING_OPTIONS = {
+  ...RecordingPresets.HIGH_QUALITY,
+  isMeteringEnabled: true,
+} as const;
+const WAVE_BAR_COUNT = 22;
 
 type ChatComposerProps = {
   draft: string;
@@ -68,7 +73,7 @@ export default function ChatComposer({
   bottomInset,
 }: ChatComposerProps) {
   const inputRef = useRef<TextInput>(null);
-  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const recorder = useAudioRecorder(RECORDING_OPTIONS);
   const recorderState = useAudioRecorderState(recorder, 200);
 
   const [recorderMode, setRecorderMode] = useState<RecorderMode>('idle');
@@ -209,7 +214,7 @@ export default function ChatComposer({
         interruptionMode: 'duckOthers',
       });
 
-      await recorder.prepareToRecordAsync(RecordingPresets.HIGH_QUALITY);
+      await recorder.prepareToRecordAsync(RECORDING_OPTIONS);
       recorder.record();
       latestRecordingDurationRef.current = 0;
       setRecordingUri(null);
@@ -268,6 +273,23 @@ export default function ChatComposer({
     const duration = recordingDurationMs;
     return formatAudioDuration(duration);
   }, [recordingDurationMs]);
+  const recordingWaveHeights = useMemo(() => {
+    const phase = recordingDurationMs / 170;
+    const meteringValue = typeof recorderState.metering === 'number'
+      ? Math.max(0, Math.min(1, (recorderState.metering + 60) / 60))
+      : null;
+
+    return Array.from({ length: WAVE_BAR_COUNT }, (_, index) => {
+      const distanceFromCenter = Math.abs(index - (WAVE_BAR_COUNT - 1) / 2) / (WAVE_BAR_COUNT / 2);
+      const envelope = 1 - distanceFromCenter * 0.45;
+      const fallbackPulse = 0.22 + ((Math.sin(phase + index * 0.62) + 1) / 2) * 0.58;
+      const intensity = meteringValue !== null
+        ? Math.max(0.16, Math.min(1, meteringValue * envelope + fallbackPulse * 0.28))
+        : fallbackPulse * envelope;
+
+      return 4 + intensity * 22;
+    });
+  }, [recordingDurationMs, recorderState.metering]);
 
   return (
     <>
@@ -399,13 +421,38 @@ export default function ChatComposer({
           >
             <View style={styles.recordingInfo}>
               <View style={[styles.recordingDot, { backgroundColor: recorderMode === 'recording' ? '#FF6B6B' : theme.accent }]} />
-              <View>
+              <View style={styles.recordingTextBlock}>
                 <ThemedText style={[styles.recordingTitle, { color: theme.text }]}>
                   {recorderMode === 'recording' ? 'Aufnahme läuft' : 'Sprachnachricht'}
                 </ThemedText>
                 <ThemedText style={[styles.recordingTime, { color: theme.textTertiary }]}>
                   {recordingTimer}
                 </ThemedText>
+                {recorderMode === 'recording' ? (
+                  <View
+                    style={[
+                      styles.recordingWaveShell,
+                      { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#F5EEE9' },
+                    ]}
+                  >
+                    <View style={styles.recordingWave}>
+                    {recordingWaveHeights.map((height, index) => (
+                      <View
+                        // eslint-disable-next-line react/no-array-index-key
+                        key={index}
+                        style={[
+                          styles.recordingWaveBar,
+                          {
+                            height,
+                            backgroundColor: isDark ? '#F6E9D8' : theme.accent,
+                            opacity: 0.38 + (height - 4) / 28,
+                          },
+                        ]}
+                      />
+                    ))}
+                    </View>
+                  </View>
+                ) : null}
               </View>
             </View>
 
@@ -511,6 +558,9 @@ const styles = StyleSheet.create({
     gap: 10,
     flex: 1,
   },
+  recordingTextBlock: {
+    flex: 1,
+  },
   recordingDot: {
     width: 10,
     height: 10,
@@ -523,6 +573,25 @@ const styles = StyleSheet.create({
   recordingTime: {
     fontSize: 12,
     marginTop: 2,
+  },
+  recordingWave: {
+    height: 28,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    justifyContent: 'center',
+  },
+  recordingWaveShell: {
+    marginTop: 8,
+    height: 34,
+    borderRadius: 14,
+    paddingHorizontal: 8,
+    justifyContent: 'center',
+    alignSelf: 'flex-start',
+  },
+  recordingWaveBar: {
+    width: 3,
+    borderRadius: 999,
   },
   recordingActions: {
     flexDirection: 'row',
