@@ -23,17 +23,7 @@ import { ThemedBackground } from '@/components/ThemedBackground';
 import Header from '@/components/Header';
 import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import {
-  GLASS_BORDER,
-  GLASS_OVERLAY,
-  LAYOUT_PAD,
-  LiquidGlassCard,
-  PRIMARY,
-  RADIUS,
-  SECTION_GAP_BOTTOM,
-  SECTION_GAP_TOP,
-  GRID_GAP,
-} from '@/constants/DesignGuide';
+import { LiquidGlassCard, PRIMARY } from '@/constants/DesignGuide';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import {
   fetchMyRecipes,
@@ -80,6 +70,7 @@ const MyRecipesScreen = () => {
   const [editIngredientInput, setEditIngredientInput] = useState('');
   const [editAllergens, setEditAllergens] = useState<string[]>([]);
   const [editImage, setEditImage] = useState<string | null>(null);
+  const [editVideoUrl, setEditVideoUrl] = useState('');
   const [imageChanged, setImageChanged] = useState(false);
 
   const loadMyRecipes = useCallback(async () => {
@@ -113,6 +104,7 @@ const MyRecipesScreen = () => {
     setEditIngredients([...recipe.ingredients]);
     setEditAllergens([...recipe.allergens]);
     setEditImage(recipe.image_url);
+    setEditVideoUrl(recipe.video_url || '');
     setImageChanged(false);
     setShowEditModal(true);
   };
@@ -129,6 +121,7 @@ const MyRecipesScreen = () => {
     setEditIngredientInput('');
     setEditAllergens([]);
     setEditImage(null);
+    setEditVideoUrl('');
     setImageChanged(false);
   };
 
@@ -230,6 +223,7 @@ const MyRecipesScreen = () => {
         allergens: editAllergens,
         instructions: editInstructions,
         tip: editTip || null,
+        video_url: editVideoUrl || null,
       };
 
       const { data, error } = await updateRecipe(
@@ -392,6 +386,12 @@ const MyRecipesScreen = () => {
                             {recipe.ingredients.length} Zutaten
                           </ThemedText>
                         </View>
+                        {recipe.video_url ? (
+                          <View style={styles.statPill}>
+                            <IconSymbol name='play.rectangle.fill' size={14} color={PRIMARY} />
+                            <ThemedText style={styles.statText}>Videokurs</ThemedText>
+                          </View>
+                        ) : null}
                       </View>
                     </View>
 
@@ -588,6 +588,22 @@ const MyRecipesScreen = () => {
                   numberOfLines={5}
                   placeholderTextColor='rgba(0,0,0,0.35)'
                 />
+              </View>
+              <View style={styles.formGroup}>
+                <ThemedText style={styles.formLabel}>Videokurs-Link (optional)</ThemedText>
+                <TextInput
+                  style={styles.formInput}
+                  placeholder='YouTube-Link einfuegen'
+                  value={editVideoUrl}
+                  onChangeText={setEditVideoUrl}
+                  autoCapitalize='none'
+                  autoCorrect={false}
+                  keyboardType='url'
+                  placeholderTextColor='rgba(0,0,0,0.35)'
+                />
+                <ThemedText style={styles.formChipHint}>
+                  Der Link wird in der App als reduzierter Start/Stop-Videokurs eingebettet.
+                </ThemedText>
               </View>
               <View style={styles.formGroup}>
                 <ThemedText style={styles.formLabel}>Bild (optional)</ThemedText>
@@ -1062,4 +1078,3 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
 });
-

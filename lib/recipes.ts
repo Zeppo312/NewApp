@@ -1,6 +1,6 @@
 import { PostgrestError } from '@supabase/supabase-js';
-import { supabase } from './supabase';
-import { getCachedUser } from './supabase';
+import { getCachedUser, supabase } from './supabase';
+import { normalizeRecipeVideoUrl } from './recipeVideo';
 
 const RECIPE_BUCKET = 'recipe-images';
 
@@ -15,6 +15,7 @@ export interface RecipeRecord {
   instructions: string;
   tip: string | null;
   image_url: string | null;
+  video_url: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -27,6 +28,7 @@ export type RecipeInsert = {
   allergens?: string[];
   instructions: string;
   tip?: string | null;
+  video_url?: string | null;
 };
 
 type RecipeCreateResult = {
@@ -90,7 +92,7 @@ const uploadRecipeImage = async (imageBase64: string, userId: string) => {
       .slice(2)}.jpg`;
     const payload = base64ToUint8Array(imageBase64);
 
-    const { data, error } = await supabase.storage
+    const { error } = await supabase.storage
       .from(RECIPE_BUCKET)
       .upload(filename, payload, {
         contentType: 'image/jpeg',
@@ -151,6 +153,14 @@ export const createRecipe = async (
       };
     }
     const normalizedAllergens = sanitizeAllergens(payload.allergens);
+    const normalizedVideoUrl = normalizeRecipeVideoUrl(payload.video_url);
+
+    if (payload.video_url && !normalizedVideoUrl) {
+      return {
+        data: null,
+        error: new Error('Bitte hinterlege einen gueltigen YouTube-Link fuer den Videokurs.'),
+      };
+    }
 
     let imageUrl: string | null = null;
     if (imageBase64 && imageBase64.length > 0) {
@@ -177,6 +187,7 @@ export const createRecipe = async (
       instructions: payload.instructions.trim(),
       tip: payload.tip?.trim() ?? null,
       image_url: imageUrl,
+      video_url: normalizedVideoUrl,
     };
 
     const { data, error } = await supabase
@@ -234,6 +245,7 @@ export type RecipeUpdate = {
   allergens?: string[];
   instructions?: string;
   tip?: string | null;
+  video_url?: string | null;
   is_global?: boolean;
 };
 
@@ -301,6 +313,16 @@ export const updateRecipe = async (
     }
     if (payload.tip !== undefined) {
       updatePayload.tip = payload.tip?.trim() ?? null;
+    }
+    if (payload.video_url !== undefined) {
+      const normalizedVideoUrl = normalizeRecipeVideoUrl(payload.video_url);
+      if (payload.video_url && !normalizedVideoUrl) {
+        return {
+          data: null,
+          error: new Error('Bitte hinterlege einen gueltigen YouTube-Link fuer den Videokurs.'),
+        };
+      }
+      updatePayload.video_url = normalizedVideoUrl;
     }
     if (payload.is_global !== undefined) {
       updatePayload.is_global = payload.is_global;
@@ -385,6 +407,16 @@ export const updateRecipeAdmin = async (
     }
     if (payload.tip !== undefined) {
       updatePayload.tip = payload.tip?.trim() ?? null;
+    }
+    if (payload.video_url !== undefined) {
+      const normalizedVideoUrl = normalizeRecipeVideoUrl(payload.video_url);
+      if (payload.video_url && !normalizedVideoUrl) {
+        return {
+          data: null,
+          error: new Error('Bitte hinterlege einen gueltigen YouTube-Link fuer den Videokurs.'),
+        };
+      }
+      updatePayload.video_url = normalizedVideoUrl;
     }
     if (payload.is_global !== undefined) {
       updatePayload.is_global = payload.is_global;

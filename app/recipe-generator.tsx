@@ -21,6 +21,7 @@ import { Stack, useRouter } from "expo-router";
 
 import { ThemedBackground } from "@/components/ThemedBackground";
 import Header from "@/components/Header";
+import { RecipeVideoCourse } from "@/components/RecipeVideoCourse";
 import { ThemedText } from "@/components/ThemedText";
 import { IconSymbol } from "@/components/ui/IconSymbol";
 import { Colors } from "@/constants/Colors";
@@ -40,7 +41,7 @@ import {
   RECIPE_SAMPLES,
   RecipeSample,
 } from "@/lib/recipes-samples";
-import { isUserAdmin } from "@/lib/supabase/recommendations";
+import { extractYouTubeVideoId } from "@/lib/recipeVideo";
 import { useActiveBaby } from "@/contexts/ActiveBabyContext";
 
 type AllergenId = "milk" | "gluten" | "egg" | "nuts" | "fish";
@@ -207,7 +208,6 @@ const RecipeGeneratorScreen = () => {
   const [showAllergyModal, setShowAllergyModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSeeding, setIsSeeding] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false);
 
   const [newTitle, setNewTitle] = useState("");
   const [newDescription, setNewDescription] = useState("");
@@ -218,6 +218,7 @@ const RecipeGeneratorScreen = () => {
   const [newIngredientInput, setNewIngredientInput] = useState("");
   const [newAllergens, setNewAllergens] = useState<AllergenId[]>([]);
   const [newImage, setNewImage] = useState<string | null>(null);
+  const [newVideoUrl, setNewVideoUrl] = useState("");
 
   const sortedRecipes = useMemo(() => {
     return [...recipes].sort((a, b) => {
@@ -244,6 +245,9 @@ const RecipeGeneratorScreen = () => {
     : null;
   const instructionParts = selectedRecipe?.instructions
     ? parseInstructionSteps(selectedRecipe.instructions)
+    : null;
+  const selectedRecipeVideoId = selectedRecipe?.video_url
+    ? extractYouTubeVideoId(selectedRecipe.video_url)
     : null;
 
   const loadRecipes = useCallback(async () => {
@@ -286,20 +290,6 @@ const RecipeGeneratorScreen = () => {
     setAgeMonths(FILTER_AGE_LIMITS.min);
   }, [activeBabyId, activeBaby?.birth_date]);
 
-  useEffect(() => {
-    let isMounted = true;
-    const checkAdminStatus = async () => {
-      const adminStatus = await isUserAdmin();
-      if (isMounted) {
-        setIsAdmin(adminStatus);
-      }
-    };
-    checkAdminStatus();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
   const resetCreateForm = () => {
     setNewTitle("");
     setNewDescription("");
@@ -310,6 +300,7 @@ const RecipeGeneratorScreen = () => {
     setNewIngredientInput("");
     setNewAllergens([]);
     setNewImage(null);
+    setNewVideoUrl("");
   };
 
   const toggleAllergy = (allergen: AllergenId) => {
@@ -429,6 +420,7 @@ const RecipeGeneratorScreen = () => {
           allergens: newAllergens,
           instructions: newInstructions,
           tip: newTip || null,
+          video_url: newVideoUrl || null,
         },
         newImage ?? undefined,
       );
@@ -1036,6 +1028,20 @@ const RecipeGeneratorScreen = () => {
                   </ThemedText>
                 ) : null}
 
+                {selectedRecipe.video_url && selectedRecipeVideoId ? (
+                  <View style={styles.recipeSectionCard}>
+                    <ThemedText style={styles.recipeSectionTitle}>
+                      Videokurs
+                    </ThemedText>
+                    <RecipeVideoCourse
+                      accentColor={accentColor}
+                      textColor={textPrimary}
+                      secondaryTextColor={textSecondary}
+                      videoUrl={selectedRecipe.video_url}
+                    />
+                  </View>
+                ) : null}
+
                 <View style={styles.recipeInfoChipsRow}>
                   <View style={styles.recipeInfoChip}>
                     <IconSymbol
@@ -1543,6 +1549,25 @@ const RecipeGeneratorScreen = () => {
                   numberOfLines={5}
                   placeholderTextColor={placeholderTextColor}
                 />
+              </View>
+              <View style={styles.formGroup}>
+                <ThemedText style={styles.formLabel}>
+                  Videokurs-Link (optional)
+                </ThemedText>
+                <TextInput
+                  style={styles.formInput}
+                  placeholder="YouTube-Link einfuegen"
+                  value={newVideoUrl}
+                  onChangeText={setNewVideoUrl}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="url"
+                  placeholderTextColor={placeholderTextColor}
+                />
+                <ThemedText style={styles.formChipHint}>
+                  Hinterlege einfach einen YouTube-Link. In der Rezeptansicht zeigen wir nur
+                  einen reduzierten Start/Stop-Player.
+                </ThemedText>
               </View>
               <View style={styles.formGroup}>
                 <ThemedText style={styles.formLabel}>

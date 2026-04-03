@@ -19,10 +19,14 @@ create table if not exists public.baby_recipes (
   instructions text not null,
   tip text,
   image_url text,
+  video_url text,
   is_global boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.baby_recipes
+  add column if not exists video_url text;
 
 -- Helpful indexes for lookups and ingredient filtering.
 create unique index if not exists baby_recipes_title_idx
