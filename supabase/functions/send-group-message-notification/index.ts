@@ -18,7 +18,8 @@ interface GroupMessageWebhookPayload {
     group_id: string;
     sender_id: string;
     content: string | null;
-    message_type: 'text' | 'voice';
+    message_type: 'text' | 'voice' | 'event';
+    event_id: string | null;
     created_at: string;
   };
 }
@@ -62,7 +63,7 @@ serve(async (req: Request) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { sender_id, group_id, content, id, message_type } = payload.record;
+    const { sender_id, group_id, content, id, message_type, event_id } = payload.record;
 
     // 1. Get group name
     const { data: groupData, error: groupError } = await supabase
@@ -163,13 +164,25 @@ serve(async (req: Request) => {
     }
 
     // 5. Send push notifications
-    const body = message_type === 'voice'
-      ? 'Sprachnachricht'
-      : content?.trim()
-        ? content.length > 120
-          ? `${content.slice(0, 117)}...`
-          : content
-        : 'Neue Nachricht';
+    let body = 'Neue Nachricht';
+    if (message_type === 'voice') {
+      body = 'Sprachnachricht';
+    } else if (message_type === 'event') {
+      let eventTitle: string | null = null;
+      if (event_id) {
+        const { data: eventData } = await supabase
+          .from('community_group_events')
+          .select('title')
+          .eq('id', event_id)
+          .maybeSingle();
+        eventTitle = eventData?.title?.trim() || null;
+      }
+      body = eventTitle ? `Event: ${eventTitle}` : 'Event';
+    } else if (content?.trim()) {
+      body = content.length > 120
+        ? `${content.slice(0, 117)}...`
+        : content;
+    }
 
     const pushPayloads = tokens.map((tokenRecord) =>
       fetch(EXPO_PUSH_URL, {

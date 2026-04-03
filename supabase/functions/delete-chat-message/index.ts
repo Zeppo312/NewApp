@@ -22,7 +22,8 @@ type GroupMessageRow = {
   id: string;
   group_id: string;
   sender_id: string;
-  message_type: 'text' | 'voice';
+  message_type: 'text' | 'voice' | 'event';
+  event_id: string | null;
   audio_storage_path: string | null;
 };
 
@@ -124,7 +125,7 @@ serve(async (req: Request) => {
 
     const { data: message, error } = await serviceClient
       .from('community_group_messages')
-      .select('id, group_id, sender_id, message_type, audio_storage_path')
+      .select('id, group_id, sender_id, message_type, event_id, audio_storage_path')
       .eq('id', messageId)
       .maybeSingle<GroupMessageRow>();
 
@@ -148,6 +149,13 @@ serve(async (req: Request) => {
       return new Response(JSON.stringify({ message: 'Forbidden' }), {
         headers: CORS_HEADERS,
         status: 403,
+      });
+    }
+
+    if (message.message_type === 'event' || message.event_id) {
+      return new Response(JSON.stringify({ message: 'Event messages must be managed through event actions' }), {
+        headers: CORS_HEADERS,
+        status: 409,
       });
     }
 

@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import Slider from '@react-native-community/slider';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -38,7 +39,6 @@ import {
   type ChatMessageType,
   VOICE_MESSAGE_PREVIEW,
   formatAudioDuration,
-  getAudioProgress,
   getMessagePreviewText,
 } from '@/lib/chatMessages';
 import { supabase } from '@/lib/supabase';
@@ -269,11 +269,17 @@ export default function ChatThreadScreen() {
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [firstUnreadId, setFirstUnreadId] = useState<string | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [expandedSliderMessageId, setExpandedSliderMessageId] = useState<string | null>(null);
+  const [sliderMessageId, setSliderMessageId] = useState<string | null>(null);
+  const [sliderPreviewTime, setSliderPreviewTime] = useState(0);
   const {
     activeMessageId,
     currentTime,
     isPlaying,
     loadingMessageId,
+    playbackRate,
+    cyclePlaybackRate,
+    seekToTime,
     stopPlayback,
     togglePlayback,
   } = useChatAudioPlayback('direct');
@@ -461,6 +467,13 @@ export default function ChatThreadScreen() {
     [clearPendingScrolls, stopPlayback],
   );
 
+  useEffect(() => {
+    if (activeMessageId !== null) return;
+    setExpandedSliderMessageId(null);
+    setSliderMessageId(null);
+    setSliderPreviewTime(0);
+  }, [activeMessageId]);
+
   // -----------------------------------------------------------------------
   // Actions
   // -----------------------------------------------------------------------
@@ -591,6 +604,26 @@ export default function ChatThreadScreen() {
     [handleDeleteMessage, handleReply, user?.id],
   );
 
+  const handleVoiceSliderStart = useCallback(
+    (message: DirectMessage) => {
+      setExpandedSliderMessageId(message.id);
+      setSliderMessageId(message.id);
+      setSliderPreviewTime(activeMessageId === message.id ? currentTime : 0);
+    },
+    [activeMessageId, currentTime],
+  );
+
+  const handleVoiceSliderComplete = useCallback(
+    (message: DirectMessage, nextTime: number) => {
+      setSliderMessageId(message.id);
+      setSliderPreviewTime(nextTime);
+      void seekToTime(message, nextTime).finally(() => {
+        setSliderMessageId((current) => (current === message.id ? null : current));
+      });
+    },
+    [seekToTime],
+  );
+
   // -----------------------------------------------------------------------
   // Render helpers
   // -----------------------------------------------------------------------
@@ -667,6 +700,15 @@ export default function ChatThreadScreen() {
   const renderItem = ({ item }: { item: EnrichedMessage }) => {
     const isOwn = item.sender_id === user?.id;
     const isHighlighted = highlightId === item.id;
+    const isActiveVoiceMessage = activeMessageId === item.id;
+    const isSlidingVoiceMessage = sliderMessageId === item.id;
+    const isExpandedVoiceSlider = expandedSliderMessageId === item.id;
+    const durationSeconds = Math.max((item.audio_duration_ms ?? 0) / 1000, 0);
+    const voiceSliderValue = isSlidingVoiceMessage
+      ? sliderPreviewTime
+      : isActiveVoiceMessage
+        ? currentTime
+        : 0;
 
     const RADIUS = 18;
     const TAIL = 4;
@@ -748,40 +790,99 @@ export default function ChatThreadScreen() {
                   >
                     {VOICE_MESSAGE_PREVIEW}
                   </ThemedText>
-                  <View
-                    style={[
-                      styles.voiceProgressTrack,
-                      {
-                        backgroundColor: isOwn
+                  {isExpandedVoiceSlider ? (
+                    <Slider
+                      style={styles.voiceSlider}
+                      minimumValue={0}
+                      maximumValue={Math.max(durationSeconds, 0.1)}
+                      value={Math.min(voiceSliderValue, Math.max(durationSeconds, 0.1))}
+                      minimumTrackTintColor={isOwn ? '#FFFFFF' : theme.accent}
+                      maximumTrackTintColor={
+                        isOwn
                           ? 'rgba(255,255,255,0.24)'
                           : isDark
                             ? '#4A3F3B'
-                            : '#E8DDD6',
-                      },
-                    ]}
-                  >
-                    <View
-                      style={[
-                        styles.voiceProgressFill,
-                        {
-                          backgroundColor: isOwn ? '#FFFFFF' : theme.accent,
-                          width: `${getAudioProgress(
-                            activeMessageId === item.id ? currentTime : 0,
-                            item.audio_duration_ms,
-                          ) * 100}%`,
-                        },
-                      ]}
+                            : '#E8DDD6'
+                      }
+                      thumbTintColor={isOwn ? '#FFFFFF' : theme.accent}
+                      disabled={loadingMessageId === item.id || durationSeconds <= 0}
+                      onSlidingStart={() => handleVoiceSliderStart(item)}
+                      onValueChange={(value) => {
+                        setSliderMessageId(item.id);
+                        setSliderPreviewTime(value);
+                      }}
+                      onSlidingComplete={(value) => handleVoiceSliderComplete(item, value)}
                     />
-                  </View>
+                  ) : (
+                    <Pressable
+                      style={styles.voiceProgressCollapsed}
+                      onPress={() => setExpandedSliderMessageId(item.id)}
+                    >
+                      <View
+                        style={[
+                          styles.voiceProgressCollapsedTrack,
+                          {
+                            backgroundColor: isOwn
+                              ? 'rgba(255,255,255,0.24)'
+                              : isDark
+                                ? '#4A3F3B'
+                                : '#E8DDD6',
+                          },
+                        ]}
+                      >
+                        <View
+                          style={[
+                            styles.voiceProgressCollapsedFill,
+                            {
+                              backgroundColor: isOwn ? '#FFFFFF' : theme.accent,
+                              width: `${durationSeconds > 0 ? (voiceSliderValue / durationSeconds) * 100 : 0}%`,
+                            },
+                          ]}
+                        />
+                      </View>
+                    </Pressable>
+                  )}
                 </View>
               </View>
 
               <View style={styles.voiceFooter}>
-                <ThemedText
-                  style={[styles.messageTime, { color: isOwn ? ownMetaColor : otherMetaColor }]}
-                >
-                  {formatAudioDuration(item.audio_duration_ms)}
-                </ThemedText>
+                <View style={styles.voiceFooterLeft}>
+                  <ThemedText
+                    style={[
+                      styles.messageTime,
+                      styles.voiceElapsedTime,
+                      { color: isOwn ? ownMetaColor : otherMetaColor },
+                    ]}
+                  >
+                    {formatAudioDuration(voiceSliderValue * 1000)} /{' '}
+                    {formatAudioDuration(item.audio_duration_ms)}
+                  </ThemedText>
+                  {activeMessageId === item.id ? (
+                    <TouchableOpacity
+                      style={[
+                        styles.voiceSpeedButton,
+                        {
+                          backgroundColor: isOwn
+                            ? 'rgba(255,255,255,0.18)'
+                            : isDark
+                              ? '#2A2321'
+                              : '#FFFFFF',
+                        },
+                      ]}
+                      onPress={cyclePlaybackRate}
+                      activeOpacity={0.8}
+                    >
+                      <ThemedText
+                        style={[
+                          styles.voiceSpeedButtonText,
+                          { color: isOwn ? '#FFFFFF' : theme.accent },
+                        ]}
+                      >
+                        {playbackRate}x
+                      </ThemedText>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
                 <View style={styles.voiceFooterRight}>
                   <ThemedText
                     style={[styles.messageTime, { color: isOwn ? ownMetaColor : otherMetaColor }]}
@@ -1006,7 +1107,7 @@ const styles = StyleSheet.create({
   messageTime: { fontSize: 11 },
   checkmarks: { fontSize: 13, fontWeight: '700', marginTop: -1 },
   voiceBubble: {
-    minWidth: 220,
+    minWidth: 255,
   },
   voiceRow: {
     flexDirection: 'row',
@@ -1022,18 +1123,28 @@ const styles = StyleSheet.create({
   },
   voiceBody: {
     flex: 1,
-    gap: 6,
+    gap: 2,
   },
   voiceTitle: {
     fontSize: 14,
     fontWeight: '700',
   },
-  voiceProgressTrack: {
+  voiceSlider: {
+    width: '100%',
+    height: 28,
+    marginLeft: -10,
+  },
+  voiceProgressCollapsed: {
+    width: '100%',
+    paddingVertical: 10,
+    justifyContent: 'center',
+  },
+  voiceProgressCollapsedTrack: {
     height: 4,
     borderRadius: 999,
     overflow: 'hidden',
   },
-  voiceProgressFill: {
+  voiceProgressCollapsedFill: {
     height: '100%',
     borderRadius: 999,
   },
@@ -1043,6 +1154,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 8,
+  },
+  voiceFooterLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexShrink: 1,
+  },
+  voiceSpeedButton: {
+    minWidth: 44,
+    height: 26,
+    borderRadius: 13,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.14)',
+  },
+  voiceSpeedButtonText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  voiceElapsedTime: {
+    flexShrink: 1,
   },
   voiceFooterRight: {
     flexDirection: 'row',

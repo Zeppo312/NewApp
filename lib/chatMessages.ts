@@ -1,7 +1,8 @@
 export type ChatScope = 'direct' | 'group';
-export type ChatMessageType = 'text' | 'voice';
+export type ChatMessageType = 'text' | 'voice' | 'event';
 
 export const VOICE_MESSAGE_PREVIEW = 'Sprachnachricht';
+export const EVENT_MESSAGE_PREVIEW = 'Event';
 
 export type ChatMessageCore = {
   content: string | null;
@@ -9,6 +10,7 @@ export type ChatMessageCore = {
   audio_storage_path: string | null;
   audio_duration_ms: number | null;
   audio_mime_type: string | null;
+  event_title?: string | null;
 };
 
 export const isVoiceMessage = (
@@ -16,12 +18,17 @@ export const isVoiceMessage = (
 ): boolean => message?.message_type === 'voice';
 
 export const getMessagePreviewText = (
-  message: Pick<ChatMessageCore, 'content' | 'message_type'> | null | undefined,
+  message: Pick<ChatMessageCore, 'content' | 'message_type' | 'event_title'> | null | undefined,
 ): string => {
   if (!message) return '';
-  return message.message_type === 'voice'
-    ? VOICE_MESSAGE_PREVIEW
-    : message.content?.trim() || '';
+  if (message.message_type === 'voice') {
+    return VOICE_MESSAGE_PREVIEW;
+  }
+  if (message.message_type === 'event') {
+    const title = message.event_title?.trim();
+    return title ? `Event: ${title}` : EVENT_MESSAGE_PREVIEW;
+  }
+  return message.content?.trim() || '';
 };
 
 export const formatAudioDuration = (durationMs?: number | null): string => {

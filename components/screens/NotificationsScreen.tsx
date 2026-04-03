@@ -415,7 +415,10 @@ export default function NotificationsScreen() {
   };
 
   const handleGroupChatPress = (summary: GroupChatSummary) => {
-    router.push({ pathname: `/group-chat/${summary.group_id}`, params: { from: 'notifications' } } as any);
+    router.push({
+      pathname: '/group-chat/[groupId]',
+      params: { groupId: summary.group_id, from: 'notifications' },
+    } as any);
   };
 
   // -----------------------------------------------------------------------

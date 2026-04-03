@@ -795,7 +795,7 @@ export default function CommunityQaFeed({
             <TouchableOpacity
               style={styles.segmentTab}
               activeOpacity={0.7}
-              onPress={() => router.push('/groups' as any)}
+              onPress={() => router.push('/(tabs)/groups' as any)}
             >
               <ThemedText style={[styles.segmentText, styles.segmentTextCompact, { color: tertiaryText }]}>Gruppen</ThemedText>
             </TouchableOpacity>

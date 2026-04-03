@@ -15,7 +15,8 @@ import {
   View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useRouter, useSegments } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import Header from '@/components/Header';
 import { ThemedBackground } from '@/components/ThemedBackground';
@@ -229,10 +230,14 @@ const SectionHeader = ({
 
 // ── Main screen ──────────────────────────────────────────────────
 export default function GroupsHubScreen() {
+  const insets = useSafeAreaInsets();
+  const segments = useSegments();
   const router = useRouter();
   const colorScheme = useColorScheme() ?? 'light';
   const adaptiveColors = useAdaptiveColors();
   const isDark = colorScheme === 'dark' || adaptiveColors.isDarkBackground;
+  const isWithinTabs = segments[0] === '(tabs)';
+  const fabBottom = Math.max(isWithinTabs ? insets.bottom + 72 : 28, 28);
   const theme = Colors[isDark ? 'dark' : 'light'];
 
   const primaryText = isDark ? theme.textPrimary : '#5C4033';
@@ -646,7 +651,7 @@ export default function GroupsHubScreen() {
 
           {/* ── FAB ── */}
           <TouchableOpacity
-            style={styles.fab}
+            style={[styles.fab, { bottom: fabBottom }]}
             onPress={() => setShowCreateModal(true)}
             activeOpacity={0.85}
           >

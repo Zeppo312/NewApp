@@ -272,7 +272,7 @@ export default function GroupDetailScreen() {
             return;
           }
 
-          router.replace('/groups' as any);
+          router.replace('/(tabs)/groups' as any);
         },
       },
     ]);
@@ -302,7 +302,7 @@ export default function GroupDetailScreen() {
             <Header
               title="Gruppe"
               showBackButton
-              onBackPress={() => router.push('/groups' as any)}
+              onBackPress={() => router.push('/(tabs)/groups' as any)}
               showBabySwitcher={false}
             />
             <View style={styles.emptyWrap}>
@@ -339,7 +339,7 @@ export default function GroupDetailScreen() {
             <Header
               title={group.name}
               showBackButton
-              onBackPress={() => router.push('/groups' as any)}
+              onBackPress={() => router.push('/(tabs)/groups' as any)}
               showBabySwitcher={false}
             />
 

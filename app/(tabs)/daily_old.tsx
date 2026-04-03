@@ -734,6 +734,9 @@ export default function DailyScreen() {
   const [entries, setEntries] = useState<DailyEntry[]>([]);
   const [weekEntries, setWeekEntries] = useState<DailyEntry[]>([]);
   const [monthEntries, setMonthEntries] = useState<DailyEntry[]>([]);
+  const [currentDeviceTimeMs, setCurrentDeviceTimeMs] = useState(() => Date.now());
+  const [latestBottleEntryId, setLatestBottleEntryId] = useState<string | null>(null);
+  const [latestBottleTimestamp, setLatestBottleTimestamp] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -804,6 +807,53 @@ export default function DailyScreen() {
   useEffect(() => {
     requestPermissions();
   }, [requestPermissions]);
+
+  useEffect(() => {
+    setCurrentDeviceTimeMs(Date.now());
+    const intervalId = setInterval(() => {
+      setCurrentDeviceTimeMs(Date.now());
+    }, 60 * 1000);
+
+    return () => clearInterval(intervalId);
+  }, []);
+
+  const loadLatestBottleInfo = useCallback(async () => {
+    if (!activeBabyId) {
+      setLatestBottleEntryId(null);
+      setLatestBottleTimestamp(null);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('baby_care_entries')
+        .select('id,start_time')
+        .eq('baby_id', activeBabyId)
+        .eq('entry_type', 'feeding')
+        .eq('feeding_type', 'BOTTLE')
+        .order('start_time', { ascending: false })
+        .limit(1);
+
+      if (error) {
+        console.error('Error loading latest bottle info:', error);
+        return;
+      }
+
+      const latestBottle = data?.[0];
+      const timestamp = latestBottle?.start_time ? new Date(latestBottle.start_time).getTime() : NaN;
+
+      if (latestBottle?.id && Number.isFinite(timestamp)) {
+        setLatestBottleEntryId(latestBottle.id);
+        setLatestBottleTimestamp(timestamp);
+        return;
+      }
+
+      setLatestBottleEntryId(null);
+      setLatestBottleTimestamp(null);
+    } catch (error) {
+      console.error('Failed to resolve latest bottle info:', error);
+    }
+  }, [activeBabyId]);
 
   useEffect(() => {
     let isActive = true;
@@ -991,37 +1041,23 @@ export default function DailyScreen() {
   const isVitaminDCompleted = !!vitaminDChecks[selectedDateKey];
   const showVitaminDStrip = !!user?.id && !!activeBabyId && !isVitaminDCompleted;
   const showVitaminDTimelinePoint = !!user?.id && !!activeBabyId;
+  const latestBottleGapLabel = useMemo(() => {
+    if (latestBottleTimestamp === null) return null;
+
+    const diffMinutes = Math.round((currentDeviceTimeMs - latestBottleTimestamp) / (1000 * 60));
+    return formatBottleGapLabel(diffMinutes);
+  }, [currentDeviceTimeMs, latestBottleTimestamp]);
   const bottleGapLabelByEntryId = useMemo(() => {
     const labelMap = new Map<string, string>();
+    if (!latestBottleEntryId || !latestBottleGapLabel) return labelMap;
 
-    const chronologicalEntries = [...entries]
-      .map((entry) => ({
-        entry,
-        timestamp: getEntryTimelineTimestamp(entry),
-      }))
-      .filter((item): item is { entry: DailyEntry; timestamp: number } => item.timestamp !== null)
-      .sort((a, b) => a.timestamp - b.timestamp);
+    const isLatestBottleVisible = entries.some((entry) => entry.id === latestBottleEntryId);
+    if (!isLatestBottleVisible) return labelMap;
 
-    let previousBottleTimestamp: number | null = null;
-
-    for (const { entry, timestamp } of chronologicalEntries) {
-      if (entry.entry_type !== 'feeding' || entry.feeding_type !== 'BOTTLE') {
-        continue;
-      }
-
-      if (previousBottleTimestamp !== null && entry.id) {
-        const diffMinutes = Math.round((timestamp - previousBottleTimestamp) / (1000 * 60));
-        const label = formatBottleGapLabel(diffMinutes);
-        if (label) {
-          labelMap.set(entry.id, label);
-        }
-      }
-
-      previousBottleTimestamp = timestamp;
-    }
+    labelMap.set(latestBottleEntryId, latestBottleGapLabel);
 
     return labelMap;
-  }, [entries]);
+  }, [entries, latestBottleEntryId, latestBottleGapLabel]);
   const feedingOverviewCards = useMemo(() => buildFeedingOverviewCards(entries), [entries]);
   const feedingOverviewEntryCount = useMemo(
     () => feedingOverviewCards.reduce((sum, card) => sum + card.count, 0),
@@ -1156,6 +1192,10 @@ export default function DailyScreen() {
   useEffect(() => {
     setIsTimerHydrated(false);
   }, [activeBabyId]);
+
+  useEffect(() => {
+    void loadLatestBottleInfo();
+  }, [loadLatestBottleInfo]);
 
   useEffect(() => {
     if (!isReady || !activeBabyId) return;
@@ -1392,7 +1432,7 @@ export default function DailyScreen() {
       console.error('Error loading day entries:', error);
       setIsLoading(false);
     } finally {
-      await loadActiveTimer();
+      await Promise.allSettled([loadActiveTimer(), loadLatestBottleInfo()]);
       setRefreshing(false);
     }
   };
@@ -1432,7 +1472,7 @@ export default function DailyScreen() {
       console.error('Error loading week entries:', error);
       setIsLoading(false);
     } finally {
-      await loadActiveTimer();
+      await Promise.allSettled([loadActiveTimer(), loadLatestBottleInfo()]);
     }
   };
 
@@ -1467,7 +1507,7 @@ export default function DailyScreen() {
       console.error('Error loading month entries:', error);
       setIsLoading(false);
     } finally {
-      await loadActiveTimer();
+      await Promise.allSettled([loadActiveTimer(), loadLatestBottleInfo()]);
     }
   };
 
@@ -2452,6 +2492,12 @@ export default function DailyScreen() {
       ]
         .filter(Boolean)
         .join(' • ') || null;
+    }
+
+    if (latestBottleGapLabel) {
+      feedingSecondaryDetail = [latestBottleGapLabel, feedingSecondaryDetail]
+        .filter(Boolean)
+        .join(' • ');
     }
 
     const lastDiaperEntry = diaperEntries

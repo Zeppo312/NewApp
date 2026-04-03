@@ -1,6 +1,7 @@
 import { deleteChatMessage as deleteChatMessageViaEdge } from '@/lib/chatAudio';
 import { getGroupMembers } from '@/lib/groups';
 import { type ChatMessageType } from '@/lib/chatMessages';
+import { type GroupChatEvent } from '@/lib/groupChatEvents';
 import { supabase } from '@/lib/supabase';
 
 // ---------------------------------------------------------------------------
@@ -13,6 +14,7 @@ export type GroupChatMessage = {
   sender_id: string;
   content: string | null;
   message_type: ChatMessageType;
+  event_id: string | null;
   audio_storage_path: string | null;
   audio_duration_ms: number | null;
   audio_mime_type: string | null;
@@ -34,6 +36,7 @@ export type EnrichedGroupMessage = GroupChatMessage & {
   quotedContent: string | null;
   quotedMessageType: ChatMessageType | null;
   quotedSenderId: string | null;
+  quotedEventTitle: string | null;
   senderDisplayName: string;
   senderAvatarUrl: string | null;
 };
@@ -78,7 +81,21 @@ export function enrichGroupMessages(
   messages: GroupChatMessage[],
   memberMap: Map<string, GroupChatMemberInfo>,
   currentUserId?: string,
+): EnrichedGroupMessage[];
+export function enrichGroupMessages(
+  messages: GroupChatMessage[],
+  memberMap: Map<string, GroupChatMemberInfo>,
+  eventMap: Map<string, GroupChatEvent>,
+  currentUserId?: string,
+): EnrichedGroupMessage[];
+export function enrichGroupMessages(
+  messages: GroupChatMessage[],
+  memberMap: Map<string, GroupChatMemberInfo>,
+  eventMapOrCurrentUserId?: Map<string, GroupChatEvent> | string,
+  currentUserId?: string,
 ): EnrichedGroupMessage[] {
+  const eventMap =
+    eventMapOrCurrentUserId instanceof Map ? eventMapOrCurrentUserId : new Map<string, GroupChatEvent>();
   const map = new Map<string, GroupChatMessage>();
   for (const m of messages) map.set(m.id, m);
 
@@ -106,6 +123,7 @@ export function enrichGroupMessages(
 
     const quoted = msg.reply_to_id ? map.get(msg.reply_to_id) : null;
     const member = memberMap.get(msg.sender_id);
+    const quotedEvent = quoted?.event_id ? eventMap.get(quoted.event_id) : null;
 
     return {
       ...msg,
@@ -116,6 +134,7 @@ export function enrichGroupMessages(
       quotedContent: quoted?.content ?? null,
       quotedMessageType: quoted?.message_type ?? null,
       quotedSenderId: quoted?.sender_id ?? null,
+      quotedEventTitle: quotedEvent?.title ?? null,
       senderDisplayName: member?.display_name ?? 'Unbekannt',
       senderAvatarUrl: member?.avatar_url ?? null,
     };
@@ -132,7 +151,7 @@ export async function loadGroupChatMessages(
 ): Promise<GroupChatMessage[]> {
   const { data, error } = await supabase
     .from('community_group_messages')
-    .select('id, group_id, sender_id, content, message_type, audio_storage_path, audio_duration_ms, audio_mime_type, reply_to_id, created_at')
+    .select('id, group_id, sender_id, content, message_type, event_id, audio_storage_path, audio_duration_ms, audio_mime_type, reply_to_id, created_at')
     .eq('group_id', groupId)
     .order('created_at', { ascending: true })
     .limit(limit);

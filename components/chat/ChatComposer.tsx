@@ -52,6 +52,7 @@ type ChatComposerProps = {
   };
   isDark: boolean;
   bottomInset: number;
+  leadingAction?: React.ReactNode;
 };
 
 type RecorderMode = 'idle' | 'recording' | 'recorded' | 'uploading';
@@ -71,6 +72,7 @@ export default function ChatComposer({
   theme,
   isDark,
   bottomInset,
+  leadingAction,
 }: ChatComposerProps) {
   const inputRef = useRef<TextInput>(null);
   const recorder = useAudioRecorder(RECORDING_OPTIONS);
@@ -350,6 +352,7 @@ export default function ChatComposer({
       >
         {recorderMode === 'idle' ? (
           <>
+            {leadingAction ? <View style={styles.leadingActionSlot}>{leadingAction}</View> : null}
             <View
               style={[
                 styles.inputWrapper,
@@ -436,20 +439,19 @@ export default function ChatComposer({
                     ]}
                   >
                     <View style={styles.recordingWave}>
-                    {recordingWaveHeights.map((height, index) => (
-                      <View
-                        // eslint-disable-next-line react/no-array-index-key
-                        key={index}
-                        style={[
-                          styles.recordingWaveBar,
-                          {
-                            height,
-                            backgroundColor: isDark ? '#F6E9D8' : theme.accent,
-                            opacity: 0.38 + (height - 4) / 28,
-                          },
-                        ]}
-                      />
-                    ))}
+                      {recordingWaveHeights.map((height, index) => (
+                        <View
+                          key={index}
+                          style={[
+                            styles.recordingWaveBar,
+                            {
+                              height,
+                              backgroundColor: isDark ? '#F6E9D8' : theme.accent,
+                              opacity: 0.38 + (height - 4) / 28,
+                            },
+                          ]}
+                        />
+                      ))}
                     </View>
                   </View>
                 ) : null}
@@ -521,6 +523,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: 8,
+  },
+  leadingActionSlot: {
+    marginBottom: Platform.OS === 'ios' ? 1 : 0,
   },
   inputWrapper: { flex: 1, borderRadius: 22, borderWidth: 1, overflow: 'hidden' },
   input: {

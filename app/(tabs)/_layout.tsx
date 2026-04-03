@@ -450,6 +450,22 @@ export default function TabLayout() {
         }}
       />
 
+      <Tabs.Screen
+        name="groups/index"
+        options={{
+          title: 'Gruppen',
+          ...getTabVisibilityOptions(true),
+        }}
+      />
+
+      <Tabs.Screen
+        name="groups/[groupId]"
+        options={{
+          title: 'Gruppe',
+          ...getTabVisibilityOptions(true),
+        }}
+      />
+
       {/* Tab 5 von 5 in beiden Ansichten (Mehr-Tab ganz rechts) */}
       <Tabs.Screen
         name="more"

@@ -657,6 +657,53 @@ export const leaveGroup = async (groupId: string) => {
   }
 };
 
+export const removeGroupMember = async (groupId: string, memberUserId: string) => {
+  try {
+    const { data: userData } = await getCachedUser();
+    if (!userData.user) {
+      return { data: null, error: new Error('Nicht angemeldet') };
+    }
+
+    if (userData.user.id === memberUserId) {
+      return {
+        data: null,
+        error: new Error('Du kannst dich nicht selbst aus der Gruppe entfernen.'),
+      };
+    }
+
+    const { data: membership, error: membershipError } = await supabase
+      .from('community_group_members')
+      .select('role, status')
+      .eq('group_id', groupId)
+      .eq('user_id', memberUserId)
+      .maybeSingle();
+
+    if (membershipError) {
+      return { data: null, error: membershipError };
+    }
+
+    if (!membership || membership.status !== 'active') {
+      return { data: null, error: new Error('Diese Nutzerin ist kein aktives Gruppenmitglied.') };
+    }
+
+    if (membership.role === 'owner') {
+      return { data: null, error: new Error('Die Besitzerin der Gruppe kann nicht entfernt werden.') };
+    }
+
+    const { error } = await supabase
+      .from('community_group_members')
+      .update({ status: 'removed', updated_at: new Date().toISOString() })
+      .eq('group_id', groupId)
+      .eq('user_id', memberUserId)
+      .eq('status', 'active');
+
+    return { data: error ? null : true, error };
+  } catch (error) {
+    console.error('Failed to remove group member:', error);
+    return { data: null, error };
+  }
+};
+
 export const respondToGroupInvite = async (inviteId: string, accept: boolean) => {
   try {
     const { data: userData } = await getCachedUser();
