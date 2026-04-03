@@ -9,6 +9,7 @@ import {
   Image,
   SafeAreaView,
   RefreshControl,
+  TextInput,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Stack, router, useFocusEffect } from 'expo-router';
@@ -72,6 +73,8 @@ const getDisplayName = (profile?: NameProfile | null) => {
   const last = profile?.last_name?.trim() || '';
   return `${first} ${last}`.trim() || 'Benutzer';
 };
+
+const normalizeSearchValue = (value?: string | null) => value?.trim().toLowerCase() || '';
 
 const formatDate = (dateString: string) => {
   const date = new Date(dateString);
@@ -223,6 +226,7 @@ export default function NotificationsScreen() {
   const [notifications, setNotifications] = useState<(Notification & { sender_name?: string; sender_avatar_url?: string | null })[]>([]);
   const [messages, setMessages] = useState<DirectMessage[]>([]);
   const [groupSummaries, setGroupSummaries] = useState<GroupChatSummary[]>([]);
+  const [messageQuery, setMessageQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -246,6 +250,7 @@ export default function NotificationsScreen() {
   const tabActive = isDark ? '#FFFFFF' : '#5C4033';
   const tabIndicator = isDark ? Colors.dark.accent : '#C89F81';
   const tabBarBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
+  const inputBg = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.55)';
 
   // -----------------------------------------------------------------------
   // Data loading
@@ -429,6 +434,7 @@ export default function NotificationsScreen() {
     switch (activeTab) {
       case TABS.MESSAGES: {
         const followNotifs = notifications.filter((n) => n.type === 'follow');
+        const query = normalizeSearchValue(messageQuery);
 
         // Build unified list with _kind discriminator
         const dmItems: MessagesListItem[] = messages.map((m) => ({ ...m, _kind: 'dm' as const }));
@@ -446,7 +452,35 @@ export default function NotificationsScreen() {
             : b.created_at;
           return new Date(dateB).getTime() - new Date(dateA).getTime();
         });
-        return all;
+        if (!query) {
+          return all;
+        }
+
+        return all.filter((item) => {
+          if (item._kind === 'dm') {
+            const partnerName = item.sender_id === user?.id
+              ? item.receiver_name || 'Benutzer'
+              : item.sender_name || 'Benutzer';
+            const previewText = getMessagePreviewText(item);
+            const searchableText = [partnerName, previewText, item.content || ''].join(' ');
+            return normalizeSearchValue(searchableText).includes(query);
+          }
+
+          if (item._kind === 'group') {
+            const searchableText = [
+              item.group_name,
+              item.latest_message_sender_name || '',
+              item.latest_message_preview || '',
+            ].join(' ');
+            return normalizeSearchValue(searchableText).includes(query);
+          }
+
+          const searchableText = [
+            item.sender_name || 'Benutzer',
+            'folgt dir jetzt',
+          ].join(' ');
+          return normalizeSearchValue(searchableText).includes(query);
+        });
       }
       case TABS.ACTIVITY:
         return notifications.filter(
@@ -807,6 +841,7 @@ export default function NotificationsScreen() {
 
   // ---- Empty state ----
   const activeTabConfig = TAB_LIST.find((t) => t.key === activeTab)!;
+  const isSearchingMessages = activeTab === TABS.MESSAGES && Boolean(messageQuery.trim());
 
   const renderEmpty = () => (
     <View style={styles.emptyContainer}>
@@ -818,9 +853,13 @@ export default function NotificationsScreen() {
       >
         <IconSymbol name={activeTabConfig.emptyIcon as any} size={32} color={textTertiary} />
       </View>
-      <ThemedText style={[styles.emptyTitle, { color: textPrimary }]}>{activeTabConfig.emptyTitle}</ThemedText>
+      <ThemedText style={[styles.emptyTitle, { color: textPrimary }]}>
+        {isSearchingMessages ? 'Keine Chats gefunden' : activeTabConfig.emptyTitle}
+      </ThemedText>
       <ThemedText style={[styles.emptySubtitle, { color: textTertiary }]}>
-        {activeTabConfig.emptySubtitle}
+        {isSearchingMessages
+          ? 'Für deine Suche wurden keine Nachrichten, Gruppen oder Kontakte gefunden.'
+          : activeTabConfig.emptySubtitle}
       </ThemedText>
     </View>
   );
@@ -842,6 +881,32 @@ export default function NotificationsScreen() {
         />
 
         {renderTabBar()}
+
+        {activeTab === TABS.MESSAGES ? (
+          <View style={styles.searchWrap}>
+            <View
+              style={[
+                styles.searchRow,
+                {
+                  backgroundColor: inputBg,
+                  borderColor: cardBorder,
+                },
+              ]}
+            >
+              <IconSymbol name="magnifyingglass" size={15} color={textTertiary} />
+              <TextInput
+                value={messageQuery}
+                onChangeText={setMessageQuery}
+                placeholder="Chats suchen"
+                placeholderTextColor={textTertiary}
+                autoCapitalize="none"
+                autoCorrect={false}
+                clearButtonMode="while-editing"
+                style={[styles.searchInput, { color: textPrimary }]}
+              />
+            </View>
+          </View>
+        ) : null}
 
         {loading ? (
           <View style={styles.loadingContainer}>
@@ -936,6 +1001,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 6,
     paddingBottom: 24,
+  },
+  searchWrap: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+  },
+  searchRow: {
+    minHeight: 48,
+    borderRadius: RADIUS,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    paddingVertical: 12,
   },
 
   // ---- Glass row ----
