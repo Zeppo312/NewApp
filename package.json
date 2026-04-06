@@ -1,7 +1,7 @@
 {
   "name": "lottibaby",
   "main": "expo-router/entry",
-  "version": "1.0.12",
+  "version": "1.0.13",
   "engines": {
     "node": ">=20.19.4"
   },
