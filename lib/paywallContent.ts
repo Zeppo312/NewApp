@@ -21,6 +21,7 @@ export type PaywallTemplateValues = {
   trialDaysAfter: string;
   trialDaysNumber: string;
   trialDaysPlusOne: string;
+  storeProvider: string;
   monthlyDisplayPrice: string;
   yearlyDisplayPrice: string;
   monthlyPriceText: string;
@@ -132,6 +133,7 @@ export const PAYWALL_TEMPLATE_HINTS: {
   { token: 'trialDaysAfter', description: 'z. B. 14 Tagen' },
   { token: 'trialDaysNumber', description: 'z. B. 14' },
   { token: 'trialDaysPlusOne', description: 'z. B. 15' },
+  { token: 'storeProvider', description: 'z. B. Apple oder Google Play' },
   { token: 'monthlyDisplayPrice', description: 'z. B. 4,99 €' },
   { token: 'yearlyDisplayPrice', description: 'z. B. 44,99 €' },
   { token: 'monthlyPriceText', description: 'z. B. 4,99 € pro Monat' },
@@ -146,21 +148,24 @@ const DEFAULT_MONTHLY_PLAN: PaywallPlanCopy = {
   highlight: 'pro Monat',
   title: 'Monatlich flexibel',
   description:
-    'Für die Nutzung von {{appName}} nach den ersten {{trialDaysAfter}}. Zahlung wird bei Bestätigung im Store fällig.',
-  bullets: ['Voller Zugriff auf alle Inhalte', 'Jederzeit kündbar'],
-  note: 'Ideal, wenn du erst einmal flexibel bleiben möchtest.',
+    '{{appName}} wird direkt freigeschaltet. Falls {{storeProvider}} eine kostenlose Testphase anbietet, siehst du sie vor der Kaufbestätigung im Store.',
+  bullets: [
+    'Voller Zugriff auf alle Inhalte',
+    'Jederzeit in den Store-Einstellungen kündbar',
+  ],
+  note: 'Ideal, wenn du flexibel bleiben möchtest.',
   buttonLabel: 'Monatsabo starten',
 };
 
 const DEFAULT_YEARLY_PLAN: PaywallPlanCopy = {
   badge: 'Jahresabo',
   highlight: '{{yearlySavings}} sparen',
-  title: 'Günstiger im Jahrespaket',
+  title: 'Bester Preis im Jahresabo',
   description:
-    'Einmal im Jahr zahlen, {{appName}} nach den ersten {{trialDaysAfter}} ohne Unterbrechung weiter nutzen und {{yearlySavings}} gegenüber dem Monatsabo sparen.',
+    '{{appName}} direkt freischalten und, falls verfügbar, zuerst die Testphase von {{storeProvider}} nutzen. Danach sparst du {{yearlySavings}} gegenüber dem Monatsabo.',
   bullets: [
     'Bester Preis für die ganze App',
-    'Läuft das ganze Jahr ohne Unterbrechung',
+    '{{storeProvider}} zeigt die Testphase direkt im Kaufdialog',
   ],
   note: 'Automatische Verlängerung bis zur Kündigung in den Store-Einstellungen.',
   buttonLabel: 'Jahresabo starten',
@@ -178,30 +183,32 @@ export const DEFAULT_PAYWALL_CONTENT: PaywallContent = {
     subtitle: 'Schwangerschaft bis Baby-Alltag',
   },
   steps: {
-    introEyebrow: 'Kostenlos testen',
-    reminderEyebrow: 'So funktioniert es',
-    pricingEyebrow: 'Passendes Abo wählen',
+    introEyebrow: 'Abo erforderlich',
+    reminderEyebrow: 'Testphase im Store',
+    pricingEyebrow: 'Abo auswählen',
   },
   progressCard: {
-    title: 'Alles transparent erklärt',
-    subtitle: 'Kein Kauf auf diesem Schritt. Erst einmal Überblick, dann Preiswahl.',
+    title: 'So funktioniert dein Start',
+    subtitle:
+      '{{appName}} wird direkt per Abo freigeschaltet. Eine kostenlose Testphase zeigt {{storeProvider}} dir vor dem Kauf im Store an, falls sie verfügbar ist.',
     buttonLabel: 'Weiter',
     skipLabel: 'Vielleicht später',
   },
   intro: {
-    title: '{{trialDays}} kostenlos, danach Abo',
+    title: 'Abo abschließen und App freischalten',
     subtitle:
-      '{{appName}} ist nach der kostenlosen Phase nur mit aktivem Abo weiter nutzbar. Es geht also nicht um einzelne Extras, sondern um die App insgesamt.',
+      '{{appName}} ist für neue Nutzer direkt nur mit aktivem Abo nutzbar. Falls {{storeProvider}} eine kostenlose Testphase anbietet, startet sie beim Abschluss im Store.',
     summary: 'Aktuell {{monthlyPriceText}} oder {{yearlyPriceText}}.',
     miniBenefit:
-      'Nach {{trialDaysAfter}} brauchst du ein aktives Abo, um {{appName}} weiter zu nutzen.',
-    heroDealNote: 'Im Jahresabo nur {{yearlyDisplayPrice}} · du sparst {{yearlySavings}}',
-    heroTitle: 'Alles in einer App',
-    heroSubtitle: 'Von Schwangerschaft bis Baby-Alltag.',
+      'Die kostenlose Testphase kommt, falls verfügbar, direkt von {{storeProvider}} beim Abo-Abschluss.',
+    heroDealNote:
+      'Im Jahresabo nur {{yearlyDisplayPrice}} · {{storeProvider}} zeigt dir die Testphase im Kaufdialog',
+    heroTitle: 'Alles direkt freigeschaltet',
+    heroSubtitle: 'Von Schwangerschaft bis Baby-Alltag in einem Abo.',
     heroStats: [
-      { value: '{{trialDays}}', label: 'kostenlos testen' },
-      { value: '{{monthlyDisplayPrice}}', label: 'pro Monat' },
-      { value: 'Abo', label: 'für die ganze App' },
+      { value: '{{storeProvider}}', label: 'zeigt Testphase' },
+      { value: '{{monthlyDisplayPrice}}', label: 'ab pro Monat' },
+      { value: 'Abo', label: 'direkt erforderlich' },
     ],
     previewRows: [
       {
@@ -219,21 +226,27 @@ export const DEFAULT_PAYWALL_CONTENT: PaywallContent = {
     ],
   },
   reminder: {
-    title: 'So läuft es nach der Testphase',
+    title: 'So läuft der Start',
     subtitle:
-      'Die ersten {{trialDays}} kannst du {{appName}} kostenlos nutzen. Danach ist ein Abo nötig, um die App weiter zu verwenden.',
+      'Wähle dein Abo. Wenn {{storeProvider}} für dein Produkt eine Testphase hinterlegt hat, siehst du sie direkt vor der Kaufbestätigung.',
     timelineItems: [
       {
         badge: '1',
-        label: 'Tag 1 bis {{trialDaysNumber}}',
+        label: 'Abo wählen',
         description:
-          'Voller Zugriff auf Schwangerschaft, Baby, Planung und Auswertungen.',
+          'Monats- oder Jahresabo direkt in der App auswählen.',
       },
       {
         badge: '2',
-        label: 'Ab Tag {{trialDaysPlusOne}}',
+        label: '{{storeProvider}} zeigt die Testphase',
         description:
-          'Ohne aktives Abo kannst du {{appName}} nicht weiter nutzen.',
+          'Falls verfügbar, erscheint die kostenlose Testphase im App-Store-Kaufdialog.',
+      },
+      {
+        badge: '3',
+        label: 'Danach läuft das Abo',
+        description:
+          'Nach der Testphase von {{storeProvider}} bleibt {{appName}} mit aktivem Abo freigeschaltet.',
       },
       {
         badge: 'M',
@@ -253,9 +266,9 @@ export const DEFAULT_PAYWALL_CONTENT: PaywallContent = {
     ],
   },
   pricing: {
-    title: '{{appName}} weiter nutzen',
+    title: '{{appName}} freischalten',
     subtitle:
-      'Wähle dein Abo für die Zeit nach den ersten {{trialDaysAfter}} kostenloser Nutzung.',
+      'Wähle dein Abo. Eine eventuelle kostenlose Testphase wird von {{storeProvider}} direkt im Kaufdialog angezeigt.',
     socialProof:
       'Alles enthalten, was dich vor und nach der Geburt begleitet.',
     featureTitle: 'Das ist in {{appName}} enthalten:',
@@ -279,13 +292,13 @@ export const DEFAULT_PAYWALL_CONTENT: PaywallContent = {
     ],
     monthlyPlan: DEFAULT_MONTHLY_PLAN,
     yearlyPlan: DEFAULT_YEARLY_PLAN,
-    restoreLabel: 'Käufe wiederherstellen / Status aktualisieren',
+    restoreLabel: 'Käufe wiederherstellen / Status prüfen',
     cancelLabel: 'Vielleicht später',
   },
   legal: {
     paragraphs: [
-      'Nach den ersten {{trialDaysAfter}} ist für die weitere Nutzung ein Abo erforderlich. Zahlung wird bei Kaufbestätigung deinem App-Store/Google-Play-Konto belastet. Abos verlängern sich automatisch, wenn sie nicht rechtzeitig gekündigt werden.',
-      'Mit dem Kauf gelten die Nutzungsbedingungen und auf iOS ergänzend die Apple-Standard-EULA; Hinweise zur Datenverarbeitung findest du direkt im Datenschutz.',
+      'Für die Nutzung von {{appName}} ist ein aktives Abo erforderlich. Falls {{storeProvider}} für dein gewähltes Produkt eine kostenlose Testphase anbietet, wird sie vor dem Kauf im Store angezeigt. Zahlung wird bei Kaufbestätigung deinem App-Store/Google-Play-Konto belastet.',
+      'Abos verlängern sich automatisch, wenn sie nicht rechtzeitig in den Store-Einstellungen gekündigt werden. Mit dem Kauf gelten die Nutzungsbedingungen und auf iOS ergänzend die Apple-Standard-EULA.',
     ],
     links: {
       privacy: 'Datenschutz',
@@ -676,6 +689,13 @@ export const getPaywallTemplateValues = (
   const yearlySavings = formatEuroAmount(
     Math.max(0, monthlyPrice * 12 - yearlyPrice),
   );
+  const normalizedBillingLabel = billingLabel.toLowerCase();
+  const storeProvider = normalizedBillingLabel.includes('google')
+    ? 'Google Play'
+    : normalizedBillingLabel.includes('app store') ||
+        normalizedBillingLabel.includes('apple')
+      ? 'Apple'
+      : 'der Store';
 
   return {
     appName: 'Lotti Baby',
@@ -683,6 +703,7 @@ export const getPaywallTemplateValues = (
     trialDaysAfter: `${trialDaysNumber} Tagen`,
     trialDaysNumber: `${trialDaysNumber}`,
     trialDaysPlusOne: `${trialDaysNumber + 1}`,
+    storeProvider,
     monthlyDisplayPrice,
     yearlyDisplayPrice,
     monthlyPriceText: `${monthlyDisplayPrice} pro Monat`,

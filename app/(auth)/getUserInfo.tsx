@@ -564,12 +564,16 @@ export default function GetUserInfoScreen() {
       const nextRoute = babyBorn ? '/(tabs)/home' : '/(tabs)/countdown';
 
       try {
-        const { shouldShow } = await shouldShowPaywall();
+        const { shouldShow, state } = await shouldShowPaywall();
         if (shouldShow) {
           await markPaywallShown('onboarding');
           router.replace({
             pathname: '/paywall',
-            params: { next: nextRoute, origin: 'onboarding' }
+            params: {
+              next: nextRoute,
+              origin: 'onboarding',
+              trialExpired: state.isTrialExpired ? '1' : '0',
+            },
           });
           return;
         }

@@ -217,7 +217,7 @@ export default function SubscriptionScreen() {
       ? state.willRenew === false
         ? 'Dein Abo läuft aktuell, verlängert sich aber nicht automatisch.'
         : 'Dein Abo läuft und die App bleibt ohne Paywall nutzbar.'
-      : 'Wenn du Lotti Baby nach der Testphase weiter nutzen möchtest, brauchst du ein aktives Abo.';
+      : 'Für die Nutzung von Lotti Baby brauchst du ein aktives Abo. Eine eventuelle kostenlose Apple-Testphase wird dir vor dem Kauf im Store angezeigt.';
 
   const hasActiveAccess = state.isAdmin || !!state.accessRole || state.isPremium;
   const expirationLabel = formatDate(state.expiresDate);

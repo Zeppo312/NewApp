@@ -84,7 +84,7 @@ export default function NutzungsbedingungenScreen() {
               <Section title="Abonnement, Preise und Laufzeit">
                 <BulletList
                   items={[
-                    'Nach der kostenlosen Testphase ist für die weitere Nutzung der App ein aktives Abonnement erforderlich.',
+                    'Für die Nutzung der App ist ein aktives Abonnement erforderlich; eine eventuelle kostenlose Testphase wird von Apple beziehungsweise Google im Kaufdialog angezeigt.',
                     'Der jeweils angezeigte Preis auf dem Paywall-Screen ist der verbindliche Preis zum Zeitpunkt des Kaufs.',
                     'Die Abrechnung erfolgt über das App-Store- oder Google-Play-Konto, das beim Kauf verwendet wird.',
                     'Abonnements verlängern sich automatisch, wenn sie nicht rechtzeitig vor Ende der laufenden Periode in den Store-Einstellungen gekündigt werden.',

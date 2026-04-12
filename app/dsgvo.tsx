@@ -122,7 +122,7 @@ export default function DsgvoScreen() {
           <View style={styles.card}>
             <ThemedText style={styles.title}>Konto & Daten verwalten</ThemedText>
             <ThemedText style={styles.body}>
-              Auch nach Ablauf der Testphase kannst du hier deine Daten exportieren oder dein Konto dauerhaft löschen.
+              Auch ohne aktives Abo kannst du hier deine Daten exportieren oder dein Konto dauerhaft löschen.
             </ThemedText>
 
             <Pressable style={styles.primaryButton} onPress={() => void handleExportData()} disabled={isExporting}>

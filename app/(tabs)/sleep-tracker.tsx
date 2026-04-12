@@ -1330,6 +1330,8 @@ export default function SleepTrackerScreen() {
   const [liveStopRequestId, setLiveStopRequestId] = useState(0);
   const handledLivePauseRequestIdRef = useRef(0);
   const [livePauseRequestId, setLivePauseRequestId] = useState(0);
+  const handledAutoStartRequestIdRef = useRef(0);
+  const [autoStartRequestId, setAutoStartRequestId] = useState(0);
 
   const queueLiveStopRequestFromUrl = useCallback((incomingUrl: string | null) => {
     if (!incomingUrl) return;
@@ -1339,8 +1341,9 @@ export default function SleepTrackerScreen() {
 
     const hasLiveStopParam = /[?&]liveStop=(1|true)(?:&|$)/i.test(incomingUrl);
     const hasLivePauseParam = /[?&]livePause=(1|true)(?:&|$)/i.test(incomingUrl);
+    const hasAutoStartParam = /[?&]autoStart=(1|true)(?:&|$)/i.test(incomingUrl);
 
-    if (!hasLiveStopParam && !hasLivePauseParam) {
+    if (!hasLiveStopParam && !hasLivePauseParam && !hasAutoStartParam) {
       return;
     }
 
@@ -1354,8 +1357,10 @@ export default function SleepTrackerScreen() {
 
     if (hasLivePauseParam) {
       setLivePauseRequestId((prev) => prev + 1);
-    } else {
+    } else if (hasLiveStopParam) {
       setLiveStopRequestId((prev) => prev + 1);
+    } else if (hasAutoStartParam) {
+      setAutoStartRequestId((prev) => prev + 1);
     }
   }, []);
 
@@ -2357,6 +2362,27 @@ export default function SleepTrackerScreen() {
     isStoppingSleep,
     livePauseRequestId,
     handlePauseNightSleep,
+  ]);
+
+  // Handle autoStart=1 from widget deep link — starts sleep if none is active
+  useEffect(() => {
+    if (autoStartRequestId === 0) return;
+    if (handledAutoStartRequestIdRef.current === autoStartRequestId) return;
+    if (!isLiveStatusLoaded) return;
+
+    handledAutoStartRequestIdRef.current = autoStartRequestId;
+
+    if (activeSleepEntry || isStartingSleep) return;
+
+    const now = new Date();
+    void handleStartSleep(getSleepPeriodForStart(now, nightWindowSettings));
+  }, [
+    activeSleepEntry,
+    autoStartRequestId,
+    handleStartSleep,
+    isLiveStatusLoaded,
+    isStartingSleep,
+    nightWindowSettings,
   ]);
 
   // Handle save entry (compatible with SleepInputModal)
