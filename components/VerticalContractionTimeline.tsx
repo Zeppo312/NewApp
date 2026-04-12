@@ -281,12 +281,21 @@ const VerticalContractionTimeline: React.FC<VerticalContractionTimelineProps> = 
                                 </ThemedText>
                               </View>
 
-                              <View style={styles.detailRow}>
-                                <ThemedText style={styles.detailLabel}>Abstand:</ThemedText>
-                                <ThemedText style={styles.detailValue}>
-                                  {contraction.interval && contraction.interval > 0 ? formatInterval(contraction.interval) : '--:--'}
-                                </ThemedText>
-                              </View>
+                              {isLast ? (
+                                <View style={styles.detailRow}>
+                                  <ThemedText style={styles.detailLabel}>Start:</ThemedText>
+                                  <ThemedText style={styles.detailValue}>
+                                    {formatTime(new Date(contraction.startTime))}
+                                  </ThemedText>
+                                </View>
+                              ) : (
+                                <View style={styles.detailRow}>
+                                  <ThemedText style={styles.detailLabel}>Abstand:</ThemedText>
+                                  <ThemedText style={styles.detailValue}>
+                                    {contraction.interval && contraction.interval > 0 ? formatInterval(contraction.interval) : '--:--'}
+                                  </ThemedText>
+                                </View>
+                              )}
 
                               {isExpanded && (
                                 <View style={styles.expandedDetails}>

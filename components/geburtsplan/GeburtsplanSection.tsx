@@ -1,9 +1,8 @@
 import React from 'react';
 import { StyleSheet, View, StyleProp, ViewStyle } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
-import { LiquidGlassCard, GLASS_OVERLAY, RADIUS } from '@/constants/DesignGuide';
-import { Colors } from '@/constants/Colors';
-import { useColorScheme } from '@/hooks/useColorScheme';
+import { LiquidGlassCard, GLASS_OVERLAY, GLASS_OVERLAY_DARK, RADIUS } from '@/constants/DesignGuide';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 
 interface GeburtsplanSectionProps {
   title: string;
@@ -12,12 +11,14 @@ interface GeburtsplanSectionProps {
 }
 
 export const GeburtsplanSection: React.FC<GeburtsplanSectionProps> = ({ title, children, containerStyle }) => {
-  const colorScheme = useColorScheme() ?? 'light';
-  const theme = Colors[colorScheme];
+  const adaptiveColors = useAdaptiveColors();
+  const isDark = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
+  const glassOverlay = isDark ? GLASS_OVERLAY_DARK : GLASS_OVERLAY;
+  const sectionDividerColor = isDark ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.55)';
 
   return (
-    <LiquidGlassCard style={[styles.sectionGlass, containerStyle]} intensity={26} overlayColor={GLASS_OVERLAY}>
-      <ThemedText type="defaultSemiBold" style={styles.sectionTitle}>
+    <LiquidGlassCard style={[styles.sectionGlass, containerStyle]} intensity={26} overlayColor={glassOverlay}>
+      <ThemedText type="defaultSemiBold" style={[styles.sectionTitle, { borderBottomColor: sectionDividerColor }]}>
         {title}
       </ThemedText>
       <View style={styles.sectionContent}>

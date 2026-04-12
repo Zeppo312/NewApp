@@ -1,6 +1,9 @@
 /** @type {import('@bacons/apple-targets/app.plugin').ConfigFunction} */
 module.exports = config => ({
+  name: "LottiBabyLiveActivity",
+  displayName: "Lotti Baby",
   type: "widget",
-  icon: 'https://github.com/expo.png',
+  deploymentTarget: "16.1",
+  icon: "../../assets/images/icon.png",
   entitlements: { /* Add entitlements */ },
 });

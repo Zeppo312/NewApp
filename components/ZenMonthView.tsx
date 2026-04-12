@@ -15,6 +15,9 @@ interface ZenMonthViewProps {
 const ZenMonthView: React.FC<ZenMonthViewProps> = ({ selectedDate, onDateSelect }) => {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
+  const isDark = colorScheme === 'dark';
+  const selectedBgColor = isDark ? Colors.dark.accent : '#7D5A50';
+  const containerBgColor = isDark ? Colors.dark.cardLight : 'rgba(255, 255, 255, 0.95)';
   const [isExpanded, setIsExpanded] = useState(true); // Standardmäßig aufgeklappt
   const [monthDays, setMonthDays] = useState<(Date | null)[]>([]);
   const [entries, setEntries] = useState<DailyEntry[]>([]);
@@ -177,8 +180,8 @@ const ZenMonthView: React.FC<ZenMonthViewProps> = ({ selectedDate, onDateSelect 
         style={[
           styles.dayCell,
           !_isCurrentMonth && styles.otherMonthCell,
-          _isToday && styles.todayCell,
-          _isSelected && styles.selectedCell,
+          _isToday && [styles.todayCell, isDark && { backgroundColor: 'rgba(255, 255, 255, 0.1)' }],
+          _isSelected && [styles.selectedCell, { backgroundColor: selectedBgColor }],
         ]}
         onPress={() => onDateSelect(date)}
       >
@@ -218,7 +221,7 @@ const ZenMonthView: React.FC<ZenMonthViewProps> = ({ selectedDate, onDateSelect 
   const weekdays = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
 
   return (
-    <Animated.View style={[styles.container, { height: drawerHeight }]}>
+    <Animated.View style={[styles.container, { height: drawerHeight, backgroundColor: containerBgColor }]}>
       <TouchableOpacity
         style={styles.header}
         onPress={() => setIsExpanded(!isExpanded)}
@@ -435,7 +438,7 @@ const styles = StyleSheet.create({
     borderRadius: 5,
   },
   selectedCell: {
-    backgroundColor: '#7D5A50',
+    // backgroundColor wird dynamisch gesetzt
     borderRadius: 5,
   },
   dayText: {

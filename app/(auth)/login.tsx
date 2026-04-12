@@ -1,20 +1,20 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { StyleSheet, TouchableOpacity, View, TextInput, KeyboardAvoidingView, Platform, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router, Stack } from 'expo-router';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Linking from 'expo-linking';
 
 import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { Colors } from '@/constants/Colors';
-import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase, supabaseUrl, supabaseAnonKey, redeemInvitationCode } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
 
 export default function LoginScreen() {
+  const params = useLocalSearchParams<{ invitationCode?: string }>();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -22,51 +22,107 @@ export default function LoginScreen() {
   const [isRegistering, setIsRegistering] = useState(false);
   const [invitationCode, setInvitationCode] = useState('');
   const [showInvitationField, setShowInvitationField] = useState(false);
-  const colorScheme = useColorScheme() ?? 'light';
-  const theme = Colors[colorScheme];
+  const accentColor = Colors.light.accent;
+  const primaryTextColor = Colors.light.textPrimary;
+  const secondaryTextColor = Colors.light.textSecondary;
   const { signInWithEmail, signUpWithEmail, signInWithApple } = useAuth();
+  const normalizedInvitationCode = showInvitationField && invitationCode
+    ? invitationCode.trim().replace(/\s+/g, '').toUpperCase()
+    : undefined;
 
-  // Funktion zum Abrufen des is_baby_born-Flags
-  const checkIsBabyBorn = async (userId: string) => {
+  useEffect(() => {
+    if (typeof params.invitationCode !== 'string') return;
+    const nextCode = params.invitationCode.replace(/\s+/g, '').toUpperCase();
+    setInvitationCode(nextCode);
+    setShowInvitationField(true);
+  }, [params.invitationCode]);
+
+  // Nach Auth immer über Root-Router gehen, damit ein zentraler Guard
+  // den passenden Startscreen anhand des aktuellen Baby-Status auswählt.
+  const navigateAfterAuth = async () => {
     try {
-      console.log('Checking is_baby_born flag for user:', userId);
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .select('is_baby_born')
-        .eq('user_id', userId)
-        .single();
-
-      if (error) {
-        console.error('Error fetching is_baby_born flag:', error);
-        return false; // Standardmäßig auf false setzen, wenn ein Fehler auftritt
+      if (normalizedInvitationCode) {
+        router.replace({
+          pathname: '/account-linking',
+          params: {
+            invitationCode: normalizedInvitationCode,
+          },
+        });
+        return;
       }
 
-      console.log('is_baby_born flag data:', data);
-      return data?.is_baby_born || false;
-    } catch (err) {
-      console.error('Exception when checking is_baby_born flag:', err);
-      return false;
+      router.replace('/');
+    } catch (navError) {
+      console.error('Navigation error:', navError);
+      if (normalizedInvitationCode) {
+        router.navigate({
+          pathname: '/account-linking',
+          params: {
+            invitationCode: normalizedInvitationCode,
+          },
+        });
+        return;
+      }
+
+      router.navigate('/');
     }
   };
 
-  // Funktion zur Navigation basierend auf dem is_baby_born-Flag
-  const navigateBasedOnBabyBornFlag = async (userId: string) => {
-    try {
-      const isBabyBorn = await checkIsBabyBorn(userId);
-      console.log('Navigation based on is_baby_born flag:', isBabyBorn);
-
-      if (isBabyBorn) {
-        // Wenn das Baby geboren ist, zur Home-Seite navigieren
-        router.replace('/(tabs)/home');
-      } else {
-        // Wenn das Baby noch nicht geboren ist, zur Countdown-Seite navigieren
-        router.replace('/(tabs)/countdown');
-      }
-    } catch (navError) {
-      console.error('Navigation error:', navError);
-      // Fallback-Navigation zur Countdown-Seite
-      router.navigate('/(tabs)/countdown');
+  const handleForgotPassword = async () => {
+    if (!email) {
+      Alert.alert(
+        'E-Mail erforderlich',
+        'Bitte gib deine E-Mail-Adresse ein, um dein Passwort zurückzusetzen.',
+        [{ text: 'OK' }]
+      );
+      return;
     }
+
+    try {
+      setIsLoading(true);
+      setError('');
+
+      const redirectTo = Linking.createURL('auth/reset-password');
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo,
+      });
+
+      if (resetError) {
+        throw resetError;
+      }
+
+      Alert.alert(
+        'E-Mail gesendet',
+        'Wir haben dir eine E-Mail mit einem Link zum Zurücksetzen deines Passworts gesendet. Bitte überprüfe dein Postfach.',
+        [{ text: 'OK' }]
+      );
+    } catch (err: any) {
+      console.error('Password reset error:', err);
+      setError(err.message || 'Passwort zurücksetzen fehlgeschlagen. Bitte versuche es erneut.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const waitForAuthenticatedSession = async (timeoutMs = 2000) => {
+    const startedAt = Date.now();
+
+    while (Date.now() - startedAt < timeoutMs) {
+      const { data, error: sessionError } = await supabase.auth.getSession();
+
+      if (sessionError) {
+        console.error('Session check error after login:', sessionError);
+        return null;
+      }
+
+      if (data.session?.user) {
+        return data.session;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 120));
+    }
+
+    return null;
   };
 
   const handleAuth = async () => {
@@ -81,29 +137,8 @@ export default function LoginScreen() {
 
     try {
       setIsLoading(true);
-      console.log('Starting authentication process...');
-
-      // HINWEIS: Für Testzwecke ohne Supabase-Verbindung
-      // Wir simulieren eine erfolgreiche Anmeldung
-      if (supabaseUrl.includes('example.supabase.co')) {
-        console.log('Using demo mode because Supabase credentials are not set');
-        // Simulierte Verzögerung
-        await new Promise(resolve => setTimeout(resolve, 1000));
-
-        // Im Demo-Modus zur Countdown-Seite navigieren
-        console.log('Demo mode: Navigating to countdown page');
-        try {
-          router.replace('/(tabs)/countdown');
-        } catch (navError) {
-          console.error('Navigation error:', navError);
-          // Fallback-Navigation
-          router.navigate('/(tabs)/countdown');
-        }
-        return;
-      }
 
       if (isRegistering) {
-        console.log('Registering with email:', email);
         // Registrierung mit Supabase
         const { data, error: signUpError } = await signUpWithEmail(email, password);
 
@@ -112,28 +147,29 @@ export default function LoginScreen() {
           throw signUpError;
         }
 
-        console.log('Registration successful:', data);
-
         // Wenn die Registrierung erfolgreich war
         if (data && data.user) {
           // Bei Supabase wird nach der Registrierung automatisch ein OTP gesendet
-          console.log('Registration successful, redirecting to OTP verification...');
           router.replace({
             pathname: './verify-otp',
-            params: { email: email }
+            params: {
+              email: email,
+              invitationCode: normalizedInvitationCode
+            }
           });
           return;
         } else if (data && !data.user) {
           // Registrierung erfolgreich, aber User muss OTP bestätigen
-          console.log('Registration pending OTP verification...');
           router.replace({
             pathname: './verify-otp', 
-            params: { email: email }
+            params: {
+              email: email,
+              invitationCode: normalizedInvitationCode
+            }
           });
           return;
         }
       } else {
-        console.log('Signing in with email:', email);
         // Anmeldung mit Supabase
         const { data, error: signInError } = await signInWithEmail(email, password);
 
@@ -142,26 +178,23 @@ export default function LoginScreen() {
           throw signInError;
         }
 
-        console.log('Sign in successful:', data);
-
-        // Bei erfolgreicher Anmeldung basierend auf is_baby_born-Flag navigieren
-        if (data && data.user && data.user.id) {
-          await navigateBasedOnBabyBornFlag(data.user.id);
-        } else {
-          // Fallback zur Countdown-Seite, wenn keine Benutzer-ID verfügbar ist
-          try {
-            router.replace('/(tabs)/countdown');
-          } catch (navError) {
-            console.error('Navigation error:', navError);
-            router.navigate('/(tabs)/countdown');
-          }
+        // Session explizit bestätigen, damit der Root-Guard nicht in einen Login-Redirect fällt
+        const session = data?.session ?? await waitForAuthenticatedSession();
+        if (!session?.user) {
+          setError('Anmeldung erfolgreich, aber Session noch nicht verfügbar. Bitte kurz erneut versuchen.');
+          return;
         }
+
+        // Bei erfolgreicher Anmeldung über zentralen Root-Guard navigieren
+        await navigateAfterAuth();
       }
     } catch (err: any) {
       // Benutzerfreundliche Fehlermeldungen
       console.error('Authentication error:', err);
 
-      if (err.message?.includes('Invalid login')) {
+      if (err.message?.toLowerCase().includes('rate limit')) {
+        setError('Zu viele Versuche. Bitte warte kurz, bevor du es erneut probierst.');
+      } else if (err.message?.includes('Invalid login')) {
         setError('Ungültige E-Mail oder Passwort');
       } else if (err.message?.includes('Email not confirmed')) {
         setError('Bitte bestätige deine E-Mail-Adresse');
@@ -171,9 +204,11 @@ export default function LoginScreen() {
           [{ text: 'OK' }]
         );
       } else {
-        setError(isRegistering
+        const friendlyFallback = isRegistering
           ? 'Registrierung fehlgeschlagen. Bitte versuche es erneut.'
-          : 'Login fehlgeschlagen. Bitte versuche es erneut.');
+          : 'Login fehlgeschlagen. Bitte versuche es erneut.';
+        // Zeige den Supabase-Fehlertext mit Fallback, damit wir den echten Grund sehen
+        setError(err?.message ? `${friendlyFallback} (${err.message})` : friendlyFallback);
       }
     } finally {
       setIsLoading(false);
@@ -185,7 +220,6 @@ export default function LoginScreen() {
     setIsLoading(true);
     
     try {
-      console.log('Starting Apple Sign-In...');
       const { data, error: appleError } = await signInWithApple();
       
       if (appleError) {
@@ -193,14 +227,12 @@ export default function LoginScreen() {
         throw appleError;
       }
       
-      console.log('Apple Sign-In successful:', data);
-      
       // Check if this is a new user or existing user
       if (data && data.user) {
         // Check if user profile exists and is complete
         const { data: profileData, error: profileError } = await supabase
           .from('profiles')
-          .select('first_name, is_baby_born')
+          .select('first_name')
           .eq('id', data.user.id)
           .single();
         
@@ -210,11 +242,13 @@ export default function LoginScreen() {
         
         // If profile is incomplete or doesn't exist, go to onboarding
         if (!profileData || !profileData.first_name) {
-          console.log('New Apple user, redirecting to onboarding');
-          router.replace('../getUserInfo');
+          router.replace({
+            pathname: '/(auth)/getUserInfo',
+            params: normalizedInvitationCode ? { invitationCode: normalizedInvitationCode } : {},
+          });
         } else {
-          // Existing user, navigate based on baby status
-          await navigateBasedOnBabyBornFlag(data.user.id);
+          // Existing user -> zentraler Root-Guard entscheidet über Startscreen
+          await navigateAfterAuth();
         }
       }
     } catch (err: any) {
@@ -224,84 +258,6 @@ export default function LoginScreen() {
         return;
       }
       setError(err.message || 'Apple Sign-In fehlgeschlagen');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleDemoLogin = async () => {
-    try {
-      setIsLoading(true);
-      console.log('Starting demo login...');
-
-      // HINWEIS: Für Testzwecke ohne Supabase-Verbindung
-      // Wir simulieren eine erfolgreiche Anmeldung
-      if (supabaseUrl.includes('example.supabase.co')) {
-        console.log('Using demo mode because Supabase credentials are not set');
-        // Simulierte Verzögerung
-        await new Promise(resolve => setTimeout(resolve, 1000));
-
-        // Im Demo-Modus zur Countdown-Seite navigieren
-        console.log('Demo login mode: Navigating to countdown page');
-        try {
-          router.replace('/(tabs)/countdown');
-        } catch (navError) {
-          console.error('Navigation error:', navError);
-          // Fallback-Navigation
-          router.navigate('/(tabs)/countdown');
-        }
-        return;
-      }
-
-      // Demo-Login mit einem Test-Konto
-      const { data, error: authError } = await signInWithEmail('demo@example.com', 'password123');
-
-      if (authError) {
-        console.error('Demo login auth error:', authError);
-        // Wenn das Demo-Konto nicht existiert, erstellen wir es
-        if (authError.message?.includes('Invalid login')) {
-          console.log('Demo account does not exist, creating it...');
-          const { data: signUpData, error: signUpError } = await signUpWithEmail('demo@example.com', 'password123');
-
-          if (signUpError) {
-            console.error('Demo account creation error:', signUpError);
-            throw signUpError;
-          }
-
-          console.log('Demo account created successfully:', signUpData);
-
-          // Nach der Registrierung anmelden
-          console.log('Signing in with demo account...');
-          const { data: loginData, error: loginError } = await signInWithEmail('demo@example.com', 'password123');
-
-          if (loginError) {
-            console.error('Demo account login error after creation:', loginError);
-            throw loginError;
-          }
-
-          console.log('Demo login successful after account creation:', loginData);
-        } else {
-          throw authError;
-        }
-      } else {
-        console.log('Demo login successful:', data);
-      }
-
-      // Bei erfolgreicher Anmeldung basierend auf is_baby_born-Flag navigieren
-      if (data && data.user && data.user.id) {
-        await navigateBasedOnBabyBornFlag(data.user.id);
-      } else {
-        // Fallback zur Countdown-Seite, wenn keine Benutzer-ID verfügbar ist
-        try {
-          router.replace('/(tabs)/countdown');
-        } catch (navError) {
-          console.error('Navigation error:', navError);
-          router.navigate('/(tabs)/countdown');
-        }
-      }
-    } catch (err) {
-      setError('Demo-Login fehlgeschlagen. Bitte versuche es erneut.');
-      console.error('Demo login error:', err);
     } finally {
       setIsLoading(false);
     }
@@ -320,11 +276,11 @@ export default function LoginScreen() {
             <StatusBar hidden={true} />
             <ScrollView contentContainerStyle={styles.scrollContent}>
               <View style={styles.logoContainer}>
-                <ThemedText type="title" style={styles.appTitle}>
+                <ThemedText type="title" style={styles.appTitle} lightColor={primaryTextColor} darkColor={primaryTextColor}>
                   Lotti Baby
                 </ThemedText>
-                <ThemedText style={styles.appSubtitle}>
-                  Für werdende Eltern
+                <ThemedText style={styles.appSubtitle} lightColor={secondaryTextColor} darkColor={secondaryTextColor}>
+                  Für Eltern und alle, die es bald werden
                 </ThemedText>
               </View>
 
@@ -335,7 +291,7 @@ export default function LoginScreen() {
                   style={StyleSheet.absoluteFill}
                 />
                 <View style={styles.formContent}>
-                  <ThemedText type="subtitle" style={styles.formTitle}>
+                  <ThemedText type="subtitle" style={styles.formTitle} lightColor={primaryTextColor} darkColor={primaryTextColor}>
                     {isRegistering ? 'Registrieren' : 'Anmelden'}
                   </ThemedText>
 
@@ -343,14 +299,14 @@ export default function LoginScreen() {
                     <View style={styles.errorContainer}>
                       <BlurView intensity={15} tint="light" style={StyleSheet.absoluteFill} />
                       <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(244,67,54,0.15)' }]} />
-                      <ThemedText style={styles.errorText} lightColor="#B71C1C" darkColor="#FFCDD2">
+                      <ThemedText style={styles.errorText} lightColor="#B71C1C" darkColor="#B71C1C">
                         {error}
                       </ThemedText>
                     </View>
                   ) : null}
 
                 <View style={styles.inputContainer}>
-                  <ThemedText style={styles.inputLabel}>
+                  <ThemedText style={styles.inputLabel} lightColor={secondaryTextColor} darkColor={secondaryTextColor}>
                     E-Mail
                   </ThemedText>
                   <View style={styles.inputWrapper}>
@@ -369,7 +325,7 @@ export default function LoginScreen() {
                 </View>
 
                 <View style={styles.inputContainer}>
-                  <ThemedText style={styles.inputLabel}>
+                  <ThemedText style={styles.inputLabel} lightColor={secondaryTextColor} darkColor={secondaryTextColor}>
                     Passwort
                   </ThemedText>
                   <View style={styles.inputWrapper}>
@@ -385,6 +341,18 @@ export default function LoginScreen() {
                     />
                   </View>
                 </View>
+
+                {!isRegistering && (
+                  <TouchableOpacity
+                    style={styles.forgotPasswordButton}
+                    onPress={handleForgotPassword}
+                    disabled={isLoading}
+                  >
+                    <ThemedText style={styles.forgotPasswordText} lightColor={accentColor} darkColor={accentColor}>
+                      Passwort vergessen?
+                    </ThemedText>
+                  </TouchableOpacity>
+                )}
 
                 <TouchableOpacity
                   style={[styles.button, styles.loginButton, isLoading && styles.buttonDisabled]}
@@ -423,22 +391,6 @@ export default function LoginScreen() {
                   </TouchableOpacity>
                 )}
 
-                <TouchableOpacity
-                  style={[styles.button, styles.demoButton]}
-                  onPress={handleDemoLogin}
-                  disabled={isLoading}
-                  activeOpacity={0.9}
-                >
-                  <BlurView intensity={15} tint="light" style={StyleSheet.absoluteFill} />
-                  <LinearGradient
-                    colors={['rgba(255,255,255,0.2)', 'rgba(255,255,255,0.1)']}
-                    style={StyleSheet.absoluteFill}
-                  />
-                  <ThemedText style={styles.demoButtonText}>
-                    Demo-Modus
-                  </ThemedText>
-                </TouchableOpacity>
-
                 {isRegistering && (
                   <View style={styles.inputContainer}>
                     <TouchableOpacity
@@ -446,14 +398,14 @@ export default function LoginScreen() {
                       onPress={() => setShowInvitationField(!showInvitationField)}
                       disabled={isLoading}
                     >
-                      <ThemedText style={styles.invitationToggleText} lightColor={theme.accent} darkColor={theme.accent}>
+                      <ThemedText style={styles.invitationToggleText} lightColor={accentColor} darkColor={accentColor}>
                         {showInvitationField ? 'Ohne Einladungscode fortfahren' : 'Ich habe einen Einladungscode'}
                       </ThemedText>
                     </TouchableOpacity>
 
                     {showInvitationField && (
                       <>
-                        <ThemedText style={styles.inputLabel}>
+                        <ThemedText style={styles.inputLabel} lightColor={secondaryTextColor} darkColor={secondaryTextColor}>
                           Einladungscode (optional)
                         </ThemedText>
                         <View style={styles.inputWrapper}>
@@ -464,8 +416,9 @@ export default function LoginScreen() {
                             placeholder="Einladungscode eingeben"
                             placeholderTextColor="#9D9D9D"
                             value={invitationCode}
-                            onChangeText={setInvitationCode}
+                            onChangeText={(value) => setInvitationCode(value.replace(/\s+/g, '').toUpperCase())}
                             autoCapitalize="characters"
+                            autoCorrect={false}
                           />
                         </View>
                       </>
@@ -482,7 +435,7 @@ export default function LoginScreen() {
                   }}
                   disabled={isLoading}
                 >
-                  <ThemedText style={styles.switchModeText} lightColor={theme.accent} darkColor={theme.accent}>
+                  <ThemedText style={styles.switchModeText} lightColor={accentColor} darkColor={accentColor}>
                     {isRegistering ? 'Bereits ein Konto? Anmelden' : 'Noch kein Konto? Registrieren'}
                   </ThemedText>
                 </TouchableOpacity>
@@ -627,9 +580,6 @@ const styles = StyleSheet.create({
   appleButton: {
     marginTop: 16,
   },
-  demoButton: {
-    marginTop: 16,
-  },
   buttonContent: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -656,17 +606,6 @@ const styles = StyleSheet.create({
     position: 'relative',
     zIndex: 1,
   },
-  demoButtonText: {
-    color: '#7D5A50',
-    fontWeight: '700',
-    fontSize: 18,
-    letterSpacing: 0.3,
-    textShadowColor: 'rgba(255,255,255,0.3)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-    position: 'relative',
-    zIndex: 1,
-  },
   switchModeButton: {
     marginTop: 20,
     padding: 10,
@@ -684,5 +623,15 @@ const styles = StyleSheet.create({
   invitationToggleText: {
     fontSize: 14,
     textDecorationLine: 'underline',
+  },
+  forgotPasswordButton: {
+    alignSelf: 'flex-end',
+    marginTop: 8,
+    marginBottom: 4,
+    padding: 4,
+  },
+  forgotPasswordText: {
+    fontSize: 14,
+    fontWeight: '500',
   },
 });

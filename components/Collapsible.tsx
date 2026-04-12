@@ -2,10 +2,9 @@ import { PropsWithChildren, useState } from 'react';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
 
 import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { Colors } from '@/constants/Colors';
-import { useColorScheme } from '@/hooks/useColorScheme';
+import { LiquidGlassCard, TEXT_PRIMARY } from '@/constants/DesignGuide';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 
 export function Collapsible({
   children,
@@ -20,71 +19,86 @@ export function Collapsible({
   leftComponent?: React.ReactNode
 }) {
   const [isOpen, setIsOpen] = useState(initiallyExpanded);
-  const theme = useColorScheme() ?? 'light';
+  const adaptiveColors = useAdaptiveColors();
+  const isDark = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
+  const titleColor = isDark ? adaptiveColors.textPrimary : TEXT_PRIMARY;
+  const subtitleColor = isDark ? adaptiveColors.textSecondary : 'rgba(125,90,80,0.75)';
+  const iconColor = isDark ? adaptiveColors.icon : titleColor;
+  const borderColor = isDark ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.35)';
+  const overlayColor = isDark ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.15)';
 
   return (
-    <ThemedView style={styles.container}>
-      <TouchableOpacity
-        style={styles.heading}
-        onPress={() => setIsOpen((value) => !value)}
-        activeOpacity={0.8}>
-        {leftComponent && (
-          <View style={styles.leftComponentContainer}>
-            {leftComponent}
+    <LiquidGlassCard style={styles.card} borderColor={borderColor} overlayColor={overlayColor}>
+      <View>
+        <TouchableOpacity
+          style={styles.heading}
+          onPress={() => setIsOpen((value) => !value)}
+          activeOpacity={0.85}>
+          {leftComponent && (
+            <View style={styles.leftComponentContainer}>
+              {leftComponent}
+            </View>
+          )}
+          <View style={styles.titleContainer}>
+            <ThemedText style={[styles.title, { color: titleColor }]}>
+              {title}
+            </ThemedText>
+            {subtitle && (
+              <ThemedText style={[styles.subtitle, { color: subtitleColor }]}>
+                {subtitle}
+              </ThemedText>
+            )}
+          </View>
+          <IconSymbol
+            name="chevron.right"
+            size={18}
+            weight="medium"
+            color={iconColor}
+            style={{ transform: [{ rotate: isOpen ? '90deg' : '0deg' }] }}
+          />
+        </TouchableOpacity>
+        {isOpen && (
+          <View style={[styles.content, { borderTopColor: borderColor }]}>
+            {children}
           </View>
         )}
-        <View style={styles.titleContainer}>
-          <ThemedText style={styles.title}>{title}</ThemedText>
-          {subtitle && (
-            <ThemedText style={styles.subtitle}>{subtitle}</ThemedText>
-          )}
-        </View>
-        <IconSymbol
-          name="chevron.right"
-          size={18}
-          weight="medium"
-          color={theme === 'light' ? Colors.light.icon : Colors.dark.icon}
-          style={{ transform: [{ rotate: isOpen ? '90deg' : '0deg' }] }}
-        />
-      </TouchableOpacity>
-      {isOpen && <ThemedView style={styles.content}>{children}</ThemedView>}
-    </ThemedView>
+      </View>
+    </LiquidGlassCard>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    marginBottom: 16,
-    borderRadius: 8,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#E9E9E9',
+  card: {
+    marginBottom: 12,
   },
   heading: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#F2E6DD',
+    paddingHorizontal: 20,
+    paddingVertical: 18,
+    gap: 14,
   },
   leftComponentContainer: {
-    marginRight: 12,
+    marginRight: 10,
   },
   titleContainer: {
     flex: 1,
   },
   title: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#5C4033', // Dunkles Braun für bessere Lesbarkeit
+    fontSize: 17,
+    fontWeight: '700',
   },
   subtitle: {
-    fontSize: 14,
-    opacity: 0.7,
+    fontSize: 13,
     marginTop: 4,
-    color: '#5C4033', // Dunkles Braun für bessere Lesbarkeit
+    letterSpacing: 0.2,
   },
   content: {
-    padding: 0,
+    paddingHorizontal: 14,
+    paddingBottom: 18,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.35)',
+    gap: 12,
   },
 });

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   StyleSheet,
   ScrollView,
@@ -6,46 +6,106 @@ import {
   TouchableOpacity,
   Alert,
   Platform,
-  SafeAreaView,
   StatusBar,
   ActivityIndicator,
-  Modal,
-  Pressable,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { Asset } from 'expo-asset';
 
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import CountdownTimer from '@/components/CountdownTimer';
 import { supabase, hasGeburtsplan, getDueDateWithLinkedUsers, updateDueDateAndSync } from '@/lib/supabase';
 import { generateAndDownloadPDF } from '@/lib/geburtsplan-utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { getSafePickerDate, parseSafeDate } from '@/lib/safeDate';
+import IOSBottomDatePicker from '@/components/modals/IOSBottomDatePicker';
 import { pregnancyWeekInfo } from '@/constants/PregnancyWeekInfo';
 import { pregnancyMotherInfo } from '@/constants/PregnancyMotherInfo';
 import { pregnancyPartnerInfo } from '@/constants/PregnancyPartnerInfo';
 import { pregnancySymptoms } from '@/constants/PregnancySymptoms';
+import { BIRTH_PREP_SECTION_START_WEEK, birthPreparationMeasures } from '@/constants/BirthPreparationMeasures';
+import { babySizeData } from '@/lib/baby-size-data';
 import Header from '@/components/Header';
 
 // Sleep-Tracker Design Tokens
-import { LiquidGlassCard, GLASS_OVERLAY, LAYOUT_PAD } from '@/constants/DesignGuide';
+import { LiquidGlassCard, GLASS_OVERLAY, GLASS_OVERLAY_DARK, LAYOUT_PAD, SECTION_GAP_BOTTOM } from '@/constants/DesignGuide';
 
-const PRIMARY_TEXT = '#7D5A50';
+const PRIMARY_TEXT = '#5C4033';
+const SECONDARY_TEXT = '#7D5A50';
 const ACCENT_PURPLE = '#8E4EC6';
+const ACCENT_MINT = '#389D91';
+const ACCENT_ORANGE = '#FF8C42';
 const WARN = '#E57373';
 const TIMELINE_INSET = 8;
+
+const fruitEmoji: Record<string, string> = {
+  'Mohnkorn': '🌱',
+  'Apfelkern': '🍎',
+  'Erbse': '🟢',
+  'Heidelbeere': '🫐',
+  'Himbeere': '🍇',
+  'Erdbeere': '🍓',
+  'Aprikose': '🍑',
+  'Limette': '🍈',
+  'Zwetschge': '🟣',
+  'Pfirsich': '🍑',
+  'Zitrone': '🍋',
+  'Orange': '🍊',
+  'Avocado': '🥑',
+  'Süßkartoffel': '🍠',
+  'Mango': '🥭',
+  'Papaya': '🍈',
+  'Aubergine': '🍆',
+  'Kürbis': '🎃',
+  'Honigmelone': '🍈',
+  'Wassermelone': '🍉',
+};
+
+const getFruitEmoji = (comparison: string): string => {
+  for (const [key, emoji] of Object.entries(fruitEmoji)) {
+    if (comparison.includes(key)) return emoji;
+  }
+  return '🍼';
+};
+
+const toRgba = (hex: string, opacity = 1) => {
+  const cleanHex = hex.replace('#', '');
+  const int = parseInt(cleanHex, 16);
+  const r = (int >> 16) & 255;
+  const g = (int >> 8) & 255;
+  const b = int & 255;
+  return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+};
+
+const lightenHex = (hex: string, amount = 0.35) => {
+  const cleanHex = hex.replace('#', '');
+  const int = parseInt(cleanHex, 16);
+  const r = (int >> 16) & 255;
+  const g = (int >> 8) & 255;
+  const b = int & 255;
+
+  const lightenChannel = (channel: number) =>
+    Math.min(255, Math.round(channel + (255 - channel) * amount));
+  const toHex = (channel: number) => channel.toString(16).padStart(2, '0');
+
+  return `#${toHex(lightenChannel(r))}${toHex(lightenChannel(g))}${toHex(lightenChannel(b))}`;
+};
 
 // Definiere Typen für die verknüpften Benutzer
 interface LinkedUser {
   firstName: string;
-  id: string;
+  id?: string;
+  userId?: string;
 }
 
 // Interface für die Tagesinformationen
@@ -151,11 +211,36 @@ const overdueInfo: Record<number, DayInfo> & { default: DayInfo } = {
 };
 
 export default function CountdownScreen() {
+  const params = useLocalSearchParams<{ focus?: string }>();
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
+  const adaptiveColors = useAdaptiveColors();
+  const isDark = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
+  const textPrimary = isDark ? Colors.dark.textPrimary : PRIMARY_TEXT;
+  const textSecondary = isDark ? Colors.dark.textSecondary : SECONDARY_TEXT;
+  const glassOverlay = isDark ? GLASS_OVERLAY_DARK : GLASS_OVERLAY;
+
+  const accentPurple = isDark ? lightenHex(ACCENT_PURPLE) : ACCENT_PURPLE;
+  const accentMint = isDark ? lightenHex(ACCENT_MINT) : ACCENT_MINT;
+  const accentOrange = isDark ? lightenHex(ACCENT_ORANGE) : ACCENT_ORANGE;
+  const warnColor = isDark ? lightenHex(WARN) : WARN;
+
+  const cardBorderColor = isDark ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.6)';
+  const infoDividerColor = isDark ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.35)';
+  const avatarBorderColor = isDark ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.8)';
+  const badgeBorderColor = isDark ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.6)';
+  const badgeBg = isDark ? toRgba(accentPurple, 0.25) : 'rgba(142,78,198,0.15)';
+  const pillBorderColor = isDark ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.65)';
+  const pillGhostBg = isDark ? 'rgba(255,255,255,0.06)' : 'transparent';
+  const pillPrimaryBorder = isDark ? toRgba(accentPurple, 0.7) : 'rgba(255,255,255,0.7)';
+  const cardBlurTint = isDark ? 'dark' : 'light';
+  const actionPurpleBg = isDark ? toRgba(accentPurple, 0.22) : 'rgba(220,200,255,0.55)';
+  const actionMintBg = isDark ? toRgba(accentMint, 0.22) : 'rgba(168,196,193,0.6)';
+  const actionWarnBg = isDark ? toRgba(warnColor, 0.2) : 'rgba(255,180,180,0.6)';
   const { user } = useAuth();
-  const { isBabyBorn, setIsBabyBorn } = useBabyStatus();
+  const { isBabyBorn, setIsBabyBorn, isReadOnlyPreviewMode } = useBabyStatus();
   const router = useRouter();
+  const scrollViewRef = useRef<ScrollView | null>(null);
 
   const [dueDate, setDueDate] = useState<Date | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -168,6 +253,26 @@ export default function CountdownScreen() {
   const [currentWeek, setCurrentWeek] = useState<number | null>(null);
   const [currentDay, setCurrentDay] = useState<number | null>(null);
   const [daysOverdue, setDaysOverdue] = useState<number>(0);
+  const [birthPreparationSectionY, setBirthPreparationSectionY] = useState<number | null>(null);
+  const headerSubtitle = isReadOnlyPreviewMode
+    ? 'Vorschau-Modus: nur ansehen'
+    : 'Verfolge die Zeit bis zur Geburt';
+  const minDueDate = useMemo(() => {
+    const date = new Date();
+    date.setHours(0, 0, 0, 0);
+    return date;
+  }, []);
+  const maxDueDate = useMemo(() => new Date(2100, 11, 31, 23, 59, 59, 999), []);
+
+  const showReadOnlyPreviewAlert = () => {
+    Alert.alert('Nur Vorschau', 'Du schaust den Schwangerschaftsmodus an. Der Countdown ist hier gesperrt.');
+  };
+
+  const ensureWritableInCurrentMode = () => {
+    if (!isReadOnlyPreviewMode) return true;
+    showReadOnlyPreviewAlert();
+    return false;
+  };
 
   const logWithTimestamp = (message: string) => {
     const now = new Date();
@@ -200,6 +305,21 @@ export default function CountdownScreen() {
     }
   }, [user]);
 
+  useEffect(() => {
+    if (params.focus !== 'birth-preparation' || birthPreparationSectionY === null) {
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      scrollViewRef.current?.scrollTo({
+        y: Math.max(0, birthPreparationSectionY - 12),
+        animated: true,
+      });
+    }, 180);
+
+    return () => clearTimeout(timeoutId);
+  }, [params.focus, birthPreparationSectionY]);
+
   const checkGeburtsplan = async () => {
     try {
       const { exists, error } = await hasGeburtsplan();
@@ -220,7 +340,14 @@ export default function CountdownScreen() {
       if (result.success) {
         logWithTimestamp('Loaded due date with linked users');
         if (result.dueDate) {
-          const resultDueDate = new Date(result.dueDate);
+          const resultDueDate = parseSafeDate(result.dueDate);
+          if (!resultDueDate) {
+            logWithTimestamp('Ungültiger Entbindungstermin aus RPC verworfen');
+            setDueDate(null);
+            setTempDate(new Date());
+            setLinkedUsers([]);
+            return;
+          }
           setDueDate(resultDueDate);
           setTempDate(resultDueDate);
           logWithTimestamp(`Entbindungstermin geladen: ${resultDueDate.toLocaleDateString()}`);
@@ -235,12 +362,15 @@ export default function CountdownScreen() {
 
           const totalDaysInPregnancy = 280;
           const daysRemaining = Math.max(0, daysLeft);
-          const daysPregnant = totalDaysInPregnancy - daysRemaining;
+          const daysPregnant = Math.min(
+            totalDaysInPregnancy,
+            Math.max(0, totalDaysInPregnancy - daysRemaining)
+          );
 
           const weeksPregnant = Math.floor(daysPregnant / 7);
           const daysInCurrentWeek = daysPregnant % 7;
 
-          setCurrentWeek(weeksPregnant + 1);
+          setCurrentWeek(Math.max(1, weeksPregnant + 1));
           setCurrentDay(daysInCurrentWeek);
 
           setDaysOverdue(daysLeft < 0 ? Math.abs(daysLeft) : 0);
@@ -254,6 +384,7 @@ export default function CountdownScreen() {
         } else {
           logWithTimestamp('No due date found in result');
           setDueDate(null);
+          setTempDate(new Date());
           setLinkedUsers([]);
         }
       } else {
@@ -270,14 +401,21 @@ export default function CountdownScreen() {
         if (error && error.code !== 'PGRST116') {
           console.error('Error loading due date:', error);
         } else if (data && data.due_date) {
-          const loadedDate = new Date(data.due_date);
-          logWithTimestamp(`Loaded local due date: ${loadedDate.toLocaleDateString()}`);
-          setDueDate(loadedDate);
-          setTempDate(loadedDate);
+          const loadedDate = parseSafeDate(data.due_date);
+          if (loadedDate) {
+            logWithTimestamp(`Loaded local due date: ${loadedDate.toLocaleDateString()}`);
+            setDueDate(loadedDate);
+            setTempDate(loadedDate);
+          } else {
+            logWithTimestamp('Ungültiger lokaler Entbindungstermin verworfen');
+            setDueDate(null);
+            setTempDate(new Date());
+          }
           setLinkedUsers([]);
         } else {
           logWithTimestamp('No due date found for user');
           setDueDate(null);
+          setTempDate(new Date());
           setLinkedUsers([]);
         }
       }
@@ -289,6 +427,7 @@ export default function CountdownScreen() {
   };
 
   const saveDueDate = async (date: Date) => {
+    if (!ensureWritableInCurrentMode()) return;
     try {
       if (!user) {
         Alert.alert('Hinweis', 'Bitte melde dich an, um deinen Geburtstermin zu speichern.');
@@ -322,20 +461,16 @@ export default function CountdownScreen() {
   };
 
   const handleDateChange = (_event: any, selectedDate?: Date) => {
+    const safeDate = selectedDate ? parseSafeDate(selectedDate) : null;
     if (Platform.OS === 'android') {
       setShowDatePicker(false);
-      if (selectedDate) {
-        setTempDate(selectedDate);
-        saveDueDate(selectedDate);
+      if (safeDate) {
+        setTempDate(safeDate);
+        saveDueDate(safeDate);
       }
     } else {
-      if (selectedDate) setTempDate(selectedDate);
+      if (safeDate) setTempDate(safeDate);
     }
-  };
-
-  const handleIOSConfirm = () => {
-    setShowDatePicker(false);
-    saveDueDate(tempDate);
   };
 
   const handleIOSCancel = () => {
@@ -343,8 +478,19 @@ export default function CountdownScreen() {
     if (dueDate) setTempDate(dueDate);
   };
 
+  const handleIOSConfirm = (date: Date) => {
+    setShowDatePicker(false);
+    const safeDate = getSafePickerDate(date, minDueDate, {
+      minimumDate: minDueDate,
+      maximumDate: maxDueDate,
+    });
+    setTempDate(safeDate);
+    saveDueDate(safeDate);
+  };
+
   const showDatepicker = () => {
-    if (dueDate) setTempDate(dueDate);
+    if (!ensureWritableInCurrentMode()) return;
+    if (dueDate) setTempDate(getSafePickerDate(dueDate, new Date()));
     else {
       const today = new Date();
       today.setMonth(today.getMonth() + 9);
@@ -381,6 +527,7 @@ export default function CountdownScreen() {
   };
 
   const handleBabyBorn = async () => {
+    if (!ensureWritableInCurrentMode()) return;
     try {
       await setIsBabyBorn(true);
       const linkedUsersResult = await fetchLinkedUsers(user?.id || '');
@@ -404,9 +551,9 @@ export default function CountdownScreen() {
     return (
       <ThemedBackground>
         <SafeAreaView style={{ flex: 1 }}>
-          <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
+          <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
           <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-            <ActivityIndicator size="large" color={theme.tint} />
+            <ActivityIndicator size="large" color={isDark ? adaptiveColors.accent : theme.tint} />
           </View>
         </SafeAreaView>
       </ThemedBackground>
@@ -416,96 +563,145 @@ export default function CountdownScreen() {
   const isOverdue = !!dueDate && new Date() > dueDate;
 
   return (
-    <ThemedBackground style={{ flex: 1, backgroundColor: '#f5eee0' }}>
+    <ThemedBackground style={{ flex: 1 }}>
       <SafeAreaView style={{ flex: 1 }}>
-        <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
-        <Header title="Countdown" subtitle="Verfolge die Zeit bis zur Geburt" />
+        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
+        <Header
+          title="Countdown"
+          subtitle={headerSubtitle}
+          showBackButton
+          onBackPress={() => router.push('/(tabs)/pregnancy-home')}
+        />
 
-        <ScrollView contentContainerStyle={styles.scrollContent}>
+        {isReadOnlyPreviewMode && (
+          <View style={styles.readOnlyPreviewBanner}>
+            <ThemedText style={styles.readOnlyPreviewTitle}>Nur Vorschau aktiv</ThemedText>
+            <ThemedText style={styles.readOnlyPreviewText}>
+              Du schaust den Schwangerschaftsmodus an. Der Countdown ist hier gesperrt.
+            </ThemedText>
+          </View>
+        )}
+
+        <ScrollView ref={scrollViewRef} contentContainerStyle={styles.scrollContent}>
           {/* Countdown im Glas-Card */}
-          <LiquidGlassCard style={[styles.sectionCard, styles.centerCard]} intensity={26} overlayColor={GLASS_OVERLAY}>
+          <LiquidGlassCard style={[styles.sectionCard, styles.centerCard]} intensity={26} overlayColor={glassOverlay}>
             <CountdownTimer dueDate={dueDate} variant="embedded" />
           </LiquidGlassCard>
 
+          {/* Babygröße Highlight */}
+          {currentWeek && currentWeek >= 4 && !isOverdue && (() => {
+            const sizeData = babySizeData.find((d) => d.week === currentWeek);
+            if (!sizeData) return null;
+            const emoji = getFruitEmoji(sizeData.fruitComparison);
+            return (
+              <TouchableOpacity
+                onPress={() => router.push({ pathname: '/baby-size', params: { week: String(currentWeek) } })}
+                activeOpacity={0.9}
+                style={styles.babySizeTouchTarget}
+              >
+                <LiquidGlassCard style={[styles.sectionCard, styles.babySizeCard]} intensity={26} overlayColor={glassOverlay}>
+                  <View style={styles.babySizeRow}>
+                    <View style={[styles.babySizeEmojiWrap, { backgroundColor: isDark ? toRgba(accentPurple, 0.2) : 'rgba(142,78,198,0.12)', borderColor: pillPrimaryBorder }]}>
+                      <ThemedText style={styles.babySizeEmoji}>{emoji}</ThemedText>
+                    </View>
+                    <View style={styles.babySizeTextWrap}>
+                      <ThemedText style={[styles.babySizeFruit, { color: textPrimary }]}>
+                        So groß wie {sizeData.fruitComparison}
+                      </ThemedText>
+                      <ThemedText style={[styles.babySizeMeta, { color: textSecondary }]}>
+                        ca. {sizeData.length} · ca. {sizeData.weight}
+                      </ThemedText>
+                    </View>
+                    <IconSymbol name="chevron.right" size={16} color={textSecondary} />
+                  </View>
+                </LiquidGlassCard>
+              </TouchableOpacity>
+            );
+          })()}
+
           {/* Entbindungstermin */}
-          <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
-            <ThemedText style={styles.sectionTitle}>Entbindungstermin</ThemedText>
-            <ThemedText style={styles.sectionDescription}>
+          <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={glassOverlay}>
+            <ThemedText style={[styles.sectionTitle, { color: textPrimary }]}>Entbindungstermin</ThemedText>
+            <ThemedText style={[styles.sectionDescription, { color: textSecondary }]}>
               Wähle den ET, damit Countdown & Inhalte exakt passen.
             </ThemedText>
 
-            <TouchableOpacity onPress={showDatepicker} activeOpacity={0.9} style={styles.fullWidthAction}>
-              <BlurView intensity={24} tint="light" style={styles.cardBlur}>
-                <View style={[styles.actionCard, { backgroundColor: 'rgba(220,200,255,0.55)' }]}>
-                  <View style={[styles.actionIcon, { backgroundColor: ACCENT_PURPLE }]}>
+            <TouchableOpacity
+              onPress={showDatepicker}
+              activeOpacity={0.9}
+              style={[styles.fullWidthAction, isReadOnlyPreviewMode && styles.actionDisabled]}
+              disabled={isReadOnlyPreviewMode}
+            >
+              <BlurView intensity={24} tint={cardBlurTint} style={styles.cardBlur}>
+                <View style={[styles.actionCard, { backgroundColor: actionPurpleBg, borderColor: cardBorderColor }]}>
+                  <View style={[styles.actionIcon, { backgroundColor: accentPurple, borderColor: cardBorderColor }]}>
                     <IconSymbol name="calendar" size={24} color="#fff" />
                   </View>
-                  <ThemedText style={styles.actionTitle}>
+                  <ThemedText style={[styles.actionTitle, { color: textPrimary }]}>
                     {dueDate
                       ? dueDate.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
                       : 'ET auswählen'}
                   </ThemedText>
-                  <ThemedText style={styles.actionSub}>Tippen zum Ändern</ThemedText>
+                  <ThemedText style={[styles.actionSub, { color: textSecondary }]}>Tippen zum Ändern</ThemedText>
                 </View>
               </BlurView>
             </TouchableOpacity>
           </LiquidGlassCard>
 
-          {/* iOS DatePicker im Glas-Modal */}
           {Platform.OS === 'ios' && (
-            <Modal transparent visible={showDatePicker} animationType="fade" onRequestClose={() => setShowDatePicker(false)}>
-              <Pressable style={styles.modalOverlay} onPress={handleIOSCancel}>
-                <LiquidGlassCard style={styles.modalGlass} intensity={28} overlayColor={GLASS_OVERLAY}>
-                  <ThemedText style={[styles.modalTitle, { color: PRIMARY_TEXT }]}>Entbindungstermin wählen</ThemedText>
-                  <DateTimePicker
-                    value={tempDate}
-                    mode="date"
-                    display="spinner"
-                    onChange={handleDateChange}
-                    minimumDate={new Date()}
-                    textColor={colorScheme === 'dark' ? theme.text : undefined}
-                    style={styles.datePicker}
-                  />
-                  <View style={styles.modalButtonRow}>
-                    <TouchableOpacity style={[styles.pillBtn, styles.pillGhost]} onPress={handleIOSCancel}>
-                      <ThemedText style={styles.pillGhostText}>Abbrechen</ThemedText>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={[styles.pillBtn, styles.pillPrimary]} onPress={handleIOSConfirm}>
-                      <ThemedText style={styles.pillPrimaryText}>Bestätigen</ThemedText>
-                    </TouchableOpacity>
-                  </View>
-                </LiquidGlassCard>
-              </Pressable>
-            </Modal>
+            <IOSBottomDatePicker
+              visible={showDatePicker}
+              title="Entbindungstermin wählen"
+              value={getSafePickerDate(tempDate, minDueDate, {
+                minimumDate: minDueDate,
+                maximumDate: maxDueDate,
+              })}
+              mode="date"
+              minimumDate={minDueDate}
+              maximumDate={maxDueDate}
+              onClose={handleIOSCancel}
+              onConfirm={handleIOSConfirm}
+              initialVariant="calendar"
+            />
           )}
 
           {/* Android DatePicker */}
           {Platform.OS === 'android' && showDatePicker && (
-            <DateTimePicker value={tempDate} mode="date" display="default" onChange={handleDateChange} minimumDate={new Date()} />
+            <DateTimePicker
+              value={getSafePickerDate(tempDate, minDueDate, {
+                minimumDate: minDueDate,
+                maximumDate: maxDueDate,
+              })}
+              mode="date"
+              display="default"
+              onChange={handleDateChange}
+              minimumDate={minDueDate}
+              maximumDate={maxDueDate}
+            />
           )}
 
           {/* Wöchentliche Infos */}
           {currentWeek && currentWeek >= 4 && (
             <LiquidGlassCard
-              style={[styles.sectionCard, isOverdue && styles.overdueBorder]}
+              style={[styles.sectionCard, isOverdue && styles.overdueBorder, isOverdue && { borderLeftColor: warnColor }]}
               intensity={26}
-              overlayColor={GLASS_OVERLAY}
+              overlayColor={glassOverlay}
             >
-              <ThemedText style={[styles.sectionTitle, isOverdue && styles.warnTitle]}>
+              <ThemedText style={[styles.sectionTitle, { color: textPrimary }, isOverdue && { color: warnColor }]}>
                 {isOverdue
                   ? `${daysOverdue} ${daysOverdue === 1 ? 'Tag' : 'Tage'} über dem ET: Was jetzt wichtig ist`
                   : `SSW ${currentWeek}: Was geschieht diese Woche?`}
               </ThemedText>
 
               {/* Baby */}
-              <View style={styles.infoBlock}>
+              <View style={[styles.infoBlock, { borderBottomColor: infoDividerColor }]}>
                 <View style={styles.infoHeader}>
-                  <View style={[styles.avatar, { backgroundColor: 'rgba(142,78,198,0.18)' }]}>
-                    <IconSymbol name="figure.child" size={18} color={ACCENT_PURPLE} />
+                  <View style={[styles.avatar, { backgroundColor: isDark ? toRgba(accentPurple, 0.2) : 'rgba(142,78,198,0.18)', borderColor: avatarBorderColor }]}>
+                    <IconSymbol name="figure.child" size={18} color={accentPurple} />
                   </View>
-                  <ThemedText style={styles.infoTitle}>Beim Baby</ThemedText>
+                  <ThemedText style={[styles.infoTitle, { color: textPrimary }]}>Beim Baby</ThemedText>
                 </View>
-                <ThemedText style={styles.infoText}>
+                <ThemedText style={[styles.infoText, { color: textSecondary }]}>
                   {isOverdue
                     ? (overdueInfo[Math.min(daysOverdue, 14)] || overdueInfo.default).baby
                     : pregnancyWeekInfo[currentWeek < 43 ? currentWeek : 42]}
@@ -513,14 +709,14 @@ export default function CountdownScreen() {
               </View>
 
               {/* Mutter */}
-              <View style={styles.infoBlock}>
+              <View style={[styles.infoBlock, { borderBottomColor: infoDividerColor }]}>
                 <View style={styles.infoHeader}>
-                  <View style={[styles.avatar, { backgroundColor: 'rgba(56,157,145,0.18)' }]}>
-                    <IconSymbol name="person.fill" size={18} color="#389D91" />
+                  <View style={[styles.avatar, { backgroundColor: isDark ? toRgba(accentMint, 0.2) : 'rgba(56,157,145,0.18)', borderColor: avatarBorderColor }]}>
+                    <IconSymbol name="person.fill" size={18} color={accentMint} />
                   </View>
-                  <ThemedText style={styles.infoTitle}>Bei der Mutter</ThemedText>
+                  <ThemedText style={[styles.infoTitle, { color: textPrimary }]}>Bei der Mutter</ThemedText>
                 </View>
-                <ThemedText style={styles.infoText}>
+                <ThemedText style={[styles.infoText, { color: textSecondary }]}>
                   {isOverdue
                     ? (overdueInfo[Math.min(daysOverdue, 14)] || overdueInfo.default).mother
                     : pregnancyMotherInfo[currentWeek < 43 ? currentWeek : 42]}
@@ -528,14 +724,14 @@ export default function CountdownScreen() {
               </View>
 
               {/* Partner */}
-              <View style={styles.infoBlock}>
+              <View style={[styles.infoBlock, { borderBottomColor: infoDividerColor }]}>
                 <View style={styles.infoHeader}>
-                  <View style={[styles.avatar, { backgroundColor: 'rgba(255,140,66,0.18)' }]}>
-                    <IconSymbol name="person.2.fill" size={18} color="#FF8C42" />
+                  <View style={[styles.avatar, { backgroundColor: isDark ? toRgba(accentOrange, 0.2) : 'rgba(255,140,66,0.18)', borderColor: avatarBorderColor }]}>
+                    <IconSymbol name="person.2.fill" size={18} color={accentOrange} />
                   </View>
-                  <ThemedText style={styles.infoTitle}>Für den Partner</ThemedText>
+                  <ThemedText style={[styles.infoTitle, { color: textPrimary }]}>Für den Partner</ThemedText>
                 </View>
-                <ThemedText style={styles.infoText}>
+                <ThemedText style={[styles.infoText, { color: textSecondary }]}>
                   {isOverdue
                     ? (overdueInfo[Math.min(daysOverdue, 14)] || overdueInfo.default).partner
                     : pregnancyPartnerInfo[currentWeek < 43 ? currentWeek : 42]}
@@ -547,11 +743,11 @@ export default function CountdownScreen() {
           {/* Symptome */}
           {currentWeek && currentWeek >= 4 && (
             <LiquidGlassCard
-              style={[styles.sectionCard, isOverdue && styles.overdueBorder]}
+              style={[styles.sectionCard, isOverdue && styles.overdueBorder, isOverdue && { borderLeftColor: warnColor }]}
               intensity={26}
-              overlayColor={GLASS_OVERLAY}
+              overlayColor={glassOverlay}
             >
-              <ThemedText style={[styles.sectionTitle, isOverdue && styles.warnTitle]}>
+              <ThemedText style={[styles.sectionTitle, { color: textPrimary }, isOverdue && { color: warnColor }]}>
                 {isOverdue ? 'Häufige Anzeichen kurz vor der Geburt' : `Mögliche Symptome in SSW ${currentWeek}`}
               </ThemedText>
 
@@ -561,34 +757,73 @@ export default function CountdownScreen() {
                   : pregnancySymptoms[currentWeek < 43 ? currentWeek : 42]
                 ).map((symptom: string, idx: number) => (
                   <View key={idx} style={styles.symptomItem}>
-                    <IconSymbol name="circle.fill" size={8} color={isOverdue ? WARN : '#389D91'} />
-                    <ThemedText style={styles.symptomText}>{symptom}</ThemedText>
+                    <IconSymbol name="circle.fill" size={8} color={isOverdue ? warnColor : accentMint} />
+                    <ThemedText style={[styles.symptomText, { color: textSecondary }]}>{symptom}</ThemedText>
                   </View>
                 ))}
               </View>
             </LiquidGlassCard>
           )}
 
+          {/* Geburtsvorbereitung */}
+          {currentWeek && currentWeek >= BIRTH_PREP_SECTION_START_WEEK && (
+            <View onLayout={(event) => setBirthPreparationSectionY(event.nativeEvent.layout.y)}>
+              <LiquidGlassCard
+                style={styles.sectionCard}
+                intensity={26}
+                overlayColor={glassOverlay}
+              >
+                <ThemedText style={[styles.sectionTitle, { color: textPrimary }]}>
+                  Geburtsvorbereitung (ab SSW {BIRTH_PREP_SECTION_START_WEEK})
+                </ThemedText>
+                <ThemedText style={[styles.sectionDescription, { color: textSecondary }]}>
+                  Alltagstaugliche Maßnahmen für die letzten Wochen. Bitte individuell mit Hebamme oder gynäkologischer Praxis abstimmen.
+                </ThemedText>
+
+                <View style={styles.birthPrepList}>
+                  {birthPreparationMeasures.map((measure) => (
+                    <View key={measure.id} style={[styles.birthPrepCard, { borderColor: cardBorderColor }]}>
+                      <View style={styles.birthPrepHeader}>
+                        <ThemedText style={styles.birthPrepIcon}>{measure.icon}</ThemedText>
+                        <ThemedText style={[styles.birthPrepTitle, { color: textPrimary }]}>{measure.title}</ThemedText>
+                      </View>
+                      <ThemedText style={[styles.birthPrepLabel, { color: textPrimary }]}>Was bringt&apos;s?</ThemedText>
+                      <ThemedText style={[styles.birthPrepText, { color: textSecondary }]}>{measure.benefit}</ThemedText>
+                      <ThemedText style={[styles.birthPrepLabel, { color: textPrimary }]}>Ab wann?</ThemedText>
+                      <ThemedText style={[styles.birthPrepText, { color: textSecondary }]}>{measure.startAt}</ThemedText>
+                      <ThemedText style={[styles.birthPrepLabel, { color: textPrimary }]}>Wie oft?</ThemedText>
+                      <ThemedText style={[styles.birthPrepText, { color: textSecondary }]}>{measure.frequency}</ThemedText>
+                      <ThemedText style={[styles.birthPrepLabel, { color: textPrimary }]}>Wann nicht?</ThemedText>
+                      <ThemedText style={[styles.birthPrepText, { color: textSecondary }]}>{measure.caution}</ThemedText>
+                    </View>
+                  ))}
+                </View>
+              </LiquidGlassCard>
+            </View>
+          )}
+
           {/* Hinweis Überfälligkeit */}
           {isOverdue && (
-            <LiquidGlassCard style={[styles.sectionCard, styles.overdueBorder]} intensity={26} overlayColor={GLASS_OVERLAY}>
-              <View style={[styles.infoHeader, { marginBottom: 8 }]}>
-                <IconSymbol name="info.circle.fill" size={20} color={WARN} />
-                <ThemedText style={[styles.infoTitle, { color: WARN }]}>Wichtige Information</ThemedText>
+            <LiquidGlassCard style={[styles.sectionCard, styles.overdueBorder, { borderLeftColor: warnColor }]} intensity={26} overlayColor={glassOverlay}>
+              <View style={styles.infoInset}>
+                <View style={[styles.infoHeader, { marginBottom: 8 }]}>
+                  <IconSymbol name="info.circle.fill" size={20} color={warnColor} />
+                  <ThemedText style={[styles.infoTitle, { color: warnColor }]}>Wichtige Information</ThemedText>
+                </View>
+                <ThemedText style={[styles.bodyText, { color: textSecondary }]}>
+                  Ab dem errechneten Geburtstermin wird die Schwangerschaft als „überfällig“ bezeichnet. Etwa 5–10% aller Schwangerschaften dauern länger als 42 Wochen. Die meisten Geburten finden jedoch bis zu zwei Wochen vor oder nach dem ET statt.
+                </ThemedText>
+                <ThemedText style={[styles.bodyText, { color: textSecondary }]}>
+                  Halte regelmäßigen Kontakt zu deiner Hebamme oder deinem Frauenarzt. In dieser Phase werden häufigere Kontrollen durchgeführt, um das Wohlbefinden deines Babys sicherzustellen.
+                </ThemedText>
               </View>
-              <ThemedText style={styles.bodyText}>
-                Ab dem errechneten Geburtstermin wird die Schwangerschaft als „überfällig" bezeichnet. Etwa 5–10% aller Schwangerschaften dauern länger als 42 Wochen. Die meisten Geburten finden jedoch bis zu zwei Wochen vor oder nach dem ET statt.
-              </ThemedText>
-              <ThemedText style={styles.bodyText}>
-                Halte regelmäßigen Kontakt zu deiner Hebamme oder deinem Frauenarzt. In dieser Phase werden häufigere Kontrollen durchgeführt, um das Wohlbefinden deines Babys sicherzustellen.
-              </ThemedText>
             </LiquidGlassCard>
           )}
 
           {/* Geburtsplan */}
-          <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
-            <ThemedText style={styles.sectionTitle}>Geburtsplan</ThemedText>
-            <ThemedText style={styles.sectionDescription}>
+          <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={glassOverlay}>
+            <ThemedText style={[styles.sectionTitle, { color: textPrimary }]}>Geburtsplan</ThemedText>
+            <ThemedText style={[styles.sectionDescription, { color: textSecondary }]}>
               {geburtsplanExists
                 ? 'Du hast bereits einen Geburtsplan. Du kannst ihn als PDF exportieren oder bearbeiten.'
                 : 'Erstelle einen individuellen Geburtsplan und teile ihn mit deinem Team.'}
@@ -596,15 +831,15 @@ export default function CountdownScreen() {
 
             {/* Hauptaktion: exakt wie ET-Button aufgebaut */}
             <TouchableOpacity onPress={() => router.push('/geburtsplan')} activeOpacity={0.9} style={styles.fullWidthAction}>
-              <BlurView intensity={24} tint="light" style={styles.cardBlur}>
-                <View style={[styles.actionCard, { backgroundColor: 'rgba(220,200,255,0.55)' }]}>
-                  <View style={[styles.actionIcon, { backgroundColor: ACCENT_PURPLE }]}>
+              <BlurView intensity={24} tint={cardBlurTint} style={styles.cardBlur}>
+                <View style={[styles.actionCard, { backgroundColor: actionPurpleBg, borderColor: cardBorderColor }]}>
+                  <View style={[styles.actionIcon, { backgroundColor: accentPurple, borderColor: cardBorderColor }]}>
                     <IconSymbol name={geburtsplanExists ? 'pencil' : 'plus.circle'} size={24} color="#fff" />
                   </View>
-                  <ThemedText style={styles.actionTitle}>
+                  <ThemedText style={[styles.actionTitle, { color: textPrimary }]}>
                     {geburtsplanExists ? 'Geburtsplan bearbeiten' : 'Geburtsplan erstellen'}
                   </ThemedText>
-                  <ThemedText style={styles.actionSub}>Tippen zum {geburtsplanExists ? 'Bearbeiten' : 'Erstellen'}</ThemedText>
+                  <ThemedText style={[styles.actionSub, { color: textSecondary }]}>Tippen zum {geburtsplanExists ? 'Bearbeiten' : 'Erstellen'}</ThemedText>
                 </View>
               </BlurView>
             </TouchableOpacity>
@@ -613,18 +848,18 @@ export default function CountdownScreen() {
             {geburtsplanExists && (
               isGeneratingPDF ? (
                 <View style={styles.loadingRow}>
-                  <ActivityIndicator size="small" />
-                  <ThemedText style={{ marginLeft: 8 }}>PDF wird generiert…</ThemedText>
+                  <ActivityIndicator size="small" color={isDark ? adaptiveColors.accent : theme.tint} />
+                  <ThemedText style={{ marginLeft: 8, color: textSecondary }}>PDF wird generiert…</ThemedText>
                 </View>
               ) : (
                 <TouchableOpacity onPress={handleDownloadPDF} activeOpacity={0.9} style={styles.fullWidthAction}>
-                  <BlurView intensity={24} tint="light" style={styles.cardBlur}>
-                    <View style={[styles.actionCard, { backgroundColor: 'rgba(168,196,193,0.6)' }]}>
-                      <View style={[styles.actionIcon, { backgroundColor: '#389D91' }]}>
+                  <BlurView intensity={24} tint={cardBlurTint} style={styles.cardBlur}>
+                    <View style={[styles.actionCard, { backgroundColor: actionMintBg, borderColor: cardBorderColor }]}>
+                      <View style={[styles.actionIcon, { backgroundColor: accentMint, borderColor: cardBorderColor }]}>
                         <IconSymbol name="arrow.down.doc" size={22} color="#fff" />
                       </View>
-                      <ThemedText style={styles.actionTitle}>Als PDF herunterladen</ThemedText>
-                      <ThemedText style={styles.actionSub}>Tippen zum Exportieren</ThemedText>
+                      <ThemedText style={[styles.actionTitle, { color: textPrimary }]}>Als PDF herunterladen</ThemedText>
+                      <ThemedText style={[styles.actionSub, { color: textSecondary }]}>Tippen zum Exportieren</ThemedText>
                     </View>
                   </BlurView>
                 </TouchableOpacity>
@@ -634,14 +869,19 @@ export default function CountdownScreen() {
 
           {/* Baby geboren */}
           {dueDate && isOverdue && !isBabyBorn && (
-            <TouchableOpacity onPress={handleBabyBorn} activeOpacity={0.9} style={styles.fullWidthAction}>
-              <BlurView intensity={24} tint="light" style={styles.cardBlur}>
-                <View style={[styles.actionCard, { backgroundColor: 'rgba(255,180,180,0.6)' }]}>
-                  <View style={[styles.actionIcon, { backgroundColor: WARN }]}>
+            <TouchableOpacity
+              onPress={handleBabyBorn}
+              activeOpacity={0.9}
+              style={[styles.fullWidthAction, isReadOnlyPreviewMode && styles.actionDisabled]}
+              disabled={isReadOnlyPreviewMode}
+            >
+              <BlurView intensity={24} tint={cardBlurTint} style={styles.cardBlur}>
+                <View style={[styles.actionCard, { backgroundColor: actionWarnBg, borderColor: cardBorderColor }]}>
+                  <View style={[styles.actionIcon, { backgroundColor: warnColor, borderColor: cardBorderColor }]}>
                     <IconSymbol name="heart.fill" size={22} color="#fff" />
                   </View>
-                  <ThemedText style={[styles.actionTitle, { color: '#5C4033' }]}>Mein Baby ist geboren!</ThemedText>
-                  <ThemedText style={[styles.actionSub, { color: '#5C4033', opacity: 0.85 }]}>Tippen zum Bestätigen</ThemedText>
+                  <ThemedText style={[styles.actionTitle, { color: textPrimary }]}>Mein Baby ist geboren!</ThemedText>
+                  <ThemedText style={[styles.actionSub, { color: textSecondary, opacity: 0.85 }]}>Tippen zum Bestätigen</ThemedText>
                 </View>
               </BlurView>
             </TouchableOpacity>
@@ -649,12 +889,12 @@ export default function CountdownScreen() {
 
           {/* Geteilter Countdown */}
           {linkedUsers.length > 0 && (
-            <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
-              <ThemedText style={styles.sectionTitle}>Geteilter Countdown</ThemedText>
+            <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={glassOverlay}>
+              <ThemedText style={[styles.sectionTitle, { color: textPrimary }]}>Geteilter Countdown</ThemedText>
               <View style={styles.badgeWrap}>
-                {linkedUsers.map((lu) => (
-                  <View key={lu.id} style={styles.badge}>
-                    <ThemedText style={styles.badgeText}>{lu.firstName}</ThemedText>
+                {linkedUsers.map((lu, index) => (
+                  <View key={lu.id ?? lu.userId ?? `${lu.firstName}-${index}`} style={[styles.badge, { backgroundColor: badgeBg, borderColor: badgeBorderColor }]}>
+                    <ThemedText style={[styles.badgeText, { color: textPrimary }]}>{lu.firstName}</ThemedText>
                   </View>
                 ))}
               </View>
@@ -669,16 +909,41 @@ export default function CountdownScreen() {
 const styles = StyleSheet.create({
   // Layout
   scrollContent: {
-    paddingHorizontal: LAYOUT_PAD,
+    paddingHorizontal: LAYOUT_PAD + TIMELINE_INSET,
     paddingTop: 10,
     paddingBottom: 140,
   },
 
   sectionCard: {
-    marginHorizontal: TIMELINE_INSET,
-    marginBottom: 16,
+    width: '100%',
+    alignSelf: 'center',
+    marginBottom: SECTION_GAP_BOTTOM,
     borderRadius: 22,
     overflow: 'hidden',
+  },
+  readOnlyPreviewBanner: {
+    marginHorizontal: LAYOUT_PAD + TIMELINE_INSET,
+    marginTop: 10,
+    marginBottom: 4,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 248, 225, 0.92)',
+    borderWidth: 1,
+    borderColor: 'rgba(229, 180, 77, 0.45)',
+  },
+  readOnlyPreviewTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#8A5A00',
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  readOnlyPreviewText: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#8A5A00',
+    textAlign: 'center',
   },
   centerCard: { alignItems: 'center', justifyContent: 'center', paddingVertical: 18 },
 
@@ -705,7 +970,6 @@ const styles = StyleSheet.create({
     color: PRIMARY_TEXT,
     opacity: 0.95,
   },
-  warnTitle: { color: WARN },
 
   // Action Cards (Sleep-Tracker Stil)
   fullWidthAction: {
@@ -714,6 +978,9 @@ const styles = StyleSheet.create({
     marginHorizontal: 18,
     marginTop: 8,
     marginBottom: 4,
+  },
+  actionDisabled: {
+    opacity: 0.45,
   },
   cardBlur: { borderRadius: 22, overflow: 'hidden' },
   actionCard: {
@@ -739,7 +1006,7 @@ const styles = StyleSheet.create({
   actionSub: { fontSize: 11, color: PRIMARY_TEXT, opacity: 0.8, textAlign: 'center' },
 
   // Info Blöcke
-  infoBlock: { marginBottom: 12, paddingBottom: 12, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.55)' },
+  infoBlock: { marginBottom: 12, paddingBottom: 12, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.35)' },
   infoHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
   infoTitle: { fontSize: 15, fontWeight: '800', color: PRIMARY_TEXT },
   infoText: { fontSize: 14, lineHeight: 20, color: PRIMARY_TEXT, opacity: 0.95, paddingLeft: 40 },
@@ -754,6 +1021,24 @@ const styles = StyleSheet.create({
   symptomItem: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
   symptomText: { fontSize: 14, marginLeft: 8, color: PRIMARY_TEXT },
 
+  // Geburtsvorbereitung
+  birthPrepList: { paddingHorizontal: 12, paddingBottom: 8 },
+  birthPrepCard: {
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.45)',
+    borderWidth: 1.2,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 10,
+  },
+  birthPrepHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
+  birthPrepIcon: { fontSize: 17, marginRight: 8 },
+  birthPrepTitle: { fontSize: 14, fontWeight: '800', flex: 1 },
+  birthPrepLabel: { fontSize: 12, fontWeight: '800', marginTop: 4 },
+  birthPrepText: { fontSize: 13, lineHeight: 18, opacity: 0.95 },
+
+  infoInset: { paddingHorizontal: 16 },
+
   // Badges (Linked Users)
   badgeWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingHorizontal: 8, paddingBottom: 8 },
   badge: {
@@ -762,6 +1047,23 @@ const styles = StyleSheet.create({
     borderWidth: 1.2, borderColor: 'rgba(255,255,255,0.6)',
   },
   badgeText: { fontSize: 13, fontWeight: '700', color: PRIMARY_TEXT },
+
+  // Babygröße Highlight
+  babySizeTouchTarget: {
+    width: '100%',
+    alignSelf: 'center',
+  },
+  babySizeCard: { paddingVertical: 28, paddingHorizontal: 22 },
+  babySizeRow: { flexDirection: 'row', alignItems: 'center', gap: 16, paddingHorizontal: 2 },
+  babySizeEmojiWrap: {
+    width: 68, height: 68, borderRadius: 22,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1.5,
+  },
+  babySizeEmoji: { fontSize: 34, lineHeight: 40 },
+  babySizeTextWrap: { flex: 1 },
+  babySizeFruit: { fontSize: 18, fontWeight: '800' },
+  babySizeMeta: { fontSize: 14, marginTop: 5, opacity: 0.85 },
 
   // Overdue
   overdueBorder: { borderLeftWidth: 4, borderLeftColor: WARN },
