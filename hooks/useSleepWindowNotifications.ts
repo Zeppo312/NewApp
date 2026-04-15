@@ -10,6 +10,10 @@ import {
   SLEEP_WINDOW_REMINDER_TYPE,
   cancelLocalSleepWindowReminders,
 } from '@/lib/sleepWindowReminderNotifications';
+import {
+  markReminderNotificationHandled,
+  wasReminderNotificationHandled,
+} from '@/lib/reminderNotificationState';
 
 /**
  * Hook for managing sleep window reminder notifications
@@ -33,6 +37,7 @@ export function useSleepWindowNotifications(
 ) {
   const lastScheduledRef = useRef<string | null>(null);
   const scheduledNotificationIdRef = useRef<string | null>(null);
+  const lastRemoteTokenRef = useRef<string | null>(null);
   // Remote reminders are optional and used only for additional devices.
   // Local scheduling remains primary to work reliably while app is closed.
   const hasRemoteChannel = Boolean(userId && babyId && currentDevicePushToken);
@@ -87,7 +92,13 @@ export function useSleepWindowNotifications(
 
     const syncNotification = async () => {
       // Cancel if disabled, active sleep is running, no prediction, or low confidence
-      if (!enabled || hasActiveSleepEntry || !sleepPrediction || sleepPrediction.confidence < 0.6) {
+      if (
+        !enabled ||
+        hasActiveSleepEntry ||
+        !sleepPrediction ||
+        sleepPrediction.confidence < 0.6 ||
+        sleepPrediction.predictionKind === 'night_sleep'
+      ) {
         await Promise.all([
           cancelCurrentScheduledNotification(),
           cancelRemoteReminder(),
@@ -95,6 +106,8 @@ export function useSleepWindowNotifications(
         lastScheduledRef.current = null;
         if (hasActiveSleepEntry) {
           console.log('⏸️ Sleep window reminder skipped because an active sleep is running');
+        } else if (sleepPrediction?.predictionKind === 'night_sleep') {
+          console.log('🌙 Sleep window reminder skipped because the next sleep is bedtime, not a nap');
         }
         return;
       }
@@ -103,9 +116,11 @@ export function useSleepWindowNotifications(
       const fifteenMinBefore = new Date(recommendedStart.getTime() - 15 * 60 * 1000);
       const now = new Date();
       const scheduleKey = recommendedStart.toISOString();
+      const remoteTokenChanged =
+        hasRemoteChannel && lastRemoteTokenRef.current !== currentDevicePushToken;
 
       // Check if we already scheduled for this time
-      if (lastScheduledRef.current === scheduleKey) {
+      if (lastScheduledRef.current === scheduleKey && !remoteTokenChanged) {
         console.log('⏰ Sleep window reminder already scheduled for this time');
         return;
       }
@@ -121,6 +136,18 @@ export function useSleepWindowNotifications(
         const shouldSendImmediate = msUntilStart > 0 && msUntilStart <= 15 * 60 * 1000;
 
         if (shouldSendImmediate) {
+          const alreadyHandled = await wasReminderNotificationHandled(
+            'sleep_window',
+            scheduleKey,
+            userId,
+            babyId
+          );
+          if (alreadyHandled) {
+            lastScheduledRef.current = scheduleKey;
+            console.log('⏭️ Sleep window immediate reminder already handled for this schedule');
+            return;
+          }
+
           const minutesUntilStart = Math.max(1, Math.round(msUntilStart / 60000));
           const immediateBody = `Das vorhergesagte Schlaffenster startet in ca. ${minutesUntilStart} Minuten`;
 
@@ -146,9 +173,13 @@ export function useSleepWindowNotifications(
           }
 
           scheduledNotificationIdRef.current = immediateId;
+          await markReminderNotificationHandled('sleep_window', scheduleKey, userId, babyId);
 
           if (hasRemoteChannel) {
             await syncRemoteReminder(new Date(), scheduleKey, immediateBody);
+            lastRemoteTokenRef.current = currentDevicePushToken ?? null;
+          } else {
+            lastRemoteTokenRef.current = null;
           }
 
           lastScheduledRef.current = scheduleKey;
@@ -201,8 +232,10 @@ export function useSleepWindowNotifications(
       // Optional remote sync for secondary devices only.
       if (hasRemoteChannel) {
         await syncRemoteReminder(fifteenMinBefore, scheduleKey, body);
+        lastRemoteTokenRef.current = currentDevicePushToken ?? null;
       } else if (userId && babyId) {
         await cancelRemoteReminder();
+        lastRemoteTokenRef.current = null;
       }
 
       lastScheduledRef.current = scheduleKey;
@@ -247,6 +280,7 @@ export function useSleepWindowNotifications(
     ])
       .then(() => {
         lastScheduledRef.current = null;
+        lastRemoteTokenRef.current = null;
         console.log('✅ Sleep window reminder cancelled');
       })
       .catch((error) => {

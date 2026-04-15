@@ -39,6 +39,11 @@ const pythonVenvBlock = new RegExp(atProjectRoot("venv(?:[\\\\/].*)?"));
 const localBuildOutputBlock = new RegExp(
   atProjectRoot("(?:ios[\\\\/]build|\\.expo[\\\\/]web)(?:[\\\\/].*)?"),
 );
+const localWorkspaceNoiseBlock = new RegExp(
+  atProjectRoot(
+    "(?:android|ios|targets|output|docs|db|scripts|sql|supabase|\\.local-disabled|\\.agents|\\.claude)(?:[\\\\/].*)?",
+  ),
+);
 const duplicateNativeDirsBlock = new RegExp(
   atProjectRoot("android[\\\\/](?:app 2|gradle 2)(?:[\\\\/].*)?"),
 );
@@ -56,6 +61,7 @@ const combinedBlockSources = [
   backupDirsBlock.source,
   pythonVenvBlock.source,
   localBuildOutputBlock.source,
+  localWorkspaceNoiseBlock.source,
   duplicateNativeDirsBlock.source,
   duplicateNodeModulesBlock.source,
   tempNodeModulesBlock.source

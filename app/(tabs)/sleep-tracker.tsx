@@ -427,6 +427,30 @@ const getEntryIdentity = (entry: Pick<ClassifiedSleepEntry, 'id' | 'start_time' 
 const isSameDay = (a: Date, b: Date) =>
   a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 
+const getAssignedDateForEntry = (
+  entry: ClassifiedSleepEntry,
+  nightWindowSettings: NightWindowSettings
+) => {
+  if (entry.period === 'night') {
+    const windowKey = getNightWindowKeyForEntry(entry, nightWindowSettings);
+    if (windowKey) {
+      const [windowStartIso] = windowKey.split('|');
+      const windowStart = new Date(windowStartIso);
+      if (Number.isFinite(windowStart.getTime())) {
+        return windowStart;
+      }
+    }
+  }
+
+  return new Date(entry.start_time);
+};
+
+const isEntryAssignedToDate = (
+  entry: ClassifiedSleepEntry,
+  selectedDate: Date,
+  nightWindowSettings: NightWindowSettings
+) => isSameDay(getAssignedDateForEntry(entry, nightWindowSettings), selectedDate);
+
 const minutesToHMM = (mins: number) => {
   const h = Math.floor(mins / 60);
   const m = mins % 60;
@@ -472,6 +496,17 @@ const toOptionalNumber = (value: unknown): number | null => {
 
 const formatClockTime = (date: Date) =>
   date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+
+const isNightSleepPrediction = (prediction: SleepWindowPrediction | null | undefined): boolean =>
+  prediction?.predictionKind === 'night_sleep';
+
+const getBedtimePredictionLabel = (prediction: SleepWindowPrediction | null | undefined): string => {
+  const rawAnchor = prediction?.debug?.anchorBedtime;
+  if (typeof rawAnchor === 'string' && rawAnchor.trim().length > 0) {
+    return `Nachtschlaf ca. ${rawAnchor}`;
+  }
+  return 'Heute eher direkt in den Nachtschlaf';
+};
 
 const formatDurationSeconds = (seconds: number) => {
   const hours = Math.floor(seconds / 3600);
@@ -615,6 +650,11 @@ function CentralTimerComponent({
               <Text style={[styles.centralHint, { color: textSecondary, fontWeight: '500' }]}>
                 Schlaffenster wird berechnet...
               </Text>
+            ) : sleepPrediction && hasSleepData && isNightSleepPrediction(sleepPrediction) ? (
+              <Text style={[styles.centralHintPrimary, { color: textPrimary }]}>
+                Heute kein weiterer Nap{'\n'}
+                {getBedtimePredictionLabel(sleepPrediction)}
+              </Text>
             ) : sleepPrediction && hasSleepData ? (
               <Text style={[styles.centralHintPrimary, { color: textPrimary }]}>
                 Nächstes Schlaffenster{'\n'}
@@ -677,6 +717,10 @@ const StatusMetricsBar = ({
       return { emoji: '🔮', label: 'lernt noch', color: '#B0B0B0' };
     }
 
+    if (isNightSleepPrediction(sleepPrediction)) {
+      return { emoji: '🌙', label: 'abendmodus', color: '#8E4EC6' };
+    }
+
     // Echtzeit-Berechnung: Minuten bis zum empfohlenen Schlafzeitpunkt
     const now = new Date();
     const minutesUntilWindow = Math.round(
@@ -722,6 +766,9 @@ const StatusMetricsBar = ({
 
     if (!sleepPrediction || !sleepPrediction.debug) return 'Keine Vorhersage verfügbar';
     if (!hasSleepData) return 'Noch keine Schlafdaten';
+    if (isNightSleepPrediction(sleepPrediction)) {
+      return getBedtimePredictionLabel(sleepPrediction);
+    }
 
     const lastNapDuration = toOptionalNumber(sleepPrediction.debug.lastNapDuration);
     const targetNapDuration = toOptionalNumber(sleepPrediction.debug.targetNapDuration);
@@ -763,6 +810,9 @@ const StatusMetricsBar = ({
     if (activeSleepEntry) return 'Schläft gerade';
     if (!sleepPrediction) return 'Keine Vorhersage';
     if (!hasSleepData) return 'Wird noch gelernt';
+    if (isNightSleepPrediction(sleepPrediction)) {
+      return 'Heute kein weiterer Nap';
+    }
 
     const now = new Date();
     const minutesUntil = Math.round((sleepPrediction.recommendedStart.getTime() - now.getTime()) / 60000);
@@ -793,7 +843,7 @@ const StatusMetricsBar = ({
     const historicalSampleCount = sleepPrediction
       ? toNumber(sleepPrediction.debug.historicalSampleCount, 0)
       : 0;
-    if (!sleepPrediction || historicalSampleCount <= 0) {
+    if (!sleepPrediction || historicalSampleCount <= 0 || isNightSleepPrediction(sleepPrediction)) {
       return null;
     }
 
@@ -941,11 +991,17 @@ const StatusMetricsBar = ({
               </View>
               {sleepPrediction && !activeSleepEntry && hasSleepData ? (
                 <>
-                  <Text style={[styles.kpiValue, styles.kpiValueCentered, { fontSize: 16, color: textPrimary }]}>
-                    {sleepPrediction.earliest.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
-                    {' – '}
-                    {sleepPrediction.latest.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
-                  </Text>
+                  {isNightSleepPrediction(sleepPrediction) ? (
+                    <Text style={[styles.kpiValue, styles.kpiValueCentered, { fontSize: 16, color: textPrimary }]}>
+                      {getBedtimePredictionLabel(sleepPrediction)}
+                    </Text>
+                  ) : (
+                    <Text style={[styles.kpiValue, styles.kpiValueCentered, { fontSize: 16, color: textPrimary }]}>
+                      {sleepPrediction.earliest.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
+                      {' – '}
+                      {sleepPrediction.latest.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
+                    </Text>
+                  )}
                   <Text style={[styles.kpiSub, { color: textSecondary }]}>{countdownText}</Text>
                 </>
               ) : (
@@ -1890,13 +1946,7 @@ export default function SleepTrackerScreen() {
       if (
         !hasAutoSelectedDateRef.current &&
         allEntries.length > 0 &&
-        !allEntries.some(e => {
-          const s = new Date(e.start_time);
-          const ee = e.end_time ? new Date(e.end_time) : new Date();
-          const ds = startOfDay(selectedDate);
-          const de = endOfDay(selectedDate);
-          return overlapMinutes(s, ee, ds, de) > 0;
-        })
+        !allEntries.some((entry) => isEntryAssignedToDate(entry, selectedDate, nightWindowSettings))
       ) {
         const latest = allEntries.reduce((latestEntry, entry) => {
           if (!latestEntry) return entry;
@@ -1908,7 +1958,7 @@ export default function SleepTrackerScreen() {
         if (latest) {
           hasAutoSelectedDateRef.current = true;
           setSelectedTab('day');
-          setSelectedDate(new Date(latest.start_time));
+          setSelectedDate(getAssignedDateForEntry(latest, nightWindowSettings));
         }
       }
     } catch (error) {
@@ -3229,16 +3279,10 @@ export default function SleepTrackerScreen() {
 
   // Einträge für den aktuell ausgewählten Tag (Tag-Ansicht)
   const dayEntries = useMemo(() => {
-    const ds = startOfDay(selectedDate);
-    const de = endOfDay(selectedDate);
     return sleepEntries
-      .filter(e => {
-        const s = new Date(e.start_time);
-        const ee = e.end_time ? new Date(e.end_time) : new Date();
-        return overlapMinutes(s, ee, ds, de) > 0;
-      })
+      .filter((entry) => isEntryAssignedToDate(entry, selectedDate, nightWindowSettings))
       .sort((a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime());
-  }, [sleepEntries, selectedDate]);
+  }, [nightWindowSettings, selectedDate, sleepEntries]);
 
   const nightGroups = useMemo(() => {
     const baseGroups = getNightGroupsForDayEntries(dayEntries, nightWindowSettings);
@@ -3356,9 +3400,9 @@ export default function SleepTrackerScreen() {
 
     if (latest) {
       setSelectedTab('day');
-      setSelectedDate(new Date(latest.start_time));
+      setSelectedDate(getAssignedDateForEntry(latest, nightWindowSettings));
     }
-  }, [sleepEntries]);
+  }, [nightWindowSettings, sleepEntries]);
 
     // Setze die Modal-Daten beim Öffnen
     useEffect(() => {
@@ -4430,6 +4474,7 @@ export default function SleepTrackerScreen() {
                       {/* Solid timeline bar with wake cutouts + labels */}
                       <MiniNightTimeline
                         nightGroup={group}
+                        nightWindowSettings={nightWindowSettings}
                         width={timelineBarWidth}
                         isDark={isDark}
                         showLabels
@@ -5033,6 +5078,7 @@ export default function SleepTrackerScreen() {
           <NightSleepEditor
             visible={showNightEditor}
             nightGroup={nightEditorGroup}
+            nightWindowSettings={nightWindowSettings}
             onClose={() => {
               setShowNightEditor(false);
               setNightEditorGroup(null);

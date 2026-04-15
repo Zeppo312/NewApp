@@ -32,5 +32,11 @@ export async function cancelLocalSleepWindowReminders(extraIds: string[] = []): 
     } catch (error) {
       console.error('Failed to cancel sleep window reminder:', error);
     }
+
+    try {
+      await Notifications.dismissNotificationAsync(id);
+    } catch {
+      // Already dismissed or not yet presented.
+    }
   }
 }

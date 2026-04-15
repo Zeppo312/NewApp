@@ -2,6 +2,7 @@
 /* global __dirname */
 
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const http = require('http');
 const { spawn, spawnSync } = require('child_process');
@@ -21,7 +22,7 @@ const metroBaseUrl = (
   process.env.EXPO_PACKAGER_PROXY_URL || `http://localhost:${port}`
 ).replace(/\/$/, '');
 const forwardedArgs = process.argv.slice(2);
-const warmupTimeoutMs = Number(process.env.LOTTI_IOS_WARMUP_TIMEOUT_MS || 10 * 60 * 1000);
+const warmupTimeoutMs = Number(process.env.LOTTI_IOS_WARMUP_TIMEOUT_MS || 5 * 60 * 1000);
 
 if (!['hermes', 'jsc'].includes(desiredJsEngine)) {
   console.error(
@@ -110,24 +111,21 @@ const getExpoConfig = () => {
 
 const expoConfig = getExpoConfig();
 const appSlug = String(expoConfig.slug || path.basename(projectRoot)).toLowerCase();
-const devClientScheme = `exp+${appSlug}`;
 const appBundleIdentifier = expoConfig.ios?.bundleIdentifier || 'com.LottiBaby.app';
+const devClientScheme = `exp+${appSlug}`;
+const devClientUrl = `${devClientScheme}://expo-development-client/?url=${encodeURIComponent(metroBaseUrl)}`;
 const bundleWarmupUrl =
   `${metroBaseUrl}/node_modules/expo-router/entry.bundle?` +
   'platform=ios&dev=true&hot=false&lazy=true&transform.routerRoot=app';
-const devClientUrl = `${devClientScheme}://expo-development-client/?url=${encodeURIComponent(metroBaseUrl)}`;
 
-const requestOnce = (url, timeoutMs) =>
-  new Promise((resolve, reject) => {
-    const request = http.get(url, (response) => resolve(response));
+const readResponseText = async (url, timeoutMs) => {
+  const response = await new Promise((resolve, reject) => {
+    const request = http.get(url, resolve);
     request.setTimeout(timeoutMs, () => {
       request.destroy(new Error(`Timed out after ${Math.round(timeoutMs / 1000)}s`));
     });
     request.on('error', reject);
   });
-
-const readResponseText = async (url, timeoutMs) => {
-  const response = await requestOnce(url, timeoutMs);
   let body = '';
 
   response.setEncoding('utf8');
@@ -172,6 +170,19 @@ const findListeningPid = () => {
   return Number.isFinite(pid) ? pid : null;
 };
 
+const waitForPortToBeReleased = async (timeoutMs = 15000) => {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    if (!findListeningPid()) {
+      return;
+    }
+    await sleep(250);
+  }
+
+  throw new Error(`Port ${port} did not become available within ${Math.round(timeoutMs / 1000)}s.`);
+};
+
 const stopExistingMetroIfOwnedByProject = async () => {
   const probe = await probeMetroServer();
   if (!probe.isRunning) {
@@ -203,6 +214,7 @@ const stopExistingMetroIfOwnedByProject = async () => {
   while (Date.now() < stopDeadline) {
     const status = await probeMetroServer();
     if (!status.isRunning) {
+      await waitForPortToBeReleased();
       return;
     }
     await sleep(500);
@@ -228,18 +240,25 @@ const waitForMetroReady = async () => {
   throw new Error('Metro did not become ready within 60s.');
 };
 
-const warmBundle = async () => {
+const isMetroPortOccupied = () => Boolean(findListeningPid());
+
+const warmBundleUntilFirstByte = async () => {
   const startedAt = Date.now();
   console.log('[ios-dev] Warming the first iOS bundle before opening the dev client...');
 
-  const response = await requestOnce(bundleWarmupUrl, warmupTimeoutMs);
+  const response = await new Promise((resolve, reject) => {
+    const request = http.get(bundleWarmupUrl, resolve);
+    request.setTimeout(warmupTimeoutMs, () => {
+      request.destroy(new Error(`Timed out after ${Math.round(warmupTimeoutMs / 1000)}s`));
+    });
+    request.on('error', reject);
+  });
 
   if (response.statusCode !== 200) {
     response.resume();
     throw new Error(`Metro returned HTTP ${response.statusCode} for the bundle warmup request.`);
   }
 
-  let receivedBytes = 0;
   const progressTimer = setInterval(() => {
     console.log(
       `[ios-dev] Bundle warmup still running after ${formatElapsed(startedAt)}...`,
@@ -247,43 +266,56 @@ const warmBundle = async () => {
   }, 15000);
 
   await new Promise((resolve, reject) => {
-    response.on('data', (chunk) => {
-      receivedBytes += chunk.length;
+    const cleanup = () => {
+      clearInterval(progressTimer);
+      response.removeAllListeners('data');
+      response.removeAllListeners('end');
+      response.removeAllListeners('error');
+    };
+
+    response.once('data', (chunk) => {
+      cleanup();
+      if (!chunk || chunk.length === 0) {
+        reject(new Error('Metro warmup request received an empty first chunk.'));
+        return;
+      }
+      // Let Metro finish streaming the response in the background without
+      // aborting the socket, otherwise the request can surface ECONNRESET.
+      response.on('error', () => {});
+      response.resume();
+      resolve();
     });
 
-    response.on('end', resolve);
-    response.on('error', reject);
-  }).finally(() => {
-    clearInterval(progressTimer);
+    response.once('end', () => {
+      cleanup();
+      reject(new Error('Metro finished the warmup request before sending any bundle bytes.'));
+    });
+
+    response.once('error', (error) => {
+      cleanup();
+      reject(error);
+    });
   });
 
-  if (receivedBytes === 0) {
-    throw new Error('Metro finished the warmup request without sending any bundle bytes.');
-  }
-
   console.log(
-    `[ios-dev] Bundle warmup completed in ${formatElapsed(startedAt)} (${receivedBytes} bytes).`,
+    `[ios-dev] Bundle warmup reached first bundle bytes after ${formatElapsed(startedAt)}.`,
   );
-};
-
-const terminateAppIfRunning = () => {
-  runQuiet('xcrun', ['simctl', 'terminate', 'booted', appBundleIdentifier]);
-};
-
-const openDevClient = () => {
-  console.log('[ios-dev] Opening the dev client after the bundle is ready...');
-  run('xcrun', ['simctl', 'openurl', 'booted', devClientUrl]);
 };
 
 const startMetro = () => {
   console.log(`[ios-dev] Starting Metro on ${metroBaseUrl}...`);
+  const metroLogDir = path.join(os.tmpdir(), 'lottibaby');
+  const metroLogPath = path.join(metroLogDir, 'ios-metro.log');
+  fs.mkdirSync(metroLogDir, { recursive: true });
+  const metroLogFd = fs.openSync(metroLogPath, 'a');
 
   const metroProcess = spawn(
     'npx',
     ['expo', 'start', '--dev-client', '--localhost', '--port', port],
     {
       cwd: projectRoot,
-      stdio: 'inherit',
+      detached: true,
+      stdio: ['ignore', metroLogFd, metroLogFd],
       env: process.env,
     },
   );
@@ -292,7 +324,19 @@ const startMetro = () => {
     console.error(`[ios-dev] Failed to start Metro: ${error.message}`);
   });
 
+  metroProcess.unref();
+  fs.closeSync(metroLogFd);
+  console.log(`[ios-dev] Metro logs: ${metroLogPath}`);
   return metroProcess;
+};
+
+const terminateAppIfRunning = () => {
+  runQuiet('xcrun', ['simctl', 'terminate', 'booted', appBundleIdentifier]);
+};
+
+const openDevClient = () => {
+  console.log(`[ios-dev] Opening the dev client with ${devClientUrl}...`);
+  run('xcrun', ['simctl', 'openurl', 'booted', devClientUrl]);
 };
 
 const podfileProperties = readPodfileProperties();
@@ -324,22 +368,32 @@ if (didChangeJsEngine || didChangeHermesBuildSetting) {
 const runMain = async () => {
   await stopExistingMetroIfOwnedByProject();
 
-  console.log(`[ios-dev] Building iOS with ${desiredJsEngine.toUpperCase()} and without auto-opening Metro...`);
-  run('npx', ['expo', 'run:ios', '--no-bundler', ...forwardedArgs]);
-
-  terminateAppIfRunning();
   const metroStatus = await probeMetroServer();
   if (metroStatus.isRunning) {
     console.log('[ios-dev] Reusing Metro that is already running on localhost.');
+  } else if (isMetroPortOccupied()) {
+    console.log('[ios-dev] Port 8081 is already occupied; waiting for the existing Metro process to answer.');
   } else {
     startMetro();
   }
   await waitForMetroReady();
-  await warmBundle();
+  const warmBundlePromise = warmBundleUntilFirstByte();
+
+  console.log(
+    `[ios-dev] Building iOS with ${desiredJsEngine.toUpperCase()} after Metro is ready...`,
+  );
+  run('npx', ['expo', 'run:ios', '--no-bundler', ...forwardedArgs]);
+  await warmBundlePromise;
+  terminateAppIfRunning();
+  await sleep(1000);
   openDevClient();
 };
 
 runMain().catch((error) => {
+  if (error?.code === 'ECONNRESET') {
+    console.warn('[ios-dev] Ignoring transient ECONNRESET after opening the dev client.');
+    process.exit(0);
+  }
   console.error(`[ios-dev] ${error.message}`);
   process.exit(1);
 });

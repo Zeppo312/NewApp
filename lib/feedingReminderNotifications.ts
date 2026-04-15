@@ -31,5 +31,11 @@ export async function cancelLocalFeedingReminders(extraIds: string[] = []): Prom
     } catch (error) {
       console.error('Failed to cancel feeding reminder:', error);
     }
+
+    try {
+      await Notifications.dismissNotificationAsync(id);
+    } catch {
+      // Already dismissed or not yet presented.
+    }
   }
 }

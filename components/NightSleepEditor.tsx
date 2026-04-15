@@ -17,13 +17,14 @@ import { Colors } from '@/constants/Colors';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { RADIUS } from '@/constants/DesignGuide';
 import type { NightGroup, ClassifiedSleepEntry } from '@/app/(tabs)/sleep-tracker';
+import {
+  clockTimeToMinutes,
+  DEFAULT_NIGHT_WINDOW_SETTINGS,
+  type NightWindowSettings,
+} from '@/lib/nightWindowSettings';
 import { parseSafeDate, getSafePickerDate } from '@/lib/safeDate';
 
 // ─── Constants ──────────────────────────────────────────────
-const NIGHT_WINDOW_MINUTES = 990;
-const NIGHT_WINDOW_START_HOUR = 17;
-const NIGHT_WINDOW_START_MINUTES = 30;
-
 const PICKER_MIN_DATE = new Date(2020, 0, 1);
 
 const ACCENT_LIGHT = '#8E4EC6';
@@ -38,6 +39,7 @@ const WAKE_BG_DARK  = 'rgba(200, 159, 129, 0.10)';
 type NightSleepEditorProps = {
   visible: boolean;
   nightGroup: NightGroup;
+  nightWindowSettings?: NightWindowSettings;
   onClose: () => void;
   onSplit: (params: {
     targetEntry: ClassifiedSleepEntry;
@@ -91,15 +93,42 @@ const formatShortDayDate = (date: Date) =>
     month: '2-digit',
   });
 
-const getNightAnchor = (group: NightGroup): Date => {
+const DEFAULT_NIGHT_START_MINUTES = clockTimeToMinutes(
+  DEFAULT_NIGHT_WINDOW_SETTINGS.startTime,
+  18 * 60
+);
+const DEFAULT_NIGHT_END_MINUTES = clockTimeToMinutes(
+  DEFAULT_NIGHT_WINDOW_SETTINGS.endTime,
+  10 * 60
+);
+
+const getNightWindowDurationMinutes = (
+  nightWindowSettings: NightWindowSettings = DEFAULT_NIGHT_WINDOW_SETTINGS
+) => {
+  const startMinutes = clockTimeToMinutes(nightWindowSettings.startTime, DEFAULT_NIGHT_START_MINUTES);
+  const endMinutes = clockTimeToMinutes(nightWindowSettings.endTime, DEFAULT_NIGHT_END_MINUTES);
+
+  if (endMinutes <= startMinutes) {
+    return 24 * 60 - startMinutes + endMinutes;
+  }
+
+  return endMinutes - startMinutes;
+};
+
+const getNightAnchor = (
+  group: NightGroup,
+  nightWindowSettings: NightWindowSettings = DEFAULT_NIGHT_WINDOW_SETTINGS
+): Date => {
   const start = group.start;
   const anchor = new Date(start);
   const startTotalMin = start.getHours() * 60 + start.getMinutes();
-  const anchorTotalMin = NIGHT_WINDOW_START_HOUR * 60 + NIGHT_WINDOW_START_MINUTES;
+  const anchorTotalMin = clockTimeToMinutes(nightWindowSettings.startTime, DEFAULT_NIGHT_START_MINUTES);
+  const anchorHour = Math.floor(anchorTotalMin / 60);
+  const anchorMinute = anchorTotalMin % 60;
   if (startTotalMin < anchorTotalMin) {
     anchor.setDate(anchor.getDate() - 1);
   }
-  anchor.setHours(NIGHT_WINDOW_START_HOUR, NIGHT_WINDOW_START_MINUTES, 0, 0);
+  anchor.setHours(anchorHour, anchorMinute, 0, 0);
   return anchor;
 };
 
@@ -165,7 +194,12 @@ const getWakeMinutesWithMidnightWrap = (start: Date, end: Date): number => {
   return (endMinutesOfDay - startMinutesOfDay + 24 * 60) % (24 * 60);
 };
 
-const inferLikelyNightEndFromClock = (nightStart: Date, currentEnd: Date): Date => {
+const inferLikelyNightEndFromClock = (
+  nightStart: Date,
+  currentEnd: Date,
+  nightWindowSettings: NightWindowSettings = DEFAULT_NIGHT_WINDOW_SETTINGS
+): Date => {
+  const nightWindowMinutes = getNightWindowDurationMinutes(nightWindowSettings);
   const candidates: Array<{ date: Date; score: number }> = [];
 
   for (let dayOffset = 0; dayOffset <= 2; dayOffset++) {
@@ -179,7 +213,7 @@ const inferLikelyNightEndFromClock = (nightStart: Date, currentEnd: Date): Date 
     if (spanMinutes < 30) continue;
 
     // Prefer durations close to a typical night and penalize very long spans.
-    const overWindowPenalty = Math.max(0, spanMinutes - NIGHT_WINDOW_MINUTES) * 2;
+    const overWindowPenalty = Math.max(0, spanMinutes - nightWindowMinutes) * 2;
     const targetPenalty = Math.abs(spanMinutes - PLAUSIBLE_NIGHT_TARGET_MINUTES);
     const score = overWindowPenalty + targetPenalty;
     candidates.push({ date: candidate, score });
@@ -210,16 +244,18 @@ const MINI_BAR_HEIGHT = 12;
 
 export const MiniNightTimeline = ({
   nightGroup,
+  nightWindowSettings = DEFAULT_NIGHT_WINDOW_SETTINGS,
   width,
   isDark,
   showLabels = false,
 }: {
   nightGroup: NightGroup;
+  nightWindowSettings?: NightWindowSettings;
   width: number;
   isDark: boolean;
   showLabels?: boolean;
 }) => {
-  const anchor = getNightAnchor(nightGroup);
+  const anchor = getNightAnchor(nightGroup, nightWindowSettings);
   const segments = nightGroup.segments;
   if (segments.length === 0) return null;
 
@@ -928,6 +964,7 @@ const rowStyles = StyleSheet.create({
 export default function NightSleepEditor({
   visible,
   nightGroup,
+  nightWindowSettings = DEFAULT_NIGHT_WINDOW_SETTINGS,
   onClose,
   onSplit,
   onMerge,
@@ -1228,9 +1265,9 @@ export default function NightSleepEditor({
     const endReference = boundaryReferenceTimesRef.current[endKey]
       ?? parseSafeDate(lastEntry.end_time)
       ?? nightEnd;
-    const fixedEnd = inferLikelyNightEndFromClock(startReference, endReference);
+    const fixedEnd = inferLikelyNightEndFromClock(startReference, endReference, nightWindowSettings);
     return { endKey, endReference, fixedEnd };
-  }, [firstEntry.id, firstEntry.start_time, lastEntry.end_time, lastEntry.id, nightEnd, nightStart]);
+  }, [firstEntry.id, firstEntry.start_time, lastEntry.end_time, lastEntry.id, nightEnd, nightStart, nightWindowSettings]);
 
   const handleAutoFixMultiDayNight = useCallback(() => {
     if (isSaving) return;

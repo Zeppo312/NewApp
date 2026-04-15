@@ -48,3 +48,6 @@ app-example
 # accidental local git backups
 .git.backup-*/
 .git.backup-*
+
+# locally disabled features
+.local-disabled/

@@ -1,8 +1,7 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import * as Print from 'expo-print';
-import { supabase } from './supabase';
-import { getCachedUser } from './supabase';
+import { getCachedUser, supabase } from './supabase';
 
 type TableExportConfig = {
   key: string;
@@ -31,6 +30,9 @@ const EXPORT_TABLES: TableExportConfig[] = [
   { key: 'baby_daily', table: 'baby_daily', orderBy: { column: 'entry_date', ascending: true } },
   { key: 'baby_care_entries', table: 'baby_care_entries', orderBy: { column: 'start_time', ascending: true } },
   { key: 'weight_entries', table: 'weight_entries', orderBy: { column: 'date', ascending: true } },
+  { key: 'cycle_settings', table: 'cycle_settings', single: true },
+  { key: 'cycle_periods', table: 'cycle_periods', orderBy: { column: 'period_start_date', ascending: true } },
+  { key: 'cycle_daily_logs', table: 'cycle_daily_logs', orderBy: { column: 'entry_date', ascending: true } },
   {
     key: 'sleep_entries',
     table: 'sleep_entries',

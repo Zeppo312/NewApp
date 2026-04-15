@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/lib/supabase';
 
 export type TimeOfDayBucket = 'morning' | 'midday' | 'afternoon' | 'evening';
+export type SleepPredictionKind = 'nap' | 'night_sleep';
 
 export interface SleepWindowPredictionInput {
   userId: string;
@@ -28,6 +29,7 @@ export interface SleepWindowPrediction {
   napIndexToday: number;
   timeOfDayBucket: TimeOfDayBucket;
   confidence: number;
+  predictionKind: SleepPredictionKind;
   debug: Record<string, unknown>;
 }
 
@@ -356,10 +358,10 @@ function collectHistoricalWakeWindows(
   const dayGroups = new Map<string, NormalizedEntry[]>();
 
   for (const entry of entries) {
-    if (!entry.end || entry.duration === null) continue;
-    if (entry.end < minDate || entry.end > maxDate) continue;
+    if (!entry.end || entry.duration === null || !entry.start) continue;
+    if (entry.start < minDate || entry.start > maxDate) continue;
 
-    const dayKey = `${entry.end.getFullYear()}-${entry.end.getMonth()}-${entry.end.getDate()}`;
+    const dayKey = getLocalDayKey(entry.start);
     if (!dayGroups.has(dayKey)) {
       dayGroups.set(dayKey, []);
     }
@@ -375,7 +377,7 @@ function collectHistoricalWakeWindows(
     const dayEntries = dayGroups.get(dayKey)!;
     const sortedDay = dayEntries
       .filter((e) => e.end !== null)
-      .sort((a, b) => a.end!.getTime() - b.end!.getTime());
+      .sort((a, b) => a.start.getTime() - b.start.getTime());
 
     if (sortedDay.length < napIndex) continue;
 
@@ -448,7 +450,7 @@ export async function predictNextSleepWindow({
   const ageInMonths = getAgeInMonths(birthdate, now);
   const baselineAnchor = lastNapEnd ?? now;
 
-  const napCountToday = completedEntries.filter((entry) => entry.end && isSameDay(entry.end, now)).length;
+  const napCountToday = completedEntries.filter((entry) => isSameDay(entry.start, now)).length;
   const napIndexToday = Math.max(1, napCountToday + 1);
 
   const baseline = getBaselineWindow(ageInMonths, napIndexToday, baselineAnchor);
@@ -544,6 +546,7 @@ export async function predictNextSleepWindow({
   let recommendedStart = predictedStart;
   let earliest = addMinutes(baselineAnchor, Math.max(0, adjustedWindow - flexEarly));
   let latest = addMinutes(baselineAnchor, adjustedWindow + flexLate);
+  let resolvedAnchorDate: Date | null = null;
 
   const awakeSinceLastNap = lastNapEnd ? minutesBetween(now, lastNapEnd) : null;
   let awakeOverrideApplied = false;
@@ -563,8 +566,8 @@ export async function predictNextSleepWindow({
   let anchorConstraintApplied = false;
   let dynamicBedtimeGap = 0;
   if (anchorBedtime) {
-    const anchorDate = resolveAnchorDate(anchorBedtime, now);
-    if (anchorDate) {
+    resolvedAnchorDate = resolveAnchorDate(anchorBedtime, now);
+    if (resolvedAnchorDate) {
       dynamicBedtimeGap = bedtimeGapByAge(ageInMonths);
 
       // Optional: Letzter Nap braucht mehr Abstand (Nap-Drop-Phase)
@@ -574,7 +577,7 @@ export async function predictNextSleepWindow({
         dynamicBedtimeGap += 15; // +15 Min für letzten Nap
       }
 
-      const latestAllowed = addMinutes(anchorDate, -dynamicBedtimeGap);
+      const latestAllowed = addMinutes(resolvedAnchorDate, -dynamicBedtimeGap);
       if (latest.getTime() > latestAllowed.getTime()) {
         latest = latestAllowed;
         anchorConstraintApplied = true;
@@ -605,6 +608,14 @@ export async function predictNextSleepWindow({
     recommendedStart = new Date(earliest);
   }
 
+  const displayWindowMinutes = Math.max(
+    0,
+    Math.round((latest.getTime() - earliest.getTime()) / 60000)
+  );
+  const bedtimeModeApplied =
+    anchorConstraintApplied &&
+    displayWindowMinutes <= MIN_WINDOW_SPAN_MINUTES;
+
   timeOfDayBucket = getTimeOfDayBucket(recommendedStart);
   const windowMinutes = Math.round(
     (recommendedStart.getTime() - baselineAnchor.getTime()) / 60000,
@@ -633,6 +644,7 @@ export async function predictNextSleepWindow({
     napIndexToday,
     timeOfDayBucket,
     confidence,
+    predictionKind: bedtimeModeApplied ? 'night_sleep' : 'nap',
     debug: {
       now,
       ageInMonths,
@@ -662,6 +674,9 @@ export async function predictNextSleepWindow({
       historicalFactor,
       historicalSampleCount,
       dynamicBedtimeGap,
+      displayWindowMinutes,
+      bedtimeModeApplied,
+      bedtimeAnchorDate: resolvedAnchorDate?.toISOString() ?? null,
     },
   };
 }
@@ -869,6 +884,13 @@ function clamp(value: number, min: number, max: number): number {
 
 function startOfDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function getLocalDayKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 function isSameDay(dateA: Date, dateB: Date): boolean {

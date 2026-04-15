@@ -10,6 +10,10 @@ import {
   FEEDING_REMINDER_IDENTIFIER,
   FEEDING_REMINDER_TYPE,
 } from '@/lib/feedingReminderNotifications';
+import {
+  markReminderNotificationHandled,
+  wasReminderNotificationHandled,
+} from '@/lib/reminderNotificationState';
 
 /**
  * Hook für Fütterungs-Erinnerungen
@@ -27,6 +31,7 @@ export function useFeedingReminderNotifications(
 ) {
   const lastScheduledRef = useRef<string | null>(null);
   const scheduledNotificationIdRef = useRef<string | null>(null);
+  const lastRemoteTokenRef = useRef<string | null>(null);
   // Remote reminders are optional and used only for additional devices.
   // Local scheduling remains primary to work reliably while app is closed.
   const hasRemoteChannel = Boolean(userId && babyId && currentDevicePushToken);
@@ -94,9 +99,11 @@ export function useFeedingReminderNotifications(
       const tenMinBefore = new Date(nextFeeding.getTime() - 10 * 60 * 1000);
       const now = new Date();
       const scheduleKey = nextFeeding.toISOString();
+      const remoteTokenChanged =
+        hasRemoteChannel && lastRemoteTokenRef.current !== currentDevicePushToken;
 
       // Prüfe ob bereits für diesen Zeitpunkt geplant
-      if (lastScheduledRef.current === scheduleKey) {
+      if (lastScheduledRef.current === scheduleKey && !remoteTokenChanged) {
         return;
       }
 
@@ -111,6 +118,18 @@ export function useFeedingReminderNotifications(
         const shouldSendImmediate = msUntilFeeding > 0 && msUntilFeeding <= 10 * 60 * 1000;
 
         if (shouldSendImmediate) {
+          const alreadyHandled = await wasReminderNotificationHandled(
+            'feeding',
+            scheduleKey,
+            userId,
+            babyId
+          );
+          if (alreadyHandled) {
+            lastScheduledRef.current = scheduleKey;
+            console.log('⏭️ Feeding immediate reminder already handled for this schedule');
+            return;
+          }
+
           const minutesUntilFeeding = Math.max(1, Math.round(msUntilFeeding / 60000));
           const immediateBody = `Das vorhergesagte Feeding ist in ca. ${minutesUntilFeeding} Minuten`;
 
@@ -136,9 +155,13 @@ export function useFeedingReminderNotifications(
           }
 
           scheduledNotificationIdRef.current = immediateId;
+          await markReminderNotificationHandled('feeding', scheduleKey, userId, babyId);
 
           if (hasRemoteChannel) {
             await syncRemoteReminder(new Date(), scheduleKey, immediateBody, prediction.intervalMinutes);
+            lastRemoteTokenRef.current = currentDevicePushToken ?? null;
+          } else {
+            lastRemoteTokenRef.current = null;
           }
 
           lastScheduledRef.current = scheduleKey;
@@ -189,8 +212,10 @@ export function useFeedingReminderNotifications(
       // Optional remote sync for secondary devices only.
       if (hasRemoteChannel) {
         await syncRemoteReminder(tenMinBefore, scheduleKey, body, prediction.intervalMinutes);
+        lastRemoteTokenRef.current = currentDevicePushToken ?? null;
       } else if (userId && babyId) {
         await cancelRemoteReminder();
+        lastRemoteTokenRef.current = null;
       }
 
       lastScheduledRef.current = scheduleKey;

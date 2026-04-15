@@ -15,6 +15,7 @@ interface PartnerActivityNotification {
 }
 
 const NETWORK_ERROR_LOG_THROTTLE_MS = 60_000;
+const MAX_LOCAL_PARTNER_NOTIFICATION_AGE_MS = 12 * 60 * 60 * 1000;
 let lastNetworkWarningAt = 0;
 
 function extractErrorText(error: unknown): string {
@@ -108,6 +109,21 @@ export async function pollPartnerActivities(): Promise<number> {
     // Process each notification
     for (const notification of notifications as PartnerActivityNotification[]) {
       try {
+        const createdAtMs = new Date(notification.created_at).getTime();
+        const isFreshEnough =
+          Number.isFinite(createdAtMs) &&
+          Date.now() - createdAtMs <= MAX_LOCAL_PARTNER_NOTIFICATION_AGE_MS;
+
+        const markedAsRead = await markPartnerNotificationAsRead(notification.id);
+        if (!markedAsRead) {
+          continue;
+        }
+
+        if (!isFreshEnough) {
+          console.log(`⏭️ Skipping stale partner notification: ${notification.id}`);
+          continue;
+        }
+
         // Get partner name
         const { data: profile } = await supabase
           .from('profiles')
@@ -143,9 +159,6 @@ export async function pollPartnerActivities(): Promise<number> {
         });
 
         console.log(`✅ Displayed notification: ${title}`);
-
-        // Mark notification as read
-        await markPartnerNotificationAsRead(notification.id);
       } catch (error) {
         logPartnerNotificationError(`Error processing notification: ${notification.id}`, error);
       }
