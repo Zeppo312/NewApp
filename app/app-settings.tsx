@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, SafeAreaView, StatusBar, TouchableOpacity, ScrollView, Switch, Alert, ActivityIndicator, Image, Linking, Platform } from 'react-native';
+import { StyleSheet, View, SafeAreaView, StatusBar, TouchableOpacity, ScrollView, Switch, Alert, ActivityIndicator, Image, Linking, Platform, Share } from 'react-native';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
@@ -8,6 +8,7 @@ import { ThemedBackground } from '@/components/ThemedBackground';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Redirect, useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
+import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { useConvex } from '@/contexts/ConvexContext';
 import { useBackground } from '@/contexts/BackgroundContext';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -34,6 +35,7 @@ import { useNotificationPreferences } from '@/hooks/useNotificationPreferences';
 import { useNotifications } from '@/hooks/useNotifications';
 import { formatVitaminDReminderTime } from '@/lib/vitaminDReminder';
 import { openSubscriptionManagement } from '@/lib/subscriptionManagement';
+import { buildSleepDebugSnapshot, serializeSleepDebugSnapshot } from '@/lib/sleepDebug';
 
 const PRESET_OPTIONS = [
   { id: 'default', label: 'Standard' },
@@ -51,6 +53,7 @@ export default function AppSettingsScreen() {
   const router = useRouter();
   const { focus } = useLocalSearchParams<{ focus?: string }>();
   const { user, session, signOut } = useAuth();
+  const { activeBabyId } = useActiveBaby();
   const {
     autoDarkModeEnabled,
     autoDarkModeStartTime,
@@ -85,6 +88,7 @@ export default function AppSettingsScreen() {
   const [isSyncingLiveActivities, setIsSyncingLiveActivities] = useState(false);
   const [liveActivitiesStatusText, setLiveActivitiesStatusText] = useState('Status wird geladen...');
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isExportingSleepDebug, setIsExportingSleepDebug] = useState(false);
 
   // Convex context
   const { convexClient, lastSyncError } = useConvex();
@@ -216,6 +220,29 @@ export default function AppSettingsScreen() {
       const status = 'Status konnte nicht geladen werden.';
       setLiveActivitiesStatusText(status);
       return status;
+    }
+  };
+
+  const handleExportSleepDebug = async () => {
+    if (!user?.id) {
+      Alert.alert('Fehler', 'Du musst angemeldet sein.');
+      return;
+    }
+
+    try {
+      setIsExportingSleepDebug(true);
+      const snapshot = await buildSleepDebugSnapshot(user.id, activeBabyId);
+      const payload = serializeSleepDebugSnapshot(snapshot);
+
+      await Share.share({
+        title: 'Sleep Debug Snapshot',
+        message: payload,
+      });
+    } catch (error) {
+      console.error('Failed to export sleep debug snapshot:', error);
+      Alert.alert('Fehler', 'Sleep-Debug konnte nicht exportiert werden.');
+    } finally {
+      setIsExportingSleepDebug(false);
     }
   };
 
@@ -1451,6 +1478,27 @@ export default function AppSettingsScreen() {
                         </View>
                         <View style={styles.trailing}>
                           <IconSymbol name="chevron.right" size={20} color={trailingIconColor} />
+                        </View>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[styles.rowItem, isExportingSleepDebug && styles.disabledRow]}
+                        onPress={handleExportSleepDebug}
+                        disabled={isExportingSleepDebug}
+                      >
+                        <View style={styles.rowIcon}>
+                          <ThemedText style={{ fontSize: 24 }}>😴</ThemedText>
+                        </View>
+                        <View style={styles.rowContent}>
+                          <ThemedText style={styles.rowTitle}>Sleep-Debug exportieren</ThemedText>
+                          <ThemedText style={styles.rowDescription}>Erzeugt einen JSON-Snapshot mit Schlafdaten, Nachtfenster und Vorhersage</ThemedText>
+                        </View>
+                        <View style={styles.trailing}>
+                          {isExportingSleepDebug ? (
+                            <ActivityIndicator size="small" color={theme.accent} />
+                          ) : (
+                            <IconSymbol name="chevron.right" size={20} color={trailingIconColor} />
+                          )}
                         </View>
                       </TouchableOpacity>
 

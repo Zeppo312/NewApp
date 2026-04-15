@@ -547,6 +547,10 @@ export async function predictNextSleepWindow({
   let earliest = addMinutes(baselineAnchor, Math.max(0, adjustedWindow - flexEarly));
   let latest = addMinutes(baselineAnchor, adjustedWindow + flexLate);
   let resolvedAnchorDate: Date | null = null;
+  let forcedNightSleepMode = false;
+  let staleWindowFallbackApplied = false;
+  let currentDayBedtime: Date | null = null;
+  let latestAllowedToday: Date | null = null;
 
   const awakeSinceLastNap = lastNapEnd ? minutesBetween(now, lastNapEnd) : null;
   let awakeOverrideApplied = false;
@@ -586,6 +590,38 @@ export async function predictNextSleepWindow({
   }
 
   const windowAlreadyPassed = latest.getTime() < now.getTime();
+  const staleWindowFromPreviousDay =
+    windowAlreadyPassed &&
+    !isSameDay(baselineAnchor, now);
+
+  if (staleWindowFromPreviousDay) {
+    staleWindowFallbackApplied = true;
+
+    if (anchorBedtime) {
+      currentDayBedtime = resolveSameDayAnchorDate(anchorBedtime, now);
+      if (currentDayBedtime) {
+        const bedtimeGapForToday =
+          dynamicBedtimeGap > 0 ? dynamicBedtimeGap : bedtimeGapByAge(ageInMonths);
+        latestAllowedToday = addMinutes(currentDayBedtime, -bedtimeGapForToday);
+      }
+    }
+
+    const shouldSwitchToNightSleep =
+      (latestAllowedToday !== null && now.getTime() >= latestAllowedToday.getTime()) ||
+      getTimeOfDayBucket(now) === 'evening';
+
+    if (shouldSwitchToNightSleep) {
+      forcedNightSleepMode = true;
+      recommendedStart = new Date(now);
+      earliest = new Date(now);
+      latest = addMinutes(now, MIN_WINDOW_SPAN_MINUTES);
+    } else {
+      recommendedStart = addMinutes(now, JUNIOR_AWAKE_IMMEDIATE_MINUTES);
+      earliest = new Date(now);
+      latest = addMinutes(now, Math.max(MIN_WINDOW_SPAN_MINUTES, flexLate));
+    }
+  }
+
   if (!windowAlreadyPassed && earliest.getTime() < now.getTime()) {
     earliest = new Date(now);
   }
@@ -613,13 +649,17 @@ export async function predictNextSleepWindow({
     Math.round((latest.getTime() - earliest.getTime()) / 60000)
   );
   const bedtimeModeApplied =
-    anchorConstraintApplied &&
-    displayWindowMinutes <= MIN_WINDOW_SPAN_MINUTES;
+    forcedNightSleepMode ||
+    (anchorConstraintApplied &&
+      displayWindowMinutes <= MIN_WINDOW_SPAN_MINUTES);
 
   timeOfDayBucket = getTimeOfDayBucket(recommendedStart);
-  const windowMinutes = Math.round(
+  const rawWindowMinutes = Math.round(
     (recommendedStart.getTime() - baselineAnchor.getTime()) / 60000,
   );
+  const windowMinutes = bedtimeModeApplied
+    ? 0
+    : Math.max(0, rawWindowMinutes);
 
   // Berechne Confidence basierend auf historischen und Personalisierungs-Samples
   // 0-5 Samples: 0.0-0.5, 5-10: 0.5-0.8, 10+: 0.8-1.0
@@ -666,6 +706,7 @@ export async function predictNextSleepWindow({
       predictedStart,
       anchorBedtime,
       napCountToday,
+      rawWindowMinutes,
       // 🆕 Neue Debug-Felder
       napDurationAdjustment,
       sleepDebtAdjustment,
@@ -676,6 +717,10 @@ export async function predictNextSleepWindow({
       dynamicBedtimeGap,
       displayWindowMinutes,
       bedtimeModeApplied,
+      staleWindowFromPreviousDay,
+      staleWindowFallbackApplied,
+      currentDayBedtime: currentDayBedtime?.toISOString() ?? null,
+      latestAllowedToday: latestAllowedToday?.toISOString() ?? null,
       bedtimeAnchorDate: resolvedAnchorDate?.toISOString() ?? null,
     },
   };
@@ -922,6 +967,24 @@ function resolveAnchorDate(anchor: string, reference: Date): Date | null {
     anchorDate.setDate(anchorDate.getDate() + 1);
   }
 
+  return anchorDate;
+}
+
+function resolveSameDayAnchorDate(anchor: string, reference: Date): Date | null {
+  const match = anchor.trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) {
+    return null;
+  }
+
+  const hours = parseInt(match[1], 10);
+  const minutes = parseInt(match[2], 10);
+
+  if (Number.isNaN(hours) || Number.isNaN(minutes) || hours > 23 || minutes > 59) {
+    return null;
+  }
+
+  const anchorDate = new Date(reference);
+  anchorDate.setHours(hours, minutes, 0, 0);
   return anchorDate;
 }
 

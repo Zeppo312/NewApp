@@ -500,8 +500,48 @@ const formatClockTime = (date: Date) =>
 const isNightSleepPrediction = (prediction: SleepWindowPrediction | null | undefined): boolean =>
   prediction?.predictionKind === 'night_sleep';
 
+const resolvePredictionBedtimeDate = (
+  prediction: SleepWindowPrediction | null | undefined
+): Date | null => {
+  const currentDayBedtime = prediction?.debug?.currentDayBedtime;
+  if (typeof currentDayBedtime === 'string') {
+    const parsed = new Date(currentDayBedtime);
+    if (Number.isFinite(parsed.getTime())) {
+      return parsed;
+    }
+  }
+
+  const rawAnchor = prediction?.debug?.anchorBedtime;
+  if (typeof rawAnchor !== 'string') return null;
+
+  const match = rawAnchor.trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+
+  const anchorDate = new Date();
+  anchorDate.setHours(hours, minutes, 0, 0);
+  return anchorDate;
+};
+
 const getBedtimePredictionLabel = (prediction: SleepWindowPrediction | null | undefined): string => {
   const rawAnchor = prediction?.debug?.anchorBedtime;
+  const bedtimeDate = resolvePredictionBedtimeDate(prediction);
+  const now = new Date();
+
+  if (bedtimeDate && now.getTime() >= bedtimeDate.getTime()) {
+    const minutesSinceBedtime = Math.round((now.getTime() - bedtimeDate.getTime()) / 60000);
+    if (minutesSinceBedtime <= 45) {
+      return 'Jetzt Nachtschlaf';
+    }
+    if (typeof rawAnchor === 'string' && rawAnchor.trim().length > 0) {
+      return `Nachtschlaf seit ca. ${rawAnchor}`;
+    }
+    return 'Nachtschlaf läuft';
+  }
+
   if (typeof rawAnchor === 'string' && rawAnchor.trim().length > 0) {
     return `Nachtschlaf ca. ${rawAnchor}`;
   }
@@ -718,7 +758,7 @@ const StatusMetricsBar = ({
     }
 
     if (isNightSleepPrediction(sleepPrediction)) {
-      return { emoji: '🌙', label: 'abendmodus', color: '#8E4EC6' };
+      return { emoji: '🌙', label: 'nachtschlaf', color: '#8E4EC6' };
     }
 
     // Echtzeit-Berechnung: Minuten bis zum empfohlenen Schlafzeitpunkt
@@ -4287,26 +4327,6 @@ export default function SleepTrackerScreen() {
         {/* Top Tabs - über der Status Bar */}
         <TopTabs />
 
-        {/* Status Bar */}
-        <StatusMetricsBar
-          stats={stats}
-          selectedDate={selectedDate}
-          sleepPrediction={sleepPrediction}
-          activeSleepEntry={activeSleepEntry}
-          hasSleepData={sleepEntries.length > 0}
-          statsPage={statsPage}
-          onPageChange={setStatsPage}
-        />
-
-        {isReadOnlyPreviewMode && (
-          <View style={styles.readOnlyPreviewBanner}>
-            <Text style={styles.readOnlyPreviewTitle}>Nur Vorschau aktiv</Text>
-            <Text style={styles.readOnlyPreviewText}>
-              Du schaust den Babymodus an. Schlaftracking ist hier gesperrt.
-            </Text>
-          </View>
-        )}
-
         <ScrollView
           style={styles.scrollContainer}
           contentContainerStyle={styles.scrollContent}
@@ -4323,6 +4343,26 @@ export default function SleepTrackerScreen() {
             />
           }
         >
+          {/* Status Bar */}
+          <StatusMetricsBar
+            stats={stats}
+            selectedDate={selectedDate}
+            sleepPrediction={sleepPrediction}
+            activeSleepEntry={activeSleepEntry}
+            hasSleepData={sleepEntries.length > 0}
+            statsPage={statsPage}
+            onPageChange={setStatsPage}
+          />
+
+          {isReadOnlyPreviewMode && (
+            <View style={styles.readOnlyPreviewBanner}>
+              <Text style={styles.readOnlyPreviewTitle}>Nur Vorschau aktiv</Text>
+              <Text style={styles.readOnlyPreviewText}>
+                Du schaust den Babymodus an. Schlaftracking ist hier gesperrt.
+              </Text>
+            </View>
+          )}
+
           {selectedTab === 'week' ? (
             <WeekView />
           ) : selectedTab === 'month' ? (
@@ -5256,7 +5296,8 @@ const styles = StyleSheet.create({
 
   // Stats Container (Swipeable)
   statsContainer: {
-    width: '100%',
+    width: screenWidth,
+    marginHorizontal: -LAYOUT_PAD,
     marginBottom: 0,
   },
   statsScroll: {
@@ -5269,8 +5310,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 1,
-    marginBottom: -6,
+    alignSelf: 'center',
+    width: contentWidth,
+    marginTop: 4,
+    marginBottom: 4,
     gap: 8,
   },
   pagingDot: {
