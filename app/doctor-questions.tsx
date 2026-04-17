@@ -18,41 +18,63 @@ import { ThemedBackground } from '@/components/ThemedBackground';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Stack } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
-import {
-  getDoctorQuestions,
-  saveDoctorQuestion,
-  updateDoctorQuestion,
-  deleteDoctorQuestion,
-  DoctorQuestion,
-} from '@/lib/supabase';
+import { useBabyStatus } from '@/contexts/BabyStatusContext';
+import { DoctorQuestion } from '@/lib/supabase';
+import { useDoctorQuestionsService } from '@/hooks/useDoctorQuestionsService';
 import Header from '@/components/Header';
 import {
   LiquidGlassCard,
   GlassCard,
   GLASS_OVERLAY,
+  GLASS_OVERLAY_DARK,
   LAYOUT_PAD,
-  TIMELINE_INSET,
   TEXT_PRIMARY,
   RADIUS,
   PRIMARY,
 } from '@/constants/DesignGuide';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 
 export default function DoctorQuestionsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
+  const adaptiveColors = useAdaptiveColors();
+  const isDark = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
+  const textPrimary = isDark ? Colors.dark.textPrimary : '#5C4033';
+  const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
+  const glassOverlay = isDark ? GLASS_OVERLAY_DARK : GLASS_OVERLAY;
   const { user } = useAuth();
+  const { isReadOnlyPreviewMode } = useBabyStatus();
+  const service = useDoctorQuestionsService();
 
   const [questions, setQuestions] = useState<DoctorQuestion[]>([]);
   const [newQuestion, setNewQuestion] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isTogglingQuestionId, setIsTogglingQuestionId] = useState<string | null>(null);
+  const [isSavingAnswerId, setIsSavingAnswerId] = useState<string | null>(null);
+  const [isDeletingQuestionId, setIsDeletingQuestionId] = useState<string | null>(null);
+  const [operationMessage, setOperationMessage] = useState<string | null>(null);
   const [expandedQuestion, setExpandedQuestion] = useState<string | null>(null);
   const [editingAnswer, setEditingAnswer] = useState<string | null>(null);
   const [answerText, setAnswerText] = useState('');
   const answerInputRef = useRef<TextInput>(null);
+  const statusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const openQuestions = useMemo(() => questions.filter((q) => !q.is_answered), [questions]);
   const answeredQuestions = useMemo(() => questions.filter((q) => q.is_answered), [questions]);
+  const headerSubtitle = isReadOnlyPreviewMode
+    ? 'Vorschau-Modus: nur ansehen'
+    : 'Alles Wichtige für den nächsten Termin';
+
+  const showReadOnlyPreviewAlert = () => {
+    Alert.alert('Nur Vorschau', 'Du schaust den Schwangerschaftsmodus an. Arztfragen sind hier gesperrt.');
+  };
+
+  const ensureWritableInCurrentMode = () => {
+    if (!isReadOnlyPreviewMode) return true;
+    showReadOnlyPreviewAlert();
+    return false;
+  };
 
   useEffect(() => {
     if (user) {
@@ -60,14 +82,43 @@ export default function DoctorQuestionsScreen() {
     }
   }, [user]);
 
-  const loadQuestions = async () => {
+  useEffect(() => {
+    return () => {
+      if (statusTimeoutRef.current) {
+        clearTimeout(statusTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const showOperationMessage = (message: string) => {
+    setOperationMessage(message);
+    if (statusTimeoutRef.current) {
+      clearTimeout(statusTimeoutRef.current);
+    }
+    statusTimeoutRef.current = setTimeout(() => {
+      setOperationMessage(null);
+    }, 2500);
+  };
+
+  const loadQuestions = async (options?: { silent?: boolean }) => {
+    if (!service) {
+      if (!options?.silent) {
+        setIsLoading(false);
+      }
+      return;
+    }
+
     try {
-      setIsLoading(true);
-      const { data, error } = await getDoctorQuestions();
+      if (!options?.silent) {
+        setIsLoading(true);
+      }
+      const { data, error } = await service.getQuestions();
 
       if (error) {
         console.error('Error loading doctor questions:', error);
-        Alert.alert('Fehler', 'Fragen konnten nicht geladen werden.');
+        if (!options?.silent) {
+          Alert.alert('Fehler', 'Fragen konnten nicht geladen werden.');
+        }
         return;
       }
 
@@ -76,60 +127,95 @@ export default function DoctorQuestionsScreen() {
       }
     } catch (err) {
       console.error('Failed to load doctor questions:', err);
+      if (!options?.silent) {
+        Alert.alert('Fehler', 'Fragen konnten nicht geladen werden.');
+      }
     } finally {
-      setIsLoading(false);
+      if (!options?.silent) {
+        setIsLoading(false);
+      }
     }
   };
 
   const handleSaveQuestion = async () => {
+    if (!ensureWritableInCurrentMode()) return;
+    if (isSaving) {
+      return;
+    }
+
     if (!newQuestion.trim()) {
       Alert.alert('Hinweis', 'Bitte gib eine Frage ein.');
       return;
     }
 
+    if (!service) {
+      Alert.alert('Fehler', 'Service nicht verfügbar.');
+      return;
+    }
+
     try {
       setIsSaving(true);
-      const { data, error } = await saveDoctorQuestion(newQuestion.trim());
+      const result = await service.saveQuestion(newQuestion.trim());
 
-      if (error) {
-        console.error('Error saving doctor question:', error);
+      if (result.primary.error) {
+        console.error('Error saving doctor question:', result.primary.error);
         Alert.alert('Fehler', 'Frage konnte nicht gespeichert werden.');
         return;
       }
 
-      if (data) {
-        setQuestions((prev) => [data, ...prev]);
+      if (result.primary.data) {
         setNewQuestion('');
-        Alert.alert('Erfolg', 'Deine Frage wurde gespeichert.');
+        await loadQuestions({ silent: true });
+        showOperationMessage('Frage gespeichert.');
       }
     } catch (err) {
       console.error('Failed to save doctor question:', err);
+      Alert.alert('Fehler', 'Frage konnte nicht gespeichert werden.');
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleToggleAnswered = async (question: DoctorQuestion) => {
+    if (!ensureWritableInCurrentMode()) return;
+    if (!service) {
+      Alert.alert('Fehler', 'Service nicht verfügbar.');
+      return;
+    }
+
+    const nextIsAnswered = !question.is_answered;
+
     try {
-      const { data, error } = await updateDoctorQuestion(question.id, {
-        is_answered: !question.is_answered,
+      setIsTogglingQuestionId(question.id);
+
+      const result = await service.updateQuestion(question.id, {
+        is_answered: nextIsAnswered,
       });
 
-      if (error) {
-        console.error('Error updating doctor question:', error);
+      if (result.primary.error) {
+        console.error('Error updating doctor question:', result.primary.error);
         Alert.alert('Fehler', 'Status konnte nicht aktualisiert werden.');
         return;
       }
 
-      if (data) {
-        setQuestions((prev) => prev.map((q) => (q.id === question.id ? data : q)));
+      if (result.primary.data) {
+        setQuestions((prev) => prev.map((q) => (q.id === question.id ? result.primary.data! : q)));
       }
+
+      await loadQuestions({ silent: true });
+      showOperationMessage(
+        nextIsAnswered ? 'Frage als beantwortet markiert.' : 'Frage als offen markiert.'
+      );
     } catch (err) {
       console.error('Failed to update doctor question:', err);
+      Alert.alert('Fehler', 'Status konnte nicht aktualisiert werden.');
+    } finally {
+      setIsTogglingQuestionId(null);
     }
   };
 
   const handleDeleteQuestion = async (questionId: string) => {
+    if (!ensureWritableInCurrentMode()) return;
     Alert.alert('Frage löschen', 'Möchtest du diese Frage wirklich löschen?', [
       {
         text: 'Abbrechen',
@@ -139,18 +225,33 @@ export default function DoctorQuestionsScreen() {
         text: 'Löschen',
         style: 'destructive',
         onPress: async () => {
-          try {
-            const { error } = await deleteDoctorQuestion(questionId);
+          if (!ensureWritableInCurrentMode()) return;
+          if (!service) {
+            Alert.alert('Fehler', 'Service nicht verfügbar.');
+            return;
+          }
 
-            if (error) {
-              console.error('Error deleting doctor question:', error);
+          try {
+            setIsDeletingQuestionId(questionId);
+            const result = await service.deleteQuestion(questionId);
+
+            if (result.primary.error) {
+              console.error('Error deleting doctor question:', result.primary.error);
               Alert.alert('Fehler', 'Frage konnte nicht gelöscht werden.');
               return;
             }
 
             setQuestions((prev) => prev.filter((q) => q.id !== questionId));
+            if (expandedQuestion === questionId) {
+              setExpandedQuestion(null);
+            }
+            await loadQuestions({ silent: true });
+            showOperationMessage('Frage gelöscht.');
           } catch (err) {
             console.error('Failed to delete doctor question:', err);
+            Alert.alert('Fehler', 'Frage konnte nicht gelöscht werden.');
+          } finally {
+            setIsDeletingQuestionId(null);
           }
         },
       },
@@ -167,6 +268,7 @@ export default function DoctorQuestionsScreen() {
   };
 
   const handleStartEditAnswer = (question: DoctorQuestion) => {
+    if (!ensureWritableInCurrentMode()) return;
     setEditingAnswer(question.id);
     setAnswerText(question.answer || '');
     setTimeout(() => {
@@ -175,24 +277,38 @@ export default function DoctorQuestionsScreen() {
   };
 
   const handleSaveAnswer = async (questionId: string) => {
+    if (!ensureWritableInCurrentMode()) return;
+    if (!service) {
+      Alert.alert('Fehler', 'Service nicht verfügbar.');
+      return;
+    }
+
     try {
-      const { data, error } = await updateDoctorQuestion(questionId, {
-        answer: answerText.trim() || null,
+      setIsSavingAnswerId(questionId);
+      const result = await service.updateQuestion(questionId, {
+        answer: answerText.trim() || undefined,
       });
 
-      if (error) {
-        console.error('Error saving answer:', error);
+      if (result.primary.error) {
+        console.error('Error saving answer:', result.primary.error);
         Alert.alert('Fehler', 'Antwort konnte nicht gespeichert werden.');
         return;
       }
 
-      if (data) {
-        setQuestions((prev) => prev.map((q) => (q.id === questionId ? data : q)));
+      if (result.primary.data) {
+        setQuestions((prev) => prev.map((q) => (q.id === questionId ? result.primary.data! : q)));
         setEditingAnswer(null);
+        setAnswerText('');
         Keyboard.dismiss();
       }
+
+      await loadQuestions({ silent: true });
+      showOperationMessage('Antwort gespeichert.');
     } catch (err) {
       console.error('Failed to save answer:', err);
+      Alert.alert('Fehler', 'Antwort konnte nicht gespeichert werden.');
+    } finally {
+      setIsSavingAnswerId(null);
     }
   };
 
@@ -208,6 +324,11 @@ export default function DoctorQuestionsScreen() {
 
   const renderQuestionCard = (question: DoctorQuestion) => {
     const isExpanded = expandedQuestion === question.id;
+    const isToggling = isTogglingQuestionId === question.id;
+    const isSavingAnswer = isSavingAnswerId === question.id;
+    const isDeleting = isDeletingQuestionId === question.id;
+    const isQuestionBusy = isToggling || isSavingAnswer || isDeleting;
+    const isQuestionActionDisabled = isQuestionBusy || isReadOnlyPreviewMode;
     const overlayColor = question.is_answered
       ? 'rgba(168,196,162,0.22)'
       : 'rgba(142,78,198,0.18)';
@@ -242,7 +363,7 @@ export default function DoctorQuestionsScreen() {
               </ThemedText>
             </View>
             <ThemedText
-              style={[styles.questionText, question.is_answered && styles.questionTextAnswered]}
+              style={[styles.questionText, { color: textPrimary }, question.is_answered && styles.questionTextAnswered]}
               numberOfLines={isExpanded ? undefined : 2}
             >
               {question.question}
@@ -258,23 +379,36 @@ export default function DoctorQuestionsScreen() {
         {isExpanded && (
           <View style={styles.questionBody}>
             <TouchableOpacity
-              style={[styles.actionChip, question.is_answered && styles.actionChipActive]}
+              style={[
+                styles.actionChip,
+                question.is_answered && styles.actionChipActive,
+                isQuestionActionDisabled && styles.buttonDisabled,
+              ]}
               onPress={() => handleToggleAnswered(question)}
+              disabled={isQuestionActionDisabled}
               activeOpacity={0.85}
             >
-              <IconSymbol
-                name={question.is_answered ? 'arrow.uturn.backward' : 'checklist'}
-                size={18}
-                color={question.is_answered ? '#3C7C59' : PRIMARY}
-                style={styles.actionChipIcon}
-              />
+              {isToggling ? (
+                <ActivityIndicator size="small" color={question.is_answered ? '#3C7C59' : PRIMARY} />
+              ) : (
+                <IconSymbol
+                  name={question.is_answered ? 'arrow.uturn.backward' : 'checklist'}
+                  size={18}
+                  color={question.is_answered ? '#3C7C59' : PRIMARY}
+                  style={styles.actionChipIcon}
+                />
+              )}
               <ThemedText
                 style={[
                   styles.actionChipText,
                   question.is_answered && styles.actionChipTextActive,
                 ]}
               >
-                {question.is_answered ? 'Als offen markieren' : 'Als beantwortet markieren'}
+                {isToggling
+                  ? 'Wird aktualisiert...'
+                  : question.is_answered
+                    ? 'Als offen markieren'
+                    : 'Als beantwortet markieren'}
               </ThemedText>
             </TouchableOpacity>
 
@@ -286,7 +420,7 @@ export default function DoctorQuestionsScreen() {
                   color={theme.accent}
                   style={styles.answerHeaderIcon}
                 />
-                <ThemedText style={styles.answerHeaderText}>Antwort vom Arzt</ThemedText>
+                <ThemedText style={[styles.answerHeaderText, { color: textPrimary }]}>Antwort vom Arzt</ThemedText>
               </View>
 
               {editingAnswer === question.id ? (
@@ -300,12 +434,14 @@ export default function DoctorQuestionsScreen() {
                       value={answerText}
                       onChangeText={setAnswerText}
                       multiline
+                      editable={!isReadOnlyPreviewMode}
                     />
                   </GlassCard>
                   <View style={styles.answerButtons}>
                     <TouchableOpacity
-                      style={styles.secondaryButton}
+                      style={[styles.secondaryButton, isSavingAnswer && styles.buttonDisabled]}
                       onPress={handleCancelEditAnswer}
+                      disabled={isSavingAnswer}
                       activeOpacity={0.85}
                     >
                       <IconSymbol
@@ -317,28 +453,37 @@ export default function DoctorQuestionsScreen() {
                       <ThemedText style={styles.secondaryButtonText}>Abbrechen</ThemedText>
                     </TouchableOpacity>
                     <TouchableOpacity
-                      style={styles.primaryPill}
+                      style={[styles.primaryPill, isQuestionActionDisabled && styles.buttonDisabled]}
                       onPress={() => handleSaveAnswer(question.id)}
+                      disabled={isQuestionActionDisabled}
                       activeOpacity={0.85}
                     >
-                      <IconSymbol
-                        name="checklist"
-                        size={14}
-                        color="#FFFFFF"
-                        style={styles.primaryPillIcon}
-                      />
-                      <ThemedText style={styles.primaryPillText}>Speichern</ThemedText>
+                      {isSavingAnswer ? (
+                        <ActivityIndicator size="small" color="#FFFFFF" />
+                      ) : (
+                        <>
+                          <IconSymbol
+                            name="checklist"
+                            size={14}
+                            color="#FFFFFF"
+                            style={styles.primaryPillIcon}
+                          />
+                          <ThemedText style={styles.primaryPillText}>Speichern</ThemedText>
+                        </>
+                      )}
                     </TouchableOpacity>
                   </View>
                 </View>
               ) : (
                 <TouchableOpacity
+                  style={isReadOnlyPreviewMode && styles.buttonDisabled}
                   onPress={() => handleStartEditAnswer(question)}
+                  disabled={isReadOnlyPreviewMode}
                   activeOpacity={0.85}
                 >
                   <GlassCard style={styles.answerDisplay}>
                     <ThemedText
-                      style={question.answer ? styles.answerText : styles.answerPlaceholder}
+                      style={[question.answer ? styles.answerText : styles.answerPlaceholder, { color: question.answer ? textPrimary : textSecondary }]}
                     >
                       {question.answer ||
                         'Tippe, um eine Antwort zu hinterlegen oder Notizen zu ergänzen.'}
@@ -349,12 +494,24 @@ export default function DoctorQuestionsScreen() {
             </View>
 
             <TouchableOpacity
-              style={styles.deleteButton}
+              style={[styles.deleteButton, isQuestionActionDisabled && styles.buttonDisabled]}
               onPress={() => handleDeleteQuestion(question.id)}
+              disabled={isQuestionActionDisabled}
               activeOpacity={0.85}
             >
-              <IconSymbol name="trash" size={15} color="#FFFFFF" style={styles.deleteButtonIcon} />
-              <ThemedText style={styles.deleteButtonText}>Frage löschen</ThemedText>
+              {isDeleting ? (
+                <>
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                  <ThemedText style={[styles.deleteButtonText, styles.loadingInlineText]}>
+                    Lösche...
+                  </ThemedText>
+                </>
+              ) : (
+                <>
+                  <IconSymbol name="trash" size={15} color="#FFFFFF" style={styles.deleteButtonIcon} />
+                  <ThemedText style={styles.deleteButtonText}>Frage löschen</ThemedText>
+                </>
+              )}
             </TouchableOpacity>
           </View>
         )}
@@ -367,16 +524,24 @@ export default function DoctorQuestionsScreen() {
       <Stack.Screen options={{ headerShown: false }} />
       <ThemedBackground style={styles.backgroundImage}>
         <SafeAreaView style={styles.safeArea}>
-          <StatusBar hidden />
+          <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
           <Header
             title="Fragen für den Frauenarzt"
-            subtitle="Alles Wichtige für den nächsten Termin"
+            subtitle={headerSubtitle}
             showBackButton
           />
+          {isReadOnlyPreviewMode && (
+            <View style={styles.readOnlyPreviewBanner}>
+              <ThemedText style={styles.readOnlyPreviewTitle}>Nur Vorschau aktiv</ThemedText>
+              <ThemedText style={styles.readOnlyPreviewText}>
+                Du schaust den Schwangerschaftsmodus an. Arztfragen sind hier gesperrt.
+              </ThemedText>
+            </View>
+          )}
           <ScrollView contentContainerStyle={styles.scrollContent}>
             <GlassCard style={[styles.fullWidthCard, styles.heroCard]}>
-              <ThemedText style={styles.heroTitle}>Alles parat für den nächsten Besuch</ThemedText>
-              <ThemedText style={styles.heroSubtitle}>
+              <ThemedText style={[styles.heroTitle, { color: textPrimary }]}>Alles parat für den nächsten Besuch</ThemedText>
+              <ThemedText style={[styles.heroSubtitle, { color: textSecondary }]}>
                 Sammle Fragen, halte Antworten fest und geh entspannt in deinen Termin.
               </ThemedText>
             </GlassCard>
@@ -396,8 +561,8 @@ export default function DoctorQuestionsScreen() {
                     style={styles.statIcon}
                   />
                   <View>
-                    <ThemedText style={styles.statValue}>{openCount}</ThemedText>
-                    <ThemedText style={styles.statLabel}>Offene Fragen</ThemedText>
+                    <ThemedText style={[styles.statValue, { color: textPrimary }]}>{openCount}</ThemedText>
+                    <ThemedText style={[styles.statLabel, { color: textSecondary }]}>Offene Fragen</ThemedText>
                   </View>
                 </View>
               </LiquidGlassCard>
@@ -415,8 +580,8 @@ export default function DoctorQuestionsScreen() {
                     style={styles.statIcon}
                   />
                   <View>
-                    <ThemedText style={styles.statValue}>{answeredCount}</ThemedText>
-                    <ThemedText style={styles.statLabel}>Beantwortet</ThemedText>
+                    <ThemedText style={[styles.statValue, { color: textPrimary }]}>{answeredCount}</ThemedText>
+                    <ThemedText style={[styles.statLabel, { color: textSecondary }]}>Beantwortet</ThemedText>
                   </View>
                 </View>
               </LiquidGlassCard>
@@ -430,9 +595,9 @@ export default function DoctorQuestionsScreen() {
                   color={PRIMARY}
                   style={styles.newQuestionHeaderIcon}
                 />
-                <ThemedText style={styles.cardTitle}>Neue Frage notieren</ThemedText>
+                <ThemedText style={[styles.cardTitle, { color: textPrimary }]}>Neue Frage notieren</ThemedText>
               </View>
-              <ThemedText style={styles.cardSubtitle}>
+              <ThemedText style={[styles.cardSubtitle, { color: textSecondary }]}>
                 Formuliere kurz und klar, damit du beim Termin nichts vergisst.
               </ThemedText>
               <View style={styles.inputWrapper}>
@@ -443,19 +608,25 @@ export default function DoctorQuestionsScreen() {
                   value={newQuestion}
                   onChangeText={setNewQuestion}
                   multiline
+                  editable={!isReadOnlyPreviewMode}
                 />
               </View>
               <LiquidGlassCard
-                style={styles.primaryButton}
+                style={[styles.primaryButton, (isSaving || isReadOnlyPreviewMode) && styles.buttonDisabled]}
                 intensity={28}
                 overlayColor="rgba(142,78,198,0.32)"
                 borderColor="rgba(255,255,255,0.35)"
-                onPress={handleSaveQuestion}
-                activeOpacity={0.85}
+                onPress={isSaving || isReadOnlyPreviewMode ? undefined : handleSaveQuestion}
+                activeOpacity={isSaving || isReadOnlyPreviewMode ? 1 : 0.85}
               >
                 <View style={styles.primaryButtonInner}>
                   {isSaving ? (
-                    <ActivityIndicator size="small" color="#FFFFFF" />
+                    <>
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                      <ThemedText style={[styles.primaryButtonText, styles.loadingInlineText]}>
+                        Speichere...
+                      </ThemedText>
+                    </>
                   ) : (
                     <>
                       <IconSymbol
@@ -471,16 +642,32 @@ export default function DoctorQuestionsScreen() {
               </LiquidGlassCard>
             </GlassCard>
 
+            {operationMessage ? (
+              <GlassCard style={[styles.fullWidthCard, styles.feedbackCard]}>
+                <View style={styles.feedbackInner}>
+                  <IconSymbol
+                    name="checkmark.circle.fill"
+                    size={18}
+                    color="#3C7C59"
+                    style={styles.feedbackIcon}
+                  />
+                  <ThemedText style={[styles.feedbackText, { color: textPrimary }]}>
+                    {operationMessage}
+                  </ThemedText>
+                </View>
+              </GlassCard>
+            ) : null}
+
             {isLoading ? (
               <LiquidGlassCard
                 style={[styles.fullWidthCard, styles.loadingCard]}
                 intensity={26}
-                overlayColor={GLASS_OVERLAY}
+                overlayColor={glassOverlay}
                 borderColor="rgba(255,255,255,0.35)"
               >
                 <View style={styles.loadingContainer}>
                   <ActivityIndicator size="large" color={theme.accent} />
-                  <ThemedText style={[styles.loadingText, { color: TEXT_PRIMARY }]}>
+                  <ThemedText style={[styles.loadingText, { color: textPrimary }]}>
                     Fragen werden geladen...
                   </ThemedText>
                 </View>
@@ -489,7 +676,7 @@ export default function DoctorQuestionsScreen() {
               <LiquidGlassCard
                 style={[styles.fullWidthCard, styles.emptyCard]}
                 intensity={26}
-                overlayColor={GLASS_OVERLAY}
+                overlayColor={glassOverlay}
                 borderColor="rgba(255,255,255,0.35)"
               >
                 <View style={styles.emptyState}>
@@ -499,8 +686,8 @@ export default function DoctorQuestionsScreen() {
                     color={theme.tabIconDefault}
                     style={styles.emptyIcon}
                   />
-                  <ThemedText style={styles.emptyTitle}>Noch keine Fragen gespeichert</ThemedText>
-                  <ThemedText style={styles.emptySubtitle}>
+                  <ThemedText style={[styles.emptyTitle, { color: textPrimary }]}>Noch keine Fragen gespeichert</ThemedText>
+                  <ThemedText style={[styles.emptySubtitle, { color: textSecondary }]}>
                     Notiere spontan auftauchende Gedanken direkt hier, damit nichts verloren geht.
                   </ThemedText>
                 </View>
@@ -523,8 +710,8 @@ export default function DoctorQuestionsScreen() {
                           style={styles.sectionInfoIcon}
                         />
                         <View>
-                          <ThemedText style={styles.sectionInfoTitle}>Offene Fragen</ThemedText>
-                          <ThemedText style={styles.sectionInfoCaption}>
+                          <ThemedText style={[styles.sectionInfoTitle, { color: textPrimary }]}>Offene Fragen</ThemedText>
+                          <ThemedText style={[styles.sectionInfoCaption, { color: textSecondary }]}>
                             Kläre diese Punkte beim nächsten Termin.
                           </ThemedText>
                         </View>
@@ -550,8 +737,8 @@ export default function DoctorQuestionsScreen() {
                           style={styles.sectionInfoIcon}
                         />
                         <View>
-                          <ThemedText style={styles.sectionInfoTitle}>Bereits beantwortet</ThemedText>
-                          <ThemedText style={styles.sectionInfoCaption}>
+                          <ThemedText style={[styles.sectionInfoTitle, { color: textPrimary }]}>Bereits beantwortet</ThemedText>
+                          <ThemedText style={[styles.sectionInfoCaption, { color: textSecondary }]}>
                             Ergänze Notizen oder markiere erneut als offen.
                           </ThemedText>
                         </View>
@@ -584,8 +771,29 @@ const styles = StyleSheet.create({
     paddingTop: 18,
     paddingBottom: 56,
   },
+  readOnlyPreviewBanner: {
+    marginHorizontal: LAYOUT_PAD,
+    marginTop: 10,
+    marginBottom: -2,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: RADIUS,
+    backgroundColor: 'rgba(255, 248, 225, 0.92)',
+    borderWidth: 1,
+    borderColor: 'rgba(229, 180, 77, 0.45)',
+  },
+  readOnlyPreviewTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#8A5A00',
+    marginBottom: 4,
+  },
+  readOnlyPreviewText: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#8A5A00',
+  },
   fullWidthCard: {
-    marginHorizontal: TIMELINE_INSET,
   },
   heroCard: {
     paddingVertical: 22,
@@ -626,6 +834,7 @@ const styles = StyleSheet.create({
   },
   statValue: {
     fontSize: 26,
+    lineHeight: 32,
     fontWeight: '800',
     color: TEXT_PRIMARY,
   },
@@ -690,6 +899,30 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '700',
     fontSize: 15,
+  },
+  loadingInlineText: {
+    marginLeft: 8,
+  },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
+  feedbackCard: {
+    marginTop: 12,
+    marginBottom: 10,
+    borderRadius: RADIUS,
+  },
+  feedbackInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  feedbackIcon: {
+    marginRight: 10,
+  },
+  feedbackText: {
+    fontSize: 13,
+    fontWeight: '600',
   },
   loadingCard: {
     borderRadius: RADIUS,

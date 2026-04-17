@@ -12,6 +12,8 @@ fi
 # Anmelden bei EAS (falls noch nicht angemeldet)
 eas whoami || eas login
 
+node ./scripts/prep-eas-update.js || exit 1
+
 # Erstellen eines EAS Updates mit einer beschreibenden Nachricht
 echo "Erstelle EAS Update für die Echtzeit-Synchronisierung..."
 eas update --auto --message "Feature: Echtzeit-Synchronisierung von Alltag-Einträgen zwischen verbundenen Benutzern"

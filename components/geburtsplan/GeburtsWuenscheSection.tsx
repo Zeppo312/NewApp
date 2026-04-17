@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, View, StyleProp, ViewStyle } from 'react-native';
+import { StyleProp, ViewStyle } from 'react-native';
 import { GeburtsplanSection } from './GeburtsplanSection';
 import { OptionGroup } from './OptionGroup';
 import { CheckboxOption } from './CheckboxOption';
@@ -11,13 +11,15 @@ interface GeburtsWuenscheSectionProps {
   data: GeburtsWuensche;
   onChange: (data: GeburtsWuensche) => void;
   containerStyle?: StyleProp<ViewStyle>;
+  readOnly?: boolean;
 }
 
-export const GeburtsWuenscheSection: React.FC<GeburtsWuenscheSectionProps> = ({ data, onChange, containerStyle }) => {
+export const GeburtsWuenscheSection: React.FC<GeburtsWuenscheSectionProps> = ({ data, onChange, containerStyle, readOnly = false }) => {
   // Geburtspositionen
   const geburtspositionenOptions = ['Stehend', 'Hocken', 'Vierfüßler', 'im Wasser', 'flexibel'];
   
   const toggleGeburtsposition = (option: string) => {
+    if (readOnly) return;
     const newPositionen = data.geburtspositionen.includes(option)
       ? data.geburtspositionen.filter(pos => pos !== option)
       : [...data.geburtspositionen, option];
@@ -32,6 +34,7 @@ export const GeburtsWuenscheSection: React.FC<GeburtsWuenscheSectionProps> = ({ 
   const schmerzmittelOptions = ['Ohne Schmerzmittel', 'PDA', 'TENS', 'Lachgas', 'offen für alles'];
   
   const toggleSchmerzmittel = (option: string) => {
+    if (readOnly) return;
     const newSchmerzmittel = data.schmerzmittel.includes(option)
       ? data.schmerzmittel.filter(sm => sm !== option)
       : [...data.schmerzmittel, option];
@@ -46,6 +49,7 @@ export const GeburtsWuenscheSection: React.FC<GeburtsWuenscheSectionProps> = ({ 
   const rolleOptions = ['Aktiv unterstützen', 'eher passiv', 'jederzeit ansprechbar'];
   
   const selectRolle = (option: string) => {
+    if (readOnly) return;
     onChange({
       ...data,
       rolleBegleitperson: option,
@@ -56,6 +60,7 @@ export const GeburtsWuenscheSection: React.FC<GeburtsWuenscheSectionProps> = ({ 
   const atmosphaereOptions = ['Eigene Musik', 'ruhige Umgebung', 'gedimmtes Licht'];
   
   const toggleAtmosphaere = (option: string) => {
+    if (readOnly) return;
     const newAtmosphaere = data.musikAtmosphaere.includes(option)
       ? data.musikAtmosphaere.filter(atm => atm !== option)
       : [...data.musikAtmosphaere, option];
@@ -75,6 +80,7 @@ export const GeburtsWuenscheSection: React.FC<GeburtsWuenscheSectionProps> = ({ 
             label={option}
             checked={data.geburtspositionen.includes(option)}
             onToggle={() => toggleGeburtsposition(option)}
+            disabled={readOnly}
           />
         ))}
       </OptionGroup>
@@ -86,6 +92,7 @@ export const GeburtsWuenscheSection: React.FC<GeburtsWuenscheSectionProps> = ({ 
             label={option}
             checked={data.schmerzmittel.includes(option)}
             onToggle={() => toggleSchmerzmittel(option)}
+            disabled={readOnly}
           />
         ))}
       </OptionGroup>
@@ -97,6 +104,7 @@ export const GeburtsWuenscheSection: React.FC<GeburtsWuenscheSectionProps> = ({ 
             label={option}
             selected={data.rolleBegleitperson === option}
             onSelect={() => selectRolle(option)}
+            disabled={readOnly}
           />
         ))}
       </OptionGroup>
@@ -108,6 +116,7 @@ export const GeburtsWuenscheSection: React.FC<GeburtsWuenscheSectionProps> = ({ 
             label={option}
             checked={data.musikAtmosphaere.includes(option)}
             onToggle={() => toggleAtmosphaere(option)}
+            disabled={readOnly}
           />
         ))}
       </OptionGroup>
@@ -115,10 +124,14 @@ export const GeburtsWuenscheSection: React.FC<GeburtsWuenscheSectionProps> = ({ 
       <TextInputField
         label="Sonstige Wünsche zur Geburt"
         value={data.sonstigeWuensche}
-        onChangeText={(text) => onChange({ ...data, sonstigeWuensche: text })}
+        onChangeText={(text) => {
+          if (readOnly) return;
+          onChange({ ...data, sonstigeWuensche: text });
+        }}
         multiline
         numberOfLines={3}
         placeholder="Hier kannst du weitere Wünsche zur Geburt eintragen..."
+        readOnly={readOnly}
       />
     </GeburtsplanSection>
   );

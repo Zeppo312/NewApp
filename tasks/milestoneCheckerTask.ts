@@ -105,18 +105,9 @@ export async function saveBabyInfoForBackgroundTask(babyInfo: any) {
 
 export async function isTaskRegistered() {
   try {
-    const isRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_FETCH_TASK);
-    return isRegistered;
-    
-    return {
-      status: statusText,
-      isRegistered,
-    };
+    return await TaskManager.isTaskRegisteredAsync(BACKGROUND_FETCH_TASK);
   } catch (error) {
     console.error("Fehler beim Abrufen des BackgroundFetchStatus:", error);
-    return {
-      status: 'ERROR_FETCHING_STATUS',
-      isRegistered: await TaskManager.isTaskRegisteredAsync(BACKGROUND_FETCH_TASK).catch(() => false),
-    };
+    return false;
   }
 }

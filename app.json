@@ -2,36 +2,31 @@
   "expo": {
     "name": "Lotti Baby",
     "slug": "LottiBaby",
-    "version": "1.0.1",
+    "version": "1.0.15",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "com.lottibaby.app",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
+      "appleTeamId": "FWCPXYUKA2",
+      "buildNumber": "5",
+      "version": "1.0.15",
       "bundleIdentifier": "com.LottiBaby.app",
       "infoPlist": {
-        "NSCalendarsUsageDescription": "Diese App benötigt Zugriff auf deinen Kalender, um Termine zu synchronisieren.",
-        "NSRemindersUsageDescription": "Diese App benötigt Zugriff auf deine Erinnerungen, um Termine zu synchronisieren.",
-        "NSLocationWhenInUseUsageDescription": "Benötigt, um dir wetterbasierte Kleidungsempfehlungen für dein Baby anzuzeigen.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "Benötigt, um dich bei Wetteränderungen auch im Hintergrund zu informieren.",
-        "UIBackgroundModes": [
-          "processing",
-          "fetch",
-          "remote-notification"
-        ],
+        "NSMicrophoneUsageDescription": "Lotti Baby benötigt Zugriff auf dein Mikrofon, damit du Sprachnachrichten in Chats aufnehmen kannst.",
+        "NSCalendarsUsageDescription": "Lotti Baby benötigt Zugriff auf deinen Kalender, damit du Planer- und Arzttermine als Kalendereinträge anlegen, aktualisieren und mit Erinnerungen synchronisieren kannst.",
+        "NSCalendarsFullAccessUsageDescription": "Lotti Baby benötigt Zugriff auf deinen Kalender, damit du Planer- und Arzttermine als Kalendereinträge anlegen, aktualisieren und mit Erinnerungen synchronisieren kannst.",
+        "NSRemindersUsageDescription": "Lotti Baby benötigt Zugriff auf deine Erinnerungen, damit kalenderbezogene Termin-Funktionen auf iOS zuverlässig initialisiert werden und du künftige Erinnerungsfunktionen für Termine nutzen kannst.",
+        "NSRemindersFullAccessUsageDescription": "Lotti Baby benötigt Zugriff auf deine Erinnerungen, damit kalenderbezogene Termin-Funktionen auf iOS zuverlässig initialisiert werden und du künftige Erinnerungsfunktionen für Termine nutzen kannst.",
         "NSSupportsLiveActivities": true,
         "NSSupportsLiveActivitiesFrequentUpdates": true,
-        "BGTaskSchedulerPermittedIdentifiers": [
-          "com.LottiBaby.app.backgroundfetch"
-        ],
         "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "foregroundImage": "./assets/images/icon.png",
         "backgroundColor": "#ffffff"
       },
       "permissions": [
@@ -44,17 +39,47 @@
         "android.permission.RECEIVE_BOOT_COMPLETED",
         "android.permission.WAKE_LOCK"
       ],
-      "package": "com.LottiBaby.app"
+      "package": "com.LottiBaby.app",
+      "versionCode": 4
     },
     "web": {
       "bundler": "metro",
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/icon.png"
     },
           "plugins": [
-      "expo-router",
-      "expo-apple-authentication",
+    "@bacons/apple-targets",
+    "expo-router",
+    "expo-apple-authentication",
+    [
+      "expo-audio",
+      {
+        "microphonePermission": "Lotti Baby benötigt Zugriff auf dein Mikrofon, damit du Sprachnachrichten in Chats aufnehmen kannst."
+      }
+    ],
+    [
       "expo-calendar",
+        {
+          "calendarPermission": "Lotti Baby benötigt Zugriff auf deinen Kalender, damit du Planer- und Arzttermine als Kalendereinträge anlegen, aktualisieren und mit Erinnerungen synchronisieren kannst.",
+          "remindersPermission": "Lotti Baby benötigt Zugriff auf deine Erinnerungen, damit kalenderbezogene Termin-Funktionen auf iOS zuverlässig initialisiert werden und du künftige Erinnerungsfunktionen für Termine nutzen kannst."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Lotti Baby benötigt Zugriff auf deine Fotomediathek, damit du Bilder für Profile, Meilensteine, Rezepte, Empfehlungen und Beiträge auswählen kannst.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Lotti Baby verwendet deinen Standort nur während der Nutzung, um lokale Wetterdaten abzurufen und passende Kleidungsempfehlungen für dein Baby anzuzeigen.",
+          "locationAlwaysPermission": false,
+          "locationAlwaysAndWhenInUsePermission": false
+        }
+      ],
       [
         "expo-splash-screen",
         {
@@ -65,6 +90,12 @@
         }
       ],
       "expo-font",
+      [
+        "expo-sensors",
+        {
+          "motionPermission": false
+        }
+      ],
       "expo-web-browser",
 
       "expo-task-manager",
@@ -97,7 +128,7 @@
       }
     },
     "owner": "janzeppi",
-    "runtimeVersion": "54.0.0",
+    "runtimeVersion": "55.0.0",
     "updates": {
       "url": "https://u.expo.dev/d7120520-e4ff-4967-a797-627a2cb3680b",
       "enabled": true,

@@ -1,0 +1,433 @@
+[
+  {
+    "id": 1,
+    "size": 22,
+    "files": [
+      "DesignGuide.md",
+      "app/(tabs)/_layout.tsx",
+      "app/(tabs)/baby.tsx",
+      "app/(tabs)/daily_old.tsx",
+      "app/(tabs)/feeding-stats.tsx",
+      "app/(tabs)/home.tsx",
+      "app/(tabs)/pregnancy-home.tsx",
+      "app/(tabs)/selfcare.tsx",
+      "app/(tabs)/sleep-tracker.tsx",
+      "app/app-settings.tsx",
+      "app/baby-stats.tsx",
+      "app/diary-entries.tsx",
+      "app/faq.tsx",
+      "app/mini-wiki.tsx",
+      "app/mini-wiki/[id].tsx",
+      "app/notifications.tsx",
+      "components/ActivityCard.tsx",
+      "components/ActivityInputModal.tsx",
+      "components/Header.tsx",
+      "constants/Colors.ts",
+      "contexts/BabyStatusContext.tsx",
+      "lib/sleep-window.ts"
+    ],
+    "maintainers": [
+      {
+        "person_id": "janzeppenfeld@icloud.com",
+        "name": "Jan Zeppenfeld",
+        "touches": 165,
+        "touch_share": 0.6346,
+        "recency_share": 0.7368,
+        "sensitive_share": 0.0,
+        "primary_tz_offset": "+01:00"
+      },
+      {
+        "person_id": "jan.niklas.zeppenfeld@gmail.com",
+        "name": "Jan Zeppenfeld",
+        "touches": 95,
+        "touch_share": 0.3654,
+        "recency_share": 0.2632,
+        "sensitive_share": 0.0,
+        "primary_tz_offset": "+02:00"
+      }
+    ],
+    "bus_factor": 2,
+    "owner_count": 2,
+    "totals": {
+      "touches": 260,
+      "recency_weight": 180.872006,
+      "sensitive_weight": 0
+    }
+  },
+  {
+    "id": 2,
+    "size": 21,
+    "files": [
+      "app/(tabs)/weight-tracker.tsx",
+      "app/community 2.tsx",
+      "app/community-profile 2.tsx",
+      "app/debug-notifications.tsx",
+      "app/lottis-empfehlungen.tsx",
+      "components/FeedingEventManager.tsx",
+      "contexts/ActiveBabyContext.tsx",
+      "docs/LOTTIS_EMPFEHLUNGEN.md",
+      "lib/baby.ts",
+      "lib/improvedSleepSync.ts",
+      "lib/notificationService.ts",
+      "lib/partnerNotificationService.ts",
+      "lib/realtimeSyncHelpers.ts",
+      "lib/redeemInvitationCodeFixed.ts",
+      "lib/sleepData.ts",
+      "lib/sleepSharing.ts",
+      "lib/supabase.ts",
+      "lib/supabase/recommendations.ts",
+      "lib/supabase/wiki.ts",
+      "scripts/check-storage-bucket.js",
+      "scripts/setup-lotti-empfehlungen.js"
+    ],
+    "maintainers": [
+      {
+        "person_id": "janzeppenfeld@icloud.com",
+        "name": "Jan Zeppenfeld",
+        "touches": 82,
+        "touch_share": 0.8119,
+        "recency_share": 0.885,
+        "sensitive_share": 0.0,
+        "primary_tz_offset": "+01:00"
+      },
+      {
+        "person_id": "jan.niklas.zeppenfeld@gmail.com",
+        "name": "Jan Zeppenfeld",
+        "touches": 19,
+        "touch_share": 0.1881,
+        "recency_share": 0.115,
+        "sensitive_share": 0.0,
+        "primary_tz_offset": "+02:00"
+      }
+    ],
+    "bus_factor": 2,
+    "owner_count": 2,
+    "totals": {
+      "touches": 101,
+      "recency_weight": 80.354134,
+      "sensitive_weight": 0
+    }
+  },
+  {
+    "id": 3,
+    "size": 15,
+    "files": [
+      "app/planner/index.tsx",
+      "components/modals/TextInputOverlay.tsx",
+      "components/planner/EveningReflectionCard.tsx",
+      "components/planner/GreetingCard.tsx",
+      "components/planner/PlannerCaptureModal.tsx",
+      "components/planner/StructuredTimeline.tsx",
+      "components/planner/SwipeableListItem.tsx",
+      "components/planner/TodayOverviewCard.tsx",
+      "constants/PlannerDesign.ts",
+      "create_planner_tables 2.sql",
+      "create_planner_tables.sql",
+      "lib/accountLinks.ts",
+      "lib/dataExport.ts",
+      "lib/weight.ts",
+      "services/planner.ts"
+    ],
+    "maintainers": [
+      {
+        "person_id": "janzeppenfeld@icloud.com",
+        "name": "Jan Zeppenfeld",
+        "touches": 77,
+        "touch_share": 0.9872,
+        "recency_share": 0.9925,
+        "sensitive_share": 0.0,
+        "primary_tz_offset": "+01:00"
+      },
+      {
+        "person_id": "jan.niklas.zeppenfeld@gmail.com",
+        "name": "Jan Zeppenfeld",
+        "touches": 1,
+        "touch_share": 0.0128,
+        "recency_share": 0.0075,
+        "sensitive_share": 0.0,
+        "primary_tz_offset": "+02:00"
+      }
+    ],
+    "bus_factor": 2,
+    "owner_count": 2,
+    "totals": {
+      "touches": 78,
+      "recency_weight": 62.548553,
+      "sensitive_weight": 0
+    }
+  },
+  {
+    "id": 4,
+    "size": 13,
+    "files": [
+      "android/app/build.gradle",
+      "android/sentry.properties",
+      "app.json",
+      "app/_layout.tsx",
+      "app/auth/callback.tsx",
+      "app/paywall.tsx",
+      "components/BabySwitcherButton.tsx",
+      "contexts/AuthContext.tsx",
+      "eas.json",
+      "lib/paywall.ts",
+      "metro.config.js",
+      "package.json",
+      "supabase/functions/send-partner-notification/index.ts"
+    ],
+    "maintainers": [
+      {
+        "person_id": "janzeppenfeld@icloud.com",
+        "name": "Jan Zeppenfeld",
+        "touches": 51,
+        "touch_share": 0.6623,
+        "recency_share": 0.7717,
+        "sensitive_share": 0.3333,
+        "primary_tz_offset": "+01:00"
+      },
+      {
+        "person_id": "jan.niklas.zeppenfeld@gmail.com",
+        "name": "Jan Zeppenfeld",
+        "touches": 26,
+        "touch_share": 0.3377,
+        "recency_share": 0.2283,
+        "sensitive_share": 0.6667,
+        "primary_tz_offset": "+02:00"
+      }
+    ],
+    "bus_factor": 2,
+    "owner_count": 2,
+    "totals": {
+      "touches": 77,
+      "recency_weight": 57.396356,
+      "sensitive_weight": 3.0
+    }
+  },
+  {
+    "id": 5,
+    "size": 9,
+    "files": [
+      "app/community-profile.tsx",
+      "app/community.tsx",
+      "app/profil.tsx",
+      "app/profile/[id] 2.tsx",
+      "app/profile/[id].tsx",
+      "lib/community.ts",
+      "lib/follows.ts",
+      "lib/profile.ts",
+      "supabase/migrations/20260605000000_add_avatar_url_to_profiles.sql"
+    ],
+    "maintainers": [
+      {
+        "person_id": "janzeppenfeld@icloud.com",
+        "name": "Jan Zeppenfeld",
+        "touches": 56,
+        "touch_share": 0.8889,
+        "recency_share": 0.9278,
+        "sensitive_share": 0.0,
+        "primary_tz_offset": "+01:00"
+      },
+      {
+        "person_id": "jan.niklas.zeppenfeld@gmail.com",
+        "name": "Jan Zeppenfeld",
+        "touches": 7,
+        "touch_share": 0.1111,
+        "recency_share": 0.0722,
+        "sensitive_share": 0.0,
+        "primary_tz_offset": "+02:00"
+      }
+    ],
+    "bus_factor": 2,
+    "owner_count": 2,
+    "totals": {
+      "touches": 63,
+      "recency_weight": 46.367097,
+      "sensitive_weight": 0
+    }
+  },
+  {
+    "id": 6,
+    "size": 8,
+    "files": [
+      "app/(tabs)/babyweather.tsx",
+      "app/(tabs)/explore.tsx",
+      "app/(tabs)/more.tsx",
+      "app/baby-size.tsx",
+      "assets/images/Babytrage.png",
+      "assets/images/Fuesslinge.png",
+      "assets/images/Halstuch.png",
+      "components/AddChecklistItem.tsx"
+    ],
+    "maintainers": [
+      {
+        "person_id": "janzeppenfeld@icloud.com",
+        "name": "Jan Zeppenfeld",
+        "touches": 37,
+        "touch_share": 0.8222,
+        "recency_share": 0.8891,
+        "sensitive_share": 0.0,
+        "primary_tz_offset": "+01:00"
+      },
+      {
+        "person_id": "jan.niklas.zeppenfeld@gmail.com",
+        "name": "Jan Zeppenfeld",
+        "touches": 8,
+        "touch_share": 0.1778,
+        "recency_share": 0.1109,
+        "sensitive_share": 0.0,
+        "primary_tz_offset": "+02:00"
+      }
+    ],
+    "bus_factor": 2,
+    "owner_count": 2,
+    "totals": {
+      "touches": 45,
+      "recency_weight": 34.929944,
+      "sensitive_weight": 0
+    }
+  },
+  {
+    "id": 7,
+    "size": 7,
+    "files": [
+      "app/(tabs)/geburtsplan.tsx",
+      "app/(tabs)/index.tsx",
+      "app/baby-names.tsx",
+      "app/doctor-questions.tsx",
+      "app/pregnancy-stats.tsx",
+      "components/VerticalContractionTimeline.tsx",
+      "lib/geburtsplan-utils.ts"
+    ],
+    "maintainers": [
+      {
+        "person_id": "janzeppenfeld@icloud.com",
+        "name": "Jan Zeppenfeld",
+        "touches": 27,
+        "touch_share": 0.7297,
+        "recency_share": 0.8132,
+        "sensitive_share": 0.0,
+        "primary_tz_offset": "+01:00"
+      },
+      {
+        "person_id": "jan.niklas.zeppenfeld@gmail.com",
+        "name": "Jan Zeppenfeld",
+        "touches": 10,
+        "touch_share": 0.2703,
+        "recency_share": 0.1868,
+        "sensitive_share": 0.0,
+        "primary_tz_offset": "+02:00"
+      }
+    ],
+    "bus_factor": 2,
+    "owner_count": 2,
+    "totals": {
+      "touches": 37,
+      "recency_weight": 26.161346,
+      "sensitive_weight": 0
+    }
+  },
+  {
+    "id": 8,
+    "size": 7,
+    "files": [
+      "app/recipe-admin.tsx",
+      "app/recipe-generator.tsx",
+      "constants/DesignGuide.tsx",
+      "lib/recipes-samples.ts",
+      "lib/recipes.ts",
+      "scripts/setup_recipes_table.sql",
+      "supabase/migrations/20261227000000_add_admin_recipes_policy.sql"
+    ],
+    "maintainers": [
+      {
+        "person_id": "janzeppenfeld@icloud.com",
+        "name": "Jan Zeppenfeld",
+        "touches": 44,
+        "touch_share": 1.0,
+        "recency_share": 1.0,
+        "sensitive_share": 0.0,
+        "primary_tz_offset": "+01:00"
+      }
+    ],
+    "bus_factor": 1,
+    "owner_count": 1,
+    "totals": {
+      "touches": 44,
+      "recency_weight": 34.807388,
+      "sensitive_weight": 0
+    }
+  },
+  {
+    "id": 9,
+    "size": 5,
+    "files": [
+      "ios/LottiBaby/Images.xcassets/AppIcon.appiconset/App-Icon-1024x1024@1x.png",
+      "ios/LottiBaby/Images.xcassets/SplashScreenLogo.imageset/image.png",
+      "ios/LottiBaby/Images.xcassets/SplashScreenLogo.imageset/image@2x.png",
+      "ios/LottiBaby/Images.xcassets/SplashScreenLogo.imageset/image@3x.png",
+      "ios/LottiBaby/Info.plist"
+    ],
+    "maintainers": [
+      {
+        "person_id": "janzeppenfeld@icloud.com",
+        "name": "Jan Zeppenfeld",
+        "touches": 8,
+        "touch_share": 0.6154,
+        "recency_share": 0.7043,
+        "sensitive_share": 0.0,
+        "primary_tz_offset": "+01:00"
+      },
+      {
+        "person_id": "jan.niklas.zeppenfeld@gmail.com",
+        "name": "Jan Zeppenfeld",
+        "touches": 5,
+        "touch_share": 0.3846,
+        "recency_share": 0.2957,
+        "sensitive_share": 0.0,
+        "primary_tz_offset": "+02:00"
+      }
+    ],
+    "bus_factor": 2,
+    "owner_count": 2,
+    "totals": {
+      "touches": 13,
+      "recency_weight": 10.109095,
+      "sensitive_weight": 0
+    }
+  },
+  {
+    "id": 10,
+    "size": 3,
+    "files": [
+      "app/(auth)/login.tsx",
+      "app/(auth)/verify-email.tsx",
+      "app/(auth)/verify-otp.tsx"
+    ],
+    "maintainers": [
+      {
+        "person_id": "janzeppenfeld@icloud.com",
+        "name": "Jan Zeppenfeld",
+        "touches": 7,
+        "touch_share": 0.6364,
+        "recency_share": 0.7506,
+        "sensitive_share": 0.0,
+        "primary_tz_offset": "+01:00"
+      },
+      {
+        "person_id": "jan.niklas.zeppenfeld@gmail.com",
+        "name": "Jan Zeppenfeld",
+        "touches": 4,
+        "touch_share": 0.3636,
+        "recency_share": 0.2494,
+        "sensitive_share": 0.0,
+        "primary_tz_offset": "+02:00"
+      }
+    ],
+    "bus_factor": 2,
+    "owner_count": 2,
+    "totals": {
+      "touches": 11,
+      "recency_weight": 8.193291,
+      "sensitive_weight": 0
+    }
+  }
+]
