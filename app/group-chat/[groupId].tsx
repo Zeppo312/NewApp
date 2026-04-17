@@ -189,6 +189,7 @@ export default function GroupChatScreen() {
   const [groupDetails, setGroupDetails] = useState<CommunityGroup | null>(null);
   const [canManage, setCanManage] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showMembersModal, setShowMembersModal] = useState(false);
   const [editingGroupName, setEditingGroupName] = useState('');
   const [editingGroupDescription, setEditingGroupDescription] = useState('');
   const [savingGroup, setSavingGroup] = useState(false);
@@ -1663,22 +1664,38 @@ export default function GroupChatScreen() {
             </View>
           }
           rightContent={
-            canEditGroup ? (
+            <View style={styles.headerRightGroup}>
               <TouchableOpacity
                 style={[
                   styles.headerActionButton,
                   { backgroundColor: isDark ? '#2A2321' : '#F3ECE7' },
                 ]}
-                onPress={handleOpenEditGroup}
+                onPress={() => setShowMembersModal(true)}
                 activeOpacity={0.75}
               >
                 <IconSymbol
-                  name="pencil"
+                  name="person.2.fill"
                   size={16}
                   color={isDark ? '#E9D8C2' : '#7D5A50'}
                 />
               </TouchableOpacity>
-            ) : null
+              {canEditGroup ? (
+                <TouchableOpacity
+                  style={[
+                    styles.headerActionButton,
+                    { backgroundColor: isDark ? '#2A2321' : '#F3ECE7' },
+                  ]}
+                  onPress={handleOpenEditGroup}
+                  activeOpacity={0.75}
+                >
+                  <IconSymbol
+                    name="pencil"
+                    size={16}
+                    color={isDark ? '#E9D8C2' : '#7D5A50'}
+                  />
+                </TouchableOpacity>
+              ) : null}
+            </View>
           }
         />
 
@@ -2521,6 +2538,150 @@ export default function GroupChatScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      <Modal
+        visible={showMembersModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowMembersModal(false)}
+      >
+        <View style={styles.modalFlex}>
+          <Pressable
+            style={styles.modalOverlay}
+            onPress={() => setShowMembersModal(false)}
+          >
+            <Pressable
+              style={[
+                styles.modalSheet,
+                {
+                  backgroundColor: isDark ? '#1E1916' : '#FFFAF5',
+                  borderColor: isDark ? '#3D3330' : '#E8DDD6',
+                },
+              ]}
+              onPress={(e) => e.stopPropagation()}
+            >
+              <ScrollView
+                style={styles.modalScroll}
+                contentContainerStyle={styles.modalScrollContent}
+                showsVerticalScrollIndicator={false}
+              >
+                <View style={styles.modalHandle}>
+                  <View
+                    style={[
+                      styles.handleBar,
+                      {
+                        backgroundColor: isDark
+                          ? 'rgba(255,255,255,0.2)'
+                          : 'rgba(125,90,80,0.15)',
+                      },
+                    ]}
+                  />
+                </View>
+
+                <View style={styles.modalHeader}>
+                  <TouchableOpacity
+                    onPress={() => setShowMembersModal(false)}
+                    activeOpacity={0.7}
+                  >
+                    <ThemedText style={[styles.modalCancel, { color: theme.textTertiary }]}>
+                      Schließen
+                    </ThemedText>
+                  </TouchableOpacity>
+                  <ThemedText style={[styles.modalTitle, { color: theme.text }]}>
+                    Mitglieder
+                  </ThemedText>
+                  <View style={styles.modalPlaceholder} />
+                </View>
+
+                <View
+                  style={[
+                    styles.memberSection,
+                    {
+                      backgroundColor: isDark ? '#2A2321' : '#F9F5F1',
+                      borderColor: isDark ? '#3D3330' : '#E8DDD6',
+                    },
+                  ]}
+                >
+                  <View style={styles.memberSectionHeader}>
+                    <ThemedText style={[styles.memberSectionTitle, { color: theme.text }]}>
+                      Mitglieder
+                    </ThemedText>
+                    <ThemedText style={[styles.memberSectionCount, { color: theme.textTertiary }]}>
+                      {activeMemberCount}
+                    </ThemedText>
+                  </View>
+
+                  {members.map((member, index) => {
+                    const isCurrentUser = member.user_id === user?.id;
+                    const accentColor = getSenderColor(member.user_id);
+
+                    return (
+                      <TouchableOpacity
+                        key={member.user_id}
+                        style={[
+                          styles.memberRow,
+                          index < members.length - 1 && {
+                            borderBottomWidth: 1,
+                            borderBottomColor: isDark ? '#3D3330' : '#E8DDD6',
+                          },
+                        ]}
+                        activeOpacity={isCurrentUser ? 1 : 0.7}
+                        disabled={isCurrentUser}
+                        onPress={() => {
+                          setShowMembersModal(false);
+                          router.push(`/profile/${member.user_id}` as any);
+                        }}
+                      >
+                        {member.avatar_url ? (
+                          <Image source={{ uri: member.avatar_url }} style={styles.memberAvatar} />
+                        ) : (
+                          <View
+                            style={[
+                              styles.memberAvatarPlaceholder,
+                              { backgroundColor: `${accentColor}30` },
+                            ]}
+                          >
+                            <ThemedText style={[styles.memberAvatarInitial, { color: accentColor }]}>
+                              {member.display_name.charAt(0).toUpperCase()}
+                            </ThemedText>
+                          </View>
+                        )}
+
+                        <View style={styles.memberBody}>
+                          <View style={styles.memberNameRow}>
+                            <ThemedText
+                              style={[styles.memberName, { color: theme.text }]}
+                              numberOfLines={1}
+                            >
+                              {member.display_name}
+                            </ThemedText>
+                            {isCurrentUser ? (
+                              <ThemedText style={[styles.memberYouBadge, { color: theme.textTertiary }]}>
+                                Du
+                              </ThemedText>
+                            ) : null}
+                          </View>
+                          <ThemedText style={[styles.memberRole, { color: theme.textTertiary }]}>
+                            {getMemberRoleLabel(member.role)}
+                          </ThemedText>
+                        </View>
+
+                        {!isCurrentUser ? (
+                          <IconSymbol
+                            name="chevron.right"
+                            size={14}
+                            color={theme.textTertiary}
+                          />
+                        ) : null}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </ScrollView>
+            </Pressable>
+          </Pressable>
+        </View>
+      </Modal>
     </ThemedBackground>
   );
 }
@@ -2817,6 +2978,11 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  headerRightGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
 
   // ---- Edit modal ----

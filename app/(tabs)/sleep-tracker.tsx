@@ -449,7 +449,26 @@ const isEntryAssignedToDate = (
   entry: ClassifiedSleepEntry,
   selectedDate: Date,
   nightWindowSettings: NightWindowSettings
-) => isSameDay(getAssignedDateForEntry(entry, nightWindowSettings), selectedDate);
+) => {
+  if (isSameDay(getAssignedDateForEntry(entry, nightWindowSettings), selectedDate)) {
+    return true;
+  }
+
+  // Nachtschlaf-Einträge, die über Mitternacht in einen anderen Kalendertag reichen,
+  // sollen auch am Aufwachtag sichtbar sein (z.B. Nachtschlaf Mo 20:00 → Di 06:00
+  // erscheint am Montag als letzter und am Dienstag als erster Eintrag).
+  if (entry.period === 'night') {
+    const entryStart = new Date(entry.start_time);
+    const entryEnd = entry.end_time ? new Date(entry.end_time) : new Date();
+    const dayStart = startOfDay(selectedDate);
+    const dayEnd = endOfDay(selectedDate);
+    if (overlapMinutes(entryStart, entryEnd, dayStart, dayEnd) > 0) {
+      return true;
+    }
+  }
+
+  return false;
+};
 
 const minutesToHMM = (mins: number) => {
   const h = Math.floor(mins / 60);

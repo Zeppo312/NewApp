@@ -2,7 +2,7 @@
   "expo": {
     "name": "Lotti Baby",
     "slug": "LottiBaby",
-    "version": "1.0.13",
+    "version": "1.0.15",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "com.lottibaby.app",
@@ -11,7 +11,7 @@
       "supportsTablet": true,
       "appleTeamId": "FWCPXYUKA2",
       "buildNumber": "5",
-      "version": "1.0.13",
+      "version": "1.0.15",
       "bundleIdentifier": "com.LottiBaby.app",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "Lotti Baby benötigt Zugriff auf dein Mikrofon, damit du Sprachnachrichten in Chats aufnehmen kannst.",
