@@ -14,6 +14,7 @@ import { Redirect, useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 
 import Header from '@/components/Header';
+import { SubscriptionCancellationFeedbackModal } from '@/components/SubscriptionCancellationFeedbackModal';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
@@ -39,7 +40,14 @@ import {
   restoreRevenueCatPurchases,
   type RevenueCatPlanType,
 } from '@/lib/revenuecat';
-import { openSubscriptionManagement } from '@/lib/subscriptionManagement';
+import {
+  saveSubscriptionCancellationFeedback,
+  type SubscriptionCancellationFeedbackReason,
+} from '@/lib/subscriptionCancellationFeedback';
+import {
+  getSubscriptionManagementStoreLabel,
+  openSubscriptionManagement,
+} from '@/lib/subscriptionManagement';
 
 type SubscriptionViewState = {
   isAdmin: boolean;
@@ -82,6 +90,8 @@ export default function SubscriptionScreen() {
   const [state, setState] = useState<SubscriptionViewState>(EMPTY_STATE);
   const [isLoading, setIsLoading] = useState(true);
   const [isRestoring, setIsRestoring] = useState(false);
+  const [isFeedbackModalVisible, setIsFeedbackModalVisible] = useState(false);
+  const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
 
   const isDark =
     adaptiveColors.effectiveScheme === 'dark' ||
@@ -165,7 +175,45 @@ export default function SubscriptionScreen() {
   }
 
   const openStoreManagement = async () => {
+    setIsFeedbackModalVisible(true);
+  };
+
+  const continueToStoreManagement = async () => {
+    setIsFeedbackModalVisible(false);
     await openSubscriptionManagement();
+  };
+
+  const handleSubmitCancellationFeedback = async ({
+    reason,
+    details,
+  }: {
+    reason: SubscriptionCancellationFeedbackReason;
+    details: string;
+  }) => {
+    if (!user) {
+      await continueToStoreManagement();
+      return;
+    }
+
+    setIsSubmittingFeedback(true);
+    try {
+      await saveSubscriptionCancellationFeedback({
+        userId: user.id,
+        reason,
+        details,
+        source: 'subscription_screen',
+        store: getSubscriptionManagementStoreLabel(),
+        productId: state.productId,
+        planType: state.planType,
+        expiresAt: state.expiresDate,
+        willRenew: state.willRenew,
+      });
+    } catch (error) {
+      console.warn('Failed to save subscription cancellation feedback:', error);
+    } finally {
+      setIsSubmittingFeedback(false);
+      await continueToStoreManagement();
+    }
   };
 
   const handleRestore = async () => {
@@ -578,6 +626,13 @@ export default function SubscriptionScreen() {
           ) : null}
         </ScrollView>
       </SafeAreaView>
+      <SubscriptionCancellationFeedbackModal
+        visible={isFeedbackModalVisible}
+        isSubmitting={isSubmittingFeedback}
+        onClose={() => setIsFeedbackModalVisible(false)}
+        onSkip={() => void continueToStoreManagement()}
+        onSubmit={(feedback) => void handleSubmitCancellationFeedback(feedback)}
+      />
     </ThemedBackground>
   );
 }

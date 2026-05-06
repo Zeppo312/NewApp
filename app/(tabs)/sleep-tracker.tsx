@@ -25,6 +25,7 @@ import { ThemedBackground } from '@/components/ThemedBackground';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import TextInputOverlay from '@/components/modals/TextInputOverlay';
 
 import { SleepEntry, SleepQuality, loadConnectedUsers } from '@/lib/sleepData';
@@ -258,6 +259,109 @@ const MAX_BAR_H = 140; // Höhe der Balkenfläche (mehr Luft)
 // Types for sleep periods
 type SleepPeriod = 'day' | 'night';
 
+const ACTIVE_SLEEP_PERIOD_OVERRIDES_KEY = 'sleep_active_period_overrides_v1';
+
+type StoredActiveSleepPeriodOverride = {
+  period: SleepPeriod;
+  startTime?: string;
+  updatedAt?: string;
+};
+
+type ActiveSleepPeriodOverrideMap = Record<string, StoredActiveSleepPeriodOverride>;
+
+const isSleepPeriod = (value: unknown): value is SleepPeriod =>
+  value === 'day' || value === 'night';
+
+const loadActiveSleepPeriodOverrides = async (): Promise<ActiveSleepPeriodOverrideMap> => {
+  try {
+    const raw = await AsyncStorage.getItem(ACTIVE_SLEEP_PERIOD_OVERRIDES_KEY);
+    if (!raw) return {};
+
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return {};
+
+    return Object.entries(parsed as Record<string, unknown>).reduce<ActiveSleepPeriodOverrideMap>(
+      (acc, [entryId, value]) => {
+        if (!entryId || !value || typeof value !== 'object') return acc;
+        const candidate = value as Partial<StoredActiveSleepPeriodOverride>;
+        if (!isSleepPeriod(candidate.period)) return acc;
+        acc[entryId] = {
+          period: candidate.period,
+          startTime: typeof candidate.startTime === 'string' ? candidate.startTime : undefined,
+          updatedAt: typeof candidate.updatedAt === 'string' ? candidate.updatedAt : undefined,
+        };
+        return acc;
+      },
+      {}
+    );
+  } catch (error) {
+    console.error('Failed to load active sleep period overrides:', error);
+    return {};
+  }
+};
+
+const saveActiveSleepPeriodOverrides = async (overrides: ActiveSleepPeriodOverrideMap) => {
+  try {
+    await AsyncStorage.setItem(ACTIVE_SLEEP_PERIOD_OVERRIDES_KEY, JSON.stringify(overrides));
+  } catch (error) {
+    console.error('Failed to save active sleep period overrides:', error);
+  }
+};
+
+const rememberActiveSleepPeriodOverride = async (
+  entryId: string | undefined,
+  period: SleepPeriod,
+  startTime: string | Date
+) => {
+  if (!entryId) return;
+  const overrides = await loadActiveSleepPeriodOverrides();
+
+  if (period === 'night') {
+    overrides[entryId] = {
+      period,
+      startTime: new Date(startTime).toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+  } else {
+    delete overrides[entryId];
+  }
+
+  await saveActiveSleepPeriodOverrides(overrides);
+};
+
+const forgetActiveSleepPeriodOverride = async (entryId: string | undefined) => {
+  if (!entryId) return;
+  const overrides = await loadActiveSleepPeriodOverrides();
+  if (!overrides[entryId]) return;
+  delete overrides[entryId];
+  await saveActiveSleepPeriodOverrides(overrides);
+};
+
+const loadStoredActiveSleepPeriodOverride = async (
+  entry: Pick<SleepEntry, 'id' | 'start_time'>
+): Promise<SleepPeriod | undefined> => {
+  if (!entry.id) return undefined;
+
+  const overrides = await loadActiveSleepPeriodOverrides();
+  const stored = overrides[entry.id];
+  if (!stored) return undefined;
+
+  const entryStartMs = new Date(entry.start_time).getTime();
+  const storedStartMs = stored.startTime ? new Date(stored.startTime).getTime() : null;
+  if (
+    storedStartMs !== null &&
+    Number.isFinite(entryStartMs) &&
+    Number.isFinite(storedStartMs) &&
+    Math.abs(entryStartMs - storedStartMs) > 60 * 1000
+  ) {
+    delete overrides[entry.id];
+    await saveActiveSleepPeriodOverrides(overrides);
+    return undefined;
+  }
+
+  return stored.period;
+};
+
 // Sleep Entry with period classification
 export interface ClassifiedSleepEntry extends SleepEntry {
   period: SleepPeriod;
@@ -372,8 +476,9 @@ const buildNightGroupFromSegments = (segments: ClassifiedSleepEntry[]): NightGro
 };
 
 const getNightWindowKeyForEntry = (
-  entry: ClassifiedSleepEntry,
-  nightWindowSettings: NightWindowSettings
+  entry: Pick<SleepEntry, 'start_time' | 'end_time'>,
+  nightWindowSettings: NightWindowSettings,
+  allowActiveNightFallback = false
 ): string | null => {
   const start = new Date(entry.start_time);
   const end = entry.end_time ? new Date(entry.end_time) : new Date();
@@ -394,7 +499,19 @@ const getNightWindowKeyForEntry = (
     upcomingWindow.nightWindowEnd
   );
 
-  if (previousOverlap <= 0 && upcomingOverlap <= 0) return null;
+  if (previousOverlap <= 0 && upcomingOverlap <= 0) {
+    if (!allowActiveNightFallback || entry.end_time) return null;
+    const startMs = start.getTime();
+    const previousEndMs = previousWindow.nightWindowEnd.getTime();
+    const upcomingStartMs = upcomingWindow.nightWindowStart.getTime();
+    const selectedWindow =
+      startMs >= previousEndMs && startMs <= upcomingStartMs
+        ? upcomingWindow
+        : Math.abs(upcomingStartMs - startMs) < Math.abs(startMs - previousEndMs)
+          ? upcomingWindow
+          : previousWindow;
+    return `${selectedWindow.nightWindowStart.toISOString()}|${selectedWindow.nightWindowEnd.toISOString()}`;
+  }
 
   const selectedWindow = upcomingOverlap > previousOverlap ? upcomingWindow : previousWindow;
   return `${selectedWindow.nightWindowStart.toISOString()}|${selectedWindow.nightWindowEnd.toISOString()}`;
@@ -408,7 +525,7 @@ const getNightGroupsForDayEntries = (
 
   for (const entry of entries) {
     if (entry.period !== 'night') continue;
-    const key = getNightWindowKeyForEntry(entry, nightWindowSettings);
+    const key = getNightWindowKeyForEntry(entry, nightWindowSettings, true);
     if (!key) continue;
     const current = grouped.get(key) ?? [];
     current.push(entry);
@@ -432,7 +549,7 @@ const getAssignedDateForEntry = (
   nightWindowSettings: NightWindowSettings
 ) => {
   if (entry.period === 'night') {
-    const windowKey = getNightWindowKeyForEntry(entry, nightWindowSettings);
+    const windowKey = getNightWindowKeyForEntry(entry, nightWindowSettings, true);
     if (windowKey) {
       const [windowStartIso] = windowKey.split('|');
       const windowStart = new Date(windowStartIso);
@@ -1327,6 +1444,7 @@ export default function SleepTrackerScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeSleepEntry, setActiveSleepEntry] = useState<ClassifiedSleepEntry | null>(null);
+  const activeSleepEntryRef = useRef<ClassifiedSleepEntry | null>(null);
   const activeEntryPeriodOverridesRef = useRef<Record<string, SleepPeriod>>({});
   const [pausedNightState, setPausedNightState] = useState<PausedNightState | null>(null);
   const [showInputModal, setShowInputModal] = useState(false);
@@ -1585,6 +1703,10 @@ export default function SleepTrackerScreen() {
   }, [activeBabyId, activeBackend, convexClient]);
 
   useEffect(() => {
+    activeSleepEntryRef.current = activeSleepEntry;
+  }, [activeSleepEntry]);
+
+  useEffect(() => {
     if (activeSleepEntry) {
       setPausedNightState(null);
     }
@@ -1832,9 +1954,16 @@ export default function SleepTrackerScreen() {
 
   // Classify sleep entry by time period
   const classifySleepEntry = useCallback((entry: any, forcedPeriod?: SleepPeriod): ClassifiedSleepEntry => {
-    const period = forcedPeriod ?? getSleepPeriodForStart(new Date(entry.start_time), nightWindowSettings);
     const isActive = !entry.end_time;
-    
+    let period = forcedPeriod ?? getSleepPeriodForStart(new Date(entry.start_time), nightWindowSettings);
+
+    if (!forcedPeriod && isActive && period === 'day') {
+      const activeNightWindowKey = getNightWindowKeyForEntry(entry, nightWindowSettings);
+      if (activeNightWindowKey) {
+        period = 'night';
+      }
+    }
+
     return {
       ...entry,
       period,
@@ -1925,7 +2054,13 @@ export default function SleepTrackerScreen() {
           activeEntryPeriodOverridesRef.current = {};
           return null;
         }
-        const periodOverride = active.id ? activeEntryPeriodOverridesRef.current[active.id] : undefined;
+        let periodOverride = active.id ? activeEntryPeriodOverridesRef.current[active.id] : undefined;
+        if (!periodOverride) {
+          periodOverride = await loadStoredActiveSleepPeriodOverride(active);
+          if (active.id && periodOverride) {
+            activeEntryPeriodOverridesRef.current[active.id] = periodOverride;
+          }
+        }
         return classifySleepEntry(active, periodOverride);
       }
     } catch (error) {
@@ -1963,17 +2098,38 @@ export default function SleepTrackerScreen() {
 
       // LIVE: Always fresh, no cache
       const activeSleep = await loadLiveStatus();
+      const knownActiveSleep =
+        activeSleep ??
+        (
+          activeSleepEntryRef.current &&
+          !activeSleepEntryRef.current.end_time &&
+          !isStaleActiveSleepEntry(activeSleepEntryRef.current)
+            ? activeSleepEntryRef.current
+            : null
+        );
+
       // Nur auf null setzen wenn die DB explizit keinen aktiven Eintrag zurückgibt.
       // Wenn activeSleep null ist und wir bereits einen gesetzten Eintrag haben, behalten wir
       // ihn — sonst tritt eine Race Condition auf: handleStartSleep setzt activeSleepEntry
       // sofort, aber loadLiveStatus findet den Eintrag noch nicht in der DB, was den Timer
       // auf elapsedTime=0 zurücksetzt und den Interval zerstört.
       setActiveSleepEntry(prev => {
-        if (activeSleep !== null) return activeSleep;
+        if (activeSleep !== null) {
+          activeSleepEntryRef.current = activeSleep;
+          return activeSleep;
+        }
         // null von DB: nur zurücksetzen wenn kein laufender Eintrag bekannt ist,
         // oder wenn der bekannte Eintrag bereits eine end_time hat (also gestoppt wurde).
-        if (prev === null || prev.end_time) return null;
+        if (knownActiveSleep !== null) {
+          activeSleepEntryRef.current = knownActiveSleep;
+          return knownActiveSleep;
+        }
+        if (prev === null || prev.end_time) {
+          activeSleepEntryRef.current = null;
+          return null;
+        }
         // Andernfalls: aktuellen Wert behalten (DB noch nicht synced)
+        activeSleepEntryRef.current = prev;
         return prev;
       });
 
@@ -1984,8 +2140,13 @@ export default function SleepTrackerScreen() {
       const safeFinishedEntries = finishedEntries || [];
 
       // Combine active + finished entries
-      const allEntries = activeSleep
-        ? [activeSleep, ...safeFinishedEntries.map((entry) => classifySleepEntry(entry))]
+      const allEntries = knownActiveSleep
+        ? [
+            knownActiveSleep,
+            ...safeFinishedEntries
+              .filter((entry) => entry.id !== knownActiveSleep.id)
+              .map((entry) => classifySleepEntry(entry)),
+          ]
         : safeFinishedEntries.map((entry) => classifySleepEntry(entry));
 
       setSleepEntries(allEntries);
@@ -1994,8 +2155,19 @@ export default function SleepTrackerScreen() {
       if (isStale) {
         refresh().then(freshEntries => {
           const safeFreshEntries = freshEntries || [];
-          const combinedFresh = activeSleep
-            ? [activeSleep, ...safeFreshEntries.map((entry) => classifySleepEntry(entry))]
+          const freshActiveSleep =
+            activeSleepEntryRef.current &&
+            !activeSleepEntryRef.current.end_time &&
+            !isStaleActiveSleepEntry(activeSleepEntryRef.current)
+              ? activeSleepEntryRef.current
+              : null;
+          const combinedFresh = freshActiveSleep
+            ? [
+                freshActiveSleep,
+                ...safeFreshEntries
+                  .filter((entry) => entry.id !== freshActiveSleep.id)
+                  .map((entry) => classifySleepEntry(entry)),
+              ]
             : safeFreshEntries.map((entry) => classifySleepEntry(entry));
           setSleepEntries(combinedFresh);
         });
@@ -2129,9 +2301,19 @@ export default function SleepTrackerScreen() {
 
       // Use primary result to set active sleep entry
       const entry = result.primary.data!;
-      activeEntryPeriodOverridesRef.current[entry.id] = period;
-      const classifiedEntry = classifySleepEntry(entry, period);
+      if (period === 'night') {
+        activeEntryPeriodOverridesRef.current[entry.id] = period;
+      } else {
+        delete activeEntryPeriodOverridesRef.current[entry.id];
+      }
+      await rememberActiveSleepPeriodOverride(entry.id, period, entry.start_time);
+      const classifiedEntry = classifySleepEntry(entry, period === 'night' ? period : undefined);
+      activeSleepEntryRef.current = classifiedEntry;
       setActiveSleepEntry(classifiedEntry);
+      setSleepEntries((prevEntries) => [
+        classifiedEntry,
+        ...prevEntries.filter((existingEntry) => existingEntry.id !== classifiedEntry.id),
+      ]);
 
       if (predictionRef.current) {
         try {
@@ -2204,6 +2386,8 @@ export default function SleepTrackerScreen() {
         }
 
         delete activeEntryPeriodOverridesRef.current[activeSleepEntry.id];
+        await forgetActiveSleepPeriodOverride(activeSleepEntry.id);
+        activeSleepEntryRef.current = null;
         setActiveSleepEntry(null);
         setPausedNightState(null);
 
@@ -2249,6 +2433,8 @@ export default function SleepTrackerScreen() {
       }
 
       delete activeEntryPeriodOverridesRef.current[activeSleepEntry.id];
+      await forgetActiveSleepPeriodOverride(activeSleepEntry.id);
+      activeSleepEntryRef.current = null;
       setActiveSleepEntry(null);
       setPausedNightState(null);
 
@@ -2317,6 +2503,8 @@ export default function SleepTrackerScreen() {
         pausedAt: pausedAt.toISOString(),
       });
       delete activeEntryPeriodOverridesRef.current[activeSleepEntry.id];
+      await forgetActiveSleepPeriodOverride(activeSleepEntry.id);
+      activeSleepEntryRef.current = null;
       setActiveSleepEntry(null);
 
       showSuccessSplash('#F2C78A', '⏸️', 'sleep_pause_night');
@@ -2484,7 +2672,10 @@ export default function SleepTrackerScreen() {
     if (activeSleepEntry || isStartingSleep) return;
 
     const now = new Date();
-    void handleStartSleep(getSleepPeriodForStart(now, nightWindowSettings));
+    const period = isNightSleepPrediction(sleepPrediction)
+      ? 'night'
+      : getSleepPeriodForStart(now, nightWindowSettings);
+    void handleStartSleep(period);
   }, [
     activeSleepEntry,
     autoStartRequestId,
@@ -2492,6 +2683,7 @@ export default function SleepTrackerScreen() {
     isLiveStatusLoaded,
     isStartingSleep,
     nightWindowSettings,
+    sleepPrediction,
   ]);
 
   // Handle save entry (compatible with SleepInputModal)
@@ -2867,6 +3059,16 @@ export default function SleepTrackerScreen() {
       }
 
       if (targetWasActive) {
+        const nextActiveEntry = createResult.primary.data;
+        if (resolvedTarget.period === 'night' && nextActiveEntry?.id) {
+          activeEntryPeriodOverridesRef.current[nextActiveEntry.id] = 'night';
+          await rememberActiveSleepPeriodOverride(nextActiveEntry.id, 'night', nextActiveEntry.start_time);
+        }
+        if (resolvedTarget.id) {
+          delete activeEntryPeriodOverridesRef.current[resolvedTarget.id];
+          await forgetActiveSleepPeriodOverride(resolvedTarget.id);
+        }
+
         try {
           await sleepActivityService.startSleepActivity(resumedStart, babyName);
         } catch (liveActivityError) {
@@ -2997,6 +3199,20 @@ export default function SleepTrackerScreen() {
       }
 
       if (!mergedEnd) {
+        const nextPeriod = resolvedEntryA.period === 'night' || resolvedEntryB.period === 'night'
+          ? 'night'
+          : getSleepPeriodForStart(mergedStart, nightWindowSettings);
+        if (nextPeriod === 'night') {
+          activeEntryPeriodOverridesRef.current[resolvedEntryA.id] = nextPeriod;
+        } else {
+          delete activeEntryPeriodOverridesRef.current[resolvedEntryA.id];
+        }
+        await rememberActiveSleepPeriodOverride(resolvedEntryA.id, nextPeriod, mergedStart);
+        if (resolvedEntryB.id) {
+          delete activeEntryPeriodOverridesRef.current[resolvedEntryB.id];
+          await forgetActiveSleepPeriodOverride(resolvedEntryB.id);
+        }
+
         try {
           await sleepActivityService.startSleepActivity(mergedStart, babyName);
         } catch (liveActivityError) {
@@ -3052,6 +3268,14 @@ export default function SleepTrackerScreen() {
         return;
       }
 
+      if (!entry.end_time && field === 'end_time') {
+        delete activeEntryPeriodOverridesRef.current[entry.id];
+        await forgetActiveSleepPeriodOverride(entry.id);
+      } else if (!entry.end_time && field === 'start_time' && entry.period === 'night') {
+        activeEntryPeriodOverridesRef.current[entry.id] = 'night';
+        await rememberActiveSleepPeriodOverride(entry.id, 'night', newTime);
+      }
+
       showSuccessSplash('#4A90E2', '⏱️', 'sleep_adjust_save');
 
       await invalidateCacheAfterAction(`sleep_history_${activeBackend}_${activeBabyId || 'default'}`);
@@ -3086,6 +3310,11 @@ export default function SleepTrackerScreen() {
       if (failedSecondary.length > 0) {
         console.warn('[SleepTracker] Secondary backend delete failed for night group:', failedSecondary.map((item) => item.secondary.error));
       }
+
+      await Promise.all(ids.map((entryId) => forgetActiveSleepPeriodOverride(entryId)));
+      ids.forEach((entryId) => {
+        delete activeEntryPeriodOverridesRef.current[entryId];
+      });
 
       await invalidateCacheAfterAction(`sleep_history_${activeBackend}_${activeBabyId || 'default'}`);
       await loadSleepData();
@@ -3133,6 +3362,9 @@ export default function SleepTrackerScreen() {
               if (result.secondary.error) {
                 console.warn('[SleepTracker] Secondary backend delete failed:', result.secondary.error);
               }
+
+              delete activeEntryPeriodOverridesRef.current[entryId];
+              await forgetActiveSleepPeriodOverride(entryId);
 
               // Invalidate cache because entry was deleted
               // WICHTIG: Korrekter Cache-Key wie in loadSleepHistory!
@@ -3353,14 +3585,14 @@ export default function SleepTrackerScreen() {
       const referenceEntry = baseGroup.entries[0];
       if (!referenceEntry) continue;
 
-      const windowKey = getNightWindowKeyForEntry(referenceEntry, nightWindowSettings);
+      const windowKey = getNightWindowKeyForEntry(referenceEntry, nightWindowSettings, true);
       if (!windowKey) continue;
       if (expandedGroups.has(windowKey)) continue;
 
       const fullWindowSegments = sleepEntries
         .filter((entry) =>
           entry.period === 'night' &&
-          getNightWindowKeyForEntry(entry, nightWindowSettings) === windowKey
+          getNightWindowKeyForEntry(entry, nightWindowSettings, true) === windowKey
         )
         .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
 
@@ -3771,7 +4003,10 @@ export default function SleepTrackerScreen() {
                 if (isActionBlocked) return;
                 triggerHaptic();
                 const now = new Date();
-                void handleStartSleep(getSleepPeriodForStart(now, nightWindowSettings));
+                const period = isNightSleepPrediction(sleepPrediction)
+                  ? 'night'
+                  : getSleepPeriodForStart(now, nightWindowSettings);
+                void handleStartSleep(period);
               }}
               activeOpacity={0.9}
             >
