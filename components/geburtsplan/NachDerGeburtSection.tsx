@@ -11,11 +11,13 @@ interface NachDerGeburtSectionProps {
   data: NachDerGeburt;
   onChange: (data: NachDerGeburt) => void;
   containerStyle?: StyleProp<ViewStyle>;
+  readOnly?: boolean;
 }
 
-export const NachDerGeburtSection: React.FC<NachDerGeburtSectionProps> = ({ data, onChange, containerStyle }) => {
+export const NachDerGeburtSection: React.FC<NachDerGeburtSectionProps> = ({ data, onChange, containerStyle, readOnly = false }) => {
   // Bonding
   const toggleBonding = () => {
+    if (readOnly) return;
     onChange({
       ...data,
       bonding: !data.bonding,
@@ -24,6 +26,7 @@ export const NachDerGeburtSection: React.FC<NachDerGeburtSectionProps> = ({ data
 
   // Stillen
   const toggleStillen = () => {
+    if (readOnly) return;
     onChange({
       ...data,
       stillen: !data.stillen,
@@ -38,6 +41,7 @@ export const NachDerGeburtSection: React.FC<NachDerGeburtSectionProps> = ({ data
   ];
   
   const selectPlazenta = (option: string) => {
+    if (readOnly) return;
     onChange({
       ...data,
       plazenta: option,
@@ -48,6 +52,7 @@ export const NachDerGeburtSection: React.FC<NachDerGeburtSectionProps> = ({ data
   const vitaminKOptions = ['Ja', 'Nein', 'Besprechen'];
   
   const selectVitaminK = (option: string) => {
+    if (readOnly) return;
     onChange({
       ...data,
       vitaminKGabe: option,
@@ -61,6 +66,7 @@ export const NachDerGeburtSection: React.FC<NachDerGeburtSectionProps> = ({ data
           label="Haut-zu-Haut-Kontakt direkt nach Geburt"
           checked={data.bonding}
           onToggle={toggleBonding}
+          disabled={readOnly}
         />
       </OptionGroup>
 
@@ -69,6 +75,7 @@ export const NachDerGeburtSection: React.FC<NachDerGeburtSectionProps> = ({ data
           label="Sofortiges Stillen, Unterstützung erwünscht"
           checked={data.stillen}
           onToggle={toggleStillen}
+          disabled={readOnly}
         />
       </OptionGroup>
 
@@ -79,6 +86,7 @@ export const NachDerGeburtSection: React.FC<NachDerGeburtSectionProps> = ({ data
             label={option}
             selected={data.plazenta === option}
             onSelect={() => selectPlazenta(option)}
+            disabled={readOnly}
           />
         ))}
       </OptionGroup>
@@ -90,6 +98,7 @@ export const NachDerGeburtSection: React.FC<NachDerGeburtSectionProps> = ({ data
             label={option}
             selected={data.vitaminKGabe === option}
             onSelect={() => selectVitaminK(option)}
+            disabled={readOnly}
           />
         ))}
       </OptionGroup>
@@ -97,10 +106,14 @@ export const NachDerGeburtSection: React.FC<NachDerGeburtSectionProps> = ({ data
       <TextInputField
         label="Sonstige Wünsche nach der Geburt"
         value={data.sonstigeWuensche}
-        onChangeText={(text) => onChange({ ...data, sonstigeWuensche: text })}
+        onChangeText={(text) => {
+          if (readOnly) return;
+          onChange({ ...data, sonstigeWuensche: text });
+        }}
         multiline
         numberOfLines={3}
         placeholder="Hier kannst du weitere Wünsche für die Zeit nach der Geburt eintragen..."
+        readOnly={readOnly}
       />
     </GeburtsplanSection>
   );

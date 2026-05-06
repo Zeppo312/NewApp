@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { getCachedUser } from './supabase';
 
 // Typdefinitionen
 export interface Tag {
@@ -71,7 +72,7 @@ export const getTagsForPost = async (postId: string) => {
 // Tags zu einem Post hinzufügen
 export const addTagsToPost = async (postId: string, tagIds: string[]) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     // Prüfen, ob der Post dem Benutzer gehört

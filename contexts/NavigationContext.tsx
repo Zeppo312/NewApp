@@ -44,13 +44,7 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
         }
       }
 
-      // Fallback to router.back()
-      if (router.canGoBack?.()) {
-        router.back();
-        return;
-      }
-
-      // Last resort: go to fallback route
+      // Last resort: go to fallback route without dispatching a blind GO_BACK.
       router.push(fallbackRoute as any);
     } catch (error) {
       console.warn('Navigation error, going to fallback:', error);
@@ -81,7 +75,7 @@ export function useNavigation() {
 
 // Helper hook for smart back navigation with context-aware fallbacks
 export function useSmartBack(contextualFallback?: string) {
-  const { goBack, setFallbackRoute, getCurrentRoute } = useNavigation();
+  const { goBack, setFallbackRoute } = useNavigation();
   
   React.useEffect(() => {
     if (contextualFallback) {

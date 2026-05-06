@@ -1,47 +1,272 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, Image, TextInput, Alert, SafeAreaView, StatusBar, Platform } from 'react-native';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { StyleSheet, ScrollView, View, TouchableOpacity, Image, TextInput, Alert, SafeAreaView, StatusBar, Platform, BackHandler, Switch } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { useAuth } from '@/contexts/AuthContext';
+import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { getBabyInfo, saveBabyInfo, BabyInfo } from '@/lib/baby';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import * as ImagePicker from 'expo-image-picker';
+import { saveBabyInfo, BabyInfo } from '@/lib/baby';
+import { useActiveBaby } from '@/contexts/ActiveBabyContext';
+import { loadBabyInfoWithCache, invalidateBabyCache } from '@/lib/babyCache';
 import { supabase } from '@/lib/supabase';
-import { useRouter, Stack } from 'expo-router';
-import { BackButton } from '@/components/BackButton';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import Header from '@/components/Header';
 import { useSmartBack } from '@/contexts/NavigationContext';
 import * as Notifications from 'expo-notifications';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { defineMilestoneCheckerTask, saveBabyInfoForBackgroundTask, isTaskRegistered } from '@/tasks/milestoneCheckerTask';
-import { LAYOUT_PAD, TIMELINE_INSET, LiquidGlassCard } from '@/constants/DesignGuide';
+import {
+  LAYOUT_PAD,
+  LiquidGlassCard,
+  TIMELINE_INSET,
+  GLASS_BORDER,
+  GLASS_BORDER_DARK,
+  GLASS_OVERLAY,
+  GLASS_OVERLAY_DARK,
+} from '@/constants/DesignGuide';
+import { useFocusEffect } from '@react-navigation/native';
+import * as ImagePicker from 'expo-image-picker';
+import * as Haptics from 'expo-haptics';
+import {
+  DEFAULT_BEDTIME_ANCHOR,
+  isValidBedtimeAnchor,
+  normalizeBedtimeAnchor,
+} from '@/lib/bedtime';
+import { getSafePickerDate, parseSafeDate } from '@/lib/safeDate';
+import IOSBottomDatePicker from '@/components/modals/IOSBottomDatePicker';
+import {
+  differenceInYears,
+  differenceInMonths,
+  differenceInDays,
+  addMonths,
+  addDays,
+} from 'date-fns';
+
+const initialStats = {
+  years: 0,
+  months: 0,
+  days: 0,
+  totalDays: 0,
+  totalWeeks: 0,
+  totalMonths: 0,
+  milestones: [] as { name: string; reached: boolean; date?: Date }[],
+};
+
+const HEADER_TEXT_COLOR = '#7D5A50';
+const MIN_VALID_BABY_DATE = new Date(2000, 0, 1);
+const MAX_VALID_DUE_DATE = new Date(2100, 11, 31, 23, 59, 59, 999);
+
+const formatBedtimeInputValue = (value: string): string => {
+  const digits = value.replace(/\D/g, '').slice(0, 4);
+  if (digits.length <= 2) return digits;
+  if (digits.length === 3) return `${digits.slice(0, 1)}:${digits.slice(1)}`;
+  return `${digits.slice(0, 2)}:${digits.slice(2)}`;
+};
+
+const parseManualBedtimeAnchor = (value: string): string | null => {
+  const trimmed = value.trim();
+  if (!trimmed) return DEFAULT_BEDTIME_ANCHOR;
+
+  const colonMatch = trimmed.match(/^(\d{1,2})\s*:\s*(\d{1,2})$/);
+  if (colonMatch) {
+    const candidate = `${colonMatch[1].padStart(2, '0')}:${colonMatch[2].padStart(2, '0')}`;
+    return isValidBedtimeAnchor(candidate) ? candidate : null;
+  }
+
+  const digits = trimmed.replace(/\D/g, '');
+  if (digits.length === 3) {
+    const candidate = `0${digits.slice(0, 1)}:${digits.slice(1)}`;
+    return isValidBedtimeAnchor(candidate) ? candidate : null;
+  }
+  if (digits.length === 4) {
+    const candidate = `${digits.slice(0, 2)}:${digits.slice(2)}`;
+    return isValidBedtimeAnchor(candidate) ? candidate : null;
+  }
+
+  return null;
+};
+
+const getCurrentBirthDateBounds = () => {
+  const now = new Date();
+  const maximumDate = now.getTime() < MIN_VALID_BABY_DATE.getTime()
+    ? new Date(MIN_VALID_BABY_DATE.getTime())
+    : now;
+
+  return {
+    minimumDate: MIN_VALID_BABY_DATE,
+    maximumDate,
+  };
+};
+
+const pastelPaletteLight = {
+  peach: 'rgba(255, 223, 209, 0.85)',
+  rose: 'rgba(255, 210, 224, 0.8)',
+  honey: 'rgba(255, 239, 214, 0.85)',
+  sage: 'rgba(214, 236, 220, 0.78)',
+  lavender: 'rgba(236, 224, 255, 0.78)',
+  sky: 'rgba(222, 238, 255, 0.85)',
+  blush: 'rgba(255, 218, 230, 0.8)',
+};
+
+const pastelPaletteDark = {
+  peach: 'rgba(255, 177, 138, 0.25)',
+  rose: 'rgba(255, 133, 170, 0.25)',
+  honey: 'rgba(255, 210, 137, 0.23)',
+  sage: 'rgba(150, 210, 178, 0.22)',
+  lavender: 'rgba(190, 156, 255, 0.24)',
+  sky: 'rgba(134, 186, 255, 0.24)',
+  blush: 'rgba(255, 160, 188, 0.24)',
+};
+
+const GlassLayer = ({
+  tint = 'rgba(255,255,255,0.22)',
+  sheenOpacity = 0.35,
+  isDark = false,
+}: {
+  tint?: string;
+  sheenOpacity?: number;
+  isDark?: boolean;
+}) => (
+  <>
+    <LinearGradient
+      colors={[tint, isDark ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.06)']}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={styles.statsGlassLayerGradient}
+    />
+    <View
+      style={[
+        styles.statsGlassSheen,
+        {
+          opacity: sheenOpacity,
+          backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.25)',
+        },
+      ]}
+    />
+  </>
+);
 
 export default function BabyScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
+  const adaptiveColors = useAdaptiveColors();
+  const isDark = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
+  const textPrimary = isDark ? Colors.dark.textPrimary : '#5C4033';
+  const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
+  const textTertiary = isDark ? Colors.dark.textTertiary : '#A8978E';
+  const glassOverlay = isDark ? GLASS_OVERLAY_DARK : GLASS_OVERLAY;
+  const glassBorderColor = isDark ? GLASS_BORDER_DARK : GLASS_BORDER;
+  const glassSurfaceStyle = {
+    borderColor: glassBorderColor,
+    backgroundColor: isDark ? 'rgba(0,0,0,0.35)' : 'rgba(255,255,255,0.15)',
+    shadowOpacity: isDark ? 0.18 : 0.06,
+  } as const;
+  const iconBubbleBackground = isDark ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.82)';
+  const pastelPalette = isDark ? pastelPaletteDark : pastelPaletteLight;
+  const milestoneReachedIconColor = isDark ? '#FFB08D' : '#E88368';
+  const milestoneUpcomingIconColor = isDark ? '#D8CCC2' : '#9E8F86';
+  const photoButtonBackground = isDark ? 'rgba(255,255,255,0.10)' : 'rgba(125, 90, 80, 0.15)';
+  const photoButtonBorder = isDark ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.35)';
+  const accentButtonBackground = isDark ? 'rgba(142, 78, 198, 0.26)' : 'rgba(142, 78, 198, 0.16)';
+  const accentButtonBorder = isDark ? 'rgba(196, 160, 233, 0.55)' : 'rgba(142, 78, 198, 0.35)';
+  const inputBackground = isDark ? 'rgba(18,18,22,0.76)' : 'rgba(255,255,255,0.85)';
+  const inputBorder = isDark ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.35)';
   const { user } = useAuth();
+  const { activeBabyId, refreshBabies, isReady, setActiveBabyId } = useActiveBaby();
+  const { refreshBabyDetails, isBabyBorn } = useBabyStatus();
   const router = useRouter();
-  
+  const params = useLocalSearchParams<{ babyId?: string | string[]; edit?: string | string[]; created?: string | string[] }>();
+  const fallbackHomeRoute = isBabyBorn ? '/(tabs)/home' : '/(tabs)/pregnancy-home';
+
   // Set fallback route for smart back navigation
-  useSmartBack('/(tabs)/home');
+  useSmartBack(fallbackHomeRoute);
 
   const [babyInfo, setBabyInfo] = useState<BabyInfo>({});
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [showDueDatePicker, setShowDueDatePicker] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [notificationsRequested, setNotificationsRequested] = useState(false);
-  const [backgroundTaskStatus, setBackgroundTaskStatus] = useState<{status: string, isRegistered: boolean} | null>(null);
+  const [dueDate, setDueDate] = useState<Date | null>(null);
+  const [isBabyBornForCurrentBaby, setIsBabyBornForCurrentBaby] = useState(false);
+  const [bedtimeInput, setBedtimeInput] = useState(DEFAULT_BEDTIME_ANCHOR);
+  const [bedtimeInputError, setBedtimeInputError] = useState<string | null>(null);
+  const birthDateBounds = getCurrentBirthDateBounds();
+  const birthDateForDisplay = parseSafeDate(babyInfo.birth_date, birthDateBounds);
+  const birthDatePickerValue = getSafePickerDate(
+    babyInfo.birth_date,
+    birthDateBounds.maximumDate,
+    birthDateBounds
+  );
+  const dueDateBounds = useMemo(
+    () => ({
+      minimumDate: MIN_VALID_BABY_DATE,
+      maximumDate: MAX_VALID_DUE_DATE,
+    }),
+    [],
+  );
+  const dueDateForDisplay = parseSafeDate(dueDate, dueDateBounds);
+  const dueDatePickerValue = getSafePickerDate(dueDate, new Date(), dueDateBounds);
+  const bedtimeAnchor = useMemo(
+    () => normalizeBedtimeAnchor(babyInfo.preferred_bedtime),
+    [babyInfo.preferred_bedtime]
+  );
+
+  const setPreferredBedtimeAnchor = useCallback((anchor: string) => {
+    setBabyInfo((prev) => ({
+      ...prev,
+      preferred_bedtime: anchor,
+    }));
+    setBedtimeInput(anchor);
+    setBedtimeInputError(null);
+  }, []);
+
+  const commitBedtimeInput = useCallback(
+    (rawValue: string, showAlert = false): string | null => {
+      const parsed = parseManualBedtimeAnchor(rawValue);
+      if (!parsed) {
+        const message = 'Bitte Uhrzeit im Format HH:mm eingeben (z.B. 19:30).';
+        setBedtimeInputError(message);
+        if (showAlert) {
+          Alert.alert('Ungültige Schlafenszeit', message);
+        }
+        return null;
+      }
+      setPreferredBedtimeAnchor(parsed);
+      return parsed;
+    },
+    [setPreferredBedtimeAnchor]
+  );
+
+  const editParamValue = Array.isArray(params.edit) ? params.edit[0] : params.edit;
+  const createdParamValue = Array.isArray(params.created) ? params.created[0] : params.created;
+  const routeBabyId = Array.isArray(params.babyId) ? params.babyId[0] : params.babyId;
+  const targetBabyId = routeBabyId ?? activeBabyId;
+  const autoOpenEdit = editParamValue === '1' || editParamValue === 'true';
+  const showCreatedHint = createdParamValue === '1' || createdParamValue === 'true';
+
+  useEffect(() => {
+    if (autoOpenEdit) {
+      setIsEditing(true);
+    }
+  }, [autoOpenEdit]);
+
+  useEffect(() => {
+    setBedtimeInput(bedtimeAnchor);
+    setBedtimeInputError(null);
+  }, [bedtimeAnchor, isEditing]);
+
+  useEffect(() => {
+    if (!routeBabyId || routeBabyId === activeBabyId) return;
+    void setActiveBabyId(routeBabyId);
+  }, [activeBabyId, routeBabyId, setActiveBabyId]);
 
   useEffect(() => {
     if (user) {
-      loadBabyInfo();
       registerForPushNotificationsAsync();
       setupBackgroundTask();
-    } else {
-      setIsLoading(false);
     }
   }, [user]);
   
@@ -60,7 +285,6 @@ export default function BabyScreen() {
         // Status prüfen und speichern (einfacher Check)
         const registered = await isTaskRegistered();
         const status: { status: string; isRegistered: boolean } = { status: registered ? 'REGISTERED' : 'NOT_REGISTERED', isRegistered: !!registered };
-        setBackgroundTaskStatus(status);
         console.log('Background Fetch Status:', status);
       } else {
         console.log('Keine Berechtigung für Benachrichtigungen, Hintergrund-Task nicht registriert.');
@@ -70,49 +294,252 @@ export default function BabyScreen() {
     }
   };
 
-  const loadBabyInfo = async () => {
+  const loadBabyInfo = useCallback(async () => {
+    if (!targetBabyId || !user?.id) {
+      return;
+    }
+
     try {
-      setIsLoading(true);
-      const { data, error } = await getBabyInfo();
-      if (error) {
-        console.error('Error loading baby info:', error);
-      } else if (data) {
-        setBabyInfo({
-          id: data.id,
-          name: data.name || '',
-          birth_date: data.birth_date || null,
-          weight: data.weight || '',
-          height: data.height || '',
-          photo_url: data.photo_url || null,
-          baby_gender: data.baby_gender || 'unknown'
-        });
-        
-        // Wir planen keine Benachrichtigungen im Voraus mehr, stattdessen prüfen wir täglich
+      const [
+        { data, isStale, refresh },
+        settingsResult,
+      ] = await Promise.all([
+        loadBabyInfoWithCache(targetBabyId),
+        supabase
+          .from('user_settings')
+          .select('due_date, is_baby_born')
+          .eq('user_id', user.id)
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ]);
+
+      if (settingsResult.error && settingsResult.error.code !== 'PGRST116') {
+        console.error('Failed to load baby settings:', settingsResult.error);
       }
+      const settingsData = settingsResult.data;
+
+      // Show cached data immediately
+      if (data) {
+        const safeBirthDate = parseSafeDate(data.birth_date, getCurrentBirthDateBounds());
+        setBabyInfo({
+          ...data,
+          birth_date: safeBirthDate ? safeBirthDate.toISOString() : null,
+          preferred_bedtime: data.preferred_bedtime
+            ? normalizeBedtimeAnchor(data.preferred_bedtime)
+            : null,
+        });
+        setIsBabyBornForCurrentBaby(Boolean(settingsData?.is_baby_born ?? safeBirthDate));
+        setDueDate(parseSafeDate(settingsData?.due_date, dueDateBounds));
+      }
+
+      // Refresh in background if stale
+      if (isStale) {
+        const freshData = await refresh();
+        const safeBirthDate = parseSafeDate(freshData.birth_date, getCurrentBirthDateBounds());
+        setBabyInfo({
+          ...freshData,
+          birth_date: safeBirthDate ? safeBirthDate.toISOString() : null,
+          preferred_bedtime: freshData.preferred_bedtime
+            ? normalizeBedtimeAnchor(freshData.preferred_bedtime)
+            : null,
+        });
+        setIsBabyBornForCurrentBaby(Boolean(settingsData?.is_baby_born ?? safeBirthDate));
+        setDueDate(parseSafeDate(settingsData?.due_date, dueDateBounds));
+      }
+
+      // If no cache, data is already fresh
     } catch (err) {
       console.error('Failed to load baby info:', err);
-    } finally {
-      setIsLoading(false);
+    }
+  }, [dueDateBounds, targetBabyId, user?.id]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!user || !isReady || !targetBabyId) return;
+  
+      loadBabyInfo();
+  
+      const handleHardwareBack = () => {
+        router.push(fallbackHomeRoute as any);
+        return true;
+      };
+  
+      const subscription = BackHandler.addEventListener(
+        'hardwareBackPress',
+        handleHardwareBack
+      );
+  
+      return () => subscription.remove();
+    }, [user, isReady, targetBabyId, router, loadBabyInfo, fallbackHomeRoute])
+  );
+
+  const displayPhoto = babyInfo.photo_url || null;
+
+  const triggerHaptic = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
+  };
+
+  const getAvgHeartRate = (ageMonths: number) =>
+    ageMonths < 1 ? 140 : ageMonths < 6 ? 130 : 120;
+
+  const getAvgBreathRate = (ageMonths: number) =>
+    ageMonths < 1 ? 40 : ageMonths < 6 ? 35 : 30;
+
+  const getAvgDiapers = (ageMonths: number) =>
+    ageMonths < 1 ? 10 : ageMonths < 3 ? 8 : ageMonths < 12 ? 6 : 4;
+
+  const getAvgSleepHours = (ageMonths: number) =>
+    ageMonths < 1 ? 16 : ageMonths < 6 ? 14 : ageMonths < 12 ? 13 : 12;
+
+  const genderLabels = {
+    male: 'Männlich',
+    female: 'Weiblich',
+    unknown: 'Nicht angegeben',
+  };
+
+  const pickBabyPhoto = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Berechtigung erforderlich', 'Bitte erlaube den Zugriff auf deine Fotos.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.7,
+        base64: true,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        let base64Data: string | null = null;
+
+        if (asset.base64) {
+          base64Data = `data:image/jpeg;base64,${asset.base64}`;
+        } else if (asset.uri) {
+          try {
+            const response = await fetch(asset.uri);
+            const blob = await response.blob();
+            const reader = new FileReader();
+            base64Data = await new Promise((resolve, reject) => {
+              reader.onload = () => resolve(reader.result as string);
+              reader.onerror = reject;
+              reader.readAsDataURL(blob);
+            });
+          } catch (error) {
+            console.error('Fehler bei der Bildkonvertierung:', error);
+            Alert.alert('Fehler', 'Das Bild konnte nicht verarbeitet werden.');
+            return;
+          }
+        }
+
+        if (!base64Data) {
+          Alert.alert('Fehler', 'Das Bild konnte nicht verarbeitet werden.');
+          return;
+        }
+
+        setBabyInfo((current) => ({
+          ...current,
+          photo_url: base64Data,
+        }));
+      }
+    } catch (error) {
+      console.error('Error picking baby photo:', error);
+      Alert.alert('Fehler', 'Das Babyfoto konnte nicht ausgewählt werden.');
     }
   };
 
+  const removeBabyPhoto = () => {
+    setBabyInfo((current) => ({
+      ...current,
+      photo_url: null,
+    }));
+  };
+
   const handleSave = async () => {
+    if (!targetBabyId || !user?.id) return;
+
+    const normalizedBedtime = commitBedtimeInput(bedtimeInput, true);
+    if (!normalizedBedtime) return;
+
+    const birthDateForSave = isBabyBornForCurrentBaby
+      ? parseSafeDate(babyInfo.birth_date, birthDateBounds)
+      : null;
+    const dueDateForSave = !isBabyBornForCurrentBaby
+      ? parseSafeDate(dueDate, dueDateBounds)
+      : null;
+
+    if (isBabyBornForCurrentBaby && !birthDateForSave) {
+      Alert.alert('Fehlendes Geburtsdatum', 'Bitte trage das Geburtsdatum ein oder markiere, dass dein Baby noch nicht geboren ist.');
+      return;
+    }
+
     try {
-      const { error } = await saveBabyInfo(babyInfo);
+      const sanitizedBabyInfo: BabyInfo = {
+        ...babyInfo,
+        birth_date: birthDateForSave ? birthDateForSave.toISOString() : null,
+        preferred_bedtime: normalizedBedtime,
+      };
+
+      const { error } = await saveBabyInfo(sanitizedBabyInfo, targetBabyId);
       if (error) {
         console.error('Error saving baby info:', error);
         Alert.alert('Fehler', 'Die Informationen konnten nicht gespeichert werden.');
       } else {
+        const { data: existingSettings, error: existingSettingsError } = await supabase
+          .from('user_settings')
+          .select('id')
+          .eq('user_id', user.id)
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (existingSettingsError && existingSettingsError.code !== 'PGRST116') {
+          throw existingSettingsError;
+        }
+
+        const settingsPayload = {
+          due_date: dueDateForSave ? dueDateForSave.toISOString() : null,
+          is_baby_born: isBabyBornForCurrentBaby,
+          updated_at: new Date().toISOString(),
+        };
+
+        const settingsResult = existingSettings?.id
+          ? await supabase.from('user_settings').update(settingsPayload).eq('id', existingSettings.id)
+          : await supabase.from('user_settings').insert({
+              user_id: user.id,
+              theme: 'light',
+              notifications_enabled: true,
+              ...settingsPayload,
+            });
+
+        if (settingsResult.error) {
+          throw settingsResult.error;
+        }
+
         Alert.alert('Erfolg', 'Die Informationen wurden erfolgreich gespeichert.');
         setIsEditing(false);
-        
+        if (targetBabyId !== activeBabyId) {
+          await setActiveBabyId(targetBabyId);
+        }
+        await refreshBabyDetails();
+        await refreshBabies();
+
         // Speichere relevante Baby-Infos für den Hintergrund-Task
-        if (babyInfo.birth_date) {
-          await saveBabyInfoForBackgroundTask(babyInfo);
+        if (sanitizedBabyInfo.birth_date) {
+          await saveBabyInfoForBackgroundTask(sanitizedBabyInfo);
           console.log('Baby-Infos für Hintergrund-Task gespeichert.');
         }
-        
-        loadBabyInfo(); // Neu laden, um sicherzustellen, dass wir die aktuellsten Daten haben
+
+        // Invalidate cache after save
+        await invalidateBabyCache(targetBabyId);
+
+        // Reload fresh data from Supabase
+        loadBabyInfo();
       }
     } catch (err) {
       console.error('Failed to save baby info:', err);
@@ -120,202 +547,650 @@ export default function BabyScreen() {
     }
   };
 
-  const handleDateChange = (event: any, selectedDate?: Date) => {
-    setShowDatePicker(Platform.OS === 'ios');
-    if (selectedDate) {
-      setBabyInfo({
-        ...babyInfo,
-        birth_date: selectedDate.toISOString()
-      });
+  const handleDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
+    if (Platform.OS === 'android') {
+      setShowDatePicker(false);
     }
+    if (event.type === 'dismissed' || !selectedDate) return;
+
+    const safeDate = parseSafeDate(selectedDate, getCurrentBirthDateBounds());
+    if (!safeDate) return;
+    setBabyInfo((prev) => ({
+      ...prev,
+      birth_date: safeDate.toISOString(),
+    }));
   };
 
-  const pickImage = async () => {
-    try {
-      // Berechtigungen anfordern
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Berechtigung erforderlich', 'Wir benötigen die Berechtigung, auf deine Fotos zuzugreifen.');
-        return;
-      }
-
-      // Bild auswählen
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 0.5, // Reduzierte Qualität für kleinere Dateigröße
-        base64: true, // Base64-Daten anfordern
-      });
-
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        const asset = result.assets[0];
-        let base64Data: string;
-
-        // Wenn base64 nicht direkt verfügbar ist, konvertieren wir das Bild
-        if (!asset.base64) {
-          console.log('Base64 nicht direkt verfügbar, konvertiere Bild...');
-          try {
-            const response = await fetch(asset.uri);
-            const blob = await response.blob();
-            const reader = new FileReader();
-
-            // Promise für FileReader erstellen
-            base64Data = await new Promise((resolve, reject) => {
-              reader.onload = () => resolve(reader.result as string);
-              reader.onerror = reject;
-              reader.readAsDataURL(blob);
-            });
-
-            console.log('Bild erfolgreich in Base64 konvertiert');
-          } catch (convError) {
-            console.error('Fehler bei der Konvertierung:', convError);
-            Alert.alert('Fehler', 'Das Bild konnte nicht verarbeitet werden.');
-            return;
-          }
-        } else {
-          // Base64-Daten direkt verwenden
-          base64Data = `data:image/jpeg;base64,${asset.base64}`;
-          console.log('Base64-Daten direkt verwendet');
-        }
-
-        // Aktualisiere den lokalen Zustand
-        const updatedBabyInfo = {
-          ...babyInfo,
-          photo_url: base64Data
-        };
-
-        setBabyInfo(updatedBabyInfo);
-
-        // Speichere das Bild sofort in der Datenbank
-        try {
-          const { error } = await saveBabyInfo(updatedBabyInfo);
-          if (error) {
-            console.error('Error saving baby photo:', error);
-            Alert.alert('Fehler', 'Das Bild konnte nicht gespeichert werden.');
-          } else {
-            console.log('Bild erfolgreich gespeichert');
-            // Kein Alert hier, um den Benutzer nicht zu stören
-          }
-        } catch (saveError) {
-          console.error('Failed to save baby photo:', saveError);
-          Alert.alert('Fehler', 'Das Bild konnte nicht gespeichert werden.');
-        }
-      }
-    } catch (error) {
-      console.error('Error picking image:', error);
-      Alert.alert('Fehler', 'Es ist ein Fehler beim Auswählen des Bildes aufgetreten.');
+  const handleIOSBirthDateConfirm = (date: Date) => {
+    const safeDate = parseSafeDate(date, getCurrentBirthDateBounds());
+    if (!safeDate) {
+      setShowDatePicker(false);
+      return;
     }
+    setBabyInfo((prev) => ({
+      ...prev,
+      birth_date: safeDate.toISOString(),
+    }));
+    setShowDatePicker(false);
   };
+
+  const handleDueDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
+    if (Platform.OS === 'android') {
+      setShowDueDatePicker(false);
+    }
+    if (event.type === 'dismissed' || !selectedDate) return;
+
+    const safeDate = parseSafeDate(selectedDate, dueDateBounds);
+    if (!safeDate) return;
+    setDueDate(safeDate);
+  };
+
+  const handleIOSDueDateConfirm = (date: Date) => {
+    const safeDate = parseSafeDate(date, dueDateBounds);
+    if (!safeDate) {
+      setShowDueDatePicker(false);
+      return;
+    }
+    setDueDate(safeDate);
+    setShowDueDatePicker(false);
+  };
+
+  const computeStats = (birthDate: Date) => {
+    const now = new Date();
+    const years = differenceInYears(now, birthDate);
+    const months = differenceInMonths(now, addMonths(birthDate, years * 12));
+    const days = differenceInDays(now, addMonths(birthDate, years * 12 + months));
+    const totalDays = differenceInDays(now, birthDate);
+    const totalWeeks = Math.floor(totalDays / 7);
+    const totalMonths = years * 12 + months;
+
+    const milestoneDefinitions = [
+      { name: '1 Woche', addFn: () => addDays(birthDate, 7) },
+      { name: '1 Monat', addFn: () => addMonths(birthDate, 1) },
+      { name: '2 Monate', addFn: () => addMonths(birthDate, 2) },
+      { name: '3 Monate', addFn: () => addMonths(birthDate, 3) },
+      { name: '100 Tage', addFn: () => addDays(birthDate, 100) },
+      { name: '6 Monate', addFn: () => addMonths(birthDate, 6) },
+      { name: '1 Jahr', addFn: () => addMonths(birthDate, 12) },
+      { name: '500 Tage', addFn: () => addDays(birthDate, 500) },
+      { name: '1000 Tage', addFn: () => addDays(birthDate, 1000) },
+      { name: '1111 Tage', addFn: () => addDays(birthDate, 1111) },
+    ];
+
+    const milestones = milestoneDefinitions.map(({ name, addFn }) => {
+      const date = addFn();
+      const reached = now >= date;
+      return { name, reached, date: reached ? date : undefined };
+    });
+
+    return { years, months, days, totalDays, totalWeeks, totalMonths, milestones };
+  };
+
+  const stats = useMemo(() => {
+    if (!birthDateForDisplay) return initialStats;
+    return computeStats(birthDateForDisplay);
+  }, [birthDateForDisplay]);
+
+  const renderAgeDescription = () => {
+    const { years, months, days } = stats;
+
+    if (years > 0) {
+      return `${years} Jahr${years !== 1 ? 'e' : ''}, ${months} Monat${months !== 1 ? 'e' : ''} und ${days} Tag${days !== 1 ? 'e' : ''}`;
+    }
+
+    if (months > 0) {
+      return `${months} Monat${months !== 1 ? 'e' : ''} und ${days} Tag${days !== 1 ? 'e' : ''}`;
+    }
+
+    return `${days} Tag${days !== 1 ? 'e' : ''}`;
+  };
+
+  const formatDate = (date: Date) =>
+    date.toLocaleDateString('de-DE', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    });
+
+  const renderMilestoneStatus = (milestone: { name: string; reached: boolean; date?: Date }) => {
+    const reached = milestone.reached;
+
+    const tint = reached
+      ? (isDark ? 'rgba(150,210,178,0.22)' : 'rgba(213,245,231,0.75)')
+      : (isDark ? 'rgba(209,170,145,0.2)' : 'rgba(244,236,230,0.78)');
+
+    return (
+      <View
+        style={[styles.statsMilestoneRow, styles.statsGlassSurface, glassSurfaceStyle]}
+      >
+        <GlassLayer tint={tint} sheenOpacity={reached ? 0.22 : 0.16} isDark={isDark} />
+        <View
+          style={[
+            styles.statsMilestoneIcon,
+            reached ? styles.statsMilestoneIconReached : styles.statsMilestoneIconUpcoming,
+            {
+              backgroundColor: reached
+                ? (isDark ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.85)')
+                : (isDark ? 'rgba(255,255,255,0.11)' : 'rgba(255,255,255,0.75)'),
+            },
+          ]}
+        >
+          <IconSymbol
+            name={reached ? 'star.fill' : 'calendar.badge.exclamationmark'}
+            size={18}
+            color={reached ? milestoneReachedIconColor : milestoneUpcomingIconColor}
+          />
+        </View>
+        <View style={styles.statsMilestoneInfo}>
+          <ThemedText style={[styles.statsMilestoneName, { color: textPrimary }]}>{milestone.name}</ThemedText>
+          <ThemedText style={[styles.statsMilestoneDate, { color: textSecondary }]}>
+            {reached && milestone.date ? `Erreicht am ${formatDate(milestone.date)}` : 'Noch nicht erreicht'}
+          </ThemedText>
+        </View>
+      </View>
+    );
+  };
+
+  const renderInterestingFacts = () => {
+    if (!birthDateForDisplay) return null;
+
+    const totalMonths = stats.years * 12 + stats.months;
+    const heartbeats = Math.round(stats.totalDays * 24 * 60 * getAvgHeartRate(totalMonths));
+    const breaths = Math.round(stats.totalDays * 24 * 60 * getAvgBreathRate(totalMonths));
+    const diapers = Math.round(stats.totalDays * getAvgDiapers(totalMonths));
+    const sleep = Math.round(stats.totalDays * getAvgSleepHours(totalMonths));
+
+    const factItems = [
+      {
+        key: 'heart',
+        label: 'Herzschläge',
+        value: heartbeats.toLocaleString('de-DE'),
+        caption: 'geschätzt',
+        icon: 'heart.fill' as const,
+        accent: pastelPalette.rose,
+        iconColor: isDark ? '#FFB8C8' : '#D06262',
+        iconBg: iconBubbleBackground,
+      },
+      {
+        key: 'breath',
+        label: 'Atemzüge',
+        value: breaths.toLocaleString('de-DE'),
+        caption: 'seit Geburt',
+        icon: 'wind' as const,
+        accent: pastelPalette.sage,
+        iconColor: isDark ? '#9BE0CB' : '#5A8F80',
+        iconBg: iconBubbleBackground,
+      },
+      {
+        key: 'diapers',
+        label: 'Windeln',
+        value: diapers.toLocaleString('de-DE'),
+        caption: 'insgesamt',
+        icon: 'drop.fill' as const,
+        accent: pastelPalette.honey,
+        iconColor: isDark ? '#FFCA9E' : '#B98160',
+        iconBg: iconBubbleBackground,
+      },
+      {
+        key: 'sleep',
+        label: 'Schlafstunden',
+        value: sleep.toLocaleString('de-DE'),
+        caption: 'seit Geburt',
+        icon: 'moon.stars.fill' as const,
+        accent: pastelPalette.sky,
+        iconColor: isDark ? '#C3B8FF' : '#7A6FD1',
+        iconBg: iconBubbleBackground,
+      },
+    ];
+
+    return (
+      <LiquidGlassCard
+        style={styles.statsGlassCard}
+        intensity={26}
+        overlayColor={glassOverlay}
+        borderColor={glassBorderColor}
+      >
+        <View style={styles.statsGlassInner}>
+          <ThemedText style={[styles.statsSectionTitle, { color: textSecondary }]}>Interessante Fakten</ThemedText>
+          <View style={styles.statsFactGrid}>
+            {factItems.map((fact) => (
+              <View key={fact.key} style={[styles.statsFactTile, styles.statsGlassSurface, glassSurfaceStyle]}>
+                <GlassLayer tint={fact.accent} sheenOpacity={0.18} isDark={isDark} />
+                <View style={[styles.statsFactIcon, { backgroundColor: fact.iconBg }]}>
+                  <IconSymbol name={fact.icon} size={18} color={fact.iconColor} />
+                </View>
+                <ThemedText style={[styles.statsFactLabel, { color: textSecondary }]}>{fact.label}</ThemedText>
+                <ThemedText style={[styles.statsFactValue, { color: textPrimary }]}>{fact.value}</ThemedText>
+                <ThemedText style={[styles.statsFactCaption, { color: textSecondary }]}>{fact.caption}</ThemedText>
+              </View>
+            ))}
+          </View>
+        </View>
+      </LiquidGlassCard>
+    );
+  };
+
+  const ageChips = [
+    { key: 'years', label: 'Jahre', value: stats.years, accent: pastelPalette.rose },
+    { key: 'months', label: 'Monate', value: stats.months, accent: pastelPalette.honey },
+    { key: 'days', label: 'Tage', value: stats.days, accent: pastelPalette.sky },
+  ];
+
+  const statChips = [
+    {
+      key: 'total-days',
+      label: 'Tage gesamt',
+      value: stats.totalDays.toLocaleString('de-DE'),
+      icon: 'calendar' as const,
+      accent: pastelPalette.peach,
+      iconColor: isDark ? '#FFC5A7' : '#C17055',
+    },
+    {
+      key: 'total-weeks',
+      label: 'Wochen',
+      value: stats.totalWeeks.toLocaleString('de-DE'),
+      icon: 'clock' as const,
+      accent: pastelPalette.lavender,
+      iconColor: isDark ? '#C2B7FF' : '#7A6FD1',
+    },
+    {
+      key: 'total-months',
+      label: 'Monate',
+      value: stats.totalMonths.toLocaleString('de-DE'),
+      icon: 'moon.stars.fill' as const,
+      accent: pastelPalette.blush,
+      iconColor: isDark ? '#FFB6D1' : '#CF6F8B',
+    },
+  ];
+
+  const bodyMetrics = [
+    {
+      key: 'height',
+      label: 'Größe',
+      value: babyInfo.height ? `${babyInfo.height} cm` : 'Nicht angegeben',
+      icon: 'person.fill' as const,
+      accent: pastelPalette.sky,
+      iconColor: isDark ? '#B6CEFF' : '#6C87C1',
+    },
+    {
+      key: 'weight',
+      label: 'Gewicht',
+      value: babyInfo.weight ? `${babyInfo.weight} kg` : 'Nicht angegeben',
+      icon: 'chart.bar.fill' as const,
+      accent: pastelPalette.honey,
+      iconColor: isDark ? '#FFCAA2' : '#B7745D',
+    },
+    {
+      key: 'gender',
+      label: 'Geschlecht',
+      value: genderLabels[babyInfo.baby_gender as keyof typeof genderLabels] || genderLabels.unknown,
+      icon: 'person.2.fill' as const,
+      accent: pastelPalette.lavender,
+      iconColor: isDark ? '#D1BDFF' : '#8C6AC3',
+    },
+  ];
 
   return (
     <ThemedBackground style={styles.container}>
       <SafeAreaView style={{ flex: 1 }}>
         <Stack.Screen options={{ headerShown: false }} />
-        <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
+        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
         
-        <Header title="Mein Baby" subtitle="Alle Infos & Einstellungen" showBackButton />
+        <Header
+          title="Mein Baby"
+          subtitle="Alle Infos & Einstellungen"
+          showBackButton
+          onBackPress={() => {
+            triggerHaptic();
+            router.push(fallbackHomeRoute as any);
+          }}
+        />
         
         <ScrollView 
           style={styles.scrollView}
           contentContainerStyle={styles.contentContainer}
           showsVerticalScrollIndicator={false}
         >
-          <LiquidGlassCard style={styles.glassCard} intensity={24}>
+          <LiquidGlassCard style={styles.glassCard} intensity={24} overlayColor={glassOverlay}>
             <View style={styles.glassInner}>
             <View style={styles.photoContainer}>
-              {babyInfo.photo_url ? (
-                <Image source={{ uri: babyInfo.photo_url }} style={styles.babyPhoto} />
+              {displayPhoto ? (
+                <Image source={{ uri: displayPhoto }} style={styles.babyPhoto} />
               ) : (
-                <View style={[styles.placeholderPhoto, { backgroundColor: colorScheme === 'dark' ? '#555' : '#E0E0E0' }]}>
-                  <IconSymbol name="person.fill" size={60} color={theme.tabIconDefault} />
+                <View style={[styles.placeholderPhoto, { backgroundColor: isDark ? '#555' : '#E0E0E0' }]}>
+                  <IconSymbol name="person.fill" size={60} color={isDark ? adaptiveColors.iconSecondary : theme.tabIconDefault} />
                 </View>
               )}
 
-              {isEditing && (
-                <TouchableOpacity style={styles.editPhotoButton} onPress={pickImage}>
-                  <IconSymbol name="camera.fill" size={20} color="#FFFFFF" />
-                </TouchableOpacity>
-              )}
+              <View style={styles.photoHintContainer}>
+                {isEditing ? (
+                  <>
+                    <ThemedText style={[styles.photoHintText, { color: textSecondary }]}>
+                      {displayPhoto ? 'Babyfoto anpassen' : 'Füge ein Babyfoto hinzu'}
+                    </ThemedText>
+                    <TouchableOpacity
+                      style={[styles.photoHintButton, { backgroundColor: photoButtonBackground, borderColor: photoButtonBorder }]}
+                      onPress={() => {
+                        triggerHaptic();
+                        pickBabyPhoto();
+                      }}
+                    >
+                      <ThemedText style={[styles.photoHintButtonText, { color: textPrimary }]}>
+                        Foto wählen
+                      </ThemedText>
+                    </TouchableOpacity>
+                    {!!displayPhoto && (
+                      <TouchableOpacity
+                        style={[styles.photoHintButton, styles.photoRemoveButton, { backgroundColor: photoButtonBackground, borderColor: photoButtonBorder }]}
+                        onPress={() => {
+                          triggerHaptic();
+                          removeBabyPhoto();
+                        }}
+                      >
+                        <ThemedText style={[styles.photoHintButtonText, { color: textPrimary }]}>
+                          Foto entfernen
+                        </ThemedText>
+                      </TouchableOpacity>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <ThemedText style={[styles.photoHintText, { color: textSecondary }]}>
+                      Ändere das Babyfoto direkt hier.
+                    </ThemedText>
+                    <TouchableOpacity
+                      style={[styles.photoHintButton, { backgroundColor: photoButtonBackground, borderColor: photoButtonBorder }]}
+                      onPress={() => {
+                        triggerHaptic();
+                        setIsEditing(true);
+                        pickBabyPhoto();
+                      }}
+                    >
+                      <ThemedText style={[styles.photoHintButtonText, { color: textPrimary }]}>
+                        Foto ändern
+                      </ThemedText>
+                    </TouchableOpacity>
+                  </>
+                )}
+              </View>
             </View>
 
             <View style={styles.infoContainer}>
+              {showCreatedHint && (
+                <View style={styles.createdHintBox}>
+                  <ThemedText style={[styles.createdHintText, { color: textSecondary }]}>
+                    Neues Kind angelegt. Trage jetzt die wichtigsten Daten ein.
+                  </ThemedText>
+                </View>
+              )}
               {isEditing ? (
                 <>
                   <View style={styles.inputRow}>
                     <ThemedText style={styles.label}>Name:</ThemedText>
                     <TextInput
-                      style={styles.glassInput}
+                      style={[styles.glassInput, { color: textPrimary, backgroundColor: inputBackground, borderColor: inputBorder }]}
                       value={babyInfo.name}
                       onChangeText={(text) => setBabyInfo({ ...babyInfo, name: text })}
                       placeholder="Name des Babys"
-                      placeholderTextColor={'#A8978E'}
+                      placeholderTextColor={textTertiary}
                     />
                   </View>
 
                   <View style={styles.inputRow}>
-                    <ThemedText style={styles.label}>Geburtsdatum:</ThemedText>
-                    <TouchableOpacity style={styles.glassDateButton} onPress={() => setShowDatePicker(true)}>
-                      <ThemedText style={styles.dateText}>
-                        {babyInfo.birth_date
-                          ? new Date(babyInfo.birth_date).toLocaleDateString('de-DE')
-                          : 'Datum wählen'}
+                    <ThemedText style={styles.label}>Baby bereits geboren?</ThemedText>
+                    <View style={[styles.switchRow, { backgroundColor: inputBackground, borderColor: inputBorder }]}>
+                      <ThemedText style={[styles.switchValue, { color: textPrimary }]}>
+                        {isBabyBornForCurrentBaby ? 'Ja' : 'Nein'}
                       </ThemedText>
-                      <IconSymbol name="calendar" size={20} color={theme.text} />
-                    </TouchableOpacity>
-
-                    {showDatePicker && (
-                      <DateTimePicker
-                        value={babyInfo.birth_date ? new Date(babyInfo.birth_date) : new Date()}
-                        mode="date"
-                        display="default"
-                        onChange={handleDateChange}
-                        maximumDate={new Date()}
-                        textColor={colorScheme === 'dark' ? '#FFFFFF' : undefined}
+                      <Switch
+                        value={isBabyBornForCurrentBaby}
+                        onValueChange={(value) => {
+                          setIsBabyBornForCurrentBaby(value);
+                          if (!value) {
+                            setBabyInfo((current) => ({
+                              ...current,
+                              birth_date: null,
+                              weight: '',
+                              height: '',
+                            }));
+                          } else {
+                            setDueDate(null);
+                          }
+                        }}
+                        trackColor={{ false: '#D1D1D6', true: '#9DBEBB' }}
+                        thumbColor={isBabyBornForCurrentBaby ? '#FFFFFF' : '#F4F4F4'}
+                        ios_backgroundColor="#D1D1D6"
                       />
-                    )}
+                    </View>
                   </View>
 
                   <View style={styles.inputRow}>
-                    <ThemedText style={styles.label}>Gewicht:</ThemedText>
-                    <TextInput
-                      style={styles.glassInput}
-                      value={babyInfo.weight}
-                      onChangeText={(text) => setBabyInfo({ ...babyInfo, weight: text })}
-                      placeholder="z.B. 3250g"
-                      placeholderTextColor={'#A8978E'}
-                    />
+                    <ThemedText style={styles.label}>Geschlecht:</ThemedText>
+                    <View style={styles.choiceRow}>
+                      <TouchableOpacity
+                        style={[
+                          styles.choiceButton,
+                          {
+                            backgroundColor: babyInfo.baby_gender === 'male' ? 'rgba(135, 206, 235, 0.9)' : inputBackground,
+                            borderColor: babyInfo.baby_gender === 'male' ? 'rgba(255,255,255,0.65)' : inputBorder,
+                          },
+                        ]}
+                        onPress={() => setBabyInfo({ ...babyInfo, baby_gender: 'male' })}
+                        activeOpacity={0.85}
+                      >
+                        <ThemedText style={[styles.choiceButtonText, { color: babyInfo.baby_gender === 'male' ? '#FFFFFF' : textPrimary }]}>Junge</ThemedText>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.choiceButton,
+                          {
+                            backgroundColor: babyInfo.baby_gender === 'female' ? 'rgba(255, 179, 193, 0.9)' : inputBackground,
+                            borderColor: babyInfo.baby_gender === 'female' ? 'rgba(255,255,255,0.65)' : inputBorder,
+                          },
+                        ]}
+                        onPress={() => setBabyInfo({ ...babyInfo, baby_gender: 'female' })}
+                        activeOpacity={0.85}
+                      >
+                        <ThemedText style={[styles.choiceButtonText, { color: babyInfo.baby_gender === 'female' ? '#FFFFFF' : textPrimary }]}>Mädchen</ThemedText>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.choiceButton,
+                          {
+                            backgroundColor: babyInfo.baby_gender === 'unknown' || !babyInfo.baby_gender ? accentButtonBackground : inputBackground,
+                            borderColor: babyInfo.baby_gender === 'unknown' || !babyInfo.baby_gender ? accentButtonBorder : inputBorder,
+                          },
+                        ]}
+                        onPress={() => setBabyInfo({ ...babyInfo, baby_gender: 'unknown' })}
+                        activeOpacity={0.85}
+                      >
+                        <ThemedText style={[styles.choiceButtonText, { color: textPrimary }]}>Offen</ThemedText>
+                      </TouchableOpacity>
+                    </View>
                   </View>
 
+                  {!isBabyBornForCurrentBaby ? (
+                    <View style={styles.inputRow}>
+                      <ThemedText style={styles.label}>Errechneter Geburtstermin:</ThemedText>
+                      <TouchableOpacity
+                        style={[styles.glassDateButton, { backgroundColor: inputBackground, borderColor: inputBorder }]}
+                        onPress={() => {
+                          triggerHaptic();
+                          setShowDueDatePicker(true);
+                        }}
+                      >
+                        <ThemedText style={[styles.dateText, { color: textPrimary }]}>
+                          {dueDateForDisplay ? dueDateForDisplay.toLocaleDateString('de-DE') : 'Termin wählen'}
+                        </ThemedText>
+                        <IconSymbol name="calendar" size={20} color={textPrimary} />
+                      </TouchableOpacity>
+
+                      {showDueDatePicker && Platform.OS === 'android' && (
+                        <DateTimePicker
+                          value={dueDatePickerValue}
+                          mode="date"
+                          display="default"
+                          onChange={handleDueDateChange}
+                          minimumDate={dueDateBounds.minimumDate}
+                          maximumDate={dueDateBounds.maximumDate}
+                          textColor={isDark ? '#FFFFFF' : undefined}
+                        />
+                      )}
+                      {Platform.OS === 'ios' && (
+                        <IOSBottomDatePicker
+                          visible={showDueDatePicker}
+                          title="Geburtstermin wählen"
+                          value={dueDatePickerValue}
+                          mode="date"
+                          minimumDate={dueDateBounds.minimumDate}
+                          maximumDate={dueDateBounds.maximumDate}
+                          onClose={() => setShowDueDatePicker(false)}
+                          onConfirm={handleIOSDueDateConfirm}
+                          initialVariant="calendar"
+                        />
+                      )}
+                    </View>
+                  ) : (
+                    <View style={styles.inputRow}>
+                      <ThemedText style={styles.label}>Geburtsdatum:</ThemedText>
+                      <TouchableOpacity
+                        style={[styles.glassDateButton, { backgroundColor: inputBackground, borderColor: inputBorder }]}
+                        onPress={() => {
+                          triggerHaptic();
+                          setShowDatePicker(true);
+                        }}
+                      >
+                        <ThemedText style={[styles.dateText, { color: textPrimary }]}>
+                          {birthDateForDisplay
+                            ? birthDateForDisplay.toLocaleDateString('de-DE')
+                            : 'Datum wählen'}
+                        </ThemedText>
+                        <IconSymbol name="calendar" size={20} color={textPrimary} />
+                      </TouchableOpacity>
+
+                      {showDatePicker && Platform.OS === 'android' && (
+                        <DateTimePicker
+                          value={birthDatePickerValue}
+                          mode="date"
+                          display="default"
+                          onChange={handleDateChange}
+                          minimumDate={birthDateBounds.minimumDate}
+                          maximumDate={birthDateBounds.maximumDate}
+                          textColor={isDark ? '#FFFFFF' : undefined}
+                        />
+                      )}
+                      {Platform.OS === 'ios' && (
+                        <IOSBottomDatePicker
+                          visible={showDatePicker}
+                          title="Geburtsdatum wählen"
+                          value={birthDatePickerValue}
+                          mode="date"
+                          minimumDate={birthDateBounds.minimumDate}
+                          maximumDate={birthDateBounds.maximumDate}
+                          onClose={() => setShowDatePicker(false)}
+                          onConfirm={handleIOSBirthDateConfirm}
+                          initialVariant="calendar"
+                        />
+                      )}
+                    </View>
+                  )}
+
                   <View style={styles.inputRow}>
-                    <ThemedText style={styles.label}>Größe:</ThemedText>
+                    <ThemedText style={styles.label}>Schlafenszeit (Nacht):</ThemedText>
+
                     <TextInput
-                      style={styles.glassInput}
-                      value={babyInfo.height}
-                      onChangeText={(text) => setBabyInfo({ ...babyInfo, height: text })}
-                      placeholder="z.B. 52cm"
-                      placeholderTextColor={'#A8978E'}
+                      style={[styles.glassInput, styles.bedtimeManualInput, { color: textPrimary, backgroundColor: inputBackground, borderColor: inputBorder }]}
+                      value={bedtimeInput}
+                      onChangeText={(text) => {
+                        setBedtimeInput(formatBedtimeInputValue(text));
+                        setBedtimeInputError(null);
+                      }}
+                      onBlur={() => {
+                        if (!isEditing) return;
+                        commitBedtimeInput(bedtimeInput);
+                      }}
+                      onSubmitEditing={() => {
+                        commitBedtimeInput(bedtimeInput);
+                      }}
+                      placeholder="HH:mm (z.B. 19:30)"
+                      placeholderTextColor={textTertiary}
+                      keyboardType={Platform.OS === 'ios' ? 'numbers-and-punctuation' : 'numeric'}
+                      maxLength={5}
+                      autoCorrect={false}
+                      autoCapitalize="none"
+                      returnKeyType="done"
                     />
+                    {bedtimeInputError ? (
+                      <ThemedText
+                        style={[
+                          styles.bedtimeValidationText,
+                          { color: isDark ? '#FFB3B3' : '#C0392B' },
+                        ]}
+                      >
+                        {bedtimeInputError}
+                      </ThemedText>
+                    ) : null}
+
+                    <ThemedText style={[styles.photoHintText, { color: textSecondary, textAlign: 'left', marginTop: 8, marginBottom: 0 }]}>
+                      Diese Uhrzeit wird für die Schlafvorhersage und Schlaffenster-Erinnerungen genutzt.
+                    </ThemedText>
                   </View>
+
+                  {isBabyBornForCurrentBaby && (
+                    <>
+                      <View style={styles.inputRow}>
+                        <ThemedText style={styles.label}>Gewicht:</ThemedText>
+                        <TextInput
+                          style={[styles.glassInput, { color: textPrimary, backgroundColor: inputBackground, borderColor: inputBorder }]}
+                          value={babyInfo.weight}
+                          onChangeText={(text) => setBabyInfo({ ...babyInfo, weight: text })}
+                          placeholder="z.B. 3250g"
+                          placeholderTextColor={textTertiary}
+                        />
+                      </View>
+
+                      <View style={styles.inputRow}>
+                        <ThemedText style={styles.label}>Größe:</ThemedText>
+                        <TextInput
+                          style={[styles.glassInput, { color: textPrimary, backgroundColor: inputBackground, borderColor: inputBorder }]}
+                          value={babyInfo.height}
+                          onChangeText={(text) => setBabyInfo({ ...babyInfo, height: text })}
+                          placeholder="z.B. 52cm"
+                          placeholderTextColor={textTertiary}
+                        />
+                      </View>
+                    </>
+                  )}
 
                   <View style={styles.buttonRow}>
                     <TouchableOpacity
-                      style={[styles.button, styles.cancelButton]}
+                      style={[
+                        styles.button,
+                        styles.cancelButton,
+                        {
+                          backgroundColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.18)',
+                          borderColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.35)',
+                        }
+                      ]}
                       onPress={() => {
+                        triggerHaptic();
                         setIsEditing(false);
                         loadBabyInfo(); // Zurücksetzen auf gespeicherte Daten
                       }}
                     >
-                      <ThemedText style={[styles.buttonText, { color: '#7D5A50' }]} lightColor="#7D5A50" darkColor="#7D5A50">
+                      <ThemedText style={[styles.buttonText, { color: textPrimary }]}>
                         Abbrechen
                       </ThemedText>
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                      style={[styles.button, styles.saveButton]}
-                      onPress={handleSave}
+                      style={[styles.button, styles.saveButton, { backgroundColor: accentButtonBackground, borderColor: accentButtonBorder }]}
+                      onPress={() => {
+                        triggerHaptic();
+                        handleSave();
+                      }}
                     >
-                      <ThemedText style={[styles.buttonText, { color: '#7D5A50' }]} lightColor="#7D5A50" darkColor="#7D5A50">
+                      <ThemedText style={[styles.buttonText, { color: textPrimary }]}>
                         Speichern
                       </ThemedText>
                     </TouchableOpacity>
@@ -331,30 +1206,63 @@ export default function BabyScreen() {
                   </View>
 
                   <View style={styles.infoRow}>
-                    <ThemedText style={styles.infoLabel}>Geburtsdatum:</ThemedText>
+                    <ThemedText style={styles.infoLabel}>Status:</ThemedText>
                     <ThemedText style={styles.infoValue}>
-                      {babyInfo.birth_date
-                        ? new Date(babyInfo.birth_date).toLocaleDateString('de-DE')
-                        : 'Noch nicht festgelegt'}
+                      {isBabyBornForCurrentBaby ? 'Bereits geboren' : 'Noch in der Schwangerschaft'}
                     </ThemedText>
                   </View>
 
                   <View style={styles.infoRow}>
-                    <ThemedText style={styles.infoLabel}>Gewicht:</ThemedText>
+                    <ThemedText style={styles.infoLabel}>Geschlecht:</ThemedText>
                     <ThemedText style={styles.infoValue}>
-                      {babyInfo.weight || 'Noch nicht festgelegt'}
+                      {genderLabels[babyInfo.baby_gender as keyof typeof genderLabels] || genderLabels.unknown}
                     </ThemedText>
                   </View>
 
                   <View style={styles.infoRow}>
-                    <ThemedText style={styles.infoLabel}>Größe:</ThemedText>
+                    <ThemedText style={styles.infoLabel}>{isBabyBornForCurrentBaby ? 'Geburtsdatum:' : 'Geburtstermin:'}</ThemedText>
                     <ThemedText style={styles.infoValue}>
-                      {babyInfo.height || 'Noch nicht festgelegt'}
+                      {isBabyBornForCurrentBaby
+                        ? (birthDateForDisplay ? birthDateForDisplay.toLocaleDateString('de-DE') : 'Noch nicht festgelegt')
+                        : (dueDateForDisplay ? dueDateForDisplay.toLocaleDateString('de-DE') : 'Noch nicht festgelegt')}
                     </ThemedText>
                   </View>
 
-                  <TouchableOpacity style={[styles.button, styles.editButton]} onPress={() => setIsEditing(true)}>
-                    <ThemedText style={[styles.buttonText, { color: '#7D5A50' }]} lightColor="#7D5A50" darkColor="#7D5A50">
+                  <View style={styles.infoRow}>
+                    <ThemedText style={styles.infoLabel}>Schlafenszeit:</ThemedText>
+                    <ThemedText style={styles.infoValue}>
+                      {babyInfo.preferred_bedtime
+                        ? bedtimeAnchor
+                        : `${DEFAULT_BEDTIME_ANCHOR} (Standard)`}
+                    </ThemedText>
+                  </View>
+
+                  {isBabyBornForCurrentBaby && (
+                    <View style={styles.infoRow}>
+                      <ThemedText style={styles.infoLabel}>Gewicht:</ThemedText>
+                      <ThemedText style={styles.infoValue}>
+                        {babyInfo.weight || 'Noch nicht festgelegt'}
+                      </ThemedText>
+                    </View>
+                  )}
+
+                  {isBabyBornForCurrentBaby && (
+                    <View style={styles.infoRow}>
+                      <ThemedText style={styles.infoLabel}>Größe:</ThemedText>
+                      <ThemedText style={styles.infoValue}>
+                        {babyInfo.height || 'Noch nicht festgelegt'}
+                      </ThemedText>
+                    </View>
+                  )}
+
+                  <TouchableOpacity
+                    style={[styles.button, styles.editButton, { backgroundColor: accentButtonBackground, borderColor: accentButtonBorder }]}
+                    onPress={() => {
+                      triggerHaptic();
+                      setIsEditing(true);
+                    }}
+                  >
+                    <ThemedText style={[styles.buttonText, { color: textPrimary }]}>
                       Bearbeiten
                     </ThemedText>
                   </TouchableOpacity>
@@ -364,42 +1272,116 @@ export default function BabyScreen() {
             </View>
           </LiquidGlassCard>
 
-          <LiquidGlassCard
-            style={styles.infoGlassCard}
-            intensity={24}
-            overlayColor={'rgba(142, 78, 198, 0.16)'}
-            borderColor={'rgba(142, 78, 198, 0.35)'}
-            onPress={() => router.push({ pathname: '/baby-stats' } as any)}
-          >
-            <View style={styles.infoGlassInner}>
-              <View style={styles.statsButtonContent}>
-                <View>
-                  <ThemedText style={styles.infoTitle}>Baby-Statistiken</ThemedText>
-                  <ThemedText style={styles.infoText}>
-                    Alter, Entwicklung, Meilensteine und interessante Fakten über dein Baby
-                  </ThemedText>
+          {babyInfo.birth_date ? (
+            <>
+              <LiquidGlassCard
+                style={[styles.statsGlassCard, styles.statsFirstGlassCard]}
+                intensity={26}
+                overlayColor={glassOverlay}
+                borderColor={glassBorderColor}
+              >
+                <View style={styles.statsGlassInner}>
+                  <ThemedText style={[styles.statsSectionTitle, { color: textSecondary }]}>Alter</ThemedText>
+
+                  <View style={[styles.statsAgeHighlight, styles.statsGlassSurface, glassSurfaceStyle]}>
+                    <GlassLayer
+                      tint={isDark ? 'rgba(255, 177, 138, 0.24)' : 'rgba(255,232,220,0.75)'}
+                      sheenOpacity={0.22}
+                      isDark={isDark}
+                    />
+                    <View style={[styles.statsAgeHighlightIcon, { backgroundColor: iconBubbleBackground }]}>
+                      <IconSymbol name="clock" size={18} color={milestoneReachedIconColor} />
+                    </View>
+                    <View style={styles.statsAgeHighlightText}>
+                      <ThemedText style={[styles.statsAgeValue, { color: textPrimary }]}>{renderAgeDescription()}</ThemedText>
+                      <ThemedText style={[styles.statsAgeSubline, { color: textSecondary }]}>Stand heute</ThemedText>
+                    </View>
+                  </View>
+
+                  <View style={styles.statsAgeChipRow}>
+                    {ageChips.map((chip) => (
+                      <View key={chip.key} style={[styles.statsAgeChip, styles.statsGlassSurface, glassSurfaceStyle]}>
+                        <GlassLayer tint={chip.accent} sheenOpacity={0.25} isDark={isDark} />
+                        <ThemedText style={[styles.statsAgeChipValue, { color: textPrimary }]}>{chip.value}</ThemedText>
+                        <ThemedText style={[styles.statsAgeChipLabel, { color: textSecondary }]}>{chip.label}</ThemedText>
+                      </View>
+                    ))}
+                  </View>
+
+                  <View style={styles.statsStatRow}>
+                    {statChips.map((stat) => (
+                      <View key={stat.key} style={[styles.statsStatItem, styles.statsGlassSurface, glassSurfaceStyle]}>
+                        <GlassLayer tint={stat.accent} sheenOpacity={0.2} isDark={isDark} />
+                        <View style={[styles.statsStatIcon, { backgroundColor: iconBubbleBackground }]}>
+                          <IconSymbol name={stat.icon} size={16} color={stat.iconColor} />
+                        </View>
+                        <ThemedText style={[styles.statsStatValue, { color: textPrimary }]}>{stat.value}</ThemedText>
+                        <ThemedText style={[styles.statsStatLabel, { color: textSecondary }]}>{stat.label}</ThemedText>
+                      </View>
+                    ))}
+                  </View>
                 </View>
+              </LiquidGlassCard>
+
+              <LiquidGlassCard
+                style={styles.statsGlassCard}
+                intensity={26}
+                overlayColor={glassOverlay}
+                borderColor={glassBorderColor}
+              >
+                <View style={styles.statsGlassInner}>
+                  <ThemedText style={[styles.statsSectionTitle, { color: textSecondary }]}>Geburtsdaten</ThemedText>
+                  <View style={styles.statsBodyGrid}>
+                    {bodyMetrics.map((metric) => (
+                      <View key={metric.key} style={[styles.statsBodyBadge, styles.statsGlassSurface, glassSurfaceStyle]}>
+                        <GlassLayer tint={metric.accent} sheenOpacity={0.18} isDark={isDark} />
+                        <View style={[styles.statsBodyIcon, { backgroundColor: iconBubbleBackground }]}>
+                          <IconSymbol name={metric.icon} size={18} color={metric.iconColor} />
+                        </View>
+                        <View style={styles.statsBodyCopy}>
+                          <ThemedText style={[styles.statsBodyValue, { color: textPrimary }]}>{metric.value}</ThemedText>
+                          <ThemedText style={[styles.statsBodyLabel, { color: textSecondary }]}>{metric.label}</ThemedText>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              </LiquidGlassCard>
+
+              {renderInterestingFacts()}
+
+              <LiquidGlassCard
+                style={styles.statsGlassCard}
+                intensity={26}
+                overlayColor={glassOverlay}
+                borderColor={glassBorderColor}
+              >
+                <View style={styles.statsGlassInner}>
+                  <ThemedText style={[styles.statsSectionTitle, { color: textSecondary }]}>Meilensteine</ThemedText>
+                  <View style={styles.statsMilestoneContainer}>
+                    {stats.milestones.map((milestone, index) => (
+                      <View key={index}>
+                        {renderMilestoneStatus(milestone)}
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              </LiquidGlassCard>
+            </>
+          ) : (
+            <LiquidGlassCard
+              style={styles.statsGlassCard}
+              intensity={26}
+              overlayColor={glassOverlay}
+              borderColor={glassBorderColor}
+            >
+              <View style={styles.statsGlassInner}>
+                <ThemedText style={[styles.statsNoDataText, { color: textSecondary }]}>
+                  Kein Geburtsdatum verfügbar. Bitte füge das Geburtsdatum deines Babys hinzu, um Statistiken anzuzeigen.
+                </ThemedText>
               </View>
-            </View>
-          </LiquidGlassCard>
-          
-          <LiquidGlassCard style={styles.infoGlassCard} intensity={24}>
-            <View style={styles.infoGlassInner}>
-              <ThemedText style={styles.infoTitle}>Die ersten Wochen</ThemedText>
-              <ThemedText style={styles.infoText}>
-                • In den ersten Wochen ist es wichtig, eine Bindung zu deinem Baby aufzubauen.
-              </ThemedText>
-              <ThemedText style={styles.infoText}>
-                • Achte auf ausreichend Ruhe und Erholung für dich und dein Baby.
-              </ThemedText>
-              <ThemedText style={styles.infoText}>
-                • Nimm dir Zeit, dein Baby kennenzulernen und seine Bedürfnisse zu verstehen.
-              </ThemedText>
-              <ThemedText style={styles.infoText}>
-                • Scheue dich nicht, um Hilfe zu bitten, wenn du sie brauchst.
-              </ThemedText>
-            </View>
-          </LiquidGlassCard>
+            </LiquidGlassCard>
+          )}
         </ScrollView>
       </SafeAreaView>
     </ThemedBackground>
@@ -469,7 +1451,6 @@ const styles = StyleSheet.create({
   },
   // Liquid Glass wrappers (Sleep-Tracker look)
   glassCard: {
-    marginHorizontal: TIMELINE_INSET,
     marginBottom: 20,
     borderRadius: 22,
   },
@@ -493,24 +1474,43 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  editPhotoButton: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    backgroundColor: '#7D5A50',
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
+  photoHintContainer: {
+    marginTop: 16,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 3,
-    elevation: 5,
+  },
+  photoHintText: {
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  photoHintButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  photoRemoveButton: {
+    marginTop: 8,
+  },
+  photoHintButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   infoContainer: {
     width: '100%',
+  },
+  createdHintBox: {
+    borderWidth: 1,
+    borderColor: 'rgba(125, 90, 80, 0.2)',
+    backgroundColor: 'rgba(233, 201, 182, 0.25)',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 14,
+  },
+  createdHintText: {
+    fontSize: 13,
+    fontWeight: '600',
   },
   infoRow: {
     flexDirection: 'row',
@@ -534,6 +1534,37 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 5,
   },
+  switchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderRadius: 15,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  switchValue: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  choiceRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  choiceButton: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingVertical: 11,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  choiceButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
   // Glass inputs/buttons
   glassInput: {
     borderWidth: 1,
@@ -555,6 +1586,14 @@ const styles = StyleSheet.create({
   },
   dateText: {
     fontSize: 16,
+  },
+  bedtimeManualInput: {
+    marginTop: 10,
+  },
+  bedtimeValidationText: {
+    marginTop: 6,
+    fontSize: 12,
+    fontWeight: '600',
   },
   buttonRow: {
     flexDirection: 'row',
@@ -597,28 +1636,250 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
-  // Info cards (Liquid Glass)
-  infoGlassCard: {
+  statsGlassSurface: {
+    position: 'relative',
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: GLASS_BORDER,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
+  statsGlassLayerGradient: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  statsGlassSheen: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '55%',
+    backgroundColor: 'rgba(255,255,255,0.25)',
+  },
+  statsGlassCard: {
     marginHorizontal: TIMELINE_INSET,
     marginBottom: 20,
     borderRadius: 22,
+    width: '100%',
+    maxWidth: 520,
+    alignSelf: 'center',
   },
-  infoGlassInner: {
+  statsGlassInner: {
     padding: 20,
   },
-  infoTitle: {
+  statsFirstGlassCard: {
+    marginTop: 12,
+  },
+  statsSectionTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 15,
+    fontWeight: '700',
+    color: HEADER_TEXT_COLOR,
+    marginBottom: 12,
+    textAlign: 'center',
+    letterSpacing: 0.2,
   },
-  infoText: {
-    fontSize: 14,
-    marginBottom: 10,
-    lineHeight: 20,
+  statsAgeHighlight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 18,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginBottom: 16,
   },
-  statsButtonContent: {
+  statsAgeHighlightIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  statsAgeHighlightText: {
+    flex: 1,
+  },
+  statsAgeValue: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: HEADER_TEXT_COLOR,
+  },
+  statsAgeSubline: {
+    fontSize: 12,
+    color: HEADER_TEXT_COLOR,
+    opacity: 0.75,
+    marginTop: 2,
+  },
+  statsAgeChipRow: {
+    flexDirection: 'row',
+    marginBottom: 6,
+    marginTop: 4,
+  },
+  statsAgeChip: {
+    flex: 1,
+    borderRadius: 14,
+    paddingVertical: 10,
+    alignItems: 'center',
+    marginHorizontal: 4,
+  },
+  statsAgeChipValue: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: HEADER_TEXT_COLOR,
+  },
+  statsAgeChipLabel: {
+    fontSize: 12,
+    color: HEADER_TEXT_COLOR,
+    opacity: 0.8,
+  },
+  statsStatRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    marginTop: 12,
+  },
+  statsStatItem: {
     alignItems: 'center',
-  }
+    flex: 1,
+    borderRadius: 18,
+    paddingVertical: 14,
+    paddingHorizontal: 8,
+    marginHorizontal: 4,
+  },
+  statsStatIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  statsStatValue: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: HEADER_TEXT_COLOR,
+  },
+  statsStatLabel: {
+    fontSize: 12,
+    marginTop: 2,
+    color: HEADER_TEXT_COLOR,
+    opacity: 0.8,
+    textAlign: 'center',
+  },
+  statsBodyGrid: {
+    marginTop: 4,
+  },
+  statsBodyBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 18,
+    marginBottom: 12,
+  },
+  statsBodyIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  statsBodyCopy: {
+    flex: 1,
+  },
+  statsBodyValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: HEADER_TEXT_COLOR,
+  },
+  statsBodyLabel: {
+    fontSize: 12,
+    color: HEADER_TEXT_COLOR,
+    opacity: 0.8,
+    marginTop: 2,
+  },
+  statsFactGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginTop: 4,
+  },
+  statsFactTile: {
+    width: '48%',
+    borderRadius: 18,
+    padding: 14,
+    marginBottom: 12,
+  },
+  statsFactIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  statsFactLabel: {
+    fontSize: 12,
+    color: HEADER_TEXT_COLOR,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  statsFactValue: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: HEADER_TEXT_COLOR,
+  },
+  statsFactCaption: {
+    fontSize: 12,
+    color: HEADER_TEXT_COLOR,
+    opacity: 0.8,
+    marginTop: 2,
+  },
+  statsMilestoneContainer: {
+    marginTop: 8,
+  },
+  statsMilestoneRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 18,
+    padding: 14,
+    marginBottom: 12,
+  },
+  statsMilestoneIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  statsMilestoneIconReached: {
+    backgroundColor: 'rgba(255,255,255,0.85)',
+  },
+  statsMilestoneIconUpcoming: {
+    backgroundColor: 'rgba(255,255,255,0.75)',
+  },
+  statsMilestoneInfo: {
+    flex: 1,
+  },
+  statsMilestoneName: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: HEADER_TEXT_COLOR,
+  },
+  statsMilestoneDate: {
+    fontSize: 12,
+    marginTop: 2,
+    color: HEADER_TEXT_COLOR,
+    opacity: 0.8,
+  },
+  statsNoDataText: {
+    fontSize: 14,
+    textAlign: 'center',
+    padding: 20,
+    color: HEADER_TEXT_COLOR,
+  },
 });

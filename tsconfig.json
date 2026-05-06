@@ -11,9 +11,36 @@
     }
   },
   "include": [
-    "**/*.ts",
-    "**/*.tsx",
+    "app/**/*.ts",
+    "app/**/*.tsx",
+    "components/**/*.ts",
+    "components/**/*.tsx",
+    "constants/**/*.ts",
+    "constants/**/*.tsx",
+    "contexts/**/*.ts",
+    "contexts/**/*.tsx",
+    "convex/**/*.ts",
+    "hooks/**/*.ts",
+    "hooks/**/*.tsx",
+    "lib/**/*.ts",
+    "lib/**/*.tsx",
+    "services/**/*.ts",
+    "services/**/*.tsx",
+    "tasks/**/*.ts",
+    "types/**/*.ts",
+    "plugins/**/*.ts",
+    "plugins/**/*.tsx",
     ".expo/types/**/*.ts",
     "expo-env.d.ts"
+  ],
+  "exclude": [
+    "backup",
+    "debug_help.ts",
+    "dist*",
+    "node_modules",
+    "output",
+    "ownership-map-out",
+    "scripts",
+    "supabase/functions"
   ]
 }

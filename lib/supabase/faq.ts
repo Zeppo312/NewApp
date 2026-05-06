@@ -16,6 +16,16 @@ export interface FaqEntry {
   category?: string; // Für die Anzeige des Kategorienamens (wird clientseitig hinzugefügt)
 }
 
+const getFaqCategoryName = (faqCategories: unknown): string => {
+  if (Array.isArray(faqCategories)) {
+    const firstCategory = faqCategories[0] as { name?: string } | undefined;
+    return firstCategory?.name || '';
+  }
+
+  const category = faqCategories as { name?: string } | null;
+  return category?.name || '';
+};
+
 // Funktion zum Abrufen aller Kategorien
 export const getFaqCategories = async () => {
   try {
@@ -53,7 +63,7 @@ export const getFaqEntries = async () => {
     // Kategorienamen zu den Einträgen hinzufügen
     const entriesWithCategories = entries.map(entry => ({
       ...entry,
-      category: entry.faq_categories?.name || ''
+      category: getFaqCategoryName(entry.faq_categories)
     }));
 
     return { data: entriesWithCategories, error: null };
@@ -85,7 +95,7 @@ export const getFaqEntriesByCategory = async (categoryId: string) => {
     // Kategorienamen zu den Einträgen hinzufügen
     const entriesWithCategories = entries.map(entry => ({
       ...entry,
-      category: entry.faq_categories?.name || ''
+      category: getFaqCategoryName(entry.faq_categories)
     }));
 
     return { data: entriesWithCategories, error: null };
@@ -117,7 +127,7 @@ export const searchFaqEntries = async (searchTerm: string) => {
     // Kategorienamen zu den Einträgen hinzufügen
     const entriesWithCategories = entries.map(entry => ({
       ...entry,
-      category: entry.faq_categories?.name || ''
+      category: getFaqCategoryName(entry.faq_categories)
     }));
 
     return { data: entriesWithCategories, error: null };

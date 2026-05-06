@@ -15,6 +15,8 @@ interface SimpleTabsProps {
 const SimpleTabs: React.FC<SimpleTabsProps> = ({ activeTab, onTabChange }) => {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
+  const isDark = colorScheme === 'dark';
+  const inactiveColor = isDark ? Colors.dark.textTertiary : '#666666';
   const [prevActiveTab, setPrevActiveTab] = useState<TabType>(activeTab);
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(0)).current;
@@ -125,7 +127,7 @@ const SimpleTabs: React.FC<SimpleTabsProps> = ({ activeTab, onTabChange }) => {
               <IconSymbol
                 name={getTabIcon(tab)}
                 size={14}
-                color={activeTab === tab ? getTabColor(tab) : '#666666'}
+                color={activeTab === tab ? getTabColor(tab) : inactiveColor}
                 style={styles.tabIcon}
               />
               <ThemedText
@@ -134,7 +136,7 @@ const SimpleTabs: React.FC<SimpleTabsProps> = ({ activeTab, onTabChange }) => {
                   activeTab === tab && styles.activeTabText
                 ]}
                 lightColor={activeTab === tab ? getTabColor(tab) : '#666666'}
-                darkColor={activeTab === tab ? getTabColor(tab) : '#AAAAAA'}
+                darkColor={activeTab === tab ? getTabColor(tab) : Colors.dark.textSecondary}
               >
                 {getTabTitle(tab)}
               </ThemedText>
@@ -223,7 +225,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     marginLeft: 6,
-    color: '#666666',
+    // color wird durch ThemedText gesetzt
   },
 });
 
