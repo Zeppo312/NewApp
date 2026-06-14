@@ -64,6 +64,7 @@ import { buildFeedingOverview } from '@/lib/feedingOverview';
 import { sleepActivityService } from '@/lib/sleepActivityService';
 import { cancelBabyReminderNotification } from '@/lib/babyReminderNotifications';
 import { cancelLocalFeedingReminders } from '@/lib/feedingReminderNotifications';
+import { shouldCancelStaleReminderAfterManualEntry } from '@/lib/reminderCancellationGuards';
 import {
   loadVitaminDReminderState,
   saveVitaminDCompletion,
@@ -1643,7 +1644,7 @@ export default function DailyScreen() {
 
         try {
           await cancelLocalFeedingReminders();
-          if (user?.id) {
+          if (user?.id && activeBabyId) {
             await cancelBabyReminderNotification({
               userId: user.id,
               babyId: activeBabyId,
@@ -1658,6 +1659,24 @@ export default function DailyScreen() {
 
         if (timerType === 'BREAST') {
           await startBreastfeedingLiveActivity(startMs);
+        }
+      } else if (
+        shouldCancelStaleReminderAfterManualEntry({
+          startTime: resolvedStartTime,
+          endTime: resolvedEndTime,
+        })
+      ) {
+        try {
+          await cancelLocalFeedingReminders();
+          if (user?.id && activeBabyId) {
+            await cancelBabyReminderNotification({
+              userId: user.id,
+              babyId: activeBabyId,
+              reminderType: 'feeding',
+            });
+          }
+        } catch (reminderError) {
+          console.error('Failed to cancel stale feeding reminders after manual entry:', reminderError);
         }
       }
       showSuccessSplash(

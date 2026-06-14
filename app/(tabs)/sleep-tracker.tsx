@@ -58,6 +58,7 @@ import { sleepActivityService } from '@/lib/sleepActivityService';
 import { parseSafeDate } from '@/lib/safeDate';
 import { cancelBabyReminderNotification } from '@/lib/babyReminderNotifications';
 import { cancelLocalSleepWindowReminders } from '@/lib/sleepWindowReminderNotifications';
+import { shouldCancelStaleReminderAfterManualEntry } from '@/lib/reminderCancellationGuards';
 import {
   DEFAULT_NIGHT_WINDOW_SETTINGS,
   clockTimeToMinutes,
@@ -2897,6 +2898,26 @@ export default function SleepTrackerScreen() {
         console.log('✅ Entry created successfully:', result.primary.data);
         // Splash anzeigen für neuen Eintrag
         showSuccessSplash('#8E4EC6', '💤', 'sleep_manual_save');
+      }
+
+      if (
+        shouldCancelStaleReminderAfterManualEntry({
+          startTime: normalizedStartTime,
+          endTime: normalizedEndTime,
+        })
+      ) {
+        try {
+          await cancelLocalSleepWindowReminders();
+          if (activeBabyId) {
+            await cancelBabyReminderNotification({
+              userId: user.id,
+              babyId: activeBabyId,
+              reminderType: 'sleep_window',
+            });
+          }
+        } catch (reminderError) {
+          console.error('Failed to cancel stale sleep window reminders after manual entry:', reminderError);
+        }
       }
 
       closeManualSleepModal();

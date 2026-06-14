@@ -27,6 +27,9 @@ import { getLocalProfileName } from '@/lib/localProfile';
 import { buildFeedingOverview } from '@/lib/feedingOverview';
 import { loadAllVisibleSleepEntries } from '@/lib/sleepSharing';
 import type { SleepEntry } from '@/lib/sleepData';
+import { cancelBabyReminderNotification } from '@/lib/babyReminderNotifications';
+import { cancelLocalFeedingReminders } from '@/lib/feedingReminderNotifications';
+import { shouldCancelStaleReminderAfterManualEntry } from '@/lib/reminderCancellationGuards';
 import BaseSortableTileGrid, { type SortableTileGridScrollMetrics } from '@/components/SortableTileGrid';
 
 // Tägliche Tipps für Mamas
@@ -1337,6 +1340,27 @@ export default function HomeScreen() {
       console.error('Error saving baby care entry:', error);
       Alert.alert('Fehler', 'Eintrag konnte nicht gespeichert werden.');
       return;
+    }
+
+    if (
+      entryType === 'feeding' &&
+      shouldCancelStaleReminderAfterManualEntry({
+        startTime: payload.start_time,
+        endTime: payload.end_time ?? null,
+      })
+    ) {
+      try {
+        await cancelLocalFeedingReminders();
+        if (user?.id && activeBabyId) {
+          await cancelBabyReminderNotification({
+            userId: user.id,
+            babyId: activeBabyId,
+            reminderType: 'feeding',
+          });
+        }
+      } catch (reminderError) {
+        console.error('Failed to cancel stale feeding reminders after home entry:', reminderError);
+      }
     }
 
     setShowInputModal(false);
