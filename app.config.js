@@ -10,7 +10,8 @@
  * @returns {ExpoConfig}
  */
 module.exports = function({ config }) {
-  const jsEngineOverride = process.env.LOTTI_IOS_JS_ENGINE?.trim();
+  const iosJsEngine = process.env.LOTTI_IOS_JS_ENGINE?.trim() || config.ios?.jsEngine || 'jsc';
+  const androidJsEngine = process.env.LOTTI_ANDROID_JS_ENGINE?.trim() || config.android?.jsEngine || 'hermes';
   const addPlugin = (plugins, plugin) => {
     const pluginName = Array.isArray(plugin) ? plugin[0] : plugin;
     const exists = plugins.some((item) => (Array.isArray(item) ? item[0] : item) === pluginName);
@@ -35,7 +36,6 @@ module.exports = function({ config }) {
   // Konfiguration für Updates
   const updatedConfig = {
     ...config,
-    jsEngine: jsEngineOverride || config.jsEngine,
     // Stelle sicher, dass Updates für Development-Builds aktiviert sind
     updates: {
       ...config.updates,
@@ -45,7 +45,12 @@ module.exports = function({ config }) {
     },
     ios: {
       ...config.ios,
+      jsEngine: iosJsEngine,
       version: config.version,
+    },
+    android: {
+      ...config.android,
+      jsEngine: androidJsEngine,
     },
     // Zusätzliche Expo-Konfiguration
     extra: {
