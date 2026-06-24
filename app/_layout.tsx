@@ -10,6 +10,7 @@ import 'react-native-reanimated';
 import * as Notifications from 'expo-notifications';
 
 import { StartupMessageModal } from '@/components/StartupMessageModal';
+import { LottiMomentToast } from '@/components/LottiMomentToast';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { BabyStatusProvider, useBabyStatus } from '@/contexts/BabyStatusContext';
@@ -681,6 +682,7 @@ function RootLayoutNav() {
         <Stack.Screen name="pregnancy-stats" />
         <Stack.Screen name="pregnancy-setup" />
         <Stack.Screen name="milestones" />
+        <Stack.Screen name="wochenmoment" />
         <Stack.Screen name="account-linking" />
         <Stack.Screen name="invite" />
         <Stack.Screen name="+not-found" />
@@ -695,6 +697,7 @@ function RootLayoutNav() {
           void handleStartupMessageConfirm();
         }}
       />
+      <LottiMomentToast />
       <StatusBar hidden={true} />
     </ThemeProvider>
     </GestureHandlerRootView>

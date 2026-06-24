@@ -22,6 +22,8 @@ import { BlurView } from 'expo-blur';
 import ActivityInputModal from '@/components/ActivityInputModal';
 import SleepQuickAddModal, { SleepQuickEntry } from '@/components/SleepQuickAddModal';
 import BabySwitcherButton from '@/components/BabySwitcherButton';
+import { LottiWeekCard } from '@/components/LottiWeekCard';
+import { LottiWeekRing } from '@/components/LottiWeekRing';
 import { loadCachedHomeData, cacheHomeData, isCacheFresh, type HomeCacheScope } from '@/lib/homeCache';
 import { getLocalProfileName } from '@/lib/localProfile';
 import { buildFeedingOverview } from '@/lib/feedingOverview';
@@ -30,21 +32,8 @@ import type { SleepEntry } from '@/lib/sleepData';
 import { cancelBabyReminderNotification } from '@/lib/babyReminderNotifications';
 import { cancelLocalFeedingReminders } from '@/lib/feedingReminderNotifications';
 import { shouldCancelStaleReminderAfterManualEntry } from '@/lib/reminderCancellationGuards';
+import { emitLottiMoment } from '@/lib/lottiMomentEvents';
 import BaseSortableTileGrid, { type SortableTileGridScrollMetrics } from '@/components/SortableTileGrid';
-
-// Tägliche Tipps für Mamas
-const dailyTips = [
-  "Nimm dir heute 10 Minuten nur für dich – eine kleine Auszeit kann Wunder wirken!",
-  "Trinke ausreichend Wasser – besonders wichtig für dich und dein Baby.",
-  "Ein kurzer Spaziergang an der frischen Luft kann deine Stimmung heben.",
-  "Bitte um Hilfe, wenn du sie brauchst – du musst nicht alles alleine schaffen.",
-  "Genieße die kleinen Momente mit deinem Baby – sie wachsen so schnell.",
-  "Schlaf, wann immer dein Baby schläft – Ruhe ist wichtig für dich.",
-  "Lass die Hausarbeit auch mal liegen – dein Wohlbefinden hat Vorrang.",
-  "Feiere jeden kleinen Fortschritt – sowohl deinen als auch den deines Babys.",
-  "Vertraue deinem Instinkt – du kennst dein Baby am besten.",
-  "Vergiss nicht zu essen – deine Energie ist wichtig für dich und dein Baby."
-];
 
 type HomeActiveTimer = {
   source: 'sleep' | 'daily';
@@ -618,7 +607,6 @@ export default function HomeScreen() {
 
   const [dailyEntries, setDailyEntries] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [dailyTip, setDailyTip] = useState("");
   const [userName, setUserName] = useState("");
   const [recommendations, setRecommendations] = useState<LottiRecommendation[]>([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -1003,9 +991,6 @@ export default function HomeScreen() {
   useEffect(() => {
     if (user && isActiveBabyReady) {
       void loadData();
-      // Wähle einen zufälligen Tipp für den Tag
-      const randomTip = dailyTips[Math.floor(Math.random() * dailyTips.length)];
-      setDailyTip(randomTip);
     } else if (!user) {
       setActiveHomeTimer(null);
       setIsLoading(false);
@@ -1043,9 +1028,6 @@ export default function HomeScreen() {
       }
       // Lade die Daten neu
       await loadData();
-      // Wähle einen neuen zufälligen Tipp
-      const randomTip = dailyTips[Math.floor(Math.random() * dailyTips.length)];
-      setDailyTip(randomTip);
     } catch (error) {
       console.error('Error during refresh:', error);
     } finally {
@@ -1394,6 +1376,7 @@ export default function HomeScreen() {
         return;
       }
 
+      emitLottiMoment('sleep');
       setShowSleepModal(false);
 
       const today = new Date();
@@ -1463,7 +1446,9 @@ export default function HomeScreen() {
               </View>
 
               <View style={styles.profileBadge}>
-                <BabySwitcherButton size={68} />
+                <LottiWeekRing contentSize={68} inset={4} ringStroke={4.5}>
+                  <BabySwitcherButton size={68} />
+                </LottiWeekRing>
                 <View style={styles.profileStatusDot} />
               </View>
             </View>
@@ -1505,19 +1490,7 @@ export default function HomeScreen() {
                 </ThemedText>
               </TouchableOpacity>
             ) : (
-              <View style={styles.tipCard}>
-                <GlassLensOverlay radius={20} />
-                <TipHighlightDots />
-                <View style={styles.tipCardRow}>
-                  <View style={styles.tipIconWrap}>
-                    <IconSymbol name="lightbulb.fill" size={18} color="#D6B28C" />
-                  </View>
-                  <View style={styles.tipContent}>
-                    <ThemedText adaptive={false} style={[styles.tipLabel, { color: accentPurple }]}>Tipp des Tages</ThemedText>
-                    <ThemedText adaptive={false} style={[styles.tipText, { color: textPrimary }]}>{dailyTip}</ThemedText>
-                  </View>
-                </View>
-              </View>
+              <LottiWeekCard style={{ marginTop: 14, marginBottom: 0 }} />
             )}
           </ThemedView>
         </BlurView>
@@ -1886,7 +1859,10 @@ export default function HomeScreen() {
         }}
         scrollEventThrottle={16}
       >
-        {[renderDailySummary(styles.carouselCardWrapper), renderRecommendationCard(styles.carouselCardWrapper)].map(
+        {[
+          <React.Fragment key="daily-summary">{renderDailySummary(styles.carouselCardWrapper)}</React.Fragment>,
+          <React.Fragment key="recommendation">{renderRecommendationCard(styles.carouselCardWrapper)}</React.Fragment>,
+        ].map(
           (slide, index) => (
             <View
               key={`overview-slide-${index}`}

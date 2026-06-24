@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase';
 import type { ConvexReactClient } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { BackendType } from '@/contexts/BackendContext';
+import { emitLottiMoment } from '@/lib/lottiMomentEvents';
 import {
   getAutoCloseEndTimeISO,
   isStaleActiveSleepEntry,
@@ -193,6 +194,10 @@ export class SleepEntriesService extends BaseDataService {
         .select()
         .single();
 
+      if (!error) {
+        emitLottiMoment('sleep');
+      }
+
       return {
         primary: { data: data as SleepEntry | null, error },
         secondary: { data: null, error: null },
@@ -250,6 +255,8 @@ export class SleepEntriesService extends BaseDataService {
           created_at: convexData.created_at,
           updated_at: convexData.updated_at,
         };
+
+        emitLottiMoment('sleep');
 
         return {
           primary: { data: mappedData, error: null },

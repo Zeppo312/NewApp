@@ -32,8 +32,6 @@ import { SleepEntry, SleepQuality, loadConnectedUsers } from '@/lib/sleepData';
 import { loadAllVisibleSleepEntries } from '@/lib/sleepSharing';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import {
-  CacheStrategy,
-  loadWithRevalidate,
   invalidateCacheAfterAction
 } from '@/lib/screenCache';
 import Header from '@/components/Header';
@@ -223,6 +221,50 @@ const getSleepPeriodForStart = (
     : minutesSinceMidnight >= nightStartMinutes && minutesSinceMidnight < nightEndMinutes;
 
   return isNight ? 'night' : 'day';
+};
+
+const MIN_NIGHT_OVERLAP_MINUTES = 60;
+const MIN_NIGHT_OVERLAP_RATIO = 0.5;
+
+const getSleepPeriodForEntry = (
+  entry: Pick<SleepEntry, 'start_time' | 'end_time'>,
+  nightWindowSettings: NightWindowSettings = DEFAULT_NIGHT_WINDOW_SETTINGS,
+  now: Date = new Date()
+): SleepPeriod => {
+  const start = new Date(entry.start_time);
+  const end = entry.end_time ? new Date(entry.end_time) : now;
+  const startMs = start.getTime();
+  const endMs = end.getTime();
+
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
+    return getSleepPeriodForStart(start, nightWindowSettings);
+  }
+
+  const previousWindow = getNightWindowRangeForDate(start, nightWindowSettings, 'previous');
+  const upcomingWindow = getNightWindowRangeForDate(start, nightWindowSettings, 'upcoming');
+  const previousOverlap = overlapMinutes(
+    start,
+    end,
+    previousWindow.nightWindowStart,
+    previousWindow.nightWindowEnd
+  );
+  const upcomingOverlap = overlapMinutes(
+    start,
+    end,
+    upcomingWindow.nightWindowStart,
+    upcomingWindow.nightWindowEnd
+  );
+  const nightOverlap = Math.max(previousOverlap, upcomingOverlap);
+  const durationMinutes = (endMs - startMs) / 60000;
+
+  if (
+    nightOverlap >= MIN_NIGHT_OVERLAP_MINUTES ||
+    nightOverlap / durationMinutes >= MIN_NIGHT_OVERLAP_RATIO
+  ) {
+    return 'night';
+  }
+
+  return getSleepPeriodForStart(start, nightWindowSettings);
 };
 
 // Match Timeline (ActivityCard marginHorizontal=8 -> 16px gesamt)
@@ -1299,8 +1341,22 @@ const convertSleepToDailyEntry = (
       return 'nickerchen';
     }
     
-    // Nachtschlaf: dynamisches, konfigurierbares Nachtfenster
-    if (getSleepPeriodForStart(date, nightWindowSettings) === 'night') {
+    const inferredEnd = durationMinutes
+      ? new Date(date.getTime() + durationMinutes * 60000)
+      : null;
+
+    // Nachtschlaf: dynamisches, konfigurierbares Nachtfenster.
+    // Für längere Einträge zählt auch eine deutliche Überlappung mit dem Nachtfenster,
+    // damit ein vor dem Fenster gestarteter Nachtschlaf nach dem Beenden nicht als Tagschlaf verschwindet.
+    if (
+      getSleepPeriodForEntry(
+        {
+          start_time: date,
+          end_time: inferredEnd,
+        },
+        nightWindowSettings
+      ) === 'night'
+    ) {
       return 'nacht';
     }
     
@@ -1444,6 +1500,8 @@ export default function SleepTrackerScreen() {
   const [sleepEntries, setSleepEntries] = useState<ClassifiedSleepEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const loadSleepDataRequestIdRef = useRef(0);
+  const loadSleepDataRef = useRef<(() => Promise<void>) | null>(null);
   const [activeSleepEntry, setActiveSleepEntry] = useState<ClassifiedSleepEntry | null>(null);
   const activeSleepEntryRef = useRef<ClassifiedSleepEntry | null>(null);
   const activeEntryPeriodOverridesRef = useRef<Record<string, SleepPeriod>>({});
@@ -1956,7 +2014,7 @@ export default function SleepTrackerScreen() {
   // Classify sleep entry by time period
   const classifySleepEntry = useCallback((entry: any, forcedPeriod?: SleepPeriod): ClassifiedSleepEntry => {
     const isActive = !entry.end_time;
-    let period = forcedPeriod ?? getSleepPeriodForStart(new Date(entry.start_time), nightWindowSettings);
+    let period = forcedPeriod ?? getSleepPeriodForEntry(entry, nightWindowSettings);
 
     if (!forcedPeriod && isActive && period === 'day') {
       const activeNightWindowKey = getNightWindowKeyForEntry(entry, nightWindowSettings);
@@ -2070,29 +2128,33 @@ export default function SleepTrackerScreen() {
     return null;
   };
 
-  // Load sleep history (finished entries) - WITH cache!
+  // Load sleep history (finished entries).
+  // Night sleep is derived from multiple entries across the night window. Showing
+  // stale history first can render a partial night and then a different full
+  // night after background refresh, which looks like data corruption.
   const loadSleepHistory = async () => {
-    // WICHTIG: Cache-Key nur mit Baby-ID, damit Partner denselben Cache teilen!
-    const cacheKey = `screen_cache_sleep_history_${activeBackend}_${activeBabyId || 'default'}`;
+    const fetchFinishedEntries = async () => {
+      const result = await loadVisibleSleepEntries(activeBabyId ?? undefined);
+      if (!result.success) {
+        const message = 'error' in result ? result.error : undefined;
+        throw new Error(message || 'Schlafverlauf konnte nicht geladen werden.');
+      }
+      return (result.entries || []).filter(entry => entry.end_time);
+    };
 
-    const result = await loadWithRevalidate(
-      cacheKey,
-      async () => {
-        const { success, entries } = await loadVisibleSleepEntries(activeBabyId ?? undefined);
-        if (success && entries) {
-          // Only return finished entries for history
-          return entries.filter(entry => entry.end_time);
-        }
-        return [];
-      },
-      CacheStrategy.SHORT // 30 Sekunden cache für Predictions-Synchronität
-    );
-
-    return result;
+    return {
+      data: await fetchFinishedEntries(),
+      isStale: false,
+      refresh: fetchFinishedEntries,
+    };
   };
 
   // Load sleep data (combines live + cached history)
   const loadSleepData = async () => {
+    const requestId = loadSleepDataRequestIdRef.current + 1;
+    loadSleepDataRequestIdRef.current = requestId;
+    const isLatestRequest = () => loadSleepDataRequestIdRef.current === requestId;
+
     try {
       setIsLoading(true);
       setIsLiveStatusLoaded(false);
@@ -2108,6 +2170,8 @@ export default function SleepTrackerScreen() {
             ? activeSleepEntryRef.current
             : null
         );
+
+      if (!isLatestRequest()) return;
 
       // Nur auf null setzen wenn die DB explizit keinen aktiven Eintrag zurückgibt.
       // Wenn activeSleep null ist und wir bereits einen gesetzten Eintrag haben, behalten wir
@@ -2134,8 +2198,10 @@ export default function SleepTrackerScreen() {
         return prev;
       });
 
-      // HISTORY: With cache, refresh in background
+      // HISTORY: Always fresh. Nachtschlaf-Gruppen are too sensitive to partial cached histories.
       const { data: finishedEntries, isStale, refresh } = await loadSleepHistory();
+
+      if (!isLatestRequest()) return;
 
       // Handle null data gracefully
       const safeFinishedEntries = finishedEntries || [];
@@ -2155,6 +2221,7 @@ export default function SleepTrackerScreen() {
       // Background refresh if cache was stale
       if (isStale) {
         refresh().then(freshEntries => {
+          if (!isLatestRequest()) return;
           const safeFreshEntries = freshEntries || [];
           const freshActiveSleep =
             activeSleepEntryRef.current &&
@@ -2197,17 +2264,25 @@ export default function SleepTrackerScreen() {
       console.error('Failed to load sleep data:', error);
       setPredictionLoading(false);
     } finally {
+      if (!isLatestRequest()) return;
       setIsLiveStatusLoaded(true);
       setIsLoading(false);
       setRefreshing(false);
     }
   };
+  loadSleepDataRef.current = loadSleepData;
 
   // Handle refresh
   const handleRefresh = async () => {
     setRefreshing(true);
     await loadSleepData();
   };
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadSleepDataRef.current?.();
+    }, [activeBabyId, activeBackend, convexClient, sleepService, user?.id, nightWindowSettings])
+  );
 
   const applyNightQualityToSession = useCallback(async (
     quality: NonNullable<SleepQuality>,
@@ -4315,7 +4390,19 @@ export default function SleepTrackerScreen() {
     
     const monthStart = useMemo(() => getMonthStart(refMonthDate), [refMonthDate]);
     const monthEnd = useMemo(() => getMonthEnd(refMonthDate), [refMonthDate]);
+    const monthRangeEnd = useMemo(
+      () => new Date(monthEnd.getFullYear(), monthEnd.getMonth(), monthEnd.getDate() + 1),
+      [monthEnd]
+    );
     const daysInMonth = useMemo(() => getDaysInMonth(refMonthDate), [refMonthDate]);
+    const averageDayCount = useMemo(() => {
+      const today = new Date();
+      const isCurrentMonth =
+        refMonthDate.getFullYear() === today.getFullYear() &&
+        refMonthDate.getMonth() === today.getMonth();
+
+      return isCurrentMonth ? today.getDate() : daysInMonth;
+    }, [daysInMonth, refMonthDate]);
 
     // Erstelle Kalender-Grid - gruppiert nach Wochen (wie Wochenansicht)
     const getCalendarWeeks = () => {
@@ -4404,6 +4491,45 @@ export default function SleepTrackerScreen() {
         })
       );
     };
+
+    const monthStats = (() => {
+      const nowMs = Date.now();
+      const monthStartMs = monthStart.getTime();
+      const monthEndMs = monthRangeEnd.getTime();
+
+      const entriesInMonth = sleepEntries.filter((entry) => {
+        const entryStartMs = new Date(entry.start_time).getTime();
+        const entryEndMs = entry.end_time ? new Date(entry.end_time).getTime() : nowMs;
+        if (!Number.isFinite(entryStartMs) || !Number.isFinite(entryEndMs)) return false;
+
+        return Math.min(entryEndMs, monthEndMs) > Math.max(entryStartMs, monthStartMs);
+      });
+
+      const totalMonthMinutes = minutesFromMergedIntervals(
+        getMergedIntervalsForEntries(sleepEntries, {
+          rangeStart: monthStart,
+          rangeEnd: monthRangeEnd,
+          nowMs,
+        })
+      );
+
+      const longestSleepMinutes = entriesInMonth.reduce((longest, entry) => {
+        const entryStartMs = new Date(entry.start_time).getTime();
+        const entryEndMs = entry.end_time ? new Date(entry.end_time).getTime() : nowMs;
+        if (!Number.isFinite(entryStartMs) || !Number.isFinite(entryEndMs)) return longest;
+
+        const clippedMinutes = Math.floor(
+          Math.max(0, Math.min(entryEndMs, monthEndMs) - Math.max(entryStartMs, monthStartMs)) / 60000
+        );
+        return Math.max(longest, clippedMinutes);
+      }, 0);
+
+      return {
+        entriesCount: entriesInMonth.length,
+        averageHoursPerDay: Math.round(totalMonthMinutes / averageDayCount / 60),
+        longestSleepHours: Math.round(longestSleepMinutes / 60),
+      };
+    })();
 
     // Neue Farbpalette für Kalender-Tiles (wie KPI-Cards)
     type DayScore = 'excellent' | 'good' | 'okay' | 'poor' | 'none';
@@ -4559,17 +4685,17 @@ export default function SleepTrackerScreen() {
             <View style={styles.summaryStats}>
               <View style={styles.statItem}>
                 <Text style={styles.statEmoji}>📊</Text>
-                <Text style={[styles.statValue, isDark && { color: '#FFFFFF' }]}>{sleepEntries.length}</Text>
+                <Text style={[styles.statValue, isDark && { color: '#FFFFFF' }]}>{monthStats.entriesCount}</Text>
                 <Text style={[styles.statLabel, isDark && { color: '#FFFFFF' }]}>Einträge</Text>
               </View>
               <View style={styles.statItem}>
                 <Text style={styles.statEmoji}>⏰</Text>
-                <Text style={[styles.statValue, isDark && { color: '#FFFFFF' }]}>{sleepEntries.length > 0 ? Math.round(sleepEntries.reduce((sum, e) => sum + (e.duration_minutes || 0), 0) / sleepEntries.length / 60) : 0}h</Text>
+                <Text style={[styles.statValue, isDark && { color: '#FFFFFF' }]}>{monthStats.averageHoursPerDay}h</Text>
                 <Text style={[styles.statLabel, isDark && { color: '#FFFFFF' }]}>Ø pro Tag</Text>
               </View>
               <View style={styles.statItem}>
                 <Text style={styles.statEmoji}>🏆</Text>
-                <Text style={[styles.statValue, isDark && { color: '#FFFFFF' }]}>{sleepEntries.length > 0 ? Math.round(Math.max(...sleepEntries.map(e => e.duration_minutes || 0)) / 60) : 0}h</Text>
+                <Text style={[styles.statValue, isDark && { color: '#FFFFFF' }]}>{monthStats.longestSleepHours}h</Text>
                 <Text style={[styles.statLabel, isDark && { color: '#FFFFFF' }]}>Längster Schlaf</Text>
               </View>
             </View>

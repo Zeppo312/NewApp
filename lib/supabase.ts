@@ -2,6 +2,7 @@ import 'react-native-url-polyfill/auto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 import * as Linking from 'expo-linking';
+import { emitLottiMoment } from '@/lib/lottiMomentEvents';
 
 // Supabase-Konfiguration
 // Ersetzen Sie diese Werte mit Ihren eigenen Supabase-Projektdaten
@@ -435,6 +436,14 @@ export const addBabyCareEntry = async (entry: BabyCareEntry, babyId?: string) =>
       .insert(payload)
       .select()
       .single();
+
+    if (!error) {
+      if (payload.entry_type === 'feeding') {
+        emitLottiMoment('feeding');
+      } else if (payload.entry_type === 'diaper') {
+        emitLottiMoment('care');
+      }
+    }
 
     return { data, error };
   } catch (err) {
