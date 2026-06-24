@@ -1,8 +1,7 @@
 import React from 'react';
 import { StyleSheet, TextInput, View } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
-import { Colors } from '@/constants/Colors';
-import { useColorScheme } from '@/hooks/useColorScheme';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 
 interface TextInputFieldProps {
   label: string;
@@ -11,6 +10,7 @@ interface TextInputFieldProps {
   placeholder?: string;
   multiline?: boolean;
   numberOfLines?: number;
+  readOnly?: boolean;
 }
 
 export const TextInputField: React.FC<TextInputFieldProps> = ({
@@ -20,9 +20,10 @@ export const TextInputField: React.FC<TextInputFieldProps> = ({
   placeholder,
   multiline = false,
   numberOfLines = 1,
+  readOnly = false,
 }) => {
-  const colorScheme = useColorScheme() ?? 'light';
-  const theme = Colors[colorScheme];
+  const adaptiveColors = useAdaptiveColors();
+  const isDark = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
 
   return (
     <View style={styles.container}>
@@ -31,14 +32,16 @@ export const TextInputField: React.FC<TextInputFieldProps> = ({
         style={[
           styles.input,
           multiline && { minHeight: 24 * numberOfLines, textAlignVertical: 'top' },
-          { color: theme.text, borderColor: 'rgba(0,0,0,0.1)' }
+          { color: adaptiveColors.text, borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)' },
+          readOnly && styles.inputReadOnly,
         ]}
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
-        placeholderTextColor={colorScheme === 'dark' ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)'}
+        placeholderTextColor={isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)'}
         multiline={multiline}
         numberOfLines={numberOfLines}
+        editable={!readOnly}
       />
     </View>
   );
@@ -60,5 +63,8 @@ const styles = StyleSheet.create({
     padding: 10,
     paddingTop: 10,
     width: '100%',
+  },
+  inputReadOnly: {
+    opacity: 0.55,
   },
 });

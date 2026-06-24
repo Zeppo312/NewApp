@@ -1,16 +1,44 @@
+# Set by expo-router. This enables Fabric-only features from react-native-screens
+ENV['RNS_GAMMA_ENABLED'] ||= '1'
 require File.join(File.dirname(`node --print "require.resolve('expo/package.json')"`), "scripts/autolinking")
 require File.join(File.dirname(`node --print "require.resolve('react-native/package.json')"`), "scripts/react_native_pods")
 
 require 'json'
+require 'fileutils'
 podfile_properties = JSON.parse(File.read(File.join(__dir__, 'Podfile.properties.json'))) rescue {}
 
-ENV['RCT_NEW_ARCH_ENABLED'] ||= '0' if podfile_properties['newArchEnabled'] == 'false'
+def ccache_enabled?(podfile_properties)
+  # Environment variable takes precedence
+  return ENV['USE_CCACHE'] == '1' if ENV['USE_CCACHE']
+
+  # Fall back to Podfile properties
+  podfile_properties['apple.ccacheEnabled'] == 'true'
+end
+
 ENV['EX_DEV_CLIENT_NETWORK_INSPECTOR'] ||= podfile_properties['EX_DEV_CLIENT_NETWORK_INSPECTOR']
-ENV['RCT_USE_RN_DEP'] ||= '1' if podfile_properties['ios.buildReactNativeFromSource'] != 'true' && podfile_properties['newArchEnabled'] != 'false'
-ENV['RCT_USE_PREBUILT_RNCORE'] ||= '1' if podfile_properties['ios.buildReactNativeFromSource'] != 'true' && podfile_properties['newArchEnabled'] != 'false'
+ENV['RCT_USE_RN_DEP'] ||= '1' if podfile_properties['ios.buildReactNativeFromSource'] != 'true'
+ENV['RCT_USE_PREBUILT_RNCORE'] ||= '1' if podfile_properties['ios.buildReactNativeFromSource'] != 'true'
+ENV['RCT_HERMES_V1_ENABLED'] ||= '1' if podfile_properties['expo.useHermesV1'] == 'true'
 platform :ios, podfile_properties['ios.deploymentTarget'] || '15.1'
 
 prepare_react_native_project!
+
+pre_install do |_installer|
+  randombytes_podspec = File.join(
+    __dir__,
+    '..',
+    'node_modules',
+    'react-native-randombytes',
+    'react-native-randombytes.podspec'
+  )
+
+  if File.exist?(randombytes_podspec)
+    contents = File.read(randombytes_podspec)
+    patched = contents.gsub("s.source_files   = '*.{h,m}'", "s.source_files   = 'RNRandomBytes.{h,m}'")
+
+    File.write(randombytes_podspec, patched) if patched != contents
+  end
+end
 
 target 'LottiBaby' do
   use_expo_modules!
@@ -19,7 +47,10 @@ target 'LottiBaby' do
     config_command = ['node', '-e', "process.argv=['', '', 'config'];require('@react-native-community/cli').run()"];
   else
     config_command = [
-      'npx',
+      'node',
+      '--no-warnings',
+      '--eval',
+      'require(\'expo/bin/autolinking\')',
       'expo-modules-autolinking',
       'react-native-config',
       '--json',
@@ -46,7 +77,48 @@ target 'LottiBaby' do
       installer,
       config[:reactNativePath],
       :mac_catalyst_enabled => false,
-      :ccache_enabled => podfile_properties['apple.ccacheEnabled'] == 'true',
+      :ccache_enabled => ccache_enabled?(podfile_properties),
     )
+
+    react_xcframework_root = File.join(installer.sandbox.root.to_s, 'React-Core-prebuilt', 'React.xcframework')
+    shared_headers_path = File.join(react_xcframework_root, 'Headers')
+    device_headers_path = File.join(react_xcframework_root, 'ios-arm64', 'React.framework', 'Headers')
+    public_headers_path = File.join(installer.sandbox.root.to_s, 'Headers', 'Public', 'React-Core-prebuilt')
+
+    if Dir.exist?(shared_headers_path) && Dir.exist?(device_headers_path)
+      Dir.children(device_headers_path).each do |entry|
+        target_path = File.join(shared_headers_path, entry)
+        source_path = File.join(device_headers_path, entry)
+
+        next if File.exist?(target_path)
+
+        FileUtils.ln_sf(source_path, target_path)
+      end
+    end
+
+    if Dir.exist?(public_headers_path) && Dir.exist?(device_headers_path)
+      Dir.children(device_headers_path).each do |entry|
+        target_path = File.join(public_headers_path, entry)
+        source_path = File.join(device_headers_path, entry)
+
+        next if File.exist?(target_path)
+
+        FileUtils.ln_sf(source_path, target_path)
+      end
+    end
+  end
+end
+
+
+# apple-targets-extension-loader -- Dynamic loading of target configurations
+Dir.glob(File.join(__dir__, '..', 'targets', '**', 'pods.rb')).each do |target_file|
+  target_name = File.basename(File.dirname(target_file))
+  target target_name do
+    # Create a new binding with access to necessary methods and variables
+    target_binding = binding
+    target_binding.local_variable_set(:podfile_properties, podfile_properties)
+
+    # Evaluate the target file content in the new binding
+    eval(File.read(target_file), target_binding, target_file)
   end
 end

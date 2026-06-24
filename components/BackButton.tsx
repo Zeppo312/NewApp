@@ -1,10 +1,9 @@
 import React from 'react';
-import { StyleSheet, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, TouchableOpacity } from 'react-native';
 import { ThemedText } from './ThemedText';
 import { ThemedView } from './ThemedView';
 import { IconSymbol } from './ui/IconSymbol';
-import { useRouter } from 'expo-router';
-import { useColorScheme } from '@/hooks/useColorScheme';
+import { useNavigation } from '@/contexts/NavigationContext';
 
 interface BackButtonProps {
   onPress?: () => void;
@@ -17,15 +16,13 @@ export const BackButton: React.FC<BackButtonProps> = ({
   label = 'Zurück',
   showLabel = false
 }) => {
-  const router = useRouter();
-  const colorScheme = useColorScheme();
+  const navigation = useNavigation();
 
   const handlePress = () => {
     if (onPress) {
       onPress();
     } else {
-      // Standard-Verhalten: Zurück zur vorherigen Seite
-      router.back();
+      navigation.goBack();
     }
   };
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   StyleSheet,
   ScrollView,
@@ -9,122 +9,481 @@ import {
   SafeAreaView,
   StatusBar,
   Platform,
-  Switch,
   ActivityIndicator,
-  Dimensions,
+  Switch,
 } from 'react-native';
+import { CachedImage } from '@/components/CachedImage';
 import { BlurView } from 'expo-blur';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import { router, Stack } from 'expo-router';
+import { Redirect, router, Stack, useLocalSearchParams } from 'expo-router';
+import * as Linking from 'expo-linking';
 
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import Header from '@/components/Header';
+import TextInputOverlay from '@/components/modals/TextInputOverlay';
 
 import { Colors } from '@/constants/Colors';
-import { useColorScheme } from '@/hooks/useColorScheme';
-import { LiquidGlassCard, GLASS_OVERLAY, LAYOUT_PAD } from '@/constants/DesignGuide';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
+import { LiquidGlassCard, GLASS_OVERLAY, GLASS_OVERLAY_DARK, LAYOUT_PAD } from '@/constants/DesignGuide';
 
 import { useAuth } from '@/contexts/AuthContext';
-import { useBabyStatus } from '@/contexts/BabyStatusContext';
-import { supabase } from '@/lib/supabase';
-import { getBabyInfo, saveBabyInfo } from '@/lib/baby';
+import { saveAppSettings, supabase } from '@/lib/supabase';
+import { setLocalProfileName } from '@/lib/localProfile';
+import * as ImagePicker from 'expo-image-picker';
+import {
+  buildAccountDeletionWarningMessage,
+  deleteProfileAvatar,
+  deleteUserAccount,
+  getAccountDeletionRequirements,
+  uploadProfileAvatar,
+} from '@/lib/profile';
+import { openSubscriptionManagement } from '@/lib/subscriptionManagement';
 
-const { width: screenWidth } = Dimensions.get('window');
-const TIMELINE_INSET = 8; // wie im Sleep-Tracker
 const PRIMARY_TEXT = '#7D5A50';
 const ACCENT_PURPLE = '#8E4EC6'; // Sleep-Tracker Akzent
 const BABY_BLUE = '#87CEEB';
 
+const toRgba = (hex: string, opacity = 1) => {
+  const cleanHex = hex.replace('#', '');
+  const int = parseInt(cleanHex, 16);
+  const r = (int >> 16) & 255;
+  const g = (int >> 8) & 255;
+  const b = int & 255;
+  return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+};
+
+const lightenHex = (hex: string, amount = 0.35) => {
+  const cleanHex = hex.replace('#', '');
+  const int = parseInt(cleanHex, 16);
+  const r = (int >> 16) & 255;
+  const g = (int >> 8) & 255;
+  const b = int & 255;
+
+  const lightenChannel = (channel: number) =>
+    Math.min(255, Math.round(channel + (255 - channel) * amount));
+  const toHex = (channel: number) => channel.toString(16).padStart(2, '0');
+
+  return `#${toHex(lightenChannel(r))}${toHex(lightenChannel(g))}${toHex(lightenChannel(b))}`;
+};
+
 export default function ProfilScreen() {
-  const colorScheme = useColorScheme() ?? 'light';
-  const theme = Colors[colorScheme];
-  const { user } = useAuth();
-  const { isBabyBorn, setIsBabyBorn } = useBabyStatus();
+  const params = useLocalSearchParams<{
+    focus?: string | string[];
+    communitySetup?: string | string[];
+    communityAvatar?: string | string[];
+  }>();
+  const adaptiveColors = useAdaptiveColors();
+  const colorScheme = adaptiveColors.effectiveScheme;
+  const isDark = colorScheme === 'dark' || adaptiveColors.isDarkBackground;
+
+  const textPrimary = isDark ? Colors.dark.textPrimary : '#5C4033';
+  const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
+  const glassOverlay = isDark ? GLASS_OVERLAY_DARK : GLASS_OVERLAY;
+  const glassBorder = isDark ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.6)';
+  const glassBorderStrong = isDark ? 'rgba(255,255,255,0.28)' : 'rgba(255,255,255,0.85)';
+  const glassSurface = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.7)';
+  const glassSurfaceSoft = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.2)';
+  const glassSurfaceButton = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.5)';
+  const accentPurple = isDark ? lightenHex(ACCENT_PURPLE) : ACCENT_PURPLE;
+  const babyBlue = isDark ? lightenHex(BABY_BLUE) : BABY_BLUE;
+  const loadingAccent = adaptiveColors.accent;
+  const saveCardBackground = isDark ? toRgba(accentPurple, 0.22) : 'rgba(220,200,255,0.6)';
+  const securityCardBackground = isDark ? toRgba(babyBlue, 0.2) : 'rgba(135,206,235,0.45)';
+  const dangerCardBackground = isDark ? 'rgba(255,107,107,0.22)' : 'rgba(255,130,130,0.5)';
+  const actionDisabledBackground = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(168,168,168,0.5)';
+  const { user, session, signOut } = useAuth();
+  const requestedFocus = Array.isArray(params.focus) ? params.focus[0] : params.focus;
+  const communitySetup = Array.isArray(params.communitySetup) ? params.communitySetup[0] : params.communitySetup;
+  const communityAvatarParam = Array.isArray(params.communityAvatar)
+    ? params.communityAvatar[0]
+    : params.communityAvatar;
+  const shouldCompleteCommunityUsername = communitySetup === 'username';
 
   // Benutzerinformationen
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName]   = useState('');
+  const [username, setUsername]   = useState('');
   const [email, setEmail]         = useState('');
   const [userRole, setUserRole]   = useState<'mama' | 'papa' | ''>('');
-
-  // Baby-Informationen
-  const [babyName, setBabyName]         = useState('');
-  const [babyGender, setBabyGender]     = useState<'male' | 'female' | ''>('');
-  const [dueDate, setDueDate]           = useState<Date | null>(null);
-  const [birthDate, setBirthDate]       = useState<Date | null>(null);
-  const [babyWeight, setBabyWeight]     = useState('');
-  const [babyHeight, setBabyHeight]     = useState('');
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [avatarBase64, setAvatarBase64] = useState<string | null>(null);
+  const [avatarRemoved, setAvatarRemoved] = useState(false);
+  const [communityUseAvatar, setCommunityUseAvatar] = useState(true);
 
   // UI
   const [isLoading, setIsLoading]                   = useState(true);
-  const [showDueDatePicker, setShowDueDatePicker]   = useState(false);
-  const [showBirthDatePicker, setShowBirthDatePicker] = useState(false);
   const [isSaving, setIsSaving]                     = useState(false);
+  const [isDeletingAvatar, setIsDeletingAvatar]     = useState(false);
+  const [isDeletingProfile, setIsDeletingProfile]   = useState(false);
+  const [isSendingPasswordReset, setIsSendingPasswordReset] = useState(false);
+  const [isUpdatingEmail, setIsUpdatingEmail] = useState(false);
+  const [emailOverlayVisible, setEmailOverlayVisible] = useState(false);
+  const [emailOverlayValue, setEmailOverlayValue] = useState('');
+  const latestLoadRequestIdRef = useRef(0);
+  const usernameInputRef = useRef<TextInput>(null);
+
+  const loadUserData = useCallback(async () => {
+    const requestId = ++latestLoadRequestIdRef.current;
+    try {
+      setIsLoading(true);
+
+      if (!user) {
+        if (requestId === latestLoadRequestIdRef.current) {
+          setIsLoading(false);
+        }
+        return;
+      }
+
+      const userId = user.id;
+
+      if (user.email) setEmail(user.email);
+
+      const [{ data: profileData, error: profileError }, { data: settingsData, error: settingsError }] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('first_name, last_name, username, user_role, avatar_url')
+          .eq('id', userId)
+          .single(),
+        supabase
+          .from('user_settings')
+          .select('community_use_avatar')
+          .eq('user_id', userId)
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ]);
+
+      if (!profileError && profileData) {
+        if (requestId !== latestLoadRequestIdRef.current) return;
+        setFirstName(profileData.first_name || '');
+        setLastName(profileData.last_name || '');
+        setUsername(profileData.username || '');
+        setUserRole((profileData.user_role as any) || '');
+        setAvatarUrl(profileData.avatar_url || null);
+        setAvatarPreview(profileData.avatar_url || null);
+        setAvatarRemoved(false);
+        await setLocalProfileName(
+          userId,
+          profileData.first_name || '',
+          profileData.last_name || '',
+        );
+      }
+
+      if (!settingsError && requestId === latestLoadRequestIdRef.current) {
+        if (typeof settingsData?.community_use_avatar === 'boolean') {
+          setCommunityUseAvatar(settingsData.community_use_avatar);
+        } else if (communityAvatarParam === 'hidden') {
+          setCommunityUseAvatar(false);
+        } else if (communityAvatarParam === 'visible') {
+          setCommunityUseAvatar(true);
+        }
+      }
+
+    } catch (e) {
+      console.error(e);
+      if (requestId === latestLoadRequestIdRef.current) {
+        Alert.alert('Fehler', 'Deine Daten konnten nicht geladen werden.');
+      }
+    } finally {
+      if (requestId === latestLoadRequestIdRef.current) {
+        setIsLoading(false);
+      }
+    }
+  }, [communityAvatarParam, user]);
 
   useEffect(() => {
     if (user) loadUserData();
     else setIsLoading(false);
-  }, [user]);
+  }, [loadUserData, user]);
 
-  const loadUserData = async () => {
+  useEffect(() => {
+    if (requestedFocus !== 'username' || isLoading) return;
+
+    const timeout = setTimeout(() => {
+      usernameInputRef.current?.focus();
+    }, 350);
+
+    return () => clearTimeout(timeout);
+  }, [isLoading, requestedFocus]);
+
+  const pickAvatarImage = async () => {
     try {
-      setIsLoading(true);
-
-      if (user?.email) setEmail(user.email);
-
-      // Profile
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('first_name, last_name, user_role')
-        .eq('id', user?.id)
-        .single();
-
-      if (!profileError && profileData) {
-        setFirstName(profileData.first_name || '');
-        setLastName(profileData.last_name || '');
-        setUserRole((profileData.user_role as any) || '');
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Berechtigung erforderlich', 'Bitte erlaube den Zugriff auf deine Fotos.');
+        return;
       }
 
-      // Settings
-      const { data: settingsData } = await supabase
-        .from('user_settings')
-        .select('due_date, is_baby_born')
-        .eq('user_id', user?.id)
-        .order('updated_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.7,
+        base64: true,
+      });
 
-      if (settingsData) {
-        if (settingsData.due_date) setDueDate(new Date(settingsData.due_date));
-        if (settingsData.is_baby_born !== undefined) setIsBabyBorn(settingsData.is_baby_born);
-      }
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        let base64String = asset.base64;
 
-      // Baby info
-      const { data: babyData } = await getBabyInfo();
-      if (babyData) {
-        setBabyName(babyData.name || '');
-        setBabyGender(babyData.baby_gender || '');
-        setBabyWeight(babyData.weight || '');
-        setBabyHeight(babyData.height || '');
-        if (babyData.birth_date) setBirthDate(new Date(babyData.birth_date));
+        if (!base64String && asset.uri) {
+          const response = await fetch(asset.uri);
+          const blob = await response.blob();
+          const reader = new FileReader();
+          base64String = await new Promise<string | null>((resolve, reject) => {
+            reader.onload = () => {
+              resolve(reader.result as string);
+            };
+            reader.onerror = () => reject(null);
+            reader.readAsDataURL(blob);
+          });
+        }
+
+        setAvatarPreview(asset.uri || avatarUrl);
+        setAvatarBase64(base64String || null);
+        setAvatarRemoved(false);
       }
-    } catch (e) {
-      console.error(e);
-      Alert.alert('Fehler', 'Deine Daten konnten nicht geladen werden.');
+    } catch (error) {
+      console.error('Error picking avatar image:', error);
+      Alert.alert('Fehler', 'Das Profilbild konnte nicht ausgewählt werden.');
+    }
+  };
+
+  const removeAvatarImage = (markRemoved = true) => {
+    setAvatarPreview(null);
+    setAvatarBase64(null);
+    setAvatarUrl(null);
+    setAvatarRemoved(markRemoved);
+  };
+
+  const handleAvatarDeletePress = () => {
+    if (!avatarUrl || isDeletingAvatar) return;
+    const urlToDelete = avatarUrl;
+    Alert.alert(
+      'Profilbild löschen',
+      'Möchtest du dein aktuelles Profilbild wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.',
+      [
+        { text: 'Abbrechen', style: 'cancel' },
+        { text: 'Löschen', style: 'destructive', onPress: () => deleteAvatarFromServer(urlToDelete) },
+      ],
+    );
+  };
+
+  const deleteAvatarFromServer = async (url: string) => {
+    try {
+      setIsDeletingAvatar(true);
+      const { error } = await deleteProfileAvatar(url);
+      if (error) throw error;
+      removeAvatarImage(false);
+      Alert.alert('Profilbild gelöscht', 'Dein Profilbild wurde entfernt.');
+    } catch (error) {
+      console.error('Error deleting profile avatar:', error);
+      Alert.alert('Fehler', 'Das Profilbild konnte nicht gelöscht werden.');
     } finally {
-      setIsLoading(false);
+      setIsDeletingAvatar(false);
+    }
+  };
+
+  const handleDeleteProfileRequest = () => {
+    if (isDeletingProfile) return;
+    void confirmDeleteProfileRequest();
+  };
+
+  const confirmDeleteProfileRequest = async () => {
+    try {
+      const { data: requirements, error } = await getAccountDeletionRequirements();
+      if (error) throw error;
+
+      Alert.alert(
+        'Profil & Konto löschen',
+        `Möchtest du dein Profil und dein Konto wirklich löschen? Alle gespeicherten Daten werden dauerhaft entfernt.\n\n${buildAccountDeletionWarningMessage(requirements)}`,
+        [
+          { text: 'Abbrechen', style: 'cancel' },
+          { text: 'Abo verwalten', onPress: () => void openSubscriptionManagement() },
+          { text: 'Löschen', style: 'destructive', onPress: deleteProfileAndSignOut },
+        ],
+      );
+    } catch (error: any) {
+      console.error('Failed to load profile deletion requirements:', error);
+      Alert.alert(
+        'Fehler',
+        error?.message || 'Der Löschhinweis konnte nicht geladen werden. Bitte versuche es erneut.',
+      );
+    }
+  };
+
+  const deleteProfileAndSignOut = async () => {
+    if (!user) {
+      Alert.alert('Hinweis', 'Bitte melde dich an, um dein Profil zu löschen.');
+      return;
+    }
+    try {
+      setIsDeletingProfile(true);
+      const { error } = await deleteUserAccount({ avatarUrl });
+      if (error) throw error;
+      setIsDeletingProfile(false);
+      Alert.alert(
+        'Konto gelöscht',
+        'Dein Profil und Konto wurden gelöscht. Du wirst jetzt abgemeldet.',
+        [
+          {
+            text: 'OK',
+            onPress: async () => {
+              await signOut();
+            },
+          },
+        ],
+      );
+    } catch (error: any) {
+      console.error('Error deleting profile:', error);
+      setIsDeletingProfile(false);
+      Alert.alert('Fehler', error?.message || 'Dein Profil konnte nicht gelöscht werden.');
+    }
+  };
+
+  const sendPasswordResetEmail = async () => {
+    if (!user?.email) {
+      Alert.alert('Fehler', 'Keine E-Mail-Adresse gefunden.');
+      return;
+    }
+    if (isSendingPasswordReset) return;
+
+    try {
+      setIsSendingPasswordReset(true);
+      const redirectTo = Linking.createURL('auth/reset-password');
+      const { error } = await supabase.auth.resetPasswordForEmail(user.email, { redirectTo });
+      if (error) throw error;
+
+      Alert.alert(
+        'E-Mail gesendet',
+        'Wir haben dir eine E-Mail mit einem Link zum Ändern deines Passworts geschickt. Bitte prüfe deinen Posteingang (ggf. auch Spam).',
+      );
+    } catch (error: any) {
+      console.error('Failed to send password reset email:', error);
+      Alert.alert(
+        'Fehler',
+        error?.message || 'Die E-Mail zum Passwort-Reset konnte nicht gesendet werden.',
+      );
+    } finally {
+      setIsSendingPasswordReset(false);
+    }
+  };
+
+  const handlePasswordChangePress = () => {
+    if (!user?.email) {
+      Alert.alert('Fehler', 'Keine E-Mail-Adresse gefunden.');
+      return;
+    }
+
+    Alert.alert(
+      'Passwort ändern',
+      'Wir senden dir eine Bestätigungs-E-Mail mit einem Link zum Ändern deines Passworts.',
+      [
+        { text: 'Abbrechen', style: 'cancel' },
+        { text: 'E-Mail senden', onPress: sendPasswordResetEmail },
+      ],
+    );
+  };
+
+  const isLikelyEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+
+  const requestEmailChange = (nextEmailRaw: string) => {
+    if (!user) {
+      Alert.alert('Hinweis', 'Bitte melde dich an, um deine E-Mail zu ändern.');
+      return;
+    }
+
+    const nextEmail = nextEmailRaw.trim().toLowerCase();
+    if (!nextEmail) {
+      Alert.alert('Hinweis', 'Bitte gib eine E-Mail-Adresse ein.');
+      return;
+    }
+    if (!isLikelyEmail(nextEmail)) {
+      Alert.alert('Hinweis', 'Bitte gib eine gültige E-Mail-Adresse ein.');
+      return;
+    }
+    if (user.email && nextEmail === user.email.trim().toLowerCase()) {
+      Alert.alert('Hinweis', 'Diese E-Mail ist bereits hinterlegt.');
+      return;
+    }
+
+    setEmailOverlayVisible(false);
+
+    Alert.alert(
+      'E-Mail ändern',
+      `Möchtest du deine E-Mail-Adresse auf\n${nextEmail}\nändern?\n\nWir senden dir eine Bestätigungs-E-Mail an die neue Adresse.`,
+      [
+        {
+          text: 'Abbrechen',
+          style: 'cancel',
+          onPress: () => {
+            setEmailOverlayValue(nextEmail);
+            setEmailOverlayVisible(true);
+          },
+        },
+        {
+          text: 'E-Mail ändern',
+          onPress: () => updateEmail(nextEmail),
+        },
+      ],
+    );
+  };
+
+  const updateEmail = async (nextEmail: string) => {
+    if (!user) return;
+    if (isUpdatingEmail) return;
+
+    try {
+      setIsUpdatingEmail(true);
+      const emailRedirectTo = Linking.createURL('auth/callback');
+      const { error } = await supabase.auth.updateUser(
+        { email: nextEmail },
+        { emailRedirectTo },
+      );
+      if (error) throw error;
+
+      Alert.alert(
+        'Fast fertig',
+        `Wir haben dir eine Bestätigungs-E-Mail an ${nextEmail} gesendet.\n\nBitte öffne den Link in der E-Mail, um die Änderung abzuschließen.`,
+      );
+    } catch (error: any) {
+      console.error('Failed to update email:', error);
+      Alert.alert(
+        'Fehler',
+        error?.message || 'Die E-Mail konnte nicht geändert werden. Bitte versuche es später erneut.',
+      );
+    } finally {
+      setIsUpdatingEmail(false);
     }
   };
 
   const saveUserData = async () => {
+    if (!user) {
+      Alert.alert('Hinweis', 'Bitte melde dich an, um deine Daten zu speichern.');
+      return;
+    }
+
+    if (shouldCompleteCommunityUsername && !username.trim()) {
+      Alert.alert('Community Username', 'Bitte gib einen Username an, bevor du in der Community schreibst.');
+      usernameInputRef.current?.focus();
+      return;
+    }
+
+    setIsSaving(true);
+
+    let finalAvatarUrl = avatarUrl;
+    const trimmedUsername = username.trim();
+
     try {
-      if (!user) {
-        Alert.alert('Hinweis', 'Bitte melde dich an, um deine Daten zu speichern.');
-        return;
+      if (avatarBase64) {
+        const uploadResult = await uploadProfileAvatar(avatarBase64);
+        if (uploadResult.error) throw uploadResult.error;
+        finalAvatarUrl = uploadResult.url;
+      } else if (avatarRemoved) {
+        finalAvatarUrl = null;
       }
-      setIsSaving(true);
 
       // profiles upsert
       const { data: existingProfile } = await supabase
@@ -135,7 +494,9 @@ export default function ProfilScreen() {
         profileResult = await supabase.from('profiles').update({
           first_name: firstName,
           last_name: lastName,
+          username: trimmedUsername || null,
           user_role: userRole,
+          avatar_url: finalAvatarUrl || null,
           updated_at: new Date().toISOString(),
         }).eq('id', user.id);
       } else {
@@ -143,75 +504,45 @@ export default function ProfilScreen() {
           id: user.id,
           first_name: firstName,
           last_name: lastName,
+          username: trimmedUsername || null,
           user_role: userRole,
+          avatar_url: finalAvatarUrl || null,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         });
       }
       if (profileResult.error) throw profileResult.error;
+      await setLocalProfileName(user.id, firstName, lastName);
 
-      // user_settings upsert
-      const { data: existingSettings } = await supabase
-        .from('user_settings').select('id').eq('user_id', user.id).maybeSingle();
-
-      let settingsResult;
-      const base = {
-        due_date: dueDate ? dueDate.toISOString() : null,
-        is_baby_born: isBabyBorn,
-        theme: 'light',
-        notifications_enabled: true,
-        updated_at: new Date().toISOString(),
-      };
-      if (existingSettings?.id) {
-        settingsResult = await supabase.from('user_settings')
-          .update(base).eq('id', existingSettings.id);
-      } else {
-        settingsResult = await supabase.from('user_settings')
-          .insert({ user_id: user.id, ...base });
-      }
-      if (settingsResult.error) throw settingsResult.error;
-
-      // baby info
-      const { error: babyError } = await saveBabyInfo({
-        name: babyName,
-        baby_gender: babyGender,
-        birth_date: birthDate ? birthDate.toISOString() : null,
-        weight: babyWeight,
-        height: babyHeight,
+      const nextIdentityMode = trimmedUsername ? 'username' : 'real_name';
+      const nextCommunityUseAvatar =
+        shouldCompleteCommunityUsername && communityAvatarParam
+          ? communityAvatarParam !== 'hidden'
+          : communityUseAvatar;
+      const { error: settingsError } = await saveAppSettings({
+        community_identity_mode: nextIdentityMode,
+        community_use_avatar: nextCommunityUseAvatar,
       });
-      if (babyError) throw babyError;
+      if (settingsError) throw settingsError;
 
       Alert.alert('Erfolg', 'Deine Daten wurden erfolgreich gespeichert.', [
-        { text: 'OK', onPress: () => router.push('/more') },
+        { text: 'OK', onPress: () => router.push(shouldCompleteCommunityUsername ? '/community' : '/more') },
       ]);
     } catch (e: any) {
       console.error(e);
       Alert.alert('Fehler', e?.message || 'Deine Daten konnten nicht gespeichert werden.');
     } finally {
       setIsSaving(false);
+      setAvatarUrl(finalAvatarUrl || null);
+      setAvatarPreview(finalAvatarUrl || null);
+      setAvatarBase64(null);
+      setAvatarRemoved(false);
     }
   };
 
-  const formatDate = (date: Date | null) =>
-    !date
-      ? 'Nicht festgelegt'
-      : date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
-
-  const handleDueDateChange = (_: any, selectedDate?: Date) => {
-    setShowDueDatePicker(Platform.OS === 'ios');
-    if (selectedDate) setDueDate(selectedDate);
-  };
-  const handleBirthDateChange = (_: any, selectedDate?: Date) => {
-    setShowBirthDatePicker(Platform.OS === 'ios');
-    if (selectedDate) {
-      setBirthDate(selectedDate);
-      setIsBabyBorn(true);
-    }
-  };
-  const handleBabyBornChange = (value: boolean) => {
-    setIsBabyBorn(value);
-    if (!value) setBirthDate(null);
-  };
+  if (!session) {
+    return <Redirect href="/(auth)/login" />;
+  }
 
   return (
     <>
@@ -224,7 +555,7 @@ export default function ProfilScreen() {
             title="Profil"
             subtitle="Persönliche Daten und Babyinfos"
             showBackButton
-            onBackPress={() => router.push('/more')}
+            onBackPress={() => router.push(shouldCompleteCommunityUsername ? '/community' : '/more')}
           />
 
           <ScrollView
@@ -233,59 +564,185 @@ export default function ProfilScreen() {
           >
             {isLoading ? (
               <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color={theme.accent} />
-                <ThemedText style={styles.loadingText}>Lade Daten...</ThemedText>
+                <ActivityIndicator size="large" color={loadingAccent} />
+                <ThemedText style={[styles.loadingText, { color: textPrimary }]}>Lade Daten...</ThemedText>
               </View>
             ) : (
               <>
                 {/* Persönliche Daten */}
                 <LiquidGlassCard
-                  style={[styles.sectionCard, { marginHorizontal: TIMELINE_INSET }]}
+                  style={[
+                    styles.sectionCard,
+                    isDark && { backgroundColor: 'rgba(0,0,0,0.35)' },
+                  ]}
                   intensity={26}
-                  overlayColor={GLASS_OVERLAY}
+                  overlayColor={glassOverlay}
+                  borderColor={glassBorder}
                 >
-                  <ThemedText style={styles.sectionTitle}>Persönliche Daten</ThemedText>
+                  <ThemedText style={[styles.sectionTitle, { color: textPrimary }]}>Persönliche Daten</ThemedText>
+                  <View style={styles.avatarSelector}>
+                    <TouchableOpacity
+                      style={[
+                        styles.avatarPreviewWrapper,
+                        { backgroundColor: glassSurface, borderColor: glassBorderStrong, borderWidth: 1.5 },
+                      ]}
+                      onPress={pickAvatarImage}
+                      activeOpacity={0.8}
+                    >
+                      {avatarPreview ? (
+                        <CachedImage
+                          uri={avatarPreview}
+                          style={styles.avatarPreviewImage}
+                          showLoader={false}
+                        />
+                      ) : (
+                        <View style={[styles.avatarPlaceholder, { backgroundColor: glassSurfaceSoft, borderColor: glassBorder }]}>
+                          <IconSymbol name="camera" size={30} color="#FFFFFF" />
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                    <View style={styles.avatarActions}>
+                      <TouchableOpacity style={styles.avatarActionButton} onPress={pickAvatarImage}>
+                        <ThemedText style={[styles.avatarActionText, { color: textPrimary }]}>Foto wählen</ThemedText>
+                      </TouchableOpacity>
+                      {!!avatarPreview && (
+                        <TouchableOpacity style={styles.avatarActionButton} onPress={() => removeAvatarImage()}>
+                          <ThemedText style={[styles.avatarActionText, { color: textPrimary }]}>Foto entfernen</ThemedText>
+                        </TouchableOpacity>
+                      )}
+                      {!!avatarUrl && (
+                        <TouchableOpacity
+                          style={styles.avatarActionButton}
+                          onPress={handleAvatarDeletePress}
+                          disabled={isDeletingAvatar}
+                        >
+                          {isDeletingAvatar ? (
+                            <ActivityIndicator size="small" color="#FF6B6B" />
+                          ) : (
+                            <ThemedText style={[styles.avatarActionText, styles.avatarDeleteText]}>
+                              Foto löschen
+                            </ThemedText>
+                          )}
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  </View>
                   <View style={styles.cardInner}>
                     <View style={styles.formGroup}>
-                      <ThemedText style={styles.label}>E-Mail</ThemedText>
+                      <ThemedText style={[styles.label, { color: textPrimary }]}>E-Mail</ThemedText>
                       <TextInput
-                        style={[styles.inputGlass, styles.inputDisabled]}
+                        style={[
+                          styles.inputGlass,
+                          styles.inputDisabled,
+                          { borderColor: glassBorder, backgroundColor: glassSurface, color: textPrimary },
+                        ]}
                         value={email}
                         editable={false}
                         placeholder="Deine E-Mail-Adresse"
-                        placeholderTextColor="#9BA0A6"
+                        placeholderTextColor={isDark ? '#CFC7BC' : '#9BA0A6'}
                       />
+                      <View style={styles.inlineActions}>
+                        <TouchableOpacity
+                          style={[
+                            styles.inlineActionButton,
+                            { borderColor: glassBorder, backgroundColor: glassSurfaceSoft },
+                          ]}
+                          onPress={() => {
+                            setEmailOverlayValue(user?.new_email || '');
+                            setEmailOverlayVisible(true);
+                          }}
+                          activeOpacity={0.9}
+                          disabled={isUpdatingEmail}
+                        >
+                          {isUpdatingEmail ? (
+                            <ActivityIndicator size="small" color={accentPurple} />
+                          ) : (
+                            <IconSymbol name="envelope.fill" size={18} color={accentPurple} />
+                          )}
+                          <ThemedText style={[styles.inlineActionText, { color: textPrimary }]}>E-Mail ändern</ThemedText>
+                        </TouchableOpacity>
+                      </View>
+                      {!!user?.new_email && user?.new_email !== user?.email && (
+                        <ThemedText style={[styles.helperText, { color: textPrimary }]}>
+                          Neue E-Mail ausstehend: {user.new_email} (bitte bestätigen)
+                        </ThemedText>
+                      )}
                     </View>
 
                     <View style={styles.formGroup}>
-                      <ThemedText style={styles.label}>Vorname</ThemedText>
+                      <ThemedText style={[styles.label, { color: textPrimary }]}>Vorname</ThemedText>
                       <TextInput
-                        style={styles.inputGlass}
+                        style={[styles.inputGlass, { borderColor: glassBorder, backgroundColor: glassSurface, color: textPrimary }]}
                         value={firstName}
                         onChangeText={setFirstName}
                         placeholder="Dein Vorname"
-                        placeholderTextColor="#9BA0A6"
+                        placeholderTextColor={isDark ? '#CFC7BC' : '#9BA0A6'}
                       />
                     </View>
 
                     <View style={styles.formGroup}>
-                      <ThemedText style={styles.label}>Nachname</ThemedText>
+                      <ThemedText style={[styles.label, { color: textPrimary }]}>Nachname</ThemedText>
                       <TextInput
-                        style={styles.inputGlass}
+                        style={[styles.inputGlass, { borderColor: glassBorder, backgroundColor: glassSurface, color: textPrimary }]}
                         value={lastName}
                         onChangeText={setLastName}
                         placeholder="Dein Nachname"
-                        placeholderTextColor="#9BA0A6"
+                        placeholderTextColor={isDark ? '#CFC7BC' : '#9BA0A6'}
                       />
                     </View>
 
                     <View style={styles.formGroup}>
-                      <ThemedText style={styles.label}>Rolle</ThemedText>
+                      <ThemedText style={[styles.label, { color: textPrimary }]}>Username</ThemedText>
+                      {shouldCompleteCommunityUsername ? (
+                        <ThemedText style={[styles.helperText, { color: accentPurple }]}>
+                          Lege hier deinen Community-Username fest. Danach geht es direkt zur Community zurueck.
+                        </ThemedText>
+                      ) : null}
+                      <TextInput
+                        ref={usernameInputRef}
+                        style={[styles.inputGlass, { borderColor: glassBorder, backgroundColor: glassSurface, color: textPrimary }]}
+                        value={username}
+                        onChangeText={setUsername}
+                        placeholder="@deinname"
+                        placeholderTextColor={isDark ? '#CFC7BC' : '#9BA0A6'}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                      />
+                    </View>
+
+                    <View style={styles.formGroup}>
+                      <ThemedText style={[styles.label, { color: textPrimary }]}>Community-Profilbild</ThemedText>
+                      <View
+                        style={[
+                          styles.preferenceToggleRow,
+                          { borderColor: glassBorder, backgroundColor: glassSurfaceButton },
+                        ]}
+                      >
+                        <View style={styles.preferenceToggleTextWrap}>
+                          <ThemedText style={[styles.preferenceToggleTitle, { color: textPrimary }]}>
+                            In Community und Benachrichtigungen anzeigen
+                          </ThemedText>
+                          <ThemedText style={[styles.helperText, { color: textSecondary }]}>
+                            Wenn ausgeschaltet, wird statt deines Fotos nur ein Avatar ohne Profilbild genutzt.
+                          </ThemedText>
+                        </View>
+                        <Switch
+                          value={communityUseAvatar}
+                          onValueChange={setCommunityUseAvatar}
+                          trackColor={{ false: '#D9CEC7', true: accentPurple }}
+                          thumbColor="#FFFFFF"
+                        />
+                      </View>
+                    </View>
+
+                    <View style={styles.formGroup}>
+                      <ThemedText style={[styles.label, { color: textPrimary }]}>Rolle</ThemedText>
                       <View style={styles.duoRow}>
                         <TouchableOpacity
                           style={[
                             styles.pickButton,
-                            userRole === 'mama' && styles.pickButtonActive,
+                            { borderColor: glassBorder, backgroundColor: glassSurfaceButton },
+                            userRole === 'mama' && [styles.pickButtonActive, { backgroundColor: accentPurple, borderColor: glassBorderStrong }],
                           ]}
                           onPress={() => setUserRole('mama')}
                           activeOpacity={0.9}
@@ -293,11 +750,12 @@ export default function ProfilScreen() {
                           <IconSymbol
                             name="person.fill"
                             size={24}
-                            color={userRole === 'mama' ? '#FFFFFF' : '#7D7D85'}
+                            color={userRole === 'mama' ? '#FFFFFF' : textSecondary}
                           />
                           <ThemedText
                             style={[
                               styles.pickButtonText,
+                              { color: textSecondary },
                               userRole === 'mama' && styles.pickButtonTextActive,
                             ]}
                           >
@@ -308,7 +766,8 @@ export default function ProfilScreen() {
                         <TouchableOpacity
                           style={[
                             styles.pickButton,
-                            userRole === 'papa' && styles.pickButtonActive,
+                            { borderColor: glassBorder, backgroundColor: glassSurfaceButton },
+                            userRole === 'papa' && [styles.pickButtonActive, { backgroundColor: accentPurple, borderColor: glassBorderStrong }],
                           ]}
                           onPress={() => setUserRole('papa')}
                           activeOpacity={0.9}
@@ -316,11 +775,12 @@ export default function ProfilScreen() {
                           <IconSymbol
                             name="person.fill"
                             size={24}
-                            color={userRole === 'papa' ? '#FFFFFF' : '#7D7D85'}
+                            color={userRole === 'papa' ? '#FFFFFF' : textSecondary}
                           />
                           <ThemedText
                             style={[
                               styles.pickButtonText,
+                              { color: textSecondary },
                               userRole === 'papa' && styles.pickButtonTextActive,
                             ]}
                           >
@@ -332,196 +792,120 @@ export default function ProfilScreen() {
                   </View>
                 </LiquidGlassCard>
 
-                {/* Baby-Infos */}
+                {/* Hinweis: Baby-Daten leben jetzt auf "Mein Baby" */}
                 <LiquidGlassCard
-                  style={[styles.sectionCard, { marginHorizontal: TIMELINE_INSET }]}
+                  style={[
+                    styles.sectionCard,
+                    isDark && { backgroundColor: 'rgba(0,0,0,0.35)' },
+                  ]}
                   intensity={26}
-                  overlayColor={GLASS_OVERLAY}
+                  overlayColor={glassOverlay}
+                  borderColor={glassBorder}
                 >
-                  <ThemedText style={styles.sectionTitle}>Baby-Informationen</ThemedText>
+                  <ThemedText style={[styles.sectionTitle, { color: textPrimary }]}>Mein Baby</ThemedText>
                   <View style={styles.cardInner}>
-                    <View style={styles.formGroup}>
-                      <ThemedText style={styles.label}>Errechneter Geburtstermin</ThemedText>
-                      <TouchableOpacity
-                        style={styles.dateButtonGlass}
-                        onPress={() => setShowDueDatePicker(true)}
-                        activeOpacity={0.9}
-                      >
-                        <ThemedText style={styles.dateButtonText}>
-                          {dueDate ? formatDate(dueDate) : 'Geburtstermin auswählen'}
-                        </ThemedText>
-                        <IconSymbol name="calendar" size={20} color="#7D7D85" />
-                      </TouchableOpacity>
-                      {showDueDatePicker && (
-                        <DateTimePicker
-                          value={dueDate || new Date()}
-                          mode="date"
-                          display={Platform.OS === 'ios' ? 'compact' : 'default'}
-                          onChange={handleDueDateChange}
-                        />
-                      )}
-                    </View>
-
-                    <View style={styles.formGroup}>
-                      <ThemedText style={styles.label}>Baby bereits geboren?</ThemedText>
-                      <View style={styles.switchContainer}>
-                        <ThemedText style={styles.switchLabel}>
-                          {isBabyBorn ? 'Ja' : 'Nein'}
-                        </ThemedText>
-                        <Switch
-                          value={isBabyBorn}
-                          onValueChange={handleBabyBornChange}
-                          disabled={isSaving}
-                          trackColor={{ false: '#D1D1D6', true: '#9DBEBB' }}
-                          thumbColor={isBabyBorn ? '#FFFFFF' : '#F4F4F4'}
-                          ios_backgroundColor="#D1D1D6"
-                        />
-                      </View>
-                    </View>
-
-                    <View style={styles.formGroup}>
-                      <ThemedText style={styles.label}>Name des Babys</ThemedText>
-                      <TextInput
-                        style={styles.inputGlass}
-                        value={babyName}
-                        onChangeText={setBabyName}
-                        placeholder="Name deines Babys"
-                        placeholderTextColor="#9BA0A6"
-                      />
-                    </View>
-
-                    <View style={styles.formGroup}>
-                      <ThemedText style={styles.label}>Geschlecht</ThemedText>
-                      <View style={styles.duoRow}>
-                        <TouchableOpacity
-                          style={[
-                            styles.pickButton,
-                            babyGender === 'male' && styles.pickButtonActive,
-                          ]}
-                          onPress={() => setBabyGender('male')}
-                          activeOpacity={0.9}
-                        >
-                          <IconSymbol
-                            name="person.fill"
-                            size={24}
-                            color={babyGender === 'male' ? '#FFFFFF' : '#7D7D85'}
-                          />
-                          <ThemedText
-                            style={[
-                              styles.pickButtonText,
-                              babyGender === 'male' && styles.pickButtonTextActive,
-                            ]}
-                          >
-                            Junge
-                          </ThemedText>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                          style={[
-                            styles.pickButton,
-                            babyGender === 'female' && styles.pickButtonActive,
-                          ]}
-                          onPress={() => setBabyGender('female')}
-                          activeOpacity={0.9}
-                        >
-                          <IconSymbol
-                            name="person.fill"
-                            size={24}
-                            color={babyGender === 'female' ? '#FFFFFF' : '#7D7D85'}
-                          />
-                          <ThemedText
-                            style={[
-                              styles.pickButtonText,
-                              babyGender === 'female' && styles.pickButtonTextActive,
-                            ]}
-                          >
-                            Mädchen
-                          </ThemedText>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-
-                    {isBabyBorn && (
-                      <>
-                        <View style={styles.formGroup}>
-                          <ThemedText style={styles.label}>Geburtsdatum</ThemedText>
-                          <TouchableOpacity
-                            style={styles.dateButtonGlass}
-                            onPress={() => setShowBirthDatePicker(true)}
-                            activeOpacity={0.9}
-                          >
-                            <ThemedText style={styles.dateButtonText}>
-                              {birthDate ? formatDate(birthDate) : 'Geburtsdatum auswählen'}
-                            </ThemedText>
-                            <IconSymbol name="calendar" size={20} color="#7D7D85" />
-                          </TouchableOpacity>
-                          {showBirthDatePicker && (
-                            <DateTimePicker
-                              value={birthDate || new Date()}
-                              mode="date"
-                              display={Platform.OS === 'ios' ? 'compact' : 'default'}
-                              onChange={handleBirthDateChange}
-                              maximumDate={new Date()}
-                            />
-                          )}
-                        </View>
-
-                        <View style={styles.formRow2}>
-                          <View style={[styles.formGroup, { flex: 1 }]}>
-                            <ThemedText style={styles.label}>Geburtsgewicht (g)</ThemedText>
-                            <TextInput
-                              style={[styles.inputGlass, styles.numeric]}
-                              value={babyWeight}
-                              onChangeText={setBabyWeight}
-                              placeholder="z.B. 3500"
-                              placeholderTextColor="#9BA0A6"
-                              keyboardType="numeric"
-                            />
-                          </View>
-
-                          <View style={[styles.formGroup, { flex: 1 }]}>
-                            <ThemedText style={styles.label}>Größe (cm)</ThemedText>
-                            <TextInput
-                              style={[styles.inputGlass, styles.numeric]}
-                              value={babyHeight}
-                              onChangeText={setBabyHeight}
-                              placeholder="z.B. 52"
-                              placeholderTextColor="#9BA0A6"
-                              keyboardType="numeric"
-                            />
-                          </View>
-                        </View>
-                      </>
-                    )}
+                    <ThemedText style={[styles.sectionHelperText, { color: textSecondary }]}>
+                      {'Baby-Daten, Geburtstermin, Geschlecht und Entwicklung bearbeitest du jetzt gesammelt auf der Seite "Mein Baby".'}
+                    </ThemedText>
+                    <TouchableOpacity
+                      style={[styles.sectionLinkButton, { borderColor: glassBorder, backgroundColor: glassSurfaceButton }]}
+                      onPress={() => router.push('/(tabs)/baby?edit=1')}
+                      activeOpacity={0.9}
+                    >
+                      <IconSymbol name="person.fill" size={20} color={textPrimary} />
+                      <ThemedText style={[styles.sectionLinkButtonText, { color: textPrimary }]}>Zu Mein Baby</ThemedText>
+                    </TouchableOpacity>
                   </View>
                 </LiquidGlassCard>
 
                 {/* Speichern – im Action-Card Look */}
-                <View style={{ marginHorizontal: TIMELINE_INSET }}>
+                <View>
                   <TouchableOpacity
                     onPress={saveUserData}
                     activeOpacity={0.9}
                     disabled={isSaving}
                     style={{ borderRadius: 22, overflow: 'hidden', marginTop: 12 }}
                   >
-                    <BlurView intensity={24} tint="light" style={{ borderRadius: 22, overflow: 'hidden' }}>
+                    <BlurView intensity={24} tint={isDark ? 'dark' : 'light'} style={{ borderRadius: 22, overflow: 'hidden' }}>
                       <View
                         style={[
                           styles.saveCard,
-                          { backgroundColor: isSaving ? 'rgba(168,168,168,0.5)' : 'rgba(220,200,255,0.6)' },
+                          { backgroundColor: isSaving ? actionDisabledBackground : saveCardBackground },
                         ]}
                       >
-                        <View style={[styles.saveIconWrap, { backgroundColor: ACCENT_PURPLE }]}>
+                        <View style={[styles.saveIconWrap, { backgroundColor: accentPurple }]}>
                           {isSaving ? (
                             <ActivityIndicator color="#fff" />
                           ) : (
                             <IconSymbol name="tray.and.arrow.down.fill" size={26} color="#FFFFFF" />
                           )}
                         </View>
-                        <ThemedText style={styles.saveTitle}>
+                        <ThemedText style={[styles.saveTitle, { color: textPrimary }]}>
                           {isSaving ? 'Speichern…' : 'Änderungen speichern'}
                         </ThemedText>
-                        <ThemedText style={styles.saveSub}>Deine Daten sicher aktualisieren</ThemedText>
+                        <ThemedText style={[styles.saveSub, { color: textPrimary }]}>Deine Daten sicher aktualisieren</ThemedText>
+                      </View>
+                    </BlurView>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Sicherheit */}
+                <View>
+                  <TouchableOpacity
+                    onPress={handlePasswordChangePress}
+                    activeOpacity={0.9}
+                    disabled={isSendingPasswordReset}
+                    style={{ borderRadius: 22, overflow: 'hidden', marginTop: 12 }}
+                  >
+                    <BlurView intensity={24} tint={isDark ? 'dark' : 'light'} style={{ borderRadius: 22, overflow: 'hidden' }}>
+                      <View
+                        style={[
+                          styles.saveCard,
+                          { backgroundColor: isSendingPasswordReset ? actionDisabledBackground : securityCardBackground },
+                        ]}
+                      >
+                        <View style={[styles.saveIconWrap, { backgroundColor: babyBlue }]}>
+                          {isSendingPasswordReset ? (
+                            <ActivityIndicator color="#fff" />
+                          ) : (
+                            <ThemedText style={{ fontSize: 24, color: '#FFFFFF' }}>🔑</ThemedText>
+                          )}
+                        </View>
+                        <ThemedText style={[styles.saveTitle, { color: textPrimary }]}>
+                          {isSendingPasswordReset ? 'Sende E-Mail…' : 'Passwort ändern'}
+                        </ThemedText>
+                        <ThemedText style={[styles.saveSub, { color: textPrimary }]}>Bestätigungslink per E-Mail</ThemedText>
+                      </View>
+                    </BlurView>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={handleDeleteProfileRequest}
+                    activeOpacity={0.9}
+                    disabled={isDeletingProfile}
+                    style={{ borderRadius: 22, overflow: 'hidden', marginTop: 12 }}
+                  >
+                    <BlurView intensity={20} tint={isDark ? 'dark' : 'light'} style={{ borderRadius: 22, overflow: 'hidden' }}>
+                      <View
+                        style={[
+                          styles.saveCard,
+                          styles.dangerCard,
+                          { backgroundColor: dangerCardBackground },
+                        ]}
+                      >
+                        <View style={[styles.saveIconWrap, { backgroundColor: '#FF6B6B', borderColor: glassBorderStrong }]}>
+                          {isDeletingProfile ? (
+                            <ActivityIndicator color="#fff" />
+                          ) : (
+                            <IconSymbol name="trash.fill" size={24} color="#FFFFFF" />
+                          )}
+                        </View>
+                        <ThemedText style={[styles.saveTitle, styles.dangerText, { color: '#FF6B6B' }]}>
+                          {isDeletingProfile ? 'Profil wird gelöscht…' : 'Profil & Konto löschen'}
+                        </ThemedText>
+                        <ThemedText style={[styles.saveSub, styles.dangerSub, { color: textPrimary }]}>
+                          Entfernt Profil, Konto und alle Daten dauerhaft
+                        </ThemedText>
                       </View>
                     </BlurView>
                   </TouchableOpacity>
@@ -531,6 +915,18 @@ export default function ProfilScreen() {
           </ScrollView>
         </SafeAreaView>
       </ThemedBackground>
+
+      <TextInputOverlay
+        visible={emailOverlayVisible}
+        label="Neue E-Mail-Adresse"
+        value={emailOverlayValue}
+        placeholder="deine@email.de"
+        keyboardType="email-address"
+        inputMode="email"
+        accentColor={accentPurple}
+        onClose={() => setEmailOverlayVisible(false)}
+        onSubmit={(next) => requestEmailChange(next)}
+      />
     </>
   );
 }
@@ -559,6 +955,27 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   cardInner: { paddingHorizontal: 20, paddingBottom: 16 },
+  sectionHelperText: {
+    fontSize: 14,
+    lineHeight: 21,
+    textAlign: 'center',
+    marginBottom: 14,
+    paddingHorizontal: 8,
+  },
+  sectionLinkButton: {
+    minHeight: 48,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  sectionLinkButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
 
   formGroup: { marginBottom: 16 },
   formRow2: { flexDirection: 'row', gap: 12 },
@@ -580,6 +997,90 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(200,200,200,0.35)',
   },
   numeric: { fontVariant: ['tabular-nums'] },
+
+  babyPhotoSelector: {
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  babyPhotoPreview: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    marginBottom: 12,
+  },
+  babyPhotoPlaceholder: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: 'rgba(255,255,255,0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.7)',
+  },
+  babyPhotoActions: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+  },
+  babyPhotoActionButton: {
+    borderRadius: 999,
+    paddingVertical: 8,
+    paddingHorizontal: 18,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.6)',
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    marginHorizontal: 8,
+    marginBottom: 8,
+  },
+  babyPhotoActionText: {
+    color: ACCENT_PURPLE,
+    fontWeight: '700',
+  },
+
+  avatarSelector: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  avatarPreviewWrapper: {
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    backgroundColor: 'rgba(255,255,255,0.7)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+    overflow: 'hidden',
+  },
+  avatarPreviewImage: {
+    width: '100%',
+    height: '100%',
+  },
+  avatarPlaceholder: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#D8D8D8',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarActions: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  avatarActionButton: {
+    marginHorizontal: 12,
+    marginVertical: 4,
+  },
+  avatarActionText: {
+    color: '#8E4EC6',
+    fontWeight: '700',
+  },
+  avatarDeleteText: {
+    color: '#FF6B6B',
+  },
 
   // Glas-DateButton
   dateButtonGlass: {
@@ -620,6 +1121,24 @@ const styles = StyleSheet.create({
   // Switch
   switchContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   switchLabel: { fontSize: 16, color: PRIMARY_TEXT, fontWeight: '700' },
+  preferenceToggleRow: {
+    borderWidth: 1.5,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  preferenceToggleTextWrap: {
+    flex: 1,
+    gap: 4,
+  },
+  preferenceToggleTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
 
   // Save Action-Card (wie Sleep-Tracker Karten)
   saveCard: {
@@ -648,4 +1167,41 @@ const styles = StyleSheet.create({
   },
   saveTitle: { fontSize: 16, fontWeight: '800', color: PRIMARY_TEXT, marginBottom: 4 },
   saveSub: { fontSize: 11, color: PRIMARY_TEXT, opacity: 0.8 },
+  dangerCard: {
+    borderColor: 'rgba(255,107,107,0.6)',
+  },
+  dangerText: {
+    color: '#FF6B6B',
+  },
+  dangerSub: {
+    color: PRIMARY_TEXT,
+    opacity: 0.9,
+  },
+  inlineActions: {
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+  },
+  inlineActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderRadius: 999,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.6)',
+    backgroundColor: 'rgba(255,255,255,0.25)',
+  },
+  inlineActionText: {
+    color: ACCENT_PURPLE,
+    fontWeight: '700',
+  },
+  helperText: {
+    marginTop: 8,
+    fontSize: 12,
+    color: PRIMARY_TEXT,
+    opacity: 0.8,
+  },
 });

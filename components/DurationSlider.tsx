@@ -11,13 +11,15 @@ interface DurationSliderProps {
   startTime: Date;
 }
 
-const DurationSlider: React.FC<DurationSliderProps> = ({ 
-  initialDuration = 30, 
+const DurationSlider: React.FC<DurationSliderProps> = ({
+  initialDuration = 30,
   onChange,
   startTime
 }) => {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
+  const isDark = colorScheme === 'dark';
+  const sliderColor = isDark ? Colors.dark.accent : '#7D5A50';
   
   const [duration, setDuration] = useState(initialDuration);
 
@@ -54,9 +56,9 @@ const DurationSlider: React.FC<DurationSliderProps> = ({
         step={5}
         value={duration}
         onValueChange={setDuration}
-        minimumTrackTintColor="#7D5A50"
-        maximumTrackTintColor={colorScheme === 'dark' ? '#555555' : '#DDDDDD'}
-        thumbTintColor="#7D5A50"
+        minimumTrackTintColor={sliderColor}
+        maximumTrackTintColor={isDark ? '#555555' : '#DDDDDD'}
+        thumbTintColor={sliderColor}
       />
       
       <View style={styles.labelContainer}>

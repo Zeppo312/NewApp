@@ -13,9 +13,21 @@ interface CircularDayViewProps {
   onDeleteEntry?: (id: string) => void;
 }
 
+type ActivityPosition = {
+  id: string;
+  x: number;
+  y: number;
+  angle: number;
+  adjusted?: boolean;
+};
+
 const CircularDayView: React.FC<CircularDayViewProps> = ({ entries, onDeleteEntry }) => {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
+  const isDark = colorScheme === 'dark';
+  const textColor = isDark ? Colors.dark.text : '#3B3B3B';
+  const labelColor = isDark ? Colors.dark.textSecondary : '#7D5A50';
+  const modalValueColor = isDark ? Colors.dark.text : '#333333';
   const [selectedEntry, setSelectedEntry] = useState<DailyEntry | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
 
@@ -129,7 +141,8 @@ const CircularDayView: React.FC<CircularDayViewProps> = ({ entries, onDeleteEntr
       });
 
       // Berechne die Positionen aller Aktivitätspunkte
-      const positions = sortedEntries.map(entry => {
+      const positions = sortedEntries
+        .map<ActivityPosition | null>(entry => {
         try {
           if (!entry.id || !entry.start_time) return null;
           const { angle } = calculateActivityPosition(entry.start_time);
@@ -144,13 +157,14 @@ const CircularDayView: React.FC<CircularDayViewProps> = ({ entries, onDeleteEntr
           console.log('Fehler bei der Berechnung der Position für Eintrag:', entry.id, error);
           return null;
         }
-      }).filter(Boolean);
+      })
+        .filter((position): position is ActivityPosition => position !== null);
 
       // Minimaler Abstand zwischen Punkten
       const minDistance = 55; // Erhöhter Mindestabstand zwischen den Punkten
 
       // Vereinfachte Anpassung der Positionen, um Überlappungen zu vermeiden
-      const adjustedPositions = [];
+      const adjustedPositions: Array<ActivityPosition | null> = [];
 
       // Einfachere Positionsanpassung ohne komplexe Berechnungen
       for (let i = 0; i < positions.length; i++) {
@@ -316,7 +330,7 @@ const CircularDayView: React.FC<CircularDayViewProps> = ({ entries, onDeleteEntr
                 >
                   <ThemedText style={[
                     styles.timeLabel,
-                    { fontWeight: '700' } // Fetter für bessere Lesbarkeit
+                    { fontWeight: '700', color: textColor } // Fetter für bessere Lesbarkeit
                   ]}>
                     {timeLabel}
                   </ThemedText>
@@ -375,8 +389,8 @@ const CircularDayView: React.FC<CircularDayViewProps> = ({ entries, onDeleteEntr
 
             <View style={styles.modalContent}>
               <View style={styles.modalRow}>
-                <ThemedText style={styles.modalLabel}>Zeit:</ThemedText>
-                <ThemedText style={styles.modalValue}>
+                <ThemedText style={[styles.modalLabel, { color: labelColor }]}>Zeit:</ThemedText>
+                <ThemedText style={[styles.modalValue, { color: modalValueColor }]}>
                   {selectedEntry.start_time && formatTime(selectedEntry.start_time)}
                   {selectedEntry.end_time && ` - ${formatTime(selectedEntry.end_time)}`}
                 </ThemedText>
@@ -384,15 +398,15 @@ const CircularDayView: React.FC<CircularDayViewProps> = ({ entries, onDeleteEntr
 
               {duration > 0 && (
                 <View style={styles.modalRow}>
-                  <ThemedText style={styles.modalLabel}>Dauer:</ThemedText>
-                  <ThemedText style={styles.modalValue}>{duration} Minuten</ThemedText>
+                  <ThemedText style={[styles.modalLabel, { color: labelColor }]}>Dauer:</ThemedText>
+                  <ThemedText style={[styles.modalValue, { color: modalValueColor }]}>{duration} Minuten</ThemedText>
                 </View>
               )}
 
               {selectedEntry.notes && (
                 <View style={styles.modalRow}>
-                  <ThemedText style={styles.modalLabel}>Notizen:</ThemedText>
-                  <ThemedText style={styles.modalValue}>{selectedEntry.notes}</ThemedText>
+                  <ThemedText style={[styles.modalLabel, { color: labelColor }]}>Notizen:</ThemedText>
+                  <ThemedText style={[styles.modalValue, { color: modalValueColor }]}>{selectedEntry.notes}</ThemedText>
                 </View>
               )}
 
@@ -423,7 +437,7 @@ const CircularDayView: React.FC<CircularDayViewProps> = ({ entries, onDeleteEntr
   };
 
   // Finde die letzte Aktivität mit Fehlerbehandlung
-  let lastActivity = null;
+  let lastActivity: DailyEntry | null = null;
   try {
     if (entries.length > 0) {
       // Filtere ungültige Einträge heraus
@@ -553,7 +567,7 @@ const CircularDayView: React.FC<CircularDayViewProps> = ({ entries, onDeleteEntr
     const centerTextInfo = getCenterText();
 
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, isDark && { backgroundColor: Colors.dark.cardLight, borderColor: Colors.dark.border }]}>
         <View style={styles.circleContainer}>
           {/* Halbkreis-Hintergrund */}
           <View style={styles.circleTrack}>
@@ -576,8 +590,8 @@ const CircularDayView: React.FC<CircularDayViewProps> = ({ entries, onDeleteEntr
           {renderActivityDots()}
 
           {/* Zentrum und Beschriftung */}
-          <View style={styles.centerContent}>
-            <ThemedText style={styles.centerLabel}>
+          <View style={[styles.centerContent, isDark && { backgroundColor: Colors.dark.cardLight }]}>
+            <ThemedText style={[styles.centerLabel, { color: textColor }]}>
               {centerTextInfo.label}
             </ThemedText>
             <ThemedText
@@ -599,13 +613,13 @@ const CircularDayView: React.FC<CircularDayViewProps> = ({ entries, onDeleteEntr
     console.log('Fehler beim Rendern der CircularDayView:', error);
     // Fallback-Rendering im Fehlerfall
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, isDark && { backgroundColor: Colors.dark.cardLight, borderColor: Colors.dark.border }]}>
         <View style={styles.circleContainer}>
-          <View style={styles.centerContent}>
-            <ThemedText style={styles.centerLabel}>
+          <View style={[styles.centerContent, isDark && { backgroundColor: Colors.dark.cardLight }]}>
+            <ThemedText style={[styles.centerLabel, { color: textColor }]}>
               Fehler beim Laden
             </ThemedText>
-            <ThemedText style={styles.centerValue}>
+            <ThemedText style={[styles.centerValue, { color: textColor }]}>
               Bitte App neu starten
             </ThemedText>
           </View>
@@ -709,7 +723,7 @@ const styles = StyleSheet.create({
   },
   centerLabel: {
     fontSize: 18,
-    color: '#3B3B3B', // Dunklere Textfarbe für besseren Kontrast
+    // color wird dynamisch gesetzt
     textAlign: 'center',
     marginBottom: 8,
     fontWeight: '500', // Regular
@@ -720,7 +734,7 @@ const styles = StyleSheet.create({
   centerValue: {
     fontSize: 36,
     fontWeight: '600', // Semibold
-    color: '#3B3B3B', // Dunklere Textfarbe für besseren Kontrast
+    // color wird dynamisch gesetzt
     textAlign: 'center',
     marginTop: 5,
     letterSpacing: 1, // Mehr Abstand zwischen den Zeichen für bessere Lesbarkeit
@@ -765,7 +779,7 @@ const styles = StyleSheet.create({
   timeLabel: {
     fontSize: 14, // Etwas kleinere Schrift für bessere Platzierung
     fontWeight: '600',
-    color: '#3B3B3B', // Dunklere Textfarbe für besseren Kontrast
+    // color wird dynamisch gesetzt
     textAlign: 'center',
   },
   // BottomBar-Styles wurden entfernt, da die BottomBar nicht mehr benötigt wird
@@ -810,12 +824,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: 'bold',
     marginBottom: 4,
-    color: '#7D5A50',
+    // color wird dynamisch gesetzt
     opacity: 0.8,
   },
   modalValue: {
     fontSize: 16,
-    color: '#333333',
+    // color wird dynamisch gesetzt
   },
   deleteButton: {
     flexDirection: 'row',

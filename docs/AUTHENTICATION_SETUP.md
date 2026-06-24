@@ -112,10 +112,14 @@ print(client_secret)
 3. Konfiguration:
    ```
    Enable Apple provider: ✅
-   Client ID: com.LottiBaby.app.signin
+   Client IDs (kommagetrennt):
+   - com.LottiBaby.app.signin   (Services ID für Web/OAuth)
+   - com.LottiBaby.app          (iOS Bundle ID für natives signInWithIdToken)
+   - host.exp.Exponent          (optional, nur wenn ihr in Expo Go testet)
    Client Secret: [JWT Token aus Schritt 4]
    Redirect URL: https://deine-supabase-project.supabase.co/auth/v1/callback
    ```
+4. Wichtig: Wenn der Fehler `Unacceptable audience in id_token: [XYZ]` erscheint, muss genau `XYZ` in den Supabase **Client IDs** enthalten sein.
 
 ### 3. E-Mail Templates anpassen (Optional)
 
@@ -194,6 +198,8 @@ Stelle sicher, dass der Bundle Identifier konsistent ist:
 **1. Apple Sign-In funktioniert nicht:**
 - Bundle Identifier prüfen
 - Services ID konfiguration prüfen
+- In Supabase Apple Provider müssen die richtigen **Client IDs** eingetragen sein
+- Bei `Unacceptable audience in id_token: [XYZ]` → `XYZ` in **Client IDs** ergänzen
 - Client Secret ist gültig (max. 6 Monate)
 
 **2. E-Mail-Verifikation funktioniert nicht:**

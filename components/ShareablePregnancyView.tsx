@@ -48,18 +48,19 @@ const ShareablePregnancyView: React.FC<ShareablePregnancyViewProps> = ({
 
   const handleShare = async () => {
     try {
-      if (viewShotRef.current) {
-        const uri = await viewShotRef.current.capture();
-        
-        if (Platform.OS === 'ios') {
-          await Sharing.shareAsync(uri);
-        } else {
-          await Share.share({
-            title: 'Meine Schwangerschaft',
-            message: `Ich bin in SSW ${currentWeek}+${currentDay} und habe bereits ${Math.round(progress * 100)}% meiner Schwangerschaft geschafft! Noch ${daysLeft} Tage bis zum errechneten Geburtstermin am ${format(dueDate, 'dd.MM.yyyy')}. 🤰👶`,
-            url: uri
-          });
-        }
+      const uri = await viewShotRef.current?.capture?.();
+      if (!uri) {
+        throw new Error('Konnte Share-Ansicht nicht erfassen');
+      }
+
+      if (Platform.OS === 'ios') {
+        await Sharing.shareAsync(uri);
+      } else {
+        await Share.share({
+          title: 'Meine Schwangerschaft',
+          message: `Ich bin in SSW ${currentWeek}+${currentDay} und habe bereits ${Math.round(progress * 100)}% meiner Schwangerschaft geschafft! Noch ${daysLeft} Tage bis zum errechneten Geburtstermin am ${format(dueDate, 'dd.MM.yyyy')}. 🤰👶`,
+          url: uri
+        });
       }
     } catch (error) {
       console.error('Error sharing pregnancy details:', error);
