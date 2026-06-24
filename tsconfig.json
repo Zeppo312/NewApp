@@ -41,6 +41,8 @@
     "output",
     "ownership-map-out",
     "scripts",
-    "supabase/functions"
+    "supabase/functions",
+    "**/* 2.ts",
+    "**/* 2.tsx"
   ]
 }

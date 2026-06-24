@@ -208,7 +208,7 @@ const loadEntityCountMap = async (
     return counts;
   }
 
-  for (const row of data || []) {
+  for (const row of (data || []) as unknown as Record<string, unknown>[]) {
     const entityId = row?.[entityColumn];
     if (!entityId || typeof entityId !== 'string') continue;
     counts.set(entityId, (counts.get(entityId) || 0) + 1);
@@ -241,7 +241,7 @@ const loadCurrentUserEntitySet = async (
     return ids;
   }
 
-  for (const row of data || []) {
+  for (const row of (data || []) as unknown as Record<string, unknown>[]) {
     const entityId = row?.[entityColumn];
     if (entityId && typeof entityId === 'string') {
       ids.add(entityId);

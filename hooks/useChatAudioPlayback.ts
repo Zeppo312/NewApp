@@ -5,6 +5,17 @@ import { Alert } from 'react-native';
 import type { ChatMessageCore, ChatScope } from '@/lib/chatMessages';
 import { getChatAudioPlayableSource } from '@/lib/chatAudio';
 
+type PlaybackStatusSubscription = {
+  remove: () => void;
+};
+
+type AudioPlayerWithStatusListener = ReturnType<typeof createAudioPlayer> & {
+  addListener?: (
+    eventName: 'playbackStatusUpdate',
+    listener: (status: AudioStatus) => void,
+  ) => PlaybackStatusSubscription;
+};
+
 type AudioCacheEntry = {
   uri: string;
   expiresAt: number;
@@ -42,7 +53,7 @@ export function useChatAudioPlayback(scope: ChatScope) {
   }, [activeMessageId]);
 
   useEffect(() => {
-    const player = playerRef.current;
+    const player = playerRef.current as AudioPlayerWithStatusListener | null;
     if (!player || typeof player.addListener !== 'function') {
       return () => {
         playerRef.current?.remove();

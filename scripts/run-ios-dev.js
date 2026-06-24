@@ -15,7 +15,7 @@ const xcodeProjectPath = path.join(
   'LottiBaby.xcodeproj',
   'project.pbxproj',
 );
-const desiredJsEngine = (process.env.LOTTI_IOS_JS_ENGINE || 'jsc').trim();
+const desiredJsEngine = (process.env.LOTTI_IOS_JS_ENGINE || 'hermes').trim();
 const expoAppConfigPath = path.join(projectRoot, 'app.json');
 const port = String(process.env.RCT_METRO_PORT || process.env.EXPO_DEV_SERVER_PORT || '8081');
 const metroBaseUrl = (

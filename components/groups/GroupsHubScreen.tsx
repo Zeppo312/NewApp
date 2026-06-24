@@ -816,7 +816,7 @@ const styles = StyleSheet.create({
   },
   searchRow: {
     minHeight: 48,
-    borderRadius: RADIUS.lg,
+    borderRadius: RADIUS,
     borderWidth: 1,
     paddingHorizontal: 14,
     flexDirection: 'row',

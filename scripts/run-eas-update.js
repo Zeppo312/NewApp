@@ -7,7 +7,10 @@ function runEasUpdate() {
   const args = ['update', ...process.argv.slice(2)];
   const child = spawn(easBinary, args, {
     stdio: 'inherit',
-    env: process.env,
+    env: {
+      ...process.env,
+      CI: process.env.CI || '1',
+    },
   });
 
   child.on('error', (error) => {

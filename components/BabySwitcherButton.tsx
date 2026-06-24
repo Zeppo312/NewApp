@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import {
   Alert,
+  AlertButton,
   InteractionManager,
   Modal,
   Pressable,
@@ -268,7 +269,7 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
     if (deletingBabyId) return;
 
     const canDelete = babies.length > 1;
-    const actions = [
+    const actions: AlertButton[] = [
       { text: 'Abbrechen', style: 'cancel' as const },
       {
         text: 'Bearbeiten',

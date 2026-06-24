@@ -104,8 +104,8 @@ export const formatTime = (seconds: number): string => {
 // Setup notifications
 export const setupNotifications = async () => {
   // Request permissions
-  const { status } = await Notifications.requestPermissionsAsync();
-  if (status !== 'granted') {
+  const permissions = await Notifications.requestPermissionsAsync();
+  if (!permissions.granted) {
     console.log('Notification permissions not granted');
     return false;
   }

@@ -24,17 +24,17 @@ export async function registerForPushNotificationsAsync() {
   // Prüfen, ob das Gerät ein physisches Gerät ist (kein Simulator)
   if (Device.isDevice) {
     // Berechtigungen prüfen
-    const { status: existingStatus } = await Notifications.getPermissionsAsync();
-    let finalStatus = existingStatus;
+    const existingPermissions = await Notifications.getPermissionsAsync();
+    let granted = existingPermissions.granted;
     
     // Berechtigungen anfordern, wenn sie noch nicht erteilt wurden
-    if (existingStatus !== 'granted') {
-      const { status } = await Notifications.requestPermissionsAsync();
-      finalStatus = status;
+    if (!granted) {
+      const requestedPermissions = await Notifications.requestPermissionsAsync();
+      granted = requestedPermissions.granted;
     }
     
     // Wenn die Berechtigungen nicht erteilt wurden, abbrechen
-    if (finalStatus !== 'granted') {
+    if (!granted) {
       console.log('Keine Benachrichtigungserlaubnis erteilt!');
       return null;
     }

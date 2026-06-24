@@ -276,8 +276,8 @@ export default function BabyScreen() {
   // Hintergrund-Task einrichten
   const setupBackgroundTask = async () => {
     try {
-      const { status: existingStatus } = await Notifications.getPermissionsAsync();
-      if (existingStatus === 'granted') {
+      const existingPermissions = await Notifications.getPermissionsAsync();
+      if (existingPermissions.granted) {
         // Definiere Task (Registrierung erfolgt in App-Scope; hier stellen wir sicher, dass sie definiert ist)
         defineMilestoneCheckerTask();
         console.log('Hintergrund-Task für Meilensteine definiert.');
@@ -1390,15 +1390,15 @@ export default function BabyScreen() {
 
   const registerForPushNotificationsAsync = async () => {
     try {
-      const { status: existingStatus } = await Notifications.getPermissionsAsync();
-      let finalStatus = existingStatus;
+      const existingPermissions = await Notifications.getPermissionsAsync();
+      let granted = existingPermissions.granted;
       
-      if (existingStatus !== 'granted') {
-        const { status } = await Notifications.requestPermissionsAsync();
-        finalStatus = status;
+      if (!granted) {
+        const requestedPermissions = await Notifications.requestPermissionsAsync();
+        granted = requestedPermissions.granted;
       }
       
-      if (finalStatus !== 'granted') {
+      if (!granted) {
         console.log('Permission to receive notifications was denied');
         return;
       }

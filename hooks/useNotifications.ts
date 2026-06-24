@@ -59,17 +59,16 @@ export function useNotifications() {
       }
 
       // Check current permission status
-      const { status: existingStatus } = await Notifications.getPermissionsAsync();
-      let finalStatus = existingStatus;
+      const existingPermissions = await Notifications.getPermissionsAsync();
+      let granted = existingPermissions.granted;
 
       // Request permission if not granted
-      if (existingStatus !== 'granted') {
-        const { status } = await Notifications.requestPermissionsAsync();
-        finalStatus = status;
+      if (!granted) {
+        const requestedPermissions = await Notifications.requestPermissionsAsync();
+        granted = requestedPermissions.granted;
       }
 
       // Update permission state
-      const granted = finalStatus === 'granted';
       setHasPermission(granted);
 
       if (!granted) {

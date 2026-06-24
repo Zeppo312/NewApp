@@ -10,8 +10,6 @@
  * @returns {ExpoConfig}
  */
 module.exports = function({ config }) {
-  const iosJsEngine = process.env.LOTTI_IOS_JS_ENGINE?.trim() || config.ios?.jsEngine || 'jsc';
-  const androidJsEngine = process.env.LOTTI_ANDROID_JS_ENGINE?.trim() || config.android?.jsEngine || 'hermes';
   const addPlugin = (plugins, plugin) => {
     const pluginName = Array.isArray(plugin) ? plugin[0] : plugin;
     const exists = plugins.some((item) => (Array.isArray(item) ? item[0] : item) === pluginName);
@@ -28,6 +26,7 @@ module.exports = function({ config }) {
     },
   ]);
   addPlugin(plugins, 'expo-task-manager');
+  addPlugin(plugins, 'expo-asset');
   addPlugin(plugins, '@react-native-community/datetimepicker');
   addPlugin(plugins, 'expo-image');
   addPlugin(plugins, 'expo-sharing');
@@ -45,12 +44,10 @@ module.exports = function({ config }) {
     },
     ios: {
       ...config.ios,
-      jsEngine: iosJsEngine,
       version: config.version,
     },
     android: {
       ...config.android,
-      jsEngine: androidJsEngine,
     },
     // Zusätzliche Expo-Konfiguration
     extra: {

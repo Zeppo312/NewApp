@@ -302,7 +302,7 @@ export async function syncVitaminDReminderSchedule({
   }
 
   const permissions = await Notifications.getPermissionsAsync();
-  if (permissions.status !== 'granted') {
+  if (!permissions.granted) {
     return { scheduled: false, permissionGranted: false };
   }
 

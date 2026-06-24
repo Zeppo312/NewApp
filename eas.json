@@ -15,6 +15,16 @@
     "preview": {
       "distribution": "internal",
       "channel": "preview",
+      "environment": "preview",
+      "env": {
+        "SENTRY_ALLOW_FAILURE": "true"
+      }
+    },
+    "preview-testflight": {
+      "distribution": "store",
+      "channel": "preview",
+      "environment": "preview",
+      "autoIncrement": true,
       "env": {
         "SENTRY_ALLOW_FAILURE": "true"
       }
@@ -36,6 +46,15 @@
     }
   },
   "submit": {
-    "production": {}
+    "preview-testflight": {
+      "ios": {
+        "ascAppId": "6745569710"
+      }
+    },
+    "production": {
+      "ios": {
+        "ascAppId": "6745569710"
+      }
+    }
   }
 }

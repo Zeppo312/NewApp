@@ -1633,7 +1633,7 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     paddingHorizontal: 16,
     paddingVertical: 14,
-    borderRadius: RADIUS.lg,
+    borderRadius: RADIUS,
     backgroundColor: 'rgba(255, 248, 225, 0.92)',
     borderWidth: 1,
     borderColor: 'rgba(229, 180, 77, 0.45)',
