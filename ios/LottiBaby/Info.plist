@@ -59,6 +59,8 @@
 	<array>
 		<string>_expo._tcp</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>Lotti Baby benötigt Zugriff auf deine Kamera, damit du Barcodes von Windeln, Milchpulver und anderen Produkten scannen und deine Vorräte automatisch auffüllen kannst.</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>Lotti Baby benötigt Zugriff auf deinen Kalender, damit du Planer- und Arzttermine als Kalendereinträge anlegen, aktualisieren und mit Erinnerungen synchronisieren kannst.</string>
 	<key>NSCalendarsUsageDescription</key>

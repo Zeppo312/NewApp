@@ -332,9 +332,9 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
         >
           {(() => { const tint = getTypeTint(); return (
           <View style={[styles.card, expanded && styles.expandedCard, { borderColor: tint.border, marginHorizontal }] }>
-            <BlurView intensity={25} tint={colorScheme === 'dark' ? 'dark' : 'light'} style={StyleSheet.absoluteFillObject} />
-            <View style={[StyleSheet.absoluteFillObject as any, { backgroundColor: tint.bg }]} />
-            <LinearGradient colors={[ 'rgba(255,255,255,0.18)', 'rgba(255,255,255,0.10)' ]} style={StyleSheet.absoluteFillObject} />
+            <BlurView intensity={25} tint={colorScheme === 'dark' ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
+            <View style={[StyleSheet.absoluteFill as any, { backgroundColor: tint.bg }]} />
+            <LinearGradient colors={[ 'rgba(255,255,255,0.18)', 'rgba(255,255,255,0.10)' ]} style={StyleSheet.absoluteFill} />
             <View style={styles.cardHeader}>
               <View style={[styles.iconContainer, { marginTop: 6 }]}><ThemedText style={{fontSize: 20}}>{detail.emoji}</ThemedText></View>
 

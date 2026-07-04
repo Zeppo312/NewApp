@@ -9,8 +9,8 @@ import {
   BottomTabNavigationEventMap,
   BottomTabNavigationOptions,
   createBottomTabNavigator,
-} from '@react-navigation/bottom-tabs';
-import { ParamListBase, TabNavigationState } from '@react-navigation/native';
+} from 'expo-router/js-tabs';
+import { ParamListBase, TabNavigationState } from 'expo-router/react-navigation';
 import React, { useEffect, useMemo } from 'react';
 import { Platform, View, ActivityIndicator, Text } from 'react-native';
 import type { ComponentProps } from 'react';

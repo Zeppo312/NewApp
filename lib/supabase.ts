@@ -409,7 +409,15 @@ export const signInAnonymously = async () => {
 };
 
 // Einfügen in die einheitliche Tabelle baby_care_entries
-export const addBabyCareEntry = async (entry: BabyCareEntry, babyId?: string) => {
+export const addBabyCareEntry = async (
+  entry: BabyCareEntry,
+  babyId?: string,
+  options?: {
+    diaperInventoryItemId?: string | null;
+    // 'none' = bewusst kein Pulver abziehen (z. B. abgepumpte Muttermilch).
+    bottleInventoryItemId?: string | null | 'none';
+  }
+) => {
   try {
     const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
@@ -440,8 +448,34 @@ export const addBabyCareEntry = async (entry: BabyCareEntry, babyId?: string) =>
     if (!error) {
       if (payload.entry_type === 'feeding') {
         emitLottiMoment('feeding');
+        if (
+          payload.baby_id &&
+          payload.feeding_type === 'BOTTLE' &&
+          typeof payload.feeding_volume_ml === 'number' &&
+          payload.feeding_volume_ml > 0 &&
+          options?.bottleInventoryItemId !== 'none'
+        ) {
+          const volumeMl = payload.feeding_volume_ml;
+          import('./shopping')
+            .then(({ recordBottleUsage }) =>
+              recordBottleUsage(payload.baby_id!, volumeMl, options?.bottleInventoryItemId)
+            )
+            .catch((usageError) => {
+              console.warn('Failed to record bottle usage in inventory:', usageError);
+            });
+        }
       } else if (payload.entry_type === 'diaper') {
         emitLottiMoment('care');
+        if (payload.baby_id) {
+          // Dynamischer Import, weil lib/shopping.ts selbst aus dieser Datei importiert.
+          import('./shopping')
+            .then(({ recordDiaperUsage }) =>
+              recordDiaperUsage(payload.baby_id!, options?.diaperInventoryItemId)
+            )
+            .catch((usageError) => {
+              console.warn('Failed to record diaper usage in inventory:', usageError);
+            });
+        }
       }
     }
 

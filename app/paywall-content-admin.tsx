@@ -573,7 +573,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   toolbarGlow: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     borderRadius: 28,
   },
   heroPanel: {

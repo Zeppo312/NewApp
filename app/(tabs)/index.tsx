@@ -1679,7 +1679,7 @@ const styles = StyleSheet.create({
   },
   glassCircleBlur: { flex: 1 },
   glassCircleOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(135, 206, 235, 0.1)',
     borderWidth: 2,
     borderColor: 'rgba(255,255,255,0.6)',
@@ -2013,7 +2013,7 @@ const styles = StyleSheet.create({
     marginLeft: 10,
   },
   manualModalOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,

@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CachedImage } from '@/components/CachedImage';
 import { usePathname, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect } from 'expo-router';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedBackground } from '@/components/ThemedBackground';
@@ -17,6 +17,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Canvas, RoundedRect, LinearGradient as SkiaLinearGradient, RadialGradient, Circle, vec } from '@shopify/react-native-skia';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { supabase, addBabyCareEntry, getBabyCareEntriesForDate } from '@/lib/supabase';
+import { useAdvisorAccess } from '@/lib/advisor/access';
+import { fetchLowStockCount } from '@/lib/shopping';
 import { getRecommendations, LottiRecommendation } from '@/lib/supabase/recommendations';
 import { BlurView } from 'expo-blur';
 import ActivityInputModal from '@/components/ActivityInputModal';
@@ -49,6 +51,7 @@ type HomeActiveTimer = {
 
 type HomeQuickAccessCardId =
   | 'recipe-generator'
+  | 'shopping-list'
   | 'baby'
   | 'planner'
   | 'daily'
@@ -83,6 +86,15 @@ const HOME_QUICK_ACCESS_CARDS: HomeQuickAccessCardConfig[] = [
     destination: '/recipe-generator',
     cardBackgroundColor: 'rgba(168, 196, 193, 0.6)',
     iconBackgroundColor: 'rgba(168, 196, 193, 0.9)',
+  },
+  {
+    id: 'shopping-list',
+    title: 'Einkauf & Vorräte',
+    description: 'Liste, Bestand, Scanner',
+    iconName: 'cart',
+    destination: '/shopping-list',
+    cardBackgroundColor: 'rgba(210, 235, 215, 0.6)',
+    iconBackgroundColor: 'rgba(140, 200, 150, 0.9)',
   },
   {
     id: 'baby',
@@ -459,7 +471,7 @@ function GlassLensOverlay({ radius = 20 }: { radius?: number }) {
   return (
     <View
       pointerEvents="none"
-      style={[StyleSheet.absoluteFillObject, { borderRadius: radius, overflow: 'hidden' }]}
+      style={[StyleSheet.absoluteFill, { borderRadius: radius, overflow: 'hidden' }]}
       onLayout={(event) => {
         const { width, height } = event.nativeEvent.layout;
         if (width !== layout.width || height !== layout.height) {
@@ -599,6 +611,8 @@ export default function HomeScreen() {
   const { isBabyBorn } = useBabyStatus();
   const pathname = usePathname();
   const router = useRouter();
+  // Lottis Fürsorge: nur für Premiumtester/Admins sichtbar (später Premium-Abo).
+  const advisorAccess = useAdvisorAccess();
   const DEFAULT_OVERVIEW_HEIGHT = 230;
   const PRODUCT_ROTATION_INITIAL_DELAY_MS = 10000;
   const PRODUCT_ROTATION_INTERVAL_MS = 20000;
@@ -610,6 +624,7 @@ export default function HomeScreen() {
   const [userName, setUserName] = useState("");
   const [recommendations, setRecommendations] = useState<LottiRecommendation[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [lowStockCount, setLowStockCount] = useState(0);
   const [showInputModal, setShowInputModal] = useState(false);
   const [selectedActivityType, setSelectedActivityType] = useState<'feeding' | 'diaper' | 'other'>('feeding');
   const [selectedSubType, setSelectedSubType] = useState<string | null>(null);
@@ -997,6 +1012,15 @@ export default function HomeScreen() {
     }
   }, [user, activeBabyId, isActiveBabyReady]);
 
+  const loadLowStockCount = useCallback(async () => {
+    if (!activeBabyId) {
+      setLowStockCount(0);
+      return;
+    }
+    const { count } = await fetchLowStockCount(activeBabyId);
+    setLowStockCount(count);
+  }, [activeBabyId]);
+
   useFocusEffect(
     useCallback(() => {
       if (!user || !isActiveBabyReady) {
@@ -1004,7 +1028,8 @@ export default function HomeScreen() {
       }
 
       void loadData();
-    }, [user, activeBabyId, isActiveBabyReady, refreshing])
+      void loadLowStockCount();
+    }, [user, activeBabyId, isActiveBabyReady, refreshing, loadLowStockCount])
   );
 
   useEffect(() => {
@@ -1316,7 +1341,10 @@ export default function HomeScreen() {
       diaper_temperature_c: payload.diaper_temperature_c ?? null,
       diaper_suppository_given: payload.diaper_suppository_given ?? null,
       diaper_suppository_dose_mg: payload.diaper_suppository_dose_mg ?? null,
-    }, activeBabyId ?? undefined);
+    }, activeBabyId ?? undefined, {
+      diaperInventoryItemId: payload.diaper_inventory_item_id ?? null,
+      bottleInventoryItemId: payload.bottle_inventory_item_id ?? null,
+    });
 
     if (error) {
       console.error('Error saving baby care entry:', error);
@@ -1351,6 +1379,14 @@ export default function HomeScreen() {
 
     // Quick reload of daily entries to show the new entry immediately
     await loadDailyEntriesOnly();
+
+    if (entryType === 'diaper') {
+      // Die Vorratsabbuchung läuft fire-and-forget im Hintergrund —
+      // kurz warten, bevor das Low-Stock-Badge neu geladen wird.
+      setTimeout(() => {
+        void loadLowStockCount();
+      }, 1500);
+    }
   };
 
   const handleSaveSleepQuickEntry = async (entry: SleepQuickEntry) => {
@@ -1891,6 +1927,53 @@ export default function HomeScreen() {
     </View>
   );
 
+  const renderAdvisorEntry = () => (
+    <TouchableOpacity
+      activeOpacity={0.9}
+      onPress={() => handleNavigate('/lottis-fuersorge')}
+      style={[styles.liquidGlassWrapper, styles.advisorEntryWrapper]}
+    >
+      <BlurView
+        intensity={22}
+        tint={colorScheme === 'dark' ? 'dark' : 'light'}
+        style={[styles.liquidGlassBackground, { backgroundColor: glassBlurBg }]}
+      >
+        <View
+          style={[
+            styles.advisorEntryContainer,
+            styles.liquidGlassContainer,
+            { backgroundColor: glassCardBg },
+          ]}
+        >
+          <View style={styles.advisorEntryIcon}>
+            <Text style={styles.advisorEntryEmoji}>🌿</Text>
+          </View>
+          <View style={styles.advisorEntryTextWrap}>
+            <View style={styles.advisorEntryTitleRow}>
+              <ThemedText
+                adaptive={false}
+                style={[styles.advisorEntryTitle, { color: accentPurple }]}
+              >
+                Lottis Fürsorge
+              </ThemedText>
+              <View style={styles.advisorEntryBadge}>
+                <Text style={styles.advisorEntryBadgeText}>Premium</Text>
+              </View>
+            </View>
+            <ThemedText
+              adaptive={false}
+              numberOfLines={2}
+              style={[styles.advisorEntrySubtitle, { color: textSecondary }]}
+            >
+              Persönliche Hinweise aus Schlaf, Wetter & Ernährung
+            </ThemedText>
+          </View>
+          <IconSymbol name="chevron.right" size={20} color={textSecondary} />
+        </View>
+      </BlurView>
+    </TouchableOpacity>
+  );
+
   const renderQuickAccessCard = (
     item: HomeQuickAccessCardConfig,
     options?: { isEditing?: boolean; isActive?: boolean }
@@ -1923,6 +2006,13 @@ export default function HomeScreen() {
               isEditing ? styles.quickAccessEditorCard : null,
             ]}
           >
+            {item.id === 'shopping-list' && !isEditing && lowStockCount > 0 ? (
+              <View style={styles.quickAccessAlertBadge}>
+                <Text style={styles.quickAccessAlertBadgeText}>
+                  {lowStockCount > 9 ? '9+' : lowStockCount}
+                </Text>
+              </View>
+            ) : null}
             {canHideCard ? (
               <TouchableOpacity
                 style={styles.quickAccessHideBadge}
@@ -2175,6 +2265,7 @@ export default function HomeScreen() {
           >
             {renderGreetingSection()}
             {renderOverviewSection()}
+            {advisorAccess === true ? renderAdvisorEntry() : null}
             {renderQuickAccessCards()}
           </ScrollView>
         )}
@@ -2234,6 +2325,55 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderRadius: 22,
     overflow: 'hidden',
+  },
+  advisorEntryWrapper: {
+    marginTop: 4,
+  },
+  advisorEntryContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+  },
+  advisorEntryIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(94, 61, 179, 0.12)',
+  },
+  advisorEntryEmoji: {
+    fontSize: 24,
+  },
+  advisorEntryTextWrap: {
+    flex: 1,
+  },
+  advisorEntryTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 2,
+  },
+  advisorEntryTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+  },
+  advisorEntryBadge: {
+    backgroundColor: 'rgba(94, 61, 179, 0.14)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 999,
+  },
+  advisorEntryBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#5E3DB3',
+  },
+  advisorEntrySubtitle: {
+    fontSize: 13,
+    lineHeight: 18,
   },
   greetingCardWrapper: {
     borderRadius: 30,
@@ -2313,7 +2453,7 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   greetingGloss: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     borderRadius: 30,
   },
 
@@ -2333,7 +2473,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   tipHighlightContainer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   tipHighlightDot: {
     position: 'absolute',
@@ -2823,6 +2963,26 @@ const styles = StyleSheet.create({
   },
   quickAccessEditorCard: {
     minHeight: 132,
+  },
+  quickAccessAlertBadge: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    paddingHorizontal: 6,
+    backgroundColor: '#E25C4A',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.7)',
+  },
+  quickAccessAlertBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   quickAccessHideBadge: {
     position: 'absolute',

@@ -808,7 +808,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.25)',
   },
   avatarGlassBorder: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     borderRadius: 60,
     borderWidth: 2,
     borderColor: 'rgba(255,255,255,0.55)',

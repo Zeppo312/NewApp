@@ -23,6 +23,12 @@ import { fetchRecipes, RecipeRecord } from '@/lib/recipes';
 import TextInputOverlay from '@/components/modals/TextInputOverlay';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { useActiveBaby } from '@/contexts/ActiveBabyContext';
+import {
+  fetchDiaperInventoryItems,
+  fetchFormulaInventoryItems,
+  InventoryItem,
+} from '@/lib/shopping';
 
 // Typ-Definitionen
 type ActivityType = 'feeding' | 'diaper' | 'other';
@@ -170,6 +176,11 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
 
   // Diaper States
   const [diaperType, setDiaperType] = useState<DiaperType>('wet');
+  const { activeBabyId } = useActiveBaby();
+  const [diaperInventoryItems, setDiaperInventoryItems] = useState<InventoryItem[]>([]);
+  const [selectedDiaperItemId, setSelectedDiaperItemId] = useState<string | null>(null);
+  const [formulaInventoryItems, setFormulaInventoryItems] = useState<InventoryItem[]>([]);
+  const [selectedFormulaItemId, setSelectedFormulaItemId] = useState<string | null | 'none'>(null);
   const [diaperFeverMeasured, setDiaperFeverMeasured] = useState(false);
   const [diaperTemperatureC, setDiaperTemperatureC] = useState('');
   const [diaperSuppositoryGiven, setDiaperSuppositoryGiven] = useState(false);
@@ -399,6 +410,49 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
     // Hier könnten initialSubType ausgewertet werden
   }, [visible, initialSubType, date, initialData, activityType, sanitizeManualDate, feedingOptions, diaperOptions]);
 
+  // Windel-Vorräte laden, damit bei mehreren Posten optional gewählt werden
+  // kann, welche Windel abgebucht wird (nur bei neuen Einträgen).
+  useEffect(() => {
+    if (!visible || activityType !== 'diaper' || initialData?.id || !activeBabyId) {
+      setDiaperInventoryItems([]);
+      setSelectedDiaperItemId(null);
+      return;
+    }
+    let cancelled = false;
+    setSelectedDiaperItemId(null);
+    fetchDiaperInventoryItems(activeBabyId).then(({ data }) => {
+      if (!cancelled) {
+        setDiaperInventoryItems(data);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, activityType, initialData?.id, activeBabyId]);
+
+  // Milchpulver-Vorräte (mit hinterlegter Dosierung) für Fläschchen-Einträge.
+  useEffect(() => {
+    if (!visible || activityType !== 'feeding' || initialData?.id || !activeBabyId) {
+      setFormulaInventoryItems([]);
+      setSelectedFormulaItemId(null);
+      return;
+    }
+    let cancelled = false;
+    setSelectedFormulaItemId(null);
+    fetchFormulaInventoryItems(activeBabyId).then(({ data }) => {
+      if (!cancelled) {
+        setFormulaInventoryItems(
+          data.filter(
+            (item) => item.dosage_grams_per_100ml !== null && item.dosage_grams_per_100ml > 0
+          )
+        );
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, activityType, initialData?.id, activeBabyId]);
+
   // Rezepte laden (Supabase), fallback auf Samples
   useEffect(() => {
     const loadRecipes = async () => {
@@ -480,6 +534,8 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
         feeding_type,
         feeding_volume_ml: feedingType === 'bottle' || feedingType === 'pump' || feedingType === 'water' ? volumeMl : null,
         feeding_side,
+        // Kein DB-Feld: steuert die Milchpulver-Abbuchung ('none' = kein Abzug).
+        bottle_inventory_item_id: feedingType === 'bottle' ? selectedFormulaItemId : 'none',
       };
     } else if (activityType === 'diaper') {
       const parsedTemp = diaperFeverMeasured ? toDecimalValue(diaperTemperatureC) : null;
@@ -507,6 +563,8 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
         diaper_temperature_c: diaperFeverMeasured ? parsedTemp : null,
         diaper_suppository_given: diaperSuppositoryGiven,
         diaper_suppository_dose_mg: diaperSuppositoryGiven ? parsedDose : null,
+        // Kein DB-Feld: wird vom Aufrufer an die Vorratsabbuchung durchgereicht.
+        diaper_inventory_item_id: selectedDiaperItemId,
       };
     }
     // other: nur base + notes
@@ -1123,6 +1181,70 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
           </View>
         )}
         {(feedingOptions.length > 0 || isStandaloneSpecialFlow) && (feedingType === 'bottle' || feedingType === 'pump' || feedingType === 'water') && renderVolumeControl()}
+        {feedingType === 'bottle' && !initialData?.id && formulaInventoryItems.length > 0 ? (
+          <View style={styles.diaperStockGroup}>
+            <Text style={[styles.diaperStockTitle, { color: theme.textSecondary }]}>
+              Welches Milchpulver? (optional)
+            </Text>
+            <View style={styles.diaperStockChipRow}>
+              <TouchableOpacity
+                style={[
+                  styles.diaperStockChip,
+                  { backgroundColor: theme.lightGray },
+                  selectedFormulaItemId === null && styles.diaperStockChipActive,
+                ]}
+                onPress={() => setSelectedFormulaItemId(null)}
+              >
+                <Text
+                  style={[
+                    styles.diaperStockChipText,
+                    { color: selectedFormulaItemId === null ? '#FFFFFF' : theme.text },
+                  ]}
+                >
+                  Automatisch
+                </Text>
+              </TouchableOpacity>
+              {formulaInventoryItems.map((item) => (
+                <TouchableOpacity
+                  key={item.id}
+                  style={[
+                    styles.diaperStockChip,
+                    { backgroundColor: theme.lightGray },
+                    selectedFormulaItemId === item.id && styles.diaperStockChipActive,
+                  ]}
+                  onPress={() => setSelectedFormulaItemId(item.id)}
+                >
+                  <Text
+                    style={[
+                      styles.diaperStockChipText,
+                      { color: selectedFormulaItemId === item.id ? '#FFFFFF' : theme.text },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {item.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity
+                style={[
+                  styles.diaperStockChip,
+                  { backgroundColor: theme.lightGray },
+                  selectedFormulaItemId === 'none' && styles.diaperStockChipActive,
+                ]}
+                onPress={() => setSelectedFormulaItemId('none')}
+              >
+                <Text
+                  style={[
+                    styles.diaperStockChipText,
+                    { color: selectedFormulaItemId === 'none' ? '#FFFFFF' : theme.text },
+                  ]}
+                >
+                  Kein Pulver (Muttermilch)
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : null}
         {feedingOptions.length > 0 && (feedingType === 'breast' || feedingType === 'pump') && (
           <View style={{width: '100%', alignItems: 'center'}}>
             <Text style={[styles.sectionTitle, { color: theme.text }]}>
@@ -1270,6 +1392,54 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
           </Text>
         </View>
       )}
+
+      {diaperOptions.length > 0 && !initialData?.id && diaperInventoryItems.length >= 2 ? (
+        <View style={styles.diaperStockGroup}>
+          <Text style={[styles.diaperStockTitle, { color: theme.textSecondary }]}>
+            Welche Windeln? (optional)
+          </Text>
+          <View style={styles.diaperStockChipRow}>
+            <TouchableOpacity
+              style={[
+                styles.diaperStockChip,
+                { backgroundColor: theme.lightGray },
+                selectedDiaperItemId === null && styles.diaperStockChipActive,
+              ]}
+              onPress={() => setSelectedDiaperItemId(null)}
+            >
+              <Text
+                style={[
+                  styles.diaperStockChipText,
+                  { color: selectedDiaperItemId === null ? '#FFFFFF' : theme.text },
+                ]}
+              >
+                Automatisch
+              </Text>
+            </TouchableOpacity>
+            {diaperInventoryItems.map((item) => (
+              <TouchableOpacity
+                key={item.id}
+                style={[
+                  styles.diaperStockChip,
+                  { backgroundColor: theme.lightGray },
+                  selectedDiaperItemId === item.id && styles.diaperStockChipActive,
+                ]}
+                onPress={() => setSelectedDiaperItemId(item.id)}
+              >
+                <Text
+                  style={[
+                    styles.diaperStockChipText,
+                    { color: selectedDiaperItemId === item.id ? '#FFFFFF' : theme.text },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {item.name} ({Math.max(0, Math.trunc(item.current_quantity))})
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      ) : null}
 
       {diaperOptions.length > 0 ? (
       <View style={styles.diaperHealthGroup}>
@@ -1982,6 +2152,32 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginTop: 2,
     fontWeight: '500',
+  },
+  diaperStockGroup: {
+    marginTop: 14,
+    gap: 8,
+  },
+  diaperStockTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  diaperStockChipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  diaperStockChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    maxWidth: '100%',
+  },
+  diaperStockChipActive: {
+    backgroundColor: '#8E4EC6',
+  },
+  diaperStockChipText: {
+    fontSize: 13,
+    fontWeight: '600',
   },
   diaperHealthGroup: {
     width: '90%',

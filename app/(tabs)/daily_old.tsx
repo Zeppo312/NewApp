@@ -1626,7 +1626,9 @@ export default function DailyScreen() {
           feeding_type: feedingType,
           feeding_volume_ml: payload.feeding_volume_ml ?? null,
           feeding_side: payload.feeding_side ?? null,
-        }, activeBabyId ?? undefined);
+        }, activeBabyId ?? undefined, {
+          bottleInventoryItemId: payload.bottle_inventory_item_id ?? null,
+        });
         data = res.data; error = res.error;
       }
       if (error) {
@@ -1713,7 +1715,9 @@ export default function DailyScreen() {
           diaper_temperature_c: payload.diaper_temperature_c ?? null,
           diaper_suppository_given: payload.diaper_suppository_given ?? null,
           diaper_suppository_dose_mg: payload.diaper_suppository_dose_mg ?? null,
-        }, activeBabyId ?? undefined);
+        }, activeBabyId ?? undefined, {
+          diaperInventoryItemId: payload.diaper_inventory_item_id ?? null,
+        });
         data = res.data; error = res.error;
       }
       if (error) {
@@ -2932,7 +2936,7 @@ export default function DailyScreen() {
             ]}
           >
             <TouchableOpacity
-              style={StyleSheet.absoluteFillObject}
+              style={StyleSheet.absoluteFill}
               activeOpacity={1}
               onPress={() => setShowFeedingOverviewModal(false)}
             />
@@ -3095,7 +3099,7 @@ export default function DailyScreen() {
         >
           <LinearGradient
             colors={[splashBg, splashBg]}
-            style={StyleSheet.absoluteFillObject as any}
+            style={StyleSheet.absoluteFill as any}
           />
           <View style={s.splashCenterCard}>
             <Animated.View style={[s.splashEmojiRing, { transform: [{ scale: splashEmojiAnim }] }]}>
@@ -3342,7 +3346,7 @@ const s = StyleSheet.create({
     elevation: 8,
   },
   glassOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(255,255,255,0.30)',
   },
 
@@ -3724,7 +3728,7 @@ const s = StyleSheet.create({
     elevation: 4,
   },
   liquidGlassOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
 
   // Timeline Section (exakt wie Sleep-Tracker)

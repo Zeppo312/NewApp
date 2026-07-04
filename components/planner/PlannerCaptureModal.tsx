@@ -220,6 +220,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
   const [repeatEnabled, setRepeatEnabled] = useState(false);
   const [repeatDays, setRepeatDays] = useState<number[]>([]);
   const [recurrenceEndsOn, setRecurrenceEndsOn] = useState<Date | null>(null);
+  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
 
   const partnerLabel = useMemo(() => {
     if (!ownerOptions || ownerOptions.length === 0) return "Partner";
@@ -417,6 +418,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
 
     if (editingItem) {
       const { type: editingType, item } = editingItem;
+      setShowAdvancedOptions(true);
       setCurrentType(editingType);
       setTitle(item.title);
       if ("notes" in item && item.notes) {
@@ -502,6 +504,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
       setRepeatEnabled(false);
       setRepeatDays([]);
       setRecurrenceEndsOn(null);
+      setShowAdvancedOptions(false);
     }
   }, [visible, type, baseDate, editingItem, defaultOwnerId, initialStart, deriveAssigneeForOwner]);
 
@@ -1012,10 +1015,16 @@ export const PlannerCaptureModal: React.FC<Props> = ({
             </TouchableOpacity>
             <View style={styles.headerCenter}>
               <Text style={[styles.title, { color: theme.text }]}>
-                {currentType === "todo" ? "Neue Aufgabe" : "Neuer Termin"}
+                {editingItem
+                  ? currentType === "todo"
+                    ? "Aufgabe bearbeiten"
+                    : "Termin bearbeiten"
+                  : currentType === "todo"
+                    ? "Neue Aufgabe"
+                    : "Neuer Termin"}
               </Text>
               <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-                Details hinzufügen
+                {showAdvancedOptions ? "Details bearbeiten" : "Schnell erfassen"}
               </Text>
             </View>
             <TouchableOpacity
@@ -1083,7 +1092,50 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                   styles.titleFieldText,
                 )}
 
-                {(currentType === "todo" || currentType === "event") && (
+                <TouchableOpacity
+                  style={[
+                    styles.advancedToggleButton,
+                    {
+                      backgroundColor: showAdvancedOptions
+                        ? theme.accentSoft
+                        : theme.field,
+                      borderColor: showAdvancedOptions
+                        ? accentColor
+                        : theme.border,
+                    },
+                  ]}
+                  onPress={() => setShowAdvancedOptions((prev) => !prev)}
+                  activeOpacity={0.85}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    showAdvancedOptions
+                      ? "Weniger Optionen anzeigen"
+                      : "Mehr Optionen anzeigen"
+                  }
+                >
+                  <Text
+                    style={[
+                      styles.advancedToggleText,
+                      { color: showAdvancedOptions ? accentColor : theme.text },
+                    ]}
+                  >
+                    {showAdvancedOptions ? "Weniger Optionen" : "Mehr Optionen"}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.advancedToggleIcon,
+                      {
+                        color: showAdvancedOptions
+                          ? accentColor
+                          : theme.textSecondary,
+                      },
+                    ]}
+                  >
+                    {showAdvancedOptions ? "˄" : "˅"}
+                  </Text>
+                </TouchableOpacity>
+
+                {showAdvancedOptions && (
                   <View style={styles.section}>
                     <Text style={[styles.sectionLabel, { color: theme.text }]}>
                       👤 Für
@@ -1111,6 +1163,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                   </View>
                 )}
 
+                {showAdvancedOptions && (
                 <View style={styles.section}>
                   <View style={styles.recurrenceToggleRow}>
                     <Text style={[styles.sectionLabel, { color: theme.text }]}>
@@ -1298,6 +1351,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                     </View>
                   )}
                 </View>
+                )}
 
                 {currentType === "event" && (
                   <View style={styles.section}>
@@ -1324,25 +1378,26 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                         ▾
                       </Text>
                     </TouchableOpacity>
-                    {renderInlineField(
-                      location,
-                      "Ort (optional)",
-                      () =>
-                        openFocusEditor({
-                          field: "location",
-                          label: "Ort",
-                          placeholder: "Ort (optional)",
-                        }),
-                      [
-                        styles.locationField,
-                        styles.locationInput,
-                        {
-                          backgroundColor: theme.field,
-                          borderColor: theme.border,
-                        },
-                      ],
-                    )}
-                    {!repeatEnabled && (
+                    {showAdvancedOptions &&
+                      renderInlineField(
+                        location,
+                        "Ort (optional)",
+                        () =>
+                          openFocusEditor({
+                            field: "location",
+                            label: "Ort",
+                            placeholder: "Ort (optional)",
+                          }),
+                        [
+                          styles.locationField,
+                          styles.locationInput,
+                          {
+                            backgroundColor: theme.field,
+                            borderColor: theme.border,
+                          },
+                        ],
+                      )}
+                    {showAdvancedOptions && !repeatEnabled && (
                       <View style={styles.section}>
                         <Text
                           style={[
@@ -1441,6 +1496,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                   </View>
                 )}
 
+                {showAdvancedOptions && (
                 <View style={styles.section}>
                   <TouchableOpacity
                     style={styles.notesHeader}
@@ -1489,6 +1545,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                       true,
                     )}
                 </View>
+                )}
 
                 {/* Löschen-Button nur beim Bearbeiten anzeigen */}
                 {editingItem?.item.id && onDelete && (
@@ -2031,6 +2088,27 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
     lineHeight: 24,
+  },
+  advancedToggleButton: {
+    minHeight: 44,
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  advancedToggleText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: THEME.text,
+  },
+  advancedToggleIcon: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: THEME.textSecondary,
   },
   inlineFieldBase: {
     alignItems: "flex-start",

@@ -50,7 +50,7 @@ export default function SplashOverlay({
 
   return (
     <Animated.View style={[styles.overlay, { opacity: fade }]} pointerEvents="none">
-      <LinearGradient colors={[bgColor, bgColor]} style={StyleSheet.absoluteFillObject as any} />
+      <LinearGradient colors={[bgColor, bgColor]} style={StyleSheet.absoluteFill as any} />
       <View style={styles.center}>
         <Animated.View style={[styles.emojiRing, { transform: [{ scale: bump }] }]}>
           <Text style={styles.emoji}>{emoji}</Text>

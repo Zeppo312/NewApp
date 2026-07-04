@@ -15,7 +15,7 @@ import {
   Platform,
   Dimensions,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect } from 'expo-router';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import * as Linking from 'expo-linking';
@@ -5642,7 +5642,7 @@ export default function SleepTrackerScreen() {
         >
           <LinearGradient
             colors={[splashBg, splashBg]}
-            style={StyleSheet.absoluteFillObject as any}
+            style={StyleSheet.absoluteFill as any}
           />
           <View style={styles.splashCenterCard}>
             <Animated.View style={[styles.splashEmojiRing, { transform: [{ scale: splashEmojiAnim }] }]}>
@@ -5839,7 +5839,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   glassCircleOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(135, 206, 235, 0.1)', // Baby blue overlay
     borderWidth: 2,
     borderColor: 'rgba(255, 255, 255, 0.6)',
@@ -6082,7 +6082,7 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   glassOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(255,255,255,0.30)',
   },
 
@@ -6106,7 +6106,7 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   liquidGlassOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
 
   // Schlaferfassung Section (Design Guide konform - gleiche Breite wie Wochenansicht)

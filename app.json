@@ -58,6 +58,14 @@
       }
     ],
     [
+      "expo-camera",
+      {
+        "cameraPermission": "Lotti Baby benötigt Zugriff auf deine Kamera, damit du Barcodes von Windeln, Milchpulver und anderen Produkten scannen und deine Vorräte automatisch auffüllen kannst.",
+        "microphonePermission": false,
+        "recordAudioAndroid": false
+      }
+    ],
+    [
       "expo-calendar",
         {
           "calendarPermission": "Lotti Baby benötigt Zugriff auf deinen Kalender, damit du Planer- und Arzttermine als Kalendereinträge anlegen, aktualisieren und mit Erinnerungen synchronisieren kannst.",
@@ -128,7 +136,7 @@
       }
     },
     "owner": "janzeppi",
-    "runtimeVersion": "55.0.0",
+    "runtimeVersion": "57.0.0",
     "updates": {
       "url": "https://u.expo.dev/d7120520-e4ff-4967-a797-627a2cb3680b",
       "enabled": true,

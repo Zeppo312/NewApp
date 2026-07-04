@@ -54,7 +54,7 @@ function GlassHighlights({
   const alpha = HIGHLIGHT_ALPHA[strength];
 
   return (
-    <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
       <Svg width="100%" height="100%">
         <Defs>
           <RadialGradient id={h1} cx="25%" cy="18%" r="42%">
@@ -103,7 +103,7 @@ function GlassGrain({
   if (opacity <= 0) return null;
 
   return (
-    <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
       <Svg width="100%" height="100%">
         {dots.map((dot, index) => (
           <Circle
@@ -171,14 +171,18 @@ export function GlassCard({
       ? { blurMethod: 'dimezisBlurView', blurReductionFactor: 1 }
       : {};
 
+  // Der Inhalt liegt bewusst NICHT in der BlurView: expo-blur rendert auf iOS
+  // (neue Architektur) verschachtelte Kinder nicht zuverlässig. Blur + Deko
+  // liegen als absolute Schichten hinter dem normal layoutenden Inhalt.
   return (
     <View style={[wrapStyle, style]}>
-      <BlurView
-        {...androidBlurProps}
-        intensity={intensity}
-        tint={tint}
-        style={[styles.blur, { borderRadius: radius }]}
-      >
+      <View style={[styles.clip, { borderRadius: radius }]}>
+        <BlurView
+          {...androidBlurProps}
+          intensity={intensity}
+          tint={tint}
+          style={styles.absoluteFill}
+        />
         <View style={[styles.absoluteFill, { backgroundColor: frostColor }]} />
         {toneColor ? (
           <View style={[styles.absoluteFill, { backgroundColor: toneColor }]} />
@@ -194,7 +198,7 @@ export function GlassCard({
             locations={[0, 0.55, 1]}
             start={{ x: 0.15, y: 0.2 }}
             end={{ x: 0.92, y: 0.96 }}
-            style={StyleSheet.absoluteFillObject}
+            style={StyleSheet.absoluteFill}
           />
         ) : null}
 
@@ -205,7 +209,7 @@ export function GlassCard({
             locations={[0, 0.38, 1]}
             start={{ x: 0.02, y: 0.0 }}
             end={{ x: 0.9, y: 0.85 }}
-            style={StyleSheet.absoluteFillObject}
+            style={StyleSheet.absoluteFill}
           />
         ) : null}
 
@@ -220,17 +224,17 @@ export function GlassCard({
         ) : null}
 
         <View style={[styles.content, contentStyle]}>{children}</View>
-      </BlurView>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  blur: {
+  clip: {
     overflow: 'hidden',
     backgroundColor: 'transparent',
   },
-  absoluteFill: StyleSheet.absoluteFillObject,
+  absoluteFill: StyleSheet.absoluteFill,
   content: {
     padding: 20,
   },

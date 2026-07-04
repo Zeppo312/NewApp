@@ -1,6 +1,13 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
-import { Stack, usePathname, useRouter, useSegments } from 'expo-router';
+import {
+  DarkTheme,
+  DefaultTheme,
+  Stack,
+  ThemeProvider,
+  usePathname,
+  useRouter,
+  useSegments,
+} from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -676,10 +683,12 @@ function RootLayoutNav() {
         <Stack.Screen name="paywall" />
         <Stack.Screen name="dsgvo" />
         <Stack.Screen name="subscription" />
+        <Stack.Screen name="lottis-fuersorge" />
         <Stack.Screen name="paywall-access-admin" />
         <Stack.Screen name="paywall-content-admin" />
         <Stack.Screen name="startup-message-admin" />
         <Stack.Screen name="pregnancy-stats" />
+        <Stack.Screen name="shopping-list" />
         <Stack.Screen name="pregnancy-setup" />
         <Stack.Screen name="milestones" />
         <Stack.Screen name="wochenmoment" />

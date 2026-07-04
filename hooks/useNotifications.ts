@@ -225,6 +225,10 @@ export function useNotifications() {
           router.push('/(tabs)/daily_old' as any);
           break;
 
+        case 'inventory_low':
+          router.push('/shopping-list' as any);
+          break;
+
         case 'message':
           router.push(`/chat/${referenceId}` as any);
           break;

@@ -407,7 +407,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   previewBackdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "transparent",
   },
   webView: {
@@ -415,20 +415,20 @@ const styles = StyleSheet.create({
     backgroundColor: "#120d0a",
   },
   loadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(18, 13, 10, 0.18)",
   },
   touchShield: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "transparent",
   },
   poster: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   posterFallback: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "#1a1411",
   },
   portraitStage: {
@@ -441,7 +441,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#000000",
   },
   posterContentOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(18, 13, 10, 0.34)",
   },
   posterContent: {

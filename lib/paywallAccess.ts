@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 
-export type PaywallAccessRole = 'tester' | 'cooperation_partner';
+export type PaywallAccessRole = 'tester' | 'cooperation_partner' | 'premium_tester';
 export type PaywallAccessReason =
   | 'subscription'
   | 'admin'
@@ -21,7 +21,9 @@ export type PaywallAccessAdminUser = {
 export const isPaywallAccessRole = (
   value: string | null | undefined,
 ): value is PaywallAccessRole =>
-  value === 'tester' || value === 'cooperation_partner';
+  value === 'tester' ||
+  value === 'cooperation_partner' ||
+  value === 'premium_tester';
 
 export const getPaywallAccessRoleLabel = (
   role: PaywallAccessRole | null | undefined,
@@ -31,6 +33,8 @@ export const getPaywallAccessRoleLabel = (
       return 'Tester';
     case 'cooperation_partner':
       return 'Kooperationspartner';
+    case 'premium_tester':
+      return 'Premiumtester';
     default:
       return 'Kein Sonderzugang';
   }
@@ -48,6 +52,8 @@ export const getPaywallAccessReasonLabel = (
       return 'Tester';
     case 'cooperation_partner':
       return 'Kooperationspartner';
+    case 'premium_tester':
+      return 'Premiumtester';
     default:
       return 'Kein aktiver Zugang';
   }

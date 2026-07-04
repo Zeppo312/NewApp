@@ -216,10 +216,10 @@ export function SubscriptionCancellationFeedbackModal({
 
 const styles = StyleSheet.create({
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   center: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: 'flex-end',
     paddingHorizontal: 18,
     paddingBottom: 18,

@@ -42,6 +42,7 @@ import {
   RecipeSample,
 } from "@/lib/recipes-samples";
 import { extractYouTubeVideoId } from "@/lib/recipeVideo";
+import { addRecipeIngredientsToShoppingList } from "@/lib/shopping";
 import { useActiveBaby } from "@/contexts/ActiveBabyContext";
 
 type AllergenId = "milk" | "gluten" | "egg" | "nuts" | "fish";
@@ -208,6 +209,46 @@ const RecipeGeneratorScreen = () => {
   const [showAllergyModal, setShowAllergyModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSeeding, setIsSeeding] = useState(false);
+  const [isAddingToShoppingList, setIsAddingToShoppingList] = useState(false);
+
+  const handleAddIngredientsToShoppingList = useCallback(
+    async (recipe: RecipeRecord) => {
+      if (!activeBabyId) {
+        Alert.alert(
+          "Kein Baby ausgewählt",
+          "Bitte wähle zuerst ein Baby aus, um die Einkaufsliste zu nutzen.",
+        );
+        return;
+      }
+      setIsAddingToShoppingList(true);
+      const { data, error } = await addRecipeIngredientsToShoppingList(
+        recipe,
+        activeBabyId,
+      );
+      setIsAddingToShoppingList(false);
+      if (error || !data) {
+        Alert.alert(
+          "Fehler",
+          "Die Zutaten konnten nicht zur Einkaufsliste hinzugefügt werden.",
+        );
+        return;
+      }
+      const message =
+        data.added === 0
+          ? "Alle Zutaten stehen bereits auf der Einkaufsliste."
+          : data.skipped > 0
+            ? `${data.added} Zutaten hinzugefügt, ${data.skipped} standen bereits auf der Liste.`
+            : `${data.added} Zutaten zur Einkaufsliste hinzugefügt.`;
+      Alert.alert("Einkaufsliste", message, [
+        { text: "OK" },
+        {
+          text: "Zur Liste",
+          onPress: () => router.push("/shopping-list" as any),
+        },
+      ]);
+    },
+    [activeBabyId, router],
+  );
 
   const [newTitle, setNewTitle] = useState("");
   const [newDescription, setNewDescription] = useState("");
@@ -576,7 +617,7 @@ const RecipeGeneratorScreen = () => {
                   <BlurView
                     intensity={24}
                     tint={quickActionBlurTint}
-                    style={StyleSheet.absoluteFillObject}
+                    style={StyleSheet.absoluteFill}
                   />
                   <View style={styles.quickActionOverlay} />
                   <View style={styles.quickActionContent}>
@@ -599,7 +640,7 @@ const RecipeGeneratorScreen = () => {
                   <BlurView
                     intensity={24}
                     tint={quickActionBlurTint}
-                    style={StyleSheet.absoluteFillObject}
+                    style={StyleSheet.absoluteFill}
                   />
                   <View style={styles.quickActionOverlay} />
                   <View style={styles.quickActionContent}>
@@ -630,7 +671,7 @@ const RecipeGeneratorScreen = () => {
                   <BlurView
                     intensity={24}
                     tint={quickActionBlurTint}
-                    style={StyleSheet.absoluteFillObject}
+                    style={StyleSheet.absoluteFill}
                   />
                   <View
                     style={[
@@ -1099,6 +1140,22 @@ const RecipeGeneratorScreen = () => {
                       </ThemedText>
                     </View>
                   ))}
+                  <TouchableOpacity
+                    style={styles.ingredientsToListButton}
+                    onPress={() =>
+                      handleAddIngredientsToShoppingList(selectedRecipe)
+                    }
+                    disabled={isAddingToShoppingList}
+                  >
+                    {isAddingToShoppingList ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <IconSymbol name="cart" size={16} color="#FFFFFF" />
+                    )}
+                    <ThemedText style={styles.ingredientsToListButtonText}>
+                      Zutaten zur Einkaufsliste
+                    </ThemedText>
+                  </TouchableOpacity>
                 </View>
 
                 {selectedRecipe.instructions ? (
@@ -1858,7 +1915,7 @@ const createStyles = ({
       borderColor: toRgba(accentColor, isDark ? 0.65 : 0.5),
     },
     quickActionOverlay: {
-      ...StyleSheet.absoluteFillObject,
+      ...StyleSheet.absoluteFill,
       backgroundColor: glassOverlay,
     },
     quickActionOverlayActive: {
@@ -2270,7 +2327,7 @@ const createStyles = ({
       justifyContent: "flex-end",
     },
     recipeHeroTint: {
-      ...StyleSheet.absoluteFillObject,
+      ...StyleSheet.absoluteFill,
       backgroundColor: "rgba(0,0,0,0.25)",
     },
     recipeHeroSolid: {
@@ -2374,6 +2431,21 @@ const createStyles = ({
       fontSize: 14,
       color: textSecondary,
       flex: 1,
+    },
+    ingredientsToListButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+      marginTop: 8,
+      height: 44,
+      borderRadius: 14,
+      backgroundColor: accentColor,
+    },
+    ingredientsToListButtonText: {
+      fontSize: 14,
+      fontWeight: "700",
+      color: "#FFFFFF",
     },
     recipeInstructions: {
       fontSize: 14,

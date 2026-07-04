@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import {
   KeyboardAvoidingView,
   Modal,
@@ -30,66 +30,51 @@ type Props = {
 
 const DEFAULT_ACCENT = "#5E3DB3";
 
-const TextInputOverlay: React.FC<Props> = ({
-  visible,
+type OverlayContentProps = Omit<Props, "visible"> & {
+  palette: {
+    backdrop: string;
+    card: string;
+    cardBorder: string;
+    text: string;
+    textSecondary: string;
+    field: string;
+    fieldBorder: string;
+    placeholder: string;
+    ghostBg: string;
+  };
+  blurTint: "dark" | "extraLight" | "light" | "default" | undefined;
+  resolvedAccentColor: string;
+};
+
+const TextInputOverlayContent: React.FC<OverlayContentProps> = ({
   label,
   value,
   placeholder,
   multiline,
-  accentColor,
   submitLabel,
   keyboardType,
   inputMode,
   onClose,
   onSubmit,
+  palette,
+  blurTint,
+  resolvedAccentColor,
 }) => {
-  const adaptiveColors = useAdaptiveColors();
-  const isDark =
-    adaptiveColors.effectiveScheme === "dark" ||
-    adaptiveColors.isDarkBackground;
-  const resolvedAccentColor =
-    accentColor ?? (isDark ? adaptiveColors.accent : DEFAULT_ACCENT);
-  const blurTint = isDark ? "dark" : "extraLight";
-  const palette = {
-    backdrop: isDark ? "rgba(0,0,0,0.62)" : "rgba(0,0,0,0.45)",
-    card: isDark ? "rgba(10,10,14,0.94)" : "rgba(255,255,255,0.95)",
-    cardBorder: isDark ? "rgba(255,255,255,0.16)" : "rgba(255,255,255,0.72)",
-    text: isDark ? adaptiveColors.textPrimary : "#7D5A50",
-    textSecondary: isDark ? adaptiveColors.textSecondary : "#6B4C3B",
-    field: isDark ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.92)",
-    fieldBorder: isDark ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.06)",
-    placeholder: isDark ? "rgba(248,240,229,0.58)" : "rgba(125,90,80,0.55)",
-    ghostBg: isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.05)",
-  };
-
   const [text, setText] = useState(value);
-  const bottomLift = Platform.OS === "ios" ? 200 : 140;
-
-  useEffect(() => {
-    if (visible) {
-      setText(value);
-    }
-  }, [visible, value]);
+  const bottomLift = Platform.OS === "ios" ? 12 : 12;
 
   const handleSubmit = () => {
     onSubmit(text);
   };
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={onClose}
-    >
+    <>
       <TouchableWithoutFeedback onPress={onClose}>
-        <View
-          style={[styles.backdrop, { backgroundColor: palette.backdrop }]}
-        />
+        <View style={[styles.backdrop, { backgroundColor: palette.backdrop }]} />
       </TouchableWithoutFeedback>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
+        keyboardVerticalOffset={0}
         style={[styles.center, { paddingBottom: bottomLift }]}
       >
         <BlurView
@@ -147,17 +132,78 @@ const TextInputOverlay: React.FC<Props> = ({
           </View>
         </BlurView>
       </KeyboardAvoidingView>
+    </>
+  );
+};
+
+const TextInputOverlay: React.FC<Props> = ({
+  visible,
+  label,
+  value,
+  placeholder,
+  multiline,
+  accentColor,
+  submitLabel,
+  keyboardType,
+  inputMode,
+  onClose,
+  onSubmit,
+}) => {
+  const adaptiveColors = useAdaptiveColors();
+  const isDark =
+    adaptiveColors.effectiveScheme === "dark" ||
+    adaptiveColors.isDarkBackground;
+  const resolvedAccentColor =
+    accentColor ?? (isDark ? adaptiveColors.accent : DEFAULT_ACCENT);
+  const blurTint = isDark ? "dark" : "extraLight";
+  const palette = {
+    backdrop: isDark ? "rgba(0,0,0,0.62)" : "rgba(0,0,0,0.45)",
+    card: isDark ? "rgba(10,10,14,0.94)" : "rgba(255,255,255,0.95)",
+    cardBorder: isDark ? "rgba(255,255,255,0.16)" : "rgba(255,255,255,0.72)",
+    text: isDark ? adaptiveColors.textPrimary : "#7D5A50",
+    textSecondary: isDark ? adaptiveColors.textSecondary : "#6B4C3B",
+    field: isDark ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.92)",
+    fieldBorder: isDark ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.06)",
+    placeholder: isDark ? "rgba(248,240,229,0.58)" : "rgba(125,90,80,0.55)",
+    ghostBg: isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.05)",
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      {visible && (
+        <TextInputOverlayContent
+          key={`${label}:${value}`}
+          label={label}
+          value={value}
+          placeholder={placeholder}
+          multiline={multiline}
+          accentColor={accentColor}
+          submitLabel={submitLabel}
+          keyboardType={keyboardType}
+          inputMode={inputMode}
+          onClose={onClose}
+          onSubmit={onSubmit}
+          palette={palette}
+          blurTint={blurTint}
+          resolvedAccentColor={resolvedAccentColor}
+        />
+      )}
     </Modal>
   );
 };
 
 const styles = StyleSheet.create({
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(0,0,0,0.45)",
   },
   center: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: "flex-end",
     alignItems: "center",
     paddingHorizontal: 20,

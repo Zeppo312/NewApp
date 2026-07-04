@@ -141,7 +141,7 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   glassOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   liquidGlassWrapper: {
     width: '100%',
@@ -161,7 +161,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   liquidGlassOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     borderRadius: RADIUS,
   },
 });

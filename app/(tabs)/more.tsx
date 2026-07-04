@@ -6,7 +6,7 @@ import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Redirect, useRouter } from 'expo-router';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import Header from '@/components/Header';
 import { LiquidGlassCard, GLASS_OVERLAY, LAYOUT_PAD } from '@/constants/DesignGuide';
@@ -20,7 +20,7 @@ export default function MoreScreen() {
   const adaptiveColors = useAdaptiveColors();
   const router = useRouter();
   const { session, signOut } = useAuth();
-  const [accessReason, setAccessReason] = useState<'subscription' | 'admin' | 'tester' | 'cooperation_partner' | 'none'>('none');
+  const [accessReason, setAccessReason] = useState<'subscription' | 'admin' | 'tester' | 'cooperation_partner' | 'premium_tester' | 'none'>('none');
 
   // Nur bei dunklem Hintergrundbild die adaptiven Farben verwenden
   const useDarkMode = adaptiveColors.hasCustomBackground && adaptiveColors.isDarkBackground;

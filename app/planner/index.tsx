@@ -14,6 +14,9 @@ import {
   Text,
   Dimensions,
   Alert,
+  AppState,
+  ActivityIndicator,
+  Switch,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -57,6 +60,13 @@ import {
 import { BabyInfo, listBabies } from "@/lib/baby";
 import { useAdaptiveColors } from "@/hooks/useAdaptiveColors";
 import { parseSafeDate } from "@/lib/safeDate";
+import {
+  disablePlannerCalendarSync,
+  enablePlannerCalendarSync,
+  getPlannerCalendarSyncSettings,
+  PlannerCalendarSyncSettings,
+  runPlannerCalendarSync,
+} from "@/lib/plannerCalendarSync";
 
 function formatDateHeader(d: Date) {
   return new Intl.DateTimeFormat("de-DE", {
@@ -164,6 +174,7 @@ function displayNameForLinkedUser(linkedUser: LinkedUser, index: number) {
 export default function PlannerScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const userId = user?.id ?? null;
   const adaptiveColors = useAdaptiveColors();
   const isDark =
     adaptiveColors.effectiveScheme === "dark" ||
@@ -227,6 +238,13 @@ export default function PlannerScreen() {
   );
   const [showCompletedFloatingTodos, setShowCompletedFloatingTodos] =
     useState(false);
+  const [calendarSyncSettings, setCalendarSyncSettings] =
+    useState<PlannerCalendarSyncSettings | null>(null);
+  const [calendarSyncLoading, setCalendarSyncLoading] = useState(false);
+  const [calendarSyncError, setCalendarSyncError] = useState<string | null>(null);
+  const [calendarSyncSummary, setCalendarSyncSummary] = useState<string | null>(null);
+  const [calendarSyncPanelVisible, setCalendarSyncPanelVisible] = useState(false);
+  const calendarSyncRunningRef = useRef(false);
 
   const ownerOptions = useMemo(() => {
     if (!user?.id) return [];
@@ -745,6 +763,110 @@ export default function PlannerScreen() {
     });
   }, [selectedTab, weekDays, weekDayWidth, selectedDate]);
 
+  const loadCalendarSyncSettings = useCallback(async () => {
+    if (!userId) {
+      setCalendarSyncSettings(null);
+      return null;
+    }
+    try {
+      const settings = await getPlannerCalendarSyncSettings(userId);
+      setCalendarSyncSettings(settings);
+      return settings;
+    } catch (err) {
+      console.error("Planner: failed to load calendar sync settings", err);
+      setCalendarSyncError("Kalender-Sync konnte nicht geladen werden.");
+      return null;
+    }
+  }, [userId]);
+
+  const runCalendarSync = useCallback(
+    async (options: { silent?: boolean } = {}) => {
+      if (!userId || calendarSyncRunningRef.current) return;
+      calendarSyncRunningRef.current = true;
+      if (!options.silent) {
+        setCalendarSyncLoading(true);
+      }
+      setCalendarSyncError(null);
+      try {
+        const result = await runPlannerCalendarSync(userId);
+        await loadCalendarSyncSettings();
+        await refetch();
+        if (result.errors.length > 0) {
+          setCalendarSyncError(result.errors[0]);
+        } else {
+          const changes =
+            result.createdPlanner +
+            result.updatedPlanner +
+            result.deletedPlanner +
+            result.createdApple +
+            result.updatedApple +
+            result.deletedApple;
+          setCalendarSyncSummary(
+            changes > 0
+              ? `${changes} Änderungen synchronisiert`
+              : "Alles aktuell",
+          );
+        }
+      } catch (err) {
+        console.error("Planner: calendar sync failed", err);
+        setCalendarSyncError("Kalender-Sync ist fehlgeschlagen.");
+      } finally {
+        calendarSyncRunningRef.current = false;
+        if (!options.silent) {
+          setCalendarSyncLoading(false);
+        }
+      }
+    },
+    [loadCalendarSyncSettings, refetch, userId],
+  );
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const settings = await loadCalendarSyncSettings();
+      if (!active || !settings?.enabled) return;
+      await runCalendarSync({ silent: true });
+    })();
+    return () => {
+      active = false;
+    };
+  }, [loadCalendarSyncSettings, runCalendarSync]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active" && calendarSyncSettings?.enabled) {
+        void runCalendarSync({ silent: true });
+      }
+    });
+    return () => subscription.remove();
+  }, [calendarSyncSettings?.enabled, runCalendarSync]);
+
+  const handleCalendarSyncToggle = async (enabled: boolean) => {
+    if (!userId) return;
+    setCalendarSyncLoading(true);
+    setCalendarSyncError(null);
+    try {
+      if (enabled) {
+        const settings = await enablePlannerCalendarSync(userId);
+        setCalendarSyncSettings(settings);
+        await runCalendarSync({ silent: true });
+      } else {
+        const settings = await disablePlannerCalendarSync(userId);
+        setCalendarSyncSettings(settings);
+        setCalendarSyncSummary(null);
+      }
+    } catch (err) {
+      console.error("Planner: calendar sync toggle failed", err);
+      setCalendarSyncError(
+        enabled
+          ? "Kalender-Sync konnte nicht aktiviert werden."
+          : "Kalender-Sync konnte nicht deaktiviert werden.",
+      );
+    } finally {
+      setCalendarSyncLoading(false);
+    }
+  };
+
   const handleSelectDate = (next: Date) => {
     const normalized = new Date(next);
     normalized.setHours(0, 0, 0, 0);
@@ -796,6 +918,7 @@ export default function PlannerScreen() {
         const [, seriesId, occurrenceDate] = id.split(":");
         if (seriesId && occurrenceDate) {
           await deleteRecurringOccurrence(seriesId, occurrenceDate);
+          await runCalendarSync({ silent: true });
           await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         }
         return;
@@ -804,6 +927,7 @@ export default function PlannerScreen() {
         const [, seriesId] = id.split(":");
         if (seriesId) {
           await deleteRecurringSeries(seriesId);
+          await runCalendarSync({ silent: true });
           await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         }
         return;
@@ -846,6 +970,7 @@ export default function PlannerScreen() {
         Alert.alert("Fehler", "Der Eintrag konnte nicht gelöscht werden.");
       } else {
         await refetch();
+        await runCalendarSync({ silent: true });
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
     } catch (err) {
@@ -1038,6 +1163,7 @@ export default function PlannerScreen() {
         } else {
           await addRecurringItem(newRecurringInput);
         }
+        await runCalendarSync({ silent: true });
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         return;
       }
@@ -1048,6 +1174,7 @@ export default function PlannerScreen() {
           recurringOccurrenceDate,
           recurringSeriesInput,
         );
+        await runCalendarSync({ silent: true });
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         return;
       }
@@ -1094,7 +1221,7 @@ export default function PlannerScreen() {
             reminderMinutes: payload.reminderMinutes,
           });
         } else {
-          addEvent(
+          await addEvent(
             payload.title,
             startIso,
             endIso,
@@ -1134,12 +1261,22 @@ export default function PlannerScreen() {
           );
         }
       }
+      await runCalendarSync({ silent: true });
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } finally {
       setCaptureVisible(false);
       setEditingItem(null);
     }
   };
+
+  const calendarSyncLastLabel = calendarSyncSettings?.last_synced_at
+    ? new Intl.DateTimeFormat("de-DE", {
+        day: "2-digit",
+        month: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      }).format(parseSafeDate(calendarSyncSettings.last_synced_at) ?? new Date())
+    : null;
 
   return (
     <ThemedBackground style={{ flex: 1, backgroundColor: backgroundFallback }}>
@@ -1281,23 +1418,162 @@ export default function PlannerScreen() {
             <>
               <View style={{ paddingHorizontal: LAYOUT_PAD }}>
                 <View style={{ marginHorizontal: -LAYOUT_PAD }}>
-                <GreetingCardView
+                  <GreetingCardView
                     title={greeting.title}
                     subline={greeting.subline}
                     avatarUrl={profileAvatarUrl}
                   />
                 </View>
+                <View style={styles.dayOverviewSection}>
+                  <View style={styles.dayOverviewHeader}>
+                    <ThemedText
+                      style={[
+                        styles.sectionTitle,
+                        { paddingHorizontal: 4, color: textSecondary },
+                      ]}
+                    >
+                      Heute
+                    </ThemedText>
+                    <TouchableOpacity
+                      style={[
+                        styles.calendarSyncGearButton,
+                        {
+                          borderColor: calendarSyncPanelVisible
+                            ? toRgba(accentEventColor, 0.45)
+                            : glassBorder,
+                          backgroundColor: calendarSyncPanelVisible
+                            ? toRgba(accentEventColor, 0.14)
+                            : isDark
+                              ? "rgba(255,255,255,0.08)"
+                              : "rgba(255,255,255,0.5)",
+                        },
+                      ]}
+                      activeOpacity={0.85}
+                      onPress={() => setCalendarSyncPanelVisible((prev) => !prev)}
+                      accessibilityRole="button"
+                      accessibilityLabel="Apple Kalender Sync Einstellungen"
+                    >
+                      {calendarSyncLoading ? (
+                        <ActivityIndicator size="small" color={accentEventColor} />
+                      ) : (
+                        <IconSymbol
+                          name="gear"
+                          size={18}
+                          color={
+                            calendarSyncPanelVisible
+                              ? (accentEventColor as any)
+                              : (textSecondary as any)
+                          }
+                        />
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                  <TodayOverviewCardView summary={summary} />
+                </View>
                 <View style={{ height: 2 }} />
-                <TodayOverviewCardView summary={summary} />
-                <View style={{ height: 2 }} />
-                <ThemedText
-                  style={[
-                    styles.sectionTitle,
-                    { paddingHorizontal: 4, color: textSecondary },
-                  ]}
-                >
-                  Heute
-                </ThemedText>
+                {calendarSyncPanelVisible && (
+                  <>
+                    <LiquidGlassCard
+                      style={styles.calendarSyncPanel}
+                      intensity={20}
+                      overlayColor={glassOverlay}
+                      borderColor={glassBorder}
+                    >
+                      <View style={styles.calendarSyncHeader}>
+                        <View style={styles.calendarSyncTitleRow}>
+                          <IconSymbol
+                            name="calendar"
+                            size={17}
+                            color={accentEventColor as any}
+                          />
+                          <View style={styles.calendarSyncCopy}>
+                            <ThemedText
+                              style={[
+                                styles.calendarSyncTitle,
+                                { color: textPrimary },
+                              ]}
+                            >
+                              Apple Kalender
+                            </ThemedText>
+                            <Text
+                              style={[
+                                styles.calendarSyncSubtitle,
+                                { color: textMuted },
+                              ]}
+                              numberOfLines={2}
+                            >
+                              {calendarSyncSettings?.enabled
+                                ? calendarSyncLastLabel
+                                  ? `Lotti Baby · zuletzt ${calendarSyncLastLabel}`
+                                  : "Lotti Baby · bereit"
+                                : "Sync ist ausgeschaltet"}
+                            </Text>
+                          </View>
+                        </View>
+                        <Switch
+                          value={!!calendarSyncSettings?.enabled}
+                          disabled={calendarSyncLoading || !user?.id}
+                          onValueChange={handleCalendarSyncToggle}
+                          trackColor={{
+                            false: isDark
+                              ? "rgba(255,255,255,0.16)"
+                              : "rgba(125,90,80,0.18)",
+                            true: toRgba(accentEventColor, 0.45),
+                          }}
+                          thumbColor={
+                            calendarSyncSettings?.enabled ? accentEventColor : "#fff"
+                          }
+                        />
+                      </View>
+                      {(calendarSyncError || calendarSyncSummary || calendarSyncLoading || calendarSyncSettings?.enabled) && (
+                        <View style={styles.calendarSyncFooter}>
+                          {calendarSyncLoading ? (
+                            <ActivityIndicator size="small" color={accentEventColor} />
+                          ) : (
+                            <Text
+                              style={[
+                                styles.calendarSyncStatus,
+                                {
+                                  color: calendarSyncError
+                                    ? "#B94A48"
+                                    : textSecondary,
+                                },
+                              ]}
+                              numberOfLines={2}
+                            >
+                              {calendarSyncError ??
+                                calendarSyncSummary ??
+                                "Bereit zum Synchronisieren"}
+                            </Text>
+                          )}
+                          {calendarSyncSettings?.enabled && (
+                            <TouchableOpacity
+                              style={[
+                                styles.calendarSyncIconButton,
+                                {
+                                  borderColor: toRgba(accentEventColor, 0.35),
+                                  backgroundColor: toRgba(accentEventColor, 0.12),
+                                },
+                              ]}
+                              activeOpacity={0.85}
+                              disabled={calendarSyncLoading}
+                              onPress={() => runCalendarSync()}
+                              accessibilityRole="button"
+                              accessibilityLabel="Apple Kalender jetzt synchronisieren"
+                            >
+                              <IconSymbol
+                                name="arrow.triangle.2.circlepath"
+                                size={16}
+                                color={accentEventColor as any}
+                              />
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      )}
+                    </LiquidGlassCard>
+                    <View style={{ height: 2 }} />
+                  </>
+                )}
               </View>
 
               <StructuredTimelineView
@@ -2110,6 +2386,78 @@ const styles = StyleSheet.create({
   },
   floatingCard: {
     paddingBottom: 12,
+  },
+  dayOverviewSection: {
+    marginTop: -42,
+  },
+  dayOverviewHeader: {
+    minHeight: 30,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  calendarSyncGearButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+  },
+  calendarSyncPanel: {
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    borderRadius: 18,
+    marginTop: 8,
+  },
+  calendarSyncHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  calendarSyncTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    gap: 10,
+  },
+  calendarSyncCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  calendarSyncTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: TEXT_PRIMARY,
+  },
+  calendarSyncSubtitle: {
+    marginTop: 2,
+    fontSize: 12,
+    lineHeight: 16,
+    color: TEXT_PRIMARY,
+    opacity: 0.72,
+  },
+  calendarSyncFooter: {
+    marginTop: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  calendarSyncStatus: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  calendarSyncIconButton: {
+    width: 34,
+    height: 34,
+    borderWidth: 1,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
   },
   floatingList: {
     paddingHorizontal: LAYOUT_PAD,

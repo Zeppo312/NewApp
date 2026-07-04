@@ -39,6 +39,7 @@ const ROLE_OPTIONS: { role: PaywallAccessRole | null; label: string }[] = [
   { role: null, label: 'Keine' },
   { role: 'tester', label: 'Tester' },
   { role: 'cooperation_partner', label: 'Kooperationspartner' },
+  { role: 'premium_tester', label: 'Premiumtester' },
 ];
 
 export default function PaywallAccessAdminScreen() {
@@ -209,7 +210,7 @@ export default function PaywallAccessAdminScreen() {
 
         <Header
           title="Paywall-Zugänge"
-          subtitle="Tester und Kooperationspartner verwalten"
+          subtitle="Tester, Kooperationspartner & Premiumtester verwalten"
           showBackButton
           showBabySwitcher={false}
           onBackPress={() => router.push('/app-settings')}

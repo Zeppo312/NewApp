@@ -1,6 +1,6 @@
 import { StyleSheet, TouchableOpacity, Alert, ActivityIndicator, View, SafeAreaView, StatusBar, ScrollView } from 'react-native';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect } from 'expo-router';
 
 import Header from '@/components/Header';
 import { ThemedText } from '@/components/ThemedText';

@@ -3,34 +3,62 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { BlurView } from 'expo-blur';
 
 import { ThemedText } from '@/components/ThemedText';
-import { GLASS_BORDER, GLASS_OVERLAY, PRIMARY, LAYOUT_PAD } from '@/constants/PlannerDesign';
+import { IconSymbol, type IconSymbolName } from '@/components/ui/IconSymbol';
+import { GLASS_BORDER, GLASS_OVERLAY, PRIMARY } from '@/constants/PlannerDesign';
+import { Colors } from '@/constants/Colors';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 
 type Props = {
-  onOpenCapture: (type: 'todo' | 'event' | 'note') => void;
+  onOpenCapture: (type: 'todo' | 'event') => void;
 };
 
 export const QuickActions: React.FC<Props> = ({ onOpenCapture }) => {
-  const Chip: React.FC<{ label: string; emoji: string; onPress: () => void }> = ({ label, emoji, onPress }) => (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [styles.chip, pressed && { transform: [{ scale: 0.97 }] }]}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-    >
-      <BlurView intensity={24} tint="light" style={StyleSheet.absoluteFill} />
-      <View style={[StyleSheet.absoluteFill, styles.chipOverlay]} />
-      <View style={styles.chipContent}>
-        <ThemedText style={styles.chipEmoji}>{emoji}</ThemedText>
-        <ThemedText style={styles.chipLabel}>{label}</ThemedText>
-      </View>
-    </Pressable>
-  );
+  const adaptiveColors = useAdaptiveColors();
+  const isDark =
+    adaptiveColors.effectiveScheme === 'dark' ||
+    adaptiveColors.isDarkBackground;
+  const accentColor = isDark ? adaptiveColors.accent : PRIMARY;
+  const textPrimary = isDark ? Colors.dark.textPrimary : PRIMARY;
+  const blurTint = isDark ? 'dark' : 'light';
+  const overlayColor = isDark ? 'rgba(0,0,0,0.3)' : GLASS_OVERLAY;
+  const borderColor = isDark ? 'rgba(255,255,255,0.18)' : GLASS_BORDER;
+
+  const Chip: React.FC<{
+    label: string;
+    iconName: IconSymbolName;
+    onPress: () => void;
+  }> = ({ label, iconName, onPress }) => (
+      <Pressable
+        onPress={onPress}
+        style={({ pressed }) => [
+          styles.chip,
+          { borderColor },
+          pressed && { transform: [{ scale: 0.97 }] },
+        ]}
+        accessibilityRole="button"
+        accessibilityLabel={label}
+      >
+        <BlurView intensity={24} tint={blurTint} style={StyleSheet.absoluteFill} />
+        <View
+          style={[
+            StyleSheet.absoluteFill,
+            styles.chipOverlay,
+            { backgroundColor: overlayColor },
+          ]}
+        />
+        <View style={styles.chipContent}>
+          <IconSymbol name={iconName} size={17} color={accentColor as any} />
+          <ThemedText style={[styles.chipLabel, { color: textPrimary }]}>
+            {label}
+          </ThemedText>
+        </View>
+      </Pressable>
+    );
 
   return (
     <View style={styles.row}>
-      <Chip label="+ Aufgabe" emoji="📝" onPress={() => onOpenCapture('todo')} />
-      <Chip label="+ Termin" emoji="📅" onPress={() => onOpenCapture('event')} />
-      <Chip label="+ Notiz" emoji="💡" onPress={() => onOpenCapture('note')} />
+      <Chip label="Aufgabe" iconName="checklist" onPress={() => onOpenCapture('todo')} />
+      <Chip label="Termin" iconName="calendar" onPress={() => onOpenCapture('event')} />
     </View>
   );
 };
@@ -39,13 +67,12 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     gap: 12,
-    paddingHorizontal: LAYOUT_PAD,
-    paddingVertical: 4,
+    paddingVertical: 2,
   },
   chip: {
     flex: 1,
-    minHeight: 52,
-    borderRadius: 28,
+    minHeight: 46,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
@@ -58,7 +85,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
   },
   chipOverlay: {
-    borderRadius: 28,
+    borderRadius: 18,
     backgroundColor: GLASS_OVERLAY,
   },
   chipContent: {
@@ -66,9 +93,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     paddingHorizontal: 16,
-  },
-  chipEmoji: {
-    fontSize: 18,
   },
   chipLabel: {
     fontWeight: '700',

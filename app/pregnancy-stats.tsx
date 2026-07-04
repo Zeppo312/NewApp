@@ -617,7 +617,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   glassLayerGradient: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   glassSheen: {
     position: 'absolute',

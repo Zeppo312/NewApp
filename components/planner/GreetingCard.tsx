@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useMemo } from "react";
 import { View, StyleSheet, Animated, Easing } from "react-native";
 import { CachedImage } from "@/components/CachedImage";
 import { LinearGradient } from "expo-linear-gradient";
@@ -50,11 +50,11 @@ export const GreetingCard: React.FC<Props> = ({
         "rgba(94,61,179,0.18)",
         "rgba(255,255,255,0.0)",
         "rgba(255,207,221,0.30)",
-      ];
+  ];
 
   // Animationen
-  const introAnim = useRef(new Animated.Value(0)).current;
-  const avatarScale = useRef(new Animated.Value(1)).current;
+  const introAnim = useMemo(() => new Animated.Value(0), []);
+  const avatarScale = useMemo(() => new Animated.Value(1), []);
 
   useEffect(() => {
     // Card fährt weich rein
@@ -221,9 +221,9 @@ const styles = StyleSheet.create({
     width: "108%",
     marginHorizontal: -LAYOUT_PAD, // zieht bewusst über den Außen-Padding hinaus
     paddingHorizontal: LAYOUT_PAD + 24,
-    paddingVertical: LAYOUT_PAD + 14,
+    paddingVertical: LAYOUT_PAD + 4,
     borderRadius: 36,
-    minHeight: 180,
+    minHeight: 150,
     overflow: "hidden",
     shadowColor: "#000",
     shadowOpacity: 0.08,
@@ -231,7 +231,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
   },
   gradient: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   bubbleTopLeft: {
     position: "absolute",

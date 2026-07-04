@@ -1413,16 +1413,16 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   pinImageClip: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     overflow: 'hidden',
   },
   pinBabyImage: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     width: '100%',
     height: '100%',
   },
   pinBabyTint: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.26)',
   },
@@ -1727,12 +1727,12 @@ const styles = StyleSheet.create({
     borderColor: '#FFFFFF',
   },
   sheetIconImage: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     width: '100%',
     height: '100%',
   },
   sheetIconTint: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   sheetIconToken: {
     position: 'absolute',

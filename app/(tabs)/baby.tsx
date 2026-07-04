@@ -28,7 +28,7 @@ import {
   GLASS_OVERLAY,
   GLASS_OVERLAY_DARK,
 } from '@/constants/DesignGuide';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
 import {
@@ -1649,7 +1649,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   statsGlassLayerGradient: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   statsGlassSheen: {
     position: 'absolute',

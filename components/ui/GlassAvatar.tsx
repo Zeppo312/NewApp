@@ -20,7 +20,7 @@ function AvatarHighlights({ opacity = 1 }: { opacity?: number }) {
   const shadeId = `${gradientId}-shade`;
 
   return (
-    <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
       <Svg width="100%" height="100%">
         <Defs>
           <RadialGradient id={gradientId} cx="22%" cy="22%" r="40%">
@@ -72,7 +72,7 @@ export function GlassAvatar({
           {...androidBlurProps}
           intensity={intensity}
           tint={tint}
-          style={[StyleSheet.absoluteFillObject, { borderRadius: radius }]}
+          style={[StyleSheet.absoluteFill, { borderRadius: radius }]}
         />
 
         {uri ? (
@@ -80,7 +80,7 @@ export function GlassAvatar({
             <Image source={{ uri }} style={{ width: size, height: size, borderRadius: radius }} />
             <View
               style={[
-                StyleSheet.absoluteFillObject,
+                StyleSheet.absoluteFill,
                 { borderRadius: radius, backgroundColor: 'rgba(94,61,179,0.10)' },
               ]}
             />
@@ -98,7 +98,7 @@ export function GlassAvatar({
 
         <View
           style={[
-            StyleSheet.absoluteFillObject,
+            StyleSheet.absoluteFill,
             { borderRadius: radius, backgroundColor: 'rgba(255,255,255,0.14)' },
           ]}
         />
@@ -109,11 +109,11 @@ export function GlassAvatar({
           locations={[0, 0.42, 1]}
           start={{ x: 0.05, y: 0.0 }}
           end={{ x: 0.9, y: 0.85 }}
-          style={StyleSheet.absoluteFillObject}
+          style={StyleSheet.absoluteFill}
         />
         <View
           style={[
-            StyleSheet.absoluteFillObject,
+            StyleSheet.absoluteFill,
             { borderRadius: radius, borderWidth: 1.2, borderColor: 'rgba(255,255,255,0.70)' },
           ]}
         />
@@ -129,7 +129,7 @@ const styles = StyleSheet.create({
     overflow: 'visible',
   },
   glowRing: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     borderWidth: 2,
     borderColor: 'rgba(94,61,179,0.35)',
     shadowColor: BRAND,
@@ -139,7 +139,7 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   glassRing: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     borderWidth: 2,
     borderColor: 'rgba(255,255,255,0.70)',
   },
