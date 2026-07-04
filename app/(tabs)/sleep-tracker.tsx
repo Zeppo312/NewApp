@@ -66,6 +66,18 @@ import {
 } from '@/lib/nightWindowSettings';
 import NightSleepEditor, { MiniNightTimeline } from '@/components/NightSleepEditor';
 import { isStaleActiveSleepEntry } from '@/lib/sleepEntryGuards';
+import {
+  getSleepPeriodForEntry,
+  getSleepPeriodForStart,
+  overlapMinutes,
+  type SleepPeriod,
+} from '@/lib/sleepPeriods';
+import {
+  forgetActiveSleepPeriodOverride,
+  loadStoredActiveSleepPeriodOverride,
+  rememberActiveSleepPeriodOverride,
+} from '@/lib/sleepPeriodOverrides';
+import { splitNightSleepSegment } from '@/lib/sleepNightSplit';
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 // Typografie helper
@@ -89,8 +101,6 @@ const BABY_MODE_PREVIEW_READ_ONLY_MESSAGE =
 // Globale Helper-Funktionen für Zeitberechnungen
 const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 const endOfDay   = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
-const overlapMinutes = (aStart: Date, aEnd: Date, bStart: Date, bEnd: Date) =>
-  Math.max(0, Math.min(+aEnd, +bEnd) - Math.max(+aStart, +bStart)) / 60000 | 0;
 const MIN_PERSISTED_SLEEP_DURATION_MS = 60 * 1000;
 
 const toTimeMs = (value: Date | string | null | undefined): number | null => {
@@ -208,65 +218,6 @@ const findOverlappingEntries = (
   });
 };
 
-const getSleepPeriodForStart = (
-  date: Date,
-  nightWindowSettings: NightWindowSettings = DEFAULT_NIGHT_WINDOW_SETTINGS
-) => {
-  const minutesSinceMidnight = date.getHours() * 60 + date.getMinutes();
-  const nightStartMinutes = clockTimeToMinutes(nightWindowSettings.startTime, 18 * 60);
-  const nightEndMinutes = clockTimeToMinutes(nightWindowSettings.endTime, 10 * 60);
-  const isOvernightWindow = nightEndMinutes <= nightStartMinutes;
-  const isNight = isOvernightWindow
-    ? minutesSinceMidnight >= nightStartMinutes || minutesSinceMidnight < nightEndMinutes
-    : minutesSinceMidnight >= nightStartMinutes && minutesSinceMidnight < nightEndMinutes;
-
-  return isNight ? 'night' : 'day';
-};
-
-const MIN_NIGHT_OVERLAP_MINUTES = 60;
-const MIN_NIGHT_OVERLAP_RATIO = 0.5;
-
-const getSleepPeriodForEntry = (
-  entry: Pick<SleepEntry, 'start_time' | 'end_time'>,
-  nightWindowSettings: NightWindowSettings = DEFAULT_NIGHT_WINDOW_SETTINGS,
-  now: Date = new Date()
-): SleepPeriod => {
-  const start = new Date(entry.start_time);
-  const end = entry.end_time ? new Date(entry.end_time) : now;
-  const startMs = start.getTime();
-  const endMs = end.getTime();
-
-  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
-    return getSleepPeriodForStart(start, nightWindowSettings);
-  }
-
-  const previousWindow = getNightWindowRangeForDate(start, nightWindowSettings, 'previous');
-  const upcomingWindow = getNightWindowRangeForDate(start, nightWindowSettings, 'upcoming');
-  const previousOverlap = overlapMinutes(
-    start,
-    end,
-    previousWindow.nightWindowStart,
-    previousWindow.nightWindowEnd
-  );
-  const upcomingOverlap = overlapMinutes(
-    start,
-    end,
-    upcomingWindow.nightWindowStart,
-    upcomingWindow.nightWindowEnd
-  );
-  const nightOverlap = Math.max(previousOverlap, upcomingOverlap);
-  const durationMinutes = (endMs - startMs) / 60000;
-
-  if (
-    nightOverlap >= MIN_NIGHT_OVERLAP_MINUTES ||
-    nightOverlap / durationMinutes >= MIN_NIGHT_OVERLAP_RATIO
-  ) {
-    return 'night';
-  }
-
-  return getSleepPeriodForStart(start, nightWindowSettings);
-};
-
 // Match Timeline (ActivityCard marginHorizontal=8 -> 16px gesamt)
 const TIMELINE_INSET = 8;
 const contentWidth = screenWidth - 2 * LAYOUT_PAD;
@@ -298,112 +249,6 @@ const GRID_COL_W = Math.floor((contentWidth - (GRID_COLS - 1) * GRID_GUTTER) / G
 const GRID_LEFTOVER = contentWidth - (GRID_COLS * GRID_COL_W + (GRID_COLS - 1) * GRID_GUTTER);
 
 const MAX_BAR_H = 140; // Höhe der Balkenfläche (mehr Luft)
-
-// Types for sleep periods
-type SleepPeriod = 'day' | 'night';
-
-const ACTIVE_SLEEP_PERIOD_OVERRIDES_KEY = 'sleep_active_period_overrides_v1';
-
-type StoredActiveSleepPeriodOverride = {
-  period: SleepPeriod;
-  startTime?: string;
-  updatedAt?: string;
-};
-
-type ActiveSleepPeriodOverrideMap = Record<string, StoredActiveSleepPeriodOverride>;
-
-const isSleepPeriod = (value: unknown): value is SleepPeriod =>
-  value === 'day' || value === 'night';
-
-const loadActiveSleepPeriodOverrides = async (): Promise<ActiveSleepPeriodOverrideMap> => {
-  try {
-    const raw = await AsyncStorage.getItem(ACTIVE_SLEEP_PERIOD_OVERRIDES_KEY);
-    if (!raw) return {};
-
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object') return {};
-
-    return Object.entries(parsed as Record<string, unknown>).reduce<ActiveSleepPeriodOverrideMap>(
-      (acc, [entryId, value]) => {
-        if (!entryId || !value || typeof value !== 'object') return acc;
-        const candidate = value as Partial<StoredActiveSleepPeriodOverride>;
-        if (!isSleepPeriod(candidate.period)) return acc;
-        acc[entryId] = {
-          period: candidate.period,
-          startTime: typeof candidate.startTime === 'string' ? candidate.startTime : undefined,
-          updatedAt: typeof candidate.updatedAt === 'string' ? candidate.updatedAt : undefined,
-        };
-        return acc;
-      },
-      {}
-    );
-  } catch (error) {
-    console.error('Failed to load active sleep period overrides:', error);
-    return {};
-  }
-};
-
-const saveActiveSleepPeriodOverrides = async (overrides: ActiveSleepPeriodOverrideMap) => {
-  try {
-    await AsyncStorage.setItem(ACTIVE_SLEEP_PERIOD_OVERRIDES_KEY, JSON.stringify(overrides));
-  } catch (error) {
-    console.error('Failed to save active sleep period overrides:', error);
-  }
-};
-
-const rememberActiveSleepPeriodOverride = async (
-  entryId: string | undefined,
-  period: SleepPeriod,
-  startTime: string | Date
-) => {
-  if (!entryId) return;
-  const overrides = await loadActiveSleepPeriodOverrides();
-
-  if (period === 'night') {
-    overrides[entryId] = {
-      period,
-      startTime: new Date(startTime).toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-  } else {
-    delete overrides[entryId];
-  }
-
-  await saveActiveSleepPeriodOverrides(overrides);
-};
-
-const forgetActiveSleepPeriodOverride = async (entryId: string | undefined) => {
-  if (!entryId) return;
-  const overrides = await loadActiveSleepPeriodOverrides();
-  if (!overrides[entryId]) return;
-  delete overrides[entryId];
-  await saveActiveSleepPeriodOverrides(overrides);
-};
-
-const loadStoredActiveSleepPeriodOverride = async (
-  entry: Pick<SleepEntry, 'id' | 'start_time'>
-): Promise<SleepPeriod | undefined> => {
-  if (!entry.id) return undefined;
-
-  const overrides = await loadActiveSleepPeriodOverrides();
-  const stored = overrides[entry.id];
-  if (!stored) return undefined;
-
-  const entryStartMs = new Date(entry.start_time).getTime();
-  const storedStartMs = stored.startTime ? new Date(stored.startTime).getTime() : null;
-  if (
-    storedStartMs !== null &&
-    Number.isFinite(entryStartMs) &&
-    Number.isFinite(storedStartMs) &&
-    Math.abs(entryStartMs - storedStartMs) > 60 * 1000
-  ) {
-    delete overrides[entry.id];
-    await saveActiveSleepPeriodOverrides(overrides);
-    return undefined;
-  }
-
-  return stored.period;
-};
 
 // Sleep Entry with period classification
 export interface ClassifiedSleepEntry extends SleepEntry {
@@ -3055,120 +2900,60 @@ export default function SleepTrackerScreen() {
       return false;
     }
 
-    const targetWasActive = !resolvedTarget.end_time;
     const segmentStart = new Date(resolvedTarget.start_time);
-    const segmentEnd = resolvedTarget.end_time ? new Date(resolvedTarget.end_time) : new Date();
     const safeSplitTime = sanitizeManualDate(paramSplitTime, segmentStart);
-    const wakeMinutes = Math.max(0, Math.round(paramWakeMinutes));
-    const resumedStart = new Date(safeSplitTime.getTime() + wakeMinutes * 60000);
-
-    if (safeSplitTime.getTime() <= segmentStart.getTime()) {
-      Alert.alert('Fehler', 'Der Teilungszeitpunkt muss nach dem Start liegen.');
-      return false;
-    }
-    if (safeSplitTime.getTime() >= segmentEnd.getTime()) {
-      Alert.alert(
-        'Fehler',
-        targetWasActive
-          ? 'Der Teilungszeitpunkt muss vor dem aktuellen Zeitpunkt liegen.'
-          : 'Der Teilungszeitpunkt muss vor dem Ende liegen.'
-      );
-      return false;
-    }
-    if (resumedStart.getTime() >= segmentEnd.getTime()) {
-      Alert.alert(
-        'Fehler',
-        targetWasActive
-          ? 'Die Wachphase darf nicht in der Zukunft enden.'
-          : 'Die Wachpause ist zu lang für dieses Segment.'
-      );
-      return false;
-    }
-
-    const firstDuration = Math.max(1, Math.round((safeSplitTime.getTime() - segmentStart.getTime()) / 60000));
-    const secondDuration = targetWasActive
-      ? null
-      : Math.max(1, Math.round((segmentEnd.getTime() - resumedStart.getTime()) / 60000));
 
     setIsSplittingSegment(true);
     try {
       const effectivePartnerId = await getEffectivePartnerId();
-      const originalEndISO = resolvedTarget.end_time
-        ? new Date(resolvedTarget.end_time).toISOString()
-        : null;
-      const originalDuration = Number.isFinite(resolvedTarget.duration_minutes as number)
-        ? (resolvedTarget.duration_minutes as number)
-        : targetWasActive
-          ? null
-          : Math.max(1, Math.round((segmentEnd.getTime() - segmentStart.getTime()) / 60000));
 
-      const updateResult = await sleepService.updateEntry(resolvedTarget.id, {
-        end_time: safeSplitTime.toISOString(),
-        duration_minutes: firstDuration,
+      const result = await splitNightSleepSegment({
+        service: sleepService,
+        userId: user.id,
+        targetEntry: {
+          id: resolvedTarget.id,
+          user_id: resolvedTarget.user_id ?? null,
+          baby_id: resolvedTarget.baby_id ?? null,
+          start_time: resolvedTarget.start_time,
+          end_time: resolvedTarget.end_time ?? null,
+          duration_minutes: resolvedTarget.duration_minutes ?? null,
+          notes: resolvedTarget.notes ?? null,
+          quality: resolvedTarget.quality ?? null,
+          partner_id: resolvedTarget.partner_id ?? null,
+        },
+        splitTime: safeSplitTime,
+        wakeMinutes: paramWakeMinutes,
+        fallbackPartnerId: effectivePartnerId ?? null,
+        babyId: activeBabyId ?? null,
+        babyName,
+        targetPeriodIsNight: resolvedTarget.period === 'night',
       });
 
-      if (updateResult.primary.error) {
-        console.error('Split update error:', updateResult.primary.error);
-        Alert.alert(
-          'Fehler',
-          `Segment konnte nicht aufgeteilt werden: ${updateResult.primary.error.message || 'Unbekannter Fehler'}`
-        );
-        return false;
-      }
-
-      if (updateResult.secondary.error) {
-        console.warn('[SleepTracker] Secondary backend update failed:', updateResult.secondary.error);
-      }
-
-      const createResult = await sleepService.createEntry({
-        user_id: user.id,
-        baby_id: resolvedTarget.baby_id ?? activeBabyId ?? null,
-        start_time: resumedStart.toISOString(),
-        end_time: targetWasActive ? null : segmentEnd.toISOString(),
-        duration_minutes: secondDuration,
-        notes: resolvedTarget.notes ?? null,
-        quality: resolvedTarget.quality ?? null,
-        partner_id: resolvedTarget.partner_id ?? effectivePartnerId ?? null,
-      });
-
-      if (createResult.primary.error) {
-        console.error('Split create error:', createResult.primary.error);
-
-        // best effort rollback of first update
-        const rollback = await sleepService.updateEntry(resolvedTarget.id, {
-          end_time: originalEndISO,
-          duration_minutes: originalDuration,
-        });
-        if (rollback.primary.error) {
-          console.error('Split rollback failed:', rollback.primary.error);
+      if (!result.ok) {
+        if (result.reason === 'invalid-split-time') {
+          const targetWasActive = !resolvedTarget.end_time;
+          Alert.alert(
+            'Fehler',
+            targetWasActive
+              ? 'Der Teilungszeitpunkt muss vor dem aktuellen Zeitpunkt liegen.'
+              : 'Der Teilungszeitpunkt muss innerhalb des Segments liegen.'
+          );
+        } else if (result.reason === 'wake-too-long') {
+          Alert.alert('Fehler', result.message);
+        } else if (result.reason === 'partner-active') {
+          Alert.alert('Nicht möglich', result.message);
+        } else {
+          Alert.alert('Fehler', `Segment konnte nicht aufgeteilt werden: ${result.message}`);
         }
-
-        Alert.alert(
-          'Fehler',
-          `Segment konnte nicht aufgeteilt werden: ${createResult.primary.error.message || 'Unbekannter Fehler'}`
-        );
         return false;
       }
 
-      if (createResult.secondary.error) {
-        console.warn('[SleepTracker] Secondary backend write failed:', createResult.secondary.error);
-      }
-
-      if (targetWasActive) {
-        const nextActiveEntry = createResult.primary.data;
-        if (resolvedTarget.period === 'night' && nextActiveEntry?.id) {
-          activeEntryPeriodOverridesRef.current[nextActiveEntry.id] = 'night';
-          await rememberActiveSleepPeriodOverride(nextActiveEntry.id, 'night', nextActiveEntry.start_time);
+      if (result.mode === 'split' && result.secondIsActive) {
+        if (resolvedTarget.period === 'night' && result.secondEntry.id) {
+          activeEntryPeriodOverridesRef.current[result.secondEntry.id] = 'night';
         }
         if (resolvedTarget.id) {
           delete activeEntryPeriodOverridesRef.current[resolvedTarget.id];
-          await forgetActiveSleepPeriodOverride(resolvedTarget.id);
-        }
-
-        try {
-          await sleepActivityService.startSleepActivity(resumedStart, babyName);
-        } catch (liveActivityError) {
-          console.error('Failed to restart sleep live activity after split:', liveActivityError);
         }
       }
 

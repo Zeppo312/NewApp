@@ -1,8 +1,10 @@
 import {
   addRecipeIngredientsToShoppingList,
   adjustInventoryQuantity,
+  applyQuantityChange,
   clampQuantity,
   computeDaysLeft,
+  computeTotalQuantity,
   dedupeParsedIngredients,
   fetchLowStockCount,
   isLowStock,
@@ -107,23 +109,92 @@ describe('dedupeParsedIngredients', () => {
   });
 });
 
+/** Kurzform für Bestands-Fixtures im Packungsmodell. */
+const stock = (
+  current: number,
+  sealed = 0,
+  packageQuantity: number | null = null
+) => ({ current_quantity: current, packages_sealed: sealed, package_quantity: packageQuantity });
+
 describe('Mengenlogik', () => {
   it('clampQuantity verhindert negative Bestände', () => {
     expect(clampQuantity(-5)).toBe(0);
     expect(clampQuantity(3)).toBe(3);
   });
 
-  it('isLowStock vergleicht mit dem Schwellenwert', () => {
-    expect(isLowStock({ current_quantity: 4, reorder_threshold: 5 })).toBe(true);
-    expect(isLowStock({ current_quantity: 5, reorder_threshold: 5 })).toBe(true);
-    expect(isLowStock({ current_quantity: 6, reorder_threshold: 5 })).toBe(false);
-    expect(isLowStock({ current_quantity: 0, reorder_threshold: 0 })).toBe(false);
+  it('computeTotalQuantity summiert angebrochene Menge und volle Packungen', () => {
+    expect(computeTotalQuantity(stock(340, 2, 800))).toBe(1940);
+    expect(computeTotalQuantity(stock(5))).toBe(5);
+    expect(computeTotalQuantity(stock(5, 3, null))).toBe(5);
   });
 
-  it('computeDaysLeft rundet auf ganze Tage ab', () => {
-    expect(computeDaysLeft({ current_quantity: 22, daily_usage_estimate: 6 })).toBe(3);
-    expect(computeDaysLeft({ current_quantity: 22, daily_usage_estimate: null })).toBeNull();
-    expect(computeDaysLeft({ current_quantity: 22, daily_usage_estimate: 0 })).toBeNull();
+  it('isLowStock vergleicht den Gesamtbestand mit dem Schwellenwert', () => {
+    expect(isLowStock({ ...stock(4), reorder_threshold: 5 })).toBe(true);
+    expect(isLowStock({ ...stock(5), reorder_threshold: 5 })).toBe(true);
+    expect(isLowStock({ ...stock(6), reorder_threshold: 5 })).toBe(false);
+    expect(isLowStock({ ...stock(0), reorder_threshold: 0 })).toBe(false);
+    // 100 g angebrochen, aber noch eine volle 800-g-Packung -> nicht knapp
+    expect(isLowStock({ ...stock(100, 1, 800), reorder_threshold: 200 })).toBe(false);
+  });
+
+  it('computeDaysLeft rundet auf ganze Tage ab und rechnet Packungen mit', () => {
+    expect(computeDaysLeft({ ...stock(22), daily_usage_estimate: 6 })).toBe(3);
+    expect(computeDaysLeft({ ...stock(22), daily_usage_estimate: null })).toBeNull();
+    expect(computeDaysLeft({ ...stock(22), daily_usage_estimate: 0 })).toBeNull();
+    expect(computeDaysLeft({ ...stock(100, 1, 800), daily_usage_estimate: 90 })).toBe(10);
+  });
+});
+
+describe('applyQuantityChange', () => {
+  it('erhöht beim Auffüllen nur die angebrochene Menge', () => {
+    expect(applyQuantityChange(stock(340, 2, 800), 50)).toEqual({
+      current_quantity: 390,
+      packages_sealed: 2,
+      effectiveChange: 50,
+    });
+  });
+
+  it('zehrt Verbrauch zuerst von der angebrochenen Packung', () => {
+    expect(applyQuantityChange(stock(340, 2, 800), -40)).toEqual({
+      current_quantity: 300,
+      packages_sealed: 2,
+      effectiveChange: -40,
+    });
+  });
+
+  it('öffnet automatisch die nächste Packung, wenn die angebrochene nicht reicht', () => {
+    expect(applyQuantityChange(stock(10, 2, 800), -30)).toEqual({
+      current_quantity: 780,
+      packages_sealed: 1,
+      effectiveChange: -30,
+    });
+  });
+
+  it('öffnet bei großem Verbrauch mehrere Packungen', () => {
+    expect(applyQuantityChange(stock(0, 3, 800), -1700)).toEqual({
+      current_quantity: 700,
+      packages_sealed: 0,
+      effectiveChange: -1700,
+    });
+  });
+
+  it('lässt den Gesamtbestand nie unter 0 fallen', () => {
+    expect(applyQuantityChange(stock(10, 1, 800), -2000)).toEqual({
+      current_quantity: 0,
+      packages_sealed: 0,
+      effectiveChange: -810,
+    });
+    expect(applyQuantityChange(stock(3), -5)).toEqual({
+      current_quantity: 0,
+      packages_sealed: 0,
+      effectiveChange: -3,
+    });
+  });
+
+  it('rundet auf 2 Nachkommastellen, keine Float-Artefakte', () => {
+    const result = applyQuantityChange(stock(0.1, 1, 800), -0.3);
+    expect(result.current_quantity).toBe(799.8);
+    expect(result.effectiveChange).toBe(-0.3);
   });
 });
 
@@ -189,14 +260,14 @@ describe('adjustInventoryQuantity', () => {
     mockedFrom.mockReturnValueOnce(updateChain).mockReturnValueOnce(txChain);
 
     const { data, error } = await adjustInventoryQuantity(
-      { id: 'inv-1', baby_id: 'baby-1', current_quantity: 20 },
+      { id: 'inv-1', baby_id: 'baby-1', ...stock(20) },
       -2,
       'usage'
     );
 
     expect(error).toBeNull();
     expect(data?.current_quantity).toBe(18);
-    expect(updateChain.update).toHaveBeenCalledWith({ current_quantity: 18 });
+    expect(updateChain.update).toHaveBeenCalledWith({ current_quantity: 18, packages_sealed: 0 });
     expect(txChain.insert).toHaveBeenCalledWith(
       expect.objectContaining({
         transaction_type: 'usage',
@@ -215,14 +286,34 @@ describe('adjustInventoryQuantity', () => {
     mockedFrom.mockReturnValueOnce(updateChain).mockReturnValueOnce(txChain);
 
     await adjustInventoryQuantity(
-      { id: 'inv-1', baby_id: 'baby-1', current_quantity: 3 },
+      { id: 'inv-1', baby_id: 'baby-1', ...stock(3) },
       -10,
       'usage'
     );
 
-    expect(updateChain.update).toHaveBeenCalledWith({ current_quantity: 0 });
+    expect(updateChain.update).toHaveBeenCalledWith({ current_quantity: 0, packages_sealed: 0 });
     expect(txChain.insert).toHaveBeenCalledWith(
       expect.objectContaining({ quantity_change: -3, quantity_after: 0 })
+    );
+  });
+
+  it('öffnet beim Verbrauch automatisch die nächste volle Packung', async () => {
+    const updateChain = chainResolving({
+      data: { id: 'inv-1', baby_id: 'baby-1', current_quantity: 790, packages_sealed: 0 },
+      error: null,
+    });
+    const txChain = chainResolving({ data: null, error: null });
+    mockedFrom.mockReturnValueOnce(updateChain).mockReturnValueOnce(txChain);
+
+    await adjustInventoryQuantity(
+      { id: 'inv-1', baby_id: 'baby-1', ...stock(10, 1, 800) },
+      -20,
+      'usage'
+    );
+
+    expect(updateChain.update).toHaveBeenCalledWith({ current_quantity: 790, packages_sealed: 0 });
+    expect(txChain.insert).toHaveBeenCalledWith(
+      expect.objectContaining({ quantity_change: -20, quantity_after: 790 })
     );
   });
 });
@@ -250,7 +341,7 @@ describe('recordDiaperUsage', () => {
 
     expect(error).toBeNull();
     expect(data?.current_quantity).toBe(29);
-    expect(updateChain.update).toHaveBeenCalledWith({ current_quantity: 29 });
+    expect(updateChain.update).toHaveBeenCalledWith({ current_quantity: 29, packages_sealed: 0 });
     expect(txChain.insert).toHaveBeenCalledWith(
       expect.objectContaining({ transaction_type: 'usage', quantity_change: -1 })
     );
@@ -277,7 +368,7 @@ describe('recordDiaperUsage', () => {
     const { data } = await recordDiaperUsage('baby-1', 'inv-chosen');
 
     expect(data?.id).toBe('inv-chosen');
-    expect(updateChain.update).toHaveBeenCalledWith({ current_quantity: 43 });
+    expect(updateChain.update).toHaveBeenCalledWith({ current_quantity: 43, packages_sealed: 0 });
     expect(updateChain.eq).toHaveBeenCalledWith('id', 'inv-chosen');
   });
 
@@ -336,7 +427,10 @@ describe('recordBottleUsage', () => {
 
     expect(error).toBeNull();
     expect(data?.current_quantity).toBe(482.2);
-    expect(updateChain.update).toHaveBeenCalledWith({ current_quantity: 482.2 });
+    expect(updateChain.update).toHaveBeenCalledWith({
+      current_quantity: 482.2,
+      packages_sealed: 0,
+    });
     expect(txChain.insert).toHaveBeenCalledWith(
       expect.objectContaining({
         transaction_type: 'usage',

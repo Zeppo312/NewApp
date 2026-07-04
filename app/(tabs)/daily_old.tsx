@@ -48,6 +48,8 @@ import Header from '@/components/Header';
 import ActivityCard from '@/components/ActivityCard';
 import EmptyState from '@/components/EmptyState';
 import ActivityInputModal from '@/components/ActivityInputModal';
+import NightWakePrompt from '@/components/NightWakePrompt';
+import { useNightWakePrompt } from '@/hooks/useNightWakePrompt';
 import WeekScroller from '@/components/WeekScroller';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useAuth } from '@/contexts/AuthContext';
@@ -731,6 +733,17 @@ export default function DailyScreen() {
   
   const { activeBabyId, isReady } = useActiveBaby();
   const { isReadOnlyPreviewMode } = useBabyStatus();
+
+  const {
+    promptVisible: nightWakePromptVisible,
+    promptCandidate: nightWakeCandidate,
+    promptFeedingStart: nightWakeFeedingStart,
+    promptBusy: nightWakeBusy,
+    maybeOfferNightWake,
+    pickWake: pickNightWake,
+    truncateNight,
+    dismissNightWakePrompt,
+  } = useNightWakePrompt({ userId: user?.id, babyId: activeBabyId });
 
   const [entries, setEntries] = useState<DailyEntry[]>([]);
   const [weekEntries, setWeekEntries] = useState<DailyEntry[]>([]);
@@ -1687,6 +1700,13 @@ export default function DailyScreen() {
         feedingType === 'BREAST' ? 'feeding_breast' : feedingType === 'BOTTLE' ? 'feeding_bottle' : feedingType === 'PUMP' ? 'feeding_pump' : feedingType === 'WATER' ? 'feeding_water' : 'feeding_solids',
         timerRequested
       );
+      if (!timerRequested) {
+        void maybeOfferNightWake({
+          startTime: resolvedStartTime,
+          endTime: resolvedEndTime,
+          feedingType: feedingType ?? null,
+        });
+      }
     } else if (selectedActivityType === 'diaper') {
       const diaperType = (payload.diaper_type as 'WET' | 'DIRTY' | 'BOTH' | undefined) ?? undefined;
       const resolvedStartTime = payload.start_time ?? new Date().toISOString();
@@ -1846,6 +1866,14 @@ export default function DailyScreen() {
     await endBreastfeedingLiveActivity(timerToStop);
     setActiveTimer(null);
 
+    if (timerToStop.type === 'BREAST' || timerToStop.type === 'BOTTLE' || timerToStop.type === 'SOLIDS') {
+      void maybeOfferNightWake({
+        startTime: new Date(timerToStop.start),
+        endTime: new Date(),
+        feedingType: timerToStop.type,
+      });
+    }
+
     // Invalidate cache after timer stop
     await invalidateDailyCache(activeBabyId);
 
@@ -1864,6 +1892,7 @@ export default function DailyScreen() {
     activeBabyId,
     activeTimer,
     endBreastfeedingLiveActivity,
+    maybeOfferNightWake,
     selectedTab,
     loadWeekEntries,
     loadMonthEntries,
@@ -3090,6 +3119,16 @@ export default function DailyScreen() {
             diaper_type: selectedSubType === 'diaper_wet' ? 'WET' : selectedSubType === 'diaper_dirty' ? 'DIRTY' : selectedSubType === 'diaper_both' ? 'BOTH' : undefined,
             start_time: new Date().toISOString(),
           } : undefined)}
+        />
+
+        <NightWakePrompt
+          visible={nightWakePromptVisible}
+          candidate={nightWakeCandidate}
+          feedingStart={nightWakeFeedingStart}
+          busy={nightWakeBusy}
+          onPickWake={pickNightWake}
+          onTruncate={truncateNight}
+          onDismiss={dismissNightWakePrompt}
         />
       </SafeAreaView>
       {splashVisible && (

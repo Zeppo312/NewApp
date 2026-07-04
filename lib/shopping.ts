@@ -32,6 +32,7 @@ export interface InventoryItem {
   category: InventoryCategory | string;
   barcode: string | null;
   current_quantity: number;
+  packages_sealed: number;
   unit: string;
   package_quantity: number | null;
   reorder_threshold: number;
@@ -188,15 +189,68 @@ const formatIngredientTitle = (item: ParsedIngredient): string => {
 
 export const clampQuantity = (value: number): number => Math.max(0, value);
 
-export const isLowStock = (item: Pick<InventoryItem, 'current_quantity' | 'reorder_threshold'>): boolean =>
-  item.reorder_threshold > 0 && item.current_quantity <= item.reorder_threshold;
+// Auf 2 Nachkommastellen runden, damit keine Float-Artefakte
+// (z. B. -17.80000000000001) in Bestand und Audit-Log landen.
+const round2 = (value: number) => Math.round(value * 100) / 100;
+
+type PackagedQuantity = Pick<InventoryItem, 'current_quantity' | 'packages_sealed' | 'package_quantity'>;
+
+/** Gesamtbestand = angebrochene Menge + ungeöffnete Packungen × Packungsgröße. */
+export const computeTotalQuantity = (item: PackagedQuantity): number =>
+  round2(item.current_quantity + (item.packages_sealed ?? 0) * (item.package_quantity ?? 0));
+
+export const isLowStock = (item: PackagedQuantity & Pick<InventoryItem, 'reorder_threshold'>): boolean =>
+  item.reorder_threshold > 0 && computeTotalQuantity(item) <= item.reorder_threshold;
 
 /** Geschätzte Reichweite in ganzen Tagen; null ohne Verbrauchsschätzung. */
 export const computeDaysLeft = (
-  item: Pick<InventoryItem, 'current_quantity' | 'daily_usage_estimate'>
+  item: PackagedQuantity & Pick<InventoryItem, 'daily_usage_estimate'>
 ): number | null => {
   if (!item.daily_usage_estimate || item.daily_usage_estimate <= 0) return null;
-  return Math.floor(item.current_quantity / item.daily_usage_estimate);
+  return Math.floor(computeTotalQuantity(item) / item.daily_usage_estimate);
+};
+
+/**
+ * Wendet eine Bestandsänderung auf das Packungsmodell an. Verbrauch zehrt
+ * zuerst die angebrochene Packung auf; reicht sie nicht, werden automatisch
+ * so viele versiegelte Packungen geöffnet wie nötig. Auffüllen (positiv)
+ * erhöht nur die angebrochene Menge — ganze Packungen kommen über
+ * packages_sealed dazu. Der Gesamtbestand fällt nie unter 0.
+ */
+export const applyQuantityChange = (
+  item: PackagedQuantity,
+  quantityChange: number
+): { current_quantity: number; packages_sealed: number; effectiveChange: number } => {
+  const packageQuantity = item.package_quantity ?? 0;
+  const sealedBefore = item.packages_sealed ?? 0;
+  const totalBefore = computeTotalQuantity(item);
+
+  if (quantityChange >= 0) {
+    return {
+      current_quantity: round2(item.current_quantity + quantityChange),
+      packages_sealed: sealedBefore,
+      effectiveChange: round2(quantityChange),
+    };
+  }
+
+  const demand = -quantityChange;
+  let current = item.current_quantity;
+  let sealed = sealedBefore;
+
+  if (demand > current && sealed > 0 && packageQuantity > 0) {
+    const deficit = demand - current;
+    const packsToOpen = Math.min(sealed, Math.ceil(deficit / packageQuantity));
+    sealed -= packsToOpen;
+    current += packsToOpen * packageQuantity;
+  }
+
+  const currentAfter = round2(clampQuantity(current - demand));
+  const totalAfter = round2(currentAfter + sealed * packageQuantity);
+  return {
+    current_quantity: currentAfter,
+    packages_sealed: sealed,
+    effectiveChange: round2(totalAfter - totalBefore),
+  };
 };
 
 // --- Einkaufsliste --------------------------------------------------------------
@@ -402,6 +456,7 @@ export type InventoryItemUpsert = {
   category?: string;
   barcode?: string | null;
   current_quantity?: number;
+  packages_sealed?: number;
   unit?: string;
   package_quantity?: number | null;
   reorder_threshold?: number;
@@ -428,6 +483,7 @@ export const upsertInventoryItem = async (
     category: payload.category ?? 'other',
     barcode: payload.barcode ?? null,
     current_quantity: clampQuantity(payload.current_quantity ?? 0),
+    packages_sealed: Math.max(0, Math.round(payload.packages_sealed ?? 0)),
     unit: payload.unit ?? 'Stück',
     package_quantity: payload.package_quantity ?? null,
     reorder_threshold: clampQuantity(payload.reorder_threshold ?? 0),
@@ -454,7 +510,7 @@ export const deleteInventoryItem = async (itemId: string): Promise<{ error: Post
  * und schreibt einen Audit-Eintrag. Der Bestand fällt nie unter 0.
  */
 export const adjustInventoryQuantity = async (
-  item: Pick<InventoryItem, 'id' | 'baby_id' | 'current_quantity'>,
+  item: Pick<InventoryItem, 'id' | 'baby_id' | 'current_quantity' | 'packages_sealed' | 'package_quantity'>,
   quantityChange: number,
   transactionType: InventoryTransactionType,
   note?: string
@@ -462,15 +518,11 @@ export const adjustInventoryQuantity = async (
   const { userId, error: userError } = await getUserId();
   if (!userId) return { data: null, error: userError };
 
-  // Auf 2 Nachkommastellen runden, damit keine Float-Artefakte
-  // (z. B. -17.80000000000001) in Bestand und Audit-Log landen.
-  const round2 = (value: number) => Math.round(value * 100) / 100;
-  const quantityAfter = round2(clampQuantity(item.current_quantity + quantityChange));
-  const effectiveChange = round2(quantityAfter - item.current_quantity);
+  const next = applyQuantityChange(item, quantityChange);
 
   const { data, error } = await supabase
     .from('inventory_items')
-    .update({ current_quantity: quantityAfter })
+    .update({ current_quantity: next.current_quantity, packages_sealed: next.packages_sealed })
     .eq('id', item.id)
     .select()
     .single();
@@ -481,8 +533,51 @@ export const adjustInventoryQuantity = async (
     baby_id: item.baby_id,
     created_by: userId,
     transaction_type: transactionType,
-    quantity_change: effectiveChange,
-    quantity_after: quantityAfter,
+    quantity_change: next.effectiveChange,
+    quantity_after: computeTotalQuantity({ ...next, package_quantity: item.package_quantity }),
+    note: note ?? null,
+  });
+  if (txError) {
+    console.error('Failed to log inventory transaction:', txError);
+  }
+
+  return { data: (data as InventoryItem) ?? null, error: null };
+};
+
+/**
+ * Bucht ganze (versiegelte) Packungen zu oder ab — z. B. +1 nach dem Einkauf
+ * oder dem Scan. Der Audit-Eintrag hält die Änderung in der Basiseinheit fest
+ * (Packungen × Packungsgröße). packages_sealed fällt nie unter 0.
+ */
+export const adjustSealedPackages = async (
+  item: Pick<InventoryItem, 'id' | 'baby_id' | 'current_quantity' | 'packages_sealed' | 'package_quantity'>,
+  packageDelta: number,
+  transactionType: InventoryTransactionType,
+  note?: string
+): Promise<DataResult<InventoryItem>> => {
+  const { userId, error: userError } = await getUserId();
+  if (!userId) return { data: null, error: userError };
+
+  const sealedBefore = item.packages_sealed ?? 0;
+  const sealedAfter = Math.max(0, Math.round(sealedBefore + packageDelta));
+  const effectivePackages = sealedAfter - sealedBefore;
+
+  const { data, error } = await supabase
+    .from('inventory_items')
+    .update({ packages_sealed: sealedAfter })
+    .eq('id', item.id)
+    .select()
+    .single();
+  if (error) return { data: null, error };
+
+  const packageQuantity = item.package_quantity ?? 1;
+  const { error: txError } = await supabase.from('inventory_transactions').insert({
+    inventory_item_id: item.id,
+    baby_id: item.baby_id,
+    created_by: userId,
+    transaction_type: transactionType,
+    quantity_change: round2(effectivePackages * packageQuantity),
+    quantity_after: computeTotalQuantity({ ...item, packages_sealed: sealedAfter }),
     note: note ?? null,
   });
   if (txError) {
@@ -517,14 +612,15 @@ export const refillInventoryFromProduct = async (
 
   const existing = (existingItems?.[0] as InventoryItem | undefined) ?? null;
   if (existing) {
-    return adjustInventoryQuantity(existing, product.packageQuantity, 'scan_refill', product.name);
+    return adjustSealedPackages(existing, 1, 'scan_refill', product.name);
   }
 
   const created = await upsertInventoryItem(babyId, {
     name: product.name,
     category: product.category,
     barcode: product.barcode,
-    current_quantity: product.packageQuantity,
+    current_quantity: 0,
+    packages_sealed: 1,
     unit: product.unit,
     package_quantity: product.packageQuantity,
   });
@@ -538,7 +634,7 @@ export const refillInventoryFromProduct = async (
       created_by: userId,
       transaction_type: 'scan_refill',
       quantity_change: product.packageQuantity,
-      quantity_after: created.data.current_quantity,
+      quantity_after: computeTotalQuantity(created.data),
       note: product.name,
     });
     if (txError) {
@@ -600,8 +696,8 @@ export const recordBottleUsage = async (
     ? candidates.find((item) => item.id === preferredItemId)
     : undefined;
   const target =
-    preferred ?? candidates.find((item) => item.current_quantity > 0) ?? candidates[0];
-  if (target.current_quantity <= 0) return { data: target, error: null };
+    preferred ?? candidates.find((item) => computeTotalQuantity(item) > 0) ?? candidates[0];
+  if (computeTotalQuantity(target) <= 0) return { data: target, error: null };
 
   const grams = Math.round((volumeMl / 100) * target.dosage_grams_per_100ml! * 10) / 10;
   if (grams <= 0) return { data: target, error: null };
@@ -641,8 +737,8 @@ export const recordDiaperUsage = async (
     ? candidates.find((item) => item.id === preferredItemId)
     : undefined;
   const target =
-    preferred ?? candidates.find((item) => item.current_quantity > 0) ?? candidates[0];
-  if (target.current_quantity <= 0) return { data: target, error: null };
+    preferred ?? candidates.find((item) => computeTotalQuantity(item) > 0) ?? candidates[0];
+  if (computeTotalQuantity(target) <= 0) return { data: target, error: null };
 
   return adjustInventoryQuantity(target, -1, 'usage', 'Wickeleintrag aus Unser Tag');
 };
@@ -651,10 +747,13 @@ export const recordDiaperUsage = async (
 export const fetchLowStockCount = async (babyId: string): Promise<{ count: number; error: PostgrestError | null }> => {
   const { data, error } = await supabase
     .from('inventory_items')
-    .select('current_quantity, reorder_threshold')
+    .select('current_quantity, packages_sealed, package_quantity, reorder_threshold')
     .eq('baby_id', babyId);
   if (error) return { count: 0, error };
-  const rows = (data ?? []) as Pick<InventoryItem, 'current_quantity' | 'reorder_threshold'>[];
+  const rows = (data ?? []) as Pick<
+    InventoryItem,
+    'current_quantity' | 'packages_sealed' | 'package_quantity' | 'reorder_threshold'
+  >[];
   return { count: rows.filter(isLowStock).length, error: null };
 };
 

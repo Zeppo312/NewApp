@@ -25,6 +25,7 @@ import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import {
+  computeTotalQuantity,
   fetchDiaperInventoryItems,
   fetchFormulaInventoryItems,
   InventoryItem,
@@ -1433,7 +1434,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
                   ]}
                   numberOfLines={1}
                 >
-                  {item.name} ({Math.max(0, Math.trunc(item.current_quantity))})
+                  {item.name} ({Math.max(0, Math.trunc(computeTotalQuantity(item)))})
                 </Text>
               </TouchableOpacity>
             ))}

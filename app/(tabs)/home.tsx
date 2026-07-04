@@ -22,6 +22,8 @@ import { fetchLowStockCount } from '@/lib/shopping';
 import { getRecommendations, LottiRecommendation } from '@/lib/supabase/recommendations';
 import { BlurView } from 'expo-blur';
 import ActivityInputModal from '@/components/ActivityInputModal';
+import NightWakePrompt from '@/components/NightWakePrompt';
+import { useNightWakePrompt } from '@/hooks/useNightWakePrompt';
 import SleepQuickAddModal, { SleepQuickEntry } from '@/components/SleepQuickAddModal';
 import BabySwitcherButton from '@/components/BabySwitcherButton';
 import { LottiWeekCard } from '@/components/LottiWeekCard';
@@ -1316,6 +1318,21 @@ export default function HomeScreen() {
   };
 
   // Handle save entry from modal
+  const {
+    promptVisible: nightWakePromptVisible,
+    promptCandidate: nightWakeCandidate,
+    promptFeedingStart: nightWakeFeedingStart,
+    promptBusy: nightWakeBusy,
+    maybeOfferNightWake,
+    pickWake: pickNightWake,
+    truncateNight,
+    dismissNightWakePrompt,
+  } = useNightWakePrompt({
+    userId: user?.id,
+    babyId: activeBabyId,
+    onAfterSplit: () => loadDailyEntriesOnly(),
+  });
+
   const handleSaveEntry = async (payload: any) => {
     console.log('handleSaveEntry - Received payload:', JSON.stringify(payload, null, 2));
     const entryType =
@@ -1379,6 +1396,14 @@ export default function HomeScreen() {
 
     // Quick reload of daily entries to show the new entry immediately
     await loadDailyEntriesOnly();
+
+    if (entryType === 'feeding' && payload.start_time) {
+      void maybeOfferNightWake({
+        startTime: payload.start_time,
+        endTime: payload.end_time ?? null,
+        feedingType: payload.feeding_type ?? null,
+      });
+    }
 
     if (entryType === 'diaper') {
       // Die Vorratsabbuchung läuft fire-and-forget im Hintergrund —
@@ -2287,6 +2312,15 @@ export default function HomeScreen() {
           initialStart={sleepModalStart}
           onClose={() => setShowSleepModal(false)}
           onSave={handleSaveSleepQuickEntry}
+        />
+        <NightWakePrompt
+          visible={nightWakePromptVisible}
+          candidate={nightWakeCandidate}
+          feedingStart={nightWakeFeedingStart}
+          busy={nightWakeBusy}
+          onPickWake={pickNightWake}
+          onTruncate={truncateNight}
+          onDismiss={dismissNightWakePrompt}
         />
       </SafeAreaView>
     </ThemedBackground>

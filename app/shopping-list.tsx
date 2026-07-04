@@ -24,9 +24,12 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { LiquidGlassCard, PRIMARY, RADIUS } from '@/constants/DesignGuide';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { useNotifications } from '@/hooks/useNotifications';
+import { formatUnitQuantity } from '@/lib/units';
 import {
   adjustInventoryQuantity,
+  adjustSealedPackages,
   computeDaysLeft,
+  computeTotalQuantity,
   deleteInventoryItem,
   deleteShoppingItem,
   fetchInventoryUsageSummaries,
@@ -136,9 +139,6 @@ const buildZoomSteps = (lenses: string[]): ZoomStep[] => {
   return steps;
 };
 const REMINDER_COOLDOWN_MS = 24 * 60 * 60 * 1000;
-
-const formatQuantity = (value: number) =>
-  Number.isInteger(value) ? String(value) : value.toLocaleString('de-DE');
 
 const formatShortDate = (value: string) =>
   new Date(value).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
@@ -362,7 +362,7 @@ export default function ShoppingListScreen() {
       if (now - lastReminded < REMINDER_COOLDOWN_MS) continue;
       scheduleNotification(
         'Vorrat wird knapp',
-        `${item.name}: nur noch ${formatQuantity(item.current_quantity)} ${item.unit} übrig.`,
+        `${item.name}: nur noch ${formatUnitQuantity(computeTotalQuantity(item), item.unit)} übrig.`,
         { type: 'inventory_low', referenceId: item.id },
         null,
         `inventory_low_${item.id}`
@@ -411,20 +411,31 @@ export default function ShoppingListScreen() {
         return;
       }
 
-      // Stammt der Posten aus dem Vorrat, wird der Bestand beim Abhaken um die
-      // Packungsmenge erhöht — beim Zurücknehmen wieder korrigiert.
+      // Stammt der Posten aus dem Vorrat, wird der Bestand beim Abhaken erhöht —
+      // bei Packungsartikeln als ganze (versiegelte) Packung, sonst als Menge.
+      // Beim Zurücknehmen wird wieder korrigiert.
       const linkedInventory = item.inventory_item_id
         ? inventoryItems.find((inv) => inv.id === item.inventory_item_id)
         : undefined;
       if (linkedInventory) {
-        const quantity =
-          item.quantity_value ?? linkedInventory.package_quantity ?? 1;
-        const { data } = await adjustInventoryQuantity(
-          linkedInventory,
-          nowPurchased ? quantity : -quantity,
-          nowPurchased ? 'refill' : 'correction',
-          nowPurchased ? `Einkauf: ${item.title}` : `Kauf zurückgenommen: ${item.title}`
-        );
+        const note = nowPurchased
+          ? `Einkauf: ${item.title}`
+          : `Kauf zurückgenommen: ${item.title}`;
+        const hasPackage = (linkedInventory.package_quantity ?? 0) > 0;
+        const { data } = hasPackage
+          ? await adjustSealedPackages(
+              linkedInventory,
+              (item.quantity_unit === 'Packung' ? item.quantity_value ?? 1 : 1) *
+                (nowPurchased ? 1 : -1),
+              nowPurchased ? 'refill' : 'correction',
+              note
+            )
+          : await adjustInventoryQuantity(
+              linkedInventory,
+              (item.quantity_value ?? 1) * (nowPurchased ? 1 : -1),
+              nowPurchased ? 'refill' : 'correction',
+              note
+            );
         if (data) {
           applyInventoryUpdate(data);
         }
@@ -522,14 +533,29 @@ export default function ShoppingListScreen() {
     [applyInventoryUpdate]
   );
 
+  // "+ Packung": bucht eine ganze versiegelte Packung zu (statt loser Menge).
+  const handleAddPackage = useCallback(
+    async (item: InventoryItem) => {
+      const { data, error } = await adjustSealedPackages(item, 1, 'refill', 'Packung hinzugefügt');
+      if (error || !data) {
+        Alert.alert('Fehler', 'Die Packung konnte nicht verbucht werden.');
+        return;
+      }
+      applyInventoryUpdate(data);
+    },
+    [applyInventoryUpdate]
+  );
+
   const handleInventoryToShoppingList = useCallback(
     async (item: InventoryItem) => {
       if (!activeBabyId) return;
+      // Packungsartikel landen als "1 Packung" auf der Liste, lose Artikel als Menge.
+      const hasPackage = (item.package_quantity ?? 0) > 0;
       const { data, error } = await upsertShoppingItem(activeBabyId, {
         title: item.name,
         category: item.category,
-        quantity_value: item.package_quantity,
-        quantity_unit: item.unit,
+        quantity_value: hasPackage ? 1 : item.package_quantity,
+        quantity_unit: hasPackage ? 'Packung' : item.unit,
         source_type: 'inventory',
         inventory_item_id: item.id,
       });
@@ -556,6 +582,7 @@ export default function ShoppingListScreen() {
       category: editingInventory.category ?? 'other',
       barcode: editingInventory.barcode ?? null,
       current_quantity: editingInventory.current_quantity ?? 0,
+      packages_sealed: editingInventory.packages_sealed ?? 0,
       unit: editingInventory.unit ?? 'Stück',
       package_quantity: editingInventory.package_quantity ?? null,
       reorder_threshold: editingInventory.reorder_threshold ?? 0,
@@ -647,7 +674,10 @@ export default function ShoppingListScreen() {
     }
     applyInventoryUpdate(data);
     setScanSheet(null);
-    Alert.alert('Aufgefüllt', `${product.name}: +${formatQuantity(packageQuantity)} ${product.unit ?? 'Stück'}.`);
+    Alert.alert(
+      'Aufgefüllt',
+      `${product.name}: +1 Packung (${formatUnitQuantity(packageQuantity, product.unit ?? 'Stück')}).`
+    );
   }, [activeBabyId, scanSheet, applyInventoryUpdate]);
 
   const handleConfirmUnknownProduct = useCallback(async () => {
@@ -869,6 +899,13 @@ export default function ShoppingListScreen() {
     const daysLeft = computeDaysLeft(item);
     const low = isLowStock(item);
     const usageSummary = usageSummaries[item.id];
+    const totalQuantity = computeTotalQuantity(item);
+    const packageQuantity = item.package_quantity ?? 0;
+    const hasPackages = packageQuantity > 0;
+    const sealedPackages = item.packages_sealed ?? 0;
+    const openRatio = hasPackages
+      ? Math.max(0, Math.min(1, item.current_quantity / packageQuantity))
+      : 0;
     return (
       <LiquidGlassCard key={item.id} style={styles.card}>
         <View style={styles.cardInner}>
@@ -892,22 +929,58 @@ export default function ShoppingListScreen() {
             </TouchableOpacity>
           </View>
 
-          <View style={styles.inventoryStatsRow}>
-            <ThemedText style={styles.inventoryStat}>
-              Aktuell: {formatQuantity(item.current_quantity)} {item.unit}
-            </ThemedText>
-            <ThemedText style={styles.inventoryStat}>
-              Schwelle: {formatQuantity(item.reorder_threshold)} {item.unit}
-            </ThemedText>
+          {/* Kennzahlen prominent: Gesamtbestand groß, daneben Packungen & Reichweite */}
+          <View style={styles.inventoryHero}>
+            <View style={styles.inventoryHeroTile}>
+              <ThemedText style={[styles.inventoryHeroValue, low && styles.inventoryHeroValueLow]}>
+                {formatUnitQuantity(totalQuantity, item.unit)}
+              </ThemedText>
+              <ThemedText style={styles.inventoryHeroLabel}>gesamt</ThemedText>
+            </View>
+            {hasPackages ? (
+              <View style={styles.inventoryHeroTile}>
+                <ThemedText style={styles.inventoryHeroValue}>{sealedPackages}</ThemedText>
+                <ThemedText style={styles.inventoryHeroLabel}>
+                  {sealedPackages === 1 ? 'volle Packung' : 'volle Packungen'}
+                </ThemedText>
+              </View>
+            ) : null}
             {daysLeft !== null ? (
-              <ThemedText style={styles.inventoryStat}>reicht ca. {daysLeft} Tage</ThemedText>
+              <View style={styles.inventoryHeroTile}>
+                <ThemedText style={styles.inventoryHeroValue}>~{daysLeft}</ThemedText>
+                <ThemedText style={styles.inventoryHeroLabel}>Tage Reichweite</ThemedText>
+              </View>
             ) : null}
           </View>
+
+          {hasPackages ? (
+            <View style={styles.packageProgressBlock}>
+              <View style={styles.packageProgressTrack}>
+                <View
+                  style={[
+                    styles.packageProgressFill,
+                    { width: `${Math.round(openRatio * 100)}%` },
+                    low && styles.packageProgressFillLow,
+                  ]}
+                />
+              </View>
+              <ThemedText style={styles.packageProgressLabel}>
+                Angebrochen: {formatUnitQuantity(item.current_quantity, item.unit)} von{' '}
+                {formatUnitQuantity(packageQuantity, item.unit)}
+              </ThemedText>
+            </View>
+          ) : null}
+
+          {item.reorder_threshold > 0 ? (
+            <ThemedText style={styles.inventoryStat}>
+              Nachkaufen ab {formatUnitQuantity(item.reorder_threshold, item.unit)}
+            </ThemedText>
+          ) : null}
 
           <View style={styles.usageSummaryRow}>
             <IconSymbol name="chart.line.uptrend.xyaxis" size={15} color={PRIMARY} />
             <ThemedText style={styles.usageSummaryText}>
-              7 Tage: {formatQuantity(usageSummary?.usedLast7Days ?? 0)} {item.unit} verbraucht
+              7 Tage: {formatUnitQuantity(usageSummary?.usedLast7Days ?? 0, item.unit)} verbraucht
               {usageSummary?.lastTransactionAt
                 ? ` · letzte Buchung ${formatShortDate(usageSummary.lastTransactionAt)}`
                 : ''}
@@ -916,23 +989,20 @@ export default function ShoppingListScreen() {
 
           <View style={styles.quantityStepper}>
             <TouchableOpacity
-              style={[
-                styles.stepperButton,
-                item.current_quantity <= 0 && styles.stepperButtonDisabled,
-              ]}
+              style={[styles.stepperButton, totalQuantity <= 0 && styles.stepperButtonDisabled]}
               onPress={() => handleAdjustQuantity(item, -1, 'usage')}
-              disabled={item.current_quantity <= 0}
+              disabled={totalQuantity <= 0}
               accessibilityLabel={`${item.name} Bestand um eins reduzieren`}
             >
               <IconSymbol
                 name="minus"
                 size={18}
-                color={item.current_quantity <= 0 ? 'rgba(125,90,80,0.35)' : PRIMARY}
+                color={totalQuantity <= 0 ? 'rgba(125,90,80,0.35)' : PRIMARY}
               />
             </TouchableOpacity>
             <View style={styles.stepperValue}>
               <ThemedText style={styles.stepperValueText}>
-                {formatQuantity(item.current_quantity)} {item.unit}
+                {formatUnitQuantity(totalQuantity, item.unit)}
               </ThemedText>
             </View>
             <TouchableOpacity
@@ -945,10 +1015,10 @@ export default function ShoppingListScreen() {
           </View>
 
           <View style={styles.inventoryActions}>
-            {item.package_quantity ? (
+            {hasPackages ? (
               <TouchableOpacity
                 style={styles.inventoryActionButton}
-                onPress={() => handleAdjustQuantity(item, item.package_quantity!, 'refill')}
+                onPress={() => handleAddPackage(item)}
               >
                 <ThemedText style={styles.inventoryActionText}>+ Packung</ThemedText>
               </TouchableOpacity>
@@ -1085,7 +1155,7 @@ export default function ShoppingListScreen() {
                           <View style={styles.suggestionTextBlock}>
                             <ThemedText style={styles.suggestionTitle}>{item.name}</ThemedText>
                             <ThemedText style={styles.suggestionMeta}>
-                              {formatQuantity(item.current_quantity)} {item.unit} übrig
+                              {formatUnitQuantity(computeTotalQuantity(item), item.unit)} übrig
                             </ThemedText>
                           </View>
                           <TouchableOpacity
@@ -1244,7 +1314,7 @@ export default function ShoppingListScreen() {
                   ) : null}
                   <ThemedText style={styles.modalDetail}>
                     Packung: {scanSheet.product.packageQuantity
-                      ? `${formatQuantity(scanSheet.product.packageQuantity)} ${scanSheet.product.unit ?? 'Stück'}`
+                      ? formatUnitQuantity(scanSheet.product.packageQuantity, scanSheet.product.unit ?? 'Stück')
                       : 'unbekannt (1 wird gebucht)'}
                   </ThemedText>
                   <TouchableOpacity style={styles.primaryButton} onPress={handleRefillFromScan}>
@@ -1378,7 +1448,7 @@ export default function ShoppingListScreen() {
               <View style={styles.modalInputRow}>
                 <TextInput
                   style={[styles.modalInput, styles.modalInputHalf]}
-                  placeholder="Aktueller Bestand"
+                  placeholder="Bestand (angebrochen)"
                   placeholderTextColor="rgba(125,90,80,0.5)"
                   keyboardType="decimal-pad"
                   value={
@@ -1421,6 +1491,29 @@ export default function ShoppingListScreen() {
                 />
                 <TextInput
                   style={[styles.modalInput, styles.modalInputHalf]}
+                  placeholder="Volle Packungen"
+                  placeholderTextColor="rgba(125,90,80,0.5)"
+                  keyboardType="number-pad"
+                  value={
+                    editingInventory?.packages_sealed != null
+                      ? String(editingInventory.packages_sealed)
+                      : ''
+                  }
+                  onChangeText={(value) =>
+                    setEditingInventory((prev) => ({
+                      ...prev,
+                      packages_sealed: parseInt(value, 10) || 0,
+                    }))
+                  }
+                />
+              </View>
+              <ThemedText style={styles.helperText}>
+                Bestand = Inhalt der angebrochenen Packung. Ungeöffnete Packungen zählst du
+                unter „Volle Packungen" — die Gesamtmenge rechnet die App selbst aus.
+              </ThemedText>
+              <View style={styles.modalInputRow}>
+                <TextInput
+                  style={[styles.modalInput, styles.modalInputHalf]}
                   placeholder="Schwellenwert"
                   placeholderTextColor="rgba(125,90,80,0.5)"
                   keyboardType="decimal-pad"
@@ -1436,24 +1529,24 @@ export default function ShoppingListScreen() {
                     }))
                   }
                 />
+                <TextInput
+                  style={[styles.modalInput, styles.modalInputHalf]}
+                  placeholder="Verbrauch pro Tag"
+                  placeholderTextColor="rgba(125,90,80,0.5)"
+                  keyboardType="decimal-pad"
+                  value={
+                    editingInventory?.daily_usage_estimate != null
+                      ? String(editingInventory.daily_usage_estimate)
+                      : ''
+                  }
+                  onChangeText={(value) =>
+                    setEditingInventory((prev) => ({
+                      ...prev,
+                      daily_usage_estimate: parseFloat(value.replace(',', '.')) || null,
+                    }))
+                  }
+                />
               </View>
-              <TextInput
-                style={styles.modalInput}
-                placeholder="Verbrauch pro Tag (optional)"
-                placeholderTextColor="rgba(125,90,80,0.5)"
-                keyboardType="decimal-pad"
-                value={
-                  editingInventory?.daily_usage_estimate != null
-                    ? String(editingInventory.daily_usage_estimate)
-                    : ''
-                }
-                onChangeText={(value) =>
-                  setEditingInventory((prev) => ({
-                    ...prev,
-                    daily_usage_estimate: parseFloat(value.replace(',', '.')) || null,
-                  }))
-                }
-              />
               {editingInventory?.category === 'formula' ? (
                 <>
                   <TextInput
@@ -1698,7 +1791,43 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   lowStockBadgeText: { fontSize: 11, fontWeight: '700', color: '#FFFFFF' },
-  inventoryStatsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  inventoryHero: { flexDirection: 'row', gap: 8 },
+  inventoryHeroTile: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderRadius: 14,
+    backgroundColor: 'rgba(125,90,80,0.08)',
+    gap: 2,
+  },
+  inventoryHeroValue: {
+    fontSize: 20,
+    lineHeight: 24,
+    fontWeight: '800',
+    fontVariant: ['tabular-nums'],
+    color: PRIMARY,
+  },
+  inventoryHeroValueLow: { color: '#C4453A' },
+  inventoryHeroLabel: {
+    fontSize: 11,
+    opacity: 0.7,
+    textAlign: 'center',
+  },
+  packageProgressBlock: { gap: 4 },
+  packageProgressTrack: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(125,90,80,0.12)',
+    overflow: 'hidden',
+  },
+  packageProgressFill: {
+    height: '100%',
+    borderRadius: 4,
+    backgroundColor: PRIMARY,
+  },
+  packageProgressFillLow: { backgroundColor: '#C4453A' },
+  packageProgressLabel: { fontSize: 12, opacity: 0.75, fontVariant: ['tabular-nums'] },
   inventoryStat: { fontSize: 13, opacity: 0.8 },
   usageSummaryRow: {
     flexDirection: 'row',
