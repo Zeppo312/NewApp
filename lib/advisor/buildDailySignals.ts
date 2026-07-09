@@ -15,12 +15,21 @@ import type { BabyInfo } from '@/lib/baby';
 import { buildFeedingOverview } from '@/lib/feedingOverview';
 import { loadAllVisibleSleepEntries } from '@/lib/sleepSharing';
 import { getBabyCareEntriesForDateRange } from '@/lib/supabase';
-import { getWeatherByCoordinates, type WeatherData } from '@/lib/weatherService';
+import {
+  getDailyForecastByCoordinates,
+  getWeatherByCoordinates,
+  type DailyForecast,
+  type WeatherData,
+} from '@/lib/weatherService';
 
 import type { DailySignals } from './types';
 
 const HOT_THRESHOLD_C = 27;
 const COLD_THRESHOLD_C = 5;
+/** Ab UV 5 greift die Sonnenschutz-Regel (Babyhaut braucht ab UV 3 Schutz). */
+const HIGH_UV_THRESHOLD = 5;
+/** Ab dieser Regenwahrscheinlichkeit (%) gilt der Tag als „regnerisch". */
+const RAIN_PROB_THRESHOLD = 60;
 
 const isSameDay = (a: Date, b: Date) =>
   a.getFullYear() === b.getFullYear() &&
@@ -92,8 +101,15 @@ const computeTodaySleepMinutes = (entries: any[] | undefined): number => {
   return total;
 };
 
-/** Wetter nur laden, wenn die Standortfreigabe bereits erteilt ist (kein Prompt). */
-const tryLoadWeather = async (): Promise<WeatherData | null> => {
+/**
+ * Wetter nur laden, wenn die Standortfreigabe bereits erteilt ist (kein Prompt).
+ * Lädt aktuelles Wetter (Beschreibung) UND den Tagesforecast (Tmax, UV-Index,
+ * Regenwahrscheinlichkeit) parallel; jede Quelle darf einzeln ausfallen.
+ */
+const tryLoadWeather = async (): Promise<{
+  current: WeatherData | null;
+  forecast: DailyForecast | null;
+} | null> => {
   try {
     const Location = await import('expo-location');
     const { status } = await Location.getForegroundPermissionsAsync();
@@ -102,7 +118,14 @@ const tryLoadWeather = async (): Promise<WeatherData | null> => {
     const coords =
       pos?.coords ?? (await Location.getCurrentPositionAsync({})).coords;
     if (!coords) return null;
-    return await getWeatherByCoordinates(coords.latitude, coords.longitude);
+    const [current, forecast] = await Promise.allSettled([
+      getWeatherByCoordinates(coords.latitude, coords.longitude),
+      getDailyForecastByCoordinates(coords.latitude, coords.longitude),
+    ]);
+    return {
+      current: current.status === 'fulfilled' ? current.value : null,
+      forecast: forecast.status === 'fulfilled' ? forecast.value : null,
+    };
   } catch {
     return null;
   }
@@ -146,6 +169,10 @@ const buildEmptySignals = (babyName: string): DailySignals => ({
     isHot: false,
     isCold: false,
     isReal: true,
+    uvIndex: null,
+    rainProbability: null,
+    isHighUv: false,
+    isRainy: false,
   },
 });
 
@@ -303,18 +330,33 @@ export const buildDailySignals = async (
   }
 
   // --- Wetter (nur echt; ohne Standortfreigabe bleibt es leer) ---
+  // Maßgeblich ist der TAGESforecast (Tmax, UV, Regen) — so warnt Lotti
+  // morgens vor dem heißen Nachmittag. Die aktuelle Messung liefert die
+  // schönere Beschreibung und dient als Fallback ohne Forecast.
   let weather = empty.weather;
   if (weatherResult.status === 'fulfilled' && weatherResult.value) {
-    const w = weatherResult.value;
-    weather = {
-      available: true,
-      temperature: w.temperature,
-      feelsLike: w.feelsLike,
-      description: w.description ?? '',
-      isHot: w.temperature >= HOT_THRESHOLD_C || w.feelsLike >= HOT_THRESHOLD_C + 2,
-      isCold: w.temperature <= COLD_THRESHOLD_C || w.feelsLike <= 0,
-      isReal: true,
-    };
+    const { current, forecast } = weatherResult.value;
+    const temperature = forecast?.tempMax ?? current?.temperature ?? null;
+    const feelsLike = forecast?.feelsLikeMax ?? current?.feelsLike ?? null;
+    if (temperature != null) {
+      const uvIndex = forecast?.uvIndexMax ?? null;
+      const rainProbability = forecast?.rainProbability ?? null;
+      weather = {
+        available: true,
+        temperature,
+        feelsLike,
+        description: current?.description || forecast?.description || '',
+        isHot:
+          temperature >= HOT_THRESHOLD_C ||
+          (feelsLike ?? -99) >= HOT_THRESHOLD_C + 2,
+        isCold: temperature <= COLD_THRESHOLD_C || (feelsLike ?? 99) <= 0,
+        isReal: true,
+        uvIndex,
+        rainProbability,
+        isHighUv: uvIndex != null && uvIndex >= HIGH_UV_THRESHOLD,
+        isRainy: rainProbability != null && rainProbability >= RAIN_PROB_THRESHOLD,
+      };
+    }
   }
 
   return {

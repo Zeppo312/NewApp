@@ -847,6 +847,22 @@ function getAgeProfile(ageInMonths: number | null): AgeProfile {
   );
 }
 
+/**
+ * Altersabhängiges Tages-Schlafziel in Minuten (aus AGE_PROFILES).
+ * Ohne (gültiges) Geburtsdatum wird der Fallback zurückgegeben.
+ */
+export function getDailySleepTargetMinutes(
+  birthdate: string | Date | null | undefined,
+  reference: Date = new Date(),
+  fallbackMinutes: number = 14 * 60
+): number {
+  const ageInMonths = getAgeInMonths(birthdate, reference);
+  if (ageInMonths === null) {
+    return fallbackMinutes;
+  }
+  return getAgeProfile(ageInMonths).dailyTargetMinutes;
+}
+
 function computeDailySleepStats(entries: NormalizedEntry[], reference: Date): {
   last24hMinutes: number;
   todayMinutes: number;

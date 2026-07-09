@@ -44,11 +44,10 @@ import { useConvex } from '@/contexts/ConvexContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { useSleepEntriesService } from '@/hooks/useSleepEntriesService';
 import { ProgressCircle } from '@/components/ProgressCircle';
-import type { ViewStyle } from 'react-native';
 import { GlassCard, LiquidGlassCard, LAYOUT_PAD, SECTION_GAP_TOP, SECTION_GAP_BOTTOM, RADIUS, PRIMARY, GLASS_BORDER, GLASS_OVERLAY, FONT_SM, FONT_MD, FONT_LG } from '@/constants/DesignGuide';
 import { getBabyInfo } from '@/lib/baby';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
-import { predictNextSleepWindow, updatePersonalizationAfterNap, initializePersonalization, type SleepWindowPrediction } from '@/lib/sleep-window';
+import { predictNextSleepWindow, updatePersonalizationAfterNap, initializePersonalization, getDailySleepTargetMinutes, type SleepWindowPrediction } from '@/lib/sleep-window';
 import { normalizeBedtimeAnchor } from '@/lib/bedtime';
 import { useNotifications } from '@/hooks/useNotifications';
 import { usePartnerNotifications } from '@/hooks/usePartnerNotifications';
@@ -80,8 +79,6 @@ import {
 import { splitNightSleepSegment } from '@/lib/sleepNightSplit';
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
-// Typografie helper
-const FONT_NUM = { fontVariant: ['tabular-nums'] };
 const QUALITY_VISUALS = {
   good: { color: '#7BBF9A', emoji: '😴' },
   medium: { color: '#F2C78A', emoji: '🙂' },
@@ -226,21 +223,12 @@ const COLS = 7;
 const GUTTER = 4; // weniger Abstand zwischen Spalten => mehr Netto-Breite
 const COL_WIDTH = Math.floor((contentWidth - (COLS - 1) * GUTTER) / COLS);
 const totalGutters = (COLS - 1) * GUTTER;
-const colsWidth = COLS * COL_WIDTH;
-const leftover = contentWidth - (colsWidth + totalGutters); // 0..(COLS-1)
 
 // Week-Chart spezifische Konstanten (wie Timeline)
 const WEEK_CONTENT_WIDTH = contentWidth - TIMELINE_INSET * 2;
 const WEEK_COL_WIDTH   = Math.floor((WEEK_CONTENT_WIDTH - (COLS - 1) * GUTTER) / COLS);
 const WEEK_COLS_WIDTH  = COLS * WEEK_COL_WIDTH;
 const WEEK_LEFTOVER    = WEEK_CONTENT_WIDTH - (WEEK_COLS_WIDTH + totalGutters);
-
-// Highlight-Karten Konstanten (2-Spalten Layout)
-const HL_COLS = 2;
-const HL_GUTTER = 12;
-const HL_COL_WIDTH = Math.floor((WEEK_CONTENT_WIDTH - (HL_COLS - 1) * HL_GUTTER) / HL_COLS);
-const HL_COLS_WIDTH = HL_COLS * HL_COL_WIDTH;
-const HL_LEFTOVER = WEEK_CONTENT_WIDTH - (HL_COLS_WIDTH + (HL_COLS - 1) * HL_GUTTER);
 
 // Action Buttons Konstanten (2-Spalten Layout)
 const GRID_COLS = 2;
@@ -904,7 +892,7 @@ const StatusMetricsBar = ({
   };
 
   const getHistoricalText = (): string | null => {
-    const historicalSampleCount = sleepPrediction
+    const historicalSampleCount = sleepPrediction?.debug
       ? toNumber(sleepPrediction.debug.historicalSampleCount, 0)
       : 0;
     if (!sleepPrediction || historicalSampleCount <= 0 || isNightSleepPrediction(sleepPrediction)) {
@@ -939,7 +927,7 @@ const StatusMetricsBar = ({
   const countdownText = getCountdownText();
   const historicalText = getHistoricalText();
   const historyText = historicalText ?? 'Noch zu wenig Daten für einen Trend';
-  const personalizationSamples = sleepPrediction
+  const personalizationSamples = sleepPrediction?.debug
     ? toNumber(sleepPrediction.debug.personalizationSampleCount, 0)
     : 0;
   const hasPersonalization = personalizationSamples > 0;
@@ -1180,17 +1168,13 @@ const convertSleepToDailyEntry = (
   const getSleepType = (startTime: string | Date, durationMinutes?: number) => {
     const date = new Date(startTime);
     const hour = date.getHours();
-    
-    // Nickerchen: max 30 Minuten
-    if (durationMinutes && durationMinutes <= 30) {
-      return 'nickerchen';
-    }
-    
+
     const inferredEnd = durationMinutes
       ? new Date(date.getTime() + durationMinutes * 60000)
       : null;
 
-    // Nachtschlaf: dynamisches, konfigurierbares Nachtfenster.
+    // Nachtschlaf zuerst prüfen: auch ein kurzes Segment (z.B. 20 Min um 2 Uhr)
+    // ist Nachtschlaf und kein Nickerchen.
     // Für längere Einträge zählt auch eine deutliche Überlappung mit dem Nachtfenster,
     // damit ein vor dem Fenster gestarteter Nachtschlaf nach dem Beenden nicht als Tagschlaf verschwindet.
     if (
@@ -1204,12 +1188,17 @@ const convertSleepToDailyEntry = (
     ) {
       return 'nacht';
     }
-    
+
+    // Nickerchen: max 30 Minuten
+    if (durationMinutes && durationMinutes <= 30) {
+      return 'nickerchen';
+    }
+
     // Mittagsschlaf: 12:00-14:59
     if (hour >= 12 && hour < 15) {
       return 'mittag';
     }
-    
+
     // Tagschlaf: außerhalb des Nachtfensters (außer Mittagszeit)
     return 'tag';
   };
@@ -1287,15 +1276,6 @@ const convertSleepToDailyEntry = (
     label: getSleepLabel(sleepType, sleepEntry.quality)
   };
 };
-
-// Manual entry modal data
-interface ManualEntryData {
-  start_time: Date;
-  end_time?: Date;
-  quality?: SleepQuality;
-  notes?: string;
-  period: SleepPeriod;
-}
 
 // LiquidGlassCard imported from DesignGuide
 
@@ -1451,7 +1431,6 @@ export default function SleepTrackerScreen() {
   // Splash System wie in daily_old.tsx
   const [splashVisible, setSplashVisible] = useState(false);
   const [splashBg, setSplashBg] = useState<string>('rgba(0,0,0,0.6)');
-  const [splashText, setSplashText] = useState<string>('Gespeichert');
   const splashAnim = useRef(new Animated.Value(0)).current;
   const splashEmojiAnim = useRef(new Animated.Value(0.9)).current;
   const splashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -2491,6 +2470,19 @@ export default function SleepTrackerScreen() {
     }
   };
 
+  // Refs auf die neuesten Handler: die Handler selbst sind nicht memoized (neue
+  // Identität pro Render). Effects/Callbacks greifen über die Refs zu, damit sie
+  // die Funktionen nicht in ihren Dependency-Arrays brauchen und nicht bei jedem
+  // Render neu laufen (gleiches Muster wie loadSleepDataRef).
+  const handleStartSleepRef = useRef(handleStartSleep);
+  handleStartSleepRef.current = handleStartSleep;
+  const handleStopSleepRef = useRef(handleStopSleep);
+  handleStopSleepRef.current = handleStopSleep;
+  const handlePauseNightSleepRef = useRef(handlePauseNightSleep);
+  handlePauseNightSleepRef.current = handlePauseNightSleep;
+  const handleFinalizePausedNightRef = useRef(handleFinalizePausedNight);
+  handleFinalizePausedNightRef.current = handleFinalizePausedNight;
+
   const promptSleepQualityForStop = useCallback(() => {
     if (!ensureWritableInCurrentMode()) return;
     if (!activeSleepEntry?.id || isStoppingSleep) return;
@@ -2501,13 +2493,13 @@ export default function SleepTrackerScreen() {
       isNightStop ? 'Wie war die Schlafqualität insgesamt?' : 'Wie war die Schlafqualität?',
       [
         { text: 'Abbrechen', style: 'cancel' },
-        { text: 'Schlecht', onPress: () => void handleStopSleep('bad') },
-        { text: 'Mittel', onPress: () => void handleStopSleep('medium') },
-        { text: 'Gut', onPress: () => void handleStopSleep('good') },
+        { text: 'Schlecht', onPress: () => void handleStopSleepRef.current('bad') },
+        { text: 'Mittel', onPress: () => void handleStopSleepRef.current('medium') },
+        { text: 'Gut', onPress: () => void handleStopSleepRef.current('good') },
       ],
       { cancelable: true }
     );
-  }, [activeSleepEntry?.id, activeSleepEntry?.period, ensureWritableInCurrentMode, handleStopSleep, isStoppingSleep]);
+  }, [activeSleepEntry?.id, activeSleepEntry?.period, ensureWritableInCurrentMode, isStoppingSleep]);
 
   const promptSleepQualityForFinalizePausedNight = useCallback(() => {
     if (!ensureWritableInCurrentMode()) return;
@@ -2518,13 +2510,13 @@ export default function SleepTrackerScreen() {
       'Wie war die Schlafqualität insgesamt?',
       [
         { text: 'Abbrechen', style: 'cancel' },
-        { text: 'Schlecht', onPress: () => void handleFinalizePausedNight('bad') },
-        { text: 'Mittel', onPress: () => void handleFinalizePausedNight('medium') },
-        { text: 'Gut', onPress: () => void handleFinalizePausedNight('good') },
+        { text: 'Schlecht', onPress: () => void handleFinalizePausedNightRef.current('bad') },
+        { text: 'Mittel', onPress: () => void handleFinalizePausedNightRef.current('medium') },
+        { text: 'Gut', onPress: () => void handleFinalizePausedNightRef.current('good') },
       ],
       { cancelable: true }
     );
-  }, [ensureWritableInCurrentMode, handleFinalizePausedNight, isStoppingSleep, pausedNightState?.lastPausedEntryId]);
+  }, [ensureWritableInCurrentMode, isStoppingSleep, pausedNightState?.lastPausedEntryId]);
 
   useEffect(() => {
     if (liveStopRequestId === 0) return;
@@ -2572,14 +2564,13 @@ export default function SleepTrackerScreen() {
       return;
     }
 
-    void handlePauseNightSleep();
+    void handlePauseNightSleepRef.current();
   }, [
     activeSleepEntry?.id,
     activeSleepEntry?.period,
     isLiveStatusLoaded,
     isStoppingSleep,
     livePauseRequestId,
-    handlePauseNightSleep,
   ]);
 
   // Handle autoStart=1 from widget deep link — starts sleep if none is active
@@ -2596,11 +2587,10 @@ export default function SleepTrackerScreen() {
     const period = isNightSleepPrediction(sleepPrediction)
       ? 'night'
       : getSleepPeriodForStart(now, nightWindowSettings);
-    void handleStartSleep(period);
+    void handleStartSleepRef.current(period);
   }, [
     activeSleepEntry,
     autoStartRequestId,
-    handleStartSleep,
     isLiveStatusLoaded,
     isStartingSleep,
     nightWindowSettings,
@@ -3314,61 +3304,51 @@ export default function SleepTrackerScreen() {
       setSplashSubtitle('Gute Nacht, kleiner Schatz. Träum schön.');
       setSplashStatus('Timer gestartet...');
       setSplashHint('Du machst das großartig 🌙');
-      setSplashText('');
     } else if (kind === 'sleep_start_day') {
       setSplashTitle('Tagschlaf läuft');
       setSplashSubtitle('Kuschel-Nap – Energie tanken.');
       setSplashStatus('Timer gestartet...');
       setSplashHint('Erholung ist wichtig 💤');
-      setSplashText('');
     } else if (kind === 'sleep_pause_night') {
       setSplashTitle('Nachtschlaf pausiert');
       setSplashSubtitle('Aufwachphase wird nicht als Schlaf gezählt.');
       setSplashStatus('');
       setSplashHint('Wenn es weitergeht, einfach fortsetzen ⏸️');
-      setSplashText('');
     } else if (kind === 'sleep_stop_good') {
       setSplashTitle('Schlaf beendet');
       setSplashSubtitle('Guter Schlaf – perfekt erholt!');
       setSplashStatus('');
       setSplashHint('Ein weiterer Meilenstein heute ✨');
-      setSplashText('');
     } else if (kind === 'sleep_stop_medium') {
       setSplashTitle('Schlaf beendet');
       setSplashSubtitle('Okay geschlafen – das ist völlig normal.');
       setSplashStatus('');
       setSplashHint('Jeder Schlaf ist wertvoll 💕');
-      setSplashText('');
     } else if (kind === 'sleep_stop_bad') {
       setSplashTitle('Schlaf beendet');
       setSplashSubtitle('Unruhiger Schlaf – morgen wird besser.');
       setSplashStatus('');
       setSplashHint('Du gibst dein Bestes, das reicht 🤍');
-      setSplashText('');
     } else if (kind === 'sleep_manual_save') {
       setSplashTitle('Schlaf gespeichert');
       setSplashSubtitle('Eintrag erfolgreich hinzugefügt.');
       setSplashStatus('');
       setSplashHint('Danke für die genaue Aufzeichnung 💕');
-      setSplashText('');
     } else if (kind === 'sleep_edit_save') {
       setSplashTitle('Schlaf aktualisiert');
       setSplashSubtitle('Änderungen erfolgreich gespeichert.');
       setSplashStatus('');
       setSplashHint('Die Daten wurden aktualisiert ✏️');
-      setSplashText('');
     } else if (kind === 'sleep_split_save') {
       setSplashTitle('Segment aufgeteilt');
       setSplashSubtitle('Die Schlafphase wurde in zwei Blöcke geteilt.');
       setSplashStatus('');
       setSplashHint('Wachpause ist jetzt separat sichtbar ✂️');
-      setSplashText('');
     } else {
       setSplashTitle('Schlaf-Aktion');
       setSplashSubtitle('Erfolgreich ausgeführt.');
       setSplashStatus('');
       setSplashHint('Alles in Ordnung ✅');
-      setSplashText('');
     }
     setSplashVisible(true);
     // reset and animate in
@@ -3387,15 +3367,6 @@ export default function SleepTrackerScreen() {
       });
     }, 4500);
   };
-
-  // Group entries by period
-  const groupedEntries = sleepEntries.reduce((acc, entry) => {
-    if (!acc[entry.period]) {
-      acc[entry.period] = [];
-    }
-    acc[entry.period].push(entry);
-    return acc;
-  }, {} as Record<SleepPeriod, ClassifiedSleepEntry[]>);
 
   const stats = useMemo(() => {
     // Compute high-level stats & score (heutiger Kalendertag 00:00–24:00 lokal)
@@ -3430,24 +3401,20 @@ export default function SleepTrackerScreen() {
     const nightTotalMinutes = nightSessionGroup?.totalMinutes ?? 0;
     const nightSegmentCount = nightSessionGroup?.segments.length ?? 0;
 
-    // Beispiel-Score: 14h Ziel, lineare Abweichung (keine 100% bei 25h)
-    const target = 14 * 60;
+    // Score: altersabhängiges Tagesziel (AGE_PROFILES), lineare Abweichung (keine 100% bei 25h).
+    // Ohne Geburtsdatum fällt getDailySleepTargetMinutes auf 14h zurück.
+    const target = getDailySleepTargetMinutes(babyBirthdate, selectedDate);
     const deviation = Math.abs(totalMinutes - target);
     const score = Math.max(0, Math.round(100 - (deviation / target) * 100));
 
     return { totalMinutes, napsCount, longestStretch, score, nightTotalMinutes, nightSegmentCount };
-  }, [nightWindowSettings, selectedDate, sleepEntries]);
+  }, [babyBirthdate, nightWindowSettings, selectedDate, sleepEntries]);
 
   // Daily navigation helpers
   const goPrevDay = () => setSelectedDate(d => { const nd = new Date(d); nd.setDate(nd.getDate() - 1); return nd; });
   const goNextDay = () => setSelectedDate(d => { const nd = new Date(d); nd.setDate(nd.getDate() + 1); return nd; });
   const today = new Date();
   const nextDisabled = isSameDay(selectedDate, today) || selectedDate > today;
-
-  const qualityPillActive = (q: 'good' | 'medium' | 'bad'): ViewStyle => ({
-    backgroundColor:
-      q === 'good' ? 'rgba(56,161,105,0.25)' : q === 'medium' ? 'rgba(245,166,35,0.25)' : 'rgba(229,62,62,0.25)',
-  });
 
   // Einträge für den aktuell ausgewählten Tag (Tag-Ansicht)
   const dayEntries = useMemo(() => {
@@ -3932,15 +3899,16 @@ export default function SleepTrackerScreen() {
     );
   };
 
-  // Wochenansicht Component (Design Guide konform)
+  // Wochenansicht (als Render-Funktion aufgerufen, keine eigene Komponente:
+  // eine inline definierte Komponente würde bei jedem Parent-Render remounten)
   const WeekView = () => {
     // Referenz-Datum: Heute + (weekOffset * 7 Tage)
-    const refDate = useMemo(() => {
+    const refDate = (() => {
       const d = new Date();
       d.setDate(d.getDate() + weekOffset * 7);
       return d;
-    }, [weekOffset]);
-    
+    })();
+
     // Lokale Hilfsfunktionen
     const getWeekStart = (date: Date) => {
       const d = new Date(date);
@@ -3967,9 +3935,9 @@ export default function SleepTrackerScreen() {
       return days;
     };
     
-    const weekDays = useMemo(() => getWeekDays(refDate), [refDate]);
-    const weekStart = useMemo(() => getWeekStart(refDate), [refDate]);
-    const weekEnd = useMemo(() => getWeekEnd(refDate), [refDate]);
+    const weekDays = getWeekDays(refDate);
+    const weekStart = getWeekStart(refDate);
+    const weekEnd = getWeekEnd(refDate);
 
     // Hilfsfunktionen (lokaler Tag, kein UTC-Shift)
     const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -4148,16 +4116,16 @@ export default function SleepTrackerScreen() {
     );
   };
 
-  // Monatsansicht Component (Design Guide konform)
+  // Monatsansicht (als Render-Funktion aufgerufen, siehe WeekView)
   const MonthView = () => {
     // Referenz-Monat: aktueller Monat + monthOffset
-    const refMonthDate = useMemo(() => {
+    const refMonthDate = (() => {
       const d = new Date();
       d.setDate(1);                 // Normalize to first of month
       d.setMonth(d.getMonth() + monthOffset);
       return d;
-    }, [monthOffset]);
-    
+    })();
+
     // Lokale Hilfsfunktionen
     const getMonthStart = (date: Date) => {
       return new Date(date.getFullYear(), date.getMonth(), 1);
@@ -4173,21 +4141,18 @@ export default function SleepTrackerScreen() {
       return new Date(year, month + 1, 0).getDate();
     };
     
-    const monthStart = useMemo(() => getMonthStart(refMonthDate), [refMonthDate]);
-    const monthEnd = useMemo(() => getMonthEnd(refMonthDate), [refMonthDate]);
-    const monthRangeEnd = useMemo(
-      () => new Date(monthEnd.getFullYear(), monthEnd.getMonth(), monthEnd.getDate() + 1),
-      [monthEnd]
-    );
-    const daysInMonth = useMemo(() => getDaysInMonth(refMonthDate), [refMonthDate]);
-    const averageDayCount = useMemo(() => {
+    const monthStart = getMonthStart(refMonthDate);
+    const monthEnd = getMonthEnd(refMonthDate);
+    const monthRangeEnd = new Date(monthEnd.getFullYear(), monthEnd.getMonth(), monthEnd.getDate() + 1);
+    const daysInMonth = getDaysInMonth(refMonthDate);
+    const averageDayCount = (() => {
       const today = new Date();
       const isCurrentMonth =
         refMonthDate.getFullYear() === today.getFullYear() &&
         refMonthDate.getMonth() === today.getMonth();
 
       return isCurrentMonth ? today.getDate() : daysInMonth;
-    }, [daysInMonth, refMonthDate]);
+    })();
 
     // Erstelle Kalender-Grid - gruppiert nach Wochen (wie Wochenansicht)
     const getCalendarWeeks = () => {
@@ -4225,7 +4190,7 @@ export default function SleepTrackerScreen() {
       return weeks;
     };
 
-    const calendarWeeks = useMemo(() => getCalendarWeeks(), [monthStart, daysInMonth]);
+    const calendarWeeks = getCalendarWeeks();
 
     // Hilfsfunktionen für lokale Tage (kein UTC-Shift)
     const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -4510,8 +4475,8 @@ export default function SleepTrackerScreen() {
           onBackPress={() => router.push('/(tabs)/home')}
         />
 
-        {/* Top Tabs - über der Status Bar */}
-        <TopTabs />
+        {/* Top Tabs - über der Status Bar (Funktionsaufruf statt <TopTabs />, verhindert Remount bei jedem Render) */}
+        {TopTabs()}
 
         <ScrollView
           style={styles.scrollContainer}
@@ -4550,9 +4515,9 @@ export default function SleepTrackerScreen() {
           )}
 
           {selectedTab === 'week' ? (
-            <WeekView />
+            WeekView()
           ) : selectedTab === 'month' ? (
-            <MonthView />
+            MonthView()
           ) : (
             <>
               {/* Day Navigation - gleiche Position/Höhe wie Woche/Monat */}
@@ -4614,7 +4579,7 @@ export default function SleepTrackerScreen() {
                 <Text style={[styles.sectionTitle, styles.sectionTitleTight, { color: textSecondary }]}>Schlaferfassung</Text>
 
                 {/* Action Buttons - nur in Tag-Ansicht */}
-          <ActionButtons />
+                {ActionButtons()}
               </View>
 
               {/* Timeline Section - nur in Tag-Ansicht */}
@@ -6509,12 +6474,6 @@ const styles = StyleSheet.create({
   splashGif: {
     width: 170,
     height: 170,
-  },
-  splashText: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#fff',
-    textAlign: 'center',
   },
   splashCenterCard: {
     width: '100%',

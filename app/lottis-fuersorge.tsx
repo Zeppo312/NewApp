@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Alert,
   Animated,
   Easing,
   LayoutAnimation,
@@ -44,6 +45,10 @@ import {
   type AdvisorSettings,
 } from '@/lib/advisor/advisorStorage';
 import { buildDailySignals } from '@/lib/advisor/buildDailySignals';
+import {
+  registerForPushNotificationsAsync,
+  savePushToken,
+} from '@/lib/notificationService';
 import { generateAdvisorInsight } from '@/lib/advisor/generateInsight';
 import { buildMockAnalysis } from '@/lib/advisor/mockInsights';
 import type {
@@ -89,7 +94,14 @@ const chipsForInsight = (id: string): { emoji: string; label: string }[] => {
   const keys: AnalysisCard['key'][] = [];
   if (id.includes('feeding')) keys.push('feeding');
   if (id.includes('sleep')) keys.push('sleep');
-  if (id.includes('hot') || id.includes('cold')) keys.push('weather');
+  if (
+    id.includes('hot') ||
+    id.includes('cold') ||
+    id.includes('uv') ||
+    id.includes('rain')
+  ) {
+    keys.push('weather');
+  }
   if (id === 'all_good') keys.push('sleep', 'feeding');
   // Duplikate raus, max. zwei kompakte Chips.
   return Array.from(new Set(keys)).slice(0, 2).map((k) => TOPIC_CHIPS[k]);
@@ -388,6 +400,35 @@ export default function LottisFuersorgeScreen() {
     }
     setSettings(next);
     saveAdvisorSettings(next);
+  };
+
+  /**
+   * Push-Opt-in: Beim Einschalten System-Berechtigung anfordern und den
+   * Expo-Token registrieren; erst wenn beides klappt, wird das Opt-in
+   * gespeichert. Ausschalten wirkt sofort (advisor-daily prüft das Flag).
+   */
+  const [pushBusy, setPushBusy] = useState(false);
+  const togglePush = async () => {
+    if (!settings || pushBusy) return;
+    if (settings.pushEnabled) {
+      updateSettings({ ...settings, pushEnabled: false });
+      return;
+    }
+    setPushBusy(true);
+    try {
+      const token = await registerForPushNotificationsAsync();
+      if (!token) {
+        Alert.alert(
+          'Mitteilungen nicht möglich',
+          'Bitte erlaube Lotti Benachrichtigungen in den Systemeinstellungen. Ohne Erlaubnis kann Lotti dir keine Tageshinweise schicken.',
+        );
+        return;
+      }
+      await savePushToken(token);
+      updateSettings({ ...settings, pushEnabled: true });
+    } finally {
+      setPushBusy(false);
+    }
   };
 
   const toggleTheme = (theme: AdvisorCategory) => {
@@ -704,6 +745,32 @@ export default function LottisFuersorgeScreen() {
             adaptive={false}
             style={[styles.settingsGroupLabel, styles.settingsGroupSpacing]}
           >
+            Mitteilungen
+          </ThemedText>
+          <View style={styles.settingsRow}>
+            <Text style={styles.settingsEmoji}>🔔</Text>
+            <View style={styles.settingsLabelColumn}>
+              <ThemedText adaptive={false} style={styles.settingsLabel}>
+                Push für wichtige Hinweise
+              </ThemedText>
+              <ThemedText adaptive={false} style={styles.settingsHint}>
+                Max. 1 Nachricht am Tag, morgens gegen 8 Uhr – nie in deinen
+                stillen Zeiten ({settings.quietHoursStart}–{settings.quietHoursEnd} Uhr).
+              </ThemedText>
+            </View>
+            <Switch
+              value={settings.pushEnabled}
+              disabled={pushBusy}
+              onValueChange={togglePush}
+              trackColor={{ false: 'rgba(74,58,51,0.18)', true: BRAND_PURPLE_SOFT }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
+
+          <ThemedText
+            adaptive={false}
+            style={[styles.settingsGroupLabel, styles.settingsGroupSpacing]}
+          >
             Häufigkeit
           </ThemedText>
           <View style={styles.frequencyRow}>
@@ -727,6 +794,31 @@ export default function LottisFuersorgeScreen() {
                 </TouchableOpacity>
               );
             })}
+          </View>
+
+          {/* Datenschutz-Hinweis: was Lottis Fürsorge wohin überträgt. */}
+          <View style={styles.privacyBlock}>
+            <ThemedText adaptive={false} style={styles.privacyTitle}>
+              🛡️ Deine Daten
+            </ThemedText>
+            <ThemedText adaptive={false} style={styles.privacyText}>
+              Für den Wetterteil wird dein ungefährer Standort (auf ca. 1 km
+              gerundet) gespeichert und an den Wetterdienst Open-Meteo
+              übertragen – nie deine genaue Position. Für die persönliche
+              Formulierung gehen die Tageswerte (Schlaf, Mahlzeiten, Windeln,
+              Wetter) sowie Vorname und Alter deines Babys an einen
+              KI-Dienst. Alles lässt sich hier jederzeit abschalten.
+            </ThemedText>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => router.push('/datenschutz')}
+              style={styles.privacyLink}
+            >
+              <ThemedText adaptive={false} style={styles.privacyLinkText}>
+                Mehr in der Datenschutzerklärung
+              </ThemedText>
+              <IconSymbol name="chevron.right" size={12} color={BRAND_PURPLE} />
+            </TouchableOpacity>
           </View>
         </GlassCard>
       </View>
@@ -793,8 +885,12 @@ export default function LottisFuersorgeScreen() {
           <View style={styles.disclaimerWrap}>
             <IconSymbol name="info.circle" size={14} color={TEXT_TERTIARY} />
             <ThemedText style={styles.disclaimerText}>
-              Lottis Tipps ersetzen keinen medizinischen Rat. Im Zweifel Hebamme oder
-              Kinderärztin fragen.
+              Lottis Hinweise sind allgemeine Alltagstipps und ersetzen keinen
+              medizinischen Rat, keine Diagnose und keine Behandlung. Bei
+              Fieber, Trinkverweigerung, Teilnahmslosigkeit oder wenn du dir
+              unsicher bist: wende dich an deine Hebamme, Kinderarztpraxis
+              oder den ärztlichen Bereitschaftsdienst (116 117), im Notfall an
+              den Notruf 112.
             </ThemedText>
           </View>
         </ScrollView>
@@ -1053,6 +1149,8 @@ const styles = StyleSheet.create({
   },
   settingsEmoji: { fontSize: 17 },
   settingsLabel: { flex: 1, fontSize: 14.5, fontWeight: '600', color: TEXT_PRIMARY },
+  settingsLabelColumn: { flex: 1, gap: 2 },
+  settingsHint: { fontSize: 11.5, lineHeight: 15, color: TEXT_TERTIARY },
   frequencyRow: { flexDirection: 'row', gap: 8, marginTop: 4 },
   frequencyChip: {
     paddingHorizontal: 14,
@@ -1063,6 +1161,25 @@ const styles = StyleSheet.create({
   frequencyChipActive: { backgroundColor: BRAND_PURPLE },
   frequencyChipText: { fontSize: 13, fontWeight: '700', color: BRAND_PURPLE },
   frequencyChipTextActive: { color: '#FFFFFF' },
+
+  /* Datenschutz-Hinweis in den Einstellungen */
+  privacyBlock: {
+    marginTop: 18,
+    paddingTop: 14,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(74,58,51,0.12)',
+    gap: 6,
+  },
+  privacyTitle: { fontSize: 12.5, fontWeight: '800', color: TEXT_PRIMARY },
+  privacyText: { fontSize: 12, lineHeight: 17, color: TEXT_SECONDARY },
+  privacyLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    alignSelf: 'flex-start',
+    marginTop: 2,
+  },
+  privacyLinkText: { fontSize: 12.5, fontWeight: '700', color: BRAND_PURPLE },
 
   /* Zugriffs-Gate */
   gateWrap: { paddingHorizontal: 20, paddingTop: 24 },

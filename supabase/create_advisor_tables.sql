@@ -105,3 +105,7 @@ ALTER TABLE public.advisor_settings
   ADD COLUMN IF NOT EXISTS longitude           DOUBLE PRECISION,
   ADD COLUMN IF NOT EXISTS location_updated_at TIMESTAMPTZ,
   ADD COLUMN IF NOT EXISTS ai_enabled          BOOLEAN NOT NULL DEFAULT TRUE;
+
+-- Explizites Push-Opt-in (Default AUS) — advisor-daily pusht nur bei TRUE:
+ALTER TABLE public.advisor_settings
+  ADD COLUMN IF NOT EXISTS push_enabled BOOLEAN NOT NULL DEFAULT FALSE;

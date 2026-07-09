@@ -67,6 +67,11 @@ export interface RuleSignals {
     isHot: boolean;
     isCold: boolean;
     isReal: boolean;
+    /* Tagesforecast-Felder — optional (abwärtskompatibel zu alten Clients). */
+    uvIndex?: number | null;
+    rainProbability?: number | null;
+    isHighUv?: boolean;
+    isRainy?: boolean;
   };
 }
 
@@ -200,6 +205,14 @@ export const evaluateRules = (s: RuleSignals): RuleCandidate[] => {
     hoursSince > expectedIntervalH * 1.3 &&
     mode !== 'solids';
 
+  // Tagesforecast: UV & Regen (Fallback-Schwellen, falls der Client die
+  // Flags noch nicht liefert). Babyhaut braucht ab UV 3 Schutz; die eigene
+  // Regel greift ab UV 5.
+  const uvIndex = s.weather.uvIndex ?? null;
+  const highUv = s.weather.isHighUv ?? (uvIndex != null && uvIndex >= 5);
+  const rainProb = s.weather.rainProbability ?? null;
+  const rainy = s.weather.isRainy ?? (rainProb != null && rainProb >= 60);
+
   const baseFacts = {
     ageMonths: s.ageMonths,
     feedingsToday: s.feeding.totalCount,
@@ -212,6 +225,8 @@ export const evaluateRules = (s: RuleSignals): RuleCandidate[] => {
     sleepTypical: sleepRef,
     temperature: s.weather.temperature,
     feelsLike: s.weather.feelsLike,
+    uvIndex,
+    rainProbability: rainProb,
   };
 
   const candidates: RuleCandidate[] = [];
@@ -284,10 +299,59 @@ export const evaluateRules = (s: RuleSignals): RuleCandidate[] => {
       body: `Heute wird es warm (${temp(s)}). Halte ${name} aus der direkten Sonne, denk an leichte, luftige Kleidung – und biete ruhig etwas öfter ${offerPhrase(mode)} an.`,
       coreContent:
         'Direkte Sonne meiden, dünne lange Kleidung, Räume kühl halten. ' +
-        hydrationCore(mode, under6Months),
+        hydrationCore(mode, under6Months) +
+        (highUv && uvIndex != null
+          ? ` Zusätzlich ist der UV-Index heute hoch (${uvIndex}): Schatten, Sonnenhut, Mittagssonne meiden.`
+          : ''),
       reasons: [
         `Wetter heute: warm (${temp(s)})`,
+        ...(uvIndex != null && uvIndex >= 3 ? [`UV-Index heute bis ${uvIndex}`] : []),
         `Alter berücksichtigt: ${s.ageText || 'unbekannt'}`,
+      ],
+      facts: baseFacts,
+    });
+  }
+
+  // 4.2 Hoher UV-Index (auch ohne Hitze — Frühling/Berge/klarer Himmel)
+  if (highUv && uvIndex != null) {
+    candidates.push({
+      ruleId: 'high_uv',
+      priority: 2,
+      category: 'weather',
+      tone: 'gentle',
+      emoji: '🧴',
+      title: 'Heute wichtig',
+      headline: 'Heute an Sonnenschutz denken',
+      body: `Der UV-Index steigt heute auf ${uvIndex} – für Babyhaut ist das viel. Schatten, Sonnenhut und leichte, lange Kleidung schützen ${name} am besten; die Mittagssonne lieber meiden.`,
+      coreContent:
+        `Hoher UV-Index (heute bis ${uvIndex}). Babys im ersten Jahr nicht in die direkte Sonne: Schatten, Sonnenhut, dünne lange Kleidung. Mittagszeit (11–15 Uhr) draußen meiden.` +
+        (under6Months
+          ? ' Sonnencreme wird unter 6 Monaten nicht empfohlen — Schatten und Kleidung sind der beste Schutz.'
+          : ' Freie Hautstellen mit Baby-Sonnencreme (LSF 50) schützen.'),
+      reasons: [
+        `UV-Index heute bis ${uvIndex} (ab 3 braucht Babyhaut Schutz)`,
+        `Alter berücksichtigt: ${s.ageText || 'unbekannt'}`,
+      ],
+      facts: baseFacts,
+    });
+  }
+
+  // 4.4 Regen wahrscheinlich — praktischer Tageshinweis
+  if (rainy && rainProb != null && !s.weather.isHot) {
+    candidates.push({
+      ruleId: 'rain_likely',
+      priority: 4,
+      category: 'weather',
+      tone: 'neutral',
+      emoji: '🌧️',
+      title: 'Für heute gut zu wissen',
+      headline: 'Heute Regen einplanen',
+      body: `Für heute sind ${Math.round(rainProb)} % Regenwahrscheinlichkeit gemeldet. Pack für unterwegs den Regenschutz für den Kinderwagen ein – oder macht es euch drinnen gemütlich.`,
+      coreContent:
+        `Regenwahrscheinlichkeit heute ${Math.round(rainProb)} %. Praktischer Hinweis: Regenverdeck/Regenschutz für Kinderwagen oder Trage einpacken, Spaziergang in eine trockenere Tageszeit legen. Kein Gesundheitsalarm.`,
+      reasons: [
+        `Regenwahrscheinlichkeit heute: ${Math.round(rainProb)} %`,
+        `Wetter heute: ${s.weather.description || 'wechselhaft'}`,
       ],
       facts: baseFacts,
     });

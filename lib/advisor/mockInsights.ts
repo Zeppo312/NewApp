@@ -54,11 +54,26 @@ const buildCards = (s: DailySignals): AnalysisCard[] => {
     },
     {
       key: 'weather',
-      emoji: s.weather.isHot ? '☀️' : s.weather.isCold ? '🥶' : '🌤️',
+      emoji: s.weather.isRainy
+        ? '🌧️'
+        : s.weather.isHot
+          ? '☀️'
+          : s.weather.isCold
+            ? '🥶'
+            : '🌤️',
       label: 'Wetter',
       value:
         s.weather.temperature != null ? `${s.weather.temperature}°` : '–',
-      caption: s.weather.description || 'Standort nötig',
+      caption:
+        [
+          s.weather.description || null,
+          s.weather.uvIndex != null ? `UV ${s.weather.uvIndex}` : null,
+          s.weather.rainProbability != null
+            ? `Regen ${Math.round(s.weather.rainProbability)} %`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(' · ') || 'Standort nötig',
       // Temperatur auf einer Skala von 0–40 °C.
       progress:
         s.weather.temperature != null ? clamp01(s.weather.temperature / 40) : 0,
@@ -130,6 +145,24 @@ const buildMainInsight = (s: DailySignals): { insight: AdvisorInsight; reasons: 
     };
   }
 
+  // 3b) Hoher UV-Index (Sonnenschutz auch ohne Hitze)
+  if (s.weather.isHighUv && s.weather.uvIndex != null) {
+    return {
+      insight: {
+        id: 'high_uv',
+        tone: 'gentle',
+        emoji: '🧴',
+        title: 'Heute wichtig',
+        headline: `Heute an Sonnenschutz denken`,
+        body: `Der UV-Index steigt heute auf ${s.weather.uvIndex} – für Babyhaut ist das viel. Schatten, Sonnenhut und leichte, lange Kleidung schützen ${name} am besten; die Mittagssonne lieber meiden.`,
+      },
+      reasons: [
+        `UV-Index heute bis ${s.weather.uvIndex} (ab 3 braucht Babyhaut Schutz)`,
+        `Alter berücksichtigt: ${s.ageText || 'unbekannt'}`,
+      ],
+    };
+  }
+
   // 4) Kälte
   if (s.weather.isCold) {
     return {
@@ -162,6 +195,24 @@ const buildMainInsight = (s: DailySignals): { insight: AdvisorInsight; reasons: 
       reasons: [
         'Heutiger Schlaf liegt unter eurem üblichen Schnitt',
         'Schlafmuster der letzten Tage',
+      ],
+    };
+  }
+
+  // 5b) Regen wahrscheinlich — praktischer Tageshinweis
+  if (s.weather.isRainy && s.weather.rainProbability != null) {
+    return {
+      insight: {
+        id: 'rain_likely',
+        tone: 'neutral',
+        emoji: '🌧️',
+        title: 'Für heute gut zu wissen',
+        headline: `Heute Regen einplanen`,
+        body: `Für heute sind ${Math.round(s.weather.rainProbability)} % Regenwahrscheinlichkeit gemeldet. Pack für unterwegs den Regenschutz für den Kinderwagen ein – oder macht es euch drinnen gemütlich.`,
+      },
+      reasons: [
+        `Regenwahrscheinlichkeit heute: ${Math.round(s.weather.rainProbability)} %`,
+        `Wetter heute: ${s.weather.description || 'wechselhaft'}`,
       ],
     };
   }

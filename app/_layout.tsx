@@ -689,6 +689,7 @@ function RootLayoutNav() {
         <Stack.Screen name="startup-message-admin" />
         <Stack.Screen name="pregnancy-stats" />
         <Stack.Screen name="shopping-list" />
+        <Stack.Screen name="prints-shop" />
         <Stack.Screen name="pregnancy-setup" />
         <Stack.Screen name="milestones" />
         <Stack.Screen name="wochenmoment" />

@@ -39,6 +39,8 @@ export interface AdvisorSettings {
   themes: AdvisorCategory[];
   quietHoursStart: number;
   quietHoursEnd: number;
+  /** Explizites Opt-in für Push-Hinweise (Default: aus). */
+  pushEnabled: boolean;
 }
 
 export const ALL_ADVISOR_THEMES: AdvisorCategory[] = [
@@ -54,6 +56,7 @@ export const DEFAULT_ADVISOR_SETTINGS: AdvisorSettings = {
   themes: [...ALL_ADVISOR_THEMES],
   quietHoursStart: 21,
   quietHoursEnd: 7,
+  pushEnabled: false,
 };
 
 /** Lokales Datum als YYYY-MM-DD (Gerätezeitzone). */
@@ -68,15 +71,23 @@ export const localDateString = (date = new Date()): string => {
 export const categoryForRule = (ruleId: string): AdvisorCategory => {
   if (ruleId.includes('feeding')) return 'feeding';
   if (ruleId.includes('sleep')) return 'sleep';
-  if (ruleId.includes('hot') || ruleId.includes('cold')) return 'weather';
+  if (
+    ruleId.includes('hot') ||
+    ruleId.includes('cold') ||
+    ruleId.includes('uv') ||
+    ruleId.includes('rain')
+  ) {
+    return 'weather';
+  }
   return 'motivation';
 };
 
 /** Priorität wie im Konzept: Kombi-Regeln schlagen Einzel-Regeln. */
 export const priorityForRule = (ruleId: string): number => {
   if (ruleId === 'hot_low_feeding' || ruleId === 'hot_low_sleep') return 1;
-  if (ruleId === 'hot' || ruleId === 'cold') return 2;
+  if (ruleId === 'hot' || ruleId === 'cold' || ruleId === 'high_uv') return 2;
   if (ruleId === 'low_sleep') return 3;
+  if (ruleId === 'rain_likely') return 4;
   return 5; // all_good & sonstige Motivation
 };
 
@@ -207,7 +218,9 @@ export const fetchAdvisorSettings = async (): Promise<AdvisorSettings> => {
   try {
     const { data, error } = await supabase
       .from('advisor_settings')
-      .select('enabled, frequency, themes, quiet_hours_start, quiet_hours_end')
+      .select(
+        'enabled, frequency, themes, quiet_hours_start, quiet_hours_end, push_enabled',
+      )
       .eq('user_id', userId)
       .maybeSingle();
     if (error || !data) return { ...DEFAULT_ADVISOR_SETTINGS };
@@ -220,6 +233,7 @@ export const fetchAdvisorSettings = async (): Promise<AdvisorSettings> => {
           : [...ALL_ADVISOR_THEMES],
       quietHoursStart: data.quiet_hours_start ?? 21,
       quietHoursEnd: data.quiet_hours_end ?? 7,
+      pushEnabled: data.push_enabled === true,
     };
   } catch {
     return { ...DEFAULT_ADVISOR_SETTINGS };
@@ -282,6 +296,7 @@ export const saveAdvisorSettings = async (
         themes: settings.themes,
         quiet_hours_start: settings.quietHoursStart,
         quiet_hours_end: settings.quietHoursEnd,
+        push_enabled: settings.pushEnabled,
         updated_at: new Date().toISOString(),
       },
       { onConflict: 'user_id' },

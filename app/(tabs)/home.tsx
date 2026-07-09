@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Animated, Easing, StyleSheet, ScrollView, View, TouchableOpacity, Text, SafeAreaView, StatusBar, Image, ActivityIndicator, RefreshControl, Alert, Platform, StyleProp, ViewStyle } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { CachedImage } from '@/components/CachedImage';
 import { usePathname, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useFocusEffect } from 'expo-router';
@@ -18,8 +17,12 @@ import { Canvas, RoundedRect, LinearGradient as SkiaLinearGradient, RadialGradie
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { supabase, addBabyCareEntry, getBabyCareEntriesForDate } from '@/lib/supabase';
 import { useAdvisorAccess } from '@/lib/advisor/access';
+import { useVoiceLogAccess } from '@/lib/voiceLog/access';
+import VoiceLogModal from '@/components/VoiceLogModal';
+import PremiumHighlights, {
+  type PremiumHighlightItem,
+} from '@/components/PremiumHighlights';
 import { fetchLowStockCount } from '@/lib/shopping';
-import { getRecommendations, LottiRecommendation } from '@/lib/supabase/recommendations';
 import { BlurView } from 'expo-blur';
 import ActivityInputModal from '@/components/ActivityInputModal';
 import NightWakePrompt from '@/components/NightWakePrompt';
@@ -146,10 +149,10 @@ const HOME_QUICK_ACCESS_CARDS: HomeQuickAccessCardConfig[] = [
   },
   {
     id: 'recommendations',
-    title: 'Lottis Empfehlungen',
-    description: 'Handverlesene Produkte',
-    iconName: 'star.fill',
-    destination: '/lottis-empfehlungen',
+    title: 'Lotti Baby Shop',
+    description: 'Prints shoppen',
+    iconName: 'bag.fill',
+    destination: '/prints-shop',
     cardBackgroundColor: 'rgba(255, 235, 200, 0.6)',
     iconBackgroundColor: 'rgba(255, 200, 120, 0.9)',
   },
@@ -615,16 +618,16 @@ export default function HomeScreen() {
   const router = useRouter();
   // Lottis Fürsorge: nur für Premiumtester/Admins sichtbar (später Premium-Abo).
   const advisorAccess = useAdvisorAccess();
+  // Sprach-Logging: gleiches Premium-Gating.
+  const voiceLogAccess = useVoiceLogAccess();
+  const [showVoiceLogModal, setShowVoiceLogModal] = useState(false);
   const DEFAULT_OVERVIEW_HEIGHT = 230;
-  const PRODUCT_ROTATION_INITIAL_DELAY_MS = 10000;
-  const PRODUCT_ROTATION_INTERVAL_MS = 20000;
   const OVERVIEW_ROTATION_INTERVAL_MS = 20000;
   const OVERVIEW_ROTATION_PAUSE_MS = 12000;
 
   const [dailyEntries, setDailyEntries] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [userName, setUserName] = useState("");
-  const [recommendations, setRecommendations] = useState<LottiRecommendation[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [lowStockCount, setLowStockCount] = useState(0);
   const [showInputModal, setShowInputModal] = useState(false);
@@ -635,11 +638,6 @@ export default function HomeScreen() {
   const [activeHomeTimerNow, setActiveHomeTimerNow] = useState(() => Date.now());
   const [showSleepModal, setShowSleepModal] = useState(false);
   const [sleepModalStart, setSleepModalStart] = useState(new Date());
-  const [recommendationImageRetryKey, setRecommendationImageRetryKey] = useState(0);
-  const [recommendationImageErrorCount, setRecommendationImageErrorCount] = useState(0);
-  const [recommendationImageFailed, setRecommendationImageFailed] = useState(false);
-  const MAX_IMAGE_RETRIES = 1;
-  const [productIndex, setProductIndex] = useState(0);
   const [overviewCarouselWidth, setOverviewCarouselWidth] = useState(0);
   const [overviewIndex, setOverviewIndex] = useState(0);
   const [overviewSummaryHeight, setOverviewSummaryHeight] = useState<number | null>(null);
@@ -658,10 +656,6 @@ export default function HomeScreen() {
   const overviewRotationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const overviewRotationPauseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isAutoScrollingRef = useRef(false);
-  const productIndexRef = useRef(0);
-  const productRotationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const productRotationCycleRef = useRef(0);
-  const imageRetryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const androidBlurProps =
     Platform.OS === 'android'
       ? { blurMethod: 'dimezisBlurView' as const, blurReductionFactor: 1 }
@@ -694,9 +688,6 @@ export default function HomeScreen() {
     [hiddenQuickAccessIdSet, quickAccessCardById, quickAccessOrder],
   );
 
-  const rotationCandidates = recommendations;
-
-  const featuredRecommendation = rotationCandidates[productIndex] ?? null;
   const triggerHaptic = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
   };
@@ -794,19 +785,6 @@ export default function HomeScreen() {
     void persistQuickAccessHiddenIds([]);
   }, [hiddenQuickAccessIds.length, persistQuickAccessHiddenIds]);
 
-  const buildImageUri = (imageUrl?: string | null, retryKey = recommendationImageRetryKey) => {
-    if (!imageUrl) return '';
-    if (retryKey <= 0) return imageUrl;
-    return `${imageUrl}${imageUrl.includes('?') ? '&' : '?'}r=${retryKey}`;
-  };
-
-  const getPreviewText = (value?: string | null, limit = 10) => {
-    if (!value) return '';
-    const words = value.trim().split(/\s+/).filter(Boolean);
-    if (words.length <= limit) return value.trim();
-    return `${words.slice(0, limit).join(' ')}...`;
-  };
-
   const loadLocalProfileName = useCallback(async () => {
     if (!user?.id) {
       setUserName('');
@@ -824,69 +802,8 @@ export default function HomeScreen() {
   );
 
   useEffect(() => {
-    if (featuredRecommendation?.image_url) {
-      Image.prefetch(featuredRecommendation.image_url).catch(() => {});
-    }
-  }, [featuredRecommendation?.image_url]);
-
-  useEffect(() => {
-    setRecommendationImageRetryKey(0);
-    setRecommendationImageErrorCount(0);
-    setRecommendationImageFailed(false);
-    if (imageRetryTimeoutRef.current) {
-      clearTimeout(imageRetryTimeoutRef.current);
-      imageRetryTimeoutRef.current = null;
-    }
-  }, [featuredRecommendation?.id, featuredRecommendation?.image_url]);
-
-  useEffect(() => {
-    productIndexRef.current = productIndex;
-  }, [productIndex]);
-
-  useEffect(() => {
     overviewIndexRef.current = overviewIndex;
   }, [overviewIndex]);
-
-  useEffect(() => {
-    productIndexRef.current = 0;
-    setProductIndex(0);
-    productRotationCycleRef.current = 0;
-  }, [rotationCandidates]);
-
-  useEffect(() => {
-    if (rotationCandidates.length <= 1) {
-      if (productRotationTimeoutRef.current) {
-        clearTimeout(productRotationTimeoutRef.current);
-        productRotationTimeoutRef.current = null;
-      }
-      productRotationCycleRef.current = 0;
-      return;
-    }
-
-    const scheduleNextRotation = () => {
-      const delay =
-        productRotationCycleRef.current === 0
-          ? PRODUCT_ROTATION_INITIAL_DELAY_MS
-          : PRODUCT_ROTATION_INTERVAL_MS;
-
-      productRotationTimeoutRef.current = setTimeout(() => {
-        const nextIndex = (productIndexRef.current + 1) % rotationCandidates.length;
-        productIndexRef.current = nextIndex;
-        setProductIndex(nextIndex);
-        productRotationCycleRef.current += 1;
-        scheduleNextRotation();
-      }, delay);
-    };
-
-    scheduleNextRotation();
-
-    return () => {
-      if (productRotationTimeoutRef.current) {
-        clearTimeout(productRotationTimeoutRef.current);
-        productRotationTimeoutRef.current = null;
-      }
-    };
-  }, [rotationCandidates, PRODUCT_ROTATION_INITIAL_DELAY_MS, PRODUCT_ROTATION_INTERVAL_MS]);
 
   useEffect(() => {
     let isActive = true;
@@ -1085,7 +1002,6 @@ export default function HomeScreen() {
         // Zeige sofort gecachte Daten für instant load
         if (cachedData.dailyEntries) setDailyEntries(cachedData.dailyEntries);
         if (cachedData.todaySleepMinutes !== undefined) setTodaySleepMinutes(cachedData.todaySleepMinutes);
-        if (cachedData.recommendations) setRecommendations(cachedData.recommendations);
 
         // Wenn Cache frisch ist (< 5 Min), beende Loading sofort
         if (isCacheFresh(cachedData.lastUpdate) && !refreshing) {
@@ -1119,20 +1035,10 @@ export default function HomeScreen() {
       const activeDailyTimer = await loadActiveDailyTimer();
       setActiveHomeTimer(pickLatestHomeTimer(activeSleepTimer, activeDailyTimer));
 
-      let freshRecommendations: any[] = [];
-      try {
-        const recommendationData = await getRecommendations();
-        freshRecommendations = recommendationData;
-        setRecommendations(recommendationData);
-      } catch (error) {
-        console.error('Error loading recommendations:', error);
-      }
-
       // 🆕 Speichere frische Daten im Cache für nächstes Mal
       await cacheHomeData({
         dailyEntries: freshDailyEntries,
         todaySleepMinutes: freshSleepMinutes,
-        recommendations: freshRecommendations,
       }, homeCacheScope);
     } catch (err) {
       console.error('Failed to load home data:', err);
@@ -1452,16 +1358,21 @@ export default function HomeScreen() {
     }
   };
 
-  const handleFocusRecommendation = (recommendationId?: string | null) => {
+  // Nach dem Sprach-Logging alles neu laden, was betroffen sein kann
+  // (Alltag-Einträge und die Schlafminuten der Home-Kachel).
+  const handleVoiceLogSaved = async () => {
+    await loadDailyEntriesOnly();
+    const today = new Date();
+    const startOfDay = new Date(today);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(today);
+    endOfDay.setHours(23, 59, 59, 999);
+    await fetchTodaySleepMinutes(startOfDay, endOfDay);
+  };
+
+  const handleFocusRecommendation = () => {
     triggerHaptic();
-    if (!recommendationId) {
-      router.push('/lottis-empfehlungen');
-      return;
-    }
-    router.push({
-      pathname: '/lottis-empfehlungen',
-      params: { focusId: recommendationId },
-    });
+    router.push('/prints-shop' as any);
   };
   // Rendere den Begrüßungsbereich
   const renderGreetingSection = () => {
@@ -1757,50 +1668,12 @@ export default function HomeScreen() {
     );
   };
 
-  const handleRecommendationImageError = () => {
-    setRecommendationImageErrorCount((prev) => {
-      if (prev >= MAX_IMAGE_RETRIES) {
-        setRecommendationImageFailed(true);
-        return prev;
-      }
-      const next = prev + 1;
-      if (imageRetryTimeoutRef.current) {
-        clearTimeout(imageRetryTimeoutRef.current);
-      }
-      imageRetryTimeoutRef.current = setTimeout(() => {
-        setRecommendationImageRetryKey((key) => key + 1);
-      }, 600);
-      return next;
-    });
-  };
-
-  const handleRecommendationImageLoadStart = () => {
-    if (recommendationImageRetryKey >= MAX_IMAGE_RETRIES) return;
-    if (imageRetryTimeoutRef.current) {
-      clearTimeout(imageRetryTimeoutRef.current);
-    }
-    imageRetryTimeoutRef.current = setTimeout(() => {
-      if (!recommendationImageFailed) {
-        setRecommendationImageRetryKey((key) => key + 1);
-      }
-    }, 1500);
-  };
-
-  const handleRecommendationImageLoad = () => {
-    if (imageRetryTimeoutRef.current) {
-      clearTimeout(imageRetryTimeoutRef.current);
-      imageRetryTimeoutRef.current = null;
-    }
-    setRecommendationImageFailed(false);
-  };
-
   const renderRecommendationCard = (wrapperStyle?: StyleProp<ViewStyle>) => {
     const cardHeightStyle = {
       height: overviewSummaryHeight ?? DEFAULT_OVERVIEW_HEIGHT,
     };
-    const buttonLabel = 'Mehr';
-    const showRecommendationImage = Boolean(featuredRecommendation?.image_url) && !recommendationImageFailed;
-    const imageUri = buildImageUri(featuredRecommendation?.image_url);
+    const buttonLabel = 'Shop';
+    const showShopCard = true;
 
     return (
       <View style={[styles.liquidGlassWrapper, wrapperStyle, cardHeightStyle]}>
@@ -1820,41 +1693,34 @@ export default function HomeScreen() {
             lightColor="rgba(255, 255, 255, 0.04)"
             darkColor="rgba(255, 255, 255, 0.02)"
           >
-            {featuredRecommendation ? (
+            {showShopCard ? (
               <View style={styles.recommendationCard}>
                 <View style={styles.sectionTitleContainer}>
                   <ThemedText adaptive={false} style={[styles.sectionTitle, styles.liquidGlassText, { color: textPrimary, fontSize: 22 }]}>
-                    Lottis Empfehlungen
+                    Lotti Baby Shop
                   </ThemedText>
                   <View style={[styles.liquidGlassChevron, styles.recommendationHeaderSpacer]} />
                 </View>
                 <TouchableOpacity
                   style={styles.recommendationInnerCard}
-                  onPress={() => handleFocusRecommendation(featuredRecommendation.id)}
+                  onPress={handleFocusRecommendation}
                   activeOpacity={0.9}
                 >
                   <View style={styles.recommendationRow}>
                     <View style={styles.recommendationImagePane}>
-                      {showRecommendationImage ? (
-                        <CachedImage
-                          key={`${featuredRecommendation.id}-${recommendationImageRetryKey}`}
-                          uri={imageUri}
-                          style={styles.recommendationImage}
-                          showLoader={false}
-                        />
-                      ) : (
-                        <View style={styles.recommendationImageFallback}>
-                          <IconSymbol name="bag.fill" size={22} color={textPrimary} />
-                        </View>
-                      )}
+                      <Image
+                        source={require('../../assets/images/lotti-baby-shop-hero.png')}
+                        style={styles.recommendationImage}
+                        resizeMode="cover"
+                      />
                     </View>
                     <View style={styles.recommendationContentPane}>
                       <View style={styles.recommendationTextWrap}>
                         <ThemedText adaptive={false} style={[styles.recommendationTitle, { color: textPrimary }]}>
-                          {featuredRecommendation.title}
+                          Prints zum Aufbügeln
                         </ThemedText>
                         <ThemedText adaptive={false} style={[styles.recommendationDescription, { color: isDark ? Colors.dark.textSecondary : 'rgba(125, 90, 80, 0.88)' }]}>
-                          {getPreviewText(featuredRecommendation.description, 10)}
+                          Lieblingsmotiv wählen und direkt bestellen
                         </ThemedText>
                       </View>
                       <View style={styles.recommendationButton}>
@@ -1870,14 +1736,14 @@ export default function HomeScreen() {
               <View style={styles.recommendationEmptyWrapper}>
                 <View style={styles.sectionTitleContainer}>
                   <ThemedText adaptive={false} style={[styles.sectionTitle, styles.liquidGlassText, { color: textPrimary, fontSize: 22 }]}>
-                    Lottis Empfehlungen
+                    Lotti Baby Shop
                   </ThemedText>
                   <View style={[styles.liquidGlassChevron, styles.recommendationHeaderSpacer]} />
                 </View>
                 <View style={styles.recommendationEmpty}>
                   <IconSymbol name="bag.fill" size={20} color={textSecondary} />
                   <ThemedText adaptive={false} style={[styles.recommendationEmptyText, { color: textSecondary }]}>
-                    Noch keine Empfehlungen verfügbar.
+                    Prints ansehen und bestellen.
                   </ThemedText>
                 </View>
               </View>
@@ -1952,52 +1818,28 @@ export default function HomeScreen() {
     </View>
   );
 
-  const renderAdvisorEntry = () => (
-    <TouchableOpacity
-      activeOpacity={0.9}
-      onPress={() => handleNavigate('/lottis-fuersorge')}
-      style={[styles.liquidGlassWrapper, styles.advisorEntryWrapper]}
-    >
-      <BlurView
-        intensity={22}
-        tint={colorScheme === 'dark' ? 'dark' : 'light'}
-        style={[styles.liquidGlassBackground, { backgroundColor: glassBlurBg }]}
-      >
-        <View
-          style={[
-            styles.advisorEntryContainer,
-            styles.liquidGlassContainer,
-            { backgroundColor: glassCardBg },
-          ]}
-        >
-          <View style={styles.advisorEntryIcon}>
-            <Text style={styles.advisorEntryEmoji}>🌿</Text>
-          </View>
-          <View style={styles.advisorEntryTextWrap}>
-            <View style={styles.advisorEntryTitleRow}>
-              <ThemedText
-                adaptive={false}
-                style={[styles.advisorEntryTitle, { color: accentPurple }]}
-              >
-                Lottis Fürsorge
-              </ThemedText>
-              <View style={styles.advisorEntryBadge}>
-                <Text style={styles.advisorEntryBadgeText}>Premium</Text>
-              </View>
-            </View>
-            <ThemedText
-              adaptive={false}
-              numberOfLines={2}
-              style={[styles.advisorEntrySubtitle, { color: textSecondary }]}
-            >
-              Persönliche Hinweise aus Schlaf, Wetter & Ernährung
-            </ThemedText>
-          </View>
-          <IconSymbol name="chevron.right" size={20} color={textSecondary} />
-        </View>
-      </BlurView>
-    </TouchableOpacity>
-  );
+  const renderPremiumSection = () => {
+    const items: PremiumHighlightItem[] = [];
+    if (advisorAccess === true) {
+      items.push({
+        key: 'advisor',
+        emoji: '🌿',
+        title: 'Lottis Fürsorge',
+        subtitle: 'Persönliche Hinweise aus Schlaf, Wetter & Ernährung',
+        onPress: () => handleNavigate('/lottis-fuersorge'),
+      });
+    }
+    if (voiceLogAccess === true) {
+      items.push({
+        key: 'voice-log',
+        emoji: '🎙️',
+        title: 'Per Sprache eintragen',
+        subtitle: 'Schlaf, Füttern & Windeln einsprechen',
+        onPress: () => setShowVoiceLogModal(true),
+      });
+    }
+    return <PremiumHighlights items={items} />;
+  };
 
   const renderQuickAccessCard = (
     item: HomeQuickAccessCardConfig,
@@ -2290,7 +2132,7 @@ export default function HomeScreen() {
           >
             {renderGreetingSection()}
             {renderOverviewSection()}
-            {advisorAccess === true ? renderAdvisorEntry() : null}
+            {renderPremiumSection()}
             {renderQuickAccessCards()}
           </ScrollView>
         )}
@@ -2312,6 +2154,15 @@ export default function HomeScreen() {
           initialStart={sleepModalStart}
           onClose={() => setShowSleepModal(false)}
           onSave={handleSaveSleepQuickEntry}
+        />
+        <VoiceLogModal
+          visible={showVoiceLogModal}
+          userId={user?.id}
+          babyId={activeBabyId}
+          onClose={() => setShowVoiceLogModal(false)}
+          onSaved={() => {
+            void handleVoiceLogSaved();
+          }}
         />
         <NightWakePrompt
           visible={nightWakePromptVisible}
@@ -2359,55 +2210,6 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderRadius: 22,
     overflow: 'hidden',
-  },
-  advisorEntryWrapper: {
-    marginTop: 4,
-  },
-  advisorEntryContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    paddingVertical: 16,
-    paddingHorizontal: 18,
-  },
-  advisorEntryIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(94, 61, 179, 0.12)',
-  },
-  advisorEntryEmoji: {
-    fontSize: 24,
-  },
-  advisorEntryTextWrap: {
-    flex: 1,
-  },
-  advisorEntryTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 2,
-  },
-  advisorEntryTitle: {
-    fontSize: 17,
-    fontWeight: '800',
-  },
-  advisorEntryBadge: {
-    backgroundColor: 'rgba(94, 61, 179, 0.14)',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 999,
-  },
-  advisorEntryBadgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#5E3DB3',
-  },
-  advisorEntrySubtitle: {
-    fontSize: 13,
-    lineHeight: 18,
   },
   greetingCardWrapper: {
     borderRadius: 30,

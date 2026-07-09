@@ -10,17 +10,18 @@
  *   – kein Streak-Verlust, kein Druck, kein Konfetti.
  */
 
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Animated,
   Easing,
   Image,
-  ImageSourcePropType,
   Platform,
+  Pressable,
   StyleSheet,
   TouchableOpacity,
   View,
-  ViewStyle,
+  type GestureResponderEvent,
+  type ViewStyle,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { useRouter } from 'expo-router';
@@ -30,6 +31,10 @@ import { Colors } from '@/constants/Colors';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { useLottiWeek } from '@/hooks/useLottiWeek';
 import { useLottiLevel } from '@/hooks/useLottiLevel';
+import { useWeekHeartsClaim } from '@/hooks/useWeekHeartsClaim';
+import { useLottiAvatarChoice } from '@/hooks/useLottiAvatarChoice';
+import { LEVEL_BABY_IMAGES, babyImageForLevel } from '@/lib/lottiBabyImages';
+import { getWochenkarteMood, WochenkarteStory } from '@/components/WochenkarteStory';
 
 const POINTS_NOUN = 'Herzen'; // UI-Bezeichnung für Lotti-Punkte (austauschbar)
 
@@ -37,39 +42,6 @@ const ACCENT_PURPLE = '#5E3DB3';
 const PLACEHOLDER_SIZE = 64;
 const DAY_LABELS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
 const DAY_COUNT = 7;
-
-const LEVEL_BABY_IMAGES: readonly ImageSourcePropType[] = [
-  require('@/assets/images/LottiBaby_Babys/1.jpg'),
-  require('@/assets/images/LottiBaby_Babys/2.jpg'),
-  require('@/assets/images/LottiBaby_Babys/3.jpg'),
-  require('@/assets/images/LottiBaby_Babys/4.jpg'),
-  require('@/assets/images/LottiBaby_Babys/5.jpg'),
-  require('@/assets/images/LottiBaby_Babys/6.jpg'),
-  require('@/assets/images/LottiBaby_Babys/7.jpg'),
-  require('@/assets/images/LottiBaby_Babys/8.jpg'),
-  require('@/assets/images/LottiBaby_Babys/9.jpg'),
-  require('@/assets/images/LottiBaby_Babys/10.jpg'),
-  require('@/assets/images/LottiBaby_Babys/11.jpg'),
-  require('@/assets/images/LottiBaby_Babys/12.jpg'),
-  require('@/assets/images/LottiBaby_Babys/13.jpg'),
-  require('@/assets/images/LottiBaby_Babys/14.jpg'),
-  require('@/assets/images/LottiBaby_Babys/15.jpg'),
-  require('@/assets/images/LottiBaby_Babys/16.jpg'),
-  require('@/assets/images/LottiBaby_Babys/17.jpg'),
-  require('@/assets/images/LottiBaby_Babys/18.jpg'),
-  require('@/assets/images/LottiBaby_Babys/19.jpg'),
-  require('@/assets/images/LottiBaby_Babys/20.jpg'),
-  require('@/assets/images/LottiBaby_Babys/21.jpg'),
-  require('@/assets/images/LottiBaby_Babys/22.jpg'),
-  require('@/assets/images/LottiBaby_Babys/23.jpg'),
-  require('@/assets/images/LottiBaby_Babys/24.jpg'),
-  require('@/assets/images/LottiBaby_Babys/25.jpg'),
-  require('@/assets/images/LottiBaby_Babys/26.jpg'),
-  require('@/assets/images/LottiBaby_Babys/27.jpg'),
-  require('@/assets/images/LottiBaby_Babys/28.jpg'),
-  require('@/assets/images/LottiBaby_Babys/29.jpg'),
-  require('@/assets/images/LottiBaby_Babys/30.jpg'),
-];
 
 /**
  * Avatar-Zustände — gemäß Spec. Aktuell wählen wir ein zufälliges Bild aus
@@ -97,13 +69,13 @@ type CopySet = {
 function getCopy(isWeekComplete: boolean): CopySet {
   if (isWeekComplete) {
     return {
-      title: 'Eure Wochenkarte ist bereit 🤍',
-      cta: 'Anzeigen',
+      title: 'Euer Wochen-Review ist bereit 🤍',
+      cta: 'Details',
     };
   }
   return {
-    title: 'Lotti wächst mit euch 🤍',
-    cta: 'Anzeigen',
+    title: 'Lottis Wochenmoment 🤍',
+    cta: 'Details',
   };
 }
 
@@ -121,9 +93,23 @@ type Props = {
 
 export function LottiWeekCard({ style }: Props) {
   const router = useRouter();
+  const [storyVisible, setStoryVisible] = useState(false);
   const adaptiveColors = useAdaptiveColors();
-  const { days, activeDays, todayIndex } = useLottiWeek();
+  const {
+    days,
+    activeDays,
+    todayIndex,
+    weekStart,
+    weekEnd,
+    weekPoints,
+    counts,
+    totalSleepMinutes,
+    dayBuckets,
+    dayPoints,
+  } = useLottiWeek();
   const { totalPoints, level, levelJustIncreased } = useLottiLevel();
+  const { claimable } = useWeekHeartsClaim(weekStart, weekPoints);
+  const { chosenLevel } = useLottiAvatarChoice();
 
   const isDark =
     adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
@@ -163,17 +149,37 @@ export function LottiWeekCard({ style }: Props) {
     activeDays >= DAY_COUNT || (isSundayToday && activeDays >= 3);
 
   const copy = getCopy(isWeekComplete);
+  // Wartende Herzen machen den CTA zum Einsammel-Hinweis.
+  const ctaLabel = claimable > 0 ? `✨ ${claimable} einsammeln` : copy.cta;
+  const totalMoments = counts.feeding + counts.care + counts.sleep;
+  const mood = useMemo(() => getWochenkarteMood({ counts }), [counts]);
+  const reviewTitle =
+    totalMoments > 0 ? `${mood.word} · ${totalMoments} Momente` : 'Wochen-Review wartet';
+  const reviewSubtitle =
+    totalMoments > 0
+      ? `${activeDays}/7 Tage · +${weekPoints} ${POINTS_NOUN}`
+      : 'Sobald ihr trackt, entsteht hier euer Rückblick.';
 
   // Aktueller Avatar-Zustand — vorbereitet für spätere Lotti-Illus.
   const avatarState = pickAvatarStateFromActiveDays(activeDays, isWeekComplete);
 
-  const unlockedBabyImage = useMemo(
+  // Gewähltes Sammlungs-Bild hat Vorrang; sonst Zufall aus freigeschalteten.
+  const randomUnlockedImage = useMemo(
     () => pickUnlockedBabyImage(level.level),
     [level.level],
   );
+  const unlockedBabyImage =
+    chosenLevel !== null && chosenLevel <= level.level
+      ? babyImageForLevel(chosenLevel)
+      : randomUnlockedImage;
 
   const handlePress = () => {
     router.push('/wochenmoment' as any);
+  };
+
+  const handleStoryPress = (event?: GestureResponderEvent) => {
+    event?.stopPropagation?.();
+    setStoryVisible(true);
   };
 
   // Untertitel: Stufenname + Herzen. Stufe Nr. zeigt das Badge.
@@ -182,7 +188,7 @@ export function LottiWeekCard({ style }: Props) {
     : `${level.name} · ${totalPoints} / ${level.nextThreshold ?? '—'} ${POINTS_NOUN}`;
 
   // Progressbar-Animation
-  const progressAnim = useRef(new Animated.Value(0)).current;
+  const progressAnim = useMemo(() => new Animated.Value(0), []);
   useEffect(() => {
     Animated.timing(progressAnim, {
       toValue: level.progressFraction,
@@ -193,7 +199,7 @@ export function LottiWeekCard({ style }: Props) {
   }, [level.progressFraction, progressAnim]);
 
   // Sanfter Bounce/Blink des Avatars beim Laden.
-  const avatarScale = useRef(new Animated.Value(0.92)).current;
+  const avatarScale = useMemo(() => new Animated.Value(0.92), []);
   useEffect(() => {
     Animated.spring(avatarScale, {
       toValue: 1,
@@ -204,9 +210,9 @@ export function LottiWeekCard({ style }: Props) {
   }, [avatarScale]);
 
   // Level-Up-Glow: sanfter Halo + leichter Bounce des Badges.
-  const glowOpacity = useRef(new Animated.Value(0)).current;
-  const glowScale = useRef(new Animated.Value(0.6)).current;
-  const badgeBounce = useRef(new Animated.Value(1)).current;
+  const glowOpacity = useMemo(() => new Animated.Value(0), []);
+  const glowScale = useMemo(() => new Animated.Value(0.6), []);
+  const badgeBounce = useMemo(() => new Animated.Value(1), []);
 
   useEffect(() => {
     if (!levelJustIncreased) {
@@ -271,182 +277,245 @@ export function LottiWeekCard({ style }: Props) {
   }, [levelJustIncreased, glowOpacity, glowScale, badgeBounce]);
 
   return (
-    <TouchableOpacity
-      activeOpacity={0.9}
-      onPress={handlePress}
-      style={[styles.wrapper, style]}
-      accessibilityRole="button"
-      accessibilityLabel={`${copy.title}. ${subtitle}`}
-    >
-      <BlurView
-        {...(Platform.OS === 'android'
-          ? { blurMethod: 'dimezisBlurView' as const, blurReductionFactor: 1 }
-          : {})}
-        intensity={22}
-        tint={isDark ? 'dark' : 'light'}
-        style={[styles.blur, { backgroundColor: glassBlurBg }]}
+    <>
+      <TouchableOpacity
+        activeOpacity={0.9}
+        onPress={handlePress}
+        style={[styles.wrapper, style]}
+        accessibilityRole="button"
+        accessibilityLabel={`${copy.title}. ${subtitle}`}
       >
-        <View
-          style={[
-            styles.container,
-            { backgroundColor: glassContainerBg, borderColor: glassBorder },
-          ]}
+        <BlurView
+          {...(Platform.OS === 'android'
+            ? { blurMethod: 'dimezisBlurView' as const, blurReductionFactor: 1 }
+            : {})}
+          intensity={22}
+          tint={isDark ? 'dark' : 'light'}
+          style={[styles.blur, { backgroundColor: glassBlurBg }]}
         >
-          <View style={styles.row}>
-            <Animated.View
-              style={[
-                styles.avatarBlock,
-                { transform: [{ scale: avatarScale }] },
-              ]}
-              // data-avatar-state damit später Illustration leicht zu finden
-              accessibilityLabel={`Lotti-Avatar (${avatarState})`}
-            >
-              <View
+          <View
+            style={[
+              styles.container,
+              { backgroundColor: glassContainerBg, borderColor: glassBorder },
+            ]}
+          >
+            <View style={styles.row}>
+              <Animated.View
                 style={[
-                  styles.placeholder,
-                  { borderColor: avatarBorder },
+                  styles.avatarBlock,
+                  { transform: [{ scale: avatarScale }] },
                 ]}
+                // data-avatar-state damit später Illustration leicht zu finden
+                accessibilityLabel={`Lotti-Avatar (${avatarState})`}
               >
-                <Image
-                  source={unlockedBabyImage}
-                  style={styles.placeholderImage}
-                  resizeMode="cover"
-                />
-              </View>
-              <View style={styles.badgeAnchor} pointerEvents="none">
-                <Animated.View
-                  pointerEvents="none"
+                <View
                   style={[
-                    styles.levelGlow,
-                    {
-                      opacity: glowOpacity,
-                      transform: [{ scale: glowScale }],
-                    },
-                  ]}
-                />
-                <Animated.View
-                  style={[
-                    styles.levelBadge,
-                    {
-                      backgroundColor: ACCENT_PURPLE,
-                      borderColor: isDark
-                        ? 'rgba(20,18,28,0.85)'
-                        : 'rgba(255,255,255,0.95)',
-                      transform: [{ scale: badgeBounce }],
-                    },
+                    styles.placeholder,
+                    { borderColor: avatarBorder },
                   ]}
                 >
-                  <ThemedText adaptive={false} style={styles.levelBadgeText}>
-                    {level.level}
-                  </ThemedText>
-                </Animated.View>
-              </View>
-            </Animated.View>
-
-            <View style={styles.textBlock}>
-              <ThemedText
-                adaptive={false}
-                style={[styles.title, { color: textPrimary }]}
-                numberOfLines={2}
-              >
-                {copy.title}
-              </ThemedText>
-              <ThemedText
-                adaptive={false}
-                style={[styles.subtitle, { color: textSecondary }]}
-                numberOfLines={2}
-              >
-                {subtitle}
-              </ThemedText>
-
-              <View
-                style={[
-                  styles.progressTrack,
-                  { backgroundColor: progressTrackColor },
-                ]}
-              >
-                <Animated.View
-                  style={[
-                    styles.progressFill,
-                    {
-                      backgroundColor: ACCENT_PURPLE,
-                      width: progressAnim.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: ['0%', '100%'],
-                      }),
-                    },
-                  ]}
-                />
-              </View>
-              {!level.isMax ? (
-                <ThemedText
-                  adaptive={false}
-                  style={[styles.progressHint, { color: textTertiary }]}
-                  numberOfLines={1}
-                >
-                  Noch {level.pointsToNext} {POINTS_NOUN} bis „{level.nextLevelName}“
-                </ThemedText>
-              ) : (
-                <ThemedText
-                  adaptive={false}
-                  style={[styles.progressHint, { color: textTertiary }]}
-                  numberOfLines={1}
-                >
-                  Höchste Stufe erreicht 🤍
-                </ThemedText>
-              )}
-            </View>
-          </View>
-
-          <View style={[styles.divider, { backgroundColor: dividerColor }]} />
-
-          <View style={styles.bottomRow}>
-            <View style={styles.daysRow}>
-              {DAY_LABELS.map((label, idx) => {
-                const isToday = idx === todayIndex;
-                const isOn = days[idx];
-                return (
-                  <View key={label} style={styles.dayChip}>
-                    <ThemedText
-                      adaptive={false}
-                      style={[
-                        styles.dayLabel,
-                        {
-                          color: isToday ? ACCENT_PURPLE : dayLabelColor,
-                          fontWeight: isToday ? '800' : '600',
-                        },
-                      ]}
-                    >
-                      {label}
+                  <Image
+                    source={unlockedBabyImage}
+                    style={styles.placeholderImage}
+                    resizeMode="cover"
+                  />
+                </View>
+                <View style={styles.badgeAnchor} pointerEvents="none">
+                  <Animated.View
+                    pointerEvents="none"
+                    style={[
+                      styles.levelGlow,
+                      {
+                        opacity: glowOpacity,
+                        transform: [{ scale: glowScale }],
+                      },
+                    ]}
+                  />
+                  <Animated.View
+                    style={[
+                      styles.levelBadge,
+                      {
+                        backgroundColor: ACCENT_PURPLE,
+                        borderColor: isDark
+                          ? 'rgba(20,18,28,0.85)'
+                          : 'rgba(255,255,255,0.95)',
+                        transform: [{ scale: badgeBounce }],
+                      },
+                    ]}
+                  >
+                    <ThemedText adaptive={false} style={styles.levelBadgeText}>
+                      {level.level}
                     </ThemedText>
-                    <View
-                      style={[
-                        styles.daySpot,
-                        {
-                          backgroundColor: isOn ? ACCENT_PURPLE : daySpotEmpty,
-                        },
-                        isToday && !isOn ? styles.daySpotTodayRing : null,
-                      ]}
-                    />
-                  </View>
-                );
-              })}
+                  </Animated.View>
+                </View>
+              </Animated.View>
+
+              <View style={styles.textBlock}>
+                <ThemedText
+                  adaptive={false}
+                  style={[styles.title, { color: textPrimary }]}
+                  numberOfLines={2}
+                >
+                  {copy.title}
+                </ThemedText>
+                <ThemedText
+                  adaptive={false}
+                  style={[styles.subtitle, { color: textSecondary }]}
+                  numberOfLines={2}
+                >
+                  {subtitle}
+                </ThemedText>
+
+                <View
+                  style={[
+                    styles.progressTrack,
+                    { backgroundColor: progressTrackColor },
+                  ]}
+                >
+                  <Animated.View
+                    style={[
+                      styles.progressFill,
+                      {
+                        backgroundColor: ACCENT_PURPLE,
+                        width: progressAnim.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: ['0%', '100%'],
+                        }),
+                      },
+                    ]}
+                  />
+                </View>
+                {!level.isMax ? (
+                  <ThemedText
+                    adaptive={false}
+                    style={[styles.progressHint, { color: textTertiary }]}
+                    numberOfLines={1}
+                  >
+                    Noch {level.pointsToNext} {POINTS_NOUN} bis „{level.nextLevelName}“
+                  </ThemedText>
+                ) : (
+                  <ThemedText
+                    adaptive={false}
+                    style={[styles.progressHint, { color: textTertiary }]}
+                    numberOfLines={1}
+                  >
+                    Höchste Stufe erreicht 🤍
+                  </ThemedText>
+                )}
+              </View>
             </View>
 
-            <View style={styles.ctaInner}>
-              <ThemedText
-                adaptive={false}
-                style={[styles.cta, { color: ACCENT_PURPLE }]}
-                numberOfLines={1}
-              >
-                {copy.cta}
-              </ThemedText>
-              <IconSymbol name="chevron.right" size={13} color={ACCENT_PURPLE} />
+            <Pressable
+              onPress={handleStoryPress}
+              style={({ pressed }) => [
+                styles.reviewRow,
+                {
+                  backgroundColor: isDark
+                    ? 'rgba(255,255,255,0.06)'
+                    : 'rgba(94,61,179,0.08)',
+                  borderColor: dividerColor,
+                  opacity: pressed ? 0.82 : 1,
+                },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Wochen-Review als Story ansehen"
+            >
+              <View style={styles.reviewEmojiBubble}>
+                <ThemedText adaptive={false} allowFontScaling={false} style={styles.reviewEmoji}>
+                  {mood.emoji}
+                </ThemedText>
+              </View>
+              <View style={styles.reviewTextBlock}>
+                <ThemedText
+                  adaptive={false}
+                  style={[styles.reviewTitle, { color: textPrimary }]}
+                  numberOfLines={1}
+                >
+                  {reviewTitle}
+                </ThemedText>
+                <ThemedText
+                  adaptive={false}
+                  style={[styles.reviewSubtitle, { color: textSecondary }]}
+                  numberOfLines={1}
+                >
+                  {reviewSubtitle}
+                </ThemedText>
+              </View>
+              <View style={styles.reviewCta}>
+                <ThemedText adaptive={false} style={styles.reviewCtaText}>
+                  Story
+                </ThemedText>
+                <IconSymbol name="play.fill" size={13} color="#FFFFFF" />
+              </View>
+            </Pressable>
+
+            <View style={[styles.divider, { backgroundColor: dividerColor }]} />
+
+            <View style={styles.bottomRow}>
+              <View style={styles.daysRow}>
+                {DAY_LABELS.map((label, idx) => {
+                  const isToday = idx === todayIndex;
+                  const isOn = days[idx];
+                  return (
+                    <View key={label} style={styles.dayChip}>
+                      <ThemedText
+                        adaptive={false}
+                        style={[
+                          styles.dayLabel,
+                          {
+                            color: isToday ? ACCENT_PURPLE : dayLabelColor,
+                            fontWeight: isToday ? '800' : '600',
+                          },
+                        ]}
+                      >
+                        {label}
+                      </ThemedText>
+                      <View
+                        style={[
+                          styles.daySpot,
+                          {
+                            backgroundColor: isOn ? ACCENT_PURPLE : daySpotEmpty,
+                          },
+                          isToday && !isOn ? styles.daySpotTodayRing : null,
+                        ]}
+                      />
+                    </View>
+                  );
+                })}
+              </View>
+
+              <View style={styles.ctaInner}>
+                <ThemedText
+                  adaptive={false}
+                  style={[styles.cta, { color: ACCENT_PURPLE }]}
+                  numberOfLines={1}
+                >
+                  {ctaLabel}
+                </ThemedText>
+                <IconSymbol name="chevron.right" size={13} color={ACCENT_PURPLE} />
+              </View>
             </View>
           </View>
-        </View>
-      </BlurView>
-    </TouchableOpacity>
+        </BlurView>
+      </TouchableOpacity>
+
+      <WochenkarteStory
+        visible={storyVisible}
+        onClose={() => setStoryVisible(false)}
+        data={{
+          weekStart,
+          weekEnd,
+          counts,
+          activeDays,
+          totalSleepMinutes,
+          weekPoints,
+          dayBuckets,
+          dayPoints,
+          level,
+          totalPoints,
+        }}
+      />
+    </>
   );
 }
 
@@ -540,7 +609,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 16,
     fontWeight: '700',
-    letterSpacing: -0.2,
+    letterSpacing: 0,
     lineHeight: 21,
     marginBottom: 2,
   },
@@ -564,7 +633,68 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontSize: 10.5,
     fontWeight: '500',
-    letterSpacing: 0.1,
+    letterSpacing: 0,
+  },
+  reviewRow: {
+    minHeight: 58,
+    marginTop: 12,
+    borderRadius: 18,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  reviewEmojiBubble: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.62)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.72)',
+  },
+  reviewEmoji: {
+    fontSize: 23,
+    lineHeight: 29,
+    textAlign: 'center',
+  },
+  reviewTextBlock: {
+    flex: 1,
+    minWidth: 0,
+  },
+  reviewTitle: {
+    fontSize: 13.5,
+    lineHeight: 18,
+    fontWeight: '800',
+    letterSpacing: 0,
+  },
+  reviewSubtitle: {
+    marginTop: 1,
+    fontSize: 11.5,
+    lineHeight: 15,
+    fontWeight: '600',
+    letterSpacing: 0,
+  },
+  reviewCta: {
+    minWidth: 68,
+    height: 32,
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    backgroundColor: ACCENT_PURPLE,
+  },
+  reviewCtaText: {
+    color: '#FFFFFF',
+    fontSize: 11.5,
+    lineHeight: 15,
+    fontWeight: '800',
+    letterSpacing: 0,
   },
   divider: {
     height: StyleSheet.hairlineWidth,
@@ -589,7 +719,7 @@ const styles = StyleSheet.create({
   },
   dayLabel: {
     fontSize: 10,
-    letterSpacing: 0.2,
+    letterSpacing: 0,
   },
   daySpot: {
     width: 7,
@@ -613,6 +743,6 @@ const styles = StyleSheet.create({
   cta: {
     fontSize: 12.5,
     fontWeight: '700',
-    letterSpacing: 0.1,
+    letterSpacing: 0,
   },
 });

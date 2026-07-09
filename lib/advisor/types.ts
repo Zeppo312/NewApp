@@ -60,12 +60,23 @@ export interface DailySignals {
 
   weather: {
     available: boolean;
+    /** Maßgebliche Tagestemperatur: Forecast-Tmax, sonst aktueller Wert. */
     temperature: number | null;
     feelsLike: number | null;
     description: string;
     isHot: boolean;
     isCold: boolean;
     isReal: boolean;
+
+    /* --- Tagesforecast (Open-Meteo), null = nicht verfügbar --- */
+    /** UV-Index-Maximum heute. */
+    uvIndex: number | null;
+    /** Regenwahrscheinlichkeit heute in %. */
+    rainProbability: number | null;
+    /** UV-Index über der Babyhaut-Schwelle (Sonnenschutz-Regel). */
+    isHighUv: boolean;
+    /** Regen heute wahrscheinlich (Regen-Hinweis). */
+    isRainy: boolean;
   };
 }
 

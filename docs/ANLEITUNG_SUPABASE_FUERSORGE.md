@@ -23,7 +23,11 @@ Tabellen, zwei Edge Functions und den täglichen Cron-Job.
 
 1. Supabase Dashboard → dein Projekt → **SQL Editor** → *New query*.
 2. Kompletten Inhalt von **`supabase/create_advisor_tables.sql`** einfügen → **Run**.
-3. Danach ebenso **`supabase/migrations/20270413000000_add_premium_tester_role.sql`**
+3. Danach ebenso **`supabase/migrations/20270710000000_add_advisor_push_optin.sql`**
+   (Push-Opt-in-Spalte `push_enabled`, Default AUS — ohne sie schlägt das
+   Laden/Speichern der Einstellungen still auf Defaults zurück und es wird
+   nie gepusht).
+4. Danach ebenso **`supabase/migrations/20270413000000_add_premium_tester_role.sql`**
    ausführen — das ergänzt die neue Paywall-Rolle **„Premiumtester"**
    (Check-Constraint + Admin-Funktion `admin_set_paywall_access_role`).
 
@@ -41,20 +45,23 @@ Das Skript ist idempotent (mehrfaches Ausführen ist harmlos). Es legt an bzw. e
 
 ## Schritt 2 — Secrets setzen
 
-Dashboard → **Edge Functions → Secrets** (oder per CLI, siehe unten). Drei Secrets:
+Dashboard → **Edge Functions → Secrets** (oder per CLI, siehe unten). Zwei Secrets:
 
 | Secret | Pflicht? | Woher |
 |---|---|---|
 | `ADVISOR_CRON_SECRET` | **Ja** | Selbst ausdenken (langer Zufallsstring, z. B. Terminal: `openssl rand -hex 32`). Schützt `advisor-daily` vor fremden Aufrufen. |
 | `OPENAI_API_KEY` | Nein | https://platform.openai.com → API Keys. Ohne Key: Hinweise kommen als (gute) Template-Texte statt KI-formuliert. |
-| `OPENWEATHER_API_KEY` | Nein | **Dein vorhandener OpenWeatherMap-Key** — derselbe wie `WEATHER_API_KEY` in `lib/config.ts` (die App nutzt schon `api.openweathermap.org/data/2.5`, die Function auch). Ohne Key: der Morgen-Job kennt kein Wetter — Wetter-Regeln greifen dann nur beim Öffnen der App (dort liefert das Gerät das Wetter). |
+
+Das Wetter (Tagesforecast inkl. UV-Index und Regenwahrscheinlichkeit) kommt
+keyless von **Open-Meteo** — `OPENWEATHER_API_KEY` wird für die Functions
+**nicht mehr benötigt** (die App nutzt OpenWeather nur noch für die
+aktuelle Wetterbeschreibung im Client).
 
 Per CLI alternativ:
 
 ```bash
 supabase secrets set ADVISOR_CRON_SECRET=<dein-zufallsstring>
 supabase secrets set OPENAI_API_KEY=sk-...
-supabase secrets set OPENWEATHER_API_KEY=...
 ```
 
 `SUPABASE_URL`, `SUPABASE_ANON_KEY` und `SUPABASE_SERVICE_ROLE_KEY` sind in Edge

@@ -37,6 +37,7 @@ import { ThemedText } from '@/components/ThemedText';
 import { Colors } from '@/constants/Colors';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { LOTTI_LEVELS, type LottiLevel } from '@/lib/lottiPoints';
+import { babyImageForLevel } from '@/lib/lottiBabyImages';
 
 const ACCENT_PURPLE = '#5E3DB3';
 const BROWN = '#5C4033';
@@ -51,49 +52,16 @@ const POINTS_NOUN = 'Lotti-Herzen';
 const STATION_SPACING = 118;
 const TOP_PAD = 120;
 const BOTTOM_PAD = 170;
-const START_STATION_PULL_UP = 54;
 const PATH_LENGTH_ESTIMATE = 5200;
 const X_PATTERN = [0.60, 0.32, 0.66, 0.38, 0.61, 0.34, 0.56];
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 const DEFAULT_MAP_WIDTH = Math.min(420, SCREEN_WIDTH - 32);
-const MAP_VIEWPORT_HEIGHT = Math.min(700, Math.max(540, SCREEN_HEIGHT * 0.68));
+// Kompakter als früher, damit die Seite nicht von der Karte dominiert wird.
+const MAP_VIEWPORT_HEIGHT = Math.min(620, Math.max(460, SCREEN_HEIGHT * 0.55));
 
 const AnimatedPath = Animated.createAnimatedComponent(Path);
-
-const LEVEL_BABY_IMAGES: ImageSourcePropType[] = [
-  require('@/assets/images/LottiBaby_Babys/1.jpg'),
-  require('@/assets/images/LottiBaby_Babys/2.jpg'),
-  require('@/assets/images/LottiBaby_Babys/3.jpg'),
-  require('@/assets/images/LottiBaby_Babys/4.jpg'),
-  require('@/assets/images/LottiBaby_Babys/5.jpg'),
-  require('@/assets/images/LottiBaby_Babys/6.jpg'),
-  require('@/assets/images/LottiBaby_Babys/7.jpg'),
-  require('@/assets/images/LottiBaby_Babys/8.jpg'),
-  require('@/assets/images/LottiBaby_Babys/9.jpg'),
-  require('@/assets/images/LottiBaby_Babys/10.jpg'),
-  require('@/assets/images/LottiBaby_Babys/11.jpg'),
-  require('@/assets/images/LottiBaby_Babys/12.jpg'),
-  require('@/assets/images/LottiBaby_Babys/13.jpg'),
-  require('@/assets/images/LottiBaby_Babys/14.jpg'),
-  require('@/assets/images/LottiBaby_Babys/15.jpg'),
-  require('@/assets/images/LottiBaby_Babys/16.jpg'),
-  require('@/assets/images/LottiBaby_Babys/17.jpg'),
-  require('@/assets/images/LottiBaby_Babys/18.jpg'),
-  require('@/assets/images/LottiBaby_Babys/19.jpg'),
-  require('@/assets/images/LottiBaby_Babys/20.jpg'),
-  require('@/assets/images/LottiBaby_Babys/21.jpg'),
-  require('@/assets/images/LottiBaby_Babys/22.jpg'),
-  require('@/assets/images/LottiBaby_Babys/23.jpg'),
-  require('@/assets/images/LottiBaby_Babys/24.jpg'),
-  require('@/assets/images/LottiBaby_Babys/25.jpg'),
-  require('@/assets/images/LottiBaby_Babys/26.jpg'),
-  require('@/assets/images/LottiBaby_Babys/27.jpg'),
-  require('@/assets/images/LottiBaby_Babys/28.jpg'),
-  require('@/assets/images/LottiBaby_Babys/29.jpg'),
-  require('@/assets/images/LottiBaby_Babys/30.jpg'),
-];
 
 type StationState = 'past' | 'current' | 'next' | 'future';
 
@@ -155,10 +123,10 @@ export function LottiJourneyMap({
     ? Boolean(avatarState.levelJustIncreased)
     : false;
 
+  // Aufsteigend: Stufe 1 oben (Herkunft), Zukunft beim Runterscrollen.
   const journeyLevels: JourneyStation[] = useMemo(() => {
     const sorted = [...levels].sort((a, b) => a.level - b.level);
     return sorted
-      .reverse()
       .map((level) => ({
         ...level,
         state:
@@ -174,12 +142,9 @@ export function LottiJourneyMap({
 
   const positions = useMemo(
     () =>
-      journeyLevels.map((level, index) => ({
+      journeyLevels.map((_level, index) => ({
         x: width * X_PATTERN[index % X_PATTERN.length],
-        y:
-          TOP_PAD +
-          index * STATION_SPACING -
-          (level.level === 1 ? START_STATION_PULL_UP : 0),
+        y: TOP_PAD + index * STATION_SPACING,
       })),
     [width, journeyLevels],
   );
@@ -187,7 +152,8 @@ export function LottiJourneyMap({
   const totalHeight =
     TOP_PAD + (journeyLevels.length - 1) * STATION_SPACING + BOTTOM_PAD;
   const viewportHeight = Math.min(totalHeight, MAP_VIEWPORT_HEIGHT);
-  const scrollContentHeight = totalHeight + viewportHeight * 0.58;
+  // Kein Extra-Leerraum mehr — sonst endet der Scrollbereich vor Stufe 30.
+  const scrollContentHeight = totalHeight;
   const currentIndex = Math.max(
     0,
     journeyLevels.findIndex((level) => level.state === 'current'),
@@ -195,8 +161,9 @@ export function LottiJourneyMap({
   const currentLevelData = journeyLevels[currentIndex];
 
   const pathD = useMemo(() => buildPath(positions, positions.length - 1, 0), [positions]);
+  // Erreichter Abschnitt: von Stufe 1 (Index 0) bis zur aktuellen Station.
   const completedPathD = useMemo(
-    () => buildPath(positions, positions.length - 1, currentIndex),
+    () => buildPath(positions, currentIndex, 0),
     [currentIndex, positions],
   );
 
@@ -210,8 +177,15 @@ export function LottiJourneyMap({
 
   const [selectedLevel, setSelectedLevel] = useState<LottiLevel | null>(null);
 
+  // Eingangs-Animation — läuft beim Mount UND erneut, sobald sich die
+  // aktuelle Station ändert (Daten geladen / Level-Wechsel). Nur ein
+  // Mount-Lauf ist fragil: Wird er verschluckt (z. B. Tab im Hintergrund),
+  // blieben Stationen sonst dauerhaft unsichtbar (opacity 0).
   useEffect(() => {
-    Animated.parallel([
+    drawAnim.setValue(PATH_LENGTH_ESTIMATE);
+    appearAnim.setValue(0);
+    avatarBounce.setValue(0.92);
+    const entrance = Animated.parallel([
       Animated.timing(drawAnim, {
         toValue: 0,
         duration: 1350,
@@ -231,19 +205,28 @@ export function LottiJourneyMap({
         delay: 380,
         useNativeDriver: true,
       }),
-    ]).start();
-  }, [appearAnim, avatarBounce, drawAnim]);
+    ]);
+    entrance.start(({ finished }) => {
+      if (!finished) {
+        // Sicherheitsnetz: Endzustand erzwingen, falls die Animation
+        // unterbrochen wurde — nichts darf unsichtbar hängen bleiben.
+        drawAnim.setValue(0);
+        appearAnim.setValue(1);
+        avatarBounce.setValue(1);
+      }
+    });
+    return () => entrance.stop();
+  }, [currentIndex, appearAnim, avatarBounce, drawAnim]);
 
   const scrollToCurrentStation = useCallback(() => {
+    // Aktuelle Station immer mittig zentrieren — Avatar und Glow ragen
+    // ~60px über die Station hinaus und dürfen nicht abgeschnitten werden.
     const currentY = positions[currentIndex]?.y ?? 0;
-    const startStationY = positions[positions.length - 1]?.y ?? currentY;
-    const startStationTargetY =
-      currentLevel <= 8 ? startStationY - viewportHeight * 0.82 : 0;
     const targetY = Math.max(
       0,
       Math.min(
         scrollContentHeight - viewportHeight,
-        Math.max(currentY - viewportHeight * 0.46, startStationTargetY),
+        currentY - viewportHeight * 0.44,
       ),
     );
     const scrollKey = `${currentIndex}:${Math.round(targetY)}:${Math.round(scrollContentHeight)}:${Math.round(viewportHeight)}`;
@@ -266,7 +249,7 @@ export function LottiJourneyMap({
     setTimeout(() => {
       mapScrollRef.current?.scrollTo({ y: targetY, animated: false });
     }, 140);
-  }, [currentIndex, currentLevel, positions, scrollContentHeight, viewportHeight]);
+  }, [currentIndex, positions, scrollContentHeight, viewportHeight]);
 
   useEffect(() => {
     autoScrollKeyRef.current = null;
@@ -507,10 +490,6 @@ function buildPath(
 
 function clamp01(value: number) {
   return Math.min(1, Math.max(0, value));
-}
-
-function babyImageForLevel(level: number) {
-  return LEVEL_BABY_IMAGES[(Math.max(1, level) - 1) % LEVEL_BABY_IMAGES.length];
 }
 
 function isAvatarStateObject(

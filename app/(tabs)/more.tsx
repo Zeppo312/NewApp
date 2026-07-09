@@ -149,6 +149,30 @@ export default function MoreScreen() {
 
           <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
             <ThemedText style={styles.sectionTitle}>
+              Shop
+            </ThemedText>
+
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => router.push('/prints-shop' as any)}
+            >
+              <View style={styles.menuItemIcon}>
+                <IconSymbol name="bag.fill" size={24} color={iconAccentColor} />
+              </View>
+              <View style={styles.menuItemContent}>
+                <ThemedText style={styles.menuItemTitle}>
+                  Lotti Baby Shop
+                </ThemedText>
+                <ThemedText style={styles.menuItemDescription}>
+                  Prints ansehen und bestellen
+                </ThemedText>
+              </View>
+              <IconSymbol name="chevron.right" size={20} color={iconSecondaryColor} />
+            </TouchableOpacity>
+          </LiquidGlassCard>
+
+          <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
+            <ThemedText style={styles.sectionTitle}>
               Einstellungen
             </ThemedText>
 

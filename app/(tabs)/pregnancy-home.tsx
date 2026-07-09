@@ -11,7 +11,6 @@ import CountdownTimer from '@/components/CountdownTimer';
 import { usePathname, useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase, getDueDateWithLinkedUsers } from '@/lib/supabase';
-import { getRecommendations, LottiRecommendation } from '@/lib/supabase/recommendations';
 import { loadPregnancyHomeDataWithCache, invalidatePregnancyCache } from '@/lib/pregnancyCache';
 import { pregnancyWeekInfo } from '@/constants/PregnancyWeekInfo';
 import { pregnancyMotherInfo } from '@/constants/PregnancyMotherInfo';
@@ -487,8 +486,6 @@ export default function PregnancyHomeScreen() {
     contentHeight: 0,
   });
   const overviewScrollRef = useRef<ScrollView | null>(null);
-  const [recommendations, setRecommendations] = useState<LottiRecommendation[]>([]);
-  const [recommendationImageFailed, setRecommendationImageFailed] = useState(false);
   const [isBabySwitcherOpen, setIsBabySwitcherOpen] = useState(false);
 
   // Animation für Erfolgsmeldung
@@ -528,15 +525,6 @@ export default function PregnancyHomeScreen() {
         .filter((card): card is PregnancyQuickAccessCardConfig => !!card && hiddenQuickAccessIdSet.has(card.id)),
     [hiddenQuickAccessIdSet, quickAccessCardById, quickAccessOrder],
   );
-
-  const featuredRecommendation = recommendations[0] ?? null;
-
-  const getPreviewText = (value?: string | null, limit = 10) => {
-    if (!value) return '';
-    const words = value.trim().split(/\s+/).filter(Boolean);
-    if (words.length <= limit) return value.trim();
-    return `${words.slice(0, limit).join(' ')}...`;
-  };
 
   const openQuickAccessEditor = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
@@ -625,16 +613,6 @@ export default function PregnancyHomeScreen() {
     setHiddenQuickAccessIds([]);
     void persistQuickAccessHiddenIds([]);
   }, [hiddenQuickAccessIds.length, persistQuickAccessHiddenIds]);
-
-  useEffect(() => {
-    if (featuredRecommendation?.image_url) {
-      Image.prefetch(featuredRecommendation.image_url).catch(() => {});
-    }
-  }, [featuredRecommendation?.image_url]);
-
-  useEffect(() => {
-    setRecommendationImageFailed(false);
-  }, [featuredRecommendation?.id, featuredRecommendation?.image_url]);
 
   useEffect(() => {
     if (!overviewCarouselWidth) return;
@@ -872,7 +850,7 @@ export default function PregnancyHomeScreen() {
       setIsLoading(true);
 
       // Load with cache - all data in parallel, instant if cached
-      const { profile, dueDate: dueDateData, recommendations: recs, isStale } =
+      const { profile, dueDate: dueDateData, isStale } =
         await loadPregnancyHomeDataWithCache(user.id);
 
       // Show cached data immediately
@@ -881,7 +859,6 @@ export default function PregnancyHomeScreen() {
       setDueDate(dueDateData.date);
       setCurrentWeek(dueDateData.currentWeek);
       setCurrentDay(dueDateData.currentDay);
-      setRecommendations(recs);
 
       setIsLoading(false);
 
@@ -978,19 +955,8 @@ export default function PregnancyHomeScreen() {
 
   const pregnancyProgressPercent = calculatePregnancyProgressPercent();
 
-  const handleFocusRecommendation = (recommendationId?: string | null) => {
-    if (!recommendationId) {
-      router.push('/lottis-empfehlungen');
-      return;
-    }
-    router.push({
-      pathname: '/lottis-empfehlungen',
-      params: { focusId: recommendationId },
-    });
-  };
-
-  const handleRecommendationImageError = () => {
-    setRecommendationImageFailed(true);
+  const handleFocusRecommendation = () => {
+    router.push('/prints-shop' as any);
   };
 
   const renderPregnancyOverviewCard = (wrapperStyle?: StyleProp<ViewStyle>) => (
@@ -1089,8 +1055,8 @@ export default function PregnancyHomeScreen() {
 
   const renderRecommendationCard = (wrapperStyle?: StyleProp<ViewStyle>) => {
     const cardHeightStyle = { height: overviewSummaryHeight ?? DEFAULT_OVERVIEW_HEIGHT };
-    const showRecommendationImage = Boolean(featuredRecommendation?.image_url) && !recommendationImageFailed;
-    const buttonLabel = 'Mehr';
+    const buttonLabel = 'Shop';
+    const showShopCard = true;
 
     return (
       <View style={[styles.liquidGlassWrapper, wrapperStyle, cardHeightStyle]}>
@@ -1105,40 +1071,34 @@ export default function PregnancyHomeScreen() {
             lightColor="rgba(255, 255, 255, 0.04)"
             darkColor="rgba(255, 255, 255, 0.02)"
           >
-            {featuredRecommendation ? (
+            {showShopCard ? (
               <View style={styles.recommendationCard}>
                 <View style={styles.sectionTitleContainer}>
                   <ThemedText adaptive={false} style={[styles.sectionTitle, styles.liquidGlassText, { color: textPrimary, fontSize: 22 }]}>
-                    Lottis Empfehlungen
+                    Lotti Baby Shop
                   </ThemedText>
                   <View style={[styles.liquidGlassChevron, styles.recommendationHeaderSpacer]} />
                 </View>
                 <TouchableOpacity
                   style={styles.recommendationInnerCard}
-                  onPress={() => handleFocusRecommendation(featuredRecommendation.id)}
+                  onPress={handleFocusRecommendation}
                   activeOpacity={0.9}
                 >
                   <View style={styles.recommendationRow}>
                     <View style={styles.recommendationImagePane}>
-                      {showRecommendationImage ? (
-                        <Image
-                          source={{ uri: featuredRecommendation.image_url ?? '' }}
-                          style={styles.recommendationImage}
-                          onError={handleRecommendationImageError}
-                        />
-                      ) : (
-                        <View style={styles.recommendationImageFallback}>
-                          <IconSymbol name="bag.fill" size={22} color={textPrimary} />
-                        </View>
-                      )}
+                      <Image
+                        source={require('../../assets/images/lotti-baby-shop-hero.png')}
+                        style={styles.recommendationImage}
+                        resizeMode="cover"
+                      />
                     </View>
                     <View style={styles.recommendationContentPane}>
                       <View style={styles.recommendationTextWrap}>
                         <ThemedText adaptive={false} style={[styles.recommendationTitle, { color: textPrimary }]}>
-                          {featuredRecommendation.title}
+                          Prints zum Aufbügeln
                         </ThemedText>
                         <ThemedText adaptive={false} style={[styles.recommendationDescription, { color: isDark ? Colors.dark.textSecondary : 'rgba(125, 90, 80, 0.88)' }]}>
-                          {getPreviewText(featuredRecommendation.description, 10)}
+                          Lieblingsmotiv wählen und direkt bestellen
                         </ThemedText>
                       </View>
                       <View style={styles.recommendationButton}>
@@ -1154,14 +1114,14 @@ export default function PregnancyHomeScreen() {
               <View style={styles.recommendationEmptyWrapper}>
                 <View style={styles.sectionTitleContainer}>
                   <ThemedText adaptive={false} style={[styles.sectionTitle, styles.liquidGlassText, { color: textPrimary, fontSize: 22 }]}>
-                    Lottis Empfehlungen
+                    Lotti Baby Shop
                   </ThemedText>
                   <View style={[styles.liquidGlassChevron, styles.recommendationHeaderSpacer]} />
                 </View>
                 <View style={styles.recommendationEmpty}>
                   <IconSymbol name="bag.fill" size={20} color={textSecondary} />
                   <ThemedText adaptive={false} style={[styles.recommendationEmptyText, { color: textSecondary }]}>
-                    Noch keine Empfehlungen verfügbar.
+                    Prints ansehen und bestellen.
                   </ThemedText>
                 </View>
               </View>

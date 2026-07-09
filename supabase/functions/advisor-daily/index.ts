@@ -5,8 +5,9 @@
 // Pro Nutzer/Baby: Signale aus der DB + Wetter sammeln, Regel-Engine,
 // optional OpenAI-Formulierung, advisor_messages schreiben, Expo-Push.
 //
-// Secrets: ADVISOR_CRON_SECRET (Pflicht), OPENWEATHER_API_KEY (optional,
-// sonst keine Wetter-Regeln), OPENAI_API_KEY (optional, sonst Templates).
+// Secrets: ADVISOR_CRON_SECRET (Pflicht), OPENAI_API_KEY (optional, sonst
+// Templates). Wetter kommt keyless von Open-Meteo (Tagesforecast inkl.
+// UV-Index und Regenwahrscheinlichkeit).
 //
 // Test-Aufruf (verarbeitet einen Nutzer sofort, unabhängig von der Uhrzeit):
 //   POST { "force": true, "userId": "<uuid>" }
@@ -42,6 +43,8 @@ interface SettingsRow {
   latitude: number | null;
   longitude: number | null;
   ai_enabled: boolean | null;
+  /** Explizites Push-Opt-in aus der App (Default false). */
+  push_enabled: boolean | null;
 }
 
 /** Lokale Stunde / lokales Datum in einer IANA-Zeitzone. */
@@ -96,41 +99,64 @@ const ageTextOf = (ageMonths: number | null): string => {
   return `${Math.floor(ageMonths / 12)} Jahre alt`;
 };
 
-/** Tageswetter (Tmax aus dem 5-Tage/3-h-Forecast, kostenloser Endpoint). */
+/** WMO-Wettercode → kurze deutsche Beschreibung (Open-Meteo). */
+const describeWeatherCode = (code: number | null): string => {
+  if (code == null) return '';
+  if (code === 0) return 'sonnig';
+  if (code <= 2) return 'leicht bewölkt';
+  if (code === 3) return 'bewölkt';
+  if (code === 45 || code === 48) return 'neblig';
+  if (code <= 57) return 'Nieselregen';
+  if (code <= 67) return 'Regen';
+  if (code <= 77) return 'Schnee';
+  if (code <= 82) return 'Regenschauer';
+  if (code <= 86) return 'Schneeschauer';
+  return 'Gewitter';
+};
+
+/**
+ * Tagesforecast von Open-Meteo (keyless): Tmax, gefühltes Maximum,
+ * UV-Index-Maximum und Regenwahrscheinlichkeit für HEUTE (Ortszeit).
+ * Schwellen identisch zum Client (buildDailySignals.ts).
+ */
+const HIGH_UV_THRESHOLD = 5;
+const RAIN_PROB_THRESHOLD = 60;
+
 const fetchWeather = async (
   lat: number,
   lon: number,
-  localDate: string,
   tz: string,
 ): Promise<RuleSignals['weather'] | null> => {
-  const apiKey = Deno.env.get('OPENWEATHER_API_KEY');
-  if (!apiKey) return null;
   try {
     const res = await fetch(
-      `https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&units=metric&lang=de&appid=${apiKey}`,
+      'https://api.open-meteo.com/v1/forecast' +
+        `?latitude=${lat}&longitude=${lon}` +
+        '&daily=temperature_2m_max,apparent_temperature_max,uv_index_max,precipitation_probability_max,weather_code' +
+        `&timezone=${encodeURIComponent(tz)}&forecast_days=1`,
     );
     if (!res.ok) return null;
     const data = await res.json();
-    const todaySlots = (data?.list ?? []).filter(
-      (slot: { dt: number }) =>
-        localDateOf(new Date(slot.dt * 1000).toISOString(), tz) === localDate,
-    );
-    if (todaySlots.length === 0) return null;
-    const tmax = Math.max(
-      ...todaySlots.map((s: { main: { temp: number } }) => s.main.temp),
-    );
-    const feelsMax = Math.max(
-      ...todaySlots.map((s: { main: { feels_like: number } }) => s.main.feels_like),
-    );
-    const description = todaySlots[0]?.weather?.[0]?.description ?? '';
+    const daily = data?.daily;
+    const num = (v: unknown): number | null =>
+      typeof v === 'number' && Number.isFinite(v) ? v : null;
+    const tmax = num(daily?.temperature_2m_max?.[0]);
+    if (tmax == null) return null;
+    const feelsMax = num(daily?.apparent_temperature_max?.[0]) ?? tmax;
+    const uvRaw = num(daily?.uv_index_max?.[0]);
+    const uvIndex = uvRaw != null ? Math.round(uvRaw * 10) / 10 : null;
+    const rainProbability = num(daily?.precipitation_probability_max?.[0]);
     return {
       available: true,
       temperature: Math.round(tmax),
       feelsLike: Math.round(feelsMax),
-      description,
+      description: describeWeatherCode(num(daily?.weather_code?.[0])),
       isHot: tmax >= HOT_THRESHOLD_C || feelsMax >= HOT_THRESHOLD_C + 2,
       isCold: tmax <= COLD_THRESHOLD_C || feelsMax <= 0,
       isReal: true,
+      uvIndex,
+      rainProbability,
+      isHighUv: uvIndex != null && uvIndex >= HIGH_UV_THRESHOLD,
+      isRainy: rainProbability != null && rainProbability >= RAIN_PROB_THRESHOLD,
     };
   } catch (err) {
     console.error('Weather fetch failed:', err);
@@ -163,7 +189,7 @@ serve(async (req: Request) => {
   let query = supabase
     .from('advisor_settings')
     .select(
-      'user_id, enabled, frequency, themes, quiet_hours_start, quiet_hours_end, timezone, latitude, longitude, ai_enabled',
+      'user_id, enabled, frequency, themes, quiet_hours_start, quiet_hours_end, timezone, latitude, longitude, ai_enabled, push_enabled',
     )
     .eq('enabled', true)
     .neq('frequency', 'off');
@@ -225,7 +251,7 @@ serve(async (req: Request) => {
       // Wetter einmal pro Nutzer (Standort ist nutzer-, nicht babybezogen).
       const weather =
         settings.latitude != null && settings.longitude != null
-          ? await fetchWeather(settings.latitude, settings.longitude, localDate, tz)
+          ? await fetchWeather(settings.latitude, settings.longitude, tz)
           : null;
 
       for (const babyId of babyIds) {
@@ -433,16 +459,20 @@ serve(async (req: Request) => {
           }
         }
 
-        // Push? all_good ist nur In-App, kein Push. Stille Zeiten beachten.
+        // Push? Nur mit explizitem Opt-in (push_enabled), all_good ist nur
+        // In-App, kein Push. Stille Zeiten beachten.
         const quietStart = settings.quiet_hours_start ?? 21;
         const quietEnd = settings.quiet_hours_end ?? 7;
         const inQuietHours =
           quietStart > quietEnd
             ? localHour >= quietStart || localHour < quietEnd
             : localHour >= quietStart && localHour < quietEnd;
-        const wantsPush = candidate.priority <= 4 && candidate.ruleId !== 'all_good';
+        const wantsPush =
+          settings.push_enabled === true &&
+          candidate.priority <= 4 &&
+          candidate.ruleId !== 'all_good';
 
-        let pushStatus = 'skipped';
+        let pushStatus = settings.push_enabled === true ? 'skipped' : 'opt_out';
         let pushedAt: string | null = null;
         if (wantsPush && !inQuietHours) {
           const { data: tokens } = await supabase
