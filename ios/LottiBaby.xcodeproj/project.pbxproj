@@ -8,29 +8,29 @@
 
 /* Begin PBXBuildFile section */
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
+		3B13410C349FE9F63787BCA7 /* libPods-LottiBaby.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 3763EF32BDE8A469F863FE0D /* libPods-LottiBaby.a */; };
 		3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */; };
-		504AD97052A26C031B5316FA /* libPods-LottiBaby.a in Frameworks */ = {isa = PBXBuildFile; fileRef = D10CBC43967F260050329941 /* libPods-LottiBaby.a */; };
-		5507FCC7D60D343CDD9A1D73 /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F3BEF29EA634DCB1EE8E6A6 /* ExpoModulesProvider.swift */; };
-		5AECFA602A854509A613B807 /* SleepActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = BADCD1067D9A473097A4A1FA /* SleepActivityAttributes.swift */; };
-		7936F3D095A4F12EFBAC032A /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 22A2014938CC8E20FEBB199F /* PrivacyInfo.xcprivacy */; };
-		9588BFB57B3A422EAA445855 /* LiveActivityModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF328DAF90D4423BBD9878F0 /* LiveActivityModule.swift */; };
+		4841D85380B247408E21ACC1 /* LiveActivityModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09E9783DA9314FD783D88BA1 /* LiveActivityModule.swift */; };
+		507195F9AEB2459DB984DC55 /* SleepActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6002F8638245459FBC90ECC3 /* SleepActivityAttributes.swift */; };
+		68481DEEA78D8132FD94E18F /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4487C111EFE335A832120056 /* ExpoModulesProvider.swift */; };
+		88083FDBE7804AB98B392CD7 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F3E2BEE7C1974C7D84C90DD1 /* PrivacyInfo.xcprivacy */; };
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
-		D7974F6BCE2C4441A7A1CE45 /* LiveActivityModule.m in Sources */ = {isa = PBXBuildFile; fileRef = F643A7CEA5A240CE851C147A /* LiveActivityModule.m */; };
+		EFAE198ECCBB4430BC750D6F /* LiveActivityModule.m in Sources */ = {isa = PBXBuildFile; fileRef = CB15BB7E0CD74BD3975A8F4C /* LiveActivityModule.m */; };
 		F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11748412D0307B40044C1D9 /* AppDelegate.swift */; };
-		XX09E725E164C2787243F7XX /* widget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = XXD26DB380DB6D7349BA89XX /* widget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		XX12B55A1EDABF083C3B51XX /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = XX470101BAEB8E0BBC8B0DXX /* WidgetKit.framework */; };
 		XX1A6800511A685AB346D2XX /* AppIntents.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = XXA12889081EB894481655XX /* AppIntents.framework */; };
 		XX3C562DEF346B45594832XX /* ActivityKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = XXCAF23C3FC41F82140FA1XX /* ActivityKit.framework */; };
 		XX6A44985675A04437B8C4XX /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = XX4DFF38D47332D6BF0183XX /* SwiftUI.framework */; };
+		XX763D69321572B297C9E6XX /* LottiBabyLiveActivity.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = XXE8E277A79C04E96EE2F1XX /* LottiBabyLiveActivity.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
-		XX6F7B203BB2387AD64D18XX /* PBXContainerItemProxy */ = {
+		XX2AC6B83B971916F3328BXX /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 83CBB9F71A601CBA00E9B192 /* Project object */;
 			proxyType = 1;
-			remoteGlobalIDString = XX8FA23E3920BEE60C6D63XX;
-			remoteInfo = widget;
+			remoteGlobalIDString = XX2657BF7C9A77C6031CFAXX;
+			remoteInfo = LottiBabyLiveActivity;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -41,7 +41,7 @@
 			dstPath = "";
 			dstSubfolderSpec = 13;
 			files = (
-				XX09E725E164C2787243F7XX /* widget.appex in Embed Foundation Extensions */,
+				XX763D69321572B297C9E6XX /* LottiBabyLiveActivity.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -49,45 +49,45 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		09E9783DA9314FD783D88BA1 /* LiveActivityModule.swift */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 4; includeInIndex = 0; lastKnownFileType = sourcecode.swift; name = LiveActivityModule.swift; path = /Users/janzeppenfeld/Developer/LottiBaby/ios/LottiBaby/LiveActivityModule.swift; sourceTree = "<group>"; };
 		13B07F961A680F5B00A75B9A /* LottiBaby.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; fileEncoding = 4; includeInIndex = 0; path = LottiBaby.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; fileEncoding = 4; includeInIndex = 0; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = LottiBaby/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; includeInIndex = 0; lastKnownFileType = text.plist.xml; name = Info.plist; path = LottiBaby/Info.plist; sourceTree = "<group>"; };
-		22A2014938CC8E20FEBB199F /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = LottiBaby/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
-		68309E3C55DBB05D1E46A817 /* Pods-LottiBaby.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-LottiBaby.debug.xcconfig"; path = "Target Support Files/Pods-LottiBaby/Pods-LottiBaby.debug.xcconfig"; sourceTree = "<group>"; };
-		6BECC4DD8A51671131F68270 /* Pods-LottiBaby.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-LottiBaby.release.xcconfig"; path = "Target Support Files/Pods-LottiBaby/Pods-LottiBaby.release.xcconfig"; sourceTree = "<group>"; };
-		9F3BEF29EA634DCB1EE8E6A6 /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-LottiBaby/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
+		3763EF32BDE8A469F863FE0D /* libPods-LottiBaby.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-LottiBaby.a"; sourceTree = BUILT_PRODUCTS_DIR; };
+		4487C111EFE335A832120056 /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-LottiBaby/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
+		6002F8638245459FBC90ECC3 /* SleepActivityAttributes.swift */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 4; includeInIndex = 0; lastKnownFileType = sourcecode.swift; name = SleepActivityAttributes.swift; path = /Users/janzeppenfeld/Developer/LottiBaby/ios/LottiBaby/SleepActivityAttributes.swift; sourceTree = "<group>"; };
 		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; includeInIndex = 0; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = LottiBaby/SplashScreen.storyboard; sourceTree = "<group>"; };
-		AF328DAF90D4423BBD9878F0 /* LiveActivityModule.swift */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 4; includeInIndex = 0; lastKnownFileType = sourcecode.swift; name = LiveActivityModule.swift; path = LottiBaby/LiveActivityModule.swift; sourceTree = "<group>"; };
-		BADCD1067D9A473097A4A1FA /* SleepActivityAttributes.swift */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 4; includeInIndex = 0; lastKnownFileType = sourcecode.swift; name = SleepActivityAttributes.swift; path = LottiBaby/SleepActivityAttributes.swift; sourceTree = "<group>"; };
 		BB2F792C24A3F905000567C9 /* Expo.plist */ = {isa = PBXFileReference; fileEncoding = 4; includeInIndex = 0; lastKnownFileType = text.plist.xml; path = Expo.plist; sourceTree = "<group>"; };
-		D10CBC43967F260050329941 /* libPods-LottiBaby.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-LottiBaby.a"; sourceTree = BUILT_PRODUCTS_DIR; };
+		CB15BB7E0CD74BD3975A8F4C /* LiveActivityModule.m */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 4; includeInIndex = 0; lastKnownFileType = sourcecode.c.objc; name = LiveActivityModule.m; path = /Users/janzeppenfeld/Developer/LottiBaby/ios/LottiBaby/LiveActivityModule.m; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; fileEncoding = 4; includeInIndex = undefined; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
+		EDD02A0FB70C0599C7358B41 /* Pods-LottiBaby.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-LottiBaby.release.xcconfig"; path = "Target Support Files/Pods-LottiBaby/Pods-LottiBaby.release.xcconfig"; sourceTree = "<group>"; };
 		F11748412D0307B40044C1D9 /* AppDelegate.swift */ = {isa = PBXFileReference; fileEncoding = 4; includeInIndex = 0; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = LottiBaby/AppDelegate.swift; sourceTree = "<group>"; };
 		F11748442D0722820044C1D9 /* LottiBaby-Bridging-Header.h */ = {isa = PBXFileReference; fileEncoding = 4; includeInIndex = 0; lastKnownFileType = sourcecode.c.h; name = "LottiBaby-Bridging-Header.h"; path = "LottiBaby/LottiBaby-Bridging-Header.h"; sourceTree = "<group>"; };
-		F643A7CEA5A240CE851C147A /* LiveActivityModule.m */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 4; includeInIndex = 0; lastKnownFileType = sourcecode.c.objc; name = LiveActivityModule.m; path = LottiBaby/LiveActivityModule.m; sourceTree = "<group>"; };
+		F3E2BEE7C1974C7D84C90DD1 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = PrivacyInfo.xcprivacy; path = LottiBaby/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		F9AEDECC89D19F919A3BB5F7 /* Pods-LottiBaby.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-LottiBaby.debug.xcconfig"; path = "Target Support Files/Pods-LottiBaby/Pods-LottiBaby.debug.xcconfig"; sourceTree = "<group>"; };
 		XX470101BAEB8E0BBC8B0DXX /* WidgetKit.framework */ = {isa = PBXFileReference; fileEncoding = 4; includeInIndex = undefined; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		XX4DFF38D47332D6BF0183XX /* SwiftUI.framework */ = {isa = PBXFileReference; fileEncoding = 4; includeInIndex = undefined; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		XXA12889081EB894481655XX /* AppIntents.framework */ = {isa = PBXFileReference; fileEncoding = 4; includeInIndex = undefined; lastKnownFileType = wrapper.framework; name = AppIntents.framework; path = System/Library/Frameworks/AppIntents.framework; sourceTree = SDKROOT; };
 		XXCAF23C3FC41F82140FA1XX /* ActivityKit.framework */ = {isa = PBXFileReference; fileEncoding = 4; includeInIndex = undefined; lastKnownFileType = wrapper.framework; name = ActivityKit.framework; path = System/Library/Frameworks/ActivityKit.framework; sourceTree = SDKROOT; };
-		XXD26DB380DB6D7349BA89XX /* widget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; fileEncoding = 4; includeInIndex = 0; path = widget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		XXE8E277A79C04E96EE2F1XX /* LottiBabyLiveActivity.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; fileEncoding = 4; includeInIndex = 0; path = LottiBabyLiveActivity.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		XX5721794A0E583FB51A8EXX /* Exceptions for "widget" folder in "widget" target */ = {
+		XXF788E5D461EFEF80BF4FXX /* Exceptions for "widget" folder in "LottiBabyLiveActivity" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
 				"expo-target.config.js",
 			);
-			target = XX8FA23E3920BEE60C6D63XX /* widget */;
+			target = XX2657BF7C9A77C6031CFAXX /* LottiBabyLiveActivity */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		XXC7776CA43DC2A7D41E4EXX /* widget */ = {
+		XX0BD391A170B3425CC53EXX /* widget */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				XX5721794A0E583FB51A8EXX /* Exceptions for "widget" folder in "widget" target */,
+				XXF788E5D461EFEF80BF4FXX /* Exceptions for "widget" folder in "LottiBabyLiveActivity" target */,
 			);
 			explicitFileTypes = {
 			};
@@ -103,7 +103,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				504AD97052A26C031B5316FA /* libPods-LottiBaby.a in Frameworks */,
+				3B13410C349FE9F63787BCA7 /* libPods-LottiBaby.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -130,22 +130,12 @@
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */,
-				BADCD1067D9A473097A4A1FA /* SleepActivityAttributes.swift */,
-				AF328DAF90D4423BBD9878F0 /* LiveActivityModule.swift */,
-				F643A7CEA5A240CE851C147A /* LiveActivityModule.m */,
-				22A2014938CC8E20FEBB199F /* PrivacyInfo.xcprivacy */,
+				F3E2BEE7C1974C7D84C90DD1 /* PrivacyInfo.xcprivacy */,
+				6002F8638245459FBC90ECC3 /* SleepActivityAttributes.swift */,
+				09E9783DA9314FD783D88BA1 /* LiveActivityModule.swift */,
+				CB15BB7E0CD74BD3975A8F4C /* LiveActivityModule.m */,
 			);
 			name = LottiBaby;
-			sourceTree = "<group>";
-		};
-		1D38E420A0B9D76CD0BC5B12 /* Pods */ = {
-			isa = PBXGroup;
-			children = (
-				68309E3C55DBB05D1E46A817 /* Pods-LottiBaby.debug.xcconfig */,
-				6BECC4DD8A51671131F68270 /* Pods-LottiBaby.release.xcconfig */,
-			);
-			name = Pods;
-			path = Pods;
 			sourceTree = "<group>";
 		};
 		2D16E6871FA4F8E400B85C8A /* Frameworks */ = {
@@ -156,15 +146,15 @@
 				XX4DFF38D47332D6BF0183XX /* SwiftUI.framework */,
 				XXCAF23C3FC41F82140FA1XX /* ActivityKit.framework */,
 				XXA12889081EB894481655XX /* AppIntents.framework */,
-				D10CBC43967F260050329941 /* libPods-LottiBaby.a */,
+				3763EF32BDE8A469F863FE0D /* libPods-LottiBaby.a */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
 		};
-		6C2E4E40FEFB8B07BE8A8175 /* ExpoModulesProviders */ = {
+		61625AD25C37E01F42DDDCDB /* ExpoModulesProviders */ = {
 			isa = PBXGroup;
 			children = (
-				9ED3131BDD97C6F51EF4FC49 /* LottiBaby */,
+				8520C322CE331CBE7B891439 /* LottiBaby */,
 			);
 			name = ExpoModulesProviders;
 			sourceTree = "<group>";
@@ -184,8 +174,8 @@
 				832341AE1AAA6A7D00B99B32 /* Libraries */,
 				83CBBA001A601CBA00E9B192 /* Products */,
 				2D16E6871FA4F8E400B85C8A /* Frameworks */,
-				1D38E420A0B9D76CD0BC5B12 /* Pods */,
-				6C2E4E40FEFB8B07BE8A8175 /* ExpoModulesProviders */,
+				842311DAEB3530E8A299B472 /* Pods */,
+				61625AD25C37E01F42DDDCDB /* ExpoModulesProviders */,
 			);
 			indentWidth = 2;
 			sourceTree = "<group>";
@@ -196,15 +186,25 @@
 			isa = PBXGroup;
 			children = (
 				13B07F961A680F5B00A75B9A /* LottiBaby.app */,
-				XXD26DB380DB6D7349BA89XX /* widget.appex */,
+				XXE8E277A79C04E96EE2F1XX /* LottiBabyLiveActivity.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
 		};
-		9ED3131BDD97C6F51EF4FC49 /* LottiBaby */ = {
+		842311DAEB3530E8A299B472 /* Pods */ = {
 			isa = PBXGroup;
 			children = (
-				9F3BEF29EA634DCB1EE8E6A6 /* ExpoModulesProvider.swift */,
+				F9AEDECC89D19F919A3BB5F7 /* Pods-LottiBaby.debug.xcconfig */,
+				EDD02A0FB70C0599C7358B41 /* Pods-LottiBaby.release.xcconfig */,
+			);
+			name = Pods;
+			path = Pods;
+			sourceTree = "<group>";
+		};
+		8520C322CE331CBE7B891439 /* LottiBaby */ = {
+			isa = PBXGroup;
+			children = (
+				4487C111EFE335A832120056 /* ExpoModulesProvider.swift */,
 			);
 			name = LottiBaby;
 			sourceTree = "<group>";
@@ -221,7 +221,7 @@
 		XX3E41C1850246162C0061XX /* expo:targets */ = {
 			isa = PBXGroup;
 			children = (
-				XXC7776CA43DC2A7D41E4EXX /* widget */,
+				XX0BD391A170B3425CC53EXX /* widget */,
 			);
 			name = "expo:targets";
 			path = ../targets;
@@ -235,30 +235,30 @@
 			buildConfigurationList = 13B07F931A680F5B00A75B9A /* Build configuration list for PBXNativeTarget "LottiBaby" */;
 			buildPhases = (
 				08A4A3CD28434E44B6B9DE2E /* [CP] Check Pods Manifest.lock */,
-				9F166BCCDB7C47A9924CC9D4 /* [Expo] Configure project */,
+				F226159C363CB7AAADED44BF /* [Expo] Configure project */,
 				13B07F871A680F5B00A75B9A /* Sources */,
 				13B07F8C1A680F5B00A75B9A /* Frameworks */,
 				13B07F8E1A680F5B00A75B9A /* Resources */,
 				00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */,
 				800E24972A6A228C8D4807E9 /* [CP] Copy Pods Resources */,
-				11D3D9ECF3D3441D8A2DDFD2 /* [Expo Dev Launcher] Strip Local Network Keys for Release */,
-				AA1423772B584445AF7C3116 /* Upload Debug Symbols to Sentry */,
+				222219B86C00428FA4ABCBC2 /* [Expo Dev Launcher] Strip Local Network Keys for Release */,
+				317A77E388AC4016BB331FE9 /* Upload Debug Symbols to Sentry */,
 				XX72A8CFBF0FBA13A79902XX /* Embed Foundation Extensions */,
-				7453551B324B2F1F42CC870C /* [CP] Embed Pods Frameworks */,
+				91434ED12C5849D255C7CD5D /* [CP] Embed Pods Frameworks */,
 			);
 			buildRules = (
 			);
 			dependencies = (
-				XXA69B21DE61C3BDF1CE95XX /* PBXTargetDependency */,
+				XX6DFC418DDAE3B3A268F6XX /* PBXTargetDependency */,
 			);
 			name = LottiBaby;
 			productName = LottiBaby;
 			productReference = 13B07F961A680F5B00A75B9A /* LottiBaby.app */;
 			productType = "com.apple.product-type.application";
 		};
-		XX8FA23E3920BEE60C6D63XX /* widget */ = {
+		XX2657BF7C9A77C6031CFAXX /* LottiBabyLiveActivity */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = XX8D7F4F54EB54C19B05BCXX /* Build configuration list for PBXNativeTarget "widget" */;
+			buildConfigurationList = XXD5568D30F3806791A39EXX /* Build configuration list for PBXNativeTarget "LottiBabyLiveActivity" */;
 			buildPhases = (
 				XX074B8811C1CF8E8A3D74XX /* Frameworks */,
 				XXE45443DC38DCFE1DB622XX /* Sources */,
@@ -269,11 +269,11 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				XXC7776CA43DC2A7D41E4EXX /* widget */,
+				XX0BD391A170B3425CC53EXX /* widget */,
 			);
-			name = widget;
-			productName = widget;
-			productReference = XXD26DB380DB6D7349BA89XX /* widget.appex */;
+			name = LottiBabyLiveActivity;
+			productName = LottiBabyLiveActivity;
+			productReference = XXE8E277A79C04E96EE2F1XX /* LottiBabyLiveActivity.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
@@ -287,7 +287,7 @@
 					13B07F861A680F5B00A75B9A = {
 						LastSwiftMigration = 1250;
 					};
-					XX8FA23E3920BEE60C6D63XX = {
+					XX2657BF7C9A77C6031CFAXX = {
 						CreatedOnToolsVersion = 14.3;
 						DevelopmentTeam = FWCPXYUKA2;
 						ProvisioningStyle = Automatic;
@@ -308,7 +308,7 @@
 			projectRoot = "";
 			targets = (
 				13B07F861A680F5B00A75B9A /* LottiBaby */,
-				XX8FA23E3920BEE60C6D63XX /* widget */,
+				XX2657BF7C9A77C6031CFAXX /* LottiBabyLiveActivity */,
 			);
 		};
 /* End PBXProject section */
@@ -321,7 +321,7 @@
 				BB2F792D24A3F905000567C9 /* Expo.plist in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */,
-				7936F3D095A4F12EFBAC032A /* PrivacyInfo.xcprivacy in Resources */,
+				88083FDBE7804AB98B392CD7 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -354,7 +354,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "if [[ -f \"$PODS_ROOT/../.xcode.env\" ]]; then\n  source \"$PODS_ROOT/../.xcode.env\"\nfi\nif [[ -f \"$PODS_ROOT/../.xcode.env.local\" ]]; then\n  source \"$PODS_ROOT/../.xcode.env.local\"\nfi\n\n# The project root by default is one level up from the ios directory\nexport PROJECT_ROOT=\"$PROJECT_DIR\"/..\n\nif [[ \"$CONFIGURATION\" = *Debug* ]]; then\n  export SKIP_BUNDLING=1\nfi\nif [[ -z \"$ENTRY_FILE\" ]]; then\n  # Set the entry JS file using the bundler's entry resolution.\n  export ENTRY_FILE=\"$(\"$NODE_BINARY\" -e \"require('expo/scripts/resolveAppEntry')\" \"$PROJECT_ROOT\" ios absolute | tail -n 1)\"\nfi\n\nif [[ -z \"$CLI_PATH\" ]]; then\n  # Use Expo CLI\n  export CLI_PATH=\"$(\"$NODE_BINARY\" --print \"require.resolve('@expo/cli', { paths: [require.resolve('expo/package.json')] })\")\"\nfi\nif [[ -z \"$BUNDLE_COMMAND\" ]]; then\n  # Default Expo CLI command for bundling\n  export BUNDLE_COMMAND=\"export:embed\"\nfi\n\n# Source .xcode.env.updates if it exists to allow\n# SKIP_BUNDLING to be unset if needed\nif [[ -f \"$PODS_ROOT/../.xcode.env.updates\" ]]; then\n  source \"$PODS_ROOT/../.xcode.env.updates\"\nfi\n# Source local changes to allow overrides\n# if needed\nif [[ -f \"$PODS_ROOT/../.xcode.env.local\" ]]; then\n  source \"$PODS_ROOT/../.xcode.env.local\"\nfi\n\n# Missing Sentry credentials should not fail app builds.\nif [[ -z \"$SENTRY_AUTH_TOKEN\" && -z \"$SENTRY_ALLOW_FAILURE\" ]]; then\n  export SENTRY_ALLOW_FAILURE=true\nfi\n\n/bin/sh `\"$NODE_BINARY\" --print \"require('path').dirname(require.resolve('@sentry/react-native/package.json')) + '/scripts/sentry-xcode.sh'\"` `\"$NODE_BINARY\" --print \"require('path').dirname(require.resolve('react-native/package.json')) + '/scripts/react-native-xcode.sh'\"`\n\n";
+			shellScript = "if [[ -f \"$PODS_ROOT/../.xcode.env\" ]]; then\n  source \"$PODS_ROOT/../.xcode.env\"\nfi\nif [[ -f \"$PODS_ROOT/../.xcode.env.local\" ]]; then\n  source \"$PODS_ROOT/../.xcode.env.local\"\nfi\n\n# The project root by default is one level up from the ios directory\nexport PROJECT_ROOT=\"$PROJECT_DIR\"/..\n\nif [[ \"$CONFIGURATION\" = *Debug* ]]; then\n  export SKIP_BUNDLING=1\nfi\nif [[ -z \"$ENTRY_FILE\" ]]; then\n  # Set the entry JS file using the bundler's entry resolution.\n  export ENTRY_FILE=\"$(\"$NODE_BINARY\" -e \"require('expo/scripts/resolveAppEntry')\" \"$PROJECT_ROOT\" ios absolute | tail -n 1)\"\nfi\n\nif [[ -z \"$CLI_PATH\" ]]; then\n  # Use Expo CLI\n  export CLI_PATH=\"$(\"$NODE_BINARY\" --print \"require.resolve('@expo/cli', { paths: [require.resolve('expo/package.json')] })\")\"\nfi\nif [[ -z \"$BUNDLE_COMMAND\" ]]; then\n  # Default Expo CLI command for bundling\n  export BUNDLE_COMMAND=\"export:embed\"\nfi\n\n# Source .xcode.env.updates if it exists to allow\n# SKIP_BUNDLING to be unset if needed\nif [[ -f \"$PODS_ROOT/../.xcode.env.updates\" ]]; then\n  source \"$PODS_ROOT/../.xcode.env.updates\"\nfi\n# Source local changes to allow overrides\n# if needed\nif [[ -f \"$PODS_ROOT/../.xcode.env.local\" ]]; then\n  source \"$PODS_ROOT/../.xcode.env.local\"\nfi\n\n/bin/sh `\"$NODE_BINARY\" --print \"require('path').dirname(require.resolve('@sentry/react-native/package.json')) + '/scripts/sentry-xcode.sh'\"` `\"$NODE_BINARY\" --print \"require('path').dirname(require.resolve('react-native/package.json')) + '/scripts/react-native-xcode.sh'\"`\n\n";
 		};
 		08A4A3CD28434E44B6B9DE2E /* [CP] Check Pods Manifest.lock */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -378,7 +378,7 @@
 			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
 			showEnvVarsInLog = 0;
 		};
-		11D3D9ECF3D3441D8A2DDFD2 /* [Expo Dev Launcher] Strip Local Network Keys for Release */ = {
+		222219B86C00428FA4ABCBC2 /* [Expo Dev Launcher] Strip Local Network Keys for Release */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -396,29 +396,23 @@
 			shellPath = /bin/sh;
 			shellScript = "# Strip dev-launcher-specific local network permission keys from non-Debug builds\n# This only removes _expo._tcp Bonjour services and the dev-launcher usage description.\n# Other Bonjour services and custom descriptions are preserved for production use.\n\nif [ \"$CONFIGURATION\" != \"Debug\" ]; then\n  PLIST_PATH=\"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}\"\n  if [ -f \"$PLIST_PATH\" ]; then\n    # Check if NSBonjourServices exists\n    if /usr/libexec/PlistBuddy -c \"Print :NSBonjourServices\" \"$PLIST_PATH\" >/dev/null 2>&1; then\n      # Get the count of services\n      COUNT=$(/usr/libexec/PlistBuddy -c \"Print :NSBonjourServices\" \"$PLIST_PATH\" 2>/dev/null | grep \"^    \" | wc -l | tr -d ' ')\n\n      # Remove _expo._tcp\n      for ((i=COUNT-1; i>=0; i--)); do\n        SERVICE=$(/usr/libexec/PlistBuddy -c \"Print :NSBonjourServices:$i\" \"$PLIST_PATH\" 2>/dev/null || echo \"\")\n        if echo \"$SERVICE\" | grep -q \"_expo._tcp\"; then\n          /usr/libexec/PlistBuddy -c \"Delete :NSBonjourServices:$i\" \"$PLIST_PATH\" 2>/dev/null || true\n        fi\n      done\n\n      # If the array is now empty, remove it entirely\n      REMAINING=$(/usr/libexec/PlistBuddy -c \"Print :NSBonjourServices\" \"$PLIST_PATH\" 2>/dev/null | grep \"^    \" | wc -l | tr -d ' ')\n      if [ \"$REMAINING\" -eq \"0\" ]; then\n        /usr/libexec/PlistBuddy -c \"Delete :NSBonjourServices\" \"$PLIST_PATH\" 2>/dev/null || true\n      fi\n    fi\n\n    # Only delete the description if it matches the dev-launcher default text\n    DESC=$(/usr/libexec/PlistBuddy -c \"Print :NSLocalNetworkUsageDescription\" \"$PLIST_PATH\" 2>/dev/null || echo \"\")\n    if echo \"$DESC\" | grep -q \"Expo Dev Launcher\"; then\n      /usr/libexec/PlistBuddy -c \"Delete :NSLocalNetworkUsageDescription\" \"$PLIST_PATH\" 2>/dev/null || true\n    fi\n  fi\nfi\n";
 		};
-		7453551B324B2F1F42CC870C /* [CP] Embed Pods Frameworks */ = {
+		317A77E388AC4016BB331FE9 /* Upload Debug Symbols to Sentry */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
-			inputPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-LottiBaby/Pods-LottiBaby-frameworks.sh",
-				"${PODS_XCFRAMEWORKS_BUILD_DIR}/ExpoModulesJSI/ExpoModulesJSI.framework/ExpoModulesJSI",
-				"${PODS_XCFRAMEWORKS_BUILD_DIR}/React-Core-prebuilt/React.framework/React",
-				"${PODS_XCFRAMEWORKS_BUILD_DIR}/ReactNativeDependencies/ReactNativeDependencies.framework/ReactNativeDependencies",
-				"${PODS_XCFRAMEWORKS_BUILD_DIR}/hermes-engine/Pre-built/hermesvm.framework/hermesvm",
+			inputFileListPaths = (
 			);
-			name = "[CP] Embed Pods Frameworks";
+			inputPaths = (
+			);
+			name = "Upload Debug Symbols to Sentry";
+			outputFileListPaths = (
+			);
 			outputPaths = (
-				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/ExpoModulesJSI.framework",
-				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/React.framework",
-				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/ReactNativeDependencies.framework",
-				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/hermesvm.framework",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-LottiBaby/Pods-LottiBaby-frameworks.sh\"\n";
-			showEnvVarsInLog = 0;
+			shellScript = "/bin/sh `${NODE_BINARY:-node} --print \"require('path').dirname(require.resolve('@sentry/react-native/package.json')) + '/scripts/sentry-xcode-debug-files.sh'\"`";
 		};
 		800E24972A6A228C8D4807E9 /* [CP] Copy Pods Resources */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -444,7 +438,6 @@
 				"${PODS_CONFIGURATION_BUILD_DIR}/React-cxxreact/React-cxxreact_privacy.bundle",
 				"${PODS_CONFIGURATION_BUILD_DIR}/React-timing/React-timing_privacy.bundle",
 				"${PODS_CONFIGURATION_BUILD_DIR}/RevenueCat/RevenueCat.bundle",
-				"${PODS_CONFIGURATION_BUILD_DIR}/SDWebImage/SDWebImage.bundle",
 				"${PODS_CONFIGURATION_BUILD_DIR}/Sentry/Sentry.bundle",
 				"${PODS_CONFIGURATION_BUILD_DIR}/expo-dev-launcher/EXDevLauncher.bundle",
 				"${PODS_CONFIGURATION_BUILD_DIR}/expo-dev-menu/EXDevMenu.bundle",
@@ -469,7 +462,6 @@
 				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/React-cxxreact_privacy.bundle",
 				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/React-timing_privacy.bundle",
 				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/RevenueCat.bundle",
-				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/SDWebImage.bundle",
 				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/Sentry.bundle",
 				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/EXDevLauncher.bundle",
 				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/EXDevMenu.bundle",
@@ -480,7 +472,63 @@
 			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-LottiBaby/Pods-LottiBaby-resources.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
-		9F166BCCDB7C47A9924CC9D4 /* [Expo] Configure project */ = {
+		91434ED12C5849D255C7CD5D /* [CP] Embed Pods Frameworks */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-LottiBaby/Pods-LottiBaby-frameworks.sh",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/ExpoCamera/ExpoCamera.framework/ExpoCamera",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/ExpoCameraBarcodeScanning/ExpoCameraBarcodeScanning.framework/ExpoCameraBarcodeScanning",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/ExpoCameraBarcodeScanning/ZXingObjC.framework/ZXingObjC",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/ExpoFileSystem/ExpoFileSystem.framework/ExpoFileSystem",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/ExpoFont/ExpoFont.framework/ExpoFont",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/ExpoImage/ExpoImage.framework/ExpoImage",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/ExpoImage/SDWebImage.framework/SDWebImage",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/ExpoImage/SDWebImageAVIFCoder.framework/SDWebImageAVIFCoder",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/ExpoImage/SDWebImageSVGCoder.framework/SDWebImageSVGCoder",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/ExpoImage/SDWebImageWebPCoder.framework/SDWebImageWebPCoder",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/ExpoImage/libavif.framework/libavif",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/ExpoImageManipulator/ExpoImageManipulator.framework/ExpoImageManipulator",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/ExpoLocation/ExpoLocation.framework/ExpoLocation",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/ExpoModulesCore/ExpoModulesCore.framework/ExpoModulesCore",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/ExpoModulesJSI/ExpoModulesJSI.framework/ExpoModulesJSI",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/ExpoModulesWorklets/ExpoModulesWorklets.framework/ExpoModulesWorklets",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/ExpoPrint/ExpoPrint.framework/ExpoPrint",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/React-Core-prebuilt/React.framework/React",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/ReactNativeDependencies/ReactNativeDependencies.framework/ReactNativeDependencies",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/hermes-engine/Pre-built/hermesvm.framework/hermesvm",
+			);
+			name = "[CP] Embed Pods Frameworks";
+			outputPaths = (
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/ExpoCamera.framework",
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/ExpoCameraBarcodeScanning.framework",
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/ZXingObjC.framework",
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/ExpoFileSystem.framework",
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/ExpoFont.framework",
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/ExpoImage.framework",
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/SDWebImage.framework",
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/SDWebImageAVIFCoder.framework",
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/SDWebImageSVGCoder.framework",
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/SDWebImageWebPCoder.framework",
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/libavif.framework",
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/ExpoImageManipulator.framework",
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/ExpoLocation.framework",
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/ExpoModulesCore.framework",
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/ExpoModulesJSI.framework",
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/ExpoModulesWorklets.framework",
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/ExpoPrint.framework",
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/React.framework",
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/ReactNativeDependencies.framework",
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/hermesvm.framework",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-LottiBaby/Pods-LottiBaby-frameworks.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
+		F226159C363CB7AAADED44BF /* [Expo] Configure project */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
@@ -491,7 +539,7 @@
 			inputPaths = (
 				"$(SRCROOT)/.xcode.env",
 				"$(SRCROOT)/.xcode.env.local",
-				"$(SRCROOT)/LottiBaby/LottiBaby.entitlements",
+				"$(SRCROOT)/LottiBaby/LottiBaby.release.entitlements",
 				"$(SRCROOT)/Pods/Target Support Files/Pods-LottiBaby/expo-configure-project.sh",
 			);
 			name = "[Expo] Configure project";
@@ -504,24 +552,6 @@
 			shellPath = /bin/sh;
 			shellScript = "# This script configures Expo modules and generates the modules provider file.\nbash -l -c \"./Pods/Target\\ Support\\ Files/Pods-LottiBaby/expo-configure-project.sh\"\n";
 		};
-		AA1423772B584445AF7C3116 /* Upload Debug Symbols to Sentry */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-			);
-			name = "Upload Debug Symbols to Sentry";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "/bin/sh `${NODE_BINARY:-node} --print \"require('path').dirname(require.resolve('@sentry/react-native/package.json')) + '/scripts/sentry-xcode-debug-files.sh'\"`";
-		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -530,10 +560,10 @@
 			buildActionMask = 2147483647;
 			files = (
 				F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */,
-				5AECFA602A854509A613B807 /* SleepActivityAttributes.swift in Sources */,
-				9588BFB57B3A422EAA445855 /* LiveActivityModule.swift in Sources */,
-				D7974F6BCE2C4441A7A1CE45 /* LiveActivityModule.m in Sources */,
-				5507FCC7D60D343CDD9A1D73 /* ExpoModulesProvider.swift in Sources */,
+				507195F9AEB2459DB984DC55 /* SleepActivityAttributes.swift in Sources */,
+				4841D85380B247408E21ACC1 /* LiveActivityModule.swift in Sources */,
+				EFAE198ECCBB4430BC750D6F /* LiveActivityModule.m in Sources */,
+				68481DEEA78D8132FD94E18F /* ExpoModulesProvider.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -547,22 +577,21 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
-		XXA69B21DE61C3BDF1CE95XX /* PBXTargetDependency */ = {
+		XX6DFC418DDAE3B3A268F6XX /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = XX8FA23E3920BEE60C6D63XX /* widget */;
-			targetProxy = XX6F7B203BB2387AD64D18XX /* PBXContainerItemProxy */;
+			target = XX2657BF7C9A77C6031CFAXX /* LottiBabyLiveActivity */;
+			targetProxy = XX2AC6B83B971916F3328BXX /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		13B07F941A680F5B00A75B9A /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 68309E3C55DBB05D1E46A817 /* Pods-LottiBaby.debug.xcconfig */;
+			baseConfigurationReference = F9AEDECC89D19F919A3BB5F7 /* Pods-LottiBaby.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
-				CODE_SIGN_ENTITLEMENTS = LottiBaby/LottiBaby.entitlements;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = FWCPXYUKA2;
 				ENABLE_BITCODE = NO;
 				GCC_PREPROCESSOR_DEFINITIONS = (
@@ -575,6 +604,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				MACOSX_DEPLOYMENT_TARGET = 13.4;
 				MARKETING_VERSION = 1.0.17;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
@@ -594,12 +624,12 @@
 		};
 		13B07F951A680F5B00A75B9A /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 6BECC4DD8A51671131F68270 /* Pods-LottiBaby.release.xcconfig */;
+			baseConfigurationReference = EDD02A0FB70C0599C7358B41 /* Pods-LottiBaby.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = LottiBaby/LottiBaby.release.entitlements;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = FWCPXYUKA2;
 				INFOPLIST_FILE = LottiBaby/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.4;
@@ -607,6 +637,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				MACOSX_DEPLOYMENT_TARGET = 13.4;
 				MARKETING_VERSION = 1.0.17;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
@@ -759,9 +790,10 @@
 			};
 			name = Release;
 		};
-		XX850E3659E5F53615A64CXX /* Release */ = {
+		XX2006065096DF1F9CD1F3XX /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
@@ -800,9 +832,10 @@
 			};
 			name = Release;
 		};
-		XXE9332A59B2A7C8960CFEXX /* Debug */ = {
+		XXDEFE25A0865E689A38D7XX /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
@@ -862,11 +895,11 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		XX8D7F4F54EB54C19B05BCXX /* Build configuration list for PBXNativeTarget "widget" */ = {
+		XXD5568D30F3806791A39EXX /* Build configuration list for PBXNativeTarget "LottiBabyLiveActivity" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				XXE9332A59B2A7C8960CFEXX /* Debug */,
-				XX850E3659E5F53615A64CXX /* Release */,
+				XXDEFE25A0865E689A38D7XX /* Debug */,
+				XX2006065096DF1F9CD1F3XX /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

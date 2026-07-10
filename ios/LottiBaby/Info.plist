@@ -21,7 +21,7 @@
 	<key>CFBundlePackageType</key>
 	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
 	<key>CFBundleShortVersionString</key>
-	<string>$(MARKETING_VERSION)</string>
+	<string>1.0.17</string>
 	<key>CFBundleSignature</key>
 	<string>????</string>
 	<key>CFBundleURLTypes</key>
@@ -41,7 +41,7 @@
 		</dict>
 	</array>
 	<key>CFBundleVersion</key>
-	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<string>5</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>LSMinimumSystemVersion</key>
@@ -59,18 +59,20 @@
 	<array>
 		<string>_expo._tcp</string>
 	</array>
-	<key>NSCameraUsageDescription</key>
-	<string>Lotti Baby benötigt Zugriff auf deine Kamera, damit du Barcodes von Windeln, Milchpulver und anderen Produkten scannen und deine Vorräte automatisch auffüllen kannst.</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>Lotti Baby benötigt Zugriff auf deinen Kalender, damit du Planer- und Arzttermine als Kalendereinträge anlegen, aktualisieren und mit Erinnerungen synchronisieren kannst.</string>
 	<key>NSCalendarsUsageDescription</key>
 	<string>Lotti Baby benötigt Zugriff auf deinen Kalender, damit du Planer- und Arzttermine als Kalendereinträge anlegen, aktualisieren und mit Erinnerungen synchronisieren kannst.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Lotti Baby benötigt Zugriff auf deine Kamera, damit du Barcodes von Windeln, Milchpulver und anderen Produkten scannen und deine Vorräte automatisch auffüllen kannst.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Expo Dev Launcher uses the local network to discover and connect to development servers running on your computer.</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Lotti Baby benötigt Zugriff auf dein Mikrofon, damit du Sprachnachrichten in Chats aufnehmen kannst.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Lotti Baby verwendet deinen Standort nur während der Nutzung, um lokale Wetterdaten abzurufen und passende Kleidungsempfehlungen für dein Baby anzuzeigen.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Lotti Baby benötigt Zugriff auf dein Mikrofon, damit du Sprachnachrichten in Chats aufnehmen kannst.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>Allow $(PRODUCT_NAME) to detect your current motion activity</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Lotti Baby benötigt Zugriff auf deine Fotomediathek, damit du Bilder für Profile, Meilensteine, Rezepte, Empfehlungen und Beiträge auswählen kannst.</string>
 	<key>NSRemindersFullAccessUsageDescription</key>
@@ -87,6 +89,11 @@
 	</array>
 	<key>RCTNewArchEnabled</key>
 	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+		<string>audio</string>
+	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>SplashScreen</string>
 	<key>UIRequiredDeviceCapabilities</key>

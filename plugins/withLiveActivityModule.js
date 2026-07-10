@@ -18,6 +18,7 @@ const NATIVE_FILES = [
   'LiveActivityModule.swift',
   'LiveActivityModule.m',
 ];
+const RELEASE_ENTITLEMENTS_SOURCE = 'LottiBaby.release.entitlements';
 const SOURCE_DIR = 'native-modules/LiveActivity';
 
 /** Step 1 – copy files into ios/<AppName>/ */
@@ -38,6 +39,14 @@ function withCopyFiles(config) {
         } else {
           console.warn(`[withLiveActivityModule] Source not found: ${src}`);
         }
+      }
+
+      const releaseEntitlementsSource = path.join(srcDir, RELEASE_ENTITLEMENTS_SOURCE);
+      const releaseEntitlementsDestination = path.join(targetDir, `${appName}.release.entitlements`);
+      if (fs.existsSync(releaseEntitlementsSource)) {
+        fs.copyFileSync(releaseEntitlementsSource, releaseEntitlementsDestination);
+      } else {
+        console.warn(`[withLiveActivityModule] Source not found: ${releaseEntitlementsSource}`);
       }
 
       return cfg;
@@ -73,6 +82,16 @@ function withAddToXcode(config) {
         project,
         targetUuid: target.uuid,
       });
+    }
+
+    const buildConfigurations = IOSConfig.XcodeUtils.getBuildConfigurationsForListId(
+      project,
+      target.buildConfigurationList,
+    );
+    for (const [, buildConfiguration] of buildConfigurations) {
+      if (buildConfiguration.name === 'Release') {
+        buildConfiguration.buildSettings.CODE_SIGN_ENTITLEMENTS = `${appName}/${appName}.release.entitlements`;
+      }
     }
 
     return cfg;

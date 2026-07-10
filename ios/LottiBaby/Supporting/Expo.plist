@@ -11,12 +11,14 @@
       <key>keyid</key>
       <string>main</string>
     </dict>
+    <key>EXUpdatesEnableBsdiffPatchSupport</key>
+    <true/>
     <key>EXUpdatesEnabled</key>
     <true/>
     <key>EXUpdatesLaunchWaitMs</key>
     <integer>0</integer>
     <key>EXUpdatesRuntimeVersion</key>
-    <string>55.0.0</string>
+    <string>57.0.0</string>
     <key>EXUpdatesURL</key>
     <string>https://u.expo.dev/d7120520-e4ff-4967-a797-627a2cb3680b</string>
   </dict>

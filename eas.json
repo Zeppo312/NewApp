@@ -8,6 +8,7 @@
       "developmentClient": true,
       "distribution": "internal",
       "channel": "development",
+      "environment": "development",
       "env": {
         "SENTRY_ALLOW_FAILURE": "true"
       }
@@ -32,6 +33,7 @@
     "production": {
       "autoIncrement": true,
       "channel": "production",
+      "environment": "production",
       "env": {
         "SENTRY_ALLOW_FAILURE": "true"
       }

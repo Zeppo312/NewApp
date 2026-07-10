@@ -4,7 +4,6 @@ require File.join(File.dirname(`node --print "require.resolve('expo/package.json
 require File.join(File.dirname(`node --print "require.resolve('react-native/package.json')"`), "scripts/react_native_pods")
 
 require 'json'
-require 'fileutils'
 podfile_properties = JSON.parse(File.read(File.join(__dir__, 'Podfile.properties.json'))) rescue {}
 
 def ccache_enabled?(podfile_properties)
@@ -16,29 +15,16 @@ def ccache_enabled?(podfile_properties)
 end
 
 ENV['EX_DEV_CLIENT_NETWORK_INSPECTOR'] ||= podfile_properties['EX_DEV_CLIENT_NETWORK_INSPECTOR']
-ENV['RCT_USE_RN_DEP'] ||= '1' if podfile_properties['ios.buildReactNativeFromSource'] != 'true'
-ENV['RCT_USE_PREBUILT_RNCORE'] ||= '1' if podfile_properties['ios.buildReactNativeFromSource'] != 'true'
-ENV['RCT_HERMES_V1_ENABLED'] ||= '1' if podfile_properties['expo.useHermesV1'] == 'true'
-platform :ios, podfile_properties['ios.deploymentTarget'] || '15.1'
+ENV['RCT_USE_RN_DEP'] ||= podfile_properties['ios.buildReactNativeFromSource'] == 'true' ? '0' : '1'
+ENV['RCT_USE_PREBUILT_RNCORE'] ||= podfile_properties['ios.buildReactNativeFromSource'] == 'true' ? '0' : '1'
+ENV['RCT_HERMES_V1_ENABLED'] ||= '0' if podfile_properties['expo.useHermesV1'] == 'false'
+# An explicit `ios.usePrecompiledModules: false` must win even when the env var is already set
+# (e.g. EXPO_USE_PRECOMPILED_MODULES exported by EAS Build), so force-disable here before the default.
+ENV['EXPO_USE_PRECOMPILED_MODULES'] = '0' if podfile_properties['EXPO_USE_PRECOMPILED_MODULES'] == 'false'
+ENV['EXPO_USE_PRECOMPILED_MODULES'] ||= '1'
+platform :ios, podfile_properties['ios.deploymentTarget'] || '16.4'
 
 prepare_react_native_project!
-
-pre_install do |_installer|
-  randombytes_podspec = File.join(
-    __dir__,
-    '..',
-    'node_modules',
-    'react-native-randombytes',
-    'react-native-randombytes.podspec'
-  )
-
-  if File.exist?(randombytes_podspec)
-    contents = File.read(randombytes_podspec)
-    patched = contents.gsub("s.source_files   = '*.{h,m}'", "s.source_files   = 'RNRandomBytes.{h,m}'")
-
-    File.write(randombytes_podspec, patched) if patched != contents
-  end
-end
 
 target 'LottiBaby' do
   use_expo_modules!
@@ -79,33 +65,6 @@ target 'LottiBaby' do
       :mac_catalyst_enabled => false,
       :ccache_enabled => ccache_enabled?(podfile_properties),
     )
-
-    react_xcframework_root = File.join(installer.sandbox.root.to_s, 'React-Core-prebuilt', 'React.xcframework')
-    shared_headers_path = File.join(react_xcframework_root, 'Headers')
-    device_headers_path = File.join(react_xcframework_root, 'ios-arm64', 'React.framework', 'Headers')
-    public_headers_path = File.join(installer.sandbox.root.to_s, 'Headers', 'Public', 'React-Core-prebuilt')
-
-    if Dir.exist?(shared_headers_path) && Dir.exist?(device_headers_path)
-      Dir.children(device_headers_path).each do |entry|
-        target_path = File.join(shared_headers_path, entry)
-        source_path = File.join(device_headers_path, entry)
-
-        next if File.exist?(target_path)
-
-        FileUtils.ln_sf(source_path, target_path)
-      end
-    end
-
-    if Dir.exist?(public_headers_path) && Dir.exist?(device_headers_path)
-      Dir.children(device_headers_path).each do |entry|
-        target_path = File.join(public_headers_path, entry)
-        source_path = File.join(device_headers_path, entry)
-
-        next if File.exist?(target_path)
-
-        FileUtils.ln_sf(source_path, target_path)
-      end
-    end
   end
 end
 
