@@ -8,41 +8,41 @@ import { getOnboardingCompletionState } from '@/lib/onboarding';
 export default function AuthIndex() {
   const { session, loading: authLoading } = useAuth();
   const { isBabyBorn, isLoading: babyStatusLoading, isResolved: babyStatusResolved } = useBabyStatus();
-  const [isCheckingOnboarding, setIsCheckingOnboarding] = useState(false);
-  const [isOnboardingComplete, setIsOnboardingComplete] = useState(false);
+  const userId = session?.user?.id ?? null;
+  const canCheckOnboarding = !authLoading && babyStatusResolved && userId !== null;
+  const [onboardingResult, setOnboardingResult] = useState<{
+    userId: string | null;
+    complete: boolean;
+  }>({ userId: null, complete: false });
+  const isCheckingOnboarding = canCheckOnboarding && onboardingResult.userId !== userId;
+  const isOnboardingComplete = canCheckOnboarding
+    && onboardingResult.userId === userId
+    && onboardingResult.complete;
 
   useEffect(() => {
-    if (authLoading || !session?.user || !babyStatusResolved) {
-      setIsCheckingOnboarding(false);
-      setIsOnboardingComplete(false);
+    if (!canCheckOnboarding || !userId) {
       return;
     }
 
     let cancelled = false;
-    setIsCheckingOnboarding(true);
 
     getOnboardingCompletionState()
       .then((complete) => {
         if (!cancelled) {
-          setIsOnboardingComplete(complete);
+          setOnboardingResult({ userId, complete });
         }
       })
       .catch((error) => {
         console.error('Failed to check onboarding completion on auth index:', error);
         if (!cancelled) {
-          setIsOnboardingComplete(false);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setIsCheckingOnboarding(false);
+          setOnboardingResult({ userId, complete: false });
         }
       });
 
     return () => {
       cancelled = true;
     };
-  }, [authLoading, babyStatusResolved, session?.user]);
+  }, [canCheckOnboarding, userId]);
 
   if (authLoading || babyStatusLoading || !babyStatusResolved || isCheckingOnboarding) {
     return (

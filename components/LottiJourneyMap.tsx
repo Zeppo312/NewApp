@@ -167,13 +167,13 @@ export function LottiJourneyMap({
     [currentIndex, positions],
   );
 
-  const drawAnim = useRef(new Animated.Value(PATH_LENGTH_ESTIMATE)).current;
-  const appearAnim = useRef(new Animated.Value(0)).current;
-  const glowScale = useRef(new Animated.Value(1)).current;
-  const glowOpacity = useRef(new Animated.Value(0.45)).current;
-  const avatarBounce = useRef(new Animated.Value(0.92)).current;
-  const progressAnim = useRef(new Animated.Value(0)).current;
-  const levelUpFlash = useRef(new Animated.Value(0)).current;
+  const drawAnim = React.useState(() => new Animated.Value(PATH_LENGTH_ESTIMATE))[0];
+  const appearAnim = React.useState(() => new Animated.Value(0))[0];
+  const glowScale = React.useState(() => new Animated.Value(1))[0];
+  const glowOpacity = React.useState(() => new Animated.Value(0.45))[0];
+  const avatarBounce = React.useState(() => new Animated.Value(0.92))[0];
+  const progressAnim = React.useState(() => new Animated.Value(0))[0];
+  const levelUpFlash = React.useState(() => new Animated.Value(0))[0];
 
   const [selectedLevel, setSelectedLevel] = useState<LottiLevel | null>(null);
 

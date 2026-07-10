@@ -502,10 +502,10 @@ describe('fetchLowStockCount', () => {
 });
 
 describe('resolveBarcodeProduct', () => {
-  const originalFetch = global.fetch;
+  const originalFetch = globalThis.fetch;
 
   afterEach(() => {
-    global.fetch = originalFetch;
+    globalThis.fetch = originalFetch;
   });
 
   it('bevorzugt den lokalen Produktkatalog', async () => {
@@ -524,7 +524,7 @@ describe('resolveBarcodeProduct', () => {
         error: null,
       })
     );
-    global.fetch = jest.fn();
+    globalThis.fetch = jest.fn();
 
     const { data } = await resolveBarcodeProduct('4000000000001');
 
@@ -533,12 +533,12 @@ describe('resolveBarcodeProduct', () => {
       source: 'catalog',
       product: { name: 'Windeln Gr. 3', packageQuantity: 52 },
     });
-    expect(global.fetch).not.toHaveBeenCalled();
+    expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
   it('fällt auf Open Food Facts zurück', async () => {
     mockedFrom.mockReturnValueOnce(chainResolving({ data: [], error: null }));
-    global.fetch = jest.fn().mockResolvedValue({
+    globalThis.fetch = jest.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
         status: 1,
@@ -557,7 +557,7 @@ describe('resolveBarcodeProduct', () => {
 
   it('fällt auf Open Beauty Facts zurück, wenn Open Food Facts das Produkt nicht kennt', async () => {
     mockedFrom.mockReturnValueOnce(chainResolving({ data: [], error: null }));
-    global.fetch = jest
+    globalThis.fetch = jest
       .fn()
       .mockResolvedValueOnce({ ok: true, json: async () => ({ status: 0 }) })
       .mockResolvedValueOnce({
@@ -570,8 +570,8 @@ describe('resolveBarcodeProduct', () => {
 
     const { data } = await resolveBarcodeProduct('4015400636649');
 
-    expect(global.fetch).toHaveBeenCalledTimes(2);
-    expect((global.fetch as jest.Mock).mock.calls[1][0]).toContain('openbeautyfacts');
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+    expect((globalThis.fetch as jest.Mock).mock.calls[1][0]).toContain('openbeautyfacts');
     expect(data).toMatchObject({
       status: 'known',
       source: 'open_food_facts',
@@ -581,7 +581,7 @@ describe('resolveBarcodeProduct', () => {
 
   it('liefert unknown, wenn keine Quelle das Produkt kennt', async () => {
     mockedFrom.mockReturnValueOnce(chainResolving({ data: [], error: null }));
-    global.fetch = jest.fn().mockResolvedValue({
+    globalThis.fetch = jest.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ status: 0 }),
     });
@@ -593,7 +593,7 @@ describe('resolveBarcodeProduct', () => {
 
   it('liefert unknown, wenn der API-Aufruf fehlschlägt', async () => {
     mockedFrom.mockReturnValueOnce(chainResolving({ data: [], error: null }));
-    global.fetch = jest.fn().mockRejectedValue(new Error('offline'));
+    globalThis.fetch = jest.fn().mockRejectedValue(new Error('offline'));
 
     const { data, error } = await resolveBarcodeProduct('4000000000004');
 

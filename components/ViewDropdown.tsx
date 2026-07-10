@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { View, StyleSheet, TouchableOpacity, Modal, Animated, Dimensions } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
@@ -19,7 +19,7 @@ const ViewDropdown: React.FC<ViewDropdownProps> = ({ activeView, onViewChange })
   const isDark = colorScheme === 'dark';
   const activeColor = isDark ? Colors.dark.accent : '#7D5A50';
   const [isOpen, setIsOpen] = useState(false);
-  const dropdownAnimation = useRef(new Animated.Value(0)).current;
+  const dropdownAnimation = React.useState(() => new Animated.Value(0))[0];
   const screenWidth = Dimensions.get('window').width;
 
   // Öffne/schließe das Dropdown

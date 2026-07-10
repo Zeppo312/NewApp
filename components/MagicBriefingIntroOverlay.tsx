@@ -11,7 +11,7 @@
  * Worklet-/JSI-Anforderungen stabil bleibt. Die Komponente ändert keinerlei
  * Datenquellen – reine UI/Animation.
  */
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect } from 'react';
 import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
 import { BlurView } from 'expo-blur';
 import Svg, { Circle, Defs, RadialGradient, Stop } from 'react-native-svg';
@@ -122,11 +122,11 @@ export interface MagicBriefingIntroOverlayProps {
 }
 
 export function MagicBriefingIntroOverlay({ onFinish }: MagicBriefingIntroOverlayProps) {
-  const enter = useRef(new Animated.Value(0)).current;
-  const swirl = useRef(new Animated.Value(0)).current;
-  const gather = useRef(new Animated.Value(0)).current;
-  const glow = useRef(new Animated.Value(0)).current;
-  const overlay = useRef(new Animated.Value(0)).current;
+  const enter = React.useState(() => new Animated.Value(0))[0];
+  const swirl = React.useState(() => new Animated.Value(0))[0];
+  const gather = React.useState(() => new Animated.Value(0))[0];
+  const glow = React.useState(() => new Animated.Value(0))[0];
+  const overlay = React.useState(() => new Animated.Value(0))[0];
 
   useEffect(() => {
     enter.setValue(0);

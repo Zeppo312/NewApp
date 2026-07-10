@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Animated, Easing, StyleSheet, ScrollView, View, TouchableOpacity, Text, SafeAreaView, StatusBar, Image, ActivityIndicator, RefreshControl, Alert, Platform, StyleProp, ViewStyle } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { usePathname, useRouter } from 'expo-router';
+import { usePathname, useRouter , useFocusEffect } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { useFocusEffect } from 'expo-router';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedBackground } from '@/components/ThemedBackground';
@@ -393,7 +392,7 @@ function pickLatestHomeTimer(...timers: (HomeActiveTimer | null)[]): HomeActiveT
 }
 
 function GlassBorderGlint({ radius = 30 }: { radius?: number }) {
-  const anim = useRef(new Animated.Value(0)).current;
+  const anim = React.useState(() => new Animated.Value(0))[0];
 
   useEffect(() => {
     const animation = Animated.loop(
@@ -543,9 +542,9 @@ function GlassLensOverlay({ radius = 20 }: { radius?: number }) {
 }
 
 function TipHighlightDots() {
-  const dotOne = useRef(new Animated.Value(0)).current;
-  const dotTwo = useRef(new Animated.Value(0)).current;
-  const dotThree = useRef(new Animated.Value(0)).current;
+  const dotOne = React.useState(() => new Animated.Value(0))[0];
+  const dotTwo = React.useState(() => new Animated.Value(0))[0];
+  const dotThree = React.useState(() => new Animated.Value(0))[0];
 
   useEffect(() => {
     const createPulse = (value: Animated.Value, delayMs: number) =>
@@ -612,6 +611,7 @@ export default function HomeScreen() {
   const glassCardBg = isDark ? 'rgba(0, 0, 0, 0.22)' : 'rgba(255, 255, 255, 0.04)';
   const glassBlurBg = isDark ? 'rgba(0, 0, 0, 0.25)' : 'rgba(255, 255, 255, 0.35)';
   const { user } = useAuth();
+  const userId = user?.id;
   const { activeBabyId, isReady: isActiveBabyReady } = useActiveBaby();
   const { isBabyBorn } = useBabyStatus();
   const pathname = usePathname();
@@ -786,14 +786,14 @@ export default function HomeScreen() {
   }, [hiddenQuickAccessIds.length, persistQuickAccessHiddenIds]);
 
   const loadLocalProfileName = useCallback(async () => {
-    if (!user?.id) {
+    if (!userId) {
       setUserName('');
       return;
     }
-    const localProfile = await getLocalProfileName(user.id);
+    const localProfile = await getLocalProfileName(userId);
     const nextName = localProfile?.firstName || localProfile?.lastName || '';
     setUserName(nextName);
-  }, [user?.id]);
+  }, [userId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -922,15 +922,6 @@ export default function HomeScreen() {
     scheduleOverviewRotationResume();
   };
 
-  useEffect(() => {
-    if (user && isActiveBabyReady) {
-      void loadData();
-    } else if (!user) {
-      setActiveHomeTimer(null);
-      setIsLoading(false);
-    }
-  }, [user, activeBabyId, isActiveBabyReady]);
-
   const loadLowStockCount = useCallback(async () => {
     if (!activeBabyId) {
       setLowStockCount(0);
@@ -940,28 +931,11 @@ export default function HomeScreen() {
     setLowStockCount(count);
   }, [activeBabyId]);
 
-  useFocusEffect(
-    useCallback(() => {
-      if (!user || !isActiveBabyReady) {
-        return;
-      }
-
-      void loadData();
-      void loadLowStockCount();
-    }, [user, activeBabyId, isActiveBabyReady, refreshing, loadLowStockCount])
-  );
-
   useEffect(() => {
-    if (!activeHomeTimer) {
-      setActiveHomeTimerNow(Date.now());
-      return;
-    }
-
     const syncNow = () => setActiveHomeTimerNow(Date.now());
-    syncNow();
     const interval = setInterval(syncNow, 1000);
     return () => clearInterval(interval);
-  }, [activeHomeTimer]);
+  }, []);
 
   // Funktion für Pull-to-Refresh
   const onRefresh = async () => {
@@ -979,7 +953,7 @@ export default function HomeScreen() {
     }
   };
 
-  const loadData = async () => {
+  async function loadData() {
     try {
       if (!user?.id) {
         setDailyEntries([]);
@@ -1045,7 +1019,27 @@ export default function HomeScreen() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }
+
+  useEffect(() => {
+    if (user && isActiveBabyReady) {
+      const timeoutId = setTimeout(() => {
+        void loadData();
+      }, 0);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [user, activeBabyId, isActiveBabyReady]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!user || !isActiveBabyReady) {
+        return;
+      }
+
+      void loadData();
+      void loadLowStockCount();
+    }, [user, activeBabyId, isActiveBabyReady, refreshing, loadLowStockCount])
+  );
 
   // Formatiere das aktuelle Datum
   const formatDate = () => {

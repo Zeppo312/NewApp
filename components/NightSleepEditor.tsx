@@ -200,7 +200,7 @@ const inferLikelyNightEndFromClock = (
   nightWindowSettings: NightWindowSettings = DEFAULT_NIGHT_WINDOW_SETTINGS
 ): Date => {
   const nightWindowMinutes = getNightWindowDurationMinutes(nightWindowSettings);
-  const candidates: Array<{ date: Date; score: number }> = [];
+  const candidates: { date: Date; score: number }[] = [];
 
   for (let dayOffset = 0; dayOffset <= 2; dayOffset++) {
     const candidate = new Date(nightStart);

@@ -64,7 +64,7 @@ export const SwipeableListItem: React.FC<Props> = ({
   const textSecondary = isDark ? Colors.dark.textSecondary : TEXT_PRIMARY;
 
   const ref = useRef<Swipeable | null>(null);
-  const scale = useRef(new Animated.Value(completed ? 1 : 0)).current;
+  const scale = React.useState(() => new Animated.Value(completed ? 1 : 0))[0];
 
   useEffect(() => {
     Animated.spring(scale, {

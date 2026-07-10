@@ -164,7 +164,7 @@ const CircularDayView: React.FC<CircularDayViewProps> = ({ entries, onDeleteEntr
       const minDistance = 55; // Erhöhter Mindestabstand zwischen den Punkten
 
       // Vereinfachte Anpassung der Positionen, um Überlappungen zu vermeiden
-      const adjustedPositions: Array<ActivityPosition | null> = [];
+      const adjustedPositions: (ActivityPosition | null)[] = [];
 
       // Einfachere Positionsanpassung ohne komplexe Berechnungen
       for (let i = 0; i < positions.length; i++) {
@@ -562,11 +562,10 @@ const CircularDayView: React.FC<CircularDayViewProps> = ({ entries, onDeleteEntr
     }
   };
 
-  try {
-    // Hole den zentralen Text einmal, um ihn nicht mehrfach zu berechnen
-    const centerTextInfo = getCenterText();
+  // Hole den zentralen Text einmal, um ihn nicht mehrfach zu berechnen
+  const centerTextInfo = getCenterText();
 
-    return (
+  return (
       <View style={[styles.container, isDark && { backgroundColor: Colors.dark.cardLight, borderColor: Colors.dark.border }]}>
         <View style={styles.circleContainer}>
           {/* Halbkreis-Hintergrund */}
@@ -608,25 +607,7 @@ const CircularDayView: React.FC<CircularDayViewProps> = ({ entries, onDeleteEntr
         {/* Detail-Modal */}
         {renderDetailModal()}
       </View>
-    );
-  } catch (error) {
-    console.log('Fehler beim Rendern der CircularDayView:', error);
-    // Fallback-Rendering im Fehlerfall
-    return (
-      <View style={[styles.container, isDark && { backgroundColor: Colors.dark.cardLight, borderColor: Colors.dark.border }]}>
-        <View style={styles.circleContainer}>
-          <View style={[styles.centerContent, isDark && { backgroundColor: Colors.dark.cardLight }]}>
-            <ThemedText style={[styles.centerLabel, { color: textColor }]}>
-              Fehler beim Laden
-            </ThemedText>
-            <ThemedText style={[styles.centerValue, { color: textColor }]}>
-              Bitte App neu starten
-            </ThemedText>
-          </View>
-        </View>
-      </View>
-    );
-  }
+  );
 };
 
 const styles = StyleSheet.create({

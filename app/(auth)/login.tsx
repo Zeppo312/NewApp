@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { StyleSheet, TouchableOpacity, View, TextInput, KeyboardAvoidingView, Platform, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
@@ -15,13 +15,16 @@ import { supabase } from '@/lib/supabase';
 
 export default function LoginScreen() {
   const params = useLocalSearchParams<{ invitationCode?: string }>();
+  const prefilledInvitationCode = typeof params.invitationCode === 'string'
+    ? params.invitationCode.replace(/\s+/g, '').toUpperCase()
+    : '';
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [isRegistering, setIsRegistering] = useState(false);
-  const [invitationCode, setInvitationCode] = useState('');
-  const [showInvitationField, setShowInvitationField] = useState(false);
+  const [invitationCode, setInvitationCode] = useState(prefilledInvitationCode);
+  const [showInvitationField, setShowInvitationField] = useState(prefilledInvitationCode.length > 0);
   const accentColor = Colors.light.accent;
   const primaryTextColor = Colors.light.textPrimary;
   const secondaryTextColor = Colors.light.textSecondary;
@@ -29,13 +32,6 @@ export default function LoginScreen() {
   const normalizedInvitationCode = showInvitationField && invitationCode
     ? invitationCode.trim().replace(/\s+/g, '').toUpperCase()
     : undefined;
-
-  useEffect(() => {
-    if (typeof params.invitationCode !== 'string') return;
-    const nextCode = params.invitationCode.replace(/\s+/g, '').toUpperCase();
-    setInvitationCode(nextCode);
-    setShowInvitationField(true);
-  }, [params.invitationCode]);
 
   // Nach Auth immer über Root-Router gehen, damit ein zentraler Guard
   // den passenden Startscreen anhand des aktuellen Baby-Status auswählt.

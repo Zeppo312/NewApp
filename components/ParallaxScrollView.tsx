@@ -1,4 +1,4 @@
-import React, { type PropsWithChildren, type ReactElement } from 'react';
+import React, { type PropsWithChildren, type ReactElement, useMemo } from 'react';
 import { StyleSheet, View, PanResponder, Animated as RNAnimated } from 'react-native';
 import Animated, {
   interpolate,
@@ -33,10 +33,10 @@ export default function ParallaxScrollView({
   const bottom = useBottomTabOverflow();
 
   // Animation für Swipe-Feedback
-  const swipeAnim = React.useRef(new RNAnimated.Value(0)).current;
+  const [swipeAnim] = React.useState(() => new RNAnimated.Value(0));
 
   // PanResponder für Swipe-Gesten
-  const panResponder = PanResponder.create({
+  const panResponder = useMemo(() => PanResponder.create({
     onStartShouldSetPanResponder: () => true,
     onMoveShouldSetPanResponder: (evt, gestureState) => {
       // Nur horizontale Bewegungen erkennen
@@ -70,7 +70,7 @@ export default function ParallaxScrollView({
         }).start();
       }
     },
-  });
+  }), [onSwipeRight, swipeAnim]);
 
   const headerAnimatedStyle = useAnimatedStyle(() => {
     return {

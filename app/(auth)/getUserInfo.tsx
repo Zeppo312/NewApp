@@ -74,10 +74,9 @@ export default function GetUserInfoScreen() {
     setBackgroundMode,
   } = useBackground();
   const params = useLocalSearchParams<{ invitationCode?: string }>();
-  const prefilledInvitationCode = useMemo(() => {
-    if (typeof params?.invitationCode !== 'string') return '';
-    return params.invitationCode.replace(/\s+/g, '').toUpperCase();
-  }, [params?.invitationCode]);
+  const prefilledInvitationCode = typeof params.invitationCode === 'string'
+    ? params.invitationCode.replace(/\s+/g, '').toUpperCase()
+    : '';
   const hasPrefilledInvitationCode = prefilledInvitationCode.length > 0;
 
   const parseSafeDate = (value: unknown): Date | null => {
@@ -151,10 +150,10 @@ export default function GetUserInfoScreen() {
   const [isPickingBackground, setIsPickingBackground] = useState(false);
 
   // Einladungscode
-  const [invitationCode, setInvitationCode] = useState('');
+  const [invitationCode, setInvitationCode] = useState(prefilledInvitationCode);
   const [invitationStatus, setInvitationStatus] = useState<'idle' | 'accepted' | 'skipped'>('idle');
   const [isRedeemingInvitation, setIsRedeemingInvitation] = useState(false);
-  const [autoRedeemAttempted, setAutoRedeemAttempted] = useState(false);
+  const autoRedeemAttemptedRef = useRef(false);
   const [invitationError, setInvitationError] = useState<string | null>(null);
   const [invitationInfo, setInvitationInfo] = useState<{
     partnerName?: string;
@@ -170,7 +169,7 @@ export default function GetUserInfoScreen() {
 
   // Schrittweise Abfrage
   const shouldShowInvitationStep = !hasPrefilledInvitationCode
-    || (autoRedeemAttempted && !isRedeemingInvitation && invitationStatus !== 'accepted');
+    || (!isRedeemingInvitation && invitationStatus !== 'accepted' && invitationError !== null);
   const onboardingSteps = useMemo<StepKey[]>(() => {
     const baseSteps = shouldShowInvitationStep
       ? ONBOARDING_STEP_ORDER
@@ -186,26 +185,15 @@ export default function GetUserInfoScreen() {
       : defaultSteps;
   }, [invitationStatus, shouldShowInvitationStep, isBabyBorn]);
   const [currentStep, setCurrentStep] = useState(0);
+  const boundedCurrentStep = Math.min(currentStep, Math.max(0, onboardingSteps.length - 1));
   const totalSteps = onboardingSteps.length;
-  const currentStepKey = onboardingSteps[currentStep];
+  const currentStepKey = onboardingSteps[boundedCurrentStep];
   const isPartnerFlow = invitationStatus === 'accepted';
-
-  useEffect(() => {
-    if (currentStep >= onboardingSteps.length) {
-      setCurrentStep(Math.max(0, onboardingSteps.length - 1));
-    }
-  }, [currentStep, onboardingSteps.length]);
 
   // Bei Schrittwechsel nach oben scrollen
   useEffect(() => {
     scrollViewRef.current?.scrollTo({ y: 0, animated: false });
-  }, [currentStep]);
-
-  useEffect(() => {
-    if (prefilledInvitationCode) {
-      setInvitationCode(prefilledInvitationCode);
-    }
-  }, [prefilledInvitationCode]);
+  }, [boundedCurrentStep]);
 
   // Formatieren eines Datums für die Anzeige
   const formatDate = (date: Date | null) => {
@@ -304,13 +292,13 @@ export default function GetUserInfoScreen() {
   }, [user?.id]);
 
   useEffect(() => {
-    if (!hasPrefilledInvitationCode || autoRedeemAttempted || !user?.id) {
+    if (!hasPrefilledInvitationCode || autoRedeemAttemptedRef.current || !user?.id) {
       return;
     }
 
-    setAutoRedeemAttempted(true);
+    autoRedeemAttemptedRef.current = true;
     void redeemInvitation(prefilledInvitationCode, { showSuccessAlert: false, showErrorAlert: false });
-  }, [hasPrefilledInvitationCode, autoRedeemAttempted, user?.id, prefilledInvitationCode, redeemInvitation]);
+  }, [hasPrefilledInvitationCode, user?.id, prefilledInvitationCode, redeemInvitation]);
 
   const handleRedeemInvitation = async () => {
     await redeemInvitation(invitationCode, { showSuccessAlert: true, showErrorAlert: true });
@@ -647,7 +635,7 @@ export default function GetUserInfoScreen() {
         break;
     }
 
-    const nextStep = currentStep + 1;
+    const nextStep = boundedCurrentStep + 1;
 
     if (nextStep >= totalSteps) {
       saveUserData();
@@ -660,12 +648,12 @@ export default function GetUserInfoScreen() {
   // Zum vorherigen Schritt gehen
   const goToPreviousStep = () => {
     // Wenn wir beim ersten Schritt sind, können wir nicht zurück
-    if (currentStep === 0) {
+    if (boundedCurrentStep === 0) {
       return;
     }
 
     // Zum vorherigen Schritt
-    setCurrentStep(currentStep - 1);
+    setCurrentStep(boundedCurrentStep - 1);
   };
 
   // Render-Funktion für den aktuellen Schritt
@@ -1342,11 +1330,11 @@ export default function GetUserInfoScreen() {
           <View style={styles.progressContainer}>
             <View style={styles.progressBar}>
               <View
-                style={[styles.progressFill, { width: `${(currentStep + 1) / totalSteps * 100}%` }]}
+                style={[styles.progressFill, { width: `${(boundedCurrentStep + 1) / totalSteps * 100}%` }]}
               />
             </View>
             <ThemedText style={styles.progressText}>
-              Schritt {currentStep + 1} von {totalSteps}
+              Schritt {boundedCurrentStep + 1} von {totalSteps}
             </ThemedText>
           </View>
 
@@ -1383,7 +1371,7 @@ export default function GetUserInfoScreen() {
                 )}
 
                 <View style={styles.buttonsContainer}>
-                  {currentStep > 0 && (
+                  {boundedCurrentStep > 0 && (
                     <TouchableOpacity
                       style={styles.backButton}
                       onPress={goToPreviousStep}
@@ -1399,9 +1387,9 @@ export default function GetUserInfoScreen() {
                     disabled={isSaving || isRedeemingInvitation}
                   >
                     <ThemedText style={styles.nextButtonText}>
-                      {currentStep === totalSteps - 1 ? (isSaving ? 'Speichern...' : 'Fertig') : 'Weiter'}
+                      {boundedCurrentStep === totalSteps - 1 ? (isSaving ? 'Speichern...' : 'Fertig') : 'Weiter'}
                     </ThemedText>
-                    {currentStep < totalSteps - 1 && (
+                    {boundedCurrentStep < totalSteps - 1 && (
                       <IconSymbol name="chevron.right" size={20} color="#FFFFFF" />
                     )}
                   </TouchableOpacity>

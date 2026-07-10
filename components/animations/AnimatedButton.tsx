@@ -1,4 +1,4 @@
-import React, { useRef, ReactNode } from 'react';
+import React, { ReactNode } from 'react';
 import { Animated, TouchableOpacity, TouchableOpacityProps, GestureResponderEvent } from 'react-native';
 
 interface AnimatedButtonProps extends TouchableOpacityProps {
@@ -15,7 +15,7 @@ export default function AnimatedButton({
   onPress,
   ...props
 }: AnimatedButtonProps) {
-  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const scaleAnim = React.useState(() => new Animated.Value(1))[0];
 
   const handlePressIn = () => {
     Animated.timing(scaleAnim, {

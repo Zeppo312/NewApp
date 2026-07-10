@@ -18,8 +18,7 @@ import {
   ViewStyle,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
-import { useFocusEffect } from 'expo-router';
+import { useRouter , useFocusEffect } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 
 import Header from '@/components/Header';
@@ -170,7 +169,7 @@ function Skeleton({
   radius?: number;
   style?: StyleProp<ViewStyle>;
 }) {
-  const v = useRef(new Animated.Value(0.45)).current;
+  const v = React.useState(() => new Animated.Value(0.45))[0];
   useEffect(() => {
     const loop = Animated.loop(
       Animated.sequence([
@@ -194,7 +193,7 @@ function Skeleton({
 
 /* Balken, der sich beim Erscheinen aufbaut. */
 function AnimatedBar({ progress, color, play }: { progress: number; color: string; play: boolean }) {
-  const w = useRef(new Animated.Value(0)).current;
+  const w = React.useState(() => new Animated.Value(0))[0];
   useEffect(() => {
     if (!play) return;
     const anim = Animated.timing(w, {
@@ -226,7 +225,7 @@ function FadeInUp({
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
 }) {
-  const progress = useRef(new Animated.Value(0)).current;
+  const progress = React.useState(() => new Animated.Value(0))[0];
   useEffect(() => {
     Animated.timing(progress, {
       toValue: 1,
@@ -271,7 +270,7 @@ export default function LottisFuersorgeScreen() {
   const ready = !!analysis;
 
   // Weiche Hero-Einblendung, sobald Intro vorbei und Daten da sind.
-  const heroIn = useRef(new Animated.Value(0)).current;
+  const heroIn = React.useState(() => new Animated.Value(0))[0];
   useEffect(() => {
     if (ready && !showIntro) {
       Animated.timing(heroIn, {

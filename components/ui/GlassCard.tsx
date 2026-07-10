@@ -27,6 +27,11 @@ function rgbaBlack(alpha: number) {
   return `rgba(0,0,0,${clamp01(alpha)})`;
 }
 
+function seededFraction(index: number, salt: number) {
+  const value = Math.sin((index + 1) * 12.9898 + salt * 78.233) * 43758.5453;
+  return value - Math.floor(value);
+}
+
 type HighlightStrength = 'subtle' | 'default' | 'strong';
 
 const HIGHLIGHT_ALPHA: Record<
@@ -45,9 +50,7 @@ function GlassHighlights({
   opacity?: number;
   strength?: HighlightStrength;
 }) {
-  const gradientPrefix = React.useRef(
-    `glass-${Math.random().toString(36).slice(2, 10)}`
-  ).current;
+  const gradientPrefix = `glass-${React.useId().replace(/:/g, '')}`;
   const h1 = `${gradientPrefix}-h1`;
   const h2 = `${gradientPrefix}-h2`;
   const h3 = `${gradientPrefix}-h3`;
@@ -91,14 +94,12 @@ function GlassGrain({
   opacity?: number;
   density?: number;
 }) {
-  const dots = React.useRef(
-    Array.from({ length: density }, () => ({
-      x: Math.random() * 100,
-      y: Math.random() * 100,
-      r: 0.4 + Math.random() * 1.2,
-      a: 0.35 + Math.random() * 0.65,
-    }))
-  ).current;
+  const dots = Array.from({ length: density }, (_, index) => ({
+    x: seededFraction(index, 1) * 100,
+    y: seededFraction(index, 2) * 100,
+    r: 0.4 + seededFraction(index, 3) * 1.2,
+    a: 0.35 + seededFraction(index, 4) * 0.65,
+  }));
 
   if (opacity <= 0) return null;
 

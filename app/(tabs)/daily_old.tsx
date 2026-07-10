@@ -721,6 +721,7 @@ export default function DailyScreen() {
   const theme = Colors[colorScheme];
   const isDark = colorScheme === 'dark' || adaptiveColors.isDarkBackground;
   const { user } = useAuth();
+  const userId = user?.id;
 
   // Dark Mode angepasste Farben
   const textPrimary = isDark ? Colors.dark.textPrimary : PRIMARY;
@@ -754,16 +755,25 @@ export default function DailyScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const [selectedWeekDate, setSelectedWeekDate] = useState(new Date()); // Separate state for week view
-  const [selectedMonthDate, setSelectedMonthDate] = useState(new Date()); // Separate state for month view
   const [selectedTab, setSelectedTab] = useState<'day' | 'week' | 'month'>('day');
   const [weekOffset, setWeekOffset] = useState(0); // align with sleep-tracker week nav
   const [monthOffset, setMonthOffset] = useState(0); // align with sleep-tracker month nav
+  const selectedWeekDate = useMemo(() => {
+    const date = new Date();
+    date.setDate(date.getDate() + weekOffset * 7);
+    return date;
+  }, [weekOffset]);
+  const selectedMonthDate = useMemo(() => {
+    const date = new Date();
+    date.setDate(1);
+    date.setMonth(date.getMonth() + monthOffset);
+    return date;
+  }, [monthOffset]);
   const [showInputModal, setShowInputModal] = useState(false);
   const [showFeedingOverviewModal, setShowFeedingOverviewModal] = useState(false);
   const [showDateNav, setShowDateNav] = useState(true);
-  const fadeNavAnim = useRef(new Animated.Value(1)).current;
-  const hideNavTimeout = useRef<NodeJS.Timeout | null>(null);
+  const fadeNavAnim = React.useState(() => new Animated.Value(1))[0];
+  const hideNavTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const quickActionHandledRef = useRef<string | null>(null);
 
   const [activeTimer, setActiveTimer] = useState<{
@@ -771,7 +781,8 @@ export default function DailyScreen() {
     type: 'BOTTLE' | 'BREAST' | 'SOLIDS' | 'PUMP' | 'WATER' | 'DIAPER';
     start: number;
   } | null>(null);
-  const [isTimerHydrated, setIsTimerHydrated] = useState(false);
+  const [hydratedTimerBabyId, setHydratedTimerBabyId] = useState<string | null>(null);
+  const isTimerHydrated = hydratedTimerBabyId === activeBabyId;
   const lastLiveStopEventRef = useRef<{ url: string; at: number } | null>(null);
   const handledLiveStopRequestIdRef = useRef(0);
   const [liveStopRequestId, setLiveStopRequestId] = useState(0);
@@ -783,8 +794,8 @@ export default function DailyScreen() {
   const [splashBg, setSplashBg] = useState<string>('rgba(0,0,0,0.6)');
   const [splashEmoji, setSplashEmoji] = useState<string>('✅');
   const [splashText, setSplashText] = useState<string>('Gespeichert');
-  const splashAnim = useRef(new Animated.Value(0)).current;
-  const splashEmojiAnim = useRef(new Animated.Value(0.9)).current;
+  const splashAnim = React.useState(() => new Animated.Value(0))[0];
+  const splashEmojiAnim = React.useState(() => new Animated.Value(0.9))[0];
   const splashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [splashTitle, setSplashTitle] = useState<string>('');
   const [splashSubtitle, setSplashSubtitle] = useState<string>('');
@@ -823,7 +834,6 @@ export default function DailyScreen() {
   }, [requestPermissions]);
 
   useEffect(() => {
-    setCurrentDeviceTimeMs(Date.now());
     const intervalId = setInterval(() => {
       setCurrentDeviceTimeMs(Date.now());
     }, 60 * 1000);
@@ -1104,13 +1114,13 @@ export default function DailyScreen() {
   }, [feedingOverviewCards]);
 
   const handleToggleVitaminDCompletion = useCallback(async () => {
-    if (!user?.id || !activeBabyId || vitaminDBusy) return;
+    if (!userId || !activeBabyId || vitaminDBusy) return;
     if (!ensureWritableInCurrentMode()) return;
 
     setVitaminDBusy(true);
     try {
       const nextChecks = await saveVitaminDCompletion(
-        user.id,
+        userId,
         selectedDateKey,
         !isVitaminDCompleted,
         activeBabyId,
@@ -1127,7 +1137,7 @@ export default function DailyScreen() {
     activeBabyId,
     isVitaminDCompleted,
     selectedDateKey,
-    user?.id,
+    userId,
     vitaminDBusy,
   ]);
 
@@ -1204,54 +1214,11 @@ export default function DailyScreen() {
   }, [queueLiveStopRequestFromUrl]);
 
   useEffect(() => {
-    setIsTimerHydrated(false);
-  }, [activeBabyId]);
-
-  useEffect(() => {
-    void loadLatestBottleInfo();
+    const timeoutId = setTimeout(() => {
+      void loadLatestBottleInfo();
+    }, 0);
+    return () => clearTimeout(timeoutId);
   }, [loadLatestBottleInfo]);
-
-  useEffect(() => {
-    if (!isReady || !activeBabyId) return;
-  
-    if (selectedTab === 'week') {
-      loadWeekEntries();
-    } else if (selectedTab === 'month') {
-      loadMonthEntries();
-    } else {
-      loadEntries();
-    }
-  }, [selectedDate, selectedTab, activeBabyId, isReady]);
-
-  // Separate effects for week/month data loading
-  useEffect(() => {
-    if (!isReady || !activeBabyId) return;
-  
-    if (selectedTab === 'week') {
-      loadWeekEntries();
-    }
-  }, [selectedWeekDate, selectedTab, activeBabyId, isReady]);
-
-  useEffect(() => {
-    if (!isReady || !activeBabyId) return;
-  
-    if (selectedTab === 'month') {
-      loadMonthEntries();
-    }
-  }, [selectedMonthDate, selectedTab, activeBabyId, isReady]);
-
-  // Keep selectedWeekDate in sync with weekOffset (for data loading)
-  useEffect(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + weekOffset * 7);
-    setSelectedWeekDate(d);
-  }, [weekOffset]);
-
-  // Reset offsets on tab change like sleep-tracker
-  useEffect(() => {
-    if (selectedTab === 'week') setWeekOffset(0);
-    if (selectedTab === 'month') setMonthOffset(0);
-  }, [selectedTab]);
 
   // Helper functions for week view
   const getWeekStart = (date: Date) => {
@@ -1285,7 +1252,7 @@ export default function DailyScreen() {
       Animated.timing(fadeNavAnim, { toValue: 0, duration: 500, useNativeDriver: true }).start(() =>
         setShowDateNav(false),
       );
-    }, 5000) as unknown as NodeJS.Timeout;
+    }, 5000);
     return () => clearTimeout(timer);
   }, [selectedDate, fadeNavAnim]);
 
@@ -1297,18 +1264,20 @@ export default function DailyScreen() {
       Animated.timing(fadeNavAnim, { toValue: 0, duration: 400, useNativeDriver: true }).start(() =>
         setShowDateNav(false),
       );
-    }, 5000) as unknown as NodeJS.Timeout;
+    }, 5000);
   };
 
   useEffect(() => {
-    triggerShowDateNav();
+    const timeoutId = setTimeout(triggerShowDateNav, 0);
     return () => {
+      clearTimeout(timeoutId);
       if (hideNavTimeout.current) clearTimeout(hideNavTimeout.current);
     };
   }, [selectedDate]);
 
   useEffect(() => {
-    setShowFeedingOverviewModal(false);
+    const timeoutId = setTimeout(() => setShowFeedingOverviewModal(false), 0);
+    return () => clearTimeout(timeoutId);
   }, [selectedDate, selectedTab]);
 
   // Realtime subscription removed for simplicity; list refreshes on actions
@@ -1337,7 +1306,7 @@ export default function DailyScreen() {
   const loadActiveTimer = useCallback(async () => {
     if (!activeBabyId) {
       setActiveTimer(null);
-      setIsTimerHydrated(true);
+      setHydratedTimerBabyId(activeBabyId ?? null);
       return;
     }
 
@@ -1411,7 +1380,7 @@ export default function DailyScreen() {
     } catch (error) {
       console.error('Failed to resolve active timer:', error);
     } finally {
-      setIsTimerHydrated(true);
+      setHydratedTimerBabyId(activeBabyId ?? null);
     }
   }, [activeBabyId, isReadOnlyPreviewMode]);
 
@@ -1525,6 +1494,20 @@ export default function DailyScreen() {
     }
   };
 
+  useEffect(() => {
+    if (!isReady || !activeBabyId) return;
+    const timeoutId = setTimeout(() => {
+      if (selectedTab === 'week') {
+        void loadWeekEntries();
+      } else if (selectedTab === 'month') {
+        void loadMonthEntries();
+      } else {
+        void loadEntries();
+      }
+    }, 0);
+    return () => clearTimeout(timeoutId);
+  }, [selectedDate, selectedWeekDate, selectedMonthDate, selectedTab, activeBabyId, isReady]);
+
   const syncDailyEntries = async () => {};
 
   const handleRefresh = async () => {
@@ -1594,11 +1577,14 @@ export default function DailyScreen() {
       return;
     }
     quickActionHandledRef.current = rawAction;
-    setSelectedActivityType(resolved.activityType);
-    setSelectedSubType(resolved.subType);
-    setEditingEntry(null);
-    setShowInputModal(true);
-    router.setParams({ quickAction: undefined });
+    const timeoutId = setTimeout(() => {
+      setSelectedActivityType(resolved.activityType);
+      setSelectedSubType(resolved.subType);
+      setEditingEntry(null);
+      setShowInputModal(true);
+      router.setParams({ quickAction: undefined });
+    }, 0);
+    return () => clearTimeout(timeoutId);
   }, [ensureWritableInCurrentMode, quickAction, router]);
 
   const handleSaveEntry = async (payload: any, options?: { startTimer?: boolean }) => {
@@ -1652,7 +1638,7 @@ export default function DailyScreen() {
         const startMs = new Date(resolvedStartTime).getTime();
         const timerType = feedingType as 'BREAST' | 'BOTTLE' | 'SOLIDS' | 'PUMP' | 'WATER';
         const nextTimer = {
-          id: data?.id || editingEntry?.id || `temp_${Date.now()}`,
+          id: data?.id || editingEntry?.id || `temp_${timerType}_${startMs}`,
           type: timerType,
           start: startMs,
         };
@@ -1747,7 +1733,7 @@ export default function DailyScreen() {
       if (timerRequested) {
         const startMs = new Date(resolvedStartTime).getTime();
         setActiveTimer({
-          id: data?.id || editingEntry?.id || `temp_${Date.now()}`,
+          id: data?.id || editingEntry?.id || `temp_DIAPER_${startMs}`,
           type: 'DIAPER',
           start: startMs,
         });
@@ -1972,7 +1958,8 @@ export default function DailyScreen() {
     }
 
     if (isReadOnlyPreviewMode) return;
-    void handleTimerStop();
+    const timeoutId = setTimeout(() => void handleTimerStop(), 0);
+    return () => clearTimeout(timeoutId);
   }, [activeTimer?.id, activeTimer?.type, handleTimerStop, isReadOnlyPreviewMode, isTimerHydrated, liveStopRequestId]);
 
   const handleDeleteEntry = async (id: string) => {
@@ -2021,6 +2008,8 @@ export default function DailyScreen() {
             pressRetentionOffset={{ top: 16, bottom: 16, left: 12, right: 12 }}
             onPress={() => {
               setSelectedTab(tab);
+              if (tab === 'week') setWeekOffset(0);
+              if (tab === 'month') setMonthOffset(0);
               if (tab === 'day') {
                 setSelectedDate(new Date());
                 triggerShowDateNav();
@@ -2044,11 +2033,11 @@ export default function DailyScreen() {
 
   const WeekView = () => {
     // Reference date derived from weekOffset (exact like sleep-tracker)
-    const refDate = useMemo(() => {
+    const refDate = (() => {
       const d = new Date();
       d.setDate(d.getDate() + weekOffset * 7);
       return d;
-    }, [weekOffset]);
+    })();
 
     const weekDays = getWeekDays(refDate);
     const dayNames = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
@@ -2242,12 +2231,12 @@ export default function DailyScreen() {
 
   const MonthView = () => {
     // Referenz-Monat: aktueller Monat + monthOffset (wie Sleep-Tracker)
-    const refMonthDate = useMemo(() => {
+    const refMonthDate = (() => {
       const d = new Date();
       d.setDate(1);
       d.setMonth(d.getMonth() + monthOffset);
       return d;
-    }, [monthOffset]);
+    })();
     
     // Lokale Hilfsfunktionen
     const getMonthStart = (date: Date) => {
@@ -2264,9 +2253,9 @@ export default function DailyScreen() {
       return new Date(year, month + 1, 0).getDate();
     };
     
-    const monthStart = useMemo(() => getMonthStart(refMonthDate), [refMonthDate]);
-    const monthEnd = useMemo(() => getMonthEnd(refMonthDate), [refMonthDate]);
-    const daysInMonth = useMemo(() => getDaysInMonth(refMonthDate), [refMonthDate]);
+    const monthStart = getMonthStart(refMonthDate);
+    const monthEnd = getMonthEnd(refMonthDate);
+    const daysInMonth = getDaysInMonth(refMonthDate);
 
     // Erstelle Kalender-Grid - gruppiert nach Wochen (wie Sleep-Tracker)
     const getCalendarWeeks = () => {
@@ -2299,7 +2288,7 @@ export default function DailyScreen() {
       return weeks;
     };
 
-    const calendarWeeks = useMemo(() => getCalendarWeeks(), [monthStart, daysInMonth]);
+    const calendarWeeks = getCalendarWeeks();
 
     const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
     const endOfDay   = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
@@ -2679,12 +2668,12 @@ export default function DailyScreen() {
           contentContainerStyle={s.scrollContent}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
         >
-          <TopTabs />
+          {TopTabs()}
 
           {selectedTab === 'week' ? (
-            <WeekView />
+            WeekView()
           ) : selectedTab === 'month' ? (
-            <MonthView />
+            MonthView()
           ) : (
             <View style={s.content}>
               {/* Day Navigation - gleich wie Sleep-Tracker */}
@@ -2802,7 +2791,7 @@ export default function DailyScreen() {
               )}
 
               <Text style={[s.sectionTitle, { color: textSecondary }]}>Kennzahlen</Text>
-              <KPISection />
+              {KPISection()}
 
               <View style={s.recipeButtonSection}>
                 <TouchableOpacity
@@ -2924,9 +2913,9 @@ export default function DailyScreen() {
                     </View>
                   )}
 
-                  {entries.map((item) => (
+                  {entries.map((item, index) => (
                     <ActivityCard
-                      key={item.id ?? Math.random().toString()}
+                      key={item.id ?? `${item.entry_type}-${item.start_time ?? item.entry_date ?? index}`}
                       entry={item}
                       auxiliaryBadgeLabel={item.id ? bottleGapLabelByEntryId.get(item.id) ?? null : null}
                       onDelete={handleDeleteEntry}

@@ -12,6 +12,56 @@ type Props = {
   onOpenCapture: (type: 'todo' | 'event') => void;
 };
 
+type QuickActionChipProps = {
+  label: string;
+  iconName: IconSymbolName;
+  onPress: () => void;
+  borderColor: string;
+  blurTint: 'dark' | 'light';
+  overlayColor: string;
+  accentColor: string;
+  textPrimary: string;
+};
+
+function QuickActionChip({
+  label,
+  iconName,
+  onPress,
+  borderColor,
+  blurTint,
+  overlayColor,
+  accentColor,
+  textPrimary,
+}: QuickActionChipProps) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.chip,
+        { borderColor },
+        pressed && { transform: [{ scale: 0.97 }] },
+      ]}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+    >
+      <BlurView intensity={24} tint={blurTint} style={StyleSheet.absoluteFill} />
+      <View
+        style={[
+          StyleSheet.absoluteFill,
+          styles.chipOverlay,
+          { backgroundColor: overlayColor },
+        ]}
+      />
+      <View style={styles.chipContent}>
+        <IconSymbol name={iconName} size={17} color={accentColor} />
+        <ThemedText style={[styles.chipLabel, { color: textPrimary }]}>
+          {label}
+        </ThemedText>
+      </View>
+    </Pressable>
+  );
+}
+
 export const QuickActions: React.FC<Props> = ({ onOpenCapture }) => {
   const adaptiveColors = useAdaptiveColors();
   const isDark =
@@ -23,42 +73,28 @@ export const QuickActions: React.FC<Props> = ({ onOpenCapture }) => {
   const overlayColor = isDark ? 'rgba(0,0,0,0.3)' : GLASS_OVERLAY;
   const borderColor = isDark ? 'rgba(255,255,255,0.18)' : GLASS_BORDER;
 
-  const Chip: React.FC<{
-    label: string;
-    iconName: IconSymbolName;
-    onPress: () => void;
-  }> = ({ label, iconName, onPress }) => (
-      <Pressable
-        onPress={onPress}
-        style={({ pressed }) => [
-          styles.chip,
-          { borderColor },
-          pressed && { transform: [{ scale: 0.97 }] },
-        ]}
-        accessibilityRole="button"
-        accessibilityLabel={label}
-      >
-        <BlurView intensity={24} tint={blurTint} style={StyleSheet.absoluteFill} />
-        <View
-          style={[
-            StyleSheet.absoluteFill,
-            styles.chipOverlay,
-            { backgroundColor: overlayColor },
-          ]}
-        />
-        <View style={styles.chipContent}>
-          <IconSymbol name={iconName} size={17} color={accentColor as any} />
-          <ThemedText style={[styles.chipLabel, { color: textPrimary }]}>
-            {label}
-          </ThemedText>
-        </View>
-      </Pressable>
-    );
-
   return (
     <View style={styles.row}>
-      <Chip label="Aufgabe" iconName="checklist" onPress={() => onOpenCapture('todo')} />
-      <Chip label="Termin" iconName="calendar" onPress={() => onOpenCapture('event')} />
+      <QuickActionChip
+        label="Aufgabe"
+        iconName="checklist"
+        onPress={() => onOpenCapture('todo')}
+        borderColor={borderColor}
+        blurTint={blurTint}
+        overlayColor={overlayColor}
+        accentColor={accentColor}
+        textPrimary={textPrimary}
+      />
+      <QuickActionChip
+        label="Termin"
+        iconName="calendar"
+        onPress={() => onOpenCapture('event')}
+        borderColor={borderColor}
+        blurTint={blurTint}
+        overlayColor={overlayColor}
+        accentColor={accentColor}
+        textPrimary={textPrimary}
+      />
     </View>
   );
 };

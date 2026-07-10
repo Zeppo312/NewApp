@@ -116,10 +116,10 @@ const describeMoodScore = (score: number | null) => {
   return 'Braucht Liebe';
 };
 
-const toNumberArray = (values: Array<number | null | undefined>) =>
+const toNumberArray = (values: (number | null | undefined)[]) =>
   values.filter((value): value is number => typeof value === 'number' && !Number.isNaN(value));
 
-const averageNumber = (values: Array<number | null | undefined>) => {
+const averageNumber = (values: (number | null | undefined)[]) => {
   const filtered = toNumberArray(values);
   if (!filtered.length) return null;
   return filtered.reduce((sum, val) => sum + val, 0) / filtered.length;
@@ -201,41 +201,8 @@ export default function SelfcareScreen() {
   const [isWeekLoading, setIsWeekLoading] = useState(false);
   const [isMonthLoading, setIsMonthLoading] = useState(false);
   // Animations
-  const moodPulse = React.useRef(new Animated.Value(1)).current;
-  const tipOpacity = React.useRef(new Animated.Value(1)).current;
-
-  // Lade Benutzerdaten und heutigen Eintrag
-  useEffect(() => {
-    if (user) {
-      loadUserData();
-    }
-  }, [user]);
-
-  useEffect(() => {
-    if (user) {
-      loadEntryForDate(selectedDate);
-      setDailyTip(selfcareTips[Math.floor(Math.random() * selfcareTips.length)]);
-    } else {
-      setIsLoading(false);
-    }
-  }, [user, selectedDate]);
-
-  useEffect(() => {
-    if (user) {
-      loadWeekEntries();
-    }
-  }, [user, weekOffset]);
-
-  useEffect(() => {
-    if (user) {
-      loadMonthEntries();
-    }
-  }, [user, monthOffset]);
-
-  useEffect(() => {
-    if (selectedTab === 'week') setWeekOffset(0);
-    if (selectedTab === 'month') setMonthOffset(0);
-  }, [selectedTab]);
+  const moodPulse = React.useState(() => new Animated.Value(1))[0];
+  const tipOpacity = React.useState(() => new Animated.Value(1))[0];
 
   // Lade Benutzerdaten
   const loadUserData = async () => {
@@ -367,6 +334,28 @@ export default function SelfcareScreen() {
     }
   };
 
+  useEffect(() => {
+    if (!user) return;
+    const timeoutId = setTimeout(() => {
+      void loadUserData();
+      void loadEntryForDate(selectedDate);
+      setDailyTip(selfcareTips[Math.floor(Math.random() * selfcareTips.length)]);
+    }, 0);
+    return () => clearTimeout(timeoutId);
+  }, [user, selectedDate]);
+
+  useEffect(() => {
+    if (!user) return;
+    const timeoutId = setTimeout(() => void loadWeekEntries(), 0);
+    return () => clearTimeout(timeoutId);
+  }, [user, weekOffset]);
+
+  useEffect(() => {
+    if (!user) return;
+    const timeoutId = setTimeout(() => void loadMonthEntries(), 0);
+    return () => clearTimeout(timeoutId);
+  }, [user, monthOffset]);
+
   // Speichere den Eintrag
   const saveEntry = async () => {
     try {
@@ -494,6 +483,11 @@ export default function SelfcareScreen() {
 
   const goToPreviousDay = () => goToAdjacentDay(-1);
   const goToNextDay = () => goToAdjacentDay(1);
+  const handleSelectTab = (tab: 'day' | 'week' | 'month') => {
+    setSelectedTab(tab);
+    if (tab === 'week') setWeekOffset(0);
+    if (tab === 'month') setMonthOffset(0);
+  };
 
   const TopTabs = () => (
     <View style={styles.topTabsContainer}>
@@ -507,7 +501,7 @@ export default function SelfcareScreen() {
         >
           <TouchableOpacity
             style={styles.topTabInner}
-            onPress={() => setSelectedTab(tab)}
+            onPress={() => handleSelectTab(tab)}
             activeOpacity={0.85}
           >
             <Text style={[styles.topTabText, selectedTab === tab && styles.activeTopTabText]}>
@@ -520,15 +514,15 @@ export default function SelfcareScreen() {
   );
 
   const WeekView = () => {
-    const referenceDate = useMemo(() => {
+    const referenceDate = (() => {
       const base = new Date();
       base.setDate(base.getDate() + weekOffset * 7);
       return base;
-    }, [weekOffset]);
+    })();
 
-    const weekStart = useMemo(() => getWeekStart(referenceDate), [referenceDate]);
-    const weekEnd = useMemo(() => getWeekEnd(referenceDate), [referenceDate]);
-    const weekDays = useMemo(() => getWeekDays(referenceDate), [referenceDate]);
+    const weekStart = getWeekStart(referenceDate);
+    const weekEnd = getWeekEnd(referenceDate);
+    const weekDays = getWeekDays(referenceDate);
 
     const getEntriesForDay = (day: Date) =>
       weekEntries.filter((entry) => {
@@ -680,20 +674,20 @@ export default function SelfcareScreen() {
   };
 
   const MonthView = () => {
-    const referenceMonth = useMemo(() => {
+    const referenceMonth = (() => {
       const base = new Date();
       base.setDate(1);
       base.setMonth(base.getMonth() + monthOffset);
       return base;
-    }, [monthOffset]);
+    })();
 
-    const monthStart = useMemo(() => new Date(referenceMonth.getFullYear(), referenceMonth.getMonth(), 1), [referenceMonth]);
-    const daysInMonth = useMemo(() => new Date(referenceMonth.getFullYear(), referenceMonth.getMonth() + 1, 0).getDate(), [referenceMonth]);
+    const monthStart = new Date(referenceMonth.getFullYear(), referenceMonth.getMonth(), 1);
+    const daysInMonth = new Date(referenceMonth.getFullYear(), referenceMonth.getMonth() + 1, 0).getDate();
 
-    const calendarWeeks = useMemo(() => {
-      const weeks: Array<Array<Date | null>> = [];
+    const calendarWeeks = (() => {
+      const weeks: (Date | null)[][] = [];
       const firstWeekday = monthStart.getDay() === 0 ? 6 : monthStart.getDay() - 1;
-      let currentWeek: Array<Date | null> = [];
+      let currentWeek: (Date | null)[] = [];
 
       for (let i = 0; i < firstWeekday; i++) {
         currentWeek.push(null);
@@ -715,7 +709,7 @@ export default function SelfcareScreen() {
       }
 
       return weeks;
-    }, [monthStart, daysInMonth]);
+    })();
 
     const getEntryForDate = (date: Date) =>
       monthEntries.find((entry) => {
@@ -944,6 +938,9 @@ export default function SelfcareScreen() {
     day: '2-digit',
     month: 'short',
   });
+  const dailyExercise = postpartumExercises[
+    Math.abs(Math.floor(selectedDate.getTime() / (24 * 60 * 60 * 1000))) % postpartumExercises.length
+  ];
 
   return (
     <ThemedBackground style={styles.container}>
@@ -954,7 +951,7 @@ export default function SelfcareScreen() {
         <Header title="Mama Selfcare" subtitle="Dein täglicher Check‑in" showBackButton />
         
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
-          <TopTabs />
+          {TopTabs()}
 
           {selectedTab === 'day' && (
             <View style={styles.dayNavigationContainer}>
@@ -1190,19 +1187,14 @@ export default function SelfcareScreen() {
                   <ThemedText style={styles.cardTitle}>Rückbildung & Körperpflege</ThemedText>
 
                   <ThemedText style={styles.sectionTitle}>🌸 Rückbildungsübung des Tages</ThemedText>
-                  {(() => {
-                    const exercise = postpartumExercises[Math.floor(Math.random() * postpartumExercises.length)];
-                    return (
-                      <View style={styles.exerciseCard}>
-                        <ThemedText style={styles.exerciseTitle}>
-                          {exercise.title}
-                        </ThemedText>
-                        <ThemedText style={styles.exerciseDescription}>
-                          {exercise.description}
-                        </ThemedText>
-                      </View>
-                    );
-                  })()}
+                  <View style={styles.exerciseCard}>
+                    <ThemedText style={styles.exerciseTitle}>
+                      {dailyExercise.title}
+                    </ThemedText>
+                    <ThemedText style={styles.exerciseDescription}>
+                      {dailyExercise.description}
+                    </ThemedText>
+                  </View>
 
                   <ThemedText style={styles.sectionTitle}>☑️ Meine Selfcare‑Checkliste</ThemedText>
                   <View style={{ alignItems: 'center', marginBottom: 12 }}>
@@ -1244,9 +1236,9 @@ export default function SelfcareScreen() {
               <View style={{ height: 110 }} />
             </>
           ) : selectedTab === 'week' ? (
-            <WeekView />
+            WeekView()
           ) : (
-            <MonthView />
+            MonthView()
           )}
         </ScrollView>
 

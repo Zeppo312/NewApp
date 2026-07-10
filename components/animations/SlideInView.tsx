@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, ReactNode } from 'react';
+import React, { useEffect, ReactNode } from 'react';
 import { Animated, Easing, ViewStyle } from 'react-native';
 
 interface SlideInViewProps {
@@ -18,8 +18,8 @@ export default function SlideInView({
   easing = 'ease',
   visible = true,
 }: SlideInViewProps) {
-  const translateValue = useRef(new Animated.Value(0)).current;
-  const opacityValue = useRef(new Animated.Value(0)).current;
+  const translateValue = React.useState(() => new Animated.Value(0))[0];
+  const opacityValue = React.useState(() => new Animated.Value(0))[0];
 
   useEffect(() => {
     if (!visible) {

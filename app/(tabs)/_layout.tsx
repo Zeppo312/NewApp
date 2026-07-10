@@ -12,7 +12,7 @@ import {
 } from 'expo-router/js-tabs';
 import { ParamListBase, TabNavigationState } from 'expo-router/react-navigation';
 import React, { useEffect, useMemo } from 'react';
-import { Platform, View, ActivityIndicator, Text } from 'react-native';
+import { ColorValue, Platform, View, ActivityIndicator, Text } from 'react-native';
 import type { ComponentProps } from 'react';
 
 import { HapticTab } from '@/components/HapticTab';
@@ -115,8 +115,16 @@ export default function TabLayout() {
   const { session, loading: authLoading } = useAuth();
   const { unreadCommunityTotal } = useCommunityUnreadCounts(session?.user?.id);
   const { isBabyBorn, isLoading, isResolved } = useBabyStatus();
-  const [isCheckingOnboarding, setIsCheckingOnboarding] = React.useState(false);
-  const [isOnboardingComplete, setIsOnboardingComplete] = React.useState(false);
+  const userId = session?.user?.id ?? null;
+  const canCheckOnboarding = !authLoading && isResolved && userId !== null;
+  const [onboardingResult, setOnboardingResult] = React.useState<{
+    userId: string | null;
+    complete: boolean;
+  }>({ userId: null, complete: false });
+  const isCheckingOnboarding = canCheckOnboarding && onboardingResult.userId !== userId;
+  const isOnboardingComplete = canCheckOnboarding
+    && onboardingResult.userId === userId
+    && onboardingResult.complete;
   const theme = Colors[colorScheme ?? 'light'];
   const adaptiveColors = useAdaptiveColors();
   const hasSession = Boolean(session);
@@ -151,37 +159,29 @@ export default function TabLayout() {
   }, [pathname]);
 
   useEffect(() => {
-    if (authLoading || !session?.user || !isResolved) {
-      setIsCheckingOnboarding(false);
-      setIsOnboardingComplete(false);
+    if (!canCheckOnboarding || !userId) {
       return;
     }
 
     let cancelled = false;
-    setIsCheckingOnboarding(true);
 
     getOnboardingCompletionState()
       .then((complete) => {
         if (!cancelled) {
-          setIsOnboardingComplete(complete);
+          setOnboardingResult({ userId, complete });
         }
       })
       .catch((error) => {
         console.error('Failed to check onboarding completion on tabs layout:', error);
         if (!cancelled) {
-          setIsOnboardingComplete(false);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setIsCheckingOnboarding(false);
+          setOnboardingResult({ userId, complete: false });
         }
       });
 
     return () => {
       cancelled = true;
     };
-  }, [authLoading, isResolved, session?.user]);
+  }, [canCheckOnboarding, userId]);
 
   useEffect(() => {
     if (!hasSession || !isOnboardingComplete || !currentRoute || !isResolved || isLoading || !isVisibleTabRoute) return;
@@ -237,7 +237,7 @@ export default function TabLayout() {
           tabBarItemStyle: { display: 'none' as const },
         }
       : {};
-  const renderCommunityTabIcon = (color: string) => (
+  const renderCommunityTabIcon = (color: ColorValue) => (
     <View style={{ width: 32, height: 32, alignItems: 'center', justifyContent: 'center' }}>
       <IconSymbol size={28} name="bubble.left.and.bubble.right.fill" color={color} />
       {unreadCommunityTotal > 0 ? (

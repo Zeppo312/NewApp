@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Animated, Keyboard, Platform, StyleSheet, Text, View } from 'react-native';
 
 type LiveInputPreviewProps = {
@@ -30,7 +30,7 @@ export const LiveInputPreview: React.FC<LiveInputPreviewProps> = ({
 }) => {
   const [isMounted, setIsMounted] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
-  const opacity = useRef(new Animated.Value(0)).current;
+  const opacity = React.useState(() => new Animated.Value(0))[0];
 
   const shouldShow = useMemo(() => visible && value !== undefined && value !== null, [visible, value]);
 

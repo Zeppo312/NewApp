@@ -41,7 +41,7 @@ const dailyTips = [
 ];
 
 function GlassBorderGlint({ radius = 30 }: { radius?: number }) {
-  const anim = useRef(new Animated.Value(0)).current;
+  const anim = React.useState(() => new Animated.Value(0))[0];
 
   useEffect(() => {
     const animation = Animated.loop(
@@ -191,9 +191,9 @@ function GlassLensOverlay({ radius = 20 }: { radius?: number }) {
 }
 
 function TipHighlightDots() {
-  const dotOne = useRef(new Animated.Value(0)).current;
-  const dotTwo = useRef(new Animated.Value(0)).current;
-  const dotThree = useRef(new Animated.Value(0)).current;
+  const dotOne = React.useState(() => new Animated.Value(0))[0];
+  const dotTwo = React.useState(() => new Animated.Value(0))[0];
+  const dotThree = React.useState(() => new Animated.Value(0))[0];
 
   useEffect(() => {
     const createPulse = (value: Animated.Value, delayMs: number) =>
@@ -489,7 +489,7 @@ export default function PregnancyHomeScreen() {
   const [isBabySwitcherOpen, setIsBabySwitcherOpen] = useState(false);
 
   // Animation für Erfolgsmeldung
-  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const fadeAnim = React.useState(() => new Animated.Value(0))[0];
   const [updateSuccess, setUpdateSuccess] = useState(false);
 
   const androidBlurProps =
@@ -691,14 +691,6 @@ export default function PregnancyHomeScreen() {
     [mergeVisibleOrderIntoQuickAccessOrder, persistQuickAccessOrder],
   );
 
-  useEffect(() => {
-    if (user) {
-      loadUserData();
-      const randomTip = dailyTips[Math.floor(Math.random() * dailyTips.length)];
-      setDailyTip(randomTip);
-    }
-  }, [user]);
-
   // Hilfsfunktion zur Protokollierung mit Zeitstempel
   const logWithTimestamp = (message: string) => {
     const now = new Date();
@@ -749,6 +741,8 @@ export default function PregnancyHomeScreen() {
           await AsyncStorage.setItem(LAST_POPUP_DATE_KEY, today.toISOString());
           
           // Popup anzeigen
+          // The delayed check runs after all handlers have been initialized.
+          // eslint-disable-next-line react-hooks/immutability
           showPastDueDateAlert();
         } else {
           logWithTimestamp('Popup wurde heute bereits angezeigt');
@@ -869,6 +863,14 @@ export default function PregnancyHomeScreen() {
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!user) return;
+    const timeoutId = setTimeout(() => {
+      void loadUserData();
+    }, 0);
+    return () => clearTimeout(timeoutId);
+  }, [user]);
 
   // Zeigt eine Erfolgsmeldung an, die nach einigen Sekunden ausblendet
   const showUpdateSuccess = () => {

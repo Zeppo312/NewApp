@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, TouchableOpacity, Animated, Easing } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
@@ -39,8 +39,8 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
   const [pressed, setPressed] = useState(false);
 
   // Animationen
-  const expandAnimation = useRef(new Animated.Value(0)).current;
-  const pressAnimation = useRef(new Animated.Value(1)).current;
+  const expandAnimation = React.useState(() => new Animated.Value(0))[0];
+  const pressAnimation = React.useState(() => new Animated.Value(1))[0];
 
   // Effekt für die Expand-Animation
   useEffect(() => {

@@ -45,8 +45,8 @@ export function LottiMomentToast() {
   const adaptiveColors = useAdaptiveColors();
   const [active, setActive] = useState<ActiveToast | null>(null);
 
-  const opacity = useRef(new Animated.Value(0)).current;
-  const translateY = useRef(new Animated.Value(-6)).current;
+  const opacity = React.useState(() => new Animated.Value(0))[0];
+  const translateY = React.useState(() => new Animated.Value(-6))[0];
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isDark =

@@ -57,7 +57,7 @@ const LOWER_TEETH: ToothDef[] = BABY_TEETH
 const ALL_TEETH = [...UPPER_TEETH, ...LOWER_TEETH];
 const MIN_VALID_TOOTH_DATE = new Date(2000, 0, 1);
 
-const SYMPTOM_OPTIONS: Array<{ key: ToothSymptom; label: string }> = [
+const SYMPTOM_OPTIONS: { key: ToothSymptom; label: string }[] = [
   { key: 'fever', label: 'Fieber' },
   { key: 'restlessness', label: 'Unruhe' },
   { key: 'teething_pain', label: 'Zahnungsschmerz' },

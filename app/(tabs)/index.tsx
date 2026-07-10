@@ -121,12 +121,12 @@ export default function HomeScreen() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncInfo, setSyncInfo] = useState<any>(null);
   const [linkedUsers, setLinkedUsers] = useState<any[]>([]);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [selectedTab, setSelectedTab] = useState<'day' | 'week' | 'month'>('day');
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [manualModalVisible, setManualModalVisible] = useState(false);
   const [manualStartTime, setManualStartTime] = useState(new Date());
-  const [manualEndTime, setManualEndTime] = useState(new Date(Date.now() + 60 * 1000));
+  const [manualEndTime, setManualEndTime] = useState(new Date());
   const [manualIntensity, setManualIntensity] = useState<'schwach' | 'mittel' | 'stark' | null>(null);
   const [showManualStartPicker, setShowManualStartPicker] = useState(false);
   const [showManualEndPicker, setShowManualEndPicker] = useState(false);
@@ -141,7 +141,7 @@ export default function HomeScreen() {
   const { isReadOnlyPreviewMode } = useBabyStatus();
   const appState = useRef(AppState.currentState);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const [pulseAnim] = useState(() => new Animated.Value(1));
   const safeManualStartTime = ensureValidManualDate(manualStartTime, new Date());
   const safeManualEndTime = ensureValidManualDate(
     manualEndTime,
@@ -290,6 +290,8 @@ export default function HomeScreen() {
     const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
       if (response.actionIdentifier === 'stop') {
         // User tapped "Stop" button in notification
+        // The listener fires after render; the function declaration is intentionally defined below.
+        // eslint-disable-next-line react-hooks/immutability
         stopContraction();
       }
     });
@@ -505,7 +507,7 @@ export default function HomeScreen() {
 
   // Timer effect - only for UI updates when app is in foreground
   useEffect(() => {
-    let intervalId: NodeJS.Timeout | null = null;
+    let intervalId: ReturnType<typeof setInterval> | null = null;
     
     if (timerRunning) {
       intervalId = setInterval(async () => {
@@ -521,7 +523,7 @@ export default function HomeScreen() {
           // For other platforms or simulator, increment locally
           setElapsedTime(prev => prev + 1);
         }
-      }, 1000) as unknown as NodeJS.Timeout;
+      }, 1000);
       
       timerRef.current = intervalId;
     } else if (timerRef.current) {
@@ -782,6 +784,8 @@ export default function HomeScreen() {
         // Wenn verknüpfte Benutzer vorhanden sind, einmalige Synchronisierung durchführen
         if (result.linkedUsers.length > 0) {
           console.log(`Found ${result.linkedUsers.length} linked users, starting sync...`);
+          // The async load completes after component initialization.
+          // eslint-disable-next-line react-hooks/immutability
           await syncContractions();
         } else {
           console.log('No linked users found, skipping sync');
@@ -798,6 +802,16 @@ export default function HomeScreen() {
       await loadContractions();
     }
   };
+
+  // Laden der Wehen und verknüpften Benutzer beim Start
+  useEffect(() => {
+    if (!user) return;
+    const timeoutId = setTimeout(() => {
+      void loadContractions();
+      void loadLinkedUsers();
+    }, 0);
+    return () => clearTimeout(timeoutId);
+  }, [user]);
 
   // Funktion zum einmaligen Synchronisieren aller bestehenden Wehen
   const syncContractions = async () => {
@@ -846,14 +860,6 @@ export default function HomeScreen() {
       setIsSyncing(false);
     }
   };
-
-  // Laden der Wehen und verknüpften Benutzer beim Start
-  useEffect(() => {
-    if (user) {
-      loadContractions();
-      loadLinkedUsers();
-    }
-  }, [user]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -1164,9 +1170,9 @@ export default function HomeScreen() {
           )}
           
           <View style={styles.container}>
-            <TopTabs />
-            <StatusMetricsBar />
-            <RangeNavigation />
+            {TopTabs()}
+            {StatusMetricsBar()}
+            {RangeNavigation()}
 
             <View style={[styles.timerWrapper, styles.fullWidthCard]}>
               <View style={styles.centralTimerContainer}>
@@ -1245,7 +1251,7 @@ export default function HomeScreen() {
 
             <View style={styles.captureSection}>
               <Text style={[styles.sectionTitle, { color: textSecondary }]}>Wehenerfassung</Text>
-              <ActionButtons />
+              {ActionButtons()}
             </View>
 
             <View style={styles.historySection}>

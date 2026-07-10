@@ -40,8 +40,8 @@ eas --version     # eas-cli/16.19.3
 # EAS Login:
 eas login
 
-# EAS Update:
-eas update --auto --message "Sleep-Tracker Splash System Integration"
+# EAS Preview-Update (Production erst nach TestFlight):
+npm run update:preview -- --message "Sleep-Tracker Splash System Integration"
 ```
 
 ### Oder mit dem Script:

@@ -5,7 +5,7 @@
 //
 // Animationen laufen komplett über den nativen Driver (nur transform/opacity).
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect } from 'react';
 import {
   Animated,
   Easing,
@@ -15,6 +15,7 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
+import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 
 export interface PremiumHighlightItem {
@@ -29,7 +30,13 @@ interface Props {
   items: PremiumHighlightItem[];
 }
 
-const PANEL_GRADIENT = ['#3B2566', '#5A3A9E', '#7A4FC9'] as [string, string, string];
+// Halbtransparent, damit der Blur darunter durchscheint — der Lila-Ton bleibt,
+// wirkt aber wie getöntes Glas statt wie eine opake Fläche.
+const PANEL_GRADIENT = [
+  'rgba(59,37,102,0.62)',
+  'rgba(90,58,158,0.55)',
+  'rgba(122,79,201,0.5)',
+] as [string, string, string];
 const GOLD = '#F2CE88';
 
 /** Funkel-Sterne: Position (in %), Größe und Animations-Timing je Stern. */
@@ -42,7 +49,7 @@ const SPARKLES = [
 ] as const;
 
 const Sparkle: React.FC<(typeof SPARKLES)[number]> = ({ left, top, size, duration, delay }) => {
-  const glow = useRef(new Animated.Value(0)).current;
+  const glow = React.useState(() => new Animated.Value(0))[0];
 
   useEffect(() => {
     const loop = Animated.loop(
@@ -91,8 +98,8 @@ const FeatureButton: React.FC<{ item: PremiumHighlightItem; pulseDelay: number }
   item,
   pulseDelay,
 }) => {
-  const pulse = useRef(new Animated.Value(0)).current;
-  const pressScale = useRef(new Animated.Value(1)).current;
+  const pulse = React.useState(() => new Animated.Value(0))[0];
+  const pressScale = React.useState(() => new Animated.Value(1))[0];
 
   useEffect(() => {
     const loop = Animated.loop(
@@ -158,7 +165,7 @@ const FeatureButton: React.FC<{ item: PremiumHighlightItem; pulseDelay: number }
 
 const PremiumHighlights: React.FC<Props> = ({ items }) => {
   const { width } = useWindowDimensions();
-  const shimmer = useRef(new Animated.Value(0)).current;
+  const shimmer = React.useState(() => new Animated.Value(0))[0];
 
   // Glanz-Sweep: schmaler Lichtstreifen wandert alle paar Sekunden übers Panel.
   useEffect(() => {
@@ -184,12 +191,14 @@ const PremiumHighlights: React.FC<Props> = ({ items }) => {
 
   return (
     <View style={styles.wrapper}>
-      <LinearGradient
-        colors={PANEL_GRADIENT}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.panel}
-      >
+      <View style={styles.panel}>
+        <BlurView style={StyleSheet.absoluteFill} intensity={40} tint="dark" />
+        <LinearGradient
+          colors={PANEL_GRADIENT}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
         <Animated.View
           pointerEvents="none"
           style={[
@@ -231,7 +240,7 @@ const PremiumHighlights: React.FC<Props> = ({ items }) => {
             <FeatureButton key={item.key} item={item} pulseDelay={index * 700} />
           ))}
         </View>
-      </LinearGradient>
+      </View>
     </View>
   );
 };
@@ -252,6 +261,8 @@ const styles = StyleSheet.create({
     paddingVertical: 20,
     paddingHorizontal: 18,
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.28)',
   },
   shimmerStrip: {
     position: 'absolute',
@@ -290,9 +301,9 @@ const styles = StyleSheet.create({
   },
   featureButton: {
     flex: 1,
-    backgroundColor: 'rgba(255,255,255,0.10)',
+    backgroundColor: 'rgba(255,255,255,0.12)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.18)',
+    borderColor: 'rgba(255,255,255,0.28)',
     borderRadius: 22,
     paddingVertical: 16,
     paddingHorizontal: 12,

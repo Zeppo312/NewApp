@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Animated,
   Easing,
@@ -137,8 +137,8 @@ export function PaywallExperience({
     () => resolvePaywallContent(content, templateValues),
     [content, templateValues],
   );
-  const stepTransitionX = useRef(new Animated.Value(0)).current;
-  const stepTransitionOpacity = useRef(new Animated.Value(1)).current;
+  const stepTransitionX = React.useState(() => new Animated.Value(0))[0];
+  const stepTransitionOpacity = React.useState(() => new Animated.Value(1))[0];
 
   const showCloseButton = allowClose && !isTrialExpired;
   const showSecondaryCtas = !isTrialExpired && (allowClose || editable);

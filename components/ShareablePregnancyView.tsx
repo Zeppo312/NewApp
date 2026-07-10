@@ -9,7 +9,7 @@ import { format, differenceInDays, addDays } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { pregnancyWeekInfo } from '@/constants/PregnancyWeekInfo';
 import { babySizeComparison } from '@/constants/BabySizeComparison';
-import ViewShot from 'react-native-view-shot';
+import ViewShot, { ViewShotRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
 
 interface ShareablePregnancyViewProps {
@@ -29,7 +29,7 @@ const ShareablePregnancyView: React.FC<ShareablePregnancyViewProps> = ({
 }) => {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
-  const viewShotRef = useRef<ViewShot>(null);
+  const viewShotRef = useRef<ViewShotRef>(null);
 
   // Berechne zusätzliche Informationen
   const today = new Date();

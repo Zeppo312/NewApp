@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, Animated } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -25,8 +25,8 @@ export default function SplashOverlay({
   durationMs = 3500,
   onHide,
 }: Props) {
-  const fade = useRef(new Animated.Value(0)).current;
-  const bump = useRef(new Animated.Value(0.9)).current;
+  const fade = React.useState(() => new Animated.Value(0))[0];
+  const bump = React.useState(() => new Animated.Value(0.9))[0];
 
   useEffect(() => {
     if (!visible) return;

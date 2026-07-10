@@ -66,11 +66,11 @@ export default function TabTwoScreen() {
   ];
 
   // Vordefinierte Einträge für die Checkliste
-  const defaultItems: Array<{
+  const defaultItems: {
     item_name: string;
     category: string;
     notes?: string | null;
-  }> = [
+  }[] = [
     // Dokumente
     { item_name: 'Mutterpass', category: 'Dokumente', notes: 'Unbedingt mitnehmen!' },
     { item_name: 'Personalausweis', category: 'Dokumente', notes: null },

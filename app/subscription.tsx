@@ -10,8 +10,7 @@ import {
   View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Redirect, useRouter } from 'expo-router';
-import { useFocusEffect } from 'expo-router';
+import { Redirect, useRouter , useFocusEffect } from 'expo-router';
 
 import Header from '@/components/Header';
 import { SubscriptionCancellationFeedbackModal } from '@/components/SubscriptionCancellationFeedbackModal';

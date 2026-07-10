@@ -10,7 +10,7 @@
  * Bewusst keine Streak/XP/Level-Mechanik.
  */
 
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Animated, Easing, StyleSheet, View, ViewStyle } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
@@ -99,11 +99,11 @@ export function LottiWeekRing({
     });
   }, [center, ringRadius]);
 
-  const segOpacity = useRef(
-    Array.from({ length: DAY_COUNT }, () => new Animated.Value(0)),
-  ).current;
-  const haloOpacity = useRef(new Animated.Value(0)).current;
-  const haloScale = useRef(new Animated.Value(1)).current;
+  const [segOpacity] = useState(
+    () => Array.from({ length: DAY_COUNT }, () => new Animated.Value(0)),
+  );
+  const haloOpacity = React.useState(() => new Animated.Value(0))[0];
+  const haloScale = React.useState(() => new Animated.Value(1))[0];
 
   useEffect(() => {
     days.forEach((isOn, idx) => {

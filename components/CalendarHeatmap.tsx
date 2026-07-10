@@ -63,7 +63,7 @@ const calculateDominantQuality = (date: string, groupedEntries: Record<string, S
   let dominantQuality: SleepQuality = 'good';
   let maxDuration = 0;
 
-  (Object.keys(durationByQuality) as Array<'good' | 'medium' | 'bad' | 'null'>).forEach(quality => {
+  (Object.keys(durationByQuality) as ('good' | 'medium' | 'bad' | 'null')[]).forEach(quality => {
     if (quality !== 'null' && durationByQuality[quality] > maxDuration) {
       maxDuration = durationByQuality[quality];
       dominantQuality = quality as SleepQuality;

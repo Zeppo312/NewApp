@@ -32,7 +32,7 @@ const CACHE_EARLY_REFRESH_MS = 10_000;
 const FINISH_EPSILON_SECONDS = 0.15;
 
 export function useChatAudioPlayback(scope: ChatScope) {
-  const playerRef = useRef<ReturnType<typeof createAudioPlayer> | null>(null);
+  const [player] = useState(() => createAudioPlayer(undefined, { updateInterval: 200 }));
   const cacheRef = useRef(new Map<string, AudioCacheEntry>());
   const activeMessageIdRef = useRef<string | null>(null);
   const finishHandledRef = useRef(false);
@@ -44,19 +44,15 @@ export function useChatAudioPlayback(scope: ChatScope) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
 
-  if (!playerRef.current) {
-    playerRef.current = createAudioPlayer(undefined, { updateInterval: 200 });
-  }
-
   useEffect(() => {
     activeMessageIdRef.current = activeMessageId;
   }, [activeMessageId]);
 
   useEffect(() => {
-    const player = playerRef.current as AudioPlayerWithStatusListener | null;
-    if (!player || typeof player.addListener !== 'function') {
+    const audioPlayer = player as AudioPlayerWithStatusListener;
+    if (typeof audioPlayer.addListener !== 'function') {
       return () => {
-        playerRef.current?.remove();
+        player.remove();
       };
     }
 
@@ -89,13 +85,13 @@ export function useChatAudioPlayback(scope: ChatScope) {
     };
 
     syncStatus(player.currentStatus);
-    const subscription = player.addListener('playbackStatusUpdate', syncStatus);
+    const subscription = audioPlayer.addListener('playbackStatusUpdate', syncStatus);
 
     return () => {
       subscription.remove();
-      playerRef.current?.remove();
+      player.remove();
     };
-  }, []);
+  }, [player]);
 
   const resolvePlayableUrl = useCallback(
     async (messageId: string) => {
@@ -123,21 +119,17 @@ export function useChatAudioPlayback(scope: ChatScope) {
   );
 
   const applyPlaybackRate = useCallback((nextRate: number) => {
-    const player = playerRef.current;
     playbackRateRef.current = nextRate;
     setPlaybackRate(nextRate);
-    if (!player) return;
 
     try {
       player.setPlaybackRate(nextRate);
     } catch (error) {
       console.error('Failed to set playback rate:', error);
     }
-  }, []);
+  }, [player]);
 
   const stopPlayback = useCallback(async () => {
-    const player = playerRef.current;
-    if (!player) return;
     finishHandledRef.current = false;
     player.pause();
     try {
@@ -149,14 +141,11 @@ export function useChatAudioPlayback(scope: ChatScope) {
     setLoadingMessageId(null);
     setCurrentTime(0);
     setIsPlaying(false);
-  }, []);
+  }, [player]);
 
   const togglePlayback = useCallback(
     async (message: VoiceMessageLike) => {
       if (message.message_type !== 'voice') return;
-
-      const player = playerRef.current;
-      if (!player) return;
 
       if (activeMessageId === message.id) {
         if (player.playing) {
@@ -218,15 +207,12 @@ export function useChatAudioPlayback(scope: ChatScope) {
         setLoadingMessageId(null);
       }
     },
-    [activeMessageId, applyPlaybackRate, resolvePlayableUrl],
+    [activeMessageId, applyPlaybackRate, player, resolvePlayableUrl],
   );
 
   const seekToTime = useCallback(
     async (message: VoiceMessageLike, targetSeconds: number) => {
       if (message.message_type !== 'voice') return;
-
-      const player = playerRef.current;
-      if (!player) return;
 
       const durationSeconds = (message.audio_duration_ms ?? 0) / 1000;
       const maxSeekTarget =
@@ -264,7 +250,7 @@ export function useChatAudioPlayback(scope: ChatScope) {
         }
       }
     },
-    [applyPlaybackRate, resolvePlayableUrl],
+    [applyPlaybackRate, player, resolvePlayableUrl],
   );
 
   const cyclePlaybackRate = useCallback(() => {

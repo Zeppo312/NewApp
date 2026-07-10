@@ -55,7 +55,7 @@ function WiggleView({
   enabled: boolean;
   children: React.ReactNode;
 }) {
-  const rotation = useRef(new Animated.Value(0)).current;
+  const rotation = React.useState(() => new Animated.Value(0))[0];
 
   useEffect(() => {
     if (!enabled) {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, TouchableOpacity, ScrollView, Animated, Easing } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { Colors } from '@/constants/Colors';
@@ -18,8 +18,8 @@ const SimpleTabs: React.FC<SimpleTabsProps> = ({ activeTab, onTabChange }) => {
   const isDark = colorScheme === 'dark';
   const inactiveColor = isDark ? Colors.dark.textTertiary : '#666666';
   const [prevActiveTab, setPrevActiveTab] = useState<TabType>(activeTab);
-  const fadeAnim = useRef(new Animated.Value(1)).current;
-  const slideAnim = useRef(new Animated.Value(0)).current;
+  const fadeAnim = React.useState(() => new Animated.Value(1))[0];
+  const slideAnim = React.useState(() => new Animated.Value(0))[0];
 
   // Animation beim Tabwechsel
   useEffect(() => {

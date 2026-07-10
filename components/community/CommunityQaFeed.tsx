@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -137,6 +137,33 @@ const getAvatarGradient = (name?: string | null): [string, string] => {
   return AVATAR_GRADIENTS[Math.abs(hash) % AVATAR_GRADIENTS.length];
 };
 
+function CommunityAvatar({ name, avatarUrl, isAnonymous, size = 44 }: {
+  name?: string | null;
+  avatarUrl?: string | null;
+  isAnonymous?: boolean;
+  size?: number;
+}) {
+  const gradient = isAnonymous ? ['#D4CCC8', '#B8AFA8'] as [string, string] : getAvatarGradient(name);
+  const fontSize = size < 36 ? 11 : size < 44 ? 13 : 15;
+
+  return (
+    <LinearGradient
+      colors={gradient}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={[styles.avatar, { width: size, height: size, borderRadius: size / 2 }]}
+    >
+      {avatarUrl && !isAnonymous ? (
+        <Image source={{ uri: avatarUrl }} style={{ width: size, height: size, borderRadius: size / 2 }} />
+      ) : (
+        <ThemedText style={[styles.avatarText, { fontSize }]}>
+          {isAnonymous ? '\uD83D\uDE4A' : getInitials(name)}
+        </ThemedText>
+      )}
+    </LinearGradient>
+  );
+}
+
 const isQuestionPost = (post: Post) => (post.content || '').includes('?');
 
 const isHotPost = (post: Post) => (post.comments_count || 0) >= 3 || (post.likes_count || 0) >= 3;
@@ -161,7 +188,7 @@ const AnimatedHeart = ({ liked, onPress, count, color }: {
   count: number;
   color: string;
 }) => {
-  const scale = useRef(new Animated.Value(1)).current;
+  const scale = React.useState(() => new Animated.Value(1))[0];
 
   const handlePress = () => {
     Animated.sequence([
@@ -363,8 +390,10 @@ export default function CommunityQaFeed({
   }, [groupId]);
 
   useEffect(() => {
-    setIsLoading(true);
-    void loadPosts('replace');
+    const timeoutId = setTimeout(() => {
+      void loadPosts('replace');
+    }, 0);
+    return () => clearTimeout(timeoutId);
   }, [loadPosts]);
 
   const loadCommentsForPost = useCallback(async (post: Post) => {
@@ -389,7 +418,10 @@ export default function CommunityQaFeed({
     if (!targetPostId || posts.length === 0 || showThreadModal) return;
     const matchingPost = posts.find((post) => post.id === targetPostId);
     if (matchingPost) {
-      void loadCommentsForPost(matchingPost);
+      const timeoutId = setTimeout(() => {
+        void loadCommentsForPost(matchingPost);
+      }, 0);
+      return () => clearTimeout(timeoutId);
     }
   }, [loadCommentsForPost, posts, showThreadModal, targetPostId]);
 
@@ -710,34 +742,6 @@ export default function CommunityQaFeed({
 
   const activeFilterMeta = COMMUNITY_FILTER_META[selectedFilter];
 
-  // ─── Avatar Component ─────────────────────────────────────────────
-  const Avatar = ({ name, avatarUrl, isAnonymous, size = 44 }: {
-    name?: string | null;
-    avatarUrl?: string | null;
-    isAnonymous?: boolean;
-    size?: number;
-  }) => {
-    const gradient = isAnonymous ? ['#D4CCC8', '#B8AFA8'] as [string, string] : getAvatarGradient(name);
-    const fontSize = size < 36 ? 11 : size < 44 ? 13 : 15;
-
-    return (
-      <LinearGradient
-        colors={gradient}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={[styles.avatar, { width: size, height: size, borderRadius: size / 2 }]}
-      >
-        {avatarUrl && !isAnonymous ? (
-          <Image source={{ uri: avatarUrl }} style={{ width: size, height: size, borderRadius: size / 2 }} />
-        ) : (
-          <ThemedText style={[styles.avatarText, { fontSize }]}>
-            {isAnonymous ? '\uD83D\uDE4A' : getInitials(name)}
-          </ThemedText>
-        )}
-      </LinearGradient>
-    );
-  };
-
   // ─── List Header ──────────────────────────────────────────────────
   const listHeader = (
     <View style={styles.listHeader}>
@@ -902,7 +906,7 @@ export default function CommunityQaFeed({
             onPress={() => !item.is_anonymous && item.user_id && router.push(`/profile/${item.user_id}` as any)}
             activeOpacity={0.7}
           >
-            <Avatar name={displayName} avatarUrl={item.user_avatar_url} isAnonymous={item.is_anonymous} size={40} />
+            <CommunityAvatar name={displayName} avatarUrl={item.user_avatar_url} isAnonymous={item.is_anonymous} size={40} />
             <View style={styles.postAuthorMeta}>
               <View style={styles.postAuthorNameRow}>
                 <ThemedText style={[styles.postAuthorName, { color: primaryText }]} numberOfLines={1}>
@@ -997,7 +1001,7 @@ export default function CommunityQaFeed({
 
     return (
       <View key={reply.id} style={[styles.replyCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#F8F1EA', borderColor: cardBorder }]}>
-        <Avatar name={displayName} avatarUrl={reply.user_avatar_url} isAnonymous={reply.is_anonymous} size={28} />
+        <CommunityAvatar name={displayName} avatarUrl={reply.user_avatar_url} isAnonymous={reply.is_anonymous} size={28} />
         <View style={styles.replyBody}>
           <View style={styles.replyBubble}>
             <ThemedText style={[styles.replyAuthor, { color: primaryText }]}>{displayName}</ThemedText>
@@ -1043,7 +1047,7 @@ export default function CommunityQaFeed({
           },
         ]}
       >
-        <Avatar name={displayName} avatarUrl={item.user_avatar_url} isAnonymous={item.is_anonymous} size={34} />
+        <CommunityAvatar name={displayName} avatarUrl={item.user_avatar_url} isAnonymous={item.is_anonymous} size={34} />
         <View style={styles.commentBody}>
           <View style={styles.commentBubble}>
             <ThemedText style={[styles.commentAuthor, { color: primaryText }]}>{displayName}</ThemedText>
@@ -1290,7 +1294,7 @@ export default function CommunityQaFeed({
 
                     {/* Composer */}
                     <View style={styles.composerRow}>
-                      <Avatar name={user?.user_metadata?.display_name} avatarUrl={null} isAnonymous={isAnonymousPost} size={38} />
+                      <CommunityAvatar name={user?.user_metadata?.display_name} avatarUrl={null} isAnonymous={isAnonymousPost} size={38} />
                       <View style={styles.composerMeta}>
                         <ThemedText style={[styles.composerName, { color: primaryText }]}>
                           {isAnonymousPost ? 'Anonym' : (user?.user_metadata?.display_name || 'Du')}
@@ -1360,7 +1364,7 @@ export default function CommunityQaFeed({
                   {selectedPost && (
                     <View style={[styles.threadOriginal, { borderBottomColor: dividerColor }]}>
                       <View style={styles.threadOriginalAuthor}>
-                        <Avatar
+                        <CommunityAvatar
                           name={selectedPost.user_name}
                           avatarUrl={selectedPost.user_avatar_url}
                           isAnonymous={selectedPost.is_anonymous}
@@ -1418,7 +1422,7 @@ export default function CommunityQaFeed({
                   {/* Composer */}
                   <View style={[styles.threadComposer, { borderTopColor: dividerColor, paddingBottom: Math.max(insets.bottom, 16) }]}>
                     <View style={styles.threadInputRow}>
-                      <Avatar name={user?.user_metadata?.display_name} avatarUrl={null} isAnonymous={isAnonymousAnswer} size={32} />
+                      <CommunityAvatar name={user?.user_metadata?.display_name} avatarUrl={null} isAnonymous={isAnonymousAnswer} size={32} />
                       <TextInput
                         value={newAnswer}
                         onChangeText={setNewAnswer}

@@ -14,9 +14,7 @@ function rgba(alpha: number) {
 }
 
 function AvatarHighlights({ opacity = 1 }: { opacity?: number }) {
-  const gradientId = React.useRef(
-    `avatar-hl-${Math.random().toString(36).slice(2, 10)}`
-  ).current;
+  const gradientId = `avatar-hl-${React.useId().replace(/:/g, '')}`;
   const shadeId = `${gradientId}-shade`;
 
   return (

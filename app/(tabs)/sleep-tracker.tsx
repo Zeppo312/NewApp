@@ -15,8 +15,7 @@ import {
   Platform,
   Dimensions,
 } from 'react-native';
-import { useFocusEffect } from 'expo-router';
-import { useRouter } from 'expo-router';
+import { useFocusEffect , useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import * as Linking from 'expo-linking';
 import { Colors } from '@/constants/Colors';
@@ -595,43 +594,23 @@ function CentralTimerComponent({
   textSecondary,
   pulseAnim,
 }: CentralTimerProps) {
-  const [elapsedTime, setElapsedTime] = useState(0);
-  const [currentTime, setCurrentTime] = useState(() => new Date());
+  const [currentTimeMs, setCurrentTimeMs] = useState(() => Date.now());
+  const currentTime = new Date(currentTimeMs);
   const ringSize = screenWidth * 0.75;
   const circleSize = ringSize * 0.8;
+  const activeStartMs = activeSleepEntry
+    ? new Date(activeSleepEntry.start_time).getTime()
+    : Number.NaN;
+  const elapsedTime = Number.isFinite(activeStartMs)
+    ? Math.max(0, Math.floor((currentTimeMs - activeStartMs) / 1000))
+    : 0;
 
   useEffect(() => {
-    if (!activeSleepEntry) {
-      setElapsedTime(0);
-      return;
-    }
-
-    const startMs = new Date(activeSleepEntry.start_time).getTime();
-    if (!Number.isFinite(startMs)) {
-      // Ungültiger start_time — kein Interval starten
-      setElapsedTime(0);
-      return;
-    }
-
-    const updateElapsed = () => {
-      setElapsedTime(Math.max(0, Math.floor((Date.now() - startMs) / 1000)));
-    };
-
-    updateElapsed();
-    const interval = setInterval(updateElapsed, 1000);
-    return () => clearInterval(interval);
-  // activeSleepEntry?.id stellt sicher dass der Effect neu läuft wenn null→entry wechselt,
-  // auch wenn start_time identisch bleibt (sonst würde der Interval nicht neu gestartet).
-  }, [activeSleepEntry?.id, activeSleepEntry?.start_time]);
-
-  useEffect(() => {
-    if (activeSleepEntry) return;
-    setCurrentTime(new Date());
     const interval = setInterval(() => {
-      setCurrentTime(new Date());
+      setCurrentTimeMs(Date.now());
     }, 1000);
     return () => clearInterval(interval);
-  }, [activeSleepEntry]);
+  }, []);
 
   const progress = activeSleepEntry ? (elapsedTime / (8 * 60 * 60)) * 100 : 0;
 
@@ -749,6 +728,13 @@ const StatusMetricsBar = ({
   const statsPageCount = 3;
   const statsScrollRef = useRef<ScrollView>(null);
   const [autoScrollEnabled, setAutoScrollEnabled] = useState(true);
+  const [currentTimeMs, setCurrentTimeMs] = useState(() => Date.now());
+  const currentTime = new Date(currentTimeMs);
+
+  useEffect(() => {
+    const intervalId = setInterval(() => setCurrentTimeMs(Date.now()), 60 * 1000);
+    return () => clearInterval(intervalId);
+  }, []);
 
   const getConfidenceLevel = (): 'high' | 'medium' | 'low' => {
     if (!sleepPrediction || !sleepPrediction.debug) return 'low';
@@ -774,9 +760,8 @@ const StatusMetricsBar = ({
     }
 
     // Echtzeit-Berechnung: Minuten bis zum empfohlenen Schlafzeitpunkt
-    const now = new Date();
     const minutesUntilWindow = Math.round(
-      (sleepPrediction.recommendedStart.getTime() - now.getTime()) / 60000
+      (sleepPrediction.recommendedStart.getTime() - currentTimeMs) / 60000
     );
 
     if (minutesUntilWindow > 20) {
@@ -796,7 +781,7 @@ const StatusMetricsBar = ({
 
   const getReasoningText = (): string => {
     if (activeSleepEntry) {
-      const currentHour = new Date().getHours();
+      const currentHour = currentTime.getHours();
       const isNightNow = currentHour >= 20 || currentHour < 6;
 
       // Nachtschlaf: keine Nap-Zielzeit anzeigen
@@ -806,7 +791,7 @@ const StatusMetricsBar = ({
       // Tagschlaf: verbleibende ideale Schlafdauer
       const target = toOptionalNumber(sleepPrediction?.debug?.targetNapDuration);
       if (target !== null) {
-        const elapsed = (Date.now() - new Date(activeSleepEntry.start_time).getTime()) / 60000;
+        const elapsed = (currentTimeMs - new Date(activeSleepEntry.start_time).getTime()) / 60000;
         const remaining = Math.round(target - elapsed);
         if (remaining > 0) {
           return `Noch ca. ${remaining} Min Schlaf ideal`;
@@ -1302,6 +1287,7 @@ export default function SleepTrackerScreen() {
   const modalAccentColor = isDark ? '#A26BFF' : '#8E4EC6';
   const router = useRouter();
   const { user } = useAuth();
+  const userId = user?.id;
   const { activeBackend } = useBackend();
   const { convexClient } = useConvex();
   const { activeBabyId } = useActiveBaby();
@@ -1341,6 +1327,11 @@ export default function SleepTrackerScreen() {
   // Navigation offsets für Woche und Monat
   const [weekOffset, setWeekOffset] = useState(0);   // 0 = diese Woche, -1 = letzte, +1 = nächste
   const [monthOffset, setMonthOffset] = useState(0); // 0 = dieser Monat, -1 = vorheriger, +1 = nächster
+  const selectTab = useCallback((tab: 'day' | 'week' | 'month') => {
+    setSelectedTab(tab);
+    setWeekOffset(0);
+    setMonthOffset(0);
+  }, []);
   const [isLiveStatusLoaded, setIsLiveStatusLoaded] = useState(false);
   const [babyBirthdate, setBabyBirthdate] = useState<Date | null>(null);
   const [babyBedtime, setBabyBedtime] = useState<string>('19:30');
@@ -1357,12 +1348,6 @@ export default function SleepTrackerScreen() {
   // Notification hooks
   const { requestPermissions } = useNotifications();
   const { isPartnerLinked } = usePartnerNotifications();
-
-  // Bei Tabwechsel Offsets zurücksetzen
-  useEffect(() => {
-    setWeekOffset(0);
-    setMonthOffset(0);
-  }, [selectedTab]);
 
   // Splash System komplett entfernt - saubere Sleep-Tracker Implementierung
 
@@ -1397,24 +1382,21 @@ export default function SleepTrackerScreen() {
     closeNotesEditor();
   };
 
-  useEffect(() => {
-    if (!showInputModal) {
-      closeNotesEditor();
-    }
-  }, [showInputModal]);
-
   const refreshNightWindowSettings = useCallback(async () => {
     try {
-      const loaded = await loadNightWindowSettings(user?.id);
+      const loaded = await loadNightWindowSettings(userId);
       setNightWindowSettings(loaded);
     } catch (error) {
       console.error('Failed to load night window settings:', error);
       setNightWindowSettings(DEFAULT_NIGHT_WINDOW_SETTINGS);
     }
-  }, [user?.id]);
+  }, [userId]);
 
   useEffect(() => {
-    void refreshNightWindowSettings();
+    const timeoutId = setTimeout(() => {
+      void refreshNightWindowSettings();
+    }, 0);
+    return () => clearTimeout(timeoutId);
   }, [refreshNightWindowSettings]);
 
   useFocusEffect(
@@ -1431,8 +1413,8 @@ export default function SleepTrackerScreen() {
   // Splash System wie in daily_old.tsx
   const [splashVisible, setSplashVisible] = useState(false);
   const [splashBg, setSplashBg] = useState<string>('rgba(0,0,0,0.6)');
-  const splashAnim = useRef(new Animated.Value(0)).current;
-  const splashEmojiAnim = useRef(new Animated.Value(0.9)).current;
+  const splashAnim = React.useState(() => new Animated.Value(0))[0];
+  const splashEmojiAnim = React.useState(() => new Animated.Value(0.9))[0];
   const splashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [splashTitle, setSplashTitle] = useState<string>('');
   const [splashSubtitle, setSplashSubtitle] = useState<string>('');
@@ -1559,6 +1541,8 @@ export default function SleepTrackerScreen() {
   const closeManualSleepModal = useCallback(() => {
     setShowInputModal(false);
     setEditingEntry(null);
+    setNotesOverlayVisible(false);
+    setNotesOverlayValue('');
     resetManualModalData();
   }, [resetManualModalData]);
 
@@ -1571,18 +1555,31 @@ export default function SleepTrackerScreen() {
 
   const openEditSleepModal = useCallback((entry: ClassifiedSleepEntry) => {
     if (!ensureWritableInCurrentMode()) return;
+    const startCandidate = sanitizeManualDate(new Date(entry.start_time), new Date());
+    const endCandidate = entry.end_time
+      ? sanitizeManualDate(new Date(entry.end_time), startCandidate)
+      : null;
     setEditingEntry(entry);
     setShowStartPicker(false);
     setShowEndPicker(false);
+    setSleepModalData({
+      start_time: startCandidate,
+      end_time: endCandidate && endCandidate.getTime() <= startCandidate.getTime() ? null : endCandidate,
+      quality: entry.quality || null,
+      notes: entry.notes || '',
+    });
     setShowInputModal(true);
-  }, [ensureWritableInCurrentMode]);
+  }, [ensureWritableInCurrentMode, sanitizeManualDate]);
 
   // Animation refs
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-  const appearAnim = useRef(new Animated.Value(0)).current;
+  const pulseAnim = React.useState(() => new Animated.Value(1))[0];
+  const appearAnim = React.useState(() => new Animated.Value(0))[0];
 
   useEffect(() => {
-    loadSleepData();
+    const timeoutId = setTimeout(() => {
+      void loadSleepDataRef.current?.();
+    }, 0);
+    return () => clearTimeout(timeoutId);
   }, [activeBabyId, activeBackend, convexClient]);
 
   useEffect(() => {
@@ -1591,7 +1588,8 @@ export default function SleepTrackerScreen() {
 
   useEffect(() => {
     if (activeSleepEntry) {
-      setPausedNightState(null);
+      const timeoutId = setTimeout(() => setPausedNightState(null), 0);
+      return () => clearTimeout(timeoutId);
     }
   }, [activeSleepEntry?.id]);
 
@@ -1648,16 +1646,14 @@ export default function SleepTrackerScreen() {
   }, [partnerId, refreshPartnerId]);
 
   useEffect(() => {
-    refreshPartnerId();
+    const timeoutId = setTimeout(() => {
+      void refreshPartnerId();
+    }, 0);
+    return () => clearTimeout(timeoutId);
   }, [refreshPartnerId]);
 
   useEffect(() => {
-      if (!user?.id) {
-        setBabyBirthdate(null);
-        setBabyBedtime('19:30');
-        setBabyName(undefined);
-        return;
-      }
+    if (!userId) return;
 
     let isMounted = true;
 
@@ -1686,7 +1682,7 @@ export default function SleepTrackerScreen() {
     return () => {
       isMounted = false;
     };
-  }, [user?.id, activeBabyId]);
+  }, [userId, activeBabyId]);
 
   useEffect(() => {
     Animated.timing(appearAnim, {
@@ -1726,7 +1722,7 @@ export default function SleepTrackerScreen() {
 
   const updateSleepPrediction = useCallback(
     async (entries: ClassifiedSleepEntry[]) => {
-      if (!user?.id) {
+      if (!userId) {
         setSleepPrediction(null);
         predictionRef.current = null;
         setPredictionLoading(false);
@@ -1736,7 +1732,7 @@ export default function SleepTrackerScreen() {
       setPredictionLoading(true);
       try {
         const prediction = await predictNextSleepWindow({
-          userId: user.id,
+          userId,
           babyId: activeBabyId ?? undefined, // Gemeinsame Personalization für Partner
           birthdate: babyBirthdate ?? undefined,
           entries,
@@ -1754,11 +1750,14 @@ export default function SleepTrackerScreen() {
         setPredictionLoading(false);
       }
     },
-    [user?.id, activeBabyId, babyBirthdate, babyBedtime]
+    [userId, activeBabyId, babyBirthdate, babyBedtime]
   );
 
   useEffect(() => {
-    updateSleepPrediction(sleepEntries);
+    const timeoutId = setTimeout(() => {
+      void updateSleepPrediction(sleepEntries);
+    }, 0);
+    return () => clearTimeout(timeoutId);
   }, [sleepEntries, updateSleepPrediction]);
 
   // Keep prediction in sync with notification engine (which refreshes every 5 minutes in _layout)
@@ -1974,7 +1973,7 @@ export default function SleepTrackerScreen() {
   };
 
   // Load sleep data (combines live + cached history)
-  const loadSleepData = async () => {
+  async function loadSleepData() {
     const requestId = loadSleepDataRequestIdRef.current + 1;
     loadSleepDataRequestIdRef.current = requestId;
     const isLatestRequest = () => loadSleepDataRequestIdRef.current === requestId;
@@ -2080,7 +2079,7 @@ export default function SleepTrackerScreen() {
 
         if (latest) {
           hasAutoSelectedDateRef.current = true;
-          setSelectedTab('day');
+          selectTab('day');
           setSelectedDate(getAssignedDateForEntry(latest, nightWindowSettings));
         }
       }
@@ -2093,8 +2092,10 @@ export default function SleepTrackerScreen() {
       setIsLoading(false);
       setRefreshing(false);
     }
-  };
-  loadSleepDataRef.current = loadSleepData;
+  }
+  useEffect(() => {
+    loadSleepDataRef.current = loadSleepData;
+  }, [loadSleepData]);
 
   // Handle refresh
   const handleRefresh = async () => {
@@ -2240,6 +2241,8 @@ export default function SleepTrackerScreen() {
       await loadSleepData();
 
       // Splash anzeigen
+      // Function declaration is intentionally hoisted; this handler only runs after user interaction.
+      // eslint-disable-next-line react-hooks/immutability
       showSuccessSplash(
         '#87CEEB', // Baby blue
         period === 'night' ? '🌙' : '😴',
@@ -2475,13 +2478,15 @@ export default function SleepTrackerScreen() {
   // die Funktionen nicht in ihren Dependency-Arrays brauchen und nicht bei jedem
   // Render neu laufen (gleiches Muster wie loadSleepDataRef).
   const handleStartSleepRef = useRef(handleStartSleep);
-  handleStartSleepRef.current = handleStartSleep;
   const handleStopSleepRef = useRef(handleStopSleep);
-  handleStopSleepRef.current = handleStopSleep;
   const handlePauseNightSleepRef = useRef(handlePauseNightSleep);
-  handlePauseNightSleepRef.current = handlePauseNightSleep;
   const handleFinalizePausedNightRef = useRef(handleFinalizePausedNight);
-  handleFinalizePausedNightRef.current = handleFinalizePausedNight;
+  useEffect(() => {
+    handleStartSleepRef.current = handleStartSleep;
+    handleStopSleepRef.current = handleStopSleep;
+    handlePauseNightSleepRef.current = handlePauseNightSleep;
+    handleFinalizePausedNightRef.current = handleFinalizePausedNight;
+  }, [handleFinalizePausedNight, handlePauseNightSleep, handleStartSleep, handleStopSleep]);
 
   const promptSleepQualityForStop = useCallback(() => {
     if (!ensureWritableInCurrentMode()) return;
@@ -2993,7 +2998,7 @@ export default function SleepTrackerScreen() {
 
     const resolveEntryFromList = (
       candidate: ClassifiedSleepEntry,
-      source: Array<{ id?: string; start_time: Date | string; end_time?: Date | string | null }>
+      source: { id?: string; start_time: Date | string; end_time?: Date | string | null }[]
     ): ClassifiedSleepEntry => {
       if (candidate.id) return candidate;
       const match = source.find((entry) => entry.id && matchesEntryByTime(candidate, entry));
@@ -3283,7 +3288,7 @@ export default function SleepTrackerScreen() {
   };
 
   // Splash Funktion wie in daily_old.tsx
-  const showSuccessSplash = (hex: string, _emoji: string, kind: string) => {
+  function showSuccessSplash(hex: string, _emoji: string, kind: string) {
     const rgba = (h: string, a: number) => {
       const c = h.replace('#','');
       const r = parseInt(c.substring(0,2),16);
@@ -3366,7 +3371,7 @@ export default function SleepTrackerScreen() {
         setSplashVisible(false);
       });
     }, 4500);
-  };
+  }
 
   const stats = useMemo(() => {
     // Compute high-level stats & score (heutiger Kalendertag 00:00–24:00 lokal)
@@ -3490,7 +3495,8 @@ export default function SleepTrackerScreen() {
       .join(',');
 
     if (currentSignature !== bestSignature) {
-      setNightEditorGroup(bestMatch);
+      const timeoutId = setTimeout(() => setNightEditorGroup(bestMatch), 0);
+      return () => clearTimeout(timeoutId);
     }
   }, [showNightEditor, nightEditorGroup, nightGroups]);
 
@@ -3538,36 +3544,10 @@ export default function SleepTrackerScreen() {
     }, null as ClassifiedSleepEntry | null);
 
     if (latest) {
-      setSelectedTab('day');
+      selectTab('day');
       setSelectedDate(getAssignedDateForEntry(latest, nightWindowSettings));
     }
   }, [nightWindowSettings, sleepEntries]);
-
-    // Setze die Modal-Daten beim Öffnen
-    useEffect(() => {
-      if (showInputModal) {
-        setShowStartPicker(false);
-        setShowEndPicker(false);
-
-        if (editingEntry) {
-          // Bearbeitungsmodus - lade vorhandene Daten
-          const startCandidate = sanitizeManualDate(new Date(editingEntry.start_time), new Date());
-          const endCandidate = editingEntry.end_time
-            ? sanitizeManualDate(new Date(editingEntry.end_time), startCandidate)
-            : null;
-          setSleepModalData({
-            start_time: startCandidate,
-            end_time:
-              endCandidate && endCandidate.getTime() <= startCandidate.getTime() ? null : endCandidate,
-            quality: editingEntry.quality || null,
-            notes: editingEntry.notes || ''
-          });
-        } else {
-          // Neuer Eintrag - setze Standardwerte
-          resetManualModalData();
-        }
-      }
-    }, [showInputModal, editingEntry, resetManualModalData, sanitizeManualDate]);
 
   const openStartPicker = () => {
     triggerHaptic();
@@ -3660,7 +3640,7 @@ export default function SleepTrackerScreen() {
             pressRetentionOffset={{ top: 16, bottom: 16, left: 12, right: 12 }}
             onPress={() => {
               triggerHaptic();
-              setSelectedTab(tab);
+              selectTab(tab);
               // Wenn Tag-Tab gewählt wird, springe zu heute
               if (tab === 'day') {
                 setSelectedDate(new Date());
@@ -4063,7 +4043,7 @@ export default function SleepTrackerScreen() {
                   onPress={() => {
                     triggerHaptic();
                     setSelectedDate(day);
-                    setSelectedTab('day');
+                    selectTab('day');
                   }}
                 >
                   <View style={[styles.chartBarContainer, { width: WEEK_COL_WIDTH + extra }]}>
@@ -4406,7 +4386,7 @@ export default function SleepTrackerScreen() {
                             onPress={() => {
                               triggerHaptic();
                               setSelectedDate(date);
-                              setSelectedTab('day');
+                              selectTab('day');
                             }}
                           >
                             <Text style={[styles.calendarDayNumber, { color: c.text }]}>{date.getDate()}</Text>

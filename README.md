@@ -109,15 +109,14 @@ npm test
 Dieses Projekt nutzt EAS Update für Over-the-Air-Updates, ohne neue App-Versionen in den Stores veröffentlichen zu müssen.
 
 ```sh
-# Vorbereitetes Update veröffentlichen (Skript, CI-Modus)
-npm run update
+# Preview-Update: niemals ein automatisches Branch-Update verwenden.
+npm run update:preview -- --message "Beschreibung der Änderung"
 
-# Update für den main-Branch veröffentlichen
-npm run update:dev
-
-# Manuell mit der EAS CLI
-eas update --channel production
+# Production-Update: erst nach erfolgreichem TestFlight-Test.
+npm run update:production -- --message "Beschreibung der Änderung"
 ```
+
+Die Update-Skripte verlangen immer einen expliziten Kanal, das passende EAS-Environment und eine Beschreibung. Ein Expo-SDK-, Berechtigungs- oder Native-Module-Update benötigt stattdessen einen neuen EAS Build und darf nicht per OTA-Update ausgeliefert werden.
 
 ## 🏗️ Builds erstellen
 
