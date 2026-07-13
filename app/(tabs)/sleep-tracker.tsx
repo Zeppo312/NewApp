@@ -16,6 +16,9 @@ import {
   Dimensions,
 } from 'react-native';
 import { useFocusEffect , useRouter } from 'expo-router';
+
+import { isBeforeHistoryCutoff, useHistoryCutoff } from '@/lib/entitlements';
+import { showHistoryLimitAlert } from '@/lib/historyLimit';
 import * as Haptics from 'expo-haptics';
 import * as Linking from 'expo-linking';
 import { Colors } from '@/constants/Colors';
@@ -1320,6 +1323,7 @@ export default function SleepTrackerScreen() {
   const [showInputModal, setShowInputModal] = useState(false);
   const [selectedTab, setSelectedTab] = useState<'day' | 'week' | 'month'>('day');
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const historyCutoff = useHistoryCutoff();
   const [editingEntry, setEditingEntry] = useState<ClassifiedSleepEntry | null>(null);
   const hasAutoSelectedDateRef = useRef(false);
   const [partnerId, setPartnerId] = useState<string | null>(null);
@@ -3416,7 +3420,15 @@ export default function SleepTrackerScreen() {
   }, [babyBirthdate, nightWindowSettings, selectedDate, sleepEntries]);
 
   // Daily navigation helpers
-  const goPrevDay = () => setSelectedDate(d => { const nd = new Date(d); nd.setDate(nd.getDate() - 1); return nd; });
+  const goPrevDay = () => setSelectedDate(d => {
+    const nd = new Date(d);
+    nd.setDate(nd.getDate() - 1);
+    if (isBeforeHistoryCutoff(nd, historyCutoff)) {
+      showHistoryLimitAlert(router);
+      return d;
+    }
+    return nd;
+  });
   const goNextDay = () => setSelectedDate(d => { const nd = new Date(d); nd.setDate(nd.getDate() + 1); return nd; });
   const today = new Date();
   const nextDisabled = isSameDay(selectedDate, today) || selectedDate > today;
@@ -4042,6 +4054,10 @@ export default function SleepTrackerScreen() {
                   }}
                   onPress={() => {
                     triggerHaptic();
+                    if (isBeforeHistoryCutoff(day, historyCutoff)) {
+                      showHistoryLimitAlert(router);
+                      return;
+                    }
                     setSelectedDate(day);
                     selectTab('day');
                   }}
@@ -4385,6 +4401,10 @@ export default function SleepTrackerScreen() {
                             ]}
                             onPress={() => {
                               triggerHaptic();
+                              if (isBeforeHistoryCutoff(date, historyCutoff)) {
+                                showHistoryLimitAlert(router);
+                                return;
+                              }
                               setSelectedDate(date);
                               selectTab('day');
                             }}

@@ -150,6 +150,7 @@ export default function TabLayout() {
       '/babyweather',
       '/weight-tracker',
       '/size-tracker',
+      '/period-tracker',
       '/more',
       '/community',
       '/debug',
@@ -200,6 +201,7 @@ export default function TabLayout() {
       'sleep-tracker',
       'daily_old',
       'home',
+      'period-tracker',
     ]);
 
     if (isBabyBorn && currentRoute && pregnancyOnlyRoutes.has(currentRoute)) {
@@ -345,6 +347,14 @@ export default function TabLayout() {
         options={{
           title: 'Größe',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="ruler" color={color} />,
+          ...getTabVisibilityOptions(true),
+        }}
+      />
+      <Tabs.Screen
+        name="period-tracker"
+        options={{
+          title: 'Period Tracker',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="drop.fill" color={color} />,
           ...getTabVisibilityOptions(true),
         }}
       />

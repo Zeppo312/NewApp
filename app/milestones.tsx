@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
   FlatList,
@@ -18,6 +18,15 @@ import {
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
+import * as Sharing from 'expo-sharing';
+import ViewShot, { ViewShotRef } from 'react-native-view-shot';
+import {
+  addMonths,
+  addYears,
+  differenceInCalendarDays,
+  differenceInMonths,
+  differenceInYears,
+} from 'date-fns';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemedBackground } from '@/components/ThemedBackground';
@@ -27,6 +36,7 @@ import IOSBottomDatePicker from '@/components/modals/IOSBottomDatePicker';
 import { Colors } from '@/constants/Colors';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { FloatingAddButton } from '@/components/planner/FloatingAddButton';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import {
@@ -58,6 +68,7 @@ const CATEGORY_ORDER: MilestoneCategory[] = [
   'schlaf',
   'sonstiges',
 ];
+const PRIMARY_FILTERS: CategoryFilter[] = ['all', 'motorik', 'ernaehrung', 'sprache', 'zahn'];
 const MIN_VALID_MILESTONE_DATE = new Date(2000, 0, 1);
 const BABY_MODE_PREVIEW_READ_ONLY_MESSAGE =
   'Du bist im Babymodus zur Vorschau. Meilensteine koennen erst nach der Geburt bearbeitet werden.';
@@ -75,7 +86,47 @@ const fromDateOnly = (value: string) => {
   return new Date(y, m - 1, d);
 };
 
+const formatAlbumDate = (value: string) =>
+  fromDateOnly(value).toLocaleDateString('de-DE', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+
+const joinGermanParts = (parts: string[]) => {
+  if (parts.length <= 1) return parts[0] ?? '';
+  return `${parts.slice(0, -1).join(', ')} und ${parts.at(-1)}`;
+};
+
+const formatBabyAgeAtMilestone = (birthDateValue: string | null | undefined, eventDateValue: string) => {
+  if (!birthDateValue) return null;
+
+  const birthDate = fromDateOnly(birthDateValue.slice(0, 10));
+  const milestoneDate = fromDateOnly(eventDateValue);
+  if (
+    Number.isNaN(birthDate.getTime()) ||
+    Number.isNaN(milestoneDate.getTime()) ||
+    milestoneDate < birthDate
+  ) {
+    return null;
+  }
+
+  const years = differenceInYears(milestoneDate, birthDate);
+  const afterYears = addYears(birthDate, years);
+  const months = differenceInMonths(milestoneDate, afterYears);
+  const afterMonths = addMonths(afterYears, months);
+  const days = differenceInCalendarDays(milestoneDate, afterMonths);
+  const parts = [
+    years > 0 ? `${years} ${years === 1 ? 'Jahr' : 'Jahren'}` : null,
+    months > 0 ? `${months} ${months === 1 ? 'Monat' : 'Monaten'}` : null,
+    days > 0 ? `${days} ${days === 1 ? 'Tag' : 'Tagen'}` : null,
+  ].filter((part): part is string => Boolean(part));
+
+  return parts.length > 0 ? `Mit ${joinGermanParts(parts)}` : 'Am Tag der Geburt';
+};
+
 export default function MilestonesScreen() {
+  const shareCardRef = useRef<ViewShotRef>(null);
   const adaptiveColors = useAdaptiveColors();
   const insets = useSafeAreaInsets();
   const isDark = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
@@ -83,14 +134,16 @@ export default function MilestonesScreen() {
   const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
   const chipBg = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.7)';
   const selectedChipBg = isDark ? 'rgba(94,61,179,0.45)' : 'rgba(94,61,179,0.16)';
-  const cardBg = isDark ? 'rgba(0,0,0,0.25)' : 'rgba(255,255,255,0.8)';
-  const cardBorder = isDark ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.45)';
+  const cardBg = isDark ? 'rgba(28,25,28,0.94)' : 'rgba(255,252,246,0.97)';
+  const cardBorder = isDark ? 'rgba(255,255,255,0.13)' : 'rgba(111,79,61,0.10)';
+  const photoMatBg = isDark ? 'rgba(255,255,255,0.08)' : '#FFFDFC';
+  const albumAccent = isDark ? 'rgba(225,205,190,0.55)' : 'rgba(166,127,101,0.55)';
   const inputBg = isDark ? 'rgba(20,20,24,0.9)' : 'rgba(255,255,255,0.95)';
   const inputBorder = isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.08)';
   const dateButtonTextColor = isDark ? '#FFFFFF' : textPrimary;
 
   const router = useRouter();
-  const { activeBabyId, isReady } = useActiveBaby();
+  const { activeBabyId, activeBaby, isReady } = useActiveBaby();
   const { isReadOnlyPreviewMode } = useBabyStatus();
 
   const [entries, setEntries] = useState<BabyMilestoneEntry[]>([]);
@@ -102,6 +155,10 @@ export default function MilestonesScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingEntry, setEditingEntry] = useState<BabyMilestoneEntry | null>(null);
+  const [previewEntry, setPreviewEntry] = useState<BabyMilestoneEntry | null>(null);
+  const [shareEntry, setShareEntry] = useState<BabyMilestoneEntry | null>(null);
+  const [shareImageReady, setShareImageReady] = useState(false);
+  const [sharing, setSharing] = useState(false);
 
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState<MilestoneCategory>('motorik');
@@ -251,7 +308,7 @@ export default function MilestonesScreen() {
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      allowsEditing: true,
+      allowsEditing: false,
       quality: 1,
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
     });
@@ -278,6 +335,8 @@ export default function MilestonesScreen() {
               Alert.alert('Fehler', 'Der Meilenstein konnte nicht gelöscht werden.');
               return;
             }
+            setShowModal(false);
+            resetForm();
             await loadEntries();
           },
         },
@@ -285,7 +344,46 @@ export default function MilestonesScreen() {
     );
   };
 
-  const sortedCategories = useMemo(() => CATEGORY_ORDER, []);
+  const openShareCard = (entry: BabyMilestoneEntry) => {
+    setShareImageReady(!entry.image_url);
+    setShareEntry(entry);
+  };
+
+  const closeShareCard = () => {
+    if (sharing) return;
+    setShareEntry(null);
+    setShareImageReady(false);
+  };
+
+  const handleShareMilestone = async () => {
+    if (!shareEntry || !shareImageReady || sharing) return;
+
+    setSharing(true);
+    try {
+      const sharingAvailable = await Sharing.isAvailableAsync();
+      if (!sharingAvailable) {
+        Alert.alert('Teilen nicht verfügbar', 'Auf diesem Gerät ist das Teilen von Bildern nicht verfügbar.');
+        return;
+      }
+
+      const uri = await shareCardRef.current?.capture?.();
+      if (!uri) throw new Error('Share-Karte konnte nicht erstellt werden');
+
+      await Sharing.shareAsync(uri, {
+        dialogTitle: 'Meilenstein teilen',
+        mimeType: 'image/jpeg',
+        UTI: 'public.jpeg',
+      });
+      setShareEntry(null);
+      setShareImageReady(false);
+    } catch (error) {
+      console.error('Failed to share milestone:', error);
+      Alert.alert('Teilen nicht möglich', 'Die Erinnerung konnte nicht geteilt werden. Bitte versuche es erneut.');
+    } finally {
+      setSharing(false);
+    }
+  };
+
   const headerSubtitle = isReadOnlyPreviewMode
     ? 'Vorschau-Modus: nur ansehen'
     : 'Erste Male und besondere Momente';
@@ -311,23 +409,8 @@ export default function MilestonesScreen() {
         )}
 
         <View style={styles.content}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.filterScroll}
-            contentContainerStyle={styles.filterRow}
-          >
-            <TouchableOpacity
-              style={[
-                styles.filterChip,
-                { backgroundColor: filter === 'all' ? selectedChipBg : chipBg, borderColor: cardBorder },
-              ]}
-              onPress={() => setFilter('all')}
-            >
-              <ThemedText style={[styles.filterChipText, { color: textPrimary }]}>Alle</ThemedText>
-            </TouchableOpacity>
-
-            {sortedCategories.map((value) => (
+          <View style={styles.filterRow}>
+            {PRIMARY_FILTERS.map((value) => (
               <TouchableOpacity
                 key={value}
                 style={[
@@ -340,25 +423,11 @@ export default function MilestonesScreen() {
                 onPress={() => setFilter(value)}
               >
                 <ThemedText style={[styles.filterChipText, { color: textPrimary }]}>
-                  {MILESTONE_CATEGORY_LABELS[value]}
+                  {value === 'all' ? 'Alle' : MILESTONE_CATEGORY_LABELS[value]}
                 </ThemedText>
               </TouchableOpacity>
             ))}
-          </ScrollView>
-
-          <TouchableOpacity
-            style={[
-              styles.addButton,
-              { backgroundColor: selectedChipBg, borderColor: cardBorder },
-              isReadOnlyPreviewMode && styles.actionDisabled,
-            ]}
-            onPress={openCreateModal}
-            disabled={isReadOnlyPreviewMode}
-            activeOpacity={0.85}
-          >
-            <IconSymbol name="plus.circle.fill" size={20} color={textPrimary} />
-            <ThemedText style={[styles.addButtonText, { color: textPrimary }]}>Meilenstein hinzufügen</ThemedText>
-          </TouchableOpacity>
+          </View>
 
           <FlatList
             data={entries}
@@ -367,6 +436,8 @@ export default function MilestonesScreen() {
             onRefresh={onRefresh}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
             contentContainerStyle={styles.listContent}
+            contentInsetAdjustmentBehavior="automatic"
+            showsVerticalScrollIndicator={false}
             ListEmptyComponent={
               <View style={styles.emptyState}>
                 {!loading ? (
@@ -386,51 +457,249 @@ export default function MilestonesScreen() {
                 ) : null}
               </View>
             }
-            renderItem={({ item }) => (
+            renderItem={({ item, index }) => (
               <TouchableOpacity
                 style={[styles.card, { backgroundColor: cardBg, borderColor: cardBorder }]}
                 onPress={() => openEditModal(item)}
                 disabled={isReadOnlyPreviewMode}
                 activeOpacity={0.9}
               >
+                <View style={[styles.albumBinding, { backgroundColor: albumAccent }]} />
+
                 <View style={styles.cardHeader}>
-                  <ThemedText style={[styles.cardTitle, { color: textPrimary }]}>{item.title}</ThemedText>
-                  <TouchableOpacity
-                    style={[styles.deleteIconButton, isReadOnlyPreviewMode && styles.actionDisabled]}
-                    onPress={(event) => {
-                      event.stopPropagation();
-                      handleDelete(item);
-                    }}
-                    disabled={isReadOnlyPreviewMode}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <IconSymbol name="trash" size={18} color={isDark ? '#FF9A9A' : '#D45B5B'} />
-                  </TouchableOpacity>
+                  <View style={styles.cardHeading}>
+                    <ThemedText style={[styles.cardEyebrow, { color: textSecondary }]}>UNSER FOTOBUCH</ThemedText>
+                    <ThemedText style={[styles.cardTitle, { color: textPrimary }]}>{item.title}</ThemedText>
+                  </View>
                 </View>
 
-                <View style={styles.cardMetaRow}>
+                {item.image_url ? (
+                  <TouchableOpacity
+                    style={[styles.photoPrint, { backgroundColor: photoMatBg, borderColor: cardBorder }]}
+                    onPress={(event) => {
+                      event.stopPropagation();
+                      setPreviewEntry(item);
+                    }}
+                    activeOpacity={0.9}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${item.title} in Vollbild anzeigen`}
+                  >
+                    <Image source={{ uri: item.image_url }} style={styles.cardImage} resizeMode="cover" />
+                    <View style={styles.photoZoomHint} pointerEvents="none">
+                      <IconSymbol name="magnifyingglass" size={14} color="#FFFFFF" />
+                    </View>
+                  </TouchableOpacity>
+                ) : (
+                  <View style={[styles.photoPlaceholder, { backgroundColor: selectedChipBg, borderColor: cardBorder }]}>
+                    <IconSymbol name="sparkles" size={26} color={textSecondary} />
+                    <ThemedText style={[styles.photoPlaceholderText, { color: textSecondary }]}>
+                      Ein Moment zum Festhalten
+                    </ThemedText>
+                  </View>
+                )}
+
+                <View style={styles.captionBlock}>
+                  <ThemedText style={[styles.cardDate, { color: textPrimary }]}>
+                    {formatAlbumDate(item.event_date)}
+                  </ThemedText>
+                  {item.notes ? (
+                    <ThemedText style={[styles.cardNotes, { color: textSecondary }]}>{item.notes}</ThemedText>
+                  ) : (
+                    <View style={[styles.captionRule, { backgroundColor: cardBorder }]} />
+                  )}
+                </View>
+
+                <View style={[styles.cardFooter, { borderTopColor: cardBorder }]}>
                   <View style={[styles.badge, { backgroundColor: selectedChipBg }]}>
                     <ThemedText style={[styles.badgeText, { color: textPrimary }]}>
                       {MILESTONE_CATEGORY_LABELS[item.category]}
                     </ThemedText>
                   </View>
-                  <ThemedText style={[styles.cardDate, { color: textSecondary }]}>
-                    {fromDateOnly(item.event_date).toLocaleDateString('de-DE')}
-                  </ThemedText>
+                  <View style={styles.cardFooterActions}>
+                    <ThemedText style={[styles.pageNumber, { color: textSecondary }]}>
+                      SEITE {String(index + 1).padStart(2, '0')}
+                    </ThemedText>
+                    <TouchableOpacity
+                      style={[styles.cardShareButton, { backgroundColor: selectedChipBg }]}
+                      onPress={(event) => {
+                        event.stopPropagation();
+                        openShareCard(item);
+                      }}
+                      activeOpacity={0.8}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${item.title} teilen`}
+                    >
+                      <IconSymbol name="square.and.arrow.up" size={16} color={textPrimary} />
+                    </TouchableOpacity>
+                  </View>
                 </View>
-
-                {item.notes ? (
-                  <ThemedText style={[styles.cardNotes, { color: textSecondary }]}>{item.notes}</ThemedText>
-                ) : null}
-
-                {item.image_url ? (
-                  <Image source={{ uri: item.image_url }} style={styles.cardImage} resizeMode="cover" />
-                ) : null}
               </TouchableOpacity>
             )}
           />
         </View>
+
+        {!isReadOnlyPreviewMode ? (
+          <FloatingAddButton
+            onPress={openCreateModal}
+            bottomInset={insets.bottom + 16}
+            rightInset={16}
+          />
+        ) : null}
       </SafeAreaView>
+
+      <Modal
+        visible={Boolean(previewEntry?.image_url)}
+        transparent
+        animationType="fade"
+        presentationStyle="overFullScreen"
+        statusBarTranslucent
+        onRequestClose={() => setPreviewEntry(null)}
+      >
+        <View style={styles.imageViewer}>
+          <TouchableWithoutFeedback
+            onPress={() => setPreviewEntry(null)}
+            accessibilityRole="button"
+            accessibilityLabel="Vollbildansicht schließen"
+          >
+            <View style={StyleSheet.absoluteFill} />
+          </TouchableWithoutFeedback>
+
+          {previewEntry?.image_url ? (
+            <View style={styles.fullScreenImage} pointerEvents="none">
+              <Image
+                source={{ uri: previewEntry.image_url }}
+                style={StyleSheet.absoluteFill}
+                resizeMode="contain"
+              />
+            </View>
+          ) : null}
+
+          <TouchableOpacity
+            style={[styles.imageViewerCloseButton, { top: Math.max(insets.top, 14) }]}
+            onPress={() => setPreviewEntry(null)}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Vollbildansicht schließen"
+          >
+            <IconSymbol name="xmark" size={22} color="#FFFFFF" />
+          </TouchableOpacity>
+
+          {previewEntry ? (
+            <View
+              style={[styles.imageViewerCaption, { paddingBottom: Math.max(insets.bottom, 18) }]}
+              pointerEvents="none"
+            >
+              <ThemedText style={styles.imageViewerTitle}>{previewEntry.title}</ThemedText>
+              <ThemedText style={styles.imageViewerDate}>{formatAlbumDate(previewEntry.event_date)}</ThemedText>
+            </View>
+          ) : null}
+        </View>
+      </Modal>
+
+      <Modal
+        visible={Boolean(shareEntry)}
+        transparent
+        animationType="fade"
+        presentationStyle="overFullScreen"
+        statusBarTranslucent
+        onRequestClose={closeShareCard}
+      >
+        <View style={styles.shareModalOverlay}>
+          <TouchableWithoutFeedback onPress={closeShareCard}>
+            <View style={StyleSheet.absoluteFill} />
+          </TouchableWithoutFeedback>
+
+          <View style={[styles.shareModalCard, { paddingBottom: Math.max(insets.bottom, 18) }]}>
+            <View style={styles.shareModalHeader}>
+              <View>
+                <ThemedText adaptive={false} style={styles.shareModalTitle}>Erinnerung teilen</ThemedText>
+                <ThemedText adaptive={false} style={styles.shareModalSubtitle}>So wird deine Karte geteilt</ThemedText>
+              </View>
+              <TouchableOpacity
+                style={styles.shareModalCloseButton}
+                onPress={closeShareCard}
+                disabled={sharing}
+                accessibilityRole="button"
+                accessibilityLabel="Teilen schließen"
+              >
+                <IconSymbol name="xmark" size={20} color="#6B4C3B" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.shareCardFrame}>
+              <ViewShot
+                ref={shareCardRef}
+                style={styles.shareCard}
+                options={{ format: 'jpg', quality: 0.96, result: 'tmpfile', width: 1080, height: 1350 }}
+              >
+                <View style={styles.shareDecorationTop} />
+                <View style={styles.shareDecorationBottom} />
+
+                <ThemedText adaptive={false} style={styles.shareCardEyebrow}>
+                  {activeBaby?.name
+                    ? `MEILENSTEIN VON ${activeBaby.name.toUpperCase()}`
+                    : 'UNSER MEILENSTEIN'}
+                </ThemedText>
+                <ThemedText adaptive={false} style={styles.shareCardTitle} numberOfLines={2}>
+                  {shareEntry?.title}
+                </ThemedText>
+
+                <View style={styles.shareCardPhotoMat}>
+                  {shareEntry?.image_url ? (
+                    <Image
+                      source={{ uri: shareEntry.image_url }}
+                      style={styles.shareCardImage}
+                      resizeMode="contain"
+                      onLoadEnd={() => setShareImageReady(true)}
+                    />
+                  ) : (
+                    <View style={styles.shareCardPlaceholder}>
+                      <IconSymbol name="sparkles" size={32} color="#9A7665" />
+                      <ThemedText adaptive={false} style={styles.shareCardPlaceholderText}>
+                        Ein besonderer Moment
+                      </ThemedText>
+                    </View>
+                  )}
+                </View>
+
+                <View style={styles.shareCardDetails}>
+                  <ThemedText adaptive={false} style={styles.shareCardDate}>
+                    {shareEntry ? formatAlbumDate(shareEntry.event_date) : ''}
+                  </ThemedText>
+                  {shareEntry && formatBabyAgeAtMilestone(activeBaby?.birth_date, shareEntry.event_date) ? (
+                    <ThemedText adaptive={false} style={styles.shareCardAge}>
+                      {formatBabyAgeAtMilestone(activeBaby?.birth_date, shareEntry.event_date)}
+                    </ThemedText>
+                  ) : null}
+                </View>
+
+                <View style={styles.shareCardFooter}>
+                  <View style={styles.shareCardCategory}>
+                    <ThemedText adaptive={false} style={styles.shareCardCategoryText}>
+                      {shareEntry ? MILESTONE_CATEGORY_LABELS[shareEntry.category] : ''}
+                    </ThemedText>
+                  </View>
+                  <ThemedText adaptive={false} style={styles.shareCardBrand}>LOTTI BABY</ThemedText>
+                </View>
+              </ViewShot>
+            </View>
+
+            <TouchableOpacity
+              style={[styles.shareActionButton, (!shareImageReady || sharing) && styles.shareActionButtonDisabled]}
+              onPress={handleShareMilestone}
+              disabled={!shareImageReady || sharing}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel="Meilenstein als Bild teilen"
+            >
+              <IconSymbol name="square.and.arrow.up" size={20} color="#FFFFFF" />
+              <ThemedText adaptive={false} style={styles.shareActionButtonText}>
+                {sharing ? 'Karte wird erstellt…' : shareImageReady ? 'Als Bild teilen' : 'Foto wird geladen…'}
+              </ThemedText>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       <Modal visible={showModal} transparent animationType="slide" onRequestClose={handleCloseModal}>
         <KeyboardAvoidingView
@@ -454,7 +723,21 @@ export default function MilestonesScreen() {
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
             >
-              <ThemedText style={[styles.modalTitle, { color: textPrimary }]}>{modalTitle}</ThemedText>
+              <View style={styles.modalHeaderRow}>
+                <ThemedText style={[styles.modalTitle, { color: textPrimary }]}>{modalTitle}</ThemedText>
+                {editingEntry ? (
+                  <TouchableOpacity
+                    style={[styles.modalDeleteButton, { backgroundColor: chipBg, borderColor: inputBorder }]}
+                    onPress={() => handleDelete(editingEntry)}
+                    disabled={saving || isReadOnlyPreviewMode}
+                    activeOpacity={0.8}
+                    accessibilityRole="button"
+                    accessibilityLabel="Meilenstein löschen"
+                  >
+                    <IconSymbol name="trash" size={18} color={isDark ? '#FF9A9A' : '#D45B5B'} />
+                  </TouchableOpacity>
+                ) : null}
+              </View>
 
               <ThemedText style={[styles.fieldLabel, { color: textSecondary }]}>Vorschläge</ThemedText>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.suggestionRow}>
@@ -573,7 +856,7 @@ export default function MilestonesScreen() {
 
               {imageUri ? (
                 <View style={styles.imagePreviewWrap}>
-                  <Image source={{ uri: imageUri }} style={styles.imagePreview} resizeMode="cover" />
+                  <Image source={{ uri: imageUri }} style={styles.imagePreview} resizeMode="contain" />
                   <TouchableOpacity
                     style={[styles.removeImageButton, { borderColor: inputBorder }]}
                     onPress={() => setImageUri(null)}
@@ -650,42 +933,27 @@ const styles = StyleSheet.create({
   },
   filterRow: {
     paddingVertical: 4,
+    flexDirection: 'row',
     alignItems: 'center',
-  },
-  filterScroll: {
-    maxHeight: 52,
+    justifyContent: 'space-between',
   },
   filterChip: {
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 13,
     borderWidth: 1,
-    marginRight: 8,
     alignSelf: 'center',
+    flexShrink: 1,
   },
   filterChipText: {
     fontSize: 12,
     lineHeight: 16,
     fontWeight: '700',
   },
-  addButton: {
-    marginTop: 10,
-    marginBottom: 14,
-    borderRadius: 16,
-    borderWidth: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  addButtonText: {
-    fontSize: 15,
-    fontWeight: '700',
-  },
   listContent: {
-    paddingBottom: 32,
+    paddingTop: 14,
+    paddingBottom: 112,
+    gap: 18,
   },
   emptyState: {
     alignItems: 'center',
@@ -709,53 +977,360 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   card: {
-    borderRadius: 18,
+    borderRadius: 22,
+    borderCurve: 'continuous',
     borderWidth: 1,
-    padding: 14,
-    marginBottom: 10,
+    paddingHorizontal: 18,
+    paddingTop: 20,
+    paddingBottom: 14,
+    overflow: 'hidden',
+    boxShadow: '0 8px 24px rgba(79, 53, 39, 0.10)',
+  },
+  albumBinding: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    width: 4,
   },
   cardHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
+    paddingLeft: 2,
+    paddingBottom: 16,
+  },
+  cardHeading: {
+    flex: 1,
+    gap: 4,
+  },
+  cardEyebrow: {
+    fontSize: 9,
+    lineHeight: 12,
+    fontWeight: '700',
+    letterSpacing: 1.7,
   },
   cardTitle: {
-    flex: 1,
-    fontSize: 17,
-    fontWeight: '800',
+    fontSize: 22,
+    lineHeight: 28,
+    fontWeight: '700',
+    fontFamily: Platform.select({ ios: 'Georgia', android: 'serif', default: 'serif' }),
     paddingRight: 10,
   },
-  deleteIconButton: {
-    padding: 2,
+  badge: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
   },
-  cardMetaRow: {
-    marginTop: 10,
+  badgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+  cardDate: {
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '600',
+    fontFamily: Platform.select({ ios: 'Georgia', android: 'serif', default: 'serif' }),
+  },
+  cardNotes: {
+    fontSize: 14,
+    lineHeight: 21,
+  },
+  photoPrint: {
+    position: 'relative',
+    borderRadius: 4,
+    borderCurve: 'continuous',
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingTop: 10,
+    paddingBottom: 24,
+    boxShadow: '0 4px 12px rgba(54, 38, 30, 0.12)',
+  },
+  cardImage: {
+    width: '100%',
+    aspectRatio: 4 / 3,
+    borderRadius: 2,
+  },
+  photoZoomHint: {
+    position: 'absolute',
+    right: 18,
+    top: 18,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(33, 25, 22, 0.58)',
+  },
+  photoPlaceholder: {
+    aspectRatio: 4 / 3,
+    borderRadius: 4,
+    borderCurve: 'continuous',
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  photoPlaceholderText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  captionBlock: {
+    paddingHorizontal: 4,
+    paddingTop: 16,
+    paddingBottom: 16,
+    gap: 6,
+  },
+  captionRule: {
+    height: 1,
+    width: '38%',
+    marginTop: 4,
+  },
+  cardFooter: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingTop: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  badge: {
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+  cardFooterActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
-  badgeText: {
+  cardShareButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pageNumber: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 1.2,
+  },
+  shareModalOverlay: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    backgroundColor: 'rgba(25,18,16,0.62)',
+  },
+  shareModalCard: {
+    width: '100%',
+    maxWidth: 430,
+    borderRadius: 28,
+    borderCurve: 'continuous',
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    backgroundColor: '#FBF8F3',
+    boxShadow: '0 20px 50px rgba(35,22,17,0.28)',
+  },
+  shareModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingBottom: 16,
+  },
+  shareModalTitle: {
+    color: '#5D4033',
+    fontSize: 18,
+    lineHeight: 23,
+    fontWeight: '800',
+  },
+  shareModalSubtitle: {
+    color: '#9A847A',
+    fontSize: 12,
+    lineHeight: 17,
+    paddingTop: 2,
+  },
+  shareModalCloseButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F0E7DF',
+  },
+  shareCardFrame: {
+    width: '100%',
+    borderRadius: 20,
+    borderCurve: 'continuous',
+    overflow: 'hidden',
+    boxShadow: '0 8px 24px rgba(78,52,39,0.16)',
+  },
+  shareCard: {
+    width: '100%',
+    aspectRatio: 4 / 5,
+    overflow: 'hidden',
+    paddingHorizontal: 24,
+    paddingTop: 25,
+    paddingBottom: 19,
+    backgroundColor: '#F7EDE3',
+  },
+  shareDecorationTop: {
+    position: 'absolute',
+    width: 170,
+    height: 170,
+    borderRadius: 85,
+    right: -78,
+    top: -82,
+    backgroundColor: 'rgba(198,171,203,0.28)',
+  },
+  shareDecorationBottom: {
+    position: 'absolute',
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    left: -68,
+    bottom: -72,
+    backgroundColor: 'rgba(222,183,158,0.24)',
+  },
+  shareCardEyebrow: {
+    color: '#9A7665',
+    fontSize: 8,
+    lineHeight: 11,
+    fontWeight: '800',
+    letterSpacing: 1.7,
+  },
+  shareCardTitle: {
+    color: '#5D4033',
+    fontSize: 27,
+    lineHeight: 32,
+    fontWeight: '700',
+    fontFamily: Platform.select({ ios: 'Georgia', android: 'serif', default: 'serif' }),
+    paddingTop: 5,
+    paddingBottom: 12,
+  },
+  shareCardPhotoMat: {
+    flex: 1,
+    minHeight: 150,
+    padding: 9,
+    borderRadius: 4,
+    borderCurve: 'continuous',
+    backgroundColor: '#FFFDFC',
+    boxShadow: '0 4px 12px rgba(70,45,34,0.13)',
+  },
+  shareCardImage: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#EEE7E1',
+  },
+  shareCardPlaceholder: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    backgroundColor: '#EEE5E5',
+  },
+  shareCardPlaceholderText: {
+    color: '#8A6A5C',
     fontSize: 12,
     fontWeight: '700',
   },
-  cardDate: {
-    fontSize: 13,
+  shareCardDetails: {
+    paddingTop: 12,
+    gap: 1,
+  },
+  shareCardDate: {
+    color: '#5D4033',
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: '700',
+    fontFamily: Platform.select({ ios: 'Georgia', android: 'serif', default: 'serif' }),
+  },
+  shareCardAge: {
+    color: '#927B70',
+    fontSize: 11,
+    lineHeight: 16,
     fontWeight: '600',
   },
-  cardNotes: {
-    marginTop: 10,
-    fontSize: 14,
-    lineHeight: 20,
+  shareCardFooter: {
+    paddingTop: 11,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
-  cardImage: {
+  shareCardCategory: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: '#E8DDEF',
+  },
+  shareCardCategoryText: {
+    color: '#684F5E',
+    fontSize: 9,
+    fontWeight: '800',
+  },
+  shareCardBrand: {
+    color: '#AC9286',
+    fontSize: 8,
+    fontWeight: '800',
+    letterSpacing: 1.4,
+  },
+  shareActionButton: {
+    minHeight: 50,
+    borderRadius: 17,
+    borderCurve: 'continuous',
+    marginTop: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#6B4C3B',
+  },
+  shareActionButtonDisabled: {
+    opacity: 0.52,
+  },
+  shareActionButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  imageViewer: {
+    flex: 1,
+    justifyContent: 'center',
+    backgroundColor: 'rgba(8, 7, 8, 0.98)',
+  },
+  fullScreenImage: {
     width: '100%',
-    height: 160,
-    borderRadius: 12,
-    marginTop: 10,
+    height: '100%',
+  },
+  imageViewerCloseButton: {
+    position: 'absolute',
+    right: 18,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.28)',
+  },
+  imageViewerCaption: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingTop: 42,
+    paddingHorizontal: 24,
+    backgroundColor: 'rgba(8,7,8,0.62)',
+  },
+  imageViewerTitle: {
+    color: '#FFFFFF',
+    fontSize: 20,
+    lineHeight: 26,
+    fontWeight: '700',
+    fontFamily: Platform.select({ ios: 'Georgia', android: 'serif', default: 'serif' }),
+  },
+  imageViewerDate: {
+    color: 'rgba(255,255,255,0.74)',
+    fontSize: 13,
+    lineHeight: 19,
+    paddingTop: 3,
   },
   modalOverlay: {
     flex: 1,
@@ -777,10 +1352,24 @@ const styles = StyleSheet.create({
   modalScrollContent: {
     paddingBottom: 12,
   },
+  modalHeaderRow: {
+    minHeight: 38,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
   modalTitle: {
     fontSize: 18,
     fontWeight: '800',
-    marginBottom: 14,
+  },
+  modalDeleteButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   fieldLabel: {
     fontSize: 13,
@@ -834,6 +1423,7 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 140,
     borderRadius: 12,
+    backgroundColor: 'rgba(0,0,0,0.04)',
   },
   removeImageButton: {
     marginTop: 8,

@@ -40,6 +40,11 @@ import { cancelLocalFeedingReminders } from '@/lib/feedingReminderNotifications'
 import { shouldCancelStaleReminderAfterManualEntry } from '@/lib/reminderCancellationGuards';
 import { emitLottiMoment } from '@/lib/lottiMomentEvents';
 import BaseSortableTileGrid, { type SortableTileGridScrollMetrics } from '@/components/SortableTileGrid';
+import {
+  featureAllowedForTier,
+  useSubscriptionTier,
+  type AppFeature,
+} from '@/lib/entitlements';
 
 type HomeActiveTimer = {
   source: 'sleep' | 'daily';
@@ -65,6 +70,7 @@ type HomeQuickAccessCardId =
   | 'weight-tracker'
   | 'size-tracker'
   | 'tooth-tracker'
+  | 'period-tracker'
   | 'milestones';
 
 type HomeQuickAccessCardConfig = {
@@ -80,6 +86,15 @@ type HomeQuickAccessCardConfig = {
 
 const HOME_QUICK_ACCESS_ORDER_STORAGE_PREFIX = 'home_quick_access_order';
 const HOME_QUICK_ACCESS_HIDDEN_STORAGE_PREFIX = 'home_quick_access_hidden';
+
+// Kacheln, die in Tiers ohne das jeweilige Feature komplett ausgeblendet
+// werden (kleinteilige Features ohne Lock-Screen). Gesperrte Flaggschiff-
+// Features (Planer, Einkauf) bleiben sichtbar und führen zum Lock-Screen.
+const QUICK_ACCESS_CARD_FEATURES: Partial<
+  Record<HomeQuickAccessCardId, AppFeature>
+> = {
+  'recipe-generator': 'recipes',
+};
 
 const HOME_QUICK_ACCESS_CARDS: HomeQuickAccessCardConfig[] = [
   {
@@ -181,6 +196,15 @@ const HOME_QUICK_ACCESS_CARDS: HomeQuickAccessCardConfig[] = [
     destination: '/tooth-tracker',
     cardBackgroundColor: 'rgba(200, 220, 255, 0.6)',
     iconBackgroundColor: 'rgba(150, 180, 240, 0.9)',
+  },
+  {
+    id: 'period-tracker',
+    title: 'Period Tracker',
+    description: 'Zyklus im Blick behalten',
+    iconName: 'drop.fill',
+    destination: '/(tabs)/period-tracker',
+    cardBackgroundColor: 'rgba(255, 215, 226, 0.65)',
+    iconBackgroundColor: 'rgba(232, 125, 153, 0.9)',
   },
   {
     id: 'milestones',
@@ -673,19 +697,39 @@ export default function HomeScreen() {
     [],
   );
   const hiddenQuickAccessIdSet = useMemo(() => new Set(hiddenQuickAccessIds), [hiddenQuickAccessIds]);
+  const subscriptionTier = useSubscriptionTier();
+  const isCardAvailableForTier = useCallback(
+    (id: HomeQuickAccessCardId) => {
+      if (subscriptionTier === null) return true;
+      const feature = QUICK_ACCESS_CARD_FEATURES[id];
+      if (!feature) return true;
+      return featureAllowedForTier(feature, subscriptionTier);
+    },
+    [subscriptionTier],
+  );
   const orderedQuickAccessCards = useMemo(
     () =>
       quickAccessOrder
         .map((id) => quickAccessCardById.get(id))
-        .filter((card): card is HomeQuickAccessCardConfig => !!card && !hiddenQuickAccessIdSet.has(card.id)),
-    [hiddenQuickAccessIdSet, quickAccessCardById, quickAccessOrder],
+        .filter(
+          (card): card is HomeQuickAccessCardConfig =>
+            !!card &&
+            !hiddenQuickAccessIdSet.has(card.id) &&
+            isCardAvailableForTier(card.id),
+        ),
+    [hiddenQuickAccessIdSet, isCardAvailableForTier, quickAccessCardById, quickAccessOrder],
   );
   const hiddenQuickAccessCards = useMemo(
     () =>
       quickAccessOrder
         .map((id) => quickAccessCardById.get(id))
-        .filter((card): card is HomeQuickAccessCardConfig => !!card && hiddenQuickAccessIdSet.has(card.id)),
-    [hiddenQuickAccessIdSet, quickAccessCardById, quickAccessOrder],
+        .filter(
+          (card): card is HomeQuickAccessCardConfig =>
+            !!card &&
+            hiddenQuickAccessIdSet.has(card.id) &&
+            isCardAvailableForTier(card.id),
+        ),
+    [hiddenQuickAccessIdSet, isCardAvailableForTier, quickAccessCardById, quickAccessOrder],
   );
 
   const triggerHaptic = () => {

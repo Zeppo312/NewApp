@@ -17,6 +17,9 @@ import {
 } from 'react-native';
 import DraggableFlatList, { RenderItemParams } from 'react-native-draggable-flatlist';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+
+import { isBeforeHistoryCutoff, useHistoryCutoff } from '@/lib/entitlements';
+import { showHistoryLimitAlert } from '@/lib/historyLimit';
 import * as Linking from 'expo-linking';
 import { Colors } from '@/constants/Colors';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
@@ -755,6 +758,7 @@ export default function DailyScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const historyCutoff = useHistoryCutoff();
   const [selectedTab, setSelectedTab] = useState<'day' | 'week' | 'month'>('day');
   const [weekOffset, setWeekOffset] = useState(0); // align with sleep-tracker week nav
   const [monthOffset, setMonthOffset] = useState(0); // align with sleep-tracker month nav
@@ -1533,8 +1537,14 @@ export default function DailyScreen() {
     }
   };
 
-  const changeRelativeDate = (days: number) =>
-    setSelectedDate(new Date(selectedDate.getTime() + days * 24 * 60 * 60 * 1000));
+  const changeRelativeDate = (days: number) => {
+    const next = new Date(selectedDate.getTime() + days * 24 * 60 * 60 * 1000);
+    if (isBeforeHistoryCutoff(next, historyCutoff)) {
+      showHistoryLimitAlert(router);
+      return;
+    }
+    setSelectedDate(next);
+  };
 
   const handleQuickActionPress = (action: QuickActionType) => {
     if (!ensureWritableInCurrentMode()) return;

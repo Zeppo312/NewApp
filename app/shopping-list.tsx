@@ -52,6 +52,8 @@ import {
   upsertInventoryItem,
   upsertShoppingItem,
 } from '@/lib/shopping';
+import { LockedFeatureScreen } from '@/components/LockedFeatureScreen';
+import { useFeatureAccess } from '@/lib/entitlements';
 
 type SectionKey = 'shopping' | 'inventory' | 'scanner';
 type CategoryFilterKey = 'all' | string;
@@ -170,7 +172,19 @@ type ScanSheetState =
   | { mode: 'unknown'; barcode: string }
   | null;
 
+// Abo-Gate: in Lotti Lite ist dieses Feature gesperrt (lib/entitlements.ts).
 export default function ShoppingListScreen() {
+  const access = useFeatureAccess('shoppingList');
+
+  if (access.hasAccess === null) return null;
+  if (!access.hasAccess) {
+    return <LockedFeatureScreen feature="shoppingList" />;
+  }
+
+  return <ShoppingListScreenContent />;
+}
+
+function ShoppingListScreenContent() {
   const { activeBabyId, isReady } = useActiveBaby();
   const { hasPermission, scheduleNotification } = useNotifications();
 

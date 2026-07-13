@@ -36,6 +36,7 @@ import { useNotifications } from '@/hooks/useNotifications';
 import { formatVitaminDReminderTime } from '@/lib/vitaminDReminder';
 import { openSubscriptionManagement } from '@/lib/subscriptionManagement';
 import { buildSleepDebugSnapshot, serializeSleepDebugSnapshot } from '@/lib/sleepDebug';
+import { hasFeatureAccess } from '@/lib/entitlements';
 
 const PRESET_OPTIONS = [
   { id: 'default', label: 'Standard' },
@@ -661,6 +662,24 @@ export default function AppSettingsScreen() {
   const handleExportData = async () => {
     if (!user) {
       Alert.alert('Fehler', 'Bitte melde dich erneut an.');
+      return;
+    }
+
+    // PDF-Berichte sind nicht in Lotti Lite enthalten (DSGVO-Datenauskunft
+    // läuft separat über den DSGVO-Screen und bleibt immer verfügbar).
+    const canExport = await hasFeatureAccess('pdfExport');
+    if (!canExport) {
+      Alert.alert(
+        'Nicht in Lotti Lite',
+        'PDF-Berichte sind ab dem Standard-Abo enthalten. Möchtest du die Abo-Optionen ansehen?',
+        [
+          { text: 'Später', style: 'cancel' },
+          {
+            text: 'Abo ansehen',
+            onPress: () => router.push('/paywall?origin=lock_pdfExport' as any),
+          },
+        ],
+      );
       return;
     }
 

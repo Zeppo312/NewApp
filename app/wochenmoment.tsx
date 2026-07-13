@@ -45,6 +45,8 @@ import {
   type DayCounts,
   type DayPointBreakdown,
 } from '@/lib/lottiPoints';
+import { LockedFeatureScreen } from '@/components/LockedFeatureScreen';
+import { useFeatureAccess } from '@/lib/entitlements';
 
 const ACCENT_PURPLE = '#5E3DB3';
 const POINTS_NOUN = 'Herzen';
@@ -71,7 +73,19 @@ const formatHoursMinutes = (totalMinutes: number) => {
   return `${h} Std ${m} Min`;
 };
 
+// Abo-Gate: in Lotti Lite ist dieses Feature gesperrt (lib/entitlements.ts).
 export default function WochenmomentScreen() {
+  const access = useFeatureAccess('wochenmomente');
+
+  if (access.hasAccess === null) return null;
+  if (!access.hasAccess) {
+    return <LockedFeatureScreen feature="wochenmomente" />;
+  }
+
+  return <WochenmomentScreenContent />;
+}
+
+function WochenmomentScreenContent() {
   const adaptiveColors = useAdaptiveColors();
   const {
     areas,

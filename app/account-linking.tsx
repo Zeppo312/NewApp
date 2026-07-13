@@ -29,6 +29,8 @@ import { ThemedText } from '@/components/ThemedText';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { LinkedBabySelectionModal } from '@/components/LinkedBabySelectionModal';
 import { LiquidGlassCard, GLASS_OVERLAY, GLASS_OVERLAY_DARK, LAYOUT_PAD } from '@/constants/DesignGuide';
+import { LockedFeatureScreen } from '@/components/LockedFeatureScreen';
+import { useFeatureAccess } from '@/lib/entitlements';
 
 type Invitation = {
   id: string;
@@ -74,7 +76,19 @@ const lightenHex = (hex: string, amount = 0.35) => {
   return `#${toHex(lightenChannel(r))}${toHex(lightenChannel(g))}${toHex(lightenChannel(b))}`;
 };
 
+// Abo-Gate: in Lotti Lite ist dieses Feature gesperrt (lib/entitlements.ts).
 export default function AccountLinkingScreen() {
+  const access = useFeatureAccess('partnerLink');
+
+  if (access.hasAccess === null) return null;
+  if (!access.hasAccess) {
+    return <LockedFeatureScreen feature="partnerLink" />;
+  }
+
+  return <AccountLinkingScreenContent />;
+}
+
+function AccountLinkingScreenContent() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const adaptiveColors = useAdaptiveColors();

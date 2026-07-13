@@ -2,27 +2,89 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { BackHandler, Linking, Platform } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 
-import { PaywallExperience } from '@/components/paywall/PaywallExperience';
+import {
+  PaywallPlansExperience,
+  type PaywallPlanPrices,
+} from '@/components/paywall/PaywallPlansExperience';
 import { useAuth } from '@/contexts/AuthContext';
 import { invalidatePremiumStatusCache } from '@/lib/appCache';
+import { invalidateSubscriptionTierCache } from '@/lib/entitlements';
 import { markPaywallShown } from '@/lib/paywall';
 import {
   DEFAULT_PAYWALL_CONTENT,
   fetchPaywallContent,
-  sanitizePaywallContent,
-  subscribeToPaywallContent,
-  unsubscribePaywallContent,
+  formatEuroAmount,
+  type PaywallContentSettings,
 } from '@/lib/paywallContent';
 import {
+  DEFAULT_DISPLAY_LITE_MONTHLY_PRICE,
+  DEFAULT_DISPLAY_LITE_YEARLY_PRICE,
+  DEFAULT_DISPLAY_MONTHLY_PRICE,
+  DEFAULT_DISPLAY_STANDARD_MONTHLY_PRICE,
+  DEFAULT_DISPLAY_STANDARD_YEARLY_PRICE,
+  DEFAULT_DISPLAY_YEARLY_PRICE,
+} from '@/lib/paywallDefaults';
+import {
   getRevenueCatConfigurationIssue,
+  getRevenueCatPlanPricing,
   hasRevenueCatEntitlement,
-  purchaseMonthlyPackage,
-  purchaseYearlyPackage,
+  purchaseSubscriptionPlan,
   restoreRevenueCatPurchases,
+  type RevenueCatPlanPricing,
+  type SubscriptionInterval,
+  type SubscriptionTier,
 } from '@/lib/revenuecat';
 
 const APPLE_EULA_URL =
   'https://www.apple.com/legal/internet-services/itunes/dev/stdeula/';
+
+const parsePriceSetting = (value: string, fallback: number): number => {
+  const parsed = Number(value.replace(/\s+/g, '').replace('€', '').replace(',', '.'));
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+const buildPlanPrices = (
+  settings: PaywallContentSettings,
+  storePricing: RevenueCatPlanPricing,
+): PaywallPlanPrices => {
+  const premiumMonthlyFallback = parsePriceSetting(
+    settings.monthlyPrice,
+    DEFAULT_DISPLAY_MONTHLY_PRICE,
+  );
+  const premiumYearlyFallback = parsePriceSetting(
+    settings.yearlyPrice,
+    DEFAULT_DISPLAY_YEARLY_PRICE,
+  );
+
+  const resolve = (
+    fromStore: { price: number; priceString: string } | undefined,
+    fallbackAmount: number,
+  ) =>
+    fromStore
+      ? { amount: fromStore.price, label: fromStore.priceString }
+      : { amount: fallbackAmount, label: formatEuroAmount(fallbackAmount) };
+
+  return {
+    premiumMonthly: resolve(storePricing.premiumMonthly, premiumMonthlyFallback),
+    premiumYearly: resolve(storePricing.premiumYearly, premiumYearlyFallback),
+    standardMonthly: resolve(
+      storePricing.standardMonthly,
+      DEFAULT_DISPLAY_STANDARD_MONTHLY_PRICE,
+    ),
+    standardYearly: resolve(
+      storePricing.standardYearly,
+      DEFAULT_DISPLAY_STANDARD_YEARLY_PRICE,
+    ),
+    liteMonthly: resolve(
+      storePricing.liteMonthly,
+      DEFAULT_DISPLAY_LITE_MONTHLY_PRICE,
+    ),
+    liteYearly: resolve(
+      storePricing.liteYearly,
+      DEFAULT_DISPLAY_LITE_YEARLY_PRICE,
+    ),
+  };
+};
 
 export default function PaywallScreen() {
   const { next, origin, preview, trialExpired } = useLocalSearchParams<{
@@ -38,9 +100,12 @@ export default function PaywallScreen() {
     typeof next === 'string' && next.length > 0 ? next : '/(tabs)/home';
   const isAdminPreview = preview === 'admin';
   const isTrialExpired = trialExpired === '1';
-  const [content, setContent] = useState(DEFAULT_PAYWALL_CONTENT);
+  const [contentSettings, setContentSettings] = useState<PaywallContentSettings>(
+    DEFAULT_PAYWALL_CONTENT.settings,
+  );
+  const [storePricing, setStorePricing] = useState<RevenueCatPlanPricing>({});
   const [pendingAction, setPendingAction] = useState<
-    'monthly' | 'yearly' | 'restore' | null
+    'purchase' | 'restore' | null
   >(null);
   const [purchaseError, setPurchaseError] = useState<string | null>(null);
   const isPurchasesSupported = Platform.OS !== 'web';
@@ -59,43 +124,58 @@ export default function PaywallScreen() {
       : Platform.OS === 'android'
         ? 'Abrechnung über Google Play'
         : 'Abrechnung';
+  const storeProvider =
+    Platform.OS === 'ios'
+      ? 'Apple'
+      : Platform.OS === 'android'
+        ? 'Google Play'
+        : 'der Store';
   const visiblePurchaseError = purchaseError ?? revenueCatConfigurationIssue;
+
+  const planPrices = useMemo(
+    () => buildPlanPrices(contentSettings, storePricing),
+    [contentSettings, storePricing],
+  );
 
   useEffect(() => {
     let cancelled = false;
 
-    const loadContent = async () => {
+    const loadContentSettings = async () => {
       try {
         const record = await fetchPaywallContent();
         if (!cancelled) {
-          setContent(record.content);
+          setContentSettings(record.content.settings);
         }
       } catch (error) {
         console.error('Failed to load paywall content:', error);
-        if (!cancelled) {
-          setContent(DEFAULT_PAYWALL_CONTENT);
-        }
       }
     };
 
-    void loadContent();
-
-    const channel = subscribeToPaywallContent(
-      (record) => {
-        if (!cancelled) {
-          setContent(record.content);
-        }
-      },
-      (error) => {
-        console.error('Paywall content subscription failed:', error);
-      },
-    );
+    void loadContentSettings();
 
     return () => {
       cancelled = true;
-      void unsubscribePaywallContent(channel);
     };
   }, []);
+
+  useEffect(() => {
+    if (!isPurchasesSupported || !isRevenueCatConfigured || !user) return;
+
+    let cancelled = false;
+
+    const loadStorePricing = async () => {
+      const pricing = await getRevenueCatPlanPricing(user.id);
+      if (!cancelled) {
+        setStorePricing(pricing);
+      }
+    };
+
+    void loadStorePricing();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isPurchasesSupported, isRevenueCatConfigured, user]);
 
   useEffect(() => {
     if (isAdminPreview) return;
@@ -114,7 +194,10 @@ export default function PaywallScreen() {
     };
   }, [isTrialExpired]);
 
-  const purchaseAndNavigate = async (plan: 'monthly' | 'yearly') => {
+  const purchaseAndNavigate = async (
+    tier: SubscriptionTier,
+    interval: SubscriptionInterval,
+  ) => {
     if (!isPurchasesSupported) {
       router.replace(nextRoute as any);
       return;
@@ -134,13 +217,10 @@ export default function PaywallScreen() {
     }
 
     setPurchaseError(null);
-    setPendingAction(plan);
+    setPendingAction('purchase');
 
     try {
-      const hasAccess =
-        plan === 'yearly'
-          ? await purchaseYearlyPackage(user.id)
-          : await purchaseMonthlyPackage(user.id);
+      const hasAccess = await purchaseSubscriptionPlan(user.id, tier, interval);
 
       if (!hasAccess) {
         setPurchaseError(
@@ -149,6 +229,7 @@ export default function PaywallScreen() {
         return;
       }
 
+      invalidateSubscriptionTierCache();
       await invalidatePremiumStatusCache();
       router.replace(nextRoute as any);
     } catch (err: any) {
@@ -192,6 +273,7 @@ export default function PaywallScreen() {
     try {
       const restored = await restoreRevenueCatPurchases(user.id);
       if (restored) {
+        invalidateSubscriptionTierCache();
         await invalidatePremiumStatusCache();
         router.replace(nextRoute as any);
         return;
@@ -199,6 +281,7 @@ export default function PaywallScreen() {
 
       const current = await hasRevenueCatEntitlement(user.id);
       if (current) {
+        invalidateSubscriptionTierCache();
         await invalidatePremiumStatusCache();
         router.replace(nextRoute as any);
         return;
@@ -220,20 +303,18 @@ export default function PaywallScreen() {
       <Stack.Screen
         options={{ headerShown: false, gestureEnabled: !isTrialExpired }}
       />
-      <PaywallExperience
-        content={sanitizePaywallContent(content)}
+      <PaywallPlansExperience
+        prices={planPrices}
         billingLabel={billingLabel}
+        storeProvider={storeProvider}
         isTrialExpired={isTrialExpired}
         allowClose={!isAdminPreview}
         showAppleEula={Platform.OS === 'ios'}
         visiblePurchaseError={visiblePurchaseError}
         pendingAction={pendingAction}
         isPurchaseActionDisabled={isPurchaseActionDisabled}
-        onMonthlyPress={() => {
-          void purchaseAndNavigate('monthly');
-        }}
-        onYearlyPress={() => {
-          void purchaseAndNavigate('yearly');
+        onPurchase={(tier, interval) => {
+          void purchaseAndNavigate(tier, interval);
         }}
         onRestorePress={() => {
           void restoreAndRefresh();

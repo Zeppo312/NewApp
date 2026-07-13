@@ -9,24 +9,34 @@
  * kompletten Paywall-State: Der hängt zusätzlich am Abo-Status, und ein
  * Fehler dort soll Admins/Testern nicht das Feature wegnehmen.
  *
- * TODO(Premium-Abo): Sobald das neue Premium-Abomodell existiert, hier
- * zusätzlich das Premium-Entitlement freischalten (isPro reicht dann
- * NICHT — das gilt für alle Abos; es braucht den Premium-Tier-Check).
- * Serverseitig gilt dieselbe Prüfung in supabase/functions/voice-log-parse.
+ * Seit dem Premium-Abomodell schaltet zusätzlich das Premium-Tier frei
+ * (lib/entitlements.ts). isPro reicht NICHT — das gilt für alle Abos.
+ * Serverseitig gilt dieselbe Prüfung in supabase/functions/voice-log-parse;
+ * dort muss der Premium-Tier-Check noch nachgezogen werden, sobald die
+ * RevenueCat-Produkte verknüpft sind.
  */
 
 import { useCallback, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 
 import { getCachedUserProfile } from '@/lib/appCache';
+import { hasFeatureAccess } from '@/lib/entitlements';
 
 export const fetchVoiceLogAccess = async (): Promise<boolean> => {
   try {
     const profile = await getCachedUserProfile();
-    return (
+    if (
       profile?.is_admin === true ||
       profile?.paywall_access_role === 'premium_tester'
-    );
+    ) {
+      return true;
+    }
+  } catch {
+    // Profil nicht verfügbar → weiter mit Tier-Prüfung
+  }
+
+  try {
+    return await hasFeatureAccess('voiceLog');
   } catch {
     return false;
   }

@@ -67,6 +67,8 @@ import {
   PlannerCalendarSyncSettings,
   runPlannerCalendarSync,
 } from "@/lib/plannerCalendarSync";
+import { LockedFeatureScreen } from '@/components/LockedFeatureScreen';
+import { useFeatureAccess } from '@/lib/entitlements';
 
 function formatDateHeader(d: Date) {
   return new Intl.DateTimeFormat("de-DE", {
@@ -171,7 +173,19 @@ function displayNameForLinkedUser(linkedUser: LinkedUser, index: number) {
   return `Partner ${index + 1}`;
 }
 
+// Abo-Gate: in Lotti Lite ist dieses Feature gesperrt (lib/entitlements.ts).
 export default function PlannerScreen() {
+  const access = useFeatureAccess('planner');
+
+  if (access.hasAccess === null) return null;
+  if (!access.hasAccess) {
+    return <LockedFeatureScreen feature="planner" />;
+  }
+
+  return <PlannerScreenContent />;
+}
+
+function PlannerScreenContent() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const userId = user?.id ?? null;

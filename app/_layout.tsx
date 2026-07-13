@@ -43,6 +43,7 @@ import {
   invalidateUserProfileCache,
   preloadAppData,
 } from '@/lib/appCache';
+import { invalidateSubscriptionTierCache } from '@/lib/entitlements';
 import { markPaywallShown, shouldShowPaywall } from '@/lib/paywall';
 import { SleepEntriesService } from '@/lib/services/SleepEntriesService';
 import { normalizeBedtimeAnchor } from '@/lib/bedtime';
@@ -153,6 +154,7 @@ function RootLayoutNav() {
   const [isAcknowledgingStartupMessage, setIsAcknowledgingStartupMessage] = useState(false);
 
   const refreshPaywallCaches = useCallback(async () => {
+    invalidateSubscriptionTierCache();
     await Promise.allSettled([
       invalidateUserProfileCache(),
       invalidatePremiumStatusCache(),

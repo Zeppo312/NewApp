@@ -19,6 +19,7 @@ export default function DsgvoScreen() {
   const { user, signOut } = useAuth();
   const [isExporting, setIsExporting] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
 
   const handleExportData = async () => {
     if (!user || isExporting) {
@@ -114,6 +115,49 @@ export default function DsgvoScreen() {
     }
   };
 
+  const confirmSignOut = () => {
+    if (isSigningOut) {
+      return;
+    }
+
+    Alert.alert(
+      'Ausloggen',
+      'Möchtest du dich wirklich ausloggen?',
+      [
+        { text: 'Abbrechen', style: 'cancel' },
+        {
+          text: 'Ausloggen',
+          style: 'destructive',
+          onPress: () => {
+            void handleSignOut();
+          },
+        },
+      ],
+      { cancelable: true },
+    );
+  };
+
+  const handleSignOut = async () => {
+    if (isSigningOut) {
+      return;
+    }
+
+    try {
+      setIsSigningOut(true);
+      const { error } = await signOut();
+      if (error) {
+        throw error;
+      }
+      router.replace('/(auth)/login');
+    } catch (error: any) {
+      console.error('DSGVO sign out failed:', error);
+      Alert.alert('Fehler', error?.message || 'Ausloggen fehlgeschlagen.');
+      router.replace('/(auth)/login');
+    } finally {
+      setIsSigningOut(false);
+    }
+  };
+
   return (
     <ThemedBackground style={styles.background}>
       <Stack.Screen options={{ headerShown: false }} />
@@ -134,6 +178,12 @@ export default function DsgvoScreen() {
             <Pressable style={styles.destructiveButton} onPress={() => void handleDeleteAccount()} disabled={isDeletingAccount}>
               <ThemedText style={styles.destructiveButtonText}>
                 {isDeletingAccount ? 'Bitte warten…' : 'Konto & Daten löschen'}
+              </ThemedText>
+            </Pressable>
+
+            <Pressable style={styles.logoutButton} onPress={confirmSignOut} disabled={isSigningOut}>
+              <ThemedText style={styles.logoutButtonText}>
+                {isSigningOut ? 'Wird ausgeloggt…' : 'Ausloggen'}
               </ThemedText>
             </Pressable>
 
@@ -204,6 +254,21 @@ const styles = StyleSheet.create({
   },
   destructiveButtonText: {
     color: '#B53A2D',
+    fontSize: 16,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  logoutButton: {
+    backgroundColor: '#FDFBF6',
+    borderRadius: 18,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(94,61,179,0.24)',
+  },
+  logoutButtonText: {
+    color: '#5E3DB3',
     fontSize: 16,
     fontWeight: '800',
     textAlign: 'center',
