@@ -7,13 +7,18 @@ import {
   ScrollView,
   StatusBar,
   StyleSheet,
+  Switch,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Redirect, useRouter } from 'expo-router';
 
-import { PaywallExperience } from '@/components/paywall/PaywallExperience';
+import {
+  PaywallPlansExperience,
+  type PaywallPlanPrices,
+} from '@/components/paywall/PaywallPlansExperience';
 import Header from '@/components/Header';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { ThemedText } from '@/components/ThemedText';
@@ -31,13 +36,22 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { getCachedUserProfile, invalidateUserProfileCache } from '@/lib/appCache';
 import {
   DEFAULT_PAYWALL_CONTENT,
-  PAYWALL_TEMPLATE_HINTS,
   clonePaywallContent,
   fetchPaywallContent,
+  formatEuroAmount,
   sanitizePaywallContent,
   savePaywallContent,
   type PaywallContent,
+  type PaywallPlansTierId,
 } from '@/lib/paywallContent';
+import {
+  DEFAULT_DISPLAY_LITE_MONTHLY_PRICE,
+  DEFAULT_DISPLAY_LITE_YEARLY_PRICE,
+  DEFAULT_DISPLAY_MONTHLY_PRICE,
+  DEFAULT_DISPLAY_STANDARD_MONTHLY_PRICE,
+  DEFAULT_DISPLAY_STANDARD_YEARLY_PRICE,
+  DEFAULT_DISPLAY_YEARLY_PRICE,
+} from '@/lib/paywallDefaults';
 
 type Mode = 'edit' | 'preview';
 
@@ -67,6 +81,28 @@ const setValueAtPath = (
 
   return sanitizePaywallContent(next);
 };
+
+const TIER_TOGGLE_META: {
+  id: PaywallPlansTierId;
+  title: string;
+  description: string;
+}[] = [
+  {
+    id: 'premium',
+    title: 'Lotti Premium',
+    description: 'Standard plus KI-Features (Sprach-Logging, Lottis Fürsorge).',
+  },
+  {
+    id: 'standard',
+    title: 'Lotti Standard',
+    description: 'Voller Funktionsumfang ohne KI-Features.',
+  },
+  {
+    id: 'lite',
+    title: 'Lotti Lite',
+    description: 'Basis-Tracker mit Verlauf der letzten 7 Tage.',
+  },
+];
 
 export default function PaywallContentAdminScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -99,6 +135,35 @@ export default function PaywallContentAdminScreen() {
       : Platform.OS === 'android'
         ? 'Abrechnung über Google Play'
         : 'Abrechnung';
+  const storeProvider =
+    Platform.OS === 'ios'
+      ? 'Apple'
+      : Platform.OS === 'android'
+        ? 'Google Play'
+        : 'der Store';
+
+  const previewPrices: PaywallPlanPrices = useMemo(() => {
+    const price = (amount: number) => ({
+      amount,
+      label: formatEuroAmount(amount),
+    });
+
+    return {
+      premiumMonthly: price(DEFAULT_DISPLAY_MONTHLY_PRICE),
+      premiumYearly: price(DEFAULT_DISPLAY_YEARLY_PRICE),
+      standardMonthly: price(DEFAULT_DISPLAY_STANDARD_MONTHLY_PRICE),
+      standardYearly: price(DEFAULT_DISPLAY_STANDARD_YEARLY_PRICE),
+      liteMonthly: price(DEFAULT_DISPLAY_LITE_MONTHLY_PRICE),
+      liteYearly: price(DEFAULT_DISPLAY_LITE_YEARLY_PRICE),
+    };
+  }, []);
+
+  const visibleTierCount = useMemo(
+    () =>
+      TIER_TOGGLE_META.filter((meta) => draft.plans.tiers[meta.id].visible)
+        .length,
+    [draft.plans.tiers],
+  );
 
   const hasUnsavedChanges = useMemo(
     () => JSON.stringify(draft) !== JSON.stringify(savedContent),
@@ -108,8 +173,8 @@ export default function PaywallContentAdminScreen() {
     mode === 'edit' ? 'Inline-Editor' : 'Gerenderte Vorschau';
   const editorModeDescription =
     mode === 'edit'
-      ? 'Tippe direkt auf einen Text in der Paywall und ändere ihn an Ort und Stelle.'
-      : 'Hier siehst du die Paywall exakt so, wie Nutzer sie aktuell sehen.';
+      ? 'Tippe direkt auf einen Text in der Paywall und ändere ihn an Ort und Stelle. Ausgeblendete Pläne bleiben hier gedimmt sichtbar.'
+      : 'Hier siehst du die Paywall exakt so, wie Nutzer sie aktuell sehen – inklusive ausgeblendeter Pläne.';
   const lastSavedLabel = lastSavedAt
     ? new Date(lastSavedAt).toLocaleString('de-DE')
     : null;
@@ -181,6 +246,14 @@ export default function PaywallContentAdminScreen() {
     setDraft((current) => setValueAtPath(current, path, value));
   };
 
+  const handleToggleTier = (tierId: PaywallPlansTierId, visible: boolean) => {
+    setDraft((current) => {
+      const next = clonePaywallContent(current);
+      next.plans.tiers[tierId].visible = visible;
+      return next;
+    });
+  };
+
   const restoreSavedContent = () => {
     setDraft(clonePaywallContent(savedContent));
     setSaveError(null);
@@ -239,8 +312,8 @@ export default function PaywallContentAdminScreen() {
         />
 
         <Header
-          title="Paywall-Texte"
-          subtitle="Direkt in der Paywall bearbeiten"
+          title="Paywall-Editor"
+          subtitle="Texte, Pläne & Sichtbarkeit bearbeiten"
           showBackButton
           showBabySwitcher={false}
           onBackPress={() => router.push('/app-settings')}
@@ -486,24 +559,84 @@ export default function PaywallContentAdminScreen() {
               <View style={styles.templateSection}>
                 <View style={styles.templateSectionHeader}>
                   <View style={styles.templateSectionIcon}>
-                    <IconSymbol name="sparkles" size={14} color="#7D5A50" />
+                    <IconSymbol name="eye.fill" size={14} color="#7D5A50" />
                   </View>
                   <ThemedText style={styles.templateSectionTitle}>
-                    Dynamische Platzhalter
+                    Pläne ein- & ausblenden
                   </ThemedText>
                 </View>
                 <ThemedText style={styles.templateSectionText}>
-                  Diese Tokens werden automatisch mit Trial-Days, Preisen oder
-                  Store-Texten ersetzt.
+                  Ausgeblendete Pläne verschwinden auf der Live-Paywall aus der
+                  Auswahl und aus der Vergleichstabelle.
                 </ThemedText>
-                <View style={styles.templateRow}>
-                  {PAYWALL_TEMPLATE_HINTS.slice(0, 6).map((item) => (
-                    <View key={item.token} style={styles.templateChip}>
-                      <ThemedText style={styles.templateChipText}>
-                        {`{{${item.token}}}`}
+
+                {TIER_TOGGLE_META.map((meta) => (
+                  <View key={meta.id} style={styles.tierToggleRow}>
+                    <View style={styles.tierToggleCopy}>
+                      <ThemedText style={styles.tierToggleTitle}>
+                        {meta.title}
+                      </ThemedText>
+                      <ThemedText style={styles.tierToggleText}>
+                        {meta.description}
                       </ThemedText>
                     </View>
-                  ))}
+                    <Switch
+                      value={draft.plans.tiers[meta.id].visible}
+                      onValueChange={(value) => handleToggleTier(meta.id, value)}
+                      trackColor={{
+                        false: 'rgba(125,90,80,0.22)',
+                        true: '#8B6152',
+                      }}
+                      thumbColor="#FFFFFF"
+                    />
+                  </View>
+                ))}
+
+                {visibleTierCount === 0 ? (
+                  <View style={styles.toggleWarning}>
+                    <IconSymbol
+                      name="exclamationmark.triangle.fill"
+                      size={14}
+                      color="#7A4D3A"
+                    />
+                    <ThemedText style={styles.toggleWarningText}>
+                      Alle Pläne sind ausgeblendet – die App zeigt in diesem Fall
+                      zur Sicherheit wieder alle Pläne an.
+                    </ThemedText>
+                  </View>
+                ) : null}
+              </View>
+
+              <View style={styles.templateSection}>
+                <View style={styles.templateSectionHeader}>
+                  <View style={styles.templateSectionIcon}>
+                    <IconSymbol name="eurosign.circle" size={14} color="#7D5A50" />
+                  </View>
+                  <ThemedText style={styles.templateSectionTitle}>
+                    Basis-Einstellungen
+                  </ThemedText>
+                </View>
+                <ThemedText style={styles.templateSectionText}>
+                  Trial-Dauer für die App-Logik. Alle Preise kommen direkt aus
+                  dem Store; solange ein Produkt dort fehlt, gelten die
+                  Fallback-Preise aus der App (nicht hier editierbar).
+                </ThemedText>
+                <View style={styles.settingsRow}>
+                  <View style={styles.settingsField}>
+                    <ThemedText style={styles.settingsFieldLabel}>
+                      Trial-Tage
+                    </ThemedText>
+                    <TextInput
+                      value={draft.settings.trialDays}
+                      onChangeText={(value) =>
+                        handleFieldChange('settings.trialDays', value)
+                      }
+                      keyboardType="number-pad"
+                      style={styles.settingsFieldInput}
+                      placeholder={DEFAULT_PAYWALL_CONTENT.settings.trialDays}
+                      placeholderTextColor="rgba(125,90,80,0.4)"
+                    />
+                  </View>
                 </View>
               </View>
 
@@ -520,9 +653,11 @@ export default function PaywallContentAdminScreen() {
             </LiquidGlassCard>
 
             <View style={styles.editorCanvas}>
-              <PaywallExperience
-                content={draft}
+              <PaywallPlansExperience
+                content={draft.plans}
+                prices={previewPrices}
                 billingLabel={billingLabel}
+                storeProvider={storeProvider}
                 isTrialExpired={false}
                 allowClose={false}
                 previewOnly
@@ -811,23 +946,74 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     color: '#8D6B61',
   },
-  templateRow: {
+  tierToggleRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  templateChip: {
-    borderRadius: 14,
+    alignItems: 'center',
+    gap: 12,
+    borderRadius: 16,
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: 'rgba(255,255,255,0.82)',
+    paddingVertical: 10,
+    backgroundColor: 'rgba(255,255,255,0.6)',
     borderWidth: 1,
     borderColor: 'rgba(233, 201, 182, 0.40)',
   },
-  templateChipText: {
-    fontSize: 12,
+  tierToggleCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  tierToggleTitle: {
+    fontSize: 13,
     fontWeight: '800',
-    color: '#6A4435',
+    color: '#6A4A3D',
+  },
+  tierToggleText: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: '#8D6B61',
+  },
+  toggleWarning: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: 'rgba(233, 201, 182, 0.32)',
+    borderWidth: 1,
+    borderColor: 'rgba(176, 123, 99, 0.20)',
+  },
+  toggleWarningText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 16,
+    color: '#7A4D3A',
+    fontWeight: '600',
+  },
+  settingsRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  settingsField: {
+    flex: 1,
+    gap: 6,
+  },
+  settingsFieldLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+    color: '#A07E6E',
+  },
+  settingsFieldInput: {
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#5C4033',
+    backgroundColor: 'rgba(255,255,255,0.82)',
+    borderWidth: 1,
+    borderColor: 'rgba(233, 201, 182, 0.40)',
   },
   errorCard: {
     flexDirection: 'row',

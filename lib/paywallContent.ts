@@ -70,8 +70,45 @@ export type PaywallLegalLinks = {
   dataManagement: string;
 };
 
+export type PaywallPlansTierId = 'premium' | 'standard' | 'lite';
+
+export type PaywallPlansTierContent = {
+  visible: boolean;
+  name: string;
+  tagline: string;
+  ctaLabel: string;
+  bullets: string[];
+};
+
+export type PaywallPlansComparisonRow = {
+  label: string;
+  lite: boolean;
+  standard: boolean;
+  premium: boolean;
+};
+
+export type PaywallPlansContent = {
+  brandLogo: string;
+  brandSubtitle: string;
+  headline: string;
+  subline: string;
+  socialProofText: string;
+  popularBadge: string;
+  ctaNote: string;
+  compareTitle: string;
+  comparisonRows: PaywallPlansComparisonRow[];
+  quoteText: string;
+  quoteAuthor: string;
+  trustChips: string[];
+  restoreLabel: string;
+  cancelLabel: string;
+  legalText: string;
+  tiers: Record<PaywallPlansTierId, PaywallPlansTierContent>;
+};
+
 export type PaywallContent = {
   settings: PaywallContentSettings;
+  plans: PaywallPlansContent;
   brand: {
     logo: string;
     subtitle: string;
@@ -172,12 +209,86 @@ const DEFAULT_YEARLY_PLAN: PaywallPlanCopy = {
   savingsInline: 'Spare {{yearlySavings}}',
 };
 
+const DEFAULT_PLANS_CONTENT: PaywallPlansContent = {
+  brandLogo: 'Lotti Baby',
+  brandSubtitle: 'Schwangerschaft bis Baby-Alltag',
+  headline: 'Weniger Kopf-Chaos.\nMehr Zeit für euer Baby.',
+  subline:
+    'Lotti begleitet euch von der Schwangerschaft durch die ersten Jahre – alles Wichtige an einem Ort, für dich und deinen Partner.',
+  socialProofText: 'Von Eltern entwickelt – für Familien wie eure',
+  popularBadge: 'Beliebteste Wahl',
+  ctaNote:
+    'Jederzeit kündbar · {{billingLabel}} · Falls {{storeProvider}} eine kostenlose Testphase anbietet, siehst du sie vor dem Kauf im Store.',
+  compareTitle: 'Was steckt drin?',
+  comparisonRows: [
+    { label: 'Schlaf-, Still- & Wickel-Tracker', lite: true, standard: true, premium: true },
+    { label: 'Schwangerschaft: Wehen-Tracker & Checklisten', lite: true, standard: true, premium: true },
+    { label: 'Gewichts- & Größenkurven', lite: true, standard: true, premium: true },
+    { label: 'Meilensteine & Zahn-Tracker', lite: true, standard: true, premium: true },
+    { label: 'Kompletter Verlauf (Lite: letzte 7 Tage)', lite: false, standard: true, premium: true },
+    { label: 'Partner-Verknüpfung: gemeinsam tracken', lite: false, standard: true, premium: true },
+    { label: 'Tagesübersicht, Planer & Einkaufslisten', lite: false, standard: true, premium: true },
+    { label: 'Wochenmomente & Erinnerungs-Sammlung', lite: false, standard: true, premium: true },
+    { label: 'Rezepte & Beikost-Begleitung', lite: false, standard: true, premium: true },
+    { label: 'Auswertungen & PDF-Exporte', lite: false, standard: true, premium: true },
+    { label: '✨ KI: Sprach-Logging – Einträge einsprechen', lite: false, standard: false, premium: true },
+    { label: '✨ KI: Lottis Fürsorge – tägliche Hinweise', lite: false, standard: false, premium: true },
+  ],
+  quoteText:
+    '„Nachts um 3 mit einer Hand den Still-Timer starten – und mein Partner sieht morgens direkt, wie die Nacht war. Genau das haben wir gebraucht.“',
+  quoteAuthor: 'Eine Lotti-Mama, 4 Monate dabei',
+  trustChips: ['Jederzeit kündbar', 'Sichere Zahlung', 'Für euch beide'],
+  restoreLabel: 'Käufe wiederherstellen / Status prüfen',
+  cancelLabel: 'Vielleicht später',
+  legalText:
+    'Für die Nutzung von Lotti Baby ist ein aktives Abo erforderlich. Falls {{storeProvider}} für dein gewähltes Produkt eine kostenlose Testphase anbietet, wird sie vor dem Kauf im Store angezeigt. Die Zahlung wird bei Kaufbestätigung deinem Store-Konto belastet. Abos verlängern sich automatisch, wenn sie nicht rechtzeitig in den Store-Einstellungen gekündigt werden.',
+  tiers: {
+    premium: {
+      visible: true,
+      name: 'Lotti Premium',
+      tagline: 'Alles aus Standard plus Lottis KI-Features',
+      ctaLabel: 'Premium starten',
+      bullets: [
+        '✨ KI-Features: Sprach-Logging & Lottis Fürsorge',
+        'Partner-Verknüpfung für euch beide',
+        'Planer, Listen, Wochenmomente & Rezepte',
+        'Auswertungen, Erinnerungen & PDF-Exporte',
+      ],
+    },
+    standard: {
+      visible: true,
+      name: 'Lotti Standard',
+      tagline: 'Die volle Begleitung für eure Familie',
+      ctaLabel: 'Standard starten',
+      bullets: [
+        'Alle Tracker mit vollständigem Verlauf',
+        'Partner-Verknüpfung für euch beide',
+        'Planer, Listen, Wochenmomente & Rezepte',
+        'Auswertungen, Erinnerungen & PDF-Exporte',
+      ],
+    },
+    lite: {
+      visible: true,
+      name: 'Lotti Lite',
+      tagline: 'Der einfache Start ins Tracking',
+      ctaLabel: 'Lite starten',
+      bullets: [
+        'Alle Basis-Tracker für den Alltag',
+        'Schwangerschafts-Begleitung',
+        'Wachstum & Meilensteine',
+        'Verlauf der letzten 7 Tage',
+      ],
+    },
+  },
+};
+
 export const DEFAULT_PAYWALL_CONTENT: PaywallContent = {
   settings: {
     trialDays: `${DEFAULT_PAYWALL_TRIAL_DAYS}`,
     monthlyPrice: `${DEFAULT_DISPLAY_MONTHLY_PRICE}`.replace('.', ','),
     yearlyPrice: `${DEFAULT_DISPLAY_YEARLY_PRICE}`.replace('.', ','),
   },
+  plans: DEFAULT_PLANS_CONTENT,
   brand: {
     logo: 'Lotti Baby',
     subtitle: 'Schwangerschaft bis Baby-Alltag',
@@ -322,10 +433,31 @@ const cloneArray = <T,>(items: T[]): T[] => items.map((item) => {
   return item;
 });
 
+const clonePlansTier = (
+  tier: PaywallPlansTierContent,
+): PaywallPlansTierContent => ({
+  ...tier,
+  bullets: [...tier.bullets],
+});
+
+export const clonePaywallPlansContent = (
+  plans: PaywallPlansContent = DEFAULT_PLANS_CONTENT,
+): PaywallPlansContent => ({
+  ...plans,
+  comparisonRows: cloneArray(plans.comparisonRows),
+  trustChips: [...plans.trustChips],
+  tiers: {
+    premium: clonePlansTier(plans.tiers.premium),
+    standard: clonePlansTier(plans.tiers.standard),
+    lite: clonePlansTier(plans.tiers.lite),
+  },
+});
+
 export const clonePaywallContent = (
   content: PaywallContent = DEFAULT_PAYWALL_CONTENT,
 ): PaywallContent => ({
   settings: { ...content.settings },
+  plans: clonePaywallPlansContent(content.plans),
   brand: { ...content.brand },
   steps: { ...content.steps },
   progressCard: { ...content.progressCard },
@@ -496,6 +628,79 @@ const sanitizePlanCopy = (
   };
 };
 
+const pickBoolean = (value: unknown, fallback: boolean): boolean =>
+  typeof value === 'boolean' ? value : fallback;
+
+const sanitizeComparisonRows = (value: unknown): PaywallPlansComparisonRow[] => {
+  if (!Array.isArray(value)) {
+    return cloneArray(DEFAULT_PLANS_CONTENT.comparisonRows);
+  }
+
+  const items = value
+    .map((item) => {
+      if (!isRecord(item)) return null;
+      return {
+        label: pickString(item.label, ''),
+        lite: pickBoolean(item.lite, false),
+        standard: pickBoolean(item.standard, false),
+        premium: pickBoolean(item.premium, false),
+      };
+    })
+    .filter((item): item is PaywallPlansComparisonRow => item !== null);
+
+  return items.length > 0
+    ? items
+    : cloneArray(DEFAULT_PLANS_CONTENT.comparisonRows);
+};
+
+const sanitizePlansTier = (
+  value: unknown,
+  fallback: PaywallPlansTierContent,
+): PaywallPlansTierContent => {
+  const source = isRecord(value) ? value : {};
+  return {
+    visible: pickBoolean(source.visible, fallback.visible),
+    name: pickString(source.name, fallback.name),
+    tagline: pickString(source.tagline, fallback.tagline),
+    ctaLabel: pickString(source.ctaLabel, fallback.ctaLabel),
+    bullets: pickStringArray(source.bullets, fallback.bullets),
+  };
+};
+
+export const sanitizePaywallPlansContent = (
+  value: unknown,
+): PaywallPlansContent => {
+  const source = isRecord(value) ? value : {};
+  const tiers = isRecord(source.tiers) ? source.tiers : {};
+  const fallback = DEFAULT_PLANS_CONTENT;
+
+  return {
+    brandLogo: pickString(source.brandLogo, fallback.brandLogo),
+    brandSubtitle: pickString(source.brandSubtitle, fallback.brandSubtitle),
+    headline: pickString(source.headline, fallback.headline),
+    subline: pickString(source.subline, fallback.subline),
+    socialProofText: pickString(
+      source.socialProofText,
+      fallback.socialProofText,
+    ),
+    popularBadge: pickString(source.popularBadge, fallback.popularBadge),
+    ctaNote: pickString(source.ctaNote, fallback.ctaNote),
+    compareTitle: pickString(source.compareTitle, fallback.compareTitle),
+    comparisonRows: sanitizeComparisonRows(source.comparisonRows),
+    quoteText: pickString(source.quoteText, fallback.quoteText),
+    quoteAuthor: pickString(source.quoteAuthor, fallback.quoteAuthor),
+    trustChips: pickStringArray(source.trustChips, fallback.trustChips),
+    restoreLabel: pickString(source.restoreLabel, fallback.restoreLabel),
+    cancelLabel: pickString(source.cancelLabel, fallback.cancelLabel),
+    legalText: pickString(source.legalText, fallback.legalText),
+    tiers: {
+      premium: sanitizePlansTier(tiers.premium, fallback.tiers.premium),
+      standard: sanitizePlansTier(tiers.standard, fallback.tiers.standard),
+      lite: sanitizePlansTier(tiers.lite, fallback.tiers.lite),
+    },
+  };
+};
+
 export const sanitizePaywallContent = (value: unknown): PaywallContent => {
   const source = isRecord(value) ? value : {};
   const settings = isRecord(source.settings) ? source.settings : {};
@@ -523,6 +728,7 @@ export const sanitizePaywallContent = (value: unknown): PaywallContent => {
         DEFAULT_PAYWALL_CONTENT.settings.yearlyPrice,
       ),
     },
+    plans: sanitizePaywallPlansContent(source.plans),
     brand: {
       logo: pickString(brand.logo, DEFAULT_PAYWALL_CONTENT.brand.logo),
       subtitle: pickString(
@@ -665,6 +871,14 @@ export const sanitizePaywallContent = (value: unknown): PaywallContent => {
 export const formatEuroAmount = (value: number) =>
   `${value.toFixed(2).replace('.', ',')} €`;
 
+export const applyPaywallPlansTemplate = (
+  value: string,
+  variables: { storeProvider: string; billingLabel: string },
+): string =>
+  value
+    .replace(/\{\{storeProvider\}\}/g, variables.storeProvider)
+    .replace(/\{\{billingLabel\}\}/g, variables.billingLabel);
+
 export const getPaywallTrialDays = (content: PaywallContent): number =>
   parseWholeNumberish(content.settings.trialDays, DEFAULT_PAYWALL_TRIAL_DAYS);
 
@@ -729,6 +943,7 @@ export const resolvePaywallContent = (
 
   return {
     settings: { ...source.settings },
+    plans: clonePaywallPlansContent(source.plans),
     brand: {
       logo: applyTemplate(source.brand.logo, variables),
       subtitle: applyTemplate(source.brand.subtitle, variables),

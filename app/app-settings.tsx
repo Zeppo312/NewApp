@@ -1545,8 +1545,8 @@ export default function AppSettingsScreen() {
                           <ThemedText style={{ fontSize: 24 }}>✍️</ThemedText>
                         </View>
                         <View style={styles.rowContent}>
-                          <ThemedText style={styles.rowTitle}>Paywall-Texte bearbeiten</ThemedText>
-                          <ThemedText style={styles.rowDescription}>Texte der Paywall live anpassen und speichern</ThemedText>
+                          <ThemedText style={styles.rowTitle}>Paywall-Editor</ThemedText>
+                          <ThemedText style={styles.rowDescription}>Texte anpassen und Pläne ein- oder ausblenden</ThemedText>
                         </View>
                         <View style={styles.trailing}>
                           <IconSymbol name="chevron.right" size={20} color={trailingIconColor} />

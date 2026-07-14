@@ -1,18 +1,20 @@
-import {
-  addMonths,
-  addYears,
-  differenceInCalendarDays,
-  differenceInMonths,
-  differenceInYears,
-} from 'date-fns';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Print from 'expo-print';
 import type { BabyMilestoneEntry } from './milestones';
+import {
+  DEFAULT_MILESTONE_LOCALE,
+  formatBabyAgeAtMilestone,
+  formatMilestoneDate,
+  getMilestoneLocaleTag,
+  type MilestoneLocale,
+  translateMilestoneText,
+} from './milestoneTranslations';
 
 type MilestonePhotobookPdfOptions = {
   entries: BabyMilestoneEntry[];
   babyName?: string | null;
   birthDate?: string | null;
+  locale?: MilestoneLocale;
 };
 
 export type MilestonePhotobookPdfResult = {
@@ -28,50 +30,6 @@ const escapeHtml = (value: string | null | undefined) =>
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
-
-const fromDateOnly = (value: string) => {
-  const [year, month, day] = value.slice(0, 10).split('-').map(Number);
-  return new Date(year, month - 1, day);
-};
-
-const formatAlbumDate = (value: string) =>
-  new Intl.DateTimeFormat('de-DE', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  }).format(fromDateOnly(value));
-
-const joinGermanParts = (parts: string[]) => {
-  if (parts.length <= 1) return parts[0] ?? '';
-  return `${parts.slice(0, -1).join(', ')} und ${parts.at(-1)}`;
-};
-
-const formatBabyAgeAtMilestone = (birthDateValue: string | null | undefined, eventDateValue: string) => {
-  if (!birthDateValue) return null;
-
-  const birthDate = fromDateOnly(birthDateValue);
-  const milestoneDate = fromDateOnly(eventDateValue);
-  if (
-    Number.isNaN(birthDate.getTime()) ||
-    Number.isNaN(milestoneDate.getTime()) ||
-    milestoneDate < birthDate
-  ) {
-    return null;
-  }
-
-  const years = differenceInYears(milestoneDate, birthDate);
-  const afterYears = addYears(birthDate, years);
-  const months = differenceInMonths(milestoneDate, afterYears);
-  const afterMonths = addMonths(afterYears, months);
-  const days = differenceInCalendarDays(milestoneDate, afterMonths);
-  const parts = [
-    years > 0 ? `${years} ${years === 1 ? 'Jahr' : 'Jahren'}` : null,
-    months > 0 ? `${months} ${months === 1 ? 'Monat' : 'Monaten'}` : null,
-    days > 0 ? `${days} ${days === 1 ? 'Tag' : 'Tagen'}` : null,
-  ].filter((part): part is string => Boolean(part));
-
-  return parts.length > 0 ? `Mit ${joinGermanParts(parts)}` : 'Am Tag der Geburt';
-};
 
 const safeFilePart = (value: string) =>
   value
@@ -101,17 +59,24 @@ export const buildMilestonePhotobookHtml = ({
   babyName,
   birthDate,
   imageDataUris,
+  locale = DEFAULT_MILESTONE_LOCALE,
 }: MilestonePhotobookPdfOptions & { imageDataUris: Record<string, string | null> }) => {
+  const t = (key: string, params?: Record<string, string | number>) =>
+    translateMilestoneText(locale, key, params);
+  const formatDate = (value: string) => formatMilestoneDate(value, locale);
   const sortedEntries = [...entries].sort((left, right) =>
     left.event_date.localeCompare(right.event_date)
   );
-  const displayName = babyName?.trim() || 'unserem Baby';
+  const displayName = babyName?.trim() || t('pdf.defaultBabyName');
   const firstDate = sortedEntries[0]?.event_date;
   const lastDate = sortedEntries.at(-1)?.event_date;
   const dateRange = firstDate
     ? firstDate === lastDate
-      ? formatAlbumDate(firstDate)
-      : `${formatAlbumDate(firstDate)} bis ${formatAlbumDate(lastDate ?? firstDate)}`
+      ? formatDate(firstDate)
+      : t('pdf.dateRange', {
+          from: formatDate(firstDate),
+          to: formatDate(lastDate ?? firstDate),
+        })
     : '';
   const coverEntry = sortedEntries.find((entry) => Boolean(imageDataUris[entry.id]));
   const coverImageDataUri = coverEntry ? imageDataUris[coverEntry.id] : null;
@@ -143,7 +108,7 @@ export const buildMilestonePhotobookHtml = ({
   }
 
   const buildDuoEntryHtml = (entry: BabyMilestoneEntry, position: 'first' | 'second') => {
-    const babyAge = formatBabyAgeAtMilestone(birthDate, entry.event_date);
+    const babyAge = formatBabyAgeAtMilestone(birthDate, entry.event_date, locale);
     const notes = entry.notes?.trim();
     return `
       <div class="duo-row duo-row-${position}">
@@ -151,9 +116,9 @@ export const buildMilestonePhotobookHtml = ({
           <div class="photo-frame"><img src="${imageDataUris[entry.id]}" alt="${escapeHtml(entry.title)}" /></div>
         </div>
         <div class="duo-caption">
-          <div class="eyebrow">ERINNERUNG</div>
+          <div class="eyebrow">${escapeHtml(t('pdf.memory'))}</div>
           <h2 class="duo-title">${escapeHtml(entry.title)}</h2>
-          <div class="duo-date">${escapeHtml(formatAlbumDate(entry.event_date))}</div>
+          <div class="duo-date">${escapeHtml(formatDate(entry.event_date))}</div>
           ${babyAge ? `<div class="age-pill">${escapeHtml(babyAge)}</div>` : ''}
           ${notes ? `<div class="duo-notes">${escapeHtml(notes)}</div>` : ''}
         </div>
@@ -165,7 +130,7 @@ export const buildMilestonePhotobookHtml = ({
     .map((page, index) => {
       const pageNumberHtml = `
         <footer class="page-footer">
-          <span class="page-number">SEITE ${String(index + 1).padStart(2, '0')}</span>
+          <span class="page-number">${escapeHtml(t('card.page', { number: String(index + 1).padStart(2, '0') }))}</span>
         </footer>
       `;
 
@@ -176,7 +141,7 @@ export const buildMilestonePhotobookHtml = ({
             <div class="decoration decoration-top"></div>
             <div class="decoration decoration-bottom"></div>
             <div class="duo-heading">
-              <div class="eyebrow">ERINNERUNGEN VON ${escapeHtml(displayName.toUpperCase())}</div>
+              <div class="eyebrow">${escapeHtml(t('pdf.memoriesBy', { name: displayName.toUpperCase() }))}</div>
             </div>
             ${buildDuoEntryHtml(page.entries[0], 'first')}
             <div class="duo-divider"><span></span><b>&#10022;</b><span></span></div>
@@ -188,7 +153,7 @@ export const buildMilestonePhotobookHtml = ({
 
       const entry = page.entry;
       const imageDataUri = imageDataUris[entry.id];
-      const babyAge = formatBabyAgeAtMilestone(birthDate, entry.event_date);
+      const babyAge = formatBabyAgeAtMilestone(birthDate, entry.event_date, locale);
       const notes = entry.notes?.trim();
       const layout = page.layout;
       const isSplit = layout === 'split-left' || layout === 'split-right';
@@ -203,7 +168,7 @@ export const buildMilestonePhotobookHtml = ({
 
       const headerHtml = `
         <header class="milestone-header">
-          <div class="eyebrow">ERINNERUNG VON ${escapeHtml(displayName.toUpperCase())}</div>
+          <div class="eyebrow">${escapeHtml(t('pdf.memoryBy', { name: displayName.toUpperCase() }))}</div>
           <h1 class="milestone-title ${titleClass}">${escapeHtml(entry.title)}</h1>
           <div class="title-flourish"><span></span><b>&#10022;</b><span></span></div>
         </header>
@@ -213,14 +178,14 @@ export const buildMilestonePhotobookHtml = ({
         <div class="photo-stage">
           ${imageDataUri
             ? `<div class="photo-frame"><img src="${imageDataUri}" alt="${escapeHtml(entry.title)}" /></div>`
-            : `<div class="photo-placeholder"><div class="placeholder-star">&#10022;</div><div>Ein besonderer Moment</div></div>`}
+            : `<div class="photo-placeholder"><div class="placeholder-star">&#10022;</div><div>${escapeHtml(t('card.specialMoment'))}</div></div>`}
         </div>
       `;
 
       const captionHtml = `
         <div class="caption-card">
           <div class="caption-date-row">
-            <div class="date">${escapeHtml(formatAlbumDate(entry.event_date))}</div>
+            <div class="date">${escapeHtml(formatDate(entry.event_date))}</div>
             ${babyAge ? `<div class="age-pill">${escapeHtml(babyAge)}</div>` : ''}
           </div>
           ${notes ? `<div class="${noteClass}">${escapeHtml(notes)}</div>` : '<div class="caption-line"></div>'}
@@ -229,7 +194,7 @@ export const buildMilestonePhotobookHtml = ({
 
       const memoryLinesHtml = (lineCount: number) => `
         <div class="memory-lines">
-          <div class="memory-lines-heading"><span>FÜR EURE GEDANKEN</span><b>&#10022;</b></div>
+          <div class="memory-lines-heading"><span>${escapeHtml(t('pdf.thoughts'))}</span><b>&#10022;</b></div>
           ${'<div class="writing-line"></div>'.repeat(lineCount)}
         </div>
       `;
@@ -276,7 +241,7 @@ export const buildMilestonePhotobookHtml = ({
     .join('');
 
   const html = `<!DOCTYPE html>
-    <html lang="de">
+    <html lang="${getMilestoneLocaleTag(locale)}">
       <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -865,21 +830,21 @@ export const buildMilestonePhotobookHtml = ({
           <div class="decoration decoration-top"></div>
           <div class="decoration decoration-bottom"></div>
           <div class="cover-heading">
-            <div class="cover-kicker">LOTTI BABY FOTOBUCH</div>
-            <h1 class="cover-title">Unsere<br />Meilensteine</h1>
-            <div class="cover-subtitle">Die ersten Male und besonderen Momente von ${escapeHtml(displayName)}.</div>
+            <div class="cover-kicker">${escapeHtml(t('pdf.coverKicker'))}</div>
+            <h1 class="cover-title">${t('pdf.coverTitle')}</h1>
+            <div class="cover-subtitle">${escapeHtml(t('pdf.coverSubtitle', { name: displayName }))}</div>
           </div>
           <div class="cover-photo-wrap">
             ${coverImageDataUri
-              ? `<div class="cover-photo-mark cover-photo-filled"><div class="cover-tape"></div><img src="${coverImageDataUri}" alt="${escapeHtml(coverEntry?.title)}" /><div class="cover-photo-caption">Unser Fotobuch</div></div>`
-              : `<div class="cover-photo-mark cover-photo-empty"><div class="cover-monogram">${escapeHtml(displayName.slice(0, 1).toUpperCase())}</div><div class="cover-photo-caption">Unsere Geschichte</div></div>`}
+              ? `<div class="cover-photo-mark cover-photo-filled"><div class="cover-tape"></div><img src="${coverImageDataUri}" alt="${escapeHtml(coverEntry?.title)}" /><div class="cover-photo-caption">${escapeHtml(t('pdf.ourPhotobook'))}</div></div>`
+              : `<div class="cover-photo-mark cover-photo-empty"><div class="cover-monogram">${escapeHtml(displayName.slice(0, 1).toUpperCase())}</div><div class="cover-photo-caption">${escapeHtml(t('pdf.ourStory'))}</div></div>`}
           </div>
           <div class="cover-meta">
             <div>
-              <div class="cover-count-pill">${sortedEntries.length} ${sortedEntries.length === 1 ? 'Erinnerung' : 'Erinnerungen'}</div>
+              <div class="cover-count-pill">${escapeHtml(t(`pdf.memoryCount.${sortedEntries.length === 1 ? 'one' : 'other'}`, { count: sortedEntries.length }))}</div>
               ${dateRange ? `<div class="cover-range">${escapeHtml(dateRange)}</div>` : ''}
             </div>
-            <div class="brand">LOTTI BABY</div>
+            <div class="brand">${escapeHtml(t('card.brand'))}</div>
           </div>
         </section>
         ${milestonePages}
@@ -893,13 +858,16 @@ export const generateMilestonePhotobookPdf = async ({
   entries,
   babyName,
   birthDate,
+  locale = DEFAULT_MILESTONE_LOCALE,
 }: MilestonePhotobookPdfOptions): Promise<MilestonePhotobookPdfResult> => {
+  const t = (key: string, params?: Record<string, string | number>) =>
+    translateMilestoneText(locale, key, params);
   if (entries.length === 0) {
-    throw new Error('Es sind noch keine Erinnerungen für das Fotobuch vorhanden.');
+    throw new Error(t('pdf.emptyError'));
   }
 
   const cacheRoot = FileSystem.cacheDirectory;
-  if (!cacheRoot) throw new Error('Das temporäre App-Verzeichnis ist nicht verfügbar.');
+  if (!cacheRoot) throw new Error(t('pdf.cacheError'));
 
   const exportId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const imageDirectory = `${cacheRoot}milestone-photobook-${exportId}/`;
@@ -923,7 +891,7 @@ export const generateMilestonePhotobookPdf = async ({
       } catch (error) {
         console.warn(`Foto für PDF konnte nicht geladen werden (${entry.id}):`, error);
         imageDataUris[entry.id] = null;
-        warnings.push(`Das Foto zu „${entry.title}“ konnte nicht in das PDF übernommen werden.`);
+        warnings.push(t('pdf.photoWarning', { title: entry.title }));
       }
     }
 
@@ -932,6 +900,7 @@ export const generateMilestonePhotobookPdf = async ({
       babyName,
       birthDate,
       imageDataUris,
+      locale,
     });
     const generatedPdf = await Print.printToFileAsync({
       html,
@@ -939,7 +908,9 @@ export const generateMilestonePhotobookPdf = async ({
       height: 842,
       margins: { top: 0, right: 0, bottom: 0, left: 0 },
     });
-    const fileName = `LottiBaby-Fotobuch-${safeFilePart(babyName || 'Baby')}-${Date.now()}.pdf`;
+    const fileName = `LottiBaby-${safeFilePart(t('pdf.fileLabel'))}-${safeFilePart(
+      babyName || t('pdf.defaultFileName'),
+    )}-${Date.now()}.pdf`;
     const finalUri = `${cacheRoot}${fileName}`;
     await FileSystem.copyAsync({ from: generatedPdf.uri, to: finalUri });
 

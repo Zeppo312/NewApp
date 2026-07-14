@@ -6,12 +6,20 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   useWindowDimensions,
   View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
-import { formatEuroAmount } from '@/lib/paywallContent';
+import {
+  DEFAULT_PAYWALL_CONTENT,
+  applyPaywallPlansTemplate,
+  clonePaywallPlansContent,
+  formatEuroAmount,
+  type PaywallPlansContent,
+  type PaywallPlansTierId,
+} from '@/lib/paywallContent';
 import type {
   SubscriptionInterval,
   SubscriptionTier,
@@ -38,11 +46,16 @@ type PaywallPlansExperienceProps = {
   billingLabel: string;
   storeProvider: string;
   isTrialExpired: boolean;
+  content?: PaywallPlansContent;
   allowClose?: boolean;
+  previewOnly?: boolean;
+  editable?: boolean;
+  useInternalScrollView?: boolean;
   showAppleEula?: boolean;
   visiblePurchaseError?: string | null;
   pendingAction?: PaywallPendingAction;
   isPurchaseActionDisabled?: boolean;
+  onChangeField?: (path: string, value: string) => void;
   onPurchase?: (tier: SubscriptionTier, interval: SubscriptionInterval) => void;
   onRestorePress?: () => void;
   onClose?: () => void;
@@ -53,59 +66,69 @@ type PaywallPlansExperienceProps = {
   onOpenDataManagement?: () => void;
 };
 
-type ComparisonRow = {
-  label: string;
-  lite: boolean;
-  standard: boolean;
-  premium: boolean;
+const TIER_ORDER: PaywallPlansTierId[] = ['premium', 'standard', 'lite'];
+
+type InlineEditableTextProps = {
+  editable: boolean;
+  path?: string;
+  value: string;
+  displayValue: string;
+  style: any;
+  multiline?: boolean;
+  textAlign?: 'left' | 'center';
+  onChangeField?: (path: string, value: string) => void;
 };
 
-const COMPARISON_ROWS: ComparisonRow[] = [
-  { label: 'Schlaf-, Still- & Wickel-Tracker', lite: true, standard: true, premium: true },
-  { label: 'Schwangerschaft: Wehen-Tracker & Checklisten', lite: true, standard: true, premium: true },
-  { label: 'Gewichts- & Größenkurven', lite: true, standard: true, premium: true },
-  { label: 'Meilensteine & Zahn-Tracker', lite: true, standard: true, premium: true },
-  { label: 'Kompletter Verlauf (Lite: letzte 7 Tage)', lite: false, standard: true, premium: true },
-  { label: 'Partner-Verknüpfung: gemeinsam tracken', lite: false, standard: true, premium: true },
-  { label: 'Tagesübersicht, Planer & Einkaufslisten', lite: false, standard: true, premium: true },
-  { label: 'Wochenmomente & Erinnerungs-Sammlung', lite: false, standard: true, premium: true },
-  { label: 'Rezepte & Beikost-Begleitung', lite: false, standard: true, premium: true },
-  { label: 'Auswertungen & PDF-Exporte', lite: false, standard: true, premium: true },
-  { label: '✨ KI: Sprach-Logging – Einträge einsprechen', lite: false, standard: false, premium: true },
-  { label: '✨ KI: Lottis Fürsorge – tägliche Hinweise', lite: false, standard: false, premium: true },
-];
+function InlineEditableText({
+  editable,
+  path,
+  value,
+  displayValue,
+  style,
+  multiline = false,
+  textAlign = 'left',
+  onChangeField,
+}: InlineEditableTextProps) {
+  if (!editable || !path || !onChangeField) {
+    return <Text style={style}>{displayValue}</Text>;
+  }
 
-const PREMIUM_BULLETS = [
-  '✨ KI-Features: Sprach-Logging & Lottis Fürsorge',
-  'Partner-Verknüpfung für euch beide',
-  'Planer, Listen, Wochenmomente & Rezepte',
-  'Auswertungen, Erinnerungen & PDF-Exporte',
-];
-
-const LITE_BULLETS = [
-  'Alle Basis-Tracker für den Alltag',
-  'Schwangerschafts-Begleitung',
-  'Wachstum & Meilensteine',
-  'Verlauf der letzten 7 Tage',
-];
-
-const STANDARD_BULLETS = [
-  'Alle Tracker mit vollständigem Verlauf',
-  'Partner-Verknüpfung für euch beide',
-  'Planer, Listen, Wochenmomente & Rezepte',
-  'Auswertungen, Erinnerungen & PDF-Exporte',
-];
+  return (
+    <View style={styles.inlineEditorWrap}>
+      <TextInput
+        value={value}
+        onChangeText={(nextValue) => onChangeField(path, nextValue)}
+        multiline={multiline}
+        scrollEnabled={false}
+        textAlignVertical={multiline ? 'top' : 'center'}
+        placeholder={displayValue}
+        placeholderTextColor="rgba(92,64,51,0.38)"
+        style={[
+          style,
+          styles.inlineEditorInput,
+          multiline && styles.inlineEditorInputMultiline,
+          textAlign === 'center' && styles.inlineEditorInputCentered,
+        ]}
+      />
+    </View>
+  );
+}
 
 export function PaywallPlansExperience({
   prices,
   billingLabel,
   storeProvider,
   isTrialExpired,
+  content,
   allowClose = true,
+  previewOnly = false,
+  editable = false,
+  useInternalScrollView = true,
   showAppleEula = true,
   visiblePurchaseError,
   pendingAction = null,
   isPurchaseActionDisabled = false,
+  onChangeField,
   onPurchase,
   onRestorePress,
   onClose,
@@ -118,12 +141,64 @@ export function PaywallPlansExperience({
   const { width } = useWindowDimensions();
   const contentMaxWidth = Math.min(width - 40, 640);
 
-  const [tier, setTier] = useState<SubscriptionTier>('premium');
+  const plans = useMemo(
+    () => content ?? clonePaywallPlansContent(DEFAULT_PAYWALL_CONTENT.plans),
+    [content],
+  );
+
+  const enabledTiers = useMemo(() => {
+    const visible = TIER_ORDER.filter((id) => plans.tiers[id].visible);
+    return visible.length > 0 ? visible : TIER_ORDER;
+  }, [plans]);
+
+  // Im Editor bleiben ausgeblendete Pläne (gedimmt) sichtbar, damit ihre
+  // Texte weiterhin bearbeitet werden können.
+  const renderedTiers = editable ? TIER_ORDER : enabledTiers;
+
+  const [selectedTier, setSelectedTier] = useState<SubscriptionTier>(
+    enabledTiers[0],
+  );
   const [interval, setInterval] = useState<SubscriptionInterval>('yearly');
   const selectPulse = React.useState(() => new Animated.Value(1))[0];
 
+  // Fällt automatisch auf den ersten sichtbaren Plan zurück, wenn der
+  // gewählte Plan ausgeblendet wurde.
+  const tier = enabledTiers.includes(selectedTier)
+    ? selectedTier
+    : enabledTiers[0];
+
   const showCloseButton = allowClose && !isTrialExpired;
-  const purchaseDisabled = isPurchaseActionDisabled || pendingAction !== null;
+  const purchaseDisabled =
+    editable ||
+    previewOnly ||
+    isPurchaseActionDisabled ||
+    pendingAction !== null;
+
+  const templateVariables = useMemo(
+    () => ({ storeProvider, billingLabel }),
+    [storeProvider, billingLabel],
+  );
+
+  const resolveText = (value: string) =>
+    applyPaywallPlansTemplate(value, templateVariables);
+
+  const renderText = (
+    path: string,
+    rawValue: string,
+    style: any,
+    options?: { multiline?: boolean; textAlign?: 'left' | 'center' },
+  ) => (
+    <InlineEditableText
+      editable={editable}
+      path={path}
+      value={rawValue}
+      displayValue={resolveText(rawValue)}
+      style={style}
+      multiline={options?.multiline}
+      textAlign={options?.textAlign}
+      onChangeField={onChangeField}
+    />
+  );
 
   const pulseSelection = () => {
     selectPulse.setValue(0.97);
@@ -136,8 +211,9 @@ export function PaywallPlansExperience({
   };
 
   const handleSelectTier = (nextTier: SubscriptionTier) => {
+    if (!enabledTiers.includes(nextTier) && !editable) return;
     if (nextTier !== tier) {
-      setTier(nextTier);
+      setSelectedTier(nextTier);
       pulseSelection();
     }
   };
@@ -149,6 +225,16 @@ export function PaywallPlansExperience({
     }
   };
 
+  const tierPrices = (tierId: PaywallPlansTierId) => {
+    if (tierId === 'premium') {
+      return { monthly: prices.premiumMonthly, yearly: prices.premiumYearly };
+    }
+    if (tierId === 'standard') {
+      return { monthly: prices.standardMonthly, yearly: prices.standardYearly };
+    }
+    return { monthly: prices.liteMonthly, yearly: prices.liteYearly };
+  };
+
   const yearlySavingsPercent = (monthly: number, yearly: number) => {
     if (monthly <= 0 || yearly <= 0) return 0;
     const full = monthly * 12;
@@ -156,41 +242,27 @@ export function PaywallPlansExperience({
     return Math.round(((full - yearly) / full) * 100);
   };
 
-  const premiumSavings = yearlySavingsPercent(
-    prices.premiumMonthly.amount,
-    prices.premiumYearly.amount,
-  );
-  const liteSavings = yearlySavingsPercent(
-    prices.liteMonthly.amount,
-    prices.liteYearly.amount,
-  );
-  const standardSavings = yearlySavingsPercent(
-    prices.standardMonthly.amount,
-    prices.standardYearly.amount,
-  );
-  const maxSavings = Math.max(premiumSavings, standardSavings, liteSavings);
+  const tierSavings = (tierId: PaywallPlansTierId) => {
+    const { monthly, yearly } = tierPrices(tierId);
+    return yearlySavingsPercent(monthly.amount, yearly.amount);
+  };
+
+  const maxSavings = Math.max(...enabledTiers.map((id) => tierSavings(id)));
 
   const selectedPrice = useMemo(() => {
-    if (tier === 'premium') {
-      return interval === 'yearly' ? prices.premiumYearly : prices.premiumMonthly;
-    }
-    if (tier === 'standard') {
-      return interval === 'yearly' ? prices.standardYearly : prices.standardMonthly;
-    }
-    return interval === 'yearly' ? prices.liteYearly : prices.liteMonthly;
+    const { monthly, yearly } = tierPrices(tier);
+    return interval === 'yearly' ? yearly : monthly;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [interval, prices, tier]);
 
   const perMonthLabel = (price: PaywallPlanPrice) =>
     price.amount > 0 ? `${formatEuroAmount(price.amount / 12)} / Monat` : '';
 
+  const selectedTierContent = plans.tiers[tier];
   const ctaLabel =
     pendingAction === 'purchase'
       ? 'Einen Moment …'
-      : tier === 'premium'
-        ? `Premium starten · ${selectedPrice.label}`
-        : tier === 'standard'
-          ? `Standard starten · ${selectedPrice.label}`
-          : `Lite starten · ${selectedPrice.label}`;
+      : `${resolveText(selectedTierContent.ctaLabel)} · ${selectedPrice.label}`;
 
   const renderCheck = (included: boolean, emphasized: boolean) => (
     <View
@@ -214,23 +286,14 @@ export function PaywallPlansExperience({
     </View>
   );
 
-  const renderTierCard = (cardTier: SubscriptionTier) => {
+  const renderTierCard = (cardTier: PaywallPlansTierId) => {
+    const tierContent = plans.tiers[cardTier];
     const isPremium = cardTier === 'premium';
-    const isStandard = cardTier === 'standard';
     const isSelected = tier === cardTier;
-    const monthly = isPremium
-      ? prices.premiumMonthly
-      : isStandard
-        ? prices.standardMonthly
-        : prices.liteMonthly;
-    const yearly = isPremium
-      ? prices.premiumYearly
-      : isStandard
-        ? prices.standardYearly
-        : prices.liteYearly;
+    const isHiddenInLive = !tierContent.visible;
+    const { monthly, yearly } = tierPrices(cardTier);
     const price = interval === 'yearly' ? yearly : monthly;
-    const bullets = isPremium ? PREMIUM_BULLETS : isStandard ? STANDARD_BULLETS : LITE_BULLETS;
-    const savings = isPremium ? premiumSavings : isStandard ? standardSavings : liteSavings;
+    const savings = tierSavings(cardTier);
 
     return (
       <Pressable
@@ -243,26 +306,39 @@ export function PaywallPlansExperience({
           isPremium && styles.tierCardPremium,
           isSelected && styles.tierCardSelected,
           isSelected && isPremium && styles.tierCardSelectedPremium,
+          editable && isHiddenInLive && styles.tierCardHidden,
         ]}
       >
         {isPremium ? (
           <View style={styles.popularBadge}>
-            <Text style={styles.popularBadgeText}>Beliebteste Wahl</Text>
+            {renderText(
+              'plans.popularBadge',
+              plans.popularBadge,
+              styles.popularBadgeText,
+              { textAlign: 'center' },
+            )}
+          </View>
+        ) : null}
+
+        {editable && isHiddenInLive ? (
+          <View style={styles.hiddenBadge}>
+            <Text style={styles.hiddenBadgeText}>Ausgeblendet</Text>
           </View>
         ) : null}
 
         <View style={styles.tierHeaderRow}>
           <View style={styles.tierTitleWrap}>
-            <Text style={styles.tierName}>
-              {isPremium ? 'Lotti Premium' : isStandard ? 'Lotti Standard' : 'Lotti Lite'}
-            </Text>
-            <Text style={styles.tierTagline}>
-              {isPremium
-                ? 'Alles aus Standard plus Lottis KI-Features'
-                : isStandard
-                  ? 'Die volle Begleitung für eure Familie'
-                  : 'Der einfache Start ins Tracking'}
-            </Text>
+            {renderText(
+              `plans.tiers.${cardTier}.name`,
+              tierContent.name,
+              styles.tierName,
+            )}
+            {renderText(
+              `plans.tiers.${cardTier}.tagline`,
+              tierContent.tagline,
+              styles.tierTagline,
+              { multiline: true },
+            )}
           </View>
           <View
             style={[styles.radioOuter, isSelected && styles.radioOuterSelected]}
@@ -285,21 +361,272 @@ export function PaywallPlansExperience({
         ) : null}
 
         <View style={styles.tierBullets}>
-          {bullets.map((item) => (
-            <View key={item} style={styles.tierBulletRow}>
+          {tierContent.bullets.map((item, index) => (
+            <View key={`${cardTier}-bullet-${index}`} style={styles.tierBulletRow}>
               <View
                 style={[
                   styles.tierBulletDot,
                   isPremium && styles.tierBulletDotPremium,
                 ]}
               />
-              <Text style={styles.tierBulletText}>{item}</Text>
+              <View style={styles.tierBulletTextWrap}>
+                {renderText(
+                  `plans.tiers.${cardTier}.bullets.${index}`,
+                  item,
+                  styles.tierBulletText,
+                  { multiline: true },
+                )}
+              </View>
             </View>
           ))}
         </View>
       </Pressable>
     );
   };
+
+  const compareTiers = editable ? TIER_ORDER : enabledTiers;
+  const compareColumnOrder: PaywallPlansTierId[] = ['lite', 'standard', 'premium'];
+  const compareColumns = compareColumnOrder.filter((id) =>
+    compareTiers.includes(id),
+  );
+
+  const inner = (
+    <View style={[styles.content, { maxWidth: contentMaxWidth }]}>
+      <View style={styles.topBar}>
+        <View style={styles.topBarSpacer} />
+        <View style={styles.brandBlock}>
+          {renderText('plans.brandLogo', plans.brandLogo, styles.logo, {
+            textAlign: 'center',
+          })}
+          {renderText('plans.brandSubtitle', plans.brandSubtitle, styles.logoSub, {
+            textAlign: 'center',
+          })}
+        </View>
+        {showCloseButton ? (
+          <Pressable onPress={onClose} hitSlop={8} style={styles.closeButton}>
+            <Text style={styles.closeButtonText}>✕</Text>
+          </Pressable>
+        ) : (
+          <View style={styles.topBarSpacer} />
+        )}
+      </View>
+
+      {renderText('plans.headline', plans.headline, styles.headline, {
+        multiline: true,
+        textAlign: 'center',
+      })}
+      {renderText('plans.subline', plans.subline, styles.subline, {
+        multiline: true,
+        textAlign: 'center',
+      })}
+
+      <View style={styles.socialProofPill}>
+        <Text style={styles.socialProofStars}>★★★★★</Text>
+        {renderText(
+          'plans.socialProofText',
+          plans.socialProofText,
+          styles.socialProofText,
+        )}
+      </View>
+
+      <View style={styles.intervalToggle}>
+        {(
+          [
+            { key: 'monthly', label: 'Monatlich' },
+            {
+              key: 'yearly',
+              label:
+                maxSavings > 0 ? `Jährlich · bis zu −${maxSavings} %` : 'Jährlich',
+            },
+          ] as { key: SubscriptionInterval; label: string }[]
+        ).map((option) => (
+          <Pressable
+            key={option.key}
+            onPress={() => handleSelectInterval(option.key)}
+            style={[
+              styles.intervalOption,
+              interval === option.key && styles.intervalOptionActive,
+            ]}
+          >
+            <Text
+              style={[
+                styles.intervalOptionText,
+                interval === option.key && styles.intervalOptionTextActive,
+              ]}
+            >
+              {option.label}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+
+      <Animated.View
+        style={[styles.tierStack, { transform: [{ scale: selectPulse }] }]}
+      >
+        {renderedTiers.map((tierId) => renderTierCard(tierId))}
+      </Animated.View>
+
+      <Pressable
+        onPress={() => onPurchase?.(tier, interval)}
+        disabled={purchaseDisabled}
+        style={[
+          styles.ctaButton,
+          purchaseDisabled && !editable && !previewOnly && styles.actionDisabled,
+        ]}
+      >
+        <LinearGradient
+          colors={tier === 'premium' ? ['#FFCFAE', '#FEB493'] : ['#FFE6C8', '#FFD2A5']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+        <Text style={styles.ctaButtonText}>{ctaLabel}</Text>
+      </Pressable>
+      {renderText('plans.ctaNote', plans.ctaNote, styles.ctaNote, {
+        multiline: true,
+        textAlign: 'center',
+      })}
+
+      {visiblePurchaseError ? (
+        <Text style={styles.errorText}>{visiblePurchaseError}</Text>
+      ) : null}
+
+      <View style={styles.compareCard}>
+        {renderText('plans.compareTitle', plans.compareTitle, styles.compareTitle)}
+        <View style={styles.compareHeaderRow}>
+          <View style={styles.compareLabelCell} />
+          {compareColumns.map((columnTier) => (
+            <Text
+              key={columnTier}
+              style={[
+                styles.compareHeaderText,
+                columnTier === 'premium' && styles.compareHeaderPremium,
+              ]}
+            >
+              {columnTier === 'premium'
+                ? 'Premium'
+                : columnTier === 'standard'
+                  ? 'Standard'
+                  : 'Lite'}
+            </Text>
+          ))}
+        </View>
+        {plans.comparisonRows.map((row, index) => (
+          <View
+            key={`compare-row-${index}`}
+            style={[
+              styles.compareRow,
+              index === plans.comparisonRows.length - 1 && styles.compareRowLast,
+            ]}
+          >
+            <View style={styles.compareLabelWrap}>
+              {renderText(
+                `plans.comparisonRows.${index}.label`,
+                row.label,
+                styles.compareLabel,
+                { multiline: true },
+              )}
+            </View>
+            {compareColumns.map((columnTier) => (
+              <React.Fragment key={`${index}-${columnTier}`}>
+                {renderCheck(row[columnTier], columnTier === 'premium')}
+              </React.Fragment>
+            ))}
+          </View>
+        ))}
+      </View>
+
+      <View style={styles.quoteCard}>
+        {renderText('plans.quoteText', plans.quoteText, styles.quoteText, {
+          multiline: true,
+        })}
+        {renderText('plans.quoteAuthor', plans.quoteAuthor, styles.quoteAuthor)}
+      </View>
+
+      <View style={styles.trustRow}>
+        {plans.trustChips.map((item, index) => (
+          <View key={`trust-chip-${index}`} style={styles.trustChip}>
+            {renderText(
+              `plans.trustChips.${index}`,
+              item,
+              styles.trustChipText,
+            )}
+          </View>
+        ))}
+      </View>
+
+      <Pressable
+        onPress={onRestorePress}
+        hitSlop={8}
+        disabled={purchaseDisabled && !editable}
+        style={[
+          styles.restoreButton,
+          purchaseDisabled && !editable && !previewOnly && styles.actionDisabled,
+        ]}
+      >
+        {pendingAction === 'restore' ? (
+          <Text style={styles.restoreText}>Aktualisiere …</Text>
+        ) : (
+          renderText(
+            'plans.restoreLabel',
+            plans.restoreLabel,
+            styles.restoreText,
+            { textAlign: 'center' },
+          )
+        )}
+      </Pressable>
+
+      {showCloseButton || editable ? (
+        <Pressable
+          onPress={showCloseButton ? onClose : undefined}
+          hitSlop={8}
+          style={styles.cancelButton}
+        >
+          {renderText(
+            'plans.cancelLabel',
+            plans.cancelLabel,
+            styles.cancelButtonText,
+            { textAlign: 'center' },
+          )}
+        </Pressable>
+      ) : null}
+
+      {renderText('plans.legalText', plans.legalText, styles.legal, {
+        multiline: true,
+        textAlign: 'center',
+      })}
+
+      <View style={styles.legalLinksRow}>
+        <Pressable accessibilityRole="link" hitSlop={8} onPress={onOpenPrivacy}>
+          <Text style={styles.legalLink}>Datenschutz</Text>
+        </Pressable>
+        <Pressable accessibilityRole="link" hitSlop={8} onPress={onOpenTerms}>
+          <Text style={styles.legalLink}>Nutzungsbedingungen</Text>
+        </Pressable>
+        {showAppleEula ? (
+          <Pressable
+            accessibilityRole="link"
+            hitSlop={8}
+            onPress={onOpenAppleEula}
+          >
+            <Text style={styles.legalLink}>Apple-Standard-EULA</Text>
+          </Pressable>
+        ) : null}
+        <Pressable accessibilityRole="link" hitSlop={8} onPress={onOpenImprint}>
+          <Text style={styles.legalLink}>Impressum</Text>
+        </Pressable>
+        {isTrialExpired ? (
+          <Pressable
+            accessibilityRole="link"
+            hitSlop={8}
+            onPress={onOpenDataManagement}
+          >
+            <Text style={styles.legalLink}>Konto & Daten verwalten</Text>
+          </Pressable>
+        ) : null}
+      </View>
+    </View>
+  );
 
   return (
     <View style={styles.shell}>
@@ -314,206 +641,16 @@ export function PaywallPlansExperience({
       <View style={[styles.ambientOrb, styles.ambientOrbMiddle]} />
       <View style={[styles.ambientOrb, styles.ambientOrbBottom]} />
 
-      <ScrollView
-        contentContainerStyle={styles.scrollInner}
-        keyboardShouldPersistTaps="handled"
-      >
-        <View style={[styles.content, { maxWidth: contentMaxWidth }]}>
-          <View style={styles.topBar}>
-            <View style={styles.topBarSpacer} />
-            <View style={styles.brandBlock}>
-              <Text style={styles.logo}>Lotti Baby</Text>
-              <Text style={styles.logoSub}>Schwangerschaft bis Baby-Alltag</Text>
-            </View>
-            {showCloseButton ? (
-              <Pressable onPress={onClose} hitSlop={8} style={styles.closeButton}>
-                <Text style={styles.closeButtonText}>✕</Text>
-              </Pressable>
-            ) : (
-              <View style={styles.topBarSpacer} />
-            )}
-          </View>
-
-          <Text style={styles.headline}>
-            Weniger Kopf-Chaos.{'\n'}Mehr Zeit für euer Baby.
-          </Text>
-          <Text style={styles.subline}>
-            Lotti begleitet euch von der Schwangerschaft durch die ersten Jahre –
-            alles Wichtige an einem Ort, für dich und deinen Partner.
-          </Text>
-
-          <View style={styles.socialProofPill}>
-            <Text style={styles.socialProofStars}>★★★★★</Text>
-            <Text style={styles.socialProofText}>
-              Von Eltern entwickelt – für Familien wie eure
-            </Text>
-          </View>
-
-          <View style={styles.intervalToggle}>
-            {(
-              [
-                { key: 'monthly', label: 'Monatlich' },
-                {
-                  key: 'yearly',
-                  label:
-                    maxSavings > 0 ? `Jährlich · bis zu −${maxSavings} %` : 'Jährlich',
-                },
-              ] as { key: SubscriptionInterval; label: string }[]
-            ).map((option) => (
-              <Pressable
-                key={option.key}
-                onPress={() => handleSelectInterval(option.key)}
-                style={[
-                  styles.intervalOption,
-                  interval === option.key && styles.intervalOptionActive,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.intervalOptionText,
-                    interval === option.key && styles.intervalOptionTextActive,
-                  ]}
-                >
-                  {option.label}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-
-          <Animated.View
-            style={[styles.tierStack, { transform: [{ scale: selectPulse }] }]}
-          >
-            {renderTierCard('premium')}
-            {renderTierCard('standard')}
-            {renderTierCard('lite')}
-          </Animated.View>
-
-          <Pressable
-            onPress={() => onPurchase?.(tier, interval)}
-            disabled={purchaseDisabled}
-            style={[styles.ctaButton, purchaseDisabled && styles.actionDisabled]}
-          >
-            <LinearGradient
-              colors={tier === 'premium' ? ['#FFCFAE', '#FEB493'] : ['#FFE6C8', '#FFD2A5']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={StyleSheet.absoluteFill}
-            />
-            <Text style={styles.ctaButtonText}>{ctaLabel}</Text>
-          </Pressable>
-          <Text style={styles.ctaNote}>
-            Jederzeit kündbar · {billingLabel} · Falls {storeProvider} eine
-            kostenlose Testphase anbietet, siehst du sie vor dem Kauf im Store.
-          </Text>
-
-          {visiblePurchaseError ? (
-            <Text style={styles.errorText}>{visiblePurchaseError}</Text>
-          ) : null}
-
-          <View style={styles.compareCard}>
-            <Text style={styles.compareTitle}>Was steckt drin?</Text>
-            <View style={styles.compareHeaderRow}>
-              <View style={styles.compareLabelCell} />
-              <Text style={styles.compareHeaderText}>Lite</Text>
-              <Text style={styles.compareHeaderText}>Standard</Text>
-              <Text style={[styles.compareHeaderText, styles.compareHeaderPremium]}>
-                Premium
-              </Text>
-            </View>
-            {COMPARISON_ROWS.map((row, index) => (
-              <View
-                key={row.label}
-                style={[
-                  styles.compareRow,
-                  index === COMPARISON_ROWS.length - 1 && styles.compareRowLast,
-                ]}
-              >
-                <Text style={styles.compareLabel}>{row.label}</Text>
-                {renderCheck(row.lite, false)}
-                {renderCheck(row.standard, false)}
-                {renderCheck(row.premium, true)}
-              </View>
-            ))}
-          </View>
-
-          <View style={styles.quoteCard}>
-            <Text style={styles.quoteText}>
-              „Nachts um 3 mit einer Hand den Still-Timer starten – und mein
-              Partner sieht morgens direkt, wie die Nacht war. Genau das haben
-              wir gebraucht.“
-            </Text>
-            <Text style={styles.quoteAuthor}>Eine Lotti-Mama, 4 Monate dabei</Text>
-          </View>
-
-          <View style={styles.trustRow}>
-            {['Jederzeit kündbar', 'Sichere Zahlung', 'Für euch beide'].map(
-              (item) => (
-                <View key={item} style={styles.trustChip}>
-                  <Text style={styles.trustChipText}>{item}</Text>
-                </View>
-              ),
-            )}
-          </View>
-
-          <Pressable
-            onPress={onRestorePress}
-            hitSlop={8}
-            disabled={purchaseDisabled}
-            style={[styles.restoreButton, purchaseDisabled && styles.actionDisabled]}
-          >
-            <Text style={styles.restoreText}>
-              {pendingAction === 'restore'
-                ? 'Aktualisiere …'
-                : 'Käufe wiederherstellen / Status prüfen'}
-            </Text>
-          </Pressable>
-
-          {showCloseButton ? (
-            <Pressable onPress={onClose} hitSlop={8} style={styles.cancelButton}>
-              <Text style={styles.cancelButtonText}>Vielleicht später</Text>
-            </Pressable>
-          ) : null}
-
-          <Text style={styles.legal}>
-            Für die Nutzung von Lotti Baby ist ein aktives Abo erforderlich.
-            Falls {storeProvider} für dein gewähltes Produkt eine kostenlose
-            Testphase anbietet, wird sie vor dem Kauf im Store angezeigt. Die
-            Zahlung wird bei Kaufbestätigung deinem Store-Konto belastet. Abos
-            verlängern sich automatisch, wenn sie nicht rechtzeitig in den
-            Store-Einstellungen gekündigt werden.
-          </Text>
-
-          <View style={styles.legalLinksRow}>
-            <Pressable accessibilityRole="link" hitSlop={8} onPress={onOpenPrivacy}>
-              <Text style={styles.legalLink}>Datenschutz</Text>
-            </Pressable>
-            <Pressable accessibilityRole="link" hitSlop={8} onPress={onOpenTerms}>
-              <Text style={styles.legalLink}>Nutzungsbedingungen</Text>
-            </Pressable>
-            {showAppleEula ? (
-              <Pressable
-                accessibilityRole="link"
-                hitSlop={8}
-                onPress={onOpenAppleEula}
-              >
-                <Text style={styles.legalLink}>Apple-Standard-EULA</Text>
-              </Pressable>
-            ) : null}
-            <Pressable accessibilityRole="link" hitSlop={8} onPress={onOpenImprint}>
-              <Text style={styles.legalLink}>Impressum</Text>
-            </Pressable>
-            {isTrialExpired ? (
-              <Pressable
-                accessibilityRole="link"
-                hitSlop={8}
-                onPress={onOpenDataManagement}
-              >
-                <Text style={styles.legalLink}>Konto & Daten verwalten</Text>
-              </Pressable>
-            ) : null}
-          </View>
-        </View>
-      </ScrollView>
+      {useInternalScrollView ? (
+        <ScrollView
+          contentContainerStyle={styles.scrollInner}
+          keyboardShouldPersistTaps="handled"
+        >
+          {inner}
+        </ScrollView>
+      ) : (
+        <View style={styles.scrollInner}>{inner}</View>
+      )}
     </View>
   );
 }
@@ -691,6 +828,11 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(240,164,96,0.9)',
     shadowColor: '#8A5A34',
   },
+  tierCardHidden: {
+    opacity: 0.55,
+    borderStyle: 'dashed',
+    borderColor: 'rgba(114,83,74,0.4)',
+  },
   popularBadge: {
     position: 'absolute',
     top: -12,
@@ -706,6 +848,21 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
     textTransform: 'uppercase',
     color: '#FFFFFF',
+  },
+  hiddenBadge: {
+    alignSelf: 'flex-start',
+    marginBottom: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: 'rgba(114,83,74,0.14)',
+  },
+  hiddenBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    color: '#72534A',
   },
   tierHeaderRow: {
     flexDirection: 'row',
@@ -786,8 +943,10 @@ const styles = StyleSheet.create({
   tierBulletDotPremium: {
     backgroundColor: '#F0A460',
   },
-  tierBulletText: {
+  tierBulletTextWrap: {
     flex: 1,
+  },
+  tierBulletText: {
     fontSize: 14,
     lineHeight: 20,
     color: '#5F4346',
@@ -841,6 +1000,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 6,
+    marginTop: 8,
   },
   compareLabelCell: {
     flex: 1,
@@ -868,12 +1028,14 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0,
     paddingBottom: 0,
   },
-  compareLabel: {
+  compareLabelWrap: {
     flex: 1,
+    paddingRight: 8,
+  },
+  compareLabel: {
     fontSize: 14,
     lineHeight: 20,
     color: '#5F4346',
-    paddingRight: 8,
   },
   checkCell: {
     width: 62,
@@ -973,6 +1135,23 @@ const styles = StyleSheet.create({
   },
   actionDisabled: {
     opacity: 0.6,
+  },
+  inlineEditorWrap: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: 'rgba(94,75,196,0.45)',
+    backgroundColor: 'rgba(255,255,255,0.28)',
+  },
+  inlineEditorInput: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  inlineEditorInputMultiline: {
+    minHeight: 40,
+  },
+  inlineEditorInputCentered: {
+    textAlign: 'center',
   },
 });
 

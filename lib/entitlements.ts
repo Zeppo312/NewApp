@@ -216,10 +216,11 @@ export const LOCKED_FEATURE_COPY: Record<AppFeature, LockedFeatureCopy> = {
  * Tier-Auflösung:
  *   1. Mock-Override (Entwicklung, solange RevenueCat nicht verknüpft ist)
  *   2. Admins & Premiumtester → premium (wie bisher bei den KI-Features)
- *   3. Tester/Kooperationspartner → standard (Sonderzugang wie bisher: alles
+ *   3. Lite-Tester → lite (Sonderzugang, erlebt bewusst die Lite-Grenzen)
+ *   4. Tester/Kooperationspartner → standard (Sonderzugang wie bisher: alles
  *      außer KI — KI war schon vorher Premiumtester-only)
- *   4. Aktives Abo → Tier aus der Produkt-ID
- *   5. Kein Abo (Trial) → standard: die Testphase zeigt die volle App ohne
+ *   5. Aktives Abo → Tier aus der Produkt-ID
+ *   6. Kein Abo (Trial) → standard: die Testphase zeigt die volle App ohne
  *      KI, damit das KI-Budget hinter dem Premium-Abo bleibt
  */
 export const resolveSubscriptionTier = async (): Promise<AppSubscriptionTier> => {
@@ -233,6 +234,9 @@ export const resolveSubscriptionTier = async (): Promise<AppSubscriptionTier> =>
       profile?.paywall_access_role === 'premium_tester'
     ) {
       return 'premium';
+    }
+    if (profile?.paywall_access_role === 'lite_tester') {
+      return 'lite';
     }
     if (
       profile?.paywall_access_role === 'tester' ||

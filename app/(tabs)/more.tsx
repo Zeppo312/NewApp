@@ -11,7 +11,10 @@ import Header from '@/components/Header';
 import { LiquidGlassCard, GLASS_OVERLAY, LAYOUT_PAD } from '@/constants/DesignGuide';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { fetchPaywallState } from '@/lib/paywall';
-import { getPaywallAccessReasonLabel } from '@/lib/paywallAccess';
+import {
+  getPaywallAccessReasonLabel,
+  type PaywallAccessReason,
+} from '@/lib/paywallAccess';
 
 export default function MoreScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -19,7 +22,7 @@ export default function MoreScreen() {
   const adaptiveColors = useAdaptiveColors();
   const router = useRouter();
   const { session, signOut } = useAuth();
-  const [accessReason, setAccessReason] = useState<'subscription' | 'admin' | 'tester' | 'cooperation_partner' | 'premium_tester' | 'none'>('none');
+  const [accessReason, setAccessReason] = useState<PaywallAccessReason>('none');
 
   // Nur bei dunklem Hintergrundbild die adaptiven Farben verwenden
   const useDarkMode = adaptiveColors.hasCustomBackground && adaptiveColors.isDarkBackground;

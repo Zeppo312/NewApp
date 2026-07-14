@@ -37,6 +37,7 @@ import {
 
 const ROLE_OPTIONS: { role: PaywallAccessRole | null; label: string }[] = [
   { role: null, label: 'Keine' },
+  { role: 'lite_tester', label: 'Lite-Tester' },
   { role: 'tester', label: 'Tester' },
   { role: 'cooperation_partner', label: 'Kooperationspartner' },
   { role: 'premium_tester', label: 'Premiumtester' },

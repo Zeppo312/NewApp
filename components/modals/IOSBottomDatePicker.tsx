@@ -30,6 +30,7 @@ type Props = {
   initialVariant?: PickerVariant;
   confirmLabel?: string;
   cancelLabel?: string;
+  locale?: string;
 };
 
 export default function IOSBottomDatePicker({
@@ -43,6 +44,7 @@ export default function IOSBottomDatePicker({
   mode = 'date',
   confirmLabel = 'Fertig',
   cancelLabel = 'Abbrechen',
+  locale = 'de-DE',
 }: Props) {
   const adaptiveColors = useAdaptiveColors();
   const isDark = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
@@ -136,7 +138,7 @@ export default function IOSBottomDatePicker({
             value={getSafePickerDate(draft, new Date(), safeDateOptions)}
             mode={mode}
             display={display}
-            locale="de-DE"
+            locale={locale}
             onChange={(_, date) => {
               if (!date) return;
               setDraft(getSafePickerDate(date, draft, safeDateOptions));

@@ -33,15 +33,6 @@ const CATEGORY_SET = new Set<MilestoneCategory>([
   'sonstiges',
 ]);
 
-export const MILESTONE_CATEGORY_LABELS: Record<MilestoneCategory, string> = {
-  motorik: 'Motorik',
-  ernaehrung: 'Ernährung',
-  sprache: 'Sprache',
-  zahn: 'Zähne',
-  schlaf: 'Schlaf',
-  sonstiges: 'Sonstiges',
-};
-
 const isMilestoneCategory = (value: string): value is MilestoneCategory =>
   CATEGORY_SET.has(value as MilestoneCategory);
 

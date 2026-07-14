@@ -21,13 +21,6 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
 import * as Sharing from 'expo-sharing';
 import ViewShot, { ViewShotRef } from 'react-native-view-shot';
-import {
-  addMonths,
-  addYears,
-  differenceInCalendarDays,
-  differenceInMonths,
-  differenceInYears,
-} from 'date-fns';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemedBackground } from '@/components/ThemedBackground';
@@ -46,21 +39,20 @@ import {
   deleteMilestoneEntry,
   getMilestoneEntries,
   MilestoneCategory,
-  MILESTONE_CATEGORY_LABELS,
   updateMilestoneEntry,
 } from '@/lib/milestones';
 import { generateMilestonePhotobookPdf } from '@/lib/milestonePhotobookPdf';
+import {
+  DEFAULT_MILESTONE_LOCALE,
+  formatBabyAgeAtMilestone,
+  formatMilestoneDate,
+  getMilestoneCategoryLabel,
+  getMilestoneLocaleTag,
+  MILESTONE_SUGGESTION_KEYS,
+  translateMilestoneText,
+} from '@/lib/milestoneTranslations';
 
 type CategoryFilter = 'all' | MilestoneCategory;
-
-const MILESTONE_SUGGESTIONS = [
-  'Erstes Krabbeln',
-  'Erste Schritte',
-  'Erster Brei',
-  'Erstes Wort',
-  'Erster Zahn',
-  'Erste durchgeschlafene Nacht',
-];
 
 const CATEGORY_ORDER: MilestoneCategory[] = [
   'motorik',
@@ -72,8 +64,12 @@ const CATEGORY_ORDER: MilestoneCategory[] = [
 ];
 const PRIMARY_FILTERS: CategoryFilter[] = ['all', 'motorik', 'ernaehrung', 'sprache', 'zahn'];
 const MIN_VALID_MILESTONE_DATE = new Date(2000, 0, 1);
-const BABY_MODE_PREVIEW_READ_ONLY_MESSAGE =
-  'Du bist im Babymodus zur Vorschau. Meilensteine koennen erst nach der Geburt bearbeitet werden.';
+const ACTIVE_MILESTONE_LOCALE = DEFAULT_MILESTONE_LOCALE;
+const MILESTONE_DATE_LOCALE = getMilestoneLocaleTag(ACTIVE_MILESTONE_LOCALE);
+const t = (key: string, params?: Record<string, string | number>) =>
+  translateMilestoneText(ACTIVE_MILESTONE_LOCALE, key, params);
+const categoryLabel = (category: MilestoneCategory) =>
+  getMilestoneCategoryLabel(ACTIVE_MILESTONE_LOCALE, category);
 
 const toDateOnly = (date: Date) => {
   const y = date.getFullYear();
@@ -86,45 +82,6 @@ const fromDateOnly = (value: string) => {
   const [y, m, d] = value.split('-').map(Number);
   if (!y || !m || !d) return new Date();
   return new Date(y, m - 1, d);
-};
-
-const formatAlbumDate = (value: string) =>
-  fromDateOnly(value).toLocaleDateString('de-DE', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
-
-const joinGermanParts = (parts: string[]) => {
-  if (parts.length <= 1) return parts[0] ?? '';
-  return `${parts.slice(0, -1).join(', ')} und ${parts.at(-1)}`;
-};
-
-const formatBabyAgeAtMilestone = (birthDateValue: string | null | undefined, eventDateValue: string) => {
-  if (!birthDateValue) return null;
-
-  const birthDate = fromDateOnly(birthDateValue.slice(0, 10));
-  const milestoneDate = fromDateOnly(eventDateValue);
-  if (
-    Number.isNaN(birthDate.getTime()) ||
-    Number.isNaN(milestoneDate.getTime()) ||
-    milestoneDate < birthDate
-  ) {
-    return null;
-  }
-
-  const years = differenceInYears(milestoneDate, birthDate);
-  const afterYears = addYears(birthDate, years);
-  const months = differenceInMonths(milestoneDate, afterYears);
-  const afterMonths = addMonths(afterYears, months);
-  const days = differenceInCalendarDays(milestoneDate, afterMonths);
-  const parts = [
-    years > 0 ? `${years} ${years === 1 ? 'Jahr' : 'Jahren'}` : null,
-    months > 0 ? `${months} ${months === 1 ? 'Monat' : 'Monaten'}` : null,
-    days > 0 ? `${days} ${days === 1 ? 'Tag' : 'Tagen'}` : null,
-  ].filter((part): part is string => Boolean(part));
-
-  return parts.length > 0 ? `Mit ${joinGermanParts(parts)}` : 'Am Tag der Geburt';
 };
 
 export default function MilestonesScreen() {
@@ -172,9 +129,9 @@ export default function MilestonesScreen() {
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [initialImageUri, setInitialImageUri] = useState<string | null>(null);
 
-  const modalTitle = editingEntry ? 'Meilenstein bearbeiten' : 'Neuer Meilenstein';
+  const modalTitle = editingEntry ? t('form.editTitle') : t('form.createTitle');
   const showReadOnlyPreviewAlert = useCallback(() => {
-    Alert.alert('Nur Vorschau', BABY_MODE_PREVIEW_READ_ONLY_MESSAGE);
+    Alert.alert(t('preview.alertTitle'), t('preview.alertBody'));
   }, []);
   const ensureWritableInCurrentMode = useCallback(() => {
     if (!isReadOnlyPreviewMode) return true;
@@ -196,7 +153,7 @@ export default function MilestonesScreen() {
     const { data, error } = await getMilestoneEntries(activeBabyId, categoryFilter);
 
     if (error) {
-      Alert.alert('Fehler', 'Meilensteine konnten nicht geladen werden.');
+      Alert.alert(t('common.error'), t('alert.loadFailed'));
     } else {
       setEntries(data ?? []);
     }
@@ -253,13 +210,13 @@ export default function MilestonesScreen() {
   const handleSave = async () => {
     if (!ensureWritableInCurrentMode()) return;
     if (!activeBabyId) {
-      Alert.alert('Hinweis', 'Bitte zuerst ein Baby auswählen.');
+      Alert.alert(t('common.notice'), t('alert.selectBaby'));
       return;
     }
 
     const trimmedTitle = title.trim();
     if (!trimmedTitle) {
-      Alert.alert('Hinweis', 'Bitte einen Titel eingeben.');
+      Alert.alert(t('common.notice'), t('alert.enterTitle'));
       return;
     }
 
@@ -277,7 +234,7 @@ export default function MilestonesScreen() {
       });
 
       if (error) {
-        Alert.alert('Fehler', 'Der Meilenstein konnte nicht gespeichert werden.');
+        Alert.alert(t('common.error'), t('alert.saveFailed'));
         setSaving(false);
         return;
       }
@@ -292,7 +249,7 @@ export default function MilestonesScreen() {
       });
 
       if (error) {
-        Alert.alert('Fehler', 'Der Meilenstein konnte nicht erstellt werden.');
+        Alert.alert(t('common.error'), t('alert.createFailed'));
         setSaving(false);
         return;
       }
@@ -307,7 +264,7 @@ export default function MilestonesScreen() {
   const pickImageFromLibrary = async (allowsEditing: boolean) => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Berechtigung benötigt', 'Bitte erlaube den Zugriff auf deine Fotos.');
+      Alert.alert(t('alert.photoPermissionTitle'), t('alert.photoPermissionBody'));
       return;
     }
 
@@ -326,18 +283,18 @@ export default function MilestonesScreen() {
     if (!ensureWritableInCurrentMode()) return;
 
     Alert.alert(
-      imageUri ? 'Foto ändern' : 'Foto auswählen',
-      'Möchtest du das vollständige Bild verwenden oder es vorher zuschneiden?',
+      imageUri ? t('alert.changePhotoTitle') : t('alert.selectPhotoTitle'),
+      t('alert.photoChoiceBody'),
       [
         {
-          text: 'Original verwenden',
+          text: t('alert.useOriginal'),
           onPress: () => void pickImageFromLibrary(false),
         },
         {
-          text: 'Quadratisch zuschneiden',
+          text: t('alert.cropSquare'),
           onPress: () => void pickImageFromLibrary(true),
         },
-        { text: 'Abbrechen', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
       ]
     );
   };
@@ -345,18 +302,18 @@ export default function MilestonesScreen() {
   const handleDelete = (entry: BabyMilestoneEntry) => {
     if (!ensureWritableInCurrentMode()) return;
     Alert.alert(
-      'Meilenstein löschen',
-      'Möchtest du diesen Meilenstein wirklich löschen?',
+      t('alert.deleteTitle'),
+      t('alert.deleteBody'),
       [
-        { text: 'Abbrechen', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Löschen',
+          text: t('common.delete'),
           style: 'destructive',
           onPress: async () => {
             if (!ensureWritableInCurrentMode()) return;
             const { error } = await deleteMilestoneEntry(entry.id);
             if (error) {
-              Alert.alert('Fehler', 'Der Meilenstein konnte nicht gelöscht werden.');
+              Alert.alert(t('common.error'), t('alert.deleteFailed'));
               return;
             }
             setShowModal(false);
@@ -398,15 +355,15 @@ export default function MilestonesScreen() {
     try {
       const sharingAvailable = await Sharing.isAvailableAsync();
       if (!sharingAvailable) {
-        Alert.alert('Teilen nicht verfügbar', 'Auf diesem Gerät ist das Teilen von Bildern nicht verfügbar.');
+        Alert.alert(t('share.unavailableTitle'), t('share.imageUnavailableBody'));
         return;
       }
 
       const uri = await shareCardRef.current?.capture?.();
-      if (!uri) throw new Error('Share-Karte konnte nicht erstellt werden');
+      if (!uri) throw new Error(t('share.captureFailed'));
 
       await Sharing.shareAsync(uri, {
-        dialogTitle: 'Meilenstein teilen',
+        dialogTitle: t('share.dialogTitle'),
         mimeType: 'image/jpeg',
         UTI: 'public.jpeg',
       });
@@ -414,7 +371,7 @@ export default function MilestonesScreen() {
       setShareImageReady(false);
     } catch (error) {
       console.error('Failed to share milestone:', error);
-      Alert.alert('Teilen nicht möglich', 'Die Erinnerung konnte nicht geteilt werden. Bitte versuche es erneut.');
+      Alert.alert(t('share.failedTitle'), t('share.failedBody'));
     } finally {
       setSharing(false);
     }
@@ -428,7 +385,7 @@ export default function MilestonesScreen() {
       const { data, error } = await getMilestoneEntries(activeBabyId);
       if (error) throw error;
       if (!data || data.length === 0) {
-        Alert.alert('Noch keine Erinnerungen', 'Füge zuerst mindestens einen Meilenstein zum Fotobuch hinzu.');
+        Alert.alert(t('photobook.emptyTitle'), t('photobook.emptyBody'));
         return;
       }
 
@@ -436,36 +393,40 @@ export default function MilestonesScreen() {
         entries: data,
         babyName: activeBaby?.name,
         birthDate: activeBaby?.birth_date,
+        locale: ACTIVE_MILESTONE_LOCALE,
       });
 
       if (!(await Sharing.isAvailableAsync())) {
-        Alert.alert('Teilen nicht verfügbar', 'Das PDF wurde erstellt, kann auf diesem Gerät aber nicht geteilt werden.');
+        Alert.alert(t('share.unavailableTitle'), t('photobook.pdfUnavailableBody'));
         return;
       }
 
       await Sharing.shareAsync(result.uri, {
         mimeType: 'application/pdf',
-        dialogTitle: 'LottiBaby Fotobuch speichern',
+        dialogTitle: t('photobook.shareDialogTitle'),
         UTI: 'com.adobe.pdf',
       });
 
       if (result.warnings.length > 0) {
         Alert.alert(
-          'Fotobuch erstellt',
-          `${result.pageCount} Seiten wurden erstellt. ${result.warnings.length} Foto${result.warnings.length === 1 ? '' : 's'} konnte${result.warnings.length === 1 ? '' : 'n'} nicht geladen werden.`
+          t('photobook.createdTitle'),
+          t(`photobook.warning.${result.warnings.length === 1 ? 'one' : 'other'}`, {
+            pages: result.pageCount,
+            warnings: result.warnings.length,
+          })
         );
       }
     } catch (error) {
       console.error('Failed to export milestone photobook:', error);
-      Alert.alert('PDF nicht erstellt', 'Das Fotobuch konnte nicht erstellt werden. Bitte versuche es erneut.');
+      Alert.alert(t('photobook.failedTitle'), t('photobook.failedBody'));
     } finally {
       setExportingPhotobook(false);
     }
   };
 
   const headerSubtitle = isReadOnlyPreviewMode
-    ? 'Vorschau-Modus: nur ansehen'
-    : 'Erste Male und besondere Momente';
+    ? t('screen.previewSubtitle')
+    : t('screen.subtitle');
   const shareImageAspectRatio = shareEntry
     ? (imageAspectRatios[shareEntry.id] ?? 4 / 3)
     : 4 / 3;
@@ -494,7 +455,7 @@ export default function MilestonesScreen() {
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
         <Header
-          title="Meilensteine"
+          title={t('screen.title')}
           subtitle={headerSubtitle}
           showBackButton
           onBackPress={() => router.push('/(tabs)/home')}
@@ -502,9 +463,9 @@ export default function MilestonesScreen() {
 
         {isReadOnlyPreviewMode && (
           <View style={styles.readOnlyPreviewBanner}>
-            <ThemedText style={styles.readOnlyPreviewTitle}>Nur Vorschau aktiv</ThemedText>
+            <ThemedText style={styles.readOnlyPreviewTitle}>{t('preview.title')}</ThemedText>
             <ThemedText style={styles.readOnlyPreviewText}>
-              Du schaust den Babymodus an. Meilensteine sind hier gesperrt.
+              {t('preview.body')}
             </ThemedText>
           </View>
         )}
@@ -524,7 +485,7 @@ export default function MilestonesScreen() {
                 onPress={() => setFilter(value)}
               >
                 <ThemedText style={[styles.filterChipText, { color: textPrimary }]}>
-                  {value === 'all' ? 'Alle' : MILESTONE_CATEGORY_LABELS[value]}
+                  {value === 'all' ? t('category.all') : categoryLabel(value)}
                 </ThemedText>
               </TouchableOpacity>
             ))}
@@ -540,7 +501,7 @@ export default function MilestonesScreen() {
             disabled={exportingPhotobook || !activeBabyId}
             activeOpacity={0.82}
             accessibilityRole="button"
-            accessibilityLabel="Fotobuch als PDF exportieren"
+            accessibilityLabel={t('photobook.exportAccessibility')}
           >
             <View style={[styles.pdfExportIcon, { backgroundColor: selectedChipBg }]}>
               {exportingPhotobook ? (
@@ -551,10 +512,10 @@ export default function MilestonesScreen() {
             </View>
             <View style={styles.pdfExportCopy}>
               <ThemedText style={[styles.pdfExportTitle, { color: textPrimary }]}>
-                {exportingPhotobook ? 'Fotobuch wird erstellt…' : 'Fotobuch als PDF'}
+                {exportingPhotobook ? t('photobook.exporting') : t('photobook.exportTitle')}
               </ThemedText>
               <ThemedText style={[styles.pdfExportSubtitle, { color: textSecondary }]}>
-                Alle Erinnerungen gestaltet exportieren
+                {t('photobook.exportSubtitle')}
               </ThemedText>
             </View>
             {!exportingPhotobook ? (
@@ -581,11 +542,11 @@ export default function MilestonesScreen() {
                   />
                 ) : null}
                 <ThemedText style={[styles.emptyTitle, { color: textPrimary }]}>
-                  {loading ? 'Lade Meilensteine...' : 'Noch keine Meilensteine'}
+                  {loading ? t('list.loading') : t('list.emptyTitle')}
                 </ThemedText>
                 {!loading ? (
                   <ThemedText style={[styles.emptyText, { color: textSecondary }]}>
-                    Trage z. B. „Erstes Krabbeln“ oder „Erster Brei“ ein.
+                    {t('list.emptyBody')}
                   </ThemedText>
                 ) : null}
               </View>
@@ -601,7 +562,9 @@ export default function MilestonesScreen() {
 
                 <View style={styles.cardHeader}>
                   <View style={styles.cardHeading}>
-                    <ThemedText style={[styles.cardEyebrow, { color: textSecondary }]}>UNSER FOTOBUCH</ThemedText>
+                    <ThemedText style={[styles.cardEyebrow, { color: textSecondary }]}>
+                      {t('card.eyebrow')}
+                    </ThemedText>
                     <ThemedText style={[styles.cardTitle, { color: textPrimary }]}>{item.title}</ThemedText>
                   </View>
                 </View>
@@ -615,7 +578,7 @@ export default function MilestonesScreen() {
                     }}
                     activeOpacity={0.9}
                     accessibilityRole="button"
-                    accessibilityLabel={`${item.title} in Vollbild anzeigen`}
+                    accessibilityLabel={t('card.fullscreenAccessibility', { title: item.title })}
                   >
                     <Image
                       source={{ uri: item.image_url }}
@@ -633,14 +596,14 @@ export default function MilestonesScreen() {
                   <View style={[styles.photoPlaceholder, { backgroundColor: selectedChipBg, borderColor: cardBorder }]}>
                     <IconSymbol name="sparkles" size={26} color={textSecondary} />
                     <ThemedText style={[styles.photoPlaceholderText, { color: textSecondary }]}>
-                      Ein Moment zum Festhalten
+                      {t('card.placeholder')}
                     </ThemedText>
                   </View>
                 )}
 
                 <View style={styles.captionBlock}>
                   <ThemedText style={[styles.cardDate, { color: textPrimary }]}>
-                    {formatAlbumDate(item.event_date)}
+                    {formatMilestoneDate(item.event_date, ACTIVE_MILESTONE_LOCALE)}
                   </ThemedText>
                   {item.notes ? (
                     <ThemedText style={[styles.cardNotes, { color: textSecondary }]}>{item.notes}</ThemedText>
@@ -652,12 +615,12 @@ export default function MilestonesScreen() {
                 <View style={[styles.cardFooter, { borderTopColor: cardBorder }]}>
                   <View style={[styles.badge, { backgroundColor: selectedChipBg }]}>
                     <ThemedText style={[styles.badgeText, { color: textPrimary }]}>
-                      {MILESTONE_CATEGORY_LABELS[item.category]}
+                      {categoryLabel(item.category)}
                     </ThemedText>
                   </View>
                   <View style={styles.cardFooterActions}>
                     <ThemedText style={[styles.pageNumber, { color: textSecondary }]}>
-                      SEITE {String(index + 1).padStart(2, '0')}
+                      {t('card.page', { number: String(index + 1).padStart(2, '0') })}
                     </ThemedText>
                     <TouchableOpacity
                       style={[styles.cardShareButton, { backgroundColor: selectedChipBg }]}
@@ -667,7 +630,7 @@ export default function MilestonesScreen() {
                       }}
                       activeOpacity={0.8}
                       accessibilityRole="button"
-                      accessibilityLabel={`${item.title} teilen`}
+                      accessibilityLabel={t('card.shareAccessibility', { title: item.title })}
                     >
                       <IconSymbol name="square.and.arrow.up" size={16} color={textPrimary} />
                     </TouchableOpacity>
@@ -699,7 +662,7 @@ export default function MilestonesScreen() {
           <TouchableWithoutFeedback
             onPress={() => setPreviewEntry(null)}
             accessibilityRole="button"
-            accessibilityLabel="Vollbildansicht schließen"
+            accessibilityLabel={t('card.closeFullscreen')}
           >
             <View style={StyleSheet.absoluteFill} />
           </TouchableWithoutFeedback>
@@ -719,7 +682,7 @@ export default function MilestonesScreen() {
             onPress={() => setPreviewEntry(null)}
             activeOpacity={0.8}
             accessibilityRole="button"
-            accessibilityLabel="Vollbildansicht schließen"
+            accessibilityLabel={t('card.closeFullscreen')}
           >
             <IconSymbol name="xmark" size={22} color="#FFFFFF" />
           </TouchableOpacity>
@@ -730,7 +693,9 @@ export default function MilestonesScreen() {
               pointerEvents="none"
             >
               <ThemedText style={styles.imageViewerTitle}>{previewEntry.title}</ThemedText>
-              <ThemedText style={styles.imageViewerDate}>{formatAlbumDate(previewEntry.event_date)}</ThemedText>
+              <ThemedText style={styles.imageViewerDate}>
+                {formatMilestoneDate(previewEntry.event_date, ACTIVE_MILESTONE_LOCALE)}
+              </ThemedText>
             </View>
           ) : null}
         </View>
@@ -752,15 +717,19 @@ export default function MilestonesScreen() {
           <View style={[styles.shareModalCard, { paddingBottom: Math.max(insets.bottom, 18) }]}>
             <View style={styles.shareModalHeader}>
               <View>
-                <ThemedText adaptive={false} style={styles.shareModalTitle}>Erinnerung teilen</ThemedText>
-                <ThemedText adaptive={false} style={styles.shareModalSubtitle}>So wird deine Karte geteilt</ThemedText>
+                <ThemedText adaptive={false} style={styles.shareModalTitle}>
+                  {t('share.modalTitle')}
+                </ThemedText>
+                <ThemedText adaptive={false} style={styles.shareModalSubtitle}>
+                  {t('share.modalSubtitle')}
+                </ThemedText>
               </View>
               <TouchableOpacity
                 style={styles.shareModalCloseButton}
                 onPress={closeShareCard}
                 disabled={sharing}
                 accessibilityRole="button"
-                accessibilityLabel="Teilen schließen"
+                accessibilityLabel={t('share.close')}
               >
                 <IconSymbol name="xmark" size={20} color="#6B4C3B" />
               </TouchableOpacity>
@@ -777,8 +746,8 @@ export default function MilestonesScreen() {
 
                 <ThemedText adaptive={false} style={styles.shareCardEyebrow}>
                   {activeBaby?.name
-                    ? `MEILENSTEIN VON ${activeBaby.name.toUpperCase()}`
-                    : 'UNSER MEILENSTEIN'}
+                    ? t('share.eyebrowWithName', { name: activeBaby.name.toUpperCase() })
+                    : t('share.eyebrowDefault')}
                 </ThemedText>
                 <ThemedText adaptive={false} style={styles.shareCardTitle} numberOfLines={2}>
                   {shareEntry?.title}
@@ -822,7 +791,7 @@ export default function MilestonesScreen() {
                       <View style={styles.shareCardPlaceholder}>
                         <IconSymbol name="sparkles" size={32} color="#9A7665" />
                         <ThemedText adaptive={false} style={styles.shareCardPlaceholderText}>
-                          Ein besonderer Moment
+                          {t('card.specialMoment')}
                         </ThemedText>
                       </View>
                     </View>
@@ -831,11 +800,22 @@ export default function MilestonesScreen() {
 
                 <View style={styles.shareCardDetails}>
                   <ThemedText adaptive={false} style={styles.shareCardDate}>
-                    {shareEntry ? formatAlbumDate(shareEntry.event_date) : ''}
+                    {shareEntry
+                      ? formatMilestoneDate(shareEntry.event_date, ACTIVE_MILESTONE_LOCALE)
+                      : ''}
                   </ThemedText>
-                  {shareEntry && formatBabyAgeAtMilestone(activeBaby?.birth_date, shareEntry.event_date) ? (
+                  {shareEntry &&
+                  formatBabyAgeAtMilestone(
+                    activeBaby?.birth_date,
+                    shareEntry.event_date,
+                    ACTIVE_MILESTONE_LOCALE,
+                  ) ? (
                     <ThemedText adaptive={false} style={styles.shareCardAge}>
-                      {formatBabyAgeAtMilestone(activeBaby?.birth_date, shareEntry.event_date)}
+                      {formatBabyAgeAtMilestone(
+                        activeBaby?.birth_date,
+                        shareEntry.event_date,
+                        ACTIVE_MILESTONE_LOCALE,
+                      )}
                     </ThemedText>
                   ) : null}
                 </View>
@@ -843,10 +823,12 @@ export default function MilestonesScreen() {
                 <View style={styles.shareCardFooter}>
                   <View style={styles.shareCardCategory}>
                     <ThemedText adaptive={false} style={styles.shareCardCategoryText}>
-                      {shareEntry ? MILESTONE_CATEGORY_LABELS[shareEntry.category] : ''}
+                      {shareEntry ? categoryLabel(shareEntry.category) : ''}
                     </ThemedText>
                   </View>
-                  <ThemedText adaptive={false} style={styles.shareCardBrand}>LOTTI BABY</ThemedText>
+                  <ThemedText adaptive={false} style={styles.shareCardBrand}>
+                    {t('card.brand')}
+                  </ThemedText>
                 </View>
               </ViewShot>
             </View>
@@ -857,11 +839,15 @@ export default function MilestonesScreen() {
               disabled={!shareImageReady || sharing}
               activeOpacity={0.85}
               accessibilityRole="button"
-              accessibilityLabel="Meilenstein als Bild teilen"
+              accessibilityLabel={t('share.accessibility')}
             >
               <IconSymbol name="square.and.arrow.up" size={20} color="#FFFFFF" />
               <ThemedText adaptive={false} style={styles.shareActionButtonText}>
-                {sharing ? 'Karte wird erstellt…' : shareImageReady ? 'Als Bild teilen' : 'Foto wird geladen…'}
+                {sharing
+                  ? t('share.creating')
+                  : shareImageReady
+                    ? t('share.button')
+                    : t('share.loadingPhoto')}
               </ThemedText>
             </TouchableOpacity>
           </View>
@@ -899,31 +885,36 @@ export default function MilestonesScreen() {
                     disabled={saving || isReadOnlyPreviewMode}
                     activeOpacity={0.8}
                     accessibilityRole="button"
-                    accessibilityLabel="Meilenstein löschen"
+                    accessibilityLabel={t('alert.deleteTitle')}
                   >
                     <IconSymbol name="trash" size={18} color={isDark ? '#FF9A9A' : '#D45B5B'} />
                   </TouchableOpacity>
                 ) : null}
               </View>
 
-              <ThemedText style={[styles.fieldLabel, { color: textSecondary }]}>Vorschläge</ThemedText>
+              <ThemedText style={[styles.fieldLabel, { color: textSecondary }]}>
+                {t('form.suggestions')}
+              </ThemedText>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.suggestionRow}>
-                {MILESTONE_SUGGESTIONS.map((suggestion) => (
+                {MILESTONE_SUGGESTION_KEYS.map((suggestionKey) => {
+                  const suggestion = t(suggestionKey);
+                  return (
                   <TouchableOpacity
-                    key={suggestion}
+                    key={suggestionKey}
                     style={[styles.suggestionChip, { backgroundColor: chipBg, borderColor: inputBorder }]}
                     onPress={() => setTitle(suggestion)}
                   >
                     <ThemedText style={[styles.suggestionText, { color: textPrimary }]}>{suggestion}</ThemedText>
                   </TouchableOpacity>
-                ))}
+                  );
+                })}
               </ScrollView>
 
-              <ThemedText style={[styles.fieldLabel, { color: textSecondary }]}>Titel</ThemedText>
+              <ThemedText style={[styles.fieldLabel, { color: textSecondary }]}>{t('form.title')}</ThemedText>
               <TextInput
                 value={title}
                 onChangeText={setTitle}
-                placeholder="z. B. Erste Schritte"
+                placeholder={t('form.titlePlaceholder')}
                 placeholderTextColor={textSecondary}
                 style={[
                   styles.input,
@@ -931,7 +922,7 @@ export default function MilestonesScreen() {
                 ]}
               />
 
-              <ThemedText style={[styles.fieldLabel, { color: textSecondary }]}>Kategorie</ThemedText>
+              <ThemedText style={[styles.fieldLabel, { color: textSecondary }]}>{t('form.category')}</ThemedText>
               <View style={styles.categoryGrid}>
                 {CATEGORY_ORDER.map((value) => (
                   <TouchableOpacity
@@ -946,20 +937,20 @@ export default function MilestonesScreen() {
                     onPress={() => setCategory(value)}
                   >
                     <ThemedText style={[styles.categoryChipText, { color: textPrimary }]}>
-                      {MILESTONE_CATEGORY_LABELS[value]}
+                      {categoryLabel(value)}
                     </ThemedText>
                   </TouchableOpacity>
                 ))}
               </View>
 
-              <ThemedText style={[styles.fieldLabel, { color: textSecondary }]}>Datum</ThemedText>
+              <ThemedText style={[styles.fieldLabel, { color: textSecondary }]}>{t('form.date')}</ThemedText>
               <TouchableOpacity
                 style={[styles.dateButton, { backgroundColor: inputBg, borderColor: inputBorder }]}
                 onPress={() => setShowDatePicker(true)}
                 activeOpacity={0.85}
               >
                 <ThemedText style={[styles.dateButtonText, { color: dateButtonTextColor }]}>
-                  {eventDate.toLocaleDateString('de-DE')}
+                  {eventDate.toLocaleDateString(MILESTONE_DATE_LOCALE)}
                 </ThemedText>
                 <IconSymbol name="calendar" size={18} color={textSecondary} />
               </TouchableOpacity>
@@ -969,6 +960,7 @@ export default function MilestonesScreen() {
                   value={eventDate}
                   mode="date"
                   display="default"
+                  locale={MILESTONE_DATE_LOCALE}
                   themeVariant={isDark ? 'dark' : 'light'}
                   minimumDate={MIN_VALID_MILESTONE_DATE}
                   onChange={(_, pickedDate) => {
@@ -981,7 +973,10 @@ export default function MilestonesScreen() {
               {Platform.OS === 'ios' && (
                 <IOSBottomDatePicker
                   visible={showDatePicker}
-                  title="Datum wählen"
+                  title={t('form.chooseDate')}
+                  locale={MILESTONE_DATE_LOCALE}
+                  confirmLabel={t('common.done')}
+                  cancelLabel={t('common.cancel')}
                   value={eventDate}
                   mode="date"
                   minimumDate={MIN_VALID_MILESTONE_DATE}
@@ -995,11 +990,11 @@ export default function MilestonesScreen() {
                 />
               )}
 
-              <ThemedText style={[styles.fieldLabel, { color: textSecondary }]}>Notiz (optional)</ThemedText>
+              <ThemedText style={[styles.fieldLabel, { color: textSecondary }]}>{t('form.notes')}</ThemedText>
               <TextInput
                 value={notes}
                 onChangeText={setNotes}
-                placeholder="Kurz notieren, wie es war..."
+                placeholder={t('form.notesPlaceholder')}
                 placeholderTextColor={textSecondary}
                 multiline
                 style={[
@@ -1009,7 +1004,7 @@ export default function MilestonesScreen() {
                 ]}
               />
 
-              <ThemedText style={[styles.fieldLabel, { color: textSecondary }]}>Foto (optional)</ThemedText>
+              <ThemedText style={[styles.fieldLabel, { color: textSecondary }]}>{t('form.photo')}</ThemedText>
               <TouchableOpacity
                 style={[styles.imagePickerButton, { backgroundColor: chipBg, borderColor: inputBorder }]}
                 onPress={handlePickImage}
@@ -1017,7 +1012,7 @@ export default function MilestonesScreen() {
               >
                 <IconSymbol name="photo" size={18} color={textPrimary} />
                 <ThemedText style={[styles.imagePickerButtonText, { color: textPrimary }]}>
-                  {imageUri ? 'Bild ändern' : 'Bild auswählen'}
+                  {imageUri ? t('form.changeImage') : t('form.selectImage')}
                 </ThemedText>
               </TouchableOpacity>
 
@@ -1029,7 +1024,9 @@ export default function MilestonesScreen() {
                     onPress={() => setImageUri(null)}
                   >
                     <IconSymbol name="trash" size={14} color={isDark ? '#FF9A9A' : '#D45B5B'} />
-                    <ThemedText style={[styles.removeImageText, { color: textPrimary }]}>Bild entfernen</ThemedText>
+                    <ThemedText style={[styles.removeImageText, { color: textPrimary }]}>
+                      {t('form.removeImage')}
+                    </ThemedText>
                   </TouchableOpacity>
                 </View>
               ) : null}
@@ -1041,7 +1038,9 @@ export default function MilestonesScreen() {
                 onPress={handleCloseModal}
                 disabled={saving}
               >
-                <ThemedText style={[styles.actionButtonText, { color: textPrimary }]}>Abbrechen</ThemedText>
+                <ThemedText style={[styles.actionButtonText, { color: textPrimary }]}>
+                  {t('common.cancel')}
+                </ThemedText>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -1050,7 +1049,7 @@ export default function MilestonesScreen() {
                 disabled={saving || isReadOnlyPreviewMode}
               >
                 <ThemedText style={[styles.actionButtonText, styles.primaryActionText]}>
-                  {saving ? 'Speichern...' : 'Speichern'}
+                  {saving ? t('common.saving') : t('common.save')}
                 </ThemedText>
               </TouchableOpacity>
             </View>

@@ -12,9 +12,10 @@ import { invalidateSubscriptionTierCache } from '@/lib/entitlements';
 import { markPaywallShown } from '@/lib/paywall';
 import {
   DEFAULT_PAYWALL_CONTENT,
+  clonePaywallPlansContent,
   fetchPaywallContent,
   formatEuroAmount,
-  type PaywallContentSettings,
+  type PaywallPlansContent,
 } from '@/lib/paywallContent';
 import {
   DEFAULT_DISPLAY_LITE_MONTHLY_PRICE,
@@ -38,24 +39,9 @@ import {
 const APPLE_EULA_URL =
   'https://www.apple.com/legal/internet-services/itunes/dev/stdeula/';
 
-const parsePriceSetting = (value: string, fallback: number): number => {
-  const parsed = Number(value.replace(/\s+/g, '').replace('€', '').replace(',', '.'));
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-};
-
 const buildPlanPrices = (
-  settings: PaywallContentSettings,
   storePricing: RevenueCatPlanPricing,
 ): PaywallPlanPrices => {
-  const premiumMonthlyFallback = parsePriceSetting(
-    settings.monthlyPrice,
-    DEFAULT_DISPLAY_MONTHLY_PRICE,
-  );
-  const premiumYearlyFallback = parsePriceSetting(
-    settings.yearlyPrice,
-    DEFAULT_DISPLAY_YEARLY_PRICE,
-  );
-
   const resolve = (
     fromStore: { price: number; priceString: string } | undefined,
     fallbackAmount: number,
@@ -65,8 +51,14 @@ const buildPlanPrices = (
       : { amount: fallbackAmount, label: formatEuroAmount(fallbackAmount) };
 
   return {
-    premiumMonthly: resolve(storePricing.premiumMonthly, premiumMonthlyFallback),
-    premiumYearly: resolve(storePricing.premiumYearly, premiumYearlyFallback),
+    premiumMonthly: resolve(
+      storePricing.premiumMonthly,
+      DEFAULT_DISPLAY_MONTHLY_PRICE,
+    ),
+    premiumYearly: resolve(
+      storePricing.premiumYearly,
+      DEFAULT_DISPLAY_YEARLY_PRICE,
+    ),
     standardMonthly: resolve(
       storePricing.standardMonthly,
       DEFAULT_DISPLAY_STANDARD_MONTHLY_PRICE,
@@ -100,8 +92,8 @@ export default function PaywallScreen() {
     typeof next === 'string' && next.length > 0 ? next : '/(tabs)/home';
   const isAdminPreview = preview === 'admin';
   const isTrialExpired = trialExpired === '1';
-  const [contentSettings, setContentSettings] = useState<PaywallContentSettings>(
-    DEFAULT_PAYWALL_CONTENT.settings,
+  const [plansContent, setPlansContent] = useState<PaywallPlansContent>(() =>
+    clonePaywallPlansContent(DEFAULT_PAYWALL_CONTENT.plans),
   );
   const [storePricing, setStorePricing] = useState<RevenueCatPlanPricing>({});
   const [pendingAction, setPendingAction] = useState<
@@ -133,8 +125,8 @@ export default function PaywallScreen() {
   const visiblePurchaseError = purchaseError ?? revenueCatConfigurationIssue;
 
   const planPrices = useMemo(
-    () => buildPlanPrices(contentSettings, storePricing),
-    [contentSettings, storePricing],
+    () => buildPlanPrices(storePricing),
+    [storePricing],
   );
 
   useEffect(() => {
@@ -144,7 +136,7 @@ export default function PaywallScreen() {
       try {
         const record = await fetchPaywallContent();
         if (!cancelled) {
-          setContentSettings(record.content.settings);
+          setPlansContent(record.content.plans);
         }
       } catch (error) {
         console.error('Failed to load paywall content:', error);
@@ -304,6 +296,7 @@ export default function PaywallScreen() {
         options={{ headerShown: false, gestureEnabled: !isTrialExpired }}
       />
       <PaywallPlansExperience
+        content={plansContent}
         prices={planPrices}
         billingLabel={billingLabel}
         storeProvider={storeProvider}
