@@ -116,61 +116,166 @@ export const buildMilestonePhotobookHtml = ({
   const coverEntry = sortedEntries.find((entry) => Boolean(imageDataUris[entry.id]));
   const coverImageDataUri = coverEntry ? imageDataUris[coverEntry.id] : null;
 
-  const milestonePages = sortedEntries
-    .map((entry, index) => {
+  const layoutSequence = ['classic', 'split-left', 'banner', 'split-right', 'headline'] as const;
+
+  type PhotobookPage =
+    | { kind: 'single'; layout: (typeof layoutSequence)[number]; entry: BabyMilestoneEntry }
+    | { kind: 'duo'; entries: [BabyMilestoneEntry, BabyMilestoneEntry] };
+
+  const pages: PhotobookPage[] = [];
+  let singleLayoutIndex = 0;
+  for (let entryIndex = 0; entryIndex < sortedEntries.length; ) {
+    const entry = sortedEntries[entryIndex];
+    const nextEntry = sortedEntries[entryIndex + 1];
+    const wantsDuo = pages.length % 3 === 2;
+    if (wantsDuo && nextEntry && imageDataUris[entry.id] && imageDataUris[nextEntry.id]) {
+      pages.push({ kind: 'duo', entries: [entry, nextEntry] });
+      entryIndex += 2;
+    } else {
+      pages.push({
+        kind: 'single',
+        layout: layoutSequence[singleLayoutIndex % layoutSequence.length],
+        entry,
+      });
+      singleLayoutIndex += 1;
+      entryIndex += 1;
+    }
+  }
+
+  const buildDuoEntryHtml = (entry: BabyMilestoneEntry, position: 'first' | 'second') => {
+    const babyAge = formatBabyAgeAtMilestone(birthDate, entry.event_date);
+    const notes = entry.notes?.trim();
+    return `
+      <div class="duo-row duo-row-${position}">
+        <div class="duo-photo">
+          <div class="photo-frame"><img src="${imageDataUris[entry.id]}" alt="${escapeHtml(entry.title)}" /></div>
+        </div>
+        <div class="duo-caption">
+          <div class="eyebrow">ERINNERUNG</div>
+          <h2 class="duo-title">${escapeHtml(entry.title)}</h2>
+          <div class="duo-date">${escapeHtml(formatAlbumDate(entry.event_date))}</div>
+          ${babyAge ? `<div class="age-pill">${escapeHtml(babyAge)}</div>` : ''}
+          ${notes ? `<div class="duo-notes">${escapeHtml(notes)}</div>` : ''}
+        </div>
+      </div>
+    `;
+  };
+
+  const milestonePages = pages
+    .map((page, index) => {
+      const pageNumberHtml = `
+        <footer class="page-footer">
+          <span class="page-number">SEITE ${String(index + 1).padStart(2, '0')}</span>
+        </footer>
+      `;
+
+      if (page.kind === 'duo') {
+        return `
+          <section class="page milestone-page layout-duo">
+            <div class="album-binding"></div>
+            <div class="decoration decoration-top"></div>
+            <div class="decoration decoration-bottom"></div>
+            <div class="duo-heading">
+              <div class="eyebrow">ERINNERUNGEN VON ${escapeHtml(displayName.toUpperCase())}</div>
+            </div>
+            ${buildDuoEntryHtml(page.entries[0], 'first')}
+            <div class="duo-divider"><span></span><b>&#10022;</b><span></span></div>
+            ${buildDuoEntryHtml(page.entries[1], 'second')}
+            ${pageNumberHtml}
+          </section>
+        `;
+      }
+
+      const entry = page.entry;
       const imageDataUri = imageDataUris[entry.id];
       const babyAge = formatBabyAgeAtMilestone(birthDate, entry.event_date);
       const notes = entry.notes?.trim();
-      const titleClass = entry.title.length > 48
+      const layout = page.layout;
+      const isSplit = layout === 'split-left' || layout === 'split-right';
+      const [mediumTitleAt, smallTitleAt] = isSplit ? [20, 34] : [30, 48];
+      const titleClass = entry.title.length > smallTitleAt
         ? 'title-small'
-        : entry.title.length > 30
+        : entry.title.length > mediumTitleAt
           ? 'title-medium'
           : '';
       const longNoteClass = notes && notes.length > 240 ? 'has-long-note' : '';
       const noteClass = notes && notes.length > 340 ? 'notes notes-compact' : 'notes';
-      const pageStyle = `page-style-${(index % 4) + 1}`;
+
+      const headerHtml = `
+        <header class="milestone-header">
+          <div class="eyebrow">ERINNERUNG VON ${escapeHtml(displayName.toUpperCase())}</div>
+          <h1 class="milestone-title ${titleClass}">${escapeHtml(entry.title)}</h1>
+          <div class="title-flourish"><span></span><b>&#10022;</b><span></span></div>
+        </header>
+      `;
+
+      const photoHtml = `
+        <div class="photo-stage">
+          ${imageDataUri
+            ? `<div class="photo-frame"><img src="${imageDataUri}" alt="${escapeHtml(entry.title)}" /></div>`
+            : `<div class="photo-placeholder"><div class="placeholder-star">&#10022;</div><div>Ein besonderer Moment</div></div>`}
+        </div>
+      `;
+
+      const captionHtml = `
+        <div class="caption-card">
+          <div class="caption-date-row">
+            <div class="date">${escapeHtml(formatAlbumDate(entry.event_date))}</div>
+            ${babyAge ? `<div class="age-pill">${escapeHtml(babyAge)}</div>` : ''}
+          </div>
+          ${notes ? `<div class="${noteClass}">${escapeHtml(notes)}</div>` : '<div class="caption-line"></div>'}
+        </div>
+      `;
+
+      const memoryLinesHtml = (lineCount: number) => `
+        <div class="memory-lines">
+          <div class="memory-lines-heading"><span>FÜR EURE GEDANKEN</span><b>&#10022;</b></div>
+          ${'<div class="writing-line"></div>'.repeat(lineCount)}
+        </div>
+      `;
+
+      let bodyHtml: string;
+      switch (layout) {
+        case 'split-left':
+          bodyHtml = `
+            <div class="split-columns">
+              <div class="split-photo">${photoHtml}</div>
+              <div class="split-text">${headerHtml}${captionHtml}${memoryLinesHtml(5)}</div>
+            </div>
+          `;
+          break;
+        case 'split-right':
+          bodyHtml = `
+            <div class="split-columns">
+              <div class="split-text">${headerHtml}${captionHtml}${memoryLinesHtml(5)}</div>
+              <div class="split-photo">${photoHtml}</div>
+            </div>
+          `;
+          break;
+        case 'banner':
+          bodyHtml = `${photoHtml}${headerHtml}${captionHtml}${memoryLinesHtml(2)}`;
+          break;
+        case 'headline':
+          bodyHtml = `${headerHtml}${captionHtml}${memoryLinesHtml(2)}${photoHtml}`;
+          break;
+        default:
+          bodyHtml = `${headerHtml}${photoHtml}${captionHtml}${memoryLinesHtml(3)}`;
+          break;
+      }
 
       return `
-        <section class="page milestone-page ${pageStyle} ${longNoteClass}">
+        <section class="page milestone-page layout-${layout} ${longNoteClass}">
           <div class="album-binding"></div>
           <div class="decoration decoration-top"></div>
           <div class="decoration decoration-bottom"></div>
-          <header class="milestone-header">
-            <div class="eyebrow">ERINNERUNG VON ${escapeHtml(displayName.toUpperCase())}</div>
-            <h1 class="milestone-title ${titleClass}">${escapeHtml(entry.title)}</h1>
-            <div class="title-flourish"><span></span><b>&#10022;</b><span></span></div>
-          </header>
-
-          <div class="photo-stage">
-            ${imageDataUri
-              ? `<div class="photo-frame"><img src="${imageDataUri}" alt="${escapeHtml(entry.title)}" /></div>`
-              : `<div class="photo-placeholder"><div class="placeholder-star">&#10022;</div><div>Ein besonderer Moment</div></div>`}
-          </div>
-
-          <div class="caption-card">
-            <div class="caption-date-row">
-              <div class="date">${escapeHtml(formatAlbumDate(entry.event_date))}</div>
-              ${babyAge ? `<div class="age-pill">${escapeHtml(babyAge)}</div>` : ''}
-            </div>
-            ${notes ? `<div class="${noteClass}">${escapeHtml(notes)}</div>` : '<div class="caption-line"></div>'}
-          </div>
-
-          <div class="memory-lines">
-            <div class="memory-lines-heading"><span>FÜR EURE GEDANKEN</span><b>&#10022;</b></div>
-            <div class="writing-line"></div>
-            <div class="writing-line"></div>
-            <div class="writing-line"></div>
-          </div>
-
-          <footer class="page-footer">
-            <span class="page-number">SEITE ${String(index + 1).padStart(2, '0')}</span>
-          </footer>
+          ${bodyHtml}
+          ${pageNumberHtml}
         </section>
       `;
     })
     .join('');
 
-  return `<!DOCTYPE html>
+  const html = `<!DOCTYPE html>
     <html lang="de">
       <head>
         <meta charset="utf-8" />
@@ -251,7 +356,7 @@ export const buildMilestonePhotobookHtml = ({
           .cover-photo-wrap {
             position: relative;
             z-index: 2;
-            height: 126mm;
+            height: 136mm;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -272,8 +377,8 @@ export const buildMilestonePhotobookHtml = ({
             display: block;
             width: auto;
             height: auto;
-            max-width: 140mm;
-            max-height: 105mm;
+            max-width: 148mm;
+            max-height: 115mm;
             object-fit: contain;
           }
           .cover-photo-empty { width: 126mm; height: 108mm; padding: 7mm; }
@@ -324,113 +429,8 @@ export const buildMilestonePhotobookHtml = ({
           .milestone-page {
             display: flex;
             flex-direction: column;
-            padding: 31mm 18mm 15mm 23mm;
+            padding: 28mm 18mm 15mm 23mm;
           }
-          .page-style-2 {
-            background: linear-gradient(150deg, #fcf8fb 0%, #f3e8f2 56%, #f7e9df 100%);
-          }
-          .page-style-2 .decoration-top {
-            right: auto;
-            left: -42mm;
-            top: -44mm;
-            background: #efd9dd;
-          }
-          .page-style-2 .decoration-bottom {
-            left: auto;
-            right: -27mm;
-            bottom: -38mm;
-            background: #dfd7eb;
-          }
-          .page-style-2 .milestone-header { text-align: center; }
-          .page-style-2 .title-flourish { margin-left: auto; margin-right: auto; }
-          .page-style-2 .photo-frame { transform: rotate(-0.9deg); }
-          .page-style-2 .photo-frame::before {
-            left: 23%;
-            transform: translateX(-50%) rotate(-5deg);
-            background: rgba(216, 193, 211, 0.78);
-          }
-          .page-style-2 .caption-card {
-            margin: 0 4mm;
-            border-left: 0;
-            border-top: 2mm solid #cbb5cf;
-            text-align: center;
-          }
-          .page-style-2 .caption-date-row { justify-content: center; }
-          .page-style-2 .caption-line { margin-left: auto; margin-right: auto; }
-          .page-style-3 {
-            background: linear-gradient(145deg, #fffaf2 0%, #f5e7d4 62%, #edddce 100%);
-          }
-          .page-style-3 .decoration-top {
-            width: 70mm;
-            height: 58mm;
-            right: -28mm;
-            top: -25mm;
-            border-radius: 0 0 0 58mm;
-            background: #e7cfc2;
-          }
-          .page-style-3 .decoration-bottom {
-            width: 82mm;
-            height: 82mm;
-            left: -49mm;
-            bottom: -44mm;
-            background: #e9d6b9;
-          }
-          .page-style-3 .milestone-header { text-align: right; }
-          .page-style-3 .title-flourish { margin-left: auto; }
-          .page-style-3 .photo-stage { justify-content: flex-start; padding-left: 7mm; }
-          .page-style-3 .photo-frame {
-            transform: rotate(0.8deg);
-            box-shadow: 2mm 3mm 8mm rgba(70, 45, 34, 0.15);
-          }
-          .page-style-3 .photo-frame::before {
-            left: 77%;
-            transform: translateX(-50%) rotate(4deg);
-            background: rgba(225, 198, 159, 0.78);
-          }
-          .page-style-3 .caption-card {
-            border-left-color: #cba986;
-            border-radius: 0 4mm 4mm 0;
-          }
-          .page-style-3 .writing-line { border-bottom-style: dashed; }
-          .page-style-4 {
-            background: linear-gradient(140deg, #fffaf7 0%, #eee7f2 57%, #f6e5df 100%);
-          }
-          .page-style-4 .decoration-top {
-            width: 62mm;
-            height: 62mm;
-            right: -24mm;
-            top: -25mm;
-            border-radius: 14mm;
-            transform: rotate(14deg);
-            background: #dfd5e9;
-          }
-          .page-style-4 .decoration-bottom {
-            width: 58mm;
-            height: 58mm;
-            left: -24mm;
-            bottom: -28mm;
-            border-radius: 17mm;
-            transform: rotate(-12deg);
-            background: #edced0;
-          }
-          .page-style-4 .photo-stage { justify-content: flex-end; padding-right: 5mm; }
-          .page-style-4 .photo-frame {
-            padding: 5mm;
-            border: 1px solid rgba(111, 83, 103, 0.18);
-            border-radius: 5mm;
-            background: #fdfafd;
-            box-shadow: 0 3mm 9mm rgba(70, 45, 58, 0.15);
-          }
-          .page-style-4 .photo-frame::before { display: none; }
-          .page-style-4 .photo-frame img { border-radius: 2.5mm; }
-          .page-style-4 .caption-card {
-            border-left: 0;
-            border-right: 2.5mm solid #bda9ca;
-            border-radius: 4mm 0 0 4mm;
-            background: rgba(250, 247, 252, 0.90);
-          }
-          .page-style-4 .age-pill { background: #e9e0ee; }
-          .page-style-4 .writing-line { border-bottom-style: dotted; }
           .milestone-header { flex: 0 0 auto; position: relative; z-index: 1; }
           .eyebrow { font-size: 7.5pt; line-height: 1.2; font-weight: 800; letter-spacing: 2.3pt; color: #a27663; }
           .milestone-title {
@@ -488,10 +488,10 @@ export const buildMilestonePhotobookHtml = ({
             width: auto;
             height: auto;
             max-width: 161mm;
-            max-height: 121mm;
+            max-height: 131mm;
             object-fit: contain;
           }
-          .has-long-note .photo-frame img { max-height: 101mm; }
+          .has-long-note .photo-frame img { max-height: 108mm; }
           .photo-placeholder {
             width: 100%;
             height: 104mm;
@@ -583,6 +583,280 @@ export const buildMilestonePhotobookHtml = ({
             align-items: center;
           }
           .page-number { font-size: 7.5pt; font-weight: 800; letter-spacing: 1.7pt; color: #ac9286; }
+
+          /* Layout: split (Foto links/rechts, Text daneben) */
+          .split-columns {
+            position: relative;
+            z-index: 1;
+            flex: 1 1 auto;
+            min-height: 0;
+            display: flex;
+            align-items: stretch;
+            gap: 7mm;
+          }
+          .split-photo {
+            flex: 1.35;
+            min-width: 0;
+            display: flex;
+          }
+          .split-photo .photo-stage { flex: 1; padding: 2mm 0; }
+          .split-photo .photo-frame, .layout-banner .photo-frame { max-height: none; }
+          .split-photo .photo-frame img { max-width: 89mm; max-height: 178mm; }
+          .split-photo .photo-placeholder { height: 100%; max-height: 170mm; font-size: 10.5pt; }
+          .split-text {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 6mm;
+          }
+          .split-text .milestone-title { font-size: 23pt; }
+          .split-text .milestone-title.title-medium { font-size: 20pt; }
+          .split-text .milestone-title.title-small { font-size: 17pt; }
+          .split-text .caption-date-row {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 2.5mm;
+          }
+          .split-text .date { font-size: 14pt; }
+          .split-text .age-pill { text-align: left; }
+          .split-text .memory-lines { margin-top: 2mm; padding: 0; }
+
+          .layout-split-left {
+            background: linear-gradient(150deg, #fcf8fb 0%, #f3e8f2 56%, #f7e9df 100%);
+          }
+          .layout-split-left .decoration-top {
+            right: auto;
+            left: -42mm;
+            top: -44mm;
+            background: #efd9dd;
+          }
+          .layout-split-left .decoration-bottom {
+            left: auto;
+            right: -27mm;
+            bottom: -38mm;
+            background: #dfd7eb;
+          }
+          .layout-split-left .photo-frame { transform: rotate(-1deg); }
+          .layout-split-left .photo-frame::before {
+            left: 30%;
+            transform: translateX(-50%) rotate(-5deg);
+            background: rgba(216, 193, 211, 0.78);
+          }
+          .layout-split-left .caption-card { border-left-color: #cbb5cf; }
+          .layout-split-left .age-pill { background: #ecdfee; }
+
+          .layout-split-right {
+            background: linear-gradient(140deg, #fffaf7 0%, #eee7f2 57%, #f6e5df 100%);
+          }
+          .layout-split-right .decoration-top {
+            width: 62mm;
+            height: 62mm;
+            right: -24mm;
+            top: -25mm;
+            border-radius: 14mm;
+            transform: rotate(14deg);
+            background: #dfd5e9;
+          }
+          .layout-split-right .decoration-bottom {
+            width: 58mm;
+            height: 58mm;
+            left: -24mm;
+            bottom: -28mm;
+            border-radius: 17mm;
+            transform: rotate(-12deg);
+            background: #edced0;
+          }
+          .layout-split-right .split-text { text-align: right; }
+          .layout-split-right .title-flourish { margin-left: auto; }
+          .layout-split-right .split-text .caption-date-row { align-items: flex-end; }
+          .layout-split-right .caption-card {
+            border-left: 0;
+            border-right: 2.5mm solid #bda9ca;
+            border-radius: 4mm 0 0 4mm;
+            background: rgba(250, 247, 252, 0.90);
+          }
+          .layout-split-right .caption-line { margin-left: auto; }
+          .layout-split-right .photo-frame {
+            transform: rotate(0.9deg);
+            padding: 5mm;
+            border: 1px solid rgba(111, 83, 103, 0.18);
+            border-radius: 5mm;
+            background: #fdfafd;
+            box-shadow: 0 3mm 9mm rgba(70, 45, 58, 0.15);
+          }
+          .layout-split-right .photo-frame::before { display: none; }
+          .layout-split-right .photo-frame img { border-radius: 2.5mm; }
+          .layout-split-right .age-pill { background: #e9e0ee; }
+          .layout-split-right .writing-line { border-bottom-style: dotted; }
+
+          /* Layout: banner (Foto oben, Text unten) */
+          .layout-banner {
+            background: linear-gradient(145deg, #fffaf2 0%, #f5e7d4 62%, #edddce 100%);
+            padding-top: 22mm;
+          }
+          .layout-banner .decoration-top {
+            width: 70mm;
+            height: 58mm;
+            right: -28mm;
+            top: -25mm;
+            border-radius: 0 0 0 58mm;
+            background: #e7cfc2;
+          }
+          .layout-banner .decoration-bottom {
+            width: 82mm;
+            height: 82mm;
+            left: -49mm;
+            bottom: -44mm;
+            background: #e9d6b9;
+          }
+          .layout-banner .photo-stage { padding: 0 0 8mm; }
+          .layout-banner .photo-frame {
+            transform: rotate(0.8deg);
+            box-shadow: 2mm 3mm 8mm rgba(70, 45, 34, 0.15);
+          }
+          .layout-banner .photo-frame img { max-height: 141mm; }
+          .layout-banner.has-long-note .photo-frame img { max-height: 115mm; }
+          .layout-banner .photo-frame::before {
+            left: 74%;
+            transform: translateX(-50%) rotate(4deg);
+            background: rgba(225, 198, 159, 0.78);
+          }
+          .layout-banner .milestone-header { text-align: center; }
+          .layout-banner .title-flourish { margin-left: auto; margin-right: auto; }
+          .layout-banner .caption-card {
+            margin: 5mm 6mm 0;
+            border-left: 0;
+            border-top: 2mm solid #d8bb96;
+            text-align: center;
+          }
+          .layout-banner .caption-date-row { justify-content: center; flex-wrap: wrap; }
+          .layout-banner .caption-line { margin-left: auto; margin-right: auto; }
+          .layout-banner .age-pill { background: #efe1c9; }
+          .layout-banner .writing-line { border-bottom-style: dashed; }
+
+          /* Layout: headline (Text oben, Foto unten) */
+          .layout-headline {
+            background: linear-gradient(160deg, #fdf9f3 0%, #f1e9e0 52%, #e9e4ef 100%);
+          }
+          .layout-headline .decoration-top {
+            width: 92mm;
+            height: 92mm;
+            right: -44mm;
+            top: -48mm;
+            background: #e3dcec;
+          }
+          .layout-headline .decoration-bottom {
+            width: 60mm;
+            height: 60mm;
+            left: -26mm;
+            bottom: -30mm;
+            background: #ead3c4;
+          }
+          .layout-headline .milestone-title { font-size: 33pt; }
+          .layout-headline .milestone-title.title-medium { font-size: 27pt; }
+          .layout-headline .milestone-title.title-small { font-size: 22pt; }
+          .layout-headline .caption-card {
+            margin-top: 6mm;
+            border-left-color: #b9a8c9;
+            background: rgba(252, 250, 253, 0.85);
+          }
+          .layout-headline .memory-lines { margin-top: 6mm; }
+          .layout-headline .photo-stage { padding: 7mm 0 2mm; }
+          .layout-headline .photo-frame { transform: rotate(-0.7deg); }
+          .layout-headline .photo-frame::before { background: rgba(206, 194, 222, 0.78); }
+          .layout-headline .photo-frame img { max-height: 127mm; }
+          .layout-headline.has-long-note .photo-frame img { max-height: 102mm; }
+
+          /* Layout: duo (zwei Erinnerungen auf einer Seite) */
+          .layout-duo {
+            background: linear-gradient(155deg, #fdfaf4 0%, #f2ebdd 50%, #e8ecdf 100%);
+            padding-top: 20mm;
+          }
+          .layout-duo .decoration-top {
+            width: 74mm;
+            height: 74mm;
+            right: -33mm;
+            top: -35mm;
+            background: #dfe6d4;
+          }
+          .layout-duo .decoration-bottom {
+            width: 64mm;
+            height: 64mm;
+            left: -29mm;
+            bottom: -31mm;
+            background: #ecdcc8;
+          }
+          .duo-heading {
+            position: relative;
+            z-index: 1;
+            flex: 0 0 auto;
+            padding-bottom: 4mm;
+            text-align: center;
+          }
+          .duo-row {
+            position: relative;
+            z-index: 1;
+            flex: 1 1 0;
+            min-height: 0;
+            display: flex;
+            align-items: center;
+            gap: 8mm;
+          }
+          .duo-row-second { flex-direction: row-reverse; }
+          .duo-photo {
+            flex: 1.25;
+            min-width: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }
+          .duo-row-first .duo-photo .photo-frame { transform: rotate(-1.3deg); }
+          .duo-row-second .duo-photo .photo-frame { transform: rotate(1.1deg); }
+          .duo-row-second .duo-photo .photo-frame::before { background: rgba(203, 214, 183, 0.82); }
+          .duo-photo .photo-frame img { max-width: 88mm; max-height: 100mm; }
+          .duo-caption {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 2.5mm;
+          }
+          .duo-row-second .duo-caption { align-items: flex-end; text-align: right; }
+          .duo-caption .age-pill { align-self: flex-start; }
+          .duo-row-second .duo-caption .age-pill { align-self: flex-end; }
+          .duo-title {
+            margin: 0;
+            overflow-wrap: anywhere;
+            hyphens: auto;
+            font: 700 17pt/1.15 Georgia, "Times New Roman", serif;
+            letter-spacing: -0.2pt;
+          }
+          .duo-date { font: 700 11pt/1.3 Georgia, "Times New Roman", serif; color: #6d5346; }
+          .duo-notes {
+            display: -webkit-box;
+            -webkit-box-orient: vertical;
+            -webkit-line-clamp: 5;
+            overflow: hidden;
+            overflow-wrap: anywhere;
+            hyphens: auto;
+            font-size: 9.5pt;
+            line-height: 1.4;
+            color: #765d52;
+          }
+          .duo-divider {
+            position: relative;
+            z-index: 1;
+            flex: 0 0 auto;
+            margin: 3mm 10mm;
+            display: flex;
+            align-items: center;
+            gap: 3mm;
+            color: #a2926c;
+          }
+          .duo-divider span { flex: 1; height: 1px; background: #d7cbb2; }
+          .duo-divider b { font-size: 9pt; font-weight: 400; }
         </style>
       </head>
       <body>
@@ -611,6 +885,8 @@ export const buildMilestonePhotobookHtml = ({
         ${milestonePages}
       </body>
     </html>`;
+
+  return { html, pageCount: pages.length + 1 };
 };
 
 export const generateMilestonePhotobookPdf = async ({
@@ -651,7 +927,7 @@ export const generateMilestonePhotobookPdf = async ({
       }
     }
 
-    const html = buildMilestonePhotobookHtml({
+    const { html, pageCount } = buildMilestonePhotobookHtml({
       entries,
       babyName,
       birthDate,
@@ -669,7 +945,7 @@ export const generateMilestonePhotobookPdf = async ({
 
     return {
       uri: finalUri,
-      pageCount: entries.length + 1,
+      pageCount,
       warnings,
     };
   } finally {
