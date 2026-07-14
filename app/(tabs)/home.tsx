@@ -197,15 +197,7 @@ const HOME_QUICK_ACCESS_CARDS: HomeQuickAccessCardConfig[] = [
     cardBackgroundColor: 'rgba(200, 220, 255, 0.6)',
     iconBackgroundColor: 'rgba(150, 180, 240, 0.9)',
   },
-  {
-    id: 'period-tracker',
-    title: 'Period Tracker',
-    description: 'Zyklus im Blick behalten',
-    iconName: 'drop.fill',
-    destination: '/(tabs)/period-tracker',
-    cardBackgroundColor: 'rgba(255, 215, 226, 0.65)',
-    iconBackgroundColor: 'rgba(232, 125, 153, 0.9)',
-  },
+  // Period-Tracker-Kachel vorerst ausgeblendet (Screen bleibt erhalten).
   {
     id: 'milestones',
     title: 'Meilensteine',
