@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   FlatList,
   Image,
@@ -48,6 +49,7 @@ import {
   MILESTONE_CATEGORY_LABELS,
   updateMilestoneEntry,
 } from '@/lib/milestones';
+import { generateMilestonePhotobookPdf } from '@/lib/milestonePhotobookPdf';
 
 type CategoryFilter = 'all' | MilestoneCategory;
 
@@ -157,8 +159,11 @@ export default function MilestonesScreen() {
   const [editingEntry, setEditingEntry] = useState<BabyMilestoneEntry | null>(null);
   const [previewEntry, setPreviewEntry] = useState<BabyMilestoneEntry | null>(null);
   const [shareEntry, setShareEntry] = useState<BabyMilestoneEntry | null>(null);
+  const [imageAspectRatios, setImageAspectRatios] = useState<Record<string, number>>({});
+  const [sharePhotoAreaSize, setSharePhotoAreaSize] = useState({ width: 0, height: 0 });
   const [shareImageReady, setShareImageReady] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [exportingPhotobook, setExportingPhotobook] = useState(false);
 
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState<MilestoneCategory>('motorik');
@@ -299,8 +304,7 @@ export default function MilestonesScreen() {
     await loadEntries();
   };
 
-  const handlePickImage = async () => {
-    if (!ensureWritableInCurrentMode()) return;
+  const pickImageFromLibrary = async (allowsEditing: boolean) => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
       Alert.alert('Berechtigung benötigt', 'Bitte erlaube den Zugriff auf deine Fotos.');
@@ -308,7 +312,7 @@ export default function MilestonesScreen() {
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      allowsEditing: false,
+      allowsEditing,
       quality: 1,
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
     });
@@ -316,6 +320,26 @@ export default function MilestonesScreen() {
     if (!result.canceled && result.assets.length > 0) {
       setImageUri(result.assets[0].uri);
     }
+  };
+
+  const handlePickImage = () => {
+    if (!ensureWritableInCurrentMode()) return;
+
+    Alert.alert(
+      imageUri ? 'Foto ändern' : 'Foto auswählen',
+      'Möchtest du das vollständige Bild verwenden oder es vorher zuschneiden?',
+      [
+        {
+          text: 'Original verwenden',
+          onPress: () => void pickImageFromLibrary(false),
+        },
+        {
+          text: 'Quadratisch zuschneiden',
+          onPress: () => void pickImageFromLibrary(true),
+        },
+        { text: 'Abbrechen', style: 'cancel' },
+      ]
+    );
   };
 
   const handleDelete = (entry: BabyMilestoneEntry) => {
@@ -345,13 +369,25 @@ export default function MilestonesScreen() {
   };
 
   const openShareCard = (entry: BabyMilestoneEntry) => {
+    setSharePhotoAreaSize({ width: 0, height: 0 });
     setShareImageReady(!entry.image_url);
     setShareEntry(entry);
   };
 
+  const rememberImageAspectRatio = useCallback((entryId: string, width?: number, height?: number) => {
+    if (!width || !height || width <= 0 || height <= 0) return;
+
+    const aspectRatio = width / height;
+    setImageAspectRatios((currentRatios) => {
+      if (Math.abs((currentRatios[entryId] ?? 0) - aspectRatio) < 0.001) return currentRatios;
+      return { ...currentRatios, [entryId]: aspectRatio };
+    });
+  }, []);
+
   const closeShareCard = () => {
     if (sharing) return;
     setShareEntry(null);
+    setSharePhotoAreaSize({ width: 0, height: 0 });
     setShareImageReady(false);
   };
 
@@ -384,9 +420,74 @@ export default function MilestonesScreen() {
     }
   };
 
+  const handleExportPhotobook = async () => {
+    if (!activeBabyId || exportingPhotobook) return;
+
+    setExportingPhotobook(true);
+    try {
+      const { data, error } = await getMilestoneEntries(activeBabyId);
+      if (error) throw error;
+      if (!data || data.length === 0) {
+        Alert.alert('Noch keine Erinnerungen', 'Füge zuerst mindestens einen Meilenstein zum Fotobuch hinzu.');
+        return;
+      }
+
+      const result = await generateMilestonePhotobookPdf({
+        entries: data,
+        babyName: activeBaby?.name,
+        birthDate: activeBaby?.birth_date,
+      });
+
+      if (!(await Sharing.isAvailableAsync())) {
+        Alert.alert('Teilen nicht verfügbar', 'Das PDF wurde erstellt, kann auf diesem Gerät aber nicht geteilt werden.');
+        return;
+      }
+
+      await Sharing.shareAsync(result.uri, {
+        mimeType: 'application/pdf',
+        dialogTitle: 'LottiBaby Fotobuch speichern',
+        UTI: 'com.adobe.pdf',
+      });
+
+      if (result.warnings.length > 0) {
+        Alert.alert(
+          'Fotobuch erstellt',
+          `${result.pageCount} Seiten wurden erstellt. ${result.warnings.length} Foto${result.warnings.length === 1 ? '' : 's'} konnte${result.warnings.length === 1 ? '' : 'n'} nicht geladen werden.`
+        );
+      }
+    } catch (error) {
+      console.error('Failed to export milestone photobook:', error);
+      Alert.alert('PDF nicht erstellt', 'Das Fotobuch konnte nicht erstellt werden. Bitte versuche es erneut.');
+    } finally {
+      setExportingPhotobook(false);
+    }
+  };
+
   const headerSubtitle = isReadOnlyPreviewMode
     ? 'Vorschau-Modus: nur ansehen'
     : 'Erste Male und besondere Momente';
+  const shareImageAspectRatio = shareEntry
+    ? (imageAspectRatios[shareEntry.id] ?? 4 / 3)
+    : 4 / 3;
+  const sharePhotoFrameSize = (() => {
+    if (sharePhotoAreaSize.width <= 0 || sharePhotoAreaSize.height <= 0) return null;
+
+    const frameInset = 18;
+    const maxImageWidth = Math.max(1, sharePhotoAreaSize.width - frameInset);
+    const maxImageHeight = Math.max(1, sharePhotoAreaSize.height - frameInset);
+    let imageWidth = maxImageWidth;
+    let imageHeight = imageWidth / shareImageAspectRatio;
+
+    if (imageHeight > maxImageHeight) {
+      imageHeight = maxImageHeight;
+      imageWidth = imageHeight * shareImageAspectRatio;
+    }
+
+    return {
+      width: imageWidth + frameInset,
+      height: imageHeight + frameInset,
+    };
+  })();
 
   return (
     <ThemedBackground style={styles.background}>
@@ -428,6 +529,38 @@ export default function MilestonesScreen() {
               </TouchableOpacity>
             ))}
           </View>
+
+          <TouchableOpacity
+            style={[
+              styles.pdfExportButton,
+              { backgroundColor: chipBg, borderColor: cardBorder },
+              exportingPhotobook && styles.actionDisabled,
+            ]}
+            onPress={handleExportPhotobook}
+            disabled={exportingPhotobook || !activeBabyId}
+            activeOpacity={0.82}
+            accessibilityRole="button"
+            accessibilityLabel="Fotobuch als PDF exportieren"
+          >
+            <View style={[styles.pdfExportIcon, { backgroundColor: selectedChipBg }]}>
+              {exportingPhotobook ? (
+                <ActivityIndicator size="small" color={textPrimary} />
+              ) : (
+                <IconSymbol name="arrow.down.doc" size={19} color={textPrimary} />
+              )}
+            </View>
+            <View style={styles.pdfExportCopy}>
+              <ThemedText style={[styles.pdfExportTitle, { color: textPrimary }]}>
+                {exportingPhotobook ? 'Fotobuch wird erstellt…' : 'Fotobuch als PDF'}
+              </ThemedText>
+              <ThemedText style={[styles.pdfExportSubtitle, { color: textSecondary }]}>
+                Alle Erinnerungen gestaltet exportieren
+              </ThemedText>
+            </View>
+            {!exportingPhotobook ? (
+              <IconSymbol name="chevron.right" size={18} color={textSecondary} />
+            ) : null}
+          </TouchableOpacity>
 
           <FlatList
             data={entries}
@@ -484,7 +617,14 @@ export default function MilestonesScreen() {
                     accessibilityRole="button"
                     accessibilityLabel={`${item.title} in Vollbild anzeigen`}
                   >
-                    <Image source={{ uri: item.image_url }} style={styles.cardImage} resizeMode="cover" />
+                    <Image
+                      source={{ uri: item.image_url }}
+                      style={[styles.cardImage, { aspectRatio: imageAspectRatios[item.id] ?? 4 / 3 }]}
+                      resizeMode="cover"
+                      onLoad={({ nativeEvent }) =>
+                        rememberImageAspectRatio(item.id, nativeEvent.source.width, nativeEvent.source.height)
+                      }
+                    />
                     <View style={styles.photoZoomHint} pointerEvents="none">
                       <IconSymbol name="magnifyingglass" size={14} color="#FFFFFF" />
                     </View>
@@ -644,20 +784,47 @@ export default function MilestonesScreen() {
                   {shareEntry?.title}
                 </ThemedText>
 
-                <View style={styles.shareCardPhotoMat}>
+                <View
+                  style={styles.shareCardPhotoArea}
+                  onLayout={({ nativeEvent }) => {
+                    const { width, height } = nativeEvent.layout;
+                    setSharePhotoAreaSize((currentSize) =>
+                      Math.abs(currentSize.width - width) < 0.5 &&
+                      Math.abs(currentSize.height - height) < 0.5
+                        ? currentSize
+                        : { width, height }
+                    );
+                  }}
+                >
                   {shareEntry?.image_url ? (
-                    <Image
-                      source={{ uri: shareEntry.image_url }}
-                      style={styles.shareCardImage}
-                      resizeMode="contain"
-                      onLoadEnd={() => setShareImageReady(true)}
-                    />
+                    <View
+                      style={[
+                        styles.shareCardPhotoMat,
+                        sharePhotoFrameSize ?? { width: '100%', aspectRatio: shareImageAspectRatio },
+                      ]}
+                    >
+                      <Image
+                        source={{ uri: shareEntry.image_url }}
+                        style={styles.shareCardImage}
+                        resizeMode="contain"
+                        onLoad={({ nativeEvent }) =>
+                          rememberImageAspectRatio(
+                            shareEntry.id,
+                            nativeEvent.source.width,
+                            nativeEvent.source.height
+                          )
+                        }
+                        onLoadEnd={() => setShareImageReady(true)}
+                      />
+                    </View>
                   ) : (
-                    <View style={styles.shareCardPlaceholder}>
-                      <IconSymbol name="sparkles" size={32} color="#9A7665" />
-                      <ThemedText adaptive={false} style={styles.shareCardPlaceholderText}>
-                        Ein besonderer Moment
-                      </ThemedText>
+                    <View style={[styles.shareCardPhotoMat, styles.shareCardEmptyPhotoMat]}>
+                      <View style={styles.shareCardPlaceholder}>
+                        <IconSymbol name="sparkles" size={32} color="#9A7665" />
+                        <ThemedText adaptive={false} style={styles.shareCardPlaceholderText}>
+                          Ein besonderer Moment
+                        </ThemedText>
+                      </View>
                     </View>
                   )}
                 </View>
@@ -950,6 +1117,40 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     fontWeight: '700',
   },
+  pdfExportButton: {
+    minHeight: 58,
+    marginTop: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 17,
+    borderCurve: 'continuous',
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 11,
+  },
+  pdfExportIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    borderCurve: 'continuous',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pdfExportCopy: {
+    flex: 1,
+    gap: 1,
+  },
+  pdfExportTitle: {
+    fontSize: 14,
+    lineHeight: 19,
+    fontWeight: '800',
+  },
+  pdfExportSubtitle: {
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '500',
+  },
   listContent: {
     paddingTop: 14,
     paddingBottom: 112,
@@ -1048,7 +1249,6 @@ const styles = StyleSheet.create({
   },
   cardImage: {
     width: '100%',
-    aspectRatio: 4 / 3,
     borderRadius: 2,
   },
   photoZoomHint: {
@@ -1197,26 +1397,34 @@ const styles = StyleSheet.create({
   },
   shareCardTitle: {
     color: '#5D4033',
-    fontSize: 27,
-    lineHeight: 32,
+    fontSize: 25,
+    lineHeight: 29,
     fontWeight: '700',
     fontFamily: Platform.select({ ios: 'Georgia', android: 'serif', default: 'serif' }),
     paddingTop: 5,
-    paddingBottom: 12,
+    paddingBottom: 10,
+  },
+  shareCardPhotoArea: {
+    flex: 1,
+    minHeight: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   shareCardPhotoMat: {
-    flex: 1,
-    minHeight: 150,
+    overflow: 'hidden',
     padding: 9,
     borderRadius: 4,
     borderCurve: 'continuous',
     backgroundColor: '#FFFDFC',
     boxShadow: '0 4px 12px rgba(70,45,34,0.13)',
   },
+  shareCardEmptyPhotoMat: {
+    width: '100%',
+    height: '100%',
+  },
   shareCardImage: {
     width: '100%',
     height: '100%',
-    backgroundColor: '#EEE7E1',
   },
   shareCardPlaceholder: {
     flex: 1,
