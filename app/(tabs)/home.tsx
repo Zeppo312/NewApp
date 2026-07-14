@@ -1,20 +1,25 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, Text, SafeAreaView, StatusBar, Image, ActivityIndicator, RefreshControl, Platform, Alert } from 'react-native';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Animated, Easing, StyleSheet, ScrollView, View, TouchableOpacity, Text, SafeAreaView, StatusBar, Image, ActivityIndicator, RefreshControl, Alert, Platform, StyleProp, ViewStyle } from 'react-native';
 import { useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/contexts/AuthContext';
-import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { TablerIcon } from '@/components/ui/TablerIcon';
-import { getBabyInfo, getDiaryEntries, getCurrentPhase, getPhaseProgress, getMilestonesByPhase, getDailyEntries } from '@/lib/baby';
-import { supabase } from '@/lib/supabase';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Canvas, RoundedRect, LinearGradient as SkiaLinearGradient, RadialGradient, Circle, vec } from '@shopify/react-native-skia';
+import { getBabyInfo, getDiaryEntries, getCurrentPhase, getPhaseProgress, getMilestonesByPhase } from '@/lib/baby';
+import { useActiveBaby } from '@/contexts/ActiveBabyContext';
+import { supabase, addBabyCareEntry } from '@/lib/supabase';
+import { getRecommendations, LottiRecommendation } from '@/lib/supabase/recommendations';
 import { BlurView } from 'expo-blur';
 import ActivityInputModal from '@/components/ActivityInputModal';
 import SleepQuickAddModal, { SleepQuickEntry } from '@/components/SleepQuickAddModal';
+import BabySwitcherButton from '@/components/BabySwitcherButton';
+import { loadCachedHomeData, cacheHomeData, isCacheFresh } from '@/lib/homeCache';
 
 // Tägliche Tipps für Mamas
 const dailyTips = [
@@ -30,12 +35,223 @@ const dailyTips = [
   "Vergiss nicht zu essen – deine Energie ist wichtig für dich und dein Baby."
 ];
 
+function GlassBorderGlint({ radius = 30 }: { radius?: number }) {
+  const anim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(anim, {
+          toValue: 1,
+          duration: 4200,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(anim, {
+          toValue: 0,
+          duration: 4200,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    animation.start();
+    return () => animation.stop();
+  }, [anim]);
+
+  const translateX = anim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-120, 120],
+  });
+
+  const translateY = anim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [6, -6],
+  });
+
+  return (
+    <View
+      pointerEvents="none"
+      style={[
+        StyleSheet.absoluteFill,
+        { borderRadius: radius, overflow: 'hidden' },
+      ]}
+    >
+      <Animated.View
+        style={{
+          position: 'absolute',
+          top: 2,
+          left: -140,
+          width: 220,
+          height: 8,
+          opacity: 0.65,
+          transform: [{ translateX }, { translateY }, { rotate: '-10deg' }],
+        }}
+      >
+        <LinearGradient
+          colors={[
+            'rgba(255,255,255,0)',
+            'rgba(255,255,255,0.6)',
+            'rgba(255,255,255,0)',
+          ]}
+          start={{ x: 0, y: 0.5 }}
+          end={{ x: 1, y: 0.5 }}
+          style={{
+            width: '100%',
+            height: '100%',
+          }}
+        />
+      </Animated.View>
+    </View>
+  );
+}
+
+function GlassLensOverlay({ radius = 20 }: { radius?: number }) {
+  const [layout, setLayout] = useState({ width: 0, height: 0 });
+  const width = layout.width;
+  const height = layout.height;
+  const minDim = Math.min(width, height);
+  const maxDim = Math.max(width, height);
+  const lensRadius = Math.min(radius, minDim / 2);
+  const strokeRadius = Math.max(0, lensRadius - 1);
+
+  return (
+    <View
+      pointerEvents="none"
+      style={[StyleSheet.absoluteFillObject, { borderRadius: radius, overflow: 'hidden' }]}
+      onLayout={(event) => {
+        const { width, height } = event.nativeEvent.layout;
+        if (width !== layout.width || height !== layout.height) {
+          setLayout({ width, height });
+        }
+      }}
+    >
+      {width > 0 && height > 0 ? (
+        <Canvas style={{ width, height }}>
+          <RoundedRect x={0} y={0} width={width} height={height} r={lensRadius}>
+            <SkiaLinearGradient
+              start={vec(0, 0)}
+              end={vec(width, height)}
+              colors={[
+                'rgba(255, 255, 255, 0.45)',
+                'rgba(94, 61, 179, 0.08)',
+                'rgba(255, 255, 255, 0.18)',
+              ]}
+              positions={[0, 0.6, 1]}
+            />
+          </RoundedRect>
+          <RoundedRect x={0} y={0} width={width} height={height} r={lensRadius}>
+            <RadialGradient
+              c={vec(width * 0.2, height * 0.15)}
+              r={maxDim * 0.9}
+              colors={['rgba(255, 255, 255, 0.55)', 'rgba(255, 255, 255, 0)']}
+            />
+          </RoundedRect>
+          <RoundedRect x={0} y={0} width={width} height={height} r={lensRadius}>
+            <RadialGradient
+              c={vec(width * 0.85, height * 0.85)}
+              r={maxDim * 0.8}
+              colors={['rgba(94, 61, 179, 0)', 'rgba(94, 61, 179, 0.18)']}
+            />
+          </RoundedRect>
+          <RoundedRect
+            x={0.5}
+            y={0.5}
+            width={width - 1}
+            height={height - 1}
+            r={strokeRadius}
+            style="stroke"
+            strokeWidth={1}
+            color="rgba(255, 255, 255, 0.6)"
+          />
+          <Circle cx={width * 0.22} cy={height * 0.28} r={minDim * 0.18}>
+            <RadialGradient
+              c={vec(width * 0.22, height * 0.28)}
+              r={minDim * 0.18}
+              colors={['rgba(255, 255, 255, 0.7)', 'rgba(255, 255, 255, 0)']}
+            />
+          </Circle>
+          <Circle cx={width * 0.72} cy={height * 0.18} r={minDim * 0.1}>
+            <RadialGradient
+              c={vec(width * 0.72, height * 0.18)}
+              r={minDim * 0.1}
+              colors={['rgba(255, 255, 255, 0.6)', 'rgba(255, 255, 255, 0)']}
+            />
+          </Circle>
+        </Canvas>
+      ) : null}
+    </View>
+  );
+}
+
+function TipHighlightDots() {
+  const dotOne = useRef(new Animated.Value(0)).current;
+  const dotTwo = useRef(new Animated.Value(0)).current;
+  const dotThree = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const createPulse = (value: Animated.Value, delayMs: number) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(delayMs),
+          Animated.timing(value, {
+            toValue: 1,
+            duration: 900,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: true,
+          }),
+          Animated.timing(value, {
+            toValue: 0,
+            duration: 900,
+            easing: Easing.in(Easing.quad),
+            useNativeDriver: true,
+          }),
+        ])
+      );
+
+    const pulseOne = createPulse(dotOne, 0);
+    const pulseTwo = createPulse(dotTwo, 500);
+    const pulseThree = createPulse(dotThree, 1000);
+
+    pulseOne.start();
+    pulseTwo.start();
+    pulseThree.start();
+
+    return () => {
+      pulseOne.stop();
+      pulseTwo.stop();
+      pulseThree.stop();
+    };
+  }, [dotOne, dotTwo, dotThree]);
+
+  const makeDotStyle = (value: Animated.Value) => ({
+    opacity: value.interpolate({ inputRange: [0, 1], outputRange: [0.2, 0.95] }),
+    transform: [
+      { scale: value.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1.25] }) },
+    ],
+  });
+
+  return (
+    <View pointerEvents="none" style={styles.tipHighlightContainer}>
+      <Animated.View style={[styles.tipHighlightDot, styles.tipHighlightDotOne, makeDotStyle(dotOne)]} />
+      <Animated.View style={[styles.tipHighlightDot, styles.tipHighlightDotTwo, makeDotStyle(dotTwo)]} />
+      <Animated.View style={[styles.tipHighlightDot, styles.tipHighlightDotThree, makeDotStyle(dotThree)]} />
+    </View>
+  );
+}
+
 export default function HomeScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const { user } = useAuth();
-  const { isBabyBorn } = useBabyStatus();
+  const { activeBabyId } = useActiveBaby();
   const router = useRouter();
+  const DEFAULT_OVERVIEW_HEIGHT = 230;
+  const PRODUCT_ROTATION_INITIAL_DELAY_MS = 10000;
+  const PRODUCT_ROTATION_INTERVAL_MS = 20000;
+  const OVERVIEW_ROTATION_INTERVAL_MS = 20000;
+  const OVERVIEW_ROTATION_PAUSE_MS = 12000;
 
   const [babyInfo, setBabyInfo] = useState<any>(null);
   const [diaryEntries, setDiaryEntries] = useState<any[]>([]);
@@ -46,6 +262,7 @@ export default function HomeScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [dailyTip, setDailyTip] = useState("");
   const [userName, setUserName] = useState("");
+  const [recommendations, setRecommendations] = useState<LottiRecommendation[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [showInputModal, setShowInputModal] = useState(false);
   const [selectedActivityType, setSelectedActivityType] = useState<'feeding' | 'diaper' | 'other'>('feeding');
@@ -53,6 +270,177 @@ export default function HomeScreen() {
   const [todaySleepMinutes, setTodaySleepMinutes] = useState(0);
   const [showSleepModal, setShowSleepModal] = useState(false);
   const [sleepModalStart, setSleepModalStart] = useState(new Date());
+  const [recommendationImageRetryKey, setRecommendationImageRetryKey] = useState(0);
+  const [recommendationImageErrorCount, setRecommendationImageErrorCount] = useState(0);
+  const [recommendationImageFailed, setRecommendationImageFailed] = useState(false);
+  const MAX_IMAGE_RETRIES = 1;
+  const [productIndex, setProductIndex] = useState(0);
+  const [overviewCarouselWidth, setOverviewCarouselWidth] = useState(0);
+  const [overviewIndex, setOverviewIndex] = useState(0);
+  const [overviewSummaryHeight, setOverviewSummaryHeight] = useState<number | null>(null);
+  const overviewScrollRef = useRef<ScrollView>(null);
+  const overviewIndexRef = useRef(0);
+  const overviewRotationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const overviewRotationPauseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isAutoScrollingRef = useRef(false);
+  const productIndexRef = useRef(0);
+  const productRotationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const productRotationCycleRef = useRef(0);
+  const imageRetryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const androidBlurProps =
+    Platform.OS === 'android'
+      ? { experimentalBlurMethod: 'dimezisBlurView' as const, blurReductionFactor: 1 }
+      : {};
+
+  const rotationCandidates = recommendations;
+
+  const featuredRecommendation = rotationCandidates[productIndex] ?? null;
+
+  const triggerHaptic = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
+  };
+
+  const handleNavigate = (destination: any) => {
+    triggerHaptic();
+    router.push(destination);
+  };
+
+  const buildImageUri = (imageUrl?: string | null, retryKey = recommendationImageRetryKey) => {
+    if (!imageUrl) return '';
+    if (retryKey <= 0) return imageUrl;
+    return `${imageUrl}${imageUrl.includes('?') ? '&' : '?'}r=${retryKey}`;
+  };
+
+  const getPreviewText = (value?: string | null, limit = 10) => {
+    if (!value) return '';
+    const words = value.trim().split(/\s+/).filter(Boolean);
+    if (words.length <= limit) return value.trim();
+    return `${words.slice(0, limit).join(' ')}...`;
+  };
+
+  useEffect(() => {
+    if (featuredRecommendation?.image_url) {
+      Image.prefetch(featuredRecommendation.image_url).catch(() => {});
+    }
+  }, [featuredRecommendation?.image_url]);
+
+  useEffect(() => {
+    setRecommendationImageRetryKey(0);
+    setRecommendationImageErrorCount(0);
+    setRecommendationImageFailed(false);
+    if (imageRetryTimeoutRef.current) {
+      clearTimeout(imageRetryTimeoutRef.current);
+      imageRetryTimeoutRef.current = null;
+    }
+  }, [featuredRecommendation?.id, featuredRecommendation?.image_url]);
+
+  useEffect(() => {
+    productIndexRef.current = productIndex;
+  }, [productIndex]);
+
+  useEffect(() => {
+    overviewIndexRef.current = overviewIndex;
+  }, [overviewIndex]);
+
+  useEffect(() => {
+    productIndexRef.current = 0;
+    setProductIndex(0);
+    productRotationCycleRef.current = 0;
+  }, [rotationCandidates]);
+
+  useEffect(() => {
+    if (rotationCandidates.length <= 1) {
+      if (productRotationTimeoutRef.current) {
+        clearTimeout(productRotationTimeoutRef.current);
+        productRotationTimeoutRef.current = null;
+      }
+      productRotationCycleRef.current = 0;
+      return;
+    }
+
+    const scheduleNextRotation = () => {
+      const delay =
+        productRotationCycleRef.current === 0
+          ? PRODUCT_ROTATION_INITIAL_DELAY_MS
+          : PRODUCT_ROTATION_INTERVAL_MS;
+
+      productRotationTimeoutRef.current = setTimeout(() => {
+        const nextIndex = (productIndexRef.current + 1) % rotationCandidates.length;
+        productIndexRef.current = nextIndex;
+        setProductIndex(nextIndex);
+        productRotationCycleRef.current += 1;
+        scheduleNextRotation();
+      }, delay);
+    };
+
+    scheduleNextRotation();
+
+    return () => {
+      if (productRotationTimeoutRef.current) {
+        clearTimeout(productRotationTimeoutRef.current);
+        productRotationTimeoutRef.current = null;
+      }
+    };
+  }, [rotationCandidates, PRODUCT_ROTATION_INITIAL_DELAY_MS, PRODUCT_ROTATION_INTERVAL_MS]);
+
+  const stopOverviewRotation = useCallback(() => {
+    if (overviewRotationIntervalRef.current) {
+      clearInterval(overviewRotationIntervalRef.current);
+      overviewRotationIntervalRef.current = null;
+    }
+  }, []);
+
+  const startOverviewRotation = useCallback(() => {
+    if (!overviewCarouselWidth) return;
+    stopOverviewRotation();
+
+    const slideCount = 2;
+    if (slideCount <= 1) return;
+
+    overviewRotationIntervalRef.current = setInterval(() => {
+      const nextIndex = (overviewIndexRef.current + 1) % slideCount;
+      overviewIndexRef.current = nextIndex;
+      setOverviewIndex(nextIndex);
+      isAutoScrollingRef.current = true;
+      overviewScrollRef.current?.scrollTo({
+        x: nextIndex * overviewCarouselWidth,
+        animated: true,
+      });
+    }, OVERVIEW_ROTATION_INTERVAL_MS);
+  }, [overviewCarouselWidth, OVERVIEW_ROTATION_INTERVAL_MS, stopOverviewRotation]);
+
+  const scheduleOverviewRotationResume = useCallback(() => {
+    if (overviewRotationPauseTimeoutRef.current) {
+      clearTimeout(overviewRotationPauseTimeoutRef.current);
+    }
+    overviewRotationPauseTimeoutRef.current = setTimeout(() => {
+      startOverviewRotation();
+    }, OVERVIEW_ROTATION_PAUSE_MS);
+  }, [OVERVIEW_ROTATION_PAUSE_MS, startOverviewRotation]);
+
+  useEffect(() => {
+    startOverviewRotation();
+    return () => {
+      stopOverviewRotation();
+      if (overviewRotationPauseTimeoutRef.current) {
+        clearTimeout(overviewRotationPauseTimeoutRef.current);
+        overviewRotationPauseTimeoutRef.current = null;
+      }
+    };
+  }, [startOverviewRotation, stopOverviewRotation]);
+
+  const handleOverviewScrollBeginDrag = () => {
+    isAutoScrollingRef.current = false;
+    stopOverviewRotation();
+    if (overviewRotationPauseTimeoutRef.current) {
+      clearTimeout(overviewRotationPauseTimeoutRef.current);
+      overviewRotationPauseTimeoutRef.current = null;
+    }
+  };
+
+  const handleOverviewScrollEndDrag = () => {
+    scheduleOverviewRotationResume();
+  };
 
   useEffect(() => {
     if (user) {
@@ -63,7 +451,7 @@ export default function HomeScreen() {
     } else {
       setIsLoading(false);
     }
-  }, [user]);
+  }, [user, activeBabyId]);
 
   // Funktion für Pull-to-Refresh
   const onRefresh = async () => {
@@ -83,7 +471,29 @@ export default function HomeScreen() {
 
   const loadData = async () => {
     try {
-      if (!refreshing) {
+      // 🆕 Cache-First Strategy: Lade gecachte Daten zuerst
+      const cachedData = await loadCachedHomeData();
+      if (cachedData) {
+        console.log('Loading cached home data (age:', new Date().toISOString(), '-', cachedData.lastUpdate, ')');
+        // Zeige sofort gecachte Daten für instant load
+        if (cachedData.babyInfo) setBabyInfo(cachedData.babyInfo);
+        if (cachedData.diaryEntries) setDiaryEntries(cachedData.diaryEntries);
+        if (cachedData.dailyEntries) setDailyEntries(cachedData.dailyEntries);
+        if (cachedData.todaySleepMinutes !== undefined) setTodaySleepMinutes(cachedData.todaySleepMinutes);
+        if (cachedData.currentPhase) setCurrentPhase(cachedData.currentPhase);
+        if (cachedData.phaseProgress) setPhaseProgress(cachedData.phaseProgress);
+        if (cachedData.milestones) setMilestones(cachedData.milestones);
+        if (cachedData.recommendations) setRecommendations(cachedData.recommendations);
+        if (cachedData.userName) setUserName(cachedData.userName);
+
+        // Wenn Cache frisch ist (< 5 Min), beende Loading sofort
+        if (isCacheFresh(cachedData.lastUpdate) && !refreshing) {
+          setIsLoading(false);
+        }
+      }
+
+      // Lade trotzdem immer frische Daten von Supabase (parallel)
+      if (!refreshing && !cachedData) {
         setIsLoading(true);
       }
 
@@ -94,20 +504,26 @@ export default function HomeScreen() {
         .eq('id', user?.id)
         .single();
 
+      let freshUserName = userName;
       if (profileError) {
         console.error('Error loading user profile:', profileError);
-      } else if (profileData && profileData.first_name) {
-        setUserName(profileData.first_name);
+      } else if (profileData) {
+        if (profileData.first_name) {
+          freshUserName = profileData.first_name;
+          setUserName(freshUserName);
+        }
       }
 
       // Baby-Informationen laden
-      const { data: babyData } = await getBabyInfo();
+      const { data: babyData } = await getBabyInfo(activeBabyId ?? undefined);
       setBabyInfo(babyData);
 
       // Tagebucheinträge laden (nur die neuesten 5)
-      const { data: diaryData } = await getDiaryEntries();
+      const { data: diaryData } = await getDiaryEntries(activeBabyId ?? undefined);
+      let freshDiaryEntries: any[] = [];
       if (diaryData) {
-        setDiaryEntries(diaryData.slice(0, 5));
+        freshDiaryEntries = diaryData.slice(0, 5);
+        setDiaryEntries(freshDiaryEntries);
       }
 
       // Alltags-Einträge für heute laden
@@ -117,15 +533,21 @@ export default function HomeScreen() {
       const endOfDay = new Date(today);
       endOfDay.setHours(23, 59, 59, 999);
 
-      const { data: dailyData, error: dailyError } = await supabase
+      let dailyQuery = supabase
         .from('baby_care_entries')
         .select('*')
         .gte('start_time', startOfDay.toISOString())
-        .lte('start_time', endOfDay.toISOString())
-        .eq('user_id', user?.id)
-        .order('start_time', { ascending: false });
+        .lte('start_time', endOfDay.toISOString());
 
+      if (activeBabyId) {
+        dailyQuery = dailyQuery.eq('baby_id', activeBabyId);
+      }
+
+      const { data: dailyData, error: dailyError } = await dailyQuery.order('start_time', { ascending: false });
+
+      let freshDailyEntries: any[] = [];
       if (!dailyError && dailyData) {
+        freshDailyEntries = dailyData;
         setDailyEntries(dailyData);
       }
 
@@ -133,19 +555,48 @@ export default function HomeScreen() {
 
       // Aktuelle Entwicklungsphase laden
       const { data: phaseData } = await getCurrentPhase();
+      let freshCurrentPhase = null;
+      let freshPhaseProgress = null;
+      let freshMilestones: any[] = [];
+
       if (phaseData) {
+        freshCurrentPhase = phaseData;
         setCurrentPhase(phaseData);
 
         // Fortschritt für die aktuelle Phase berechnen
         const { progress, completedCount, totalCount } = await getPhaseProgress(phaseData.phase_id);
-        setPhaseProgress({ progress, completedCount, totalCount });
+        freshPhaseProgress = { progress, completedCount, totalCount };
+        setPhaseProgress(freshPhaseProgress);
 
         // Meilensteine für die aktuelle Phase laden
         const { data: milestonesData } = await getMilestonesByPhase(phaseData.phase_id);
         if (milestonesData) {
+          freshMilestones = milestonesData;
           setMilestones(milestonesData);
         }
       }
+
+      let freshRecommendations: any[] = [];
+      try {
+        const recommendationData = await getRecommendations();
+        freshRecommendations = recommendationData;
+        setRecommendations(recommendationData);
+      } catch (error) {
+        console.error('Error loading recommendations:', error);
+      }
+
+      // 🆕 Speichere frische Daten im Cache für nächstes Mal
+      await cacheHomeData({
+        babyInfo: babyData,
+        diaryEntries: freshDiaryEntries,
+        dailyEntries: freshDailyEntries,
+        todaySleepMinutes: todaySleepMinutes,
+        currentPhase: freshCurrentPhase,
+        phaseProgress: freshPhaseProgress,
+        milestones: freshMilestones,
+        recommendations: freshRecommendations,
+        userName: freshUserName,
+      });
     } catch (err) {
       console.error('Failed to load home data:', err);
     } finally {
@@ -212,13 +663,13 @@ export default function HomeScreen() {
   // Handle stat item press
   const handleStatPress = (type: 'feeding' | 'diaper' | 'sleep') => {
     if (type === 'sleep') {
-      setSleepModalStart(new Date());
-      setShowSleepModal(true);
+      handleNavigate('/(tabs)/sleep-tracker');
       return;
     }
-    setSelectedActivityType(type);
-    setSelectedSubType(null);
-    setShowInputModal(true);
+    handleNavigate({
+      pathname: '/(tabs)/daily_old',
+      params: { quickAction: type },
+    });
   };
 
   // Load only daily entries (for quick refresh after adding entries)
@@ -233,13 +684,17 @@ export default function HomeScreen() {
       console.log('Loading daily entries for date:', today.toISOString());
 
       // Direct query to baby_care_entries table to ensure fresh data
-      const { data: dailyData, error } = await supabase
+      let dailyQuery = supabase
         .from('baby_care_entries')
         .select('*')
         .gte('start_time', startOfDay.toISOString())
-        .lte('start_time', endOfDay.toISOString())
-        .eq('user_id', user?.id)
-        .order('start_time', { ascending: false });
+        .lte('start_time', endOfDay.toISOString());
+
+      if (activeBabyId) {
+        dailyQuery = dailyQuery.eq('baby_id', activeBabyId);
+      }
+
+      const { data: dailyData, error } = await dailyQuery.order('start_time', { ascending: false });
 
       if (error) {
         console.error('Error loading daily entries:', error);
@@ -271,11 +726,17 @@ export default function HomeScreen() {
         `and(start_time.lte.${endIso},end_time.gte.${startIso})`
       ].join(',');
 
-      const { data, error } = await supabase
+      let sleepQuery = supabase
         .from('sleep_entries')
         .select('start_time,end_time')
         .eq('user_id', user.id)
         .or(overlapFilter);
+
+      if (activeBabyId) {
+        sleepQuery = sleepQuery.eq('baby_id', activeBabyId);
+      }
+
+      const { data, error } = await sleepQuery;
 
       if (error || !data) {
         console.error('Error loading sleep entries for today:', error);
@@ -302,10 +763,33 @@ export default function HomeScreen() {
   // Handle save entry from modal
   const handleSaveEntry = async (payload: any) => {
     console.log('handleSaveEntry - Received payload:', JSON.stringify(payload, null, 2));
-    console.log('handleSaveEntry - selectedActivityType:', selectedActivityType);
-    console.log('handleSaveEntry - selectedSubType:', selectedSubType);
+    const entryType =
+      payload?.entry_type === 'feeding' || payload?.entry_type === 'diaper'
+        ? payload.entry_type
+        : selectedActivityType;
 
-    // Close modal
+    if (entryType !== 'feeding' && entryType !== 'diaper') {
+      Alert.alert('Fehler', 'Unbekannter Eintragstyp. Bitte erneut versuchen.');
+      return;
+    }
+
+    const { error } = await addBabyCareEntry({
+      entry_type: entryType,
+      start_time: payload.start_time,
+      end_time: payload.end_time ?? null,
+      notes: payload.notes ?? null,
+      feeding_type: payload.feeding_type ?? null,
+      feeding_volume_ml: payload.feeding_volume_ml ?? null,
+      feeding_side: payload.feeding_side ?? null,
+      diaper_type: payload.diaper_type ?? null,
+    }, activeBabyId ?? undefined);
+
+    if (error) {
+      console.error('Error saving baby care entry:', error);
+      Alert.alert('Fehler', 'Eintrag konnte nicht gespeichert werden.');
+      return;
+    }
+
     setShowInputModal(false);
     setSelectedActivityType('feeding');
     setSelectedSubType(null);
@@ -322,6 +806,7 @@ export default function HomeScreen() {
     try {
       const payload = {
         user_id: user.id,
+        baby_id: activeBabyId ?? null,
         start_time: entry.start.toISOString(),
         end_time: entry.end ? entry.end.toISOString() : null,
         quality: entry.quality,
@@ -350,21 +835,44 @@ export default function HomeScreen() {
     }
   };
 
+  const handleFocusRecommendation = (recommendationId?: string | null) => {
+    triggerHaptic();
+    if (!recommendationId) {
+      router.push('/lottis-empfehlungen');
+      return;
+    }
+    router.push({
+      pathname: '/lottis-empfehlungen',
+      params: { focusId: recommendationId },
+    });
+  };
   // Rendere den Begrüßungsbereich
   const renderGreetingSection = () => {
     // Verwende den Benutzernamen aus der profiles-Tabelle
     const displayName = userName || 'Mama';
 
     return (
-      <View style={styles.liquidGlassWrapper}>
-        <BlurView 
-          intensity={22} 
-          tint={colorScheme === 'dark' ? 'dark' : 'light'} 
-          style={styles.liquidGlassBackground}
+      <View style={[styles.liquidGlassWrapper, styles.greetingCardWrapper]}>
+        <BlurView
+          {...androidBlurProps}
+          intensity={22}
+          tint={colorScheme === 'dark' ? 'dark' : 'light'}
+          style={[styles.liquidGlassBackground, styles.greetingGlassBackground]}
         >
-          <ThemedView style={[styles.greetingContainer, styles.liquidGlassContainer]} 
-                     lightColor="rgba(255, 255, 255, 0.04)" 
-                     darkColor="rgba(255, 255, 255, 0.02)">
+          <ThemedView
+            style={[styles.greetingContainer, styles.liquidGlassContainer, styles.greetingGlassContainer]}
+            lightColor="rgba(255, 255, 255, 0.04)"
+            darkColor="rgba(255, 255, 255, 0.02)"
+          >
+            <LinearGradient
+              pointerEvents="none"
+              colors={['rgba(255, 255, 255, 0)', 'rgba(255, 255, 255, 0)', 'rgba(255, 255, 255, 0)']}
+              locations={[0, 0.45, 1]}
+              start={{ x: 0.15, y: 0.0 }}
+              end={{ x: 0.85, y: 1.0 }}
+              style={styles.greetingGloss}
+            />
+
             <View style={styles.greetingHeader}>
               <View>
                 <ThemedText style={[styles.greeting, styles.liquidGlassText, { color: '#6B4C3B' }]}>
@@ -375,70 +883,66 @@ export default function HomeScreen() {
                 </ThemedText>
               </View>
 
-              {babyInfo?.photo_url && (
-                <View style={styles.profileImageWrapper}>
-                                     <Image
-                     source={{ uri: babyInfo.photo_url }}
-                     style={styles.profileImage}
-                   />
-                </View>
-              )}
-
-              {!babyInfo?.photo_url && (
-                <View style={[styles.profileImage, styles.profilePlaceholder, styles.liquidGlassProfilePlaceholder]}>
-                  <IconSymbol name="person.fill" size={30} color="#FFFFFF" />
-                </View>
-              )}
+              <View style={styles.profileBadge}>
+                <BabySwitcherButton size={68} />
+                <View style={styles.profileStatusDot} />
+              </View>
             </View>
 
-            <View style={styles.tipContainerWrapper}>
-              <BlurView 
-                intensity={14} 
-                tint={colorScheme === 'dark' ? 'dark' : 'light'} 
-                style={styles.tipContainerBlur}
-              >
-                <ThemedView style={[styles.tipContainer, styles.liquidGlassTipContainer]} 
-                           lightColor="rgba(168, 196, 193, 0.45)" 
-                           darkColor="rgba(168, 196, 193, 0.45)">
-                  <IconSymbol name="lightbulb.fill" size={20} color={Colors.light.success} />
-                  <ThemedText style={[styles.tipText, styles.liquidGlassTipText, { color: '#6B4C3B' }]}>
-                    {dailyTip}
-                  </ThemedText>
-                </ThemedView>
-              </BlurView>
+            <View style={styles.tipCard}>
+              <GlassLensOverlay radius={20} />
+              <TipHighlightDots />
+              <View style={styles.tipCardRow}>
+                <View style={styles.tipIconWrap}>
+                  <IconSymbol name="lightbulb.fill" size={18} color="#D6B28C" />
+                </View>
+                <View style={styles.tipContent}>
+                  <ThemedText style={styles.tipLabel}>Tipp des Tages</ThemedText>
+                  <ThemedText style={styles.tipText}>{dailyTip}</ThemedText>
+                </View>
+              </View>
             </View>
           </ThemedView>
         </BlurView>
+        <GlassBorderGlint radius={30} />
       </View>
     );
   };
 
   // Rendere die Tagesübersicht
-  const renderDailySummary = () => {
+  const renderDailySummary = (wrapperStyle?: StyleProp<ViewStyle>) => {
     const todayFeedings = getTodayFeedings();
     const todayDiaperChanges = getTodayDiaperChanges();
 
     return (
-      <View style={styles.liquidGlassWrapper}>
-        <BlurView 
-          intensity={22} 
-          tint={colorScheme === 'dark' ? 'dark' : 'light'} 
+      <TouchableOpacity
+        onPress={() => handleNavigate('/(tabs)/daily_old')}
+        activeOpacity={0.9}
+        style={[styles.liquidGlassWrapper, wrapperStyle]}
+        onLayout={(event) => {
+          const nextHeight = Math.round(event.nativeEvent.layout.height);
+          if (nextHeight && nextHeight !== overviewSummaryHeight) {
+            setOverviewSummaryHeight(nextHeight);
+          }
+        }}
+      >
+        <BlurView
+          intensity={22}
+          tint={colorScheme === 'dark' ? 'dark' : 'light'}
           style={styles.liquidGlassBackground}
         >
-          <ThemedView style={[styles.summaryContainer, styles.liquidGlassContainer]} 
-                      lightColor="rgba(255, 255, 255, 0.04)" 
-                      darkColor="rgba(255, 255, 255, 0.02)">
+          <ThemedView
+            style={[styles.summaryContainer, styles.liquidGlassContainer]}
+            lightColor="rgba(255, 255, 255, 0.04)"
+            darkColor="rgba(255, 255, 255, 0.02)"
+          >
             <View style={styles.sectionTitleContainer}>
-              <ThemedText style={[styles.sectionTitle, styles.liquidGlassText, { color: '#6B4C3B', fontSize: 22 }]}> 
+              <ThemedText style={[styles.sectionTitle, { color: '#7D5A50', fontSize: 22 }]}>
                 Dein Tag im Überblick
               </ThemedText>
-              <TouchableOpacity
-                style={styles.liquidGlassChevron}
-                onPress={() => router.push('/(tabs)/daily_old')}
-                activeOpacity={0.8}
-              >
-                <IconSymbol name="chevron.right" size={20} color="#6B4C3B" />
-              </TouchableOpacity>
+              <View style={styles.liquidGlassChevron}>
+                <IconSymbol name="chevron.right" size={20} color="#7D5A50" />
+              </View>
             </View>
 
             <View style={styles.statsContainer}>
@@ -447,8 +951,11 @@ export default function HomeScreen() {
                   backgroundColor: 'rgba(94, 61, 179, 0.13)',
                   borderColor: 'rgba(94, 61, 179, 0.35)'
                 }]}
-                onPress={() => handleStatPress('feeding')}
-                activeOpacity={0.8}
+                activeOpacity={0.85}
+                onPress={(event) => {
+                  event.stopPropagation();
+                  handleStatPress('feeding');
+                }}
               >
                 <View style={styles.liquidGlassStatIcon}>
                   <Text style={styles.statEmoji}>🍼</Text>
@@ -467,8 +974,11 @@ export default function HomeScreen() {
                   backgroundColor: 'rgba(94, 61, 179, 0.08)',
                   borderColor: 'rgba(94, 61, 179, 0.22)'
                 }]}
-                onPress={() => handleStatPress('diaper')}
-                activeOpacity={0.8}
+                activeOpacity={0.85}
+                onPress={(event) => {
+                  event.stopPropagation();
+                  handleStatPress('diaper');
+                }}
               >
                 <View style={styles.liquidGlassStatIcon}>
                   <Text style={styles.statEmoji}>💩</Text>
@@ -487,8 +997,11 @@ export default function HomeScreen() {
                   backgroundColor: 'rgba(94, 61, 179, 0.05)', 
                   borderColor: 'rgba(94, 61, 179, 0.15)' 
                 }]}
-                onPress={() => handleStatPress('sleep')}
-                activeOpacity={0.8}
+                activeOpacity={0.85}
+                onPress={(event) => {
+                  event.stopPropagation();
+                  handleStatPress('sleep');
+                }}
               >
                 <View style={styles.liquidGlassStatIcon}>
                   <Text style={styles.statEmoji}>💤</Text>
@@ -504,9 +1017,201 @@ export default function HomeScreen() {
             </View>
           </ThemedView>
         </BlurView>
+      </TouchableOpacity>
+    );
+  };
+
+  const handleRecommendationImageError = () => {
+    setRecommendationImageErrorCount((prev) => {
+      if (prev >= MAX_IMAGE_RETRIES) {
+        setRecommendationImageFailed(true);
+        return prev;
+      }
+      const next = prev + 1;
+      if (imageRetryTimeoutRef.current) {
+        clearTimeout(imageRetryTimeoutRef.current);
+      }
+      imageRetryTimeoutRef.current = setTimeout(() => {
+        setRecommendationImageRetryKey((key) => key + 1);
+      }, 600);
+      return next;
+    });
+  };
+
+  const handleRecommendationImageLoadStart = () => {
+    if (recommendationImageRetryKey >= MAX_IMAGE_RETRIES) return;
+    if (imageRetryTimeoutRef.current) {
+      clearTimeout(imageRetryTimeoutRef.current);
+    }
+    imageRetryTimeoutRef.current = setTimeout(() => {
+      if (!recommendationImageFailed) {
+        setRecommendationImageRetryKey((key) => key + 1);
+      }
+    }, 1500);
+  };
+
+  const handleRecommendationImageLoad = () => {
+    if (imageRetryTimeoutRef.current) {
+      clearTimeout(imageRetryTimeoutRef.current);
+      imageRetryTimeoutRef.current = null;
+    }
+    setRecommendationImageFailed(false);
+  };
+
+  const renderRecommendationCard = (wrapperStyle?: StyleProp<ViewStyle>) => {
+    const cardHeightStyle = {
+      height: overviewSummaryHeight ?? DEFAULT_OVERVIEW_HEIGHT,
+    };
+    const buttonLabel = 'Mehr';
+    const showRecommendationImage = Boolean(featuredRecommendation?.image_url) && !recommendationImageFailed;
+    const imageUri = buildImageUri(featuredRecommendation?.image_url);
+
+    return (
+      <View style={[styles.liquidGlassWrapper, wrapperStyle, cardHeightStyle]}>
+        <BlurView
+          {...androidBlurProps}
+          intensity={22}
+          tint={colorScheme === 'dark' ? 'dark' : 'light'}
+          style={[styles.liquidGlassBackground, cardHeightStyle]}
+        >
+          <ThemedView
+            style={[
+              styles.liquidGlassContainer,
+              styles.recommendationContainer,
+              cardHeightStyle,
+            ]}
+            lightColor="rgba(255, 255, 255, 0.04)"
+            darkColor="rgba(255, 255, 255, 0.02)"
+          >
+            {featuredRecommendation ? (
+              <View style={styles.recommendationCard}>
+                <View style={styles.sectionTitleContainer}>
+                  <ThemedText style={[styles.sectionTitle, styles.liquidGlassText, { color: '#6B4C3B', fontSize: 22 }]}>
+                    Lottis Empfehlungen
+                  </ThemedText>
+                  <View style={[styles.liquidGlassChevron, styles.recommendationHeaderSpacer]} />
+                </View>
+                <TouchableOpacity
+                  style={styles.recommendationInnerCard}
+                  onPress={() => handleFocusRecommendation(featuredRecommendation.id)}
+                  activeOpacity={0.9}
+                >
+                  <View style={styles.recommendationRow}>
+                    <View style={styles.recommendationImagePane}>
+                      {showRecommendationImage ? (
+                        <Image
+                          key={`${featuredRecommendation.id}-${recommendationImageRetryKey}`}
+                          source={{ uri: imageUri }}
+                          style={styles.recommendationImage}
+                          onLoadStart={handleRecommendationImageLoadStart}
+                          onError={handleRecommendationImageError}
+                          onLoad={handleRecommendationImageLoad}
+                        />
+                      ) : (
+                        <View style={styles.recommendationImageFallback}>
+                          <IconSymbol name="bag.fill" size={22} color="#6B4C3B" />
+                        </View>
+                      )}
+                    </View>
+                    <View style={styles.recommendationContentPane}>
+                      <View style={styles.recommendationTextWrap}>
+                        <ThemedText style={styles.recommendationTitle}>
+                          {featuredRecommendation.title}
+                        </ThemedText>
+                        <ThemedText style={styles.recommendationDescription}>
+                          {getPreviewText(featuredRecommendation.description, 10)}
+                        </ThemedText>
+                      </View>
+                      <View style={styles.recommendationButton}>
+                        <ThemedText style={styles.recommendationButtonText} numberOfLines={1}>
+                          {buttonLabel}
+                        </ThemedText>
+                      </View>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={styles.recommendationEmptyWrapper}>
+                <View style={styles.sectionTitleContainer}>
+                  <ThemedText style={[styles.sectionTitle, styles.liquidGlassText, { color: '#6B4C3B', fontSize: 22 }]}>
+                    Lottis Empfehlungen
+                  </ThemedText>
+                  <View style={[styles.liquidGlassChevron, styles.recommendationHeaderSpacer]} />
+                </View>
+                <View style={styles.recommendationEmpty}>
+                  <IconSymbol name="bag.fill" size={20} color="#7D5A50" />
+                  <ThemedText style={styles.recommendationEmptyText}>
+                    Noch keine Empfehlungen verfügbar.
+                  </ThemedText>
+                </View>
+              </View>
+            )}
+          </ThemedView>
+        </BlurView>
       </View>
     );
   };
+
+  const renderOverviewSection = () => (
+    <View
+      style={styles.overviewCarouselWrapper}
+      onLayout={(event) => {
+        const nextWidth = event.nativeEvent.layout.width;
+        if (nextWidth && nextWidth !== overviewCarouselWidth) {
+          setOverviewCarouselWidth(nextWidth);
+        }
+      }}
+    >
+      <ScrollView
+        ref={overviewScrollRef}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        style={styles.overviewCarousel}
+        decelerationRate="fast"
+        onScrollBeginDrag={handleOverviewScrollBeginDrag}
+        onScrollEndDrag={handleOverviewScrollEndDrag}
+        onMomentumScrollEnd={(event) => {
+          if (!overviewCarouselWidth) return;
+          const nextIndex = Math.round(event.nativeEvent.contentOffset.x / overviewCarouselWidth);
+          overviewIndexRef.current = nextIndex;
+          setOverviewIndex(nextIndex);
+          if (isAutoScrollingRef.current) {
+            isAutoScrollingRef.current = false;
+            return;
+          }
+          scheduleOverviewRotationResume();
+        }}
+        scrollEventThrottle={16}
+      >
+        {[renderDailySummary(styles.carouselCardWrapper), renderRecommendationCard(styles.carouselCardWrapper)].map(
+          (slide, index) => (
+            <View
+              key={`overview-slide-${index}`}
+              style={[
+                styles.overviewSlide,
+                overviewCarouselWidth ? { width: overviewCarouselWidth } : null,
+              ]}
+            >
+              {slide}
+            </View>
+          )
+        )}
+      </ScrollView>
+      <View style={styles.carouselDots}>
+        {[0, 1].map((index) => (
+          <View
+            key={`overview-dot-${index}`}
+            style={[
+              styles.carouselDot,
+              overviewIndex === index && styles.carouselDotActive,
+            ]}
+          />
+        ))}
+      </View>
+    </View>
+  );
 
   // Rendere die Schnellzugriff-Karten
   const renderQuickAccessCards = () => {
@@ -519,30 +1224,32 @@ export default function HomeScreen() {
         <View style={styles.cardsGrid}>
           <TouchableOpacity
             style={styles.liquidGlassCardWrapper}
-            onPress={() => router.push('/(tabs)/feeding-stats' as any)}
+            onPress={() => handleNavigate('/recipe-generator' as any)}
             activeOpacity={0.9}
           >
             <BlurView 
+              {...androidBlurProps}
               intensity={24} 
               tint={colorScheme === 'dark' ? 'dark' : 'light'} 
               style={styles.liquidGlassCardBackground}
             >
               <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(168, 196, 193, 0.6)', borderColor: 'rgba(255, 255, 255, 0.35)' }]}>
                 <View style={[styles.iconContainer, { backgroundColor: 'rgba(168, 196, 193, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
-                  <IconSymbol name="cup.and.saucer.fill" size={28} color="#FFFFFF" />
+                  <IconSymbol name="fork.knife" size={28} color="#FFFFFF" />
                 </View>
-                <ThemedText style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: '#7D5A50', fontWeight: '700' }]}>Mahlzeiten</ThemedText>
-                <ThemedText style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: '#7D5A50', fontWeight: '500' }]}>Statistiken ansehen</ThemedText>
+                <ThemedText style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: '#7D5A50', fontWeight: '700' }]}>BLW-Rezepte</ThemedText>
+                <ThemedText style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: '#7D5A50', fontWeight: '500' }]}>Rezepte entdecken</ThemedText>
               </View>
             </BlurView>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.liquidGlassCardWrapper}
-            onPress={() => router.push('/(tabs)/baby')}
+            onPress={() => handleNavigate('/(tabs)/baby')}
             activeOpacity={0.9}
           >
             <BlurView 
+              {...androidBlurProps}
               intensity={24} 
               tint={colorScheme === 'dark' ? 'dark' : 'light'} 
               style={styles.liquidGlassCardBackground}
@@ -559,10 +1266,11 @@ export default function HomeScreen() {
 
           <TouchableOpacity
             style={styles.liquidGlassCardWrapper}
-            onPress={() => router.push('/planner')}
+            onPress={() => handleNavigate('/planner')}
             activeOpacity={0.9}
           >
             <BlurView 
+              {...androidBlurProps}
               intensity={24} 
               tint={colorScheme === 'dark' ? 'dark' : 'light'} 
               style={styles.liquidGlassCardBackground}
@@ -579,10 +1287,11 @@ export default function HomeScreen() {
 
           <TouchableOpacity
             style={styles.liquidGlassCardWrapper}
-            onPress={() => router.push('/(tabs)/daily_old')}
+            onPress={() => handleNavigate('/(tabs)/daily_old')}
             activeOpacity={0.9}
           >
             <BlurView 
+              {...androidBlurProps}
               intensity={24} 
               tint={colorScheme === 'dark' ? 'dark' : 'light'} 
               style={styles.liquidGlassCardBackground}
@@ -599,10 +1308,11 @@ export default function HomeScreen() {
 
           <TouchableOpacity
             style={styles.liquidGlassCardWrapper}
-            onPress={() => router.push('/(tabs)/selfcare')}
+            onPress={() => handleNavigate('/(tabs)/selfcare')}
             activeOpacity={0.9}
           >
             <BlurView 
+              {...androidBlurProps}
               intensity={24} 
               tint={colorScheme === 'dark' ? 'dark' : 'light'} 
               style={styles.liquidGlassCardBackground}
@@ -619,12 +1329,13 @@ export default function HomeScreen() {
 
           <TouchableOpacity
             style={styles.liquidGlassCardWrapper}
-            onPress={() => router.push('/(tabs)/babyweather')}
+            onPress={() => handleNavigate('/(tabs)/babyweather')}
             activeOpacity={0.9}
           >
-            <BlurView 
-              intensity={16} 
-              tint={colorScheme === 'dark' ? 'dark' : 'light'} 
+            <BlurView
+              {...androidBlurProps}
+              intensity={16}
+              tint={colorScheme === 'dark' ? 'dark' : 'light'}
               style={styles.liquidGlassCardBackground}
             >
               <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(200, 225, 255, 0.6)', borderColor: 'rgba(255, 255, 255, 0.35)' }]}>
@@ -633,6 +1344,48 @@ export default function HomeScreen() {
                 </View>
                 <ThemedText style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: '#7D5A50', fontWeight: '700' }]}>Babywetter</ThemedText>
                 <ThemedText style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: '#7D5A50', fontWeight: '500' }]}>Aktuelle Wetterinfos</ThemedText>
+              </View>
+            </BlurView>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.liquidGlassCardWrapper}
+            onPress={() => handleNavigate('/mini-wiki' as any)}
+            activeOpacity={0.9}
+          >
+            <BlurView
+              {...androidBlurProps}
+              intensity={24}
+              tint={colorScheme === 'dark' ? 'dark' : 'light'}
+              style={styles.liquidGlassCardBackground}
+            >
+              <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(255, 235, 200, 0.6)', borderColor: 'rgba(255, 255, 255, 0.35)' }]}>
+                <View style={[styles.iconContainer, { backgroundColor: 'rgba(255, 200, 120, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
+                  <IconSymbol name="book.fill" size={28} color="#FFFFFF" />
+                </View>
+                <ThemedText style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: '#7D5A50', fontWeight: '700' }]}>Mini-Wiki</ThemedText>
+                <ThemedText style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: '#7D5A50', fontWeight: '500' }]}>Wissen & Tipps</ThemedText>
+              </View>
+            </BlurView>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.liquidGlassCardWrapper}
+            onPress={() => handleNavigate('/(tabs)/weight-tracker')}
+            activeOpacity={0.9}
+          >
+            <BlurView
+              {...androidBlurProps}
+              intensity={24}
+              tint={colorScheme === 'dark' ? 'dark' : 'light'}
+              style={styles.liquidGlassCardBackground}
+            >
+              <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(200, 240, 200, 0.6)', borderColor: 'rgba(255, 255, 255, 0.35)' }]}>
+                <View style={[styles.iconContainer, { backgroundColor: 'rgba(130, 210, 130, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
+                  <IconSymbol name="chart.line.uptrend.xyaxis" size={28} color="#FFFFFF" />
+                </View>
+                <ThemedText style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: '#7D5A50', fontWeight: '700' }]}>Gewichtskurve</ThemedText>
+                <ThemedText style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: '#7D5A50', fontWeight: '500' }]}>Gewicht tracken</ThemedText>
               </View>
             </BlurView>
           </TouchableOpacity>
@@ -666,7 +1419,7 @@ export default function HomeScreen() {
             }
           >
             {renderGreetingSection()}
-            {renderDailySummary()}
+            {renderOverviewSection()}
             {renderQuickAccessCards()}
           </ScrollView>
         )}
@@ -727,6 +1480,16 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     overflow: 'hidden',
   },
+  greetingCardWrapper: {
+    borderRadius: 30,
+    overflow: 'hidden',
+  },
+  greetingGlassBackground: {
+    borderRadius: 30,
+  },
+  greetingGlassContainer: {
+    borderRadius: 30,
+  },
   liquidGlassBackground: {
     borderRadius: 22,
     overflow: 'hidden',
@@ -746,87 +1509,280 @@ const styles = StyleSheet.create({
 
   // Begrüßungsbereich - Liquid Glass Design
   greetingContainer: {
-    paddingTop: 32,
+    paddingTop: 26,
     paddingHorizontal: 24,
-    paddingBottom: 28,
+    paddingBottom: 22,
     backgroundColor: 'transparent',
+    position: 'relative',
   },
   greetingHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 16,
   },
   greeting: {
-    fontSize: 28,
+    fontSize: 30,
     fontWeight: '700',
-    marginBottom: 6,
+    marginBottom: 4,
     letterSpacing: -0.5,
+    lineHeight: 36,
   },
   dateText: {
-    fontSize: 16,
+    fontSize: 18,
     opacity: 0.8,
-    fontWeight: '500',
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
-  profileImage: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+  profileBadge: {
+    width: 68,
+    height: 68,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  profileStatusDot: {
+    position: 'absolute',
+    right: -2,
+    bottom: -2,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#5E3DB3',
     borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-  },
-  profileImageWrapper: {
-    borderRadius: 32,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    borderColor: 'rgba(255, 255, 255, 0.9)',
+    shadowColor: '#5E3DB3',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35,
+    shadowRadius: 3,
     elevation: 6,
   },
-  profilePlaceholder: {
-    backgroundColor: 'rgba(125, 90, 80, 0.8)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'rgba(125, 90, 80, 0.6)',
-  },
-  liquidGlassProfilePlaceholder: {
-    backgroundColor: 'rgba(125, 90, 80, 0.8)',
-    borderColor: 'rgba(125, 90, 80, 0.6)',
+  greetingGloss: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 30,
   },
 
-  // Tip Container - Enhanced Liquid Glass
-  tipContainerWrapper: {
-    marginTop: 12,
-    borderRadius: 18,
-    overflow: 'hidden',
-    backgroundColor: 'rgba(168, 196, 193, 0.45)',
-  },
-  tipContainerBlur: {
-    borderRadius: 18,
-    overflow: 'hidden',
-  },
-  tipContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  // Tip Container
+  tipCard: {
+    marginTop: 14,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.22)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.55)',
     padding: 14,
-    backgroundColor: 'transparent',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+    overflow: 'hidden',
+    shadowColor: '#5E3DB3',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 4,
   },
-  liquidGlassTipContainer: {
-    borderRadius: 18,
+  tipHighlightContainer: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  tipHighlightDot: {
+    position: 'absolute',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    shadowColor: '#FFFFFF',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.6,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  tipHighlightDotOne: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    top: 10,
+    right: 16,
+  },
+  tipHighlightDotTwo: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    top: 28,
+    right: 44,
+  },
+  tipHighlightDotThree: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    bottom: 10,
+    right: 28,
+  },
+  tipCardRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  tipIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: 'transparent',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    elevation: 0,
+  },
+  tipContent: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  tipLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#5E3DB3',
+    marginBottom: 4,
   },
   tipText: {
     fontSize: 14,
-    marginLeft: 12,
-    flex: 1,
-    lineHeight: 20,
+    lineHeight: 19,
     fontWeight: '500',
+    color: '#6B4C3B',
   },
-  liquidGlassTipText: {
-    color: 'rgba(255, 255, 255, 0.95)',
+
+  // Overview Carousel
+  overviewCarouselWrapper: {
+    marginBottom: 16,
+  },
+  overviewCarousel: {
+    width: '100%',
+  },
+  overviewSlide: {
+    width: '100%',
+  },
+  carouselCardWrapper: {
+    marginBottom: 0,
+    width: '100%',
+  },
+  carouselDots: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 10,
+  },
+  carouselDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(107, 76, 59, 0.25)',
+    marginHorizontal: 4,
+  },
+  carouselDotActive: {
+    backgroundColor: '#6B4C3B',
+  },
+
+  // Recommendation Card
+  recommendationContainer: {
+    flex: 1,
+    padding: 18,
+  },
+  recommendationCard: {
+    flex: 1,
+    width: '100%',
+    borderRadius: 20,
+  },
+  recommendationInnerCard: {
+    flex: 1,
+    borderRadius: 18,
+    padding: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.55)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.55)',
+  },
+  recommendationRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  recommendationImagePane: {
+    width: '40%',
+    maxWidth: 120,
+    maxHeight: 120,
+    aspectRatio: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.75)',
+    borderRadius: 10,
+    overflow: 'hidden',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.6)',
+  },
+  recommendationImageFallback: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    height: '100%',
+  },
+  recommendationImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  recommendationContentPane: {
+    flex: 1,
+    minWidth: 0,
+    flexShrink: 1,
+    paddingVertical: 4,
+    justifyContent: 'space-between',
+    backgroundColor: 'transparent',
+  },
+  recommendationTextWrap: {
+    flex: 1,
+    flexShrink: 1,
+  },
+  recommendationTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#6B4C3B',
+    marginBottom: 4,
+    letterSpacing: 0.2,
+    flexWrap: 'wrap',
+  },
+  recommendationDescription: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: 'rgba(125, 90, 80, 0.88)',
+    lineHeight: 18,
+    flexWrap: 'wrap',
+  },
+  recommendationButton: {
+    alignSelf: 'flex-end',
+    marginTop: 8,
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    backgroundColor: '#5E3DB3',
+    borderWidth: 1,
+    borderColor: 'rgba(94, 61, 179, 0.7)',
+  },
+  recommendationButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  recommendationEmptyWrapper: {
+    flex: 1,
+  },
+  recommendationHeaderSpacer: {
+    opacity: 0,
+  },
+  recommendationEmpty: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+  },
+  recommendationEmptyText: {
+    fontSize: 13,
+    color: '#7D5A50',
+    marginTop: 8,
+    textAlign: 'center',
   },
 
   // Tagesübersicht - Liquid Glass Design
@@ -844,6 +1800,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
     letterSpacing: -0.3,
+    lineHeight: 28,
   },
   statsContainer: {
     flexDirection: 'row',

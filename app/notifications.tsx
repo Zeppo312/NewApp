@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { StyleSheet, View, TouchableOpacity, FlatList, ActivityIndicator, Text, SafeAreaView, RefreshControl } from 'react-native';
-import { Stack, router } from 'expo-router';
+import { Stack, router, useFocusEffect } from 'expo-router';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedBackground } from '@/components/ThemedBackground';
@@ -325,43 +325,12 @@ export default function NotificationsScreen() {
     }
   };
   
-  // Lade Daten beim ersten Rendern
-  useEffect(() => {
-    loadFollowedUsers().then(() => loadData());
-    
-    // Echtzeit-Updates für Benachrichtigungen
-    const notificationsSubscription = supabase
-      .channel('notifications_changes')
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'community_notifications',
-        // @ts-ignore - user kommt aus dem AuthContext und ist vom Typ User | null
-        filter: user ? `user_id=eq.${user.id}` : undefined
-      }, () => {
-        loadData();
-      })
-      .subscribe();
-    
-    // Echtzeit-Updates für Nachrichten
-    const messagesSubscription = supabase
-      .channel('messages_changes')
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'direct_messages',
-        // @ts-ignore - user kommt aus dem AuthContext und ist vom Typ User | null
-        filter: user ? `receiver_id=eq.${user.id}` : undefined
-      }, () => {
-        loadData();
-      })
-      .subscribe();
-    
-    return () => {
-      supabase.removeChannel(notificationsSubscription);
-      supabase.removeChannel(messagesSubscription);
-    };
-  }, [user]);
+  // Lade Daten beim Screen-Fokus (ersetzt Realtime für bessere Performance)
+  useFocusEffect(
+    useCallback(() => {
+      loadFollowedUsers().then(() => loadData());
+    }, [user])
+  );
   
   // Markiert eine Benachrichtigung als gelesen und navigiert zu ihrem Ziel
   const handleNotificationPress = async (notification: Notification) => {

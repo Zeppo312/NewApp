@@ -1,42 +1,12 @@
+import { babySizeData } from '@/lib/baby-size-data';
+
 // Vergleiche für die Babygröße in den verschiedenen Schwangerschaftswochen
-export const babySizeComparison: { [key: number]: string } = {
-  4: "Senfkorn 🌱",
-  5: "Mohnsamen ⚫",
-  6: "Linse 🟤",
-  7: "Blaubeere 🫐",
-  8: "Himbeere 🍓",
-  9: "Kirsche 🍒",
-  10: "Erdbeere 🍓",
-  11: "Feige 🟣",
-  12: "Limette 🍈",
-  13: "Pflaume 🟣",
-  14: "Zitrone 🍋",
-  15: "Apfel 🍏",
-  16: "Avocado 🥑",
-  17: "Birne 🍐",
-  18: "Paprika 🫑",
-  19: "Tomate 🍅",
-  20: "Banane 🍌",
-  21: "Karotte 🥕",
-  22: "Grapefruit 🍊",
-  23: "Mango 🥭",
-  24: "Aubergine 🍆",
-  25: "Zucchini 🥒",
-  26: "Maiskolben 🌽",
-  27: "Römersalatkopf 🥬",
-  28: "Kokosnuss 🥥",
-  29: "Butternut-Kürbis 🎃",
-  30: "Brokkoli 🥦",
-  31: "Ananas 🍍",
-  32: "Honigmelone 🍈",
-  33: "Cantaloupe-Melone 🍈",
-  34: "Spaghettikürbis 🎃",
-  35: "Wassermelone 🍉",
-  36: "Papaya 🧡",
-  37: "Kopfsalat 🥬",
-  38: "Mangold 🌿",
-  39: "Kürbis 🎃",
-  40: "Babygröße erreicht 🎉",
-  41: "Babygröße erreicht 🎉",
-  42: "Babygröße erreicht 🎉"
-};
+// werden direkt aus den zentralen Babydaten abgeleitet, damit Countdown
+// und Babygrößen-Seite dieselben Texte anzeigen.
+export const babySizeComparison: Record<number, string> = babySizeData.reduce<Record<number, string>>(
+  (acc, { week, fruitComparison }) => {
+    acc[week] = fruitComparison;
+    return acc;
+  },
+  {}
+);

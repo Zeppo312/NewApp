@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Modal,
@@ -9,13 +9,16 @@ import {
   Keyboard,
   Platform,
   ScrollView,
-  TextInput,
   LayoutAnimation,
   UIManager,
+  Image,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { getSampleRecipeImage, RECIPE_SAMPLES } from '@/lib/recipes-samples';
+import { fetchRecipes, RecipeRecord } from '@/lib/recipes';
+import TextInputOverlay from '@/components/modals/TextInputOverlay';
 
 // Typ-Definitionen
 type ActivityType = 'feeding' | 'diaper' | 'other';
@@ -30,7 +33,8 @@ interface ActivityInputModalProps {
   initialSubType?: string | null;
   date?: Date;
   onClose: () => void;
-  onSave: (data: any) => void; // data ist DB-ready für baby_care_entries
+  onSave: (data: any, options?: { startTimer?: boolean }) => void; // data ist DB-ready für baby_care_entries
+  onDelete?: (id: string) => void; // Optional: Nur wenn ein Eintrag bearbeitet wird
   initialData?: Partial<{
     id: string;
     feeding_type: 'BREAST' | 'BOTTLE' | 'SOLIDS';
@@ -43,6 +47,12 @@ interface ActivityInputModalProps {
   }>;
 }
 
+const FixedEmojiText: React.FC<React.ComponentProps<typeof Text>> = ({ style, children, ...rest }) => (
+  <Text {...rest} allowFontScaling={false} style={style}>
+    {children}
+  </Text>
+);
+
 const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   visible,
   activityType,
@@ -50,6 +60,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   date,
   onClose,
   onSave,
+  onDelete,
   initialData,
 }) => {
   // Theme und Farben
@@ -75,6 +86,16 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   const [showEndPicker, setShowEndPicker] = useState(false);
   const [notes, setNotes] = useState('');
   const [isNotesVisible, setNotesVisible] = useState(false);
+  const [focusConfig, setFocusConfig] = useState<{ label: string; placeholder?: string; multiline?: boolean } | null>(null);
+  const [focusValue, setFocusValue] = useState('');
+  const [startTimer, setStartTimer] = useState(false);
+  const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
+  const [recipeDropdownOpen, setRecipeDropdownOpen] = useState(false);
+  const [recipeOptions, setRecipeOptions] = useState<
+    { id: string; title: string; minMonths?: number; image?: string | null; emoji?: string; source: 'live' | 'sample' }[]
+  >(RECIPE_SAMPLES.map((r) => ({ id: r.id, title: r.title, minMonths: r.min_months, image: r.image, emoji: r.emoji, source: 'sample' })));
+  const [isLoadingRecipes, setIsLoadingRecipes] = useState(false);
+  const initKeyRef = useRef<string | null>(null);
 
   // Feeding States
   const [feedingType, setFeedingType] = useState<FeedingType>('bottle');
@@ -90,42 +111,87 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   }
 
   // Effekt zum Zurücksetzen der Werte bei Sichtbarkeit
+  // Only initialize on open or target change to avoid resetting user edits.
   useEffect(() => {
-    if (visible) {
-      const now = date || new Date();
-      setStartTime(initialData?.start_time ? new Date(initialData.start_time) : now);
-      setEndTime(initialData?.end_time ? new Date(initialData.end_time) : null);
-      setEndTimeVisible(!!initialData?.end_time);
-      setNotes(initialData?.notes ?? '');
-      setNotesVisible(false);
-      
-      // Standardwerte setzen
-      if (activityType === 'feeding') {
-        if (initialData?.feeding_type === 'BREAST') setFeedingType('breast');
-        else if (initialData?.feeding_type === 'SOLIDS') setFeedingType('solids');
-        else setFeedingType('bottle');
-        setVolumeMl(initialData?.feeding_volume_ml ?? 120);
-        setBreastSide(
-          initialData?.feeding_side === 'RIGHT' ? 'right' : initialData?.feeding_side === 'BOTH' ? 'both' : 'left'
-        );
-      } else if (activityType === 'diaper') {
-        setDiaperType(
-          initialData?.diaper_type === 'DIRTY' ? 'dirty' : initialData?.diaper_type === 'BOTH' ? 'both' : 'wet'
-        );
-      }
-      
-      // Hier könnten initialSubType ausgewertet werden
+    if (!visible) {
+      initKeyRef.current = null;
+      return;
     }
+
+    const initKey = `${activityType}:${initialData?.id ?? 'new'}:${initialSubType ?? ''}`;
+    if (initKeyRef.current === initKey) return;
+    initKeyRef.current = initKey;
+
+    const now = date || new Date();
+    setStartTime(initialData?.start_time ? new Date(initialData.start_time) : now);
+    setEndTime(initialData?.end_time ? new Date(initialData.end_time) : null);
+    setEndTimeVisible(!!initialData?.end_time);
+    setNotes(initialData?.notes ?? '');
+    setNotesVisible(false);
+    setFocusConfig(null);
+    setFocusValue('');
+    setStartTimer(false);
+    setSelectedRecipeId(null);
+    setRecipeDropdownOpen(false);
+
+    // Standardwerte setzen
+    if (activityType === 'feeding') {
+      if (initialData?.feeding_type === 'BREAST') setFeedingType('breast');
+      else if (initialData?.feeding_type === 'SOLIDS') setFeedingType('solids');
+      else setFeedingType('bottle');
+      setVolumeMl(initialData?.feeding_volume_ml ?? 120);
+      setBreastSide(
+        initialData?.feeding_side === 'RIGHT' ? 'right' : initialData?.feeding_side === 'BOTH' ? 'both' : 'left'
+      );
+    } else if (activityType === 'diaper') {
+      setDiaperType(
+        initialData?.diaper_type === 'DIRTY' ? 'dirty' : initialData?.diaper_type === 'BOTH' ? 'both' : 'wet'
+      );
+    }
+
+    // Hier könnten initialSubType ausgewertet werden
   }, [visible, initialSubType, date, initialData, activityType]);
+
+  // Rezepte laden (Supabase), fallback auf Samples
+  useEffect(() => {
+    const loadRecipes = async () => {
+      if (!(visible && activityType === 'feeding' && feedingType === 'solids')) return;
+      try {
+        setIsLoadingRecipes(true);
+        const { data, error } = await fetchRecipes();
+        if (!error && data && data.length > 0) {
+          const mapped = data.map((r: RecipeRecord) => ({
+            id: r.id,
+            title: r.title,
+            minMonths: r.min_months,
+            image: r.image_url ?? getSampleRecipeImage(r.title),
+            emoji: '🥄',
+            source: 'live' as const,
+          }));
+          setRecipeOptions(mapped);
+        } else {
+          // Fallback auf Samples
+          setRecipeOptions(RECIPE_SAMPLES.map((r) => ({ id: r.id, title: r.title, minMonths: r.min_months, image: r.image, emoji: r.emoji, source: 'sample' })));
+        }
+      } finally {
+        setIsLoadingRecipes(false);
+      }
+    };
+    loadRecipes();
+  }, [visible, activityType, feedingType]);
 
   // Speichern: Payload für baby_care_entries
   const handleSave = () => {
     const entryDateISO = startTime.toISOString();
+    const selectedRecipe = recipeOptions.find((r) => r.id === selectedRecipeId);
+    const recipeTitle = selectedRecipe?.title?.trim() || (selectedRecipe ? 'BLW-Rezept' : null);
+    const recipeNote = recipeTitle ? `BLW: ${recipeTitle}` : null;
+    const combinedNotes = [notes?.trim(), recipeNote ?? ''].filter(Boolean).join('\n');
     const base = {
       entry_type: activityType,           // 'feeding' | 'diaper'
       start_time: entryDateISO,
       end_time: endTime ? endTime.toISOString() : null as string | null,
-      notes: notes || null,
+      notes: combinedNotes || null,
     };
 
     let payload: any = base;
@@ -161,7 +227,14 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
     // other: nur base + notes
 
     console.log('ActivityInputModal - Sending payload:', JSON.stringify(payload, null, 2));
-    onSave(payload);
+    onSave(payload, { startTimer });
+    onClose();
+  };
+
+  // Löschen: Nur bei Bearbeitung verfügbar
+  const handleDelete = () => {
+    if (!initialData?.id || !onDelete) return;
+    onDelete(initialData.id);
     onClose();
   };
 
@@ -173,7 +246,10 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
 
   const renderTimeSection = () => (
     <View style={styles.section}>
-      <Text style={[styles.sectionTitle, { color: theme.text }]}>⏰ Zeitraum</Text>
+      <Text style={[styles.sectionTitle, { color: theme.text }]}>
+        <FixedEmojiText style={styles.sectionTitleEmoji}>⏰</FixedEmojiText>{' '}
+        Zeitraum
+      </Text>
 
       <View style={styles.timeRow}> 
         <TouchableOpacity style={styles.timeButton} onPress={() => setShowStartPicker(true)}>
@@ -183,11 +259,24 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
           </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.timeButton} onPress={() => { setEndTimeVisible(true); setShowEndPicker(true); }}>
+        <TouchableOpacity
+          style={[styles.timeButton, startTimer && styles.timeButtonDisabled]}
+          onPress={() => {
+            if (startTimer) return;
+            setEndTimeVisible(true);
+            setShowEndPicker(true);
+          }}
+          activeOpacity={startTimer ? 1 : 0.7}
+        >
           <Text style={styles.timeLabel}>Ende</Text>
-          <Text style={styles.timeValue}>
-            {endTime ? endTime.toLocaleString('de-DE', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : 'Offen'}
+          <Text style={[styles.timeValue, startTimer && styles.timeDisabledText]}>
+            {startTimer
+              ? 'Timer läuft'
+              : endTime
+              ? endTime.toLocaleString('de-DE', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })
+              : 'Offen'}
           </Text>
+          {startTimer && <Text style={styles.timeHint}>Stoppe später, Ende wird gesetzt</Text>}
         </TouchableOpacity>
       </View>
 
@@ -223,6 +312,35 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
             </TouchableOpacity>
           </View>
         </View>
+      )}
+
+      {(activityType === 'feeding' || activityType === 'diaper') && (
+        <TouchableOpacity
+          style={[styles.timerToggle, startTimer && styles.timerToggleActive]}
+          onPress={() => {
+            setStartTimer((prev) => {
+              const next = !prev;
+              if (next) {
+                setEndTime(null);
+                setEndTimeVisible(false);
+              }
+              return next;
+            });
+          }}
+          activeOpacity={0.85}
+        >
+          <View style={[styles.timerTogglePill, startTimer && styles.timerTogglePillActive]}>
+            <View style={[styles.timerToggleKnob, startTimer && styles.timerToggleKnobActive]} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.timerToggleLabel, { color: theme.text }]}>
+              Timer optional mitlaufen lassen
+            </Text>
+            <Text style={[styles.timerToggleSub, { color: theme.textSecondary }]}>
+              {startTimer ? 'Läuft, bis du stoppst' : 'Ohne Timer speichern'}
+            </Text>
+          </View>
+        </TouchableOpacity>
       )}
     </View>
   );
@@ -290,7 +408,10 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
     const quickVolumes = [60, 90, 120, 150, 180, 210];
     return (
       <View style={{width: '100%', alignItems: 'center'}}>
-        <Text style={[styles.sectionTitle, { color: theme.text }]}>🥛 Menge (ml)</Text>
+        <Text style={[styles.sectionTitle, { color: theme.text }]}>
+          <FixedEmojiText style={styles.sectionTitleEmoji}>🥛</FixedEmojiText>{' '}
+          Menge (ml)
+        </Text>
         <View style={styles.volumeStepperContainer}>
           <TouchableOpacity style={styles.stepperButton} onPress={() => setVolumeMl(v => Math.max(0, v - 10))}>
             <Text style={styles.stepperButtonText}>-</Text>
@@ -323,7 +444,10 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
 
   const renderFeedingSection = () => (
     <View style={styles.section}>
-      <Text style={[styles.sectionTitle, { color: theme.text }]}>🍼 Art der Fütterung</Text>
+      <Text style={[styles.sectionTitle, { color: theme.text }]}>
+        <FixedEmojiText style={styles.sectionTitleEmoji}>🍼</FixedEmojiText>{' '}
+        Art der Fütterung
+      </Text>
       <View style={styles.optionsGrid}>
         {[
           { type: 'breast', label: 'Brust', icon: '🤱' },
@@ -339,7 +463,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
             ]}
             onPress={() => setFeedingType(option.type as FeedingType)}
           >
-            <Text style={styles.optionIcon}>{option.icon}</Text>
+            <FixedEmojiText style={styles.optionIcon}>{option.icon}</FixedEmojiText>
             <Text style={[styles.optionLabel, { color: feedingType === option.type ? '#FFFFFF' : theme.text }]}>
               {option.label}
             </Text>
@@ -350,16 +474,83 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
         {feedingType === 'bottle' && renderVolumeControl()}
         {feedingType === 'breast' && (
           <View style={{width: '100%', alignItems: 'center'}}>
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>🤱 Seite</Text>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>
+              <FixedEmojiText style={styles.sectionTitleEmoji}>🤱</FixedEmojiText>{' '}
+              Seite
+            </Text>
             {renderBreastSideSelector()}
             <Text style={[styles.infoText, {marginTop: 20}]}>Wähle die Seite, auf der gestillt wurde.</Text>
           </View>
         )}
         {feedingType === 'solids' && (
           <View style={{width: '100%', alignItems: 'center', paddingTop: 20}}>
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>🥦 Beikost</Text>
-            <Text style={[styles.infoText, {marginTop: 10}]}>
-              Weitere Details zur Beikost folgen in Kürze.
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>
+              <FixedEmojiText style={styles.sectionTitleEmoji}>🥦</FixedEmojiText>{' '}
+              BLW-Rezepte
+            </Text>
+            <TouchableOpacity
+              style={styles.recipeDropdown}
+              onPress={() => setRecipeDropdownOpen((v) => !v)}
+              activeOpacity={0.9}
+            >
+              <Text style={[styles.recipeDropdownLabel, { color: theme.text }]}>
+                {selectedRecipeId
+                  ? recipeOptions.find((r) => r.id === selectedRecipeId)?.title?.trim() || 'Rezept wählen'
+                  : isLoadingRecipes
+                  ? 'Lade Rezepte...'
+                  : 'Rezept auswählen (optional)'}
+              </Text>
+              <Text style={styles.recipeDropdownCaret}>{recipeDropdownOpen ? '▲' : '▼'}</Text>
+            </TouchableOpacity>
+
+            {recipeDropdownOpen && (
+              <View style={styles.recipeList}>
+                {isLoadingRecipes ? (
+                  <View style={styles.recipeLoadingRow}>
+                    <Text style={styles.recipeRowTitle}>Lade Rezepte ...</Text>
+                  </View>
+                ) : recipeOptions.length === 0 ? (
+                  <View style={styles.recipeLoadingRow}>
+                    <Text style={styles.recipeRowTitle}>Keine Rezepte gefunden</Text>
+                  </View>
+                ) : recipeOptions.map((recipe) => {
+                  const isSelected = selectedRecipeId === recipe.id;
+                  const displayTitle = recipe.title?.trim() || 'Rezept';
+                  const subtitle = recipe.minMonths ? `${recipe.minMonths}+ Monate` : recipe.source === 'sample' ? 'Sample' : '';
+                  return (
+                    <TouchableOpacity
+                      key={recipe.id}
+                      style={[styles.recipeRow, isSelected && styles.recipeRowSelected]}
+                      onPress={() => {
+                        setSelectedRecipeId(isSelected ? null : recipe.id);
+                        setRecipeDropdownOpen(false);
+                      }}
+                      activeOpacity={0.9}
+                      >
+                        {recipe.image ? (
+                          <Image source={{ uri: recipe.image }} style={styles.recipeThumb} resizeMode="cover" />
+                        ) : (
+                          <View style={[styles.recipeThumb, styles.recipeThumbFallback]}>
+                          <FixedEmojiText style={styles.recipeThumbEmoji}>{recipe.emoji ?? '🥄'}</FixedEmojiText>
+                          </View>
+                        )}
+                        <View style={styles.recipeRowText}>
+                        <Text numberOfLines={2} style={styles.recipeRowTitle}>{displayTitle}</Text>
+                        {subtitle.length > 0 && (
+                          <Text style={styles.recipeRowSub}>{subtitle}</Text>
+                        )}
+                        </View>
+                        <View style={[styles.recipeCheckbox, isSelected && styles.recipeCheckboxActive]}>
+                          {isSelected && <Text style={styles.recipeCheckboxTick}>✓</Text>}
+                        </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+
+            <Text style={[styles.infoText, {marginTop: 12}]}>
+              Der gewählte Rezepttitel erscheint als Hinweis in der Timeline.
             </Text>
           </View>
         )}
@@ -369,7 +560,10 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
 
   const renderDiaperSection = () => (
     <View style={styles.section}>
-      <Text style={[styles.sectionTitle, { color: theme.text }]}>💧 Art der Windel</Text>
+      <Text style={[styles.sectionTitle, { color: theme.text }]}>
+        <FixedEmojiText style={styles.sectionTitleEmoji}>💧</FixedEmojiText>{' '}
+        Art der Windel
+      </Text>
       <View style={styles.optionsGrid}>
         {[
           { type: 'wet', label: 'Nass', icon: '💧' },
@@ -388,7 +582,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
             ]}
             onPress={() => setDiaperType(option.type as DiaperType)}
           >
-            <Text style={styles.optionIcon}>{option.icon}</Text>
+            <FixedEmojiText style={styles.optionIcon}>{option.icon}</FixedEmojiText>
             <Text style={[styles.optionLabel, { color: diaperType === option.type ? '#FFFFFF' : theme.text }]}>
               {option.label}
             </Text>
@@ -404,21 +598,48 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
     setNotesVisible(!isNotesVisible);
   };
 
+  const openNotesEditor = () => {
+    setFocusValue(notes);
+    setFocusConfig({
+      label: 'Notizen',
+      placeholder: 'Details hinzufügen...',
+      multiline: true,
+    });
+  };
+
+  const closeNotesEditor = () => {
+    setFocusConfig(null);
+    setFocusValue('');
+  };
+
+  const saveNotesEditor = (next?: string) => {
+    const val = typeof next === 'string' ? next : focusValue;
+    setNotes(val);
+    closeNotesEditor();
+  };
+
   const renderNotes = () => (
       <View style={styles.section}>
          <TouchableOpacity style={styles.notesHeader} onPress={toggleNotes}>
-           <Text style={[styles.sectionTitle, { color: theme.text, marginBottom: 0 }]}>📝 Notizen</Text>
+           <Text style={[styles.sectionTitle, { color: theme.text, marginBottom: 0 }]}>
+             <FixedEmojiText style={styles.sectionTitleEmoji}>📝</FixedEmojiText>{' '}
+             Notizen
+           </Text>
            <Text style={{ fontSize: 20, transform: [{ rotate: isNotesVisible ? '90deg' : '0deg' }] }}>›</Text>
          </TouchableOpacity>
          {isNotesVisible && (
-            <TextInput
-                style={[styles.notesInput, { color: theme.text, backgroundColor: theme.lightGray }]}
-                value={notes}
-                onChangeText={setNotes}
-                placeholder="Details hinzufügen..."
-                placeholderTextColor={theme.textSecondary}
-                multiline
-            />
+            <TouchableOpacity
+              style={[styles.notesInput, { backgroundColor: theme.lightGray }]}
+              activeOpacity={0.9}
+              onPress={openNotesEditor}
+            >
+              <Text
+                style={{ color: notes.trim() ? theme.text : theme.textSecondary, fontSize: 14 }}
+                numberOfLines={3}
+              >
+                {notes.trim() || 'Details hinzufügen...'}
+              </Text>
+            </TouchableOpacity>
          )}
       </View>
   );
@@ -445,12 +666,32 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
                         {activityType === 'diaper' && renderDiaperSection()}
                         {renderTimeSection()}
                         {renderNotes()}
+
+                        {/* Löschen-Button nur beim Bearbeiten anzeigen */}
+                        {initialData?.id && onDelete && (
+                          <TouchableOpacity
+                            style={styles.deleteButton}
+                            onPress={handleDelete}
+                            activeOpacity={0.85}
+                          >
+                            <Text style={styles.deleteButtonText}>🗑️  Eintrag löschen</Text>
+                          </TouchableOpacity>
+                        )}
                     </View>
                 </TouchableWithoutFeedback>
             </ScrollView>
         </BlurView>
       </View>
 
+      <TextInputOverlay
+        visible={!!focusConfig}
+        label={focusConfig?.label ?? ''}
+        value={focusValue}
+        placeholder={focusConfig?.placeholder}
+        multiline={!!focusConfig?.multiline}
+        onClose={closeNotesEditor}
+        onSubmit={(next) => saveNotesEditor(next)}
+      />
     </Modal>
   );
 };
@@ -528,6 +769,10 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     width: '90%',
     textAlign: 'left',
+  },
+  sectionTitleEmoji: {
+    fontSize: 16,
+    fontWeight: '600',
   },
   optionsGrid: {
     flexDirection: 'row',
@@ -619,8 +864,13 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     elevation: 3,
   },
+  timeButtonDisabled: {
+    opacity: 0.72,
+  },
   timeLabel: { fontSize: 12, color: '#888888', fontWeight: '600', marginBottom: 5 },
   timeValue: { fontSize: 16, color: '#333333', fontWeight: 'bold' },
+  timeDisabledText: { color: '#777' },
+  timeHint: { marginTop: 6, fontSize: 12, color: '#777' },
   datePickerContainer: {
     marginTop: 15,
     backgroundColor: 'rgba(255, 255, 255, 0.9)',
@@ -677,6 +927,158 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
+  recipeDropdown: {
+    width: '90%',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.85)',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.06)',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  recipeDropdownLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  recipeDropdownCaret: {
+    fontSize: 16,
+    color: '#666',
+  },
+  recipeList: {
+    width: '90%',
+    marginTop: 10,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.05)',
+    overflow: 'hidden',
+    alignSelf: 'center',
+  },
+  recipeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    minHeight: 64,
+    width: '100%',
+  },
+  recipeRowSelected: {
+    backgroundColor: 'rgba(74,144,226,0.12)',
+  },
+  recipeThumb: {
+    width: 48,
+    height: 48,
+    borderRadius: 10,
+    backgroundColor: '#f2f2f2',
+  },
+  recipeThumbFallback: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  recipeThumbEmoji: {
+    fontSize: 22,
+  },
+  recipeRowText: {
+    flex: 1,
+    flexShrink: 1,
+    paddingRight: 8,
+    marginLeft: 12,
+  },
+  recipeRowTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1F1F1F',
+  },
+  recipeRowSub: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 2,
+  },
+  recipeLoadingRow: {
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    alignItems: 'flex-start',
+  },
+  recipeCheckbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    borderColor: '#4A90E2',
+    backgroundColor: 'rgba(74,144,226,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 12,
+  },
+  recipeCheckboxActive: {
+    backgroundColor: '#4A90E2',
+    borderColor: '#4A90E2',
+  },
+  recipeCheckboxTick: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  timerToggle: {
+    width: '90%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    marginTop: 18,
+    backgroundColor: 'rgba(255,255,255,0.8)',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.05)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  timerToggleActive: {
+    borderColor: 'rgba(74,144,226,0.45)',
+    backgroundColor: 'rgba(74,144,226,0.12)',
+  },
+  timerTogglePill: {
+    width: 48,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#D6D6D6',
+    padding: 4,
+    justifyContent: 'center',
+  },
+  timerTogglePillActive: {
+    backgroundColor: '#4A90E2',
+  },
+  timerToggleKnob: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#fff',
+    alignSelf: 'flex-start',
+  },
+  timerToggleKnobActive: {
+    alignSelf: 'flex-end',
+  },
+  timerToggleLabel: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  timerToggleSub: {
+    fontSize: 13,
+    marginTop: 2,
+    fontWeight: '500',
+  },
   sideSelectorContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
@@ -725,6 +1127,29 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(240, 240, 240, 0.9)',
     width: '100%',
     marginTop: 10,
+  },
+  deleteButton: {
+    width: '90%',
+    marginTop: 30,
+    marginBottom: 20,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 107, 107, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 107, 107, 0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#FF6B6B',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  deleteButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#D63031',
   },
 });
 

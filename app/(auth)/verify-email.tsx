@@ -9,7 +9,7 @@ import { ThemedView } from '@/components/ThemedView';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
-import { resendEmailVerification, checkEmailVerification } from '@/lib/supabase';
+import { resendOTPToken, checkEmailVerification } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function VerifyEmailScreen() {
@@ -30,7 +30,7 @@ export default function VerifyEmailScreen() {
 
   useEffect(() => {
     // Countdown für erneutes Senden
-    let interval: NodeJS.Timeout;
+    let interval: ReturnType<typeof setInterval>;
     if (countdown > 0) {
       interval = setInterval(() => {
         setCountdown(prev => {
@@ -55,7 +55,7 @@ export default function VerifyEmailScreen() {
     setCanResend(false);
 
     try {
-      const { error } = await resendEmailVerification(email);
+      const { error } = await resendOTPToken(email);
       
       if (error) {
         console.error('Resend email error:', error);

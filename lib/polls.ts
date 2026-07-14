@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { getCachedUser } from './supabase';
 
 // Typdefinitionen
 export interface Poll {
@@ -32,7 +33,7 @@ export interface CreatePollData {
 // Umfrage für einen Post erstellen
 export const createPoll = async (postId: string, pollData: CreatePollData) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     // Umfrage erstellen
@@ -81,7 +82,7 @@ export const createPoll = async (postId: string, pollData: CreatePollData) => {
 // Umfrage mit Optionen abrufen
 export const getPoll = async (pollId: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     // Umfrage abrufen
@@ -138,7 +139,7 @@ export const getPoll = async (pollId: string) => {
 // Umfragen für einen Post abrufen
 export const getPollsByPostId = async (postId: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     // Umfragen für den Post abrufen
@@ -168,7 +169,7 @@ export const getPollsByPostId = async (postId: string) => {
 // Für eine Option abstimmen oder Stimme zurückziehen
 export const voteForOption = async (optionId: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     // Prüfen, zu welcher Umfrage die Option gehört

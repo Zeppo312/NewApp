@@ -1,7 +1,9 @@
-import React, { createContext, useState, useEffect, useContext } from 'react';
+import React, { createContext, useState, useEffect, useContext, useRef } from 'react';
+import { differenceInMonths } from 'date-fns';
 import { getBabyBornStatus, setBabyBornStatus } from '@/lib/supabase';
 import { useAuth } from './AuthContext';
 import { getBabyInfo } from '@/lib/baby';
+import { useActiveBaby } from './ActiveBabyContext';
 
 interface BabyStatusContextType {
   isBabyBorn: boolean;
@@ -9,6 +11,7 @@ interface BabyStatusContextType {
   isLoading: boolean;
   babyAgeMonths: number;
   babyWeightPercentile: number;
+  refreshBabyDetails: () => Promise<void>;
 }
 
 const BabyStatusContext = createContext<BabyStatusContextType | undefined>(undefined);
@@ -16,42 +19,57 @@ const BabyStatusContext = createContext<BabyStatusContextType | undefined>(undef
 export const BabyStatusProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isBabyBorn, setIsBabyBornState] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [babyAgeMonths, setBabyAgeMonths] = useState(4); // Standardwert: 4 Monate
+  const [babyAgeMonths, setBabyAgeMonths] = useState(0); // Standardwert: 0 Monate
   const [babyWeightPercentile, setBabyWeightPercentile] = useState(50); // Standardwert: 50. Perzentile
   const { user } = useAuth();
+  const { activeBabyId } = useActiveBaby();
+  const isInitialLoadRef = useRef(true);
 
   useEffect(() => {
     if (user) {
-      loadBabyBornStatus();
+      // Beim ersten Laden zeigen wir den Loading-Screen
+      // Beim Baby-Wechsel (activeBabyId ändert sich) laden wir im Hintergrund ohne Loading-Screen
+      const showLoading = isInitialLoadRef.current;
+      loadBabyBornStatus(showLoading);
       loadBabyDetails();
+
+      // Nach dem ersten Laden setzen wir isInitialLoadRef auf false
+      if (isInitialLoadRef.current) {
+        isInitialLoadRef.current = false;
+      }
     } else {
       setIsLoading(false);
     }
-  }, [user]);
+  }, [user, activeBabyId]);
 
-  const loadBabyBornStatus = async () => {
+  const loadBabyBornStatus = async (showLoading: boolean = true) => {
     try {
-      setIsLoading(true);
+      if (showLoading) {
+        setIsLoading(true);
+      }
       const { data } = await getBabyBornStatus();
       setIsBabyBornState(data);
     } catch (error) {
       console.error('Error loading baby born status:', error);
     } finally {
-      setIsLoading(false);
+      if (showLoading) {
+        setIsLoading(false);
+      }
     }
   };
 
   const loadBabyDetails = async () => {
     try {
-      const { data } = await getBabyInfo();
+      const { data } = await getBabyInfo(activeBabyId ?? undefined);
       
       // Wenn das Geburtsdatum verfügbar ist, berechne das Alter in Monaten
       if (data && data.birth_date) {
         const birthDate = new Date(data.birth_date);
         const today = new Date();
-        const ageInMonths = (today.getFullYear() - birthDate.getFullYear()) * 12 + 
-                           today.getMonth() - birthDate.getMonth();
+        const ageInMonths = differenceInMonths(today, birthDate);
         setBabyAgeMonths(Math.max(0, ageInMonths));
+      } else {
+        setBabyAgeMonths(0);
       }
       
       // Für die Gewichtsperzentile verwenden wir momentan einen Standardwert
@@ -79,7 +97,8 @@ export const BabyStatusProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         setIsBabyBorn, 
         isLoading, 
         babyAgeMonths,
-        babyWeightPercentile
+        babyWeightPercentile,
+        refreshBabyDetails: loadBabyDetails
       }}
     >
       {children}

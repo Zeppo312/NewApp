@@ -1,28 +1,32 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, Image, TextInput, Alert, SafeAreaView, StatusBar, Platform } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { StyleSheet, ScrollView, View, TouchableOpacity, Image, TextInput, Alert, SafeAreaView, StatusBar, Platform, BackHandler } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/contexts/AuthContext';
+import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { getBabyInfo, saveBabyInfo, BabyInfo } from '@/lib/baby';
+import { useActiveBaby } from '@/contexts/ActiveBabyContext';
+import { loadBabyInfoWithCache, invalidateBabyCache } from '@/lib/babyCache';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import * as ImagePicker from 'expo-image-picker';
-import { supabase } from '@/lib/supabase';
 import { useRouter, Stack } from 'expo-router';
-import { BackButton } from '@/components/BackButton';
 import Header from '@/components/Header';
 import { useSmartBack } from '@/contexts/NavigationContext';
 import * as Notifications from 'expo-notifications';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { defineMilestoneCheckerTask, saveBabyInfoForBackgroundTask, isTaskRegistered } from '@/tasks/milestoneCheckerTask';
 import { LAYOUT_PAD, TIMELINE_INSET, LiquidGlassCard } from '@/constants/DesignGuide';
+import { useFocusEffect } from '@react-navigation/native';
+import * as ImagePicker from 'expo-image-picker';
+import * as Haptics from 'expo-haptics';
 
 export default function BabyScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const { user } = useAuth();
+  const { activeBabyId, refreshBabies, isReady } = useActiveBaby();
+  const { refreshBabyDetails } = useBabyStatus();
   const router = useRouter();
   
   // Set fallback route for smart back navigation
@@ -32,12 +36,10 @@ export default function BabyScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
-  const [notificationsRequested, setNotificationsRequested] = useState(false);
   const [backgroundTaskStatus, setBackgroundTaskStatus] = useState<{status: string, isRegistered: boolean} | null>(null);
 
   useEffect(() => {
     if (user) {
-      loadBabyInfo();
       registerForPushNotificationsAsync();
       setupBackgroundTask();
     } else {
@@ -71,48 +73,152 @@ export default function BabyScreen() {
   };
 
   const loadBabyInfo = async () => {
+    if (!activeBabyId) {
+      setIsLoading(false);
+      return;
+    }
+
     try {
       setIsLoading(true);
-      const { data, error } = await getBabyInfo();
-      if (error) {
-        console.error('Error loading baby info:', error);
-      } else if (data) {
-        setBabyInfo({
-          id: data.id,
-          name: data.name || '',
-          birth_date: data.birth_date || null,
-          weight: data.weight || '',
-          height: data.height || '',
-          photo_url: data.photo_url || null,
-          baby_gender: data.baby_gender || 'unknown'
-        });
-        
-        // Wir planen keine Benachrichtigungen im Voraus mehr, stattdessen prüfen wir täglich
+
+      // Load with cache - instant if cached
+      const { data, isStale, refresh } = await loadBabyInfoWithCache(activeBabyId);
+
+      // Show cached data immediately
+      if (data) {
+        setBabyInfo(data);
+        setIsLoading(false);
+      }
+
+      // Refresh in background if stale
+      if (isStale) {
+        const freshData = await refresh();
+        setBabyInfo(freshData);
+      }
+
+      // If no cache, data is already fresh
+      if (!data) {
+        setIsLoading(false);
       }
     } catch (err) {
       console.error('Failed to load baby info:', err);
-    } finally {
       setIsLoading(false);
     }
   };
 
-  const handleSave = async () => {
+  useFocusEffect(
+    useCallback(() => {
+      if (!user || !isReady || !activeBabyId) return;
+  
+      loadBabyInfo();
+  
+      const handleHardwareBack = () => {
+        router.push('/(tabs)/home');
+        return true;
+      };
+  
+      const subscription = BackHandler.addEventListener(
+        'hardwareBackPress',
+        handleHardwareBack
+      );
+  
+      return () => subscription.remove();
+    }, [user, isReady, activeBabyId, router])
+  );
+
+  const displayPhoto = babyInfo.photo_url || null;
+
+  const triggerHaptic = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
+  };
+
+  const pickBabyPhoto = async () => {
     try {
-      const { error } = await saveBabyInfo(babyInfo);
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Berechtigung erforderlich', 'Bitte erlaube den Zugriff auf deine Fotos.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.7,
+        base64: true,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        let base64Data: string | null = null;
+
+        if (asset.base64) {
+          base64Data = `data:image/jpeg;base64,${asset.base64}`;
+        } else if (asset.uri) {
+          try {
+            const response = await fetch(asset.uri);
+            const blob = await response.blob();
+            const reader = new FileReader();
+            base64Data = await new Promise((resolve, reject) => {
+              reader.onload = () => resolve(reader.result as string);
+              reader.onerror = reject;
+              reader.readAsDataURL(blob);
+            });
+          } catch (error) {
+            console.error('Fehler bei der Bildkonvertierung:', error);
+            Alert.alert('Fehler', 'Das Bild konnte nicht verarbeitet werden.');
+            return;
+          }
+        }
+
+        if (!base64Data) {
+          Alert.alert('Fehler', 'Das Bild konnte nicht verarbeitet werden.');
+          return;
+        }
+
+        setBabyInfo((current) => ({
+          ...current,
+          photo_url: base64Data,
+        }));
+      }
+    } catch (error) {
+      console.error('Error picking baby photo:', error);
+      Alert.alert('Fehler', 'Das Babyfoto konnte nicht ausgewählt werden.');
+    }
+  };
+
+  const removeBabyPhoto = () => {
+    setBabyInfo((current) => ({
+      ...current,
+      photo_url: null,
+    }));
+  };
+
+  const handleSave = async () => {
+    if (!activeBabyId) return;
+
+    try {
+      const { error } = await saveBabyInfo(babyInfo, activeBabyId ?? undefined);
       if (error) {
         console.error('Error saving baby info:', error);
         Alert.alert('Fehler', 'Die Informationen konnten nicht gespeichert werden.');
       } else {
         Alert.alert('Erfolg', 'Die Informationen wurden erfolgreich gespeichert.');
         setIsEditing(false);
-        
+        await refreshBabyDetails();
+        await refreshBabies();
+
         // Speichere relevante Baby-Infos für den Hintergrund-Task
         if (babyInfo.birth_date) {
           await saveBabyInfoForBackgroundTask(babyInfo);
           console.log('Baby-Infos für Hintergrund-Task gespeichert.');
         }
-        
-        loadBabyInfo(); // Neu laden, um sicherzustellen, dass wir die aktuellsten Daten haben
+
+        // Invalidate cache after save
+        await invalidateBabyCache(activeBabyId);
+
+        // Reload fresh data from Supabase
+        loadBabyInfo();
       }
     } catch (err) {
       console.error('Failed to save baby info:', err);
@@ -130,91 +236,21 @@ export default function BabyScreen() {
     }
   };
 
-  const pickImage = async () => {
-    try {
-      // Berechtigungen anfordern
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Berechtigung erforderlich', 'Wir benötigen die Berechtigung, auf deine Fotos zuzugreifen.');
-        return;
-      }
-
-      // Bild auswählen
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 0.5, // Reduzierte Qualität für kleinere Dateigröße
-        base64: true, // Base64-Daten anfordern
-      });
-
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        const asset = result.assets[0];
-        let base64Data: string;
-
-        // Wenn base64 nicht direkt verfügbar ist, konvertieren wir das Bild
-        if (!asset.base64) {
-          console.log('Base64 nicht direkt verfügbar, konvertiere Bild...');
-          try {
-            const response = await fetch(asset.uri);
-            const blob = await response.blob();
-            const reader = new FileReader();
-
-            // Promise für FileReader erstellen
-            base64Data = await new Promise((resolve, reject) => {
-              reader.onload = () => resolve(reader.result as string);
-              reader.onerror = reject;
-              reader.readAsDataURL(blob);
-            });
-
-            console.log('Bild erfolgreich in Base64 konvertiert');
-          } catch (convError) {
-            console.error('Fehler bei der Konvertierung:', convError);
-            Alert.alert('Fehler', 'Das Bild konnte nicht verarbeitet werden.');
-            return;
-          }
-        } else {
-          // Base64-Daten direkt verwenden
-          base64Data = `data:image/jpeg;base64,${asset.base64}`;
-          console.log('Base64-Daten direkt verwendet');
-        }
-
-        // Aktualisiere den lokalen Zustand
-        const updatedBabyInfo = {
-          ...babyInfo,
-          photo_url: base64Data
-        };
-
-        setBabyInfo(updatedBabyInfo);
-
-        // Speichere das Bild sofort in der Datenbank
-        try {
-          const { error } = await saveBabyInfo(updatedBabyInfo);
-          if (error) {
-            console.error('Error saving baby photo:', error);
-            Alert.alert('Fehler', 'Das Bild konnte nicht gespeichert werden.');
-          } else {
-            console.log('Bild erfolgreich gespeichert');
-            // Kein Alert hier, um den Benutzer nicht zu stören
-          }
-        } catch (saveError) {
-          console.error('Failed to save baby photo:', saveError);
-          Alert.alert('Fehler', 'Das Bild konnte nicht gespeichert werden.');
-        }
-      }
-    } catch (error) {
-      console.error('Error picking image:', error);
-      Alert.alert('Fehler', 'Es ist ein Fehler beim Auswählen des Bildes aufgetreten.');
-    }
-  };
-
   return (
     <ThemedBackground style={styles.container}>
       <SafeAreaView style={{ flex: 1 }}>
         <Stack.Screen options={{ headerShown: false }} />
         <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
         
-        <Header title="Mein Baby" subtitle="Alle Infos & Einstellungen" showBackButton />
+        <Header
+          title="Mein Baby"
+          subtitle="Alle Infos & Einstellungen"
+          showBackButton
+          onBackPress={() => {
+            triggerHaptic();
+            router.push('/(tabs)/home');
+          }}
+        />
         
         <ScrollView 
           style={styles.scrollView}
@@ -224,19 +260,65 @@ export default function BabyScreen() {
           <LiquidGlassCard style={styles.glassCard} intensity={24}>
             <View style={styles.glassInner}>
             <View style={styles.photoContainer}>
-              {babyInfo.photo_url ? (
-                <Image source={{ uri: babyInfo.photo_url }} style={styles.babyPhoto} />
+              {displayPhoto ? (
+                <Image source={{ uri: displayPhoto }} style={styles.babyPhoto} />
               ) : (
                 <View style={[styles.placeholderPhoto, { backgroundColor: colorScheme === 'dark' ? '#555' : '#E0E0E0' }]}>
                   <IconSymbol name="person.fill" size={60} color={theme.tabIconDefault} />
                 </View>
               )}
 
-              {isEditing && (
-                <TouchableOpacity style={styles.editPhotoButton} onPress={pickImage}>
-                  <IconSymbol name="camera.fill" size={20} color="#FFFFFF" />
-                </TouchableOpacity>
-              )}
+              <View style={styles.photoHintContainer}>
+                {isEditing ? (
+                  <>
+                    <ThemedText style={styles.photoHintText}>
+                      {displayPhoto ? 'Babyfoto anpassen' : 'Füge ein Babyfoto hinzu'}
+                    </ThemedText>
+                    <TouchableOpacity
+                      style={styles.photoHintButton}
+                      onPress={() => {
+                        triggerHaptic();
+                        pickBabyPhoto();
+                      }}
+                    >
+                      <ThemedText style={styles.photoHintButtonText}>
+                        Foto wählen
+                      </ThemedText>
+                    </TouchableOpacity>
+                    {!!displayPhoto && (
+                      <TouchableOpacity
+                        style={[styles.photoHintButton, styles.photoRemoveButton]}
+                        onPress={() => {
+                          triggerHaptic();
+                          removeBabyPhoto();
+                        }}
+                      >
+                        <ThemedText style={styles.photoHintButtonText}>
+                          Foto entfernen
+                        </ThemedText>
+                      </TouchableOpacity>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <ThemedText style={styles.photoHintText}>
+                      Ändere das Babyfoto direkt hier.
+                    </ThemedText>
+                    <TouchableOpacity
+                      style={styles.photoHintButton}
+                      onPress={() => {
+                        triggerHaptic();
+                        setIsEditing(true);
+                        pickBabyPhoto();
+                      }}
+                    >
+                      <ThemedText style={styles.photoHintButtonText}>
+                        Foto ändern
+                      </ThemedText>
+                    </TouchableOpacity>
+                  </>
+                )}
+              </View>
             </View>
 
             <View style={styles.infoContainer}>
@@ -255,7 +337,13 @@ export default function BabyScreen() {
 
                   <View style={styles.inputRow}>
                     <ThemedText style={styles.label}>Geburtsdatum:</ThemedText>
-                    <TouchableOpacity style={styles.glassDateButton} onPress={() => setShowDatePicker(true)}>
+                    <TouchableOpacity
+                      style={styles.glassDateButton}
+                      onPress={() => {
+                        triggerHaptic();
+                        setShowDatePicker(true);
+                      }}
+                    >
                       <ThemedText style={styles.dateText}>
                         {babyInfo.birth_date
                           ? new Date(babyInfo.birth_date).toLocaleDateString('de-DE')
@@ -302,6 +390,7 @@ export default function BabyScreen() {
                     <TouchableOpacity
                       style={[styles.button, styles.cancelButton]}
                       onPress={() => {
+                        triggerHaptic();
                         setIsEditing(false);
                         loadBabyInfo(); // Zurücksetzen auf gespeicherte Daten
                       }}
@@ -313,7 +402,10 @@ export default function BabyScreen() {
 
                     <TouchableOpacity
                       style={[styles.button, styles.saveButton]}
-                      onPress={handleSave}
+                      onPress={() => {
+                        triggerHaptic();
+                        handleSave();
+                      }}
                     >
                       <ThemedText style={[styles.buttonText, { color: '#7D5A50' }]} lightColor="#7D5A50" darkColor="#7D5A50">
                         Speichern
@@ -353,7 +445,13 @@ export default function BabyScreen() {
                     </ThemedText>
                   </View>
 
-                  <TouchableOpacity style={[styles.button, styles.editButton]} onPress={() => setIsEditing(true)}>
+                  <TouchableOpacity
+                    style={[styles.button, styles.editButton]}
+                    onPress={() => {
+                      triggerHaptic();
+                      setIsEditing(true);
+                    }}
+                  >
                     <ThemedText style={[styles.buttonText, { color: '#7D5A50' }]} lightColor="#7D5A50" darkColor="#7D5A50">
                       Bearbeiten
                     </ThemedText>
@@ -369,7 +467,10 @@ export default function BabyScreen() {
             intensity={24}
             overlayColor={'rgba(142, 78, 198, 0.16)'}
             borderColor={'rgba(142, 78, 198, 0.35)'}
-            onPress={() => router.push({ pathname: '/baby-stats' } as any)}
+            onPress={() => {
+              triggerHaptic();
+              router.push({ pathname: '/baby-stats' } as any);
+            }}
           >
             <View style={styles.infoGlassInner}>
               <View style={styles.statsButtonContent}>
@@ -493,21 +594,29 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  editPhotoButton: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    backgroundColor: '#7D5A50',
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
+  photoHintContainer: {
+    marginTop: 16,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 3,
-    elevation: 5,
+  },
+  photoHintText: {
+    fontSize: 14,
+    color: '#7D5A50',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  photoHintButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(125, 90, 80, 0.15)',
+  },
+  photoRemoveButton: {
+    marginTop: 8,
+  },
+  photoHintButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#7D5A50',
   },
   infoContainer: {
     width: '100%',

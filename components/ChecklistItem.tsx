@@ -5,6 +5,9 @@ import { ChecklistItem as ChecklistItemType } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { TEXT_PRIMARY } from '@/constants/DesignGuide';
+
+const CHECK_ACCENT = '#9D7BD8';
 
 interface ChecklistItemProps {
   item: ChecklistItemType;
@@ -15,17 +18,23 @@ interface ChecklistItemProps {
 export const ChecklistItem: React.FC<ChecklistItemProps> = ({ item, onToggle, onDelete }) => {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
-  
+  const baseBackground = colorScheme === 'dark' ? 'rgba(22,16,14,0.75)' : 'rgba(255,255,255,0.85)';
+  const borderColor = colorScheme === 'dark' ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.55)';
+  const textColor = colorScheme === 'dark' ? theme.text : TEXT_PRIMARY;
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: baseBackground, borderColor }]}>
       <TouchableOpacity
         style={styles.checkboxContainer}
         onPress={() => onToggle(item.id, !item.is_checked)}
       >
         <View style={[
           styles.checkbox,
-          item.is_checked ? styles.checkboxChecked : {},
-          { borderColor: theme.text }
+          {
+            borderColor: item.is_checked ? CHECK_ACCENT : `${textColor}55`,
+            backgroundColor: item.is_checked ? CHECK_ACCENT : 'transparent',
+            shadowOpacity: item.is_checked ? 0.2 : 0,
+          }
         ]}>
           {item.is_checked && (
             <Ionicons name="checkmark" size={16} color="#FFFFFF" />
@@ -34,27 +43,28 @@ export const ChecklistItem: React.FC<ChecklistItemProps> = ({ item, onToggle, on
       </TouchableOpacity>
       
       <View style={styles.textContainer}>
-        <ThemedText 
+        <ThemedText
           style={[
             styles.itemText,
+            { color: textColor },
             item.is_checked ? styles.itemTextChecked : {}
           ]}
         >
           {item.item_name}
         </ThemedText>
-        
+
         {item.notes && (
-          <ThemedText style={styles.notes}>
+          <ThemedText style={[styles.notes, { color: `${textColor}CC` }]}>
             {item.notes}
           </ThemedText>
         )}
       </View>
-      
+
       <TouchableOpacity
         style={styles.deleteButton}
         onPress={() => onDelete(item.id)}
       >
-        <Ionicons name="trash-outline" size={20} color="#E9C9B6" />
+        <Ionicons name="trash-outline" size={20} color={CHECK_ACCENT} />
       </TouchableOpacity>
     </View>
   );
@@ -64,10 +74,11 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 14,
     paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E9E9E9',
+    borderWidth: 1,
+    borderRadius: 18,
+    gap: 12,
   },
   checkboxContainer: {
     marginRight: 12,
@@ -79,10 +90,10 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  checkboxChecked: {
-    backgroundColor: '#E9C9B6',
-    borderColor: '#E9C9B6',
+    backgroundColor: 'transparent',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 4,
   },
   textContainer: {
     flex: 1,
@@ -96,10 +107,14 @@ const styles = StyleSheet.create({
   },
   notes: {
     fontSize: 14,
-    opacity: 0.7,
     marginTop: 4,
   },
   deleteButton: {
-    padding: 8,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(157,123,216,0.2)',
   },
 });

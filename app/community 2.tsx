@@ -1435,7 +1435,7 @@ export default function CommunityScreen() {
                       </View>
                     ) : (
                       <FlatList
-                        ref={ref => (listRef.current = ref)}
+                        ref={ref => { listRef.current = ref; }}
                         data={filteredPosts}
                         renderItem={renderPostItem}
                         keyExtractor={item => item.id}

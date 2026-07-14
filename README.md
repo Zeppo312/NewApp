@@ -16,7 +16,20 @@ Eine React Native App zum Aufzeichnen und Verfolgen von Wehen während der Schwa
 - [Expo](https://expo.dev/) - React Native Toolchain
 - [Expo Router](https://docs.expo.dev/router/introduction/) - Routing und Navigation
 - [Supabase](https://supabase.com/) - Backend-as-a-Service für Authentifizierung und Datenbank
+- [RevenueCat](https://www.revenuecat.com/) - Abo-Status & In-App-Purchases (via `react-native-purchases`)
 - [TypeScript](https://www.typescriptlang.org/) - Typsicheres JavaScript
+
+## 💳 Abonnement (RevenueCat)
+
+Diese App verwendet RevenueCat (`react-native-purchases`) für genau **ein** Abo (Monatsabo).
+
+- **Entitlement:** `LottiBabyAbo` (RevenueCat-ID `ent7a7b4e9838`)
+- **Offering:** `default`
+- **Package:** `src_monthly` (Produkt: `lottibaby_monthly`)
+- **Umgebungsvariablen (Public SDK Keys):**
+  - `EXPO_PUBLIC_RC_IOS_KEY` (iOS, beginnt i.d.R. mit `appl_…`)
+  - `EXPO_PUBLIC_RC_ANDROID_KEY` (Android, beginnt i.d.R. mit `goog_…`, optional sobald Android hinzugefügt wird)
+- **Hinweis zu Expo Go:** In Expo Go läuft `react-native-purchases` im Preview API Mode. Dafür muss `EXPO_PUBLIC_RC_IOS_KEY` der RevenueCat **Test Store Key** sein (beginnt mit `test_…`). Für echte Käufe benötigst du eine Development Build/TestFlight mit dem App-Store Key (`appl_…`).
 
 ## 📋 Voraussetzungen
 

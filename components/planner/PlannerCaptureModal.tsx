@@ -5,32 +5,54 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   TouchableWithoutFeedback,
   View,
   Keyboard,
   LayoutAnimation,
   UIManager,
+  StyleProp,
+  ViewStyle,
+  Alert,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { BlurView } from 'expo-blur';
 
 import { PRIMARY, GLASS_OVERLAY } from '@/constants/PlannerDesign';
 import { PlannerAssignee, PlannerEvent, PlannerTodo } from '@/services/planner';
+import TextInputOverlay from '@/components/modals/TextInputOverlay';
 
 export type PlannerCaptureType = 'todo' | 'event' | 'note';
+type FocusField = 'title' | 'location' | 'notes';
+type FocusConfig = {
+  field: FocusField;
+  label: string;
+  placeholder?: string;
+  multiline?: boolean;
+};
 
 export type PlannerCapturePayload = {
   id?: string;
   type: PlannerCaptureType;
   title: string;
-  dueAt?: Date;
+  dueAt?: Date | null;
   start?: Date;
   end?: Date | null;
   location?: string;
   notes?: string;
   assignee?: PlannerAssignee;
+  babyId?: string;
+  ownerId?: string;
+};
+
+type OwnerOption = {
+  id: string;
+  label: string;
+};
+
+type BabyOption = {
+  id: string;
+  label: string;
 };
 
 type Props = {
@@ -38,8 +60,12 @@ type Props = {
   type: PlannerCaptureType;
   baseDate: Date;
   editingItem?: { type: 'todo' | 'event'; item: PlannerTodo | PlannerEvent } | null;
+  ownerOptions?: OwnerOption[];
+  babyOptions?: BabyOption[];
+  defaultOwnerId?: string;
   onClose: () => void;
   onSave: (payload: PlannerCapturePayload) => void;
+  onDelete?: (id: string) => void;
 };
 
 const THEME = {
@@ -55,7 +81,18 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-export const PlannerCaptureModal: React.FC<Props> = ({ visible, type, baseDate, editingItem, onClose, onSave }) => {
+export const PlannerCaptureModal: React.FC<Props> = ({
+  visible,
+  type,
+  baseDate,
+  editingItem,
+  ownerOptions,
+  babyOptions,
+  defaultOwnerId,
+  onClose,
+  onSave,
+  onDelete,
+}) => {
   const initialStart = useMemo(() => {
     const d = new Date(baseDate);
     d.setHours(new Date().getHours(), new Date().getMinutes(), 0, 0);
@@ -68,6 +105,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({ visible, type, baseDate, 
   const [endTime, setEndTime] = useState<Date | null>(null);
   const [showEnd, setShowEnd] = useState(type === 'event');
   const [dueTime, setDueTime] = useState<Date | null>(null);
+  const [hasDueTime, setHasDueTime] = useState<boolean>(false);
   const [location, setLocation] = useState('');
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
@@ -75,6 +113,31 @@ export const PlannerCaptureModal: React.FC<Props> = ({ visible, type, baseDate, 
   const [notesExpanded, setNotesExpanded] = useState(false);
   const [currentType, setCurrentType] = useState<PlannerCaptureType>(type);
   const [assignee, setAssignee] = useState<PlannerAssignee>('me');
+  const [selectedBabyId, setSelectedBabyId] = useState<string | null>(null);
+  const [showBabyPicker, setShowBabyPicker] = useState(false);
+  const [focusConfig, setFocusConfig] = useState<FocusConfig | null>(null);
+  const [focusValue, setFocusValue] = useState('');
+
+  const partnerLabel = useMemo(() => {
+    if (!ownerOptions || ownerOptions.length === 0) return 'Partner';
+    const partnerOption = ownerOptions.find((opt) => opt.id && opt.id !== defaultOwnerId);
+    return partnerOption?.label ?? 'Partner';
+  }, [ownerOptions, defaultOwnerId]);
+
+  const assigneeOptions: { value: PlannerAssignee; label: string }[] = useMemo(
+    () => [
+      { value: 'me', label: 'Ich' },
+      { value: 'partner', label: partnerLabel },
+      { value: 'family', label: 'Familie' },
+      { value: 'child', label: 'Kind' },
+    ],
+    [partnerLabel],
+  );
+
+  const deriveAssigneeForOwner = (targetOwnerId?: string | null) => {
+    if (!defaultOwnerId || !targetOwnerId) return 'me' as PlannerAssignee;
+    return targetOwnerId === defaultOwnerId ? 'me' : 'partner';
+  };
 
   useEffect(() => {
     if (!visible) return;
@@ -101,15 +164,24 @@ export const PlannerCaptureModal: React.FC<Props> = ({ visible, type, baseDate, 
         setShowEnd(true);
         setDueTime(null);
         setLocation(item.location ?? '');
-        setAssignee('me');
       } else {
         const due = item.dueAt ? new Date(item.dueAt) : null;
         setStartTime(due ?? new Date(initialStart));
         setEndTime(null);
         setShowEnd(false);
         setDueTime(due);
+        setHasDueTime(!!due);
         setLocation('');
-        setAssignee(item.assignee ?? 'me');
+      }
+      if ('assignee' in item && item.assignee) {
+        setAssignee(item.assignee);
+      } else {
+        setAssignee(deriveAssigneeForOwner(item.userId ?? defaultOwnerId ?? null));
+      }
+      if ('babyId' in item && item.babyId) {
+        setSelectedBabyId(item.babyId);
+      } else {
+        setSelectedBabyId(null);
       }
     } else {
       const reset = new Date(baseDate);
@@ -120,12 +192,14 @@ export const PlannerCaptureModal: React.FC<Props> = ({ visible, type, baseDate, 
       setStartTime(reset);
       setEndTime(type === 'event' ? new Date(reset.getTime() + 30 * 60000) : null);
       setShowEnd(type === 'event');
-      setDueTime(type === 'todo' ? reset : null);
+      setDueTime(null);
+      setHasDueTime(false);
       setLocation('');
       setNotesExpanded(type === 'note');
       setAssignee('me');
+      setSelectedBabyId(null);
     }
-  }, [visible, type, baseDate, editingItem]);
+  }, [visible, type, baseDate, editingItem, defaultOwnerId]);
 
   useEffect(() => {
     if (!visible) return;
@@ -136,7 +210,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({ visible, type, baseDate, 
       setShowEnd(true);
     } else {
       setShowEnd(false);
-      setDueTime((prev) => prev ?? new Date(startTime));
+      setDueTime((prev) => prev);
     }
   }, [currentType, visible]);
 
@@ -164,17 +238,21 @@ export const PlannerCaptureModal: React.FC<Props> = ({ visible, type, baseDate, 
             mode="datetime"
             display={Platform.OS === 'ios' ? 'inline' : 'spinner'}
             onChange={(event, date) => {
+              if (event?.type === 'dismissed') {
+                toggle();
+                return;
+              }
               if (date) {
                 onChange(date);
-                if (Platform.OS !== 'ios' || event?.type === 'set') {
-                  toggle();
-                }
-              } else if (Platform.OS !== 'ios' && event?.type === 'dismissed') {
-                toggle();
               }
             }}
             style={styles.dateTimePicker}
           />
+          <View style={styles.pickerActions}>
+            <TouchableOpacity style={styles.pickerActionButton} onPress={toggle}>
+              <Text style={styles.pickerActionLabel}>Fertig</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       )}
     </View>
@@ -196,17 +274,21 @@ export const PlannerCaptureModal: React.FC<Props> = ({ visible, type, baseDate, 
       type: currentType,
       title: currentType === 'note' ? (trimmedTitle || trimmedNotes || 'Notiz') : trimmedTitle,
       notes: trimmedNotes || undefined,
+      ownerId: defaultOwnerId ?? undefined,
     };
 
     if (currentType === 'todo') {
-      payload.dueAt = dueTime || undefined;
-      payload.assignee = assignee;
+      payload.dueAt = hasDueTime ? dueTime || startTime : null;
+      payload.assignee = assignee ?? deriveAssigneeForOwner(ownerId);
+      payload.babyId = assignee === 'child' ? selectedBabyId ?? undefined : undefined;
     }
 
     if (currentType === 'event') {
       payload.start = startTime;
       payload.end = showEnd ? endTime : null;
       payload.location = location.trim() || undefined;
+      payload.assignee = assignee ?? deriveAssigneeForOwner(ownerId);
+      payload.babyId = assignee === 'child' ? selectedBabyId ?? undefined : undefined;
     }
 
     if (currentType === 'note') {
@@ -221,9 +303,88 @@ export const PlannerCaptureModal: React.FC<Props> = ({ visible, type, baseDate, 
     onClose();
   };
 
+  const handleDelete = () => {
+    if (!editingItem?.item.id || !onDelete) return;
+
+    Alert.alert(
+      'Eintrag löschen',
+      'Möchtest du diesen Eintrag wirklich löschen?',
+      [
+        { text: 'Abbrechen', style: 'cancel' },
+        {
+          text: 'Löschen',
+          style: 'destructive',
+          onPress: () => {
+            onDelete(editingItem.item.id);
+            onClose();
+          },
+        },
+      ]
+    );
+  };
+
   const formatDateTime = (date: Date | null) => {
     if (!date) return 'Offen';
     return date.toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  };
+
+  const openFocusEditor = (config: FocusConfig) => {
+    if (config.field === 'title') {
+      setFocusValue(title);
+    } else if (config.field === 'location') {
+      setFocusValue(location);
+    } else {
+      setFocusValue(notes);
+    }
+    setFocusConfig(config);
+  };
+
+  const closeFocusEditor = () => {
+    setFocusConfig(null);
+    setFocusValue('');
+  };
+
+  const saveFocusEditor = (nextVal?: string) => {
+    if (!focusConfig) return;
+    const next = typeof nextVal === 'string' ? nextVal : focusValue;
+    if (focusConfig.field === 'title') {
+      setTitle(next);
+    } else if (focusConfig.field === 'location') {
+      setLocation(next);
+    } else {
+      setNotes(next);
+    }
+    closeFocusEditor();
+  };
+
+  useEffect(() => {
+    if (!visible) {
+      setFocusConfig(null);
+      setFocusValue('');
+    }
+  }, [visible]);
+
+  const renderInlineField = (
+    value: string,
+    placeholder: string,
+    onPress: () => void,
+    style: StyleProp<ViewStyle>,
+    multiline = false,
+  ) => {
+    const mergedStyle = Array.isArray(style)
+      ? [styles.inlineFieldBase, ...style, multiline && styles.inlineFieldMultiline]
+      : [styles.inlineFieldBase, style, multiline && styles.inlineFieldMultiline];
+
+    return (
+      <TouchableOpacity style={mergedStyle} activeOpacity={0.9} onPress={onPress}>
+        <Text
+          style={value ? styles.inputValue : styles.inputPlaceholder}
+          numberOfLines={multiline ? 3 : 1}
+        >
+          {value || placeholder}
+        </Text>
+      </TouchableOpacity>
+    );
   };
 
   return (
@@ -232,7 +393,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({ visible, type, baseDate, 
         <TouchableWithoutFeedback onPress={onClose}>
           <View style={StyleSheet.absoluteFill} />
         </TouchableWithoutFeedback>
-        <BlurView intensity={85} tint="extraLight" style={styles.sheet}>
+        <BlurView intensity={80} tint="extraLight" style={styles.sheet}>
           <View style={styles.header}>
             <TouchableOpacity style={[styles.roundButton, { backgroundColor: 'rgba(0,0,0,0.08)' }]} onPress={onClose}>
               <Text style={styles.roundButtonLabel}>✕</Text>
@@ -268,13 +429,55 @@ export const PlannerCaptureModal: React.FC<Props> = ({ visible, type, baseDate, 
                     </TouchableOpacity>
                   ))}
                 </View>
-                <TextInput
-                  value={title}
-                  onChangeText={setTitle}
-                  placeholder={currentType === 'note' ? 'Titel oder Betreff' : 'Titel'}
-                  placeholderTextColor={THEME.textSecondary}
-                  style={styles.titleInput}
-                />
+                {renderInlineField(
+                  title,
+                  currentType === 'note' ? 'Titel oder Betreff' : 'Titel',
+                  () =>
+                    openFocusEditor({
+                      field: 'title',
+                      label: currentType === 'note' ? 'Titel oder Betreff' : 'Titel',
+                      placeholder: currentType === 'note' ? 'Titel oder Betreff' : 'Titel',
+                    }),
+                  styles.titleInput,
+                )}
+
+                {(currentType === 'todo' || currentType === 'event') && (
+                  <View style={styles.section}>
+                    <Text style={styles.sectionLabel}>👤 Für</Text>
+                    <View style={styles.assignRowWrap}>
+                      {assigneeOptions.map((opt) => {
+                        const selected = assignee === opt.value;
+                        const displayLabel = opt.value === 'child' && selectedBabyId
+                          ? (babyOptions?.find(b => b.id === selectedBabyId)?.label ?? opt.label)
+                          : opt.label;
+                        return (
+                          <TouchableOpacity
+                            key={opt.value}
+                            style={[
+                              styles.assignButton,
+                              styles.assignButtonHalf,
+                              selected && styles.assignButtonActive,
+                            ]}
+                            onPress={() => {
+                              if (opt.value === 'child') {
+                                setShowBabyPicker(true);
+                              } else {
+                                setAssignee(opt.value);
+                                if (opt.value !== 'child') {
+                                  setSelectedBabyId(null);
+                                }
+                              }
+                            }}
+                          >
+                            <Text style={[styles.assignLabel, selected && styles.assignLabelActive]}>
+                              {displayLabel}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+                )}
 
                 {currentType === 'event' && (
                   <View style={styles.section}>
@@ -312,45 +515,49 @@ export const PlannerCaptureModal: React.FC<Props> = ({ visible, type, baseDate, 
                         <Text style={styles.timeButtonLabel}>Ende hinzufügen</Text>
                       </TouchableOpacity>
                     )}
-                    <TouchableOpacity
-                      style={styles.locationField}
-                      onPress={() => {}}
-                      activeOpacity={1}
-                    >
-                      <TextInput
-                        value={location}
-                        onChangeText={setLocation}
-                        placeholder="Ort (optional)"
-                        placeholderTextColor={THEME.textSecondary}
-                        style={styles.locationInput}
-                      />
-                    </TouchableOpacity>
+                    {renderInlineField(
+                      location,
+                      'Ort (optional)',
+                      () =>
+                        openFocusEditor({
+                          field: 'location',
+                          label: 'Ort',
+                          placeholder: 'Ort (optional)',
+                        }),
+                      [styles.locationField, styles.locationInput],
+                    )}
                   </View>
                 )}
 
                 {currentType !== 'event' && (
                   <View style={styles.section}>
                     <Text style={styles.sectionLabel}>🕒 Zeitpunkt</Text>
-                    {renderDateSelector('Fällig', dueTime ?? startTime, showDuePicker, () => setShowDuePicker((prev) => !prev), (date) => setDueTime(date))}
-                  </View>
-                )}
-
-                {currentType === 'todo' && (
-                  <View style={styles.section}>
-                    <Text style={styles.sectionLabel}>👥 Zuständig</Text>
-                    <View style={styles.assignRow}>
-                      {(['me', 'partner'] as PlannerAssignee[]).map((role) => (
+                    {hasDueTime ? (
+                      <>
+                        {renderDateSelector('Fällig', dueTime ?? startTime, showDuePicker, () => setShowDuePicker((prev) => !prev), (date) => setDueTime(date))}
                         <TouchableOpacity
-                          key={role}
-                          style={[styles.assignButton, assignee === role && styles.assignButtonActive]}
-                          onPress={() => setAssignee(role)}
+                          style={styles.timeButton}
+                          onPress={() => {
+                            setHasDueTime(false);
+                            setDueTime(null);
+                            setShowDuePicker(false);
+                          }}
                         >
-                          <Text style={[styles.assignLabel, assignee === role && styles.assignLabelActive]}>
-                            {role === 'me' ? 'Ich' : 'Partner'}
-                          </Text>
+                          <Text style={styles.timeButtonLabel}>Kein Datum setzen</Text>
                         </TouchableOpacity>
-                      ))}
-                    </View>
+                      </>
+                    ) : (
+                      <TouchableOpacity
+                        style={styles.timeButton}
+                        onPress={() => {
+                          setHasDueTime(true);
+                          setDueTime(dueTime ?? startTime);
+                          setShowDuePicker(true);
+                        }}
+                      >
+                        <Text style={styles.timeButtonLabel}>Datum hinzufügen</Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
                 )}
 
@@ -362,20 +569,94 @@ export const PlannerCaptureModal: React.FC<Props> = ({ visible, type, baseDate, 
                     </Text>
                   </TouchableOpacity>
                   {notesExpanded && (
-                    <TextInput
-                      value={notes}
-                      onChangeText={setNotes}
-                      placeholder="Details hinzufügen..."
-                      placeholderTextColor={THEME.textSecondary}
-                      multiline
-                      style={styles.notesInput}
-                    />
+                    renderInlineField(
+                      notes,
+                      'Details hinzufügen...',
+                      () =>
+                        openFocusEditor({
+                          field: 'notes',
+                          label: 'Notizen',
+                          placeholder: 'Details hinzufügen...',
+                          multiline: true,
+                        }),
+                      styles.notesInput,
+                      true,
+                    )
                   )}
                 </View>
+
+                {/* Löschen-Button nur beim Bearbeiten anzeigen */}
+                {editingItem?.item.id && onDelete && (
+                  <TouchableOpacity
+                    style={styles.deleteButton}
+                    onPress={handleDelete}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.deleteButtonText}>🗑️  Eintrag löschen</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             </TouchableWithoutFeedback>
           </ScrollView>
         </BlurView>
+
+        {showBabyPicker && (
+          <Modal visible={showBabyPicker} animationType="fade" transparent onRequestClose={() => setShowBabyPicker(false)}>
+            <View style={styles.pickerOverlay}>
+              <TouchableWithoutFeedback onPress={() => setShowBabyPicker(false)}>
+                <View style={StyleSheet.absoluteFill} />
+              </TouchableWithoutFeedback>
+              <BlurView intensity={80} tint="extraLight" style={styles.pickerSheet}>
+                <View style={styles.pickerHeader}>
+                  <Text style={styles.pickerTitle}>Wähle ein Kind</Text>
+                  <TouchableOpacity onPress={() => setShowBabyPicker(false)}>
+                    <Text style={styles.pickerCloseButton}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+                <ScrollView>
+                  {babyOptions && babyOptions.length > 0 ? (
+                    babyOptions.map((baby) => (
+                      <TouchableOpacity
+                        key={baby.id}
+                        style={[
+                          styles.pickerOption,
+                          selectedBabyId === baby.id && styles.pickerOptionActive,
+                        ]}
+                        onPress={() => {
+                          setSelectedBabyId(baby.id);
+                          setAssignee('child');
+                          setShowBabyPicker(false);
+                        }}
+                      >
+                        <Text style={[
+                          styles.pickerOptionText,
+                          selectedBabyId === baby.id && styles.pickerOptionTextActive,
+                        ]}>
+                          {baby.label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))
+                  ) : (
+                    <View style={styles.pickerEmpty}>
+                      <Text style={styles.pickerEmptyText}>Keine Kinder gefunden</Text>
+                    </View>
+                  )}
+                </ScrollView>
+              </BlurView>
+            </View>
+          </Modal>
+        )}
+
+        <TextInputOverlay
+          visible={!!focusConfig}
+          label={focusConfig?.label ?? ''}
+          value={focusValue}
+          placeholder={focusConfig?.placeholder}
+          multiline={!!focusConfig?.multiline}
+          accentColor={PRIMARY}
+          onClose={closeFocusEditor}
+          onSubmit={(next) => saveFocusEditor(next)}
+        />
 
       </View>
     </Modal>
@@ -389,7 +670,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.35)',
   },
   sheet: {
-    backgroundColor: THEME.background,
+    backgroundColor: 'transparent',
     borderTopLeftRadius: 30,
     borderTopRightRadius: 30,
     overflow: 'hidden',
@@ -471,6 +752,21 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: THEME.text,
   },
+  inlineFieldBase: {
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+  },
+  inlineFieldMultiline: {
+    justifyContent: 'flex-start',
+  },
+  inputValue: {
+    color: THEME.text,
+    fontSize: 16,
+  },
+  inputPlaceholder: {
+    color: THEME.textSecondary,
+    fontSize: 16,
+  },
   section: {
     gap: 12,
   },
@@ -511,6 +807,23 @@ const styles = StyleSheet.create({
   dateTimePicker: {
     alignSelf: 'stretch',
   },
+  pickerActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingHorizontal: 8,
+    paddingBottom: 6,
+  },
+  pickerActionButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: 'rgba(94,61,179,0.08)',
+  },
+  pickerActionLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: PRIMARY,
+  },
   timeButton: {
     borderRadius: 16,
     backgroundColor: THEME.field,
@@ -536,8 +849,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: PRIMARY,
   },
-  assignRow: {
+  assignRowWrap: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 12,
   },
   assignButton: {
@@ -548,6 +862,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.05)',
+  },
+  assignButtonHalf: {
+    flexBasis: '48%',
+    flexGrow: 1,
   },
   assignButtonActive: {
     backgroundColor: PRIMARY,
@@ -596,6 +914,83 @@ const styles = StyleSheet.create({
     color: THEME.text,
     borderWidth: 1,
     borderColor: GLASS_OVERLAY,
+  },
+  deleteButton: {
+    width: '100%',
+    marginTop: 30,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 107, 107, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 107, 107, 0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#FF6B6B',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  deleteButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#D63031',
+  },
+  pickerOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  pickerSheet: {
+    width: '80%',
+    maxHeight: '60%',
+    borderRadius: 20,
+    overflow: 'hidden',
+    paddingVertical: 20,
+  },
+  pickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingBottom: 15,
+  },
+  pickerTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: THEME.text,
+  },
+  pickerCloseButton: {
+    fontSize: 24,
+    color: THEME.text,
+    fontWeight: '600',
+  },
+  pickerOption: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: THEME.divider,
+  },
+  pickerOptionActive: {
+    backgroundColor: 'rgba(94,61,179,0.1)',
+  },
+  pickerOptionText: {
+    fontSize: 16,
+    color: THEME.text,
+  },
+  pickerOptionTextActive: {
+    color: PRIMARY,
+    fontWeight: '600',
+  },
+  pickerEmpty: {
+    paddingVertical: 40,
+    alignItems: 'center',
+  },
+  pickerEmptyText: {
+    fontSize: 14,
+    color: THEME.textSecondary,
   },
 });
 

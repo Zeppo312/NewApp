@@ -22,6 +22,57 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   },
 });
 
+/**
+ * 🚀 PERFORMANCE OPTIMIZATION: Auth User Cache
+ *
+ * Problem: Jede lib-Funktion ruft `supabase.auth.getUser()` auf
+ * → 137 Auth-Calls in 60 Minuten!
+ *
+ * Lösung: Cache User-Daten für 5 Minuten
+ * → Reduziert Auth-Calls auf ~1-2 pro Session
+ */
+let cachedUser: any = null;
+let cachedUserTimestamp = 0;
+const USER_CACHE_DURATION_MS = 5 * 60 * 1000; // 5 Minuten
+
+/**
+ * Cached version of supabase.auth.getUser()
+ * Use this instead of calling supabase.auth.getUser() directly!
+ */
+export const getCachedUser = async () => {
+  const now = Date.now();
+
+  // Return cached user if still valid
+  if (cachedUser && (now - cachedUserTimestamp) < USER_CACHE_DURATION_MS) {
+    return { data: { user: cachedUser }, error: null };
+  }
+
+  // Fetch fresh user data
+  const { data, error } = await supabase.auth.getUser();
+
+  if (!error && data.user) {
+    cachedUser = data.user;
+    cachedUserTimestamp = now;
+  }
+
+  return { data, error };
+};
+
+/**
+ * Invalidate user cache (call on logout/login)
+ */
+export const invalidateUserCache = () => {
+  cachedUser = null;
+  cachedUserTimestamp = 0;
+};
+
+// Listen to auth state changes and invalidate cache
+supabase.auth.onAuthStateChange((event, session) => {
+  if (event === 'SIGNED_OUT' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+    invalidateUserCache();
+  }
+});
+
 // Hilfsfunktion, um zu prüfen, ob der Client bereit ist
 export const isSupabaseReady = () => {
   return isClient;
@@ -119,6 +170,7 @@ export type Geburtsplan = {
 export type BabyCareEntry = {
   id?: string;
   user_id?: string;
+  baby_id?: string | null;
   entry_type: 'feeding' | 'diaper';
   start_time: string; // ISO
   end_time?: string | null; // ISO
@@ -165,7 +217,7 @@ export const verifyOTPToken = async (email: string, token: string) => {
 
 // Prüfung ob E-Mail verifiziert ist
 export const checkEmailVerification = async () => {
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { user } } = await getCachedUser();
   return {
     isVerified: user?.email_confirmed_at ? true : false,
     user,
@@ -306,13 +358,14 @@ export const signInAnonymously = async () => {
 };
 
 // Einfügen in die einheitliche Tabelle baby_care_entries
-export const addBabyCareEntry = async (entry: BabyCareEntry) => {
+export const addBabyCareEntry = async (entry: BabyCareEntry, babyId?: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     const payload = {
       user_id: userData.user.id,
+      baby_id: babyId ?? entry.baby_id ?? null,
       entry_type: entry.entry_type,
       start_time: entry.start_time,
       end_time: entry.end_time ?? null,
@@ -335,9 +388,9 @@ export const addBabyCareEntry = async (entry: BabyCareEntry) => {
   }
 };
 
-export const getBabyCareEntriesForDate = async (date: Date) => {
+export const getBabyCareEntriesForDate = async (date: Date, babyId?: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     const startOfDay = new Date(date);
@@ -345,13 +398,17 @@ export const getBabyCareEntriesForDate = async (date: Date) => {
     const endOfDay = new Date(date);
     endOfDay.setHours(23, 59, 59, 999);
 
-    const { data, error } = await supabase
+    let query = supabase
       .from('baby_care_entries')
       .select('*')
-      .eq('user_id', userData.user.id)
       .gte('start_time', startOfDay.toISOString())
-      .lte('start_time', endOfDay.toISOString())
-      .order('start_time', { ascending: false });
+      .lte('start_time', endOfDay.toISOString());
+
+    if (babyId) {
+      query = query.eq('baby_id', babyId);
+    }
+
+    const { data, error } = await query.order('start_time', { ascending: false });
 
     return { data, error };
   } catch (err) {
@@ -359,18 +416,22 @@ export const getBabyCareEntriesForDate = async (date: Date) => {
   }
 };
 
-export const getBabyCareEntriesForDateRange = async (startDate: Date, endDate: Date) => {
+export const getBabyCareEntriesForDateRange = async (startDate: Date, endDate: Date, babyId?: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
-    const { data, error } = await supabase
+    let query = supabase
       .from('baby_care_entries')
       .select('*')
-      .eq('user_id', userData.user.id)
       .gte('start_time', startDate.toISOString())
-      .lte('start_time', endDate.toISOString())
-      .order('start_time', { ascending: true });
+      .lte('start_time', endDate.toISOString());
+
+    if (babyId) {
+      query = query.eq('baby_id', babyId);
+    }
+
+    const { data, error } = await query.order('start_time', { ascending: true });
 
     return { data, error };
   } catch (err) {
@@ -378,52 +439,57 @@ export const getBabyCareEntriesForDateRange = async (startDate: Date, endDate: D
   }
 };
 
-export const deleteBabyCareEntry = async (id: string) => {
+export const deleteBabyCareEntry = async (id: string, babyId?: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { error: new Error('Nicht angemeldet') };
 
-    const { error } = await supabase
-      .from('baby_care_entries')
-      .delete()
-      .eq('id', id)
-      .eq('user_id', userData.user.id);
+    let query = supabase.from('baby_care_entries').delete().eq('id', id);
+    if (babyId) {
+      query = query.eq('baby_id', babyId);
+    }
+
+    const { error } = await query;
     return { error };
   } catch (err) {
     return { error: err };
   }
 };
 
-export const stopBabyCareEntryTimer = async (id: string) => {
+export const stopBabyCareEntryTimer = async (id: string, babyId?: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { error: new Error('Nicht angemeldet') };
 
-    const { data, error } = await supabase
+    let query = supabase
       .from('baby_care_entries')
       .update({ end_time: new Date().toISOString(), updated_at: new Date().toISOString() })
-      .eq('id', id)
-      .eq('user_id', userData.user.id)
-      .select()
-      .single();
+      .eq('id', id);
+
+    if (babyId) {
+      query = query.eq('baby_id', babyId);
+    }
+
+    const { data, error } = await query.select().single();
     return { data, error };
   } catch (err) {
     return { data: null, error: err };
   }
 };
 
-export const getBabyCareEntriesForMonth = async (date: Date) => {
+export const getBabyCareEntriesForMonth = async (date: Date, babyId?: string) => {
   const first = new Date(date.getFullYear(), date.getMonth(), 1, 0, 0, 0, 0);
   const last = new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
-  return getBabyCareEntriesForDateRange(first, last);
+  return getBabyCareEntriesForDateRange(first, last, babyId);
 };
 
 export const updateBabyCareEntry = async (
   id: string,
-  updates: Partial<BabyCareEntry>
+  updates: Partial<BabyCareEntry>,
+  babyId?: string
 ) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     // Only allow certain fields to be updated
@@ -438,13 +504,12 @@ export const updateBabyCareEntry = async (
       updated_at: new Date().toISOString(),
     };
 
-    const { data, error } = await supabase
-      .from('baby_care_entries')
-      .update(payload)
-      .eq('id', id)
-      .eq('user_id', userData.user.id)
-      .select()
-      .single();
+    let query = supabase.from('baby_care_entries').update(payload).eq('id', id);
+    if (babyId) {
+      query = query.eq('baby_id', babyId);
+    }
+
+    const { data, error } = await query.select().single();
 
     return { data, error };
   } catch (err) {
@@ -458,14 +523,14 @@ export const signOut = async () => {
 };
 
 export const getCurrentUser = async () => {
-  const { data, error } = await supabase.auth.getUser();
+  const { data, error } = await getCachedUser();
   return { user: data.user, error };
 };
 
 // Hilfsfunktionen für Wehen-Daten
 export const saveContraction = async (contraction: Omit<Contraction, 'id' | 'user_id' | 'created_at'>) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     // Verwenden der neuen RPC-Funktion zum Hinzufügen und Synchronisieren
@@ -511,7 +576,7 @@ export const saveContraction = async (contraction: Omit<Contraction, 'id' | 'use
 
 export const getContractions = async () => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     // Verwenden der verbesserten RPC-Funktion
@@ -549,7 +614,7 @@ export const getContractions = async () => {
 // Funktion zum einmaligen Synchronisieren aller bestehenden Wehen
 export const syncAllExistingContractions = async () => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { success: false, error: 'Nicht angemeldet' };
 
     console.log('Attempting to sync all existing contractions for user:', userData.user.id);
@@ -697,7 +762,7 @@ export const syncAllExistingContractions = async () => {
 // Funktion zum Abrufen aller verknüpften Benutzer mit Details
 export const getLinkedUsersWithDetails = async () => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { success: false, error: 'Nicht angemeldet' };
 
     // Verwenden der neuen RPC-Funktion
@@ -735,7 +800,7 @@ export const deleteContraction = async (id: string) => {
   try {
     console.log(`Attempting to delete contraction with ID: ${id}`);
 
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { error: new Error('Nicht angemeldet') };
 
     // Verwenden der neuen RPC-Funktion zum Löschen und Synchronisieren
@@ -777,7 +842,7 @@ export const deleteContraction = async (id: string) => {
 // Hilfsfunktionen für den Baby-Status
 export const getBabyBornStatus = async () => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: false, error: new Error('Nicht angemeldet') };
 
     const { data, error } = await supabase
@@ -802,7 +867,7 @@ export const getBabyBornStatus = async () => {
 
 export const setBabyBornStatus = async (isBabyBorn: boolean) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     // Verwenden der neuen RPC-Funktion
@@ -837,7 +902,7 @@ export const setBabyBornStatus = async (isBabyBorn: boolean) => {
 // Prüfen, ob ein Geburtsplan existiert
 export const hasGeburtsplan = async () => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { exists: false, error: new Error('Nicht angemeldet') };
 
     // Wir prüfen, ob ein Geburtsplan existiert
@@ -859,7 +924,7 @@ export const hasGeburtsplan = async () => {
 
 export const getGeburtsplan = async () => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     // Wir holen alle Geburtspläne des Benutzers, sortiert nach dem neuesten zuerst
@@ -910,7 +975,7 @@ export const getGeburtsplan = async () => {
 // Speichern oder Aktualisieren des Geburtsplans (Textversion)
 export const saveGeburtsplan = async (content: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     // Zuerst prüfen, ob bereits ein Geburtsplan existiert
@@ -964,7 +1029,7 @@ export const saveGeburtsplan = async (content: string) => {
 // Speichern oder Aktualisieren des strukturierten Geburtsplans
 export const saveStructuredGeburtsplan = async (structuredData: any, textContent: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     // Wir speichern die strukturierten Daten und den generierten Text zusammen in der content-Spalte
@@ -1032,7 +1097,7 @@ export const saveStructuredGeburtsplan = async (structuredData: any, textContent
 // Löschen des Geburtsplans
 export const deleteGeburtsplan = async () => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { error: new Error('Nicht angemeldet') };
 
     const { error } = await supabase
@@ -1053,7 +1118,7 @@ export const deleteGeburtsplan = async () => {
 // Abrufen aller Checklisten-Einträge
 export const getHospitalChecklist = async () => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     const { data, error } = await supabase
@@ -1073,7 +1138,7 @@ export const getHospitalChecklist = async () => {
 // Hinzufügen eines neuen Checklisten-Eintrags
 export const addChecklistItem = async (item: Omit<ChecklistItem, 'id' | 'user_id' | 'created_at' | 'updated_at'>) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     const { data, error } = await supabase
@@ -1158,7 +1223,7 @@ export const updateChecklistPositions = async (items: { id: string, position: nu
 // Frage speichern
 export const saveDoctorQuestion = async (question: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     const { data, error } = await supabase
@@ -1183,7 +1248,7 @@ export const saveDoctorQuestion = async (question: string) => {
 // Alle Fragen abrufen
 export const getDoctorQuestions = async () => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     const { data, error } = await supabase
@@ -1254,7 +1319,7 @@ export type AppSettings = {
 // App-Einstellungen laden
 export const getAppSettings = async () => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     const { data, error } = await supabase
@@ -1288,7 +1353,7 @@ export const getAppSettings = async () => {
 // App-Einstellungen speichern
 export const saveAppSettings = async (settings: Partial<AppSettings>) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     // Zuerst prüfen, ob bereits ein Eintrag existiert

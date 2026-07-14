@@ -6,6 +6,7 @@ import { ThemedBackground } from '@/components/ThemedBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/contexts/AuthContext';
+import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 // import { Collapsible } from '@/components/Collapsible';
 import {
@@ -32,6 +33,7 @@ export default function DiaryScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const { user } = useAuth();
+  const { activeBabyId } = useActiveBaby();
 
   // Zustand für Tagebucheinträge
   const [entries, setEntries] = useState<DiaryEntry[]>([]);
@@ -62,7 +64,7 @@ export default function DiaryScreen() {
     } else {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, activeBabyId]);
 
   // Laden aller benötigten Daten
   const loadInitialData = async () => {
@@ -70,7 +72,7 @@ export default function DiaryScreen() {
       setLoading(true);
 
       // Baby-Informationen laden
-      const { data: babyData } = await getBabyInfo();
+      const { data: babyData } = await getBabyInfo(activeBabyId ?? undefined);
       if (babyData?.birth_date) {
         setBabyBirthDate(new Date(babyData.birth_date));
       }
@@ -246,7 +248,7 @@ export default function DiaryScreen() {
 
   const loadEntries = async () => {
     try {
-      const { data, error } = await getDiaryEntries();
+      const { data, error } = await getDiaryEntries(activeBabyId ?? undefined);
       if (error) {
         console.error('Error loading diary entries:', error);
       } else if (data) {
@@ -264,7 +266,7 @@ export default function DiaryScreen() {
         return;
       }
 
-      const { error } = await saveDiaryEntry(newEntry);
+      const { error } = await saveDiaryEntry(newEntry, activeBabyId ?? undefined);
       if (error) {
         console.error('Error saving diary entry:', error);
         Alert.alert('Fehler', 'Der Eintrag konnte nicht gespeichert werden.');
@@ -300,7 +302,7 @@ export default function DiaryScreen() {
             text: 'Löschen',
             style: 'destructive',
             onPress: async () => {
-              const { error } = await deleteDiaryEntry(id);
+              const { error } = await deleteDiaryEntry(id, activeBabyId ?? undefined);
               if (error) {
                 console.error('Error deleting diary entry:', error);
                 Alert.alert('Fehler', 'Der Eintrag konnte nicht gelöscht werden.');

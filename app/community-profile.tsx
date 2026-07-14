@@ -14,8 +14,11 @@ import { getFollowerCount, getFollowingCount, getFollowers } from '@/lib/follows
 import Header from '@/components/Header';
 import { getPosts } from '@/lib/community';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { GlassCard, LiquidGlassCard, GLASS_OVERLAY } from '@/constants/DesignGuide';
-import { FollowButton } from '@/components/FollowButton';
+import { LiquidGlassCard, LAYOUT_PAD } from '@/constants/DesignGuide';
+const CARD_OVERLAY_LIGHT = 'rgba(255,255,255,0.18)';
+const CARD_OVERLAY_DARK = 'rgba(6,8,20,0.55)';
+const CARD_BORDER_LIGHT = 'rgba(255,255,255,0.45)';
+const CARD_BORDER_DARK = 'rgba(255,255,255,0.15)';
 
 // Interface für das Benutzerprofil
 interface UserProfile {
@@ -23,6 +26,8 @@ interface UserProfile {
   first_name: string;
   last_name?: string;
   user_role?: string;
+  username?: string | null;
+  avatar_url?: string | null;
   bio?: string;
   created_at: string;
 }
@@ -33,7 +38,15 @@ interface Follower {
   first_name: string;
   last_name?: string;
   user_role?: string;
+  username?: string | null;
+  avatar_url?: string | null;
 }
+
+type NamedEntity = {
+  username?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+};
 
 // Enum für Tabs
 enum ProfileTab {
@@ -90,7 +103,7 @@ export default function CommunityProfileScreen() {
       // Benutzerinformationen abrufen
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select('id, first_name, last_name, user_role, created_at')
+        .select('id, first_name, last_name, user_role, username, avatar_url, created_at')
         .eq('id', user.id)
         .single();
 
@@ -162,7 +175,7 @@ export default function CommunityProfileScreen() {
           // Versuche zuerst, das Profil über die profiles-Tabelle zu finden
           const { data: profileData, error: profileError } = await supabase
             .from('profiles')
-            .select('id, first_name, last_name, user_role')
+            .select('id, first_name, last_name, user_role, username, avatar_url')
             .eq('id', followingId)
             .single();
             
@@ -171,7 +184,9 @@ export default function CommunityProfileScreen() {
               id: profileData.id,
               first_name: profileData.first_name || 'Benutzer',
               last_name: profileData.last_name || '',
-              user_role: profileData.user_role || 'unknown'
+              user_role: profileData.user_role || 'unknown',
+              username: profileData.username || null,
+              avatar_url: profileData.avatar_url || null,
             });
             continue;
           }
@@ -183,25 +198,29 @@ export default function CommunityProfileScreen() {
               .rpc('get_user_profile', { user_id_param: followingId });
               
             if (!rpcError && rpcData && rpcData.length > 0) {
-              const rpcProfile = rpcData[0];
-              followingUsers.push({
-                id: followingId,
-                first_name: rpcProfile.first_name || 'Benutzer',
-                last_name: rpcProfile.last_name || '',
-                user_role: rpcProfile.user_role || 'unknown'
-              });
-              continue;
-            }
+            const rpcProfile = rpcData[0];
+            followingUsers.push({
+              id: followingId,
+              first_name: rpcProfile.first_name || 'Benutzer',
+              last_name: rpcProfile.last_name || '',
+              user_role: rpcProfile.user_role || 'unknown',
+              username: rpcProfile.username || null,
+              avatar_url: rpcProfile.avatar_url || null,
+            });
+            continue;
+          }
           }
           
           // Falls wir immer noch kein Profil haben, erstelle einen Platzhalter
           console.log(`No profile found for user ${followingId}, creating placeholder`);
-          followingUsers.push({
-            id: followingId,
-            first_name: 'Benutzer',
-            last_name: '',
-            user_role: 'unknown'
-          });
+        followingUsers.push({
+          id: followingId,
+          first_name: 'Benutzer',
+          last_name: '',
+          user_role: 'unknown',
+          username: null,
+          avatar_url: null,
+        });
           
         } catch (followingError) {
           console.error(`Error processing following user ${followingId}:`, followingError);
@@ -210,7 +229,8 @@ export default function CommunityProfileScreen() {
             id: followingId,
             first_name: 'Benutzer',
             last_name: '',
-            user_role: 'unknown'
+            user_role: 'unknown',
+            username: null,
           });
         }
       }
@@ -291,28 +311,61 @@ export default function CommunityProfileScreen() {
     });
   };
 
+  const getProfileDisplayName = (entity?: NamedEntity | null) => {
+    if (!entity) return 'Profil';
+    const username = entity.username?.trim();
+    if (username) return username;
+    const first = entity.first_name?.trim() || '';
+    const last = entity.last_name?.trim() || '';
+    const fallback = `${first} ${last}`.trim();
+    return fallback || 'Profil';
+  };
+
+  const getProfileInitials = (entity?: NamedEntity | null) => {
+    const displayName = getProfileDisplayName(entity).replace(/\s+/g, '');
+    const alphanumeric = displayName.replace(/[^A-Za-z0-9]/g, '');
+    if (alphanumeric.length >= 2) return alphanumeric.slice(0, 2).toUpperCase();
+    if (alphanumeric.length === 1) return alphanumeric.toUpperCase();
+    const fallback = `${entity?.first_name?.[0] || ''}${entity?.last_name?.[0] || ''}`.trim();
+    return fallback ? fallback.toUpperCase() : 'LB';
+  };
+
   // Renderingfunktion für Follower und Following
   const renderUserItem = ({ item }: { item: Follower }) => {
     const roleInfo = getRoleInfo(item.user_role);
+    const displayName = getProfileDisplayName(item);
+    const avatarUrl = item.avatar_url;
+    const overlayColor = colorScheme === 'dark' ? CARD_OVERLAY_DARK : CARD_OVERLAY_LIGHT;
+    const borderColor = colorScheme === 'dark' ? CARD_BORDER_DARK : CARD_BORDER_LIGHT;
 
     return (
-      <TouchableOpacity
-        style={styles.userItem}
+      <LiquidGlassCard
+        style={styles.userItemCard}
+        overlayColor={overlayColor}
+        borderColor={borderColor}
+        intensity={24}
         onPress={() => router.push(`/profile/${item.id}` as any)}
+        activeOpacity={0.85}
       >
-        <View style={[styles.userAvatar, { backgroundColor: roleInfo.chipBg }]}>
-          <IconSymbol name={roleInfo.icon as any} size={24} color="#FFFFFF" />
-        </View>
-        <View style={styles.userInfo}>
-          <ThemedText style={styles.userNameItem}>
-            {item.first_name} {item.last_name}
-          </ThemedText>
-          <View style={[styles.userRoleTag, { backgroundColor: roleInfo.chipBg }]}>
-            <ThemedText style={styles.userRoleText}>{roleInfo.label}</ThemedText>
+        <View style={styles.userItemRow}>
+          <View style={[styles.userAvatar, { backgroundColor: roleInfo.chipBg }]}>
+            {avatarUrl ? (
+              <Image source={{ uri: avatarUrl }} style={styles.userAvatarImage} />
+            ) : (
+              <IconSymbol name={roleInfo.icon as any} size={24} color="#FFFFFF" />
+            )}
           </View>
+          <View style={styles.userInfo}>
+            <ThemedText style={styles.userNameItem}>
+              {displayName}
+            </ThemedText>
+            <View style={[styles.userRoleTag, { backgroundColor: roleInfo.chipBg }]}>
+              <ThemedText style={styles.userRoleText}>{roleInfo.label}</ThemedText>
+            </View>
+          </View>
+          <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
         </View>
-        <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
-      </TouchableOpacity>
+      </LiquidGlassCard>
     );
   };
 
@@ -332,19 +385,31 @@ export default function CommunityProfileScreen() {
     const name = (item.user_name || '').trim();
     const initial = name ? name.charAt(0).toUpperCase() : '👶';
     const bg = profile?.user_role === 'mama' ? 'rgba(255,159,159,0.25)' : profile?.user_role === 'papa' ? 'rgba(159,216,255,0.25)' : 'rgba(0,0,0,0.08)';
-    return { label: initial, bg };
+    return { label: initial, bg, uri: item.user_avatar_url };
   };
 
   const renderFeedItem = ({ item }: { item: any }) => {
     const avatar = getAvatar(item);
+    const overlayColor = colorScheme === 'dark' ? CARD_OVERLAY_DARK : CARD_OVERLAY_LIGHT;
+    const borderColor = colorScheme === 'dark' ? CARD_BORDER_DARK : CARD_BORDER_LIGHT;
+    const dividerColor = colorScheme === 'dark' ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.5)';
     return (
-      <LiquidGlassCard style={styles.feedCard} intensity={28} overlayColor={'rgba(255,255,255,0.18)'} borderColor={'rgba(255,255,255,0.4)'}>
+      <LiquidGlassCard
+        style={styles.feedCard}
+        intensity={colorScheme === 'dark' ? 40 : 30}
+        overlayColor={overlayColor}
+        borderColor={borderColor}
+      >
         <TouchableOpacity onPress={() => router.push({ pathname: '/community', params: { postId: item.id } } as any)}>
           <View style={styles.feedInner}>
             <View style={styles.postHeaderRow}>
               <View style={styles.userInfoRow}>
                 <View style={[styles.avatar, { backgroundColor: avatar.bg }]}>
-                  <ThemedText style={styles.avatarText}>{item.is_anonymous ? '🍼' : avatar.label}</ThemedText>
+                  {avatar.uri ? (
+                    <Image source={{ uri: avatar.uri }} style={styles.avatarImage} />
+                  ) : (
+                    <ThemedText style={styles.avatarText}>{item.is_anonymous ? '🍼' : avatar.label}</ThemedText>
+                  )}
                 </View>
                 <ThemedText style={styles.userNameText}>{item.user_name || 'Anonym'}</ThemedText>
                 <ThemedText style={styles.postDateText}>{formatDate(item.created_at)}</ThemedText>
@@ -359,7 +424,7 @@ export default function CommunityProfileScreen() {
               </View>
             )}
 
-            <View style={[styles.postActionsRow, { borderTopColor: colorScheme === 'dark' ? theme.border : '#EFEFEF' }]}>
+            <View style={[styles.postActionsRow, { borderTopColor: dividerColor }]}>
               <View style={styles.actionItem}>
                 <IconSymbol name={item.has_liked ? 'heart.fill' : 'heart'} size={18} color={item.has_liked ? '#FF6B6B' : theme.tabIconDefault} />
                 <ThemedText style={styles.actionCount}>{item.likes_count || 0}</ThemedText>
@@ -376,45 +441,58 @@ export default function CommunityProfileScreen() {
   };
 
   return (
-    <ThemedBackground style={{ backgroundColor: '#F4EFE6' }}>
+    <ThemedBackground style={styles.backgroundImage}>
       <SafeAreaView style={styles.container} edges={['top', 'left', 'right', 'bottom']}>
         <Stack.Screen options={{ headerShown: false }} />
-        <Header 
-          title="Mein Community-Profil"
-          onBackPress={() => router.back()}
-        />
+        <View style={styles.overlayContainer}>
+          <Header 
+            title="Profil"
+            showBackButton
+            onBackPress={() => router.back()}
+          />
 
-        {loading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={theme.accent} />
-            <ThemedText style={styles.loadingText}>Profil wird geladen...</ThemedText>
-          </View>
-        ) : !profile ? (
-          <View style={styles.errorContainer}>
-            <IconSymbol name="person.crop.circle.badge.exclamationmark" size={48} color={theme.error} />
-            <ThemedText style={styles.errorTitle}>Fehler beim Laden</ThemedText>
-            <ThemedText style={styles.errorText}>
-              Dein Community-Profil konnte nicht geladen werden. Bitte versuche es später erneut.
-            </ThemedText>
-          </View>
-        ) : (
-          // Hauptansicht für das geladene Profil
-          <ScrollView 
-            contentContainerStyle={styles.contentContainer}
-            showsVerticalScrollIndicator={false}
-          >
-            {/* Profilkarte im Liquid Glass */}
-            <LiquidGlassCard style={styles.profileCard} intensity={32} overlayColor={'rgba(255,255,255,0.22)'} borderColor={'rgba(255,255,255,0.55)'}>
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={theme.accent} />
+              <ThemedText style={styles.loadingText}>Profil wird geladen...</ThemedText>
+            </View>
+          ) : !profile ? (
+            <View style={styles.errorContainer}>
+              <IconSymbol name="person.crop.circle.badge.exclamationmark" size={48} color={theme.error} />
+              <ThemedText style={styles.errorTitle}>Fehler beim Laden</ThemedText>
+              <ThemedText style={styles.errorText}>
+                Dein Community-Profil konnte nicht geladen werden. Bitte versuche es später erneut.
+              </ThemedText>
+            </View>
+          ) : (
+            // Hauptansicht für das geladene Profil
+            <ScrollView
+              style={styles.scrollArea}
+              contentContainerStyle={styles.contentContainer}
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.sectionColumn}>
+                {/* Profilkarte im Liquid Glass */}
+                <LiquidGlassCard
+                  style={styles.profileCard}
+                  intensity={36}
+                  overlayColor={colorScheme === 'dark' ? CARD_OVERLAY_DARK : CARD_OVERLAY_LIGHT}
+                  borderColor={colorScheme === 'dark' ? CARD_BORDER_DARK : CARD_BORDER_LIGHT}
+                >
               <View style={styles.profileHeader}>
                 {/* Profilbild */}
                 <View style={[styles.avatarContainer, { backgroundColor: getRoleInfo(profile.user_role).chipBg }]}>
-                  <IconSymbol name={getRoleInfo(profile.user_role).icon as any} size={40} color={getRoleInfo(profile.user_role).chipFg} />
+                  {profile.avatar_url ? (
+                    <Image source={{ uri: profile.avatar_url }} style={styles.profileAvatarImage} />
+                  ) : (
+                    <IconSymbol name={getRoleInfo(profile.user_role).icon as any} size={40} color={getRoleInfo(profile.user_role).chipFg} />
+                  )}
                 </View>
                 
                 {/* Profilinformationen */}
                 <View style={styles.nameContainer}>
                   <ThemedText style={styles.userName}>
-                    {profile.first_name} {profile.last_name}
+                    {getProfileDisplayName(profile)}
                   </ThemedText>
                   
                   <View style={[styles.roleChip, { backgroundColor: getRoleInfo(profile.user_role).chipBg }]}> 
@@ -469,7 +547,12 @@ export default function CommunityProfileScreen() {
             </LiquidGlassCard>
 
             {/* Friends/Following – IG-Stories-Style Row */}
-            <View style={styles.friendsSection}>
+            <LiquidGlassCard
+              style={styles.friendsSection}
+              intensity={30}
+              overlayColor={colorScheme === 'dark' ? CARD_OVERLAY_DARK : CARD_OVERLAY_LIGHT}
+              borderColor={colorScheme === 'dark' ? CARD_BORDER_DARK : CARD_BORDER_LIGHT}
+            >
               <View style={styles.friendsHeaderRow}>
                 <ThemedText style={styles.friendsTitle}>Freunde</ThemedText>
                 <TouchableOpacity onPress={() => setActiveTab(ProfileTab.FOLLOWING)}>
@@ -479,7 +562,9 @@ export default function CommunityProfileScreen() {
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.friendsRow}>
                 {(following.length > 0 ? following : followers).slice(0, 12).map((u) => {
                   const role = getRoleInfo(u.user_role);
-                  const initials = `${(u.first_name || 'B')[0] || ''}${(u.last_name || '')[0] || ''}`.toUpperCase();
+                  const initials = getProfileInitials(u);
+                  const displayName = getProfileDisplayName(u);
+                  const hasAvatar = !!u.avatar_url;
                   return (
                     <TouchableOpacity key={u.id} style={styles.friendItem} onPress={() => router.push(`/profile/${u.id}` as any)}>
                       <LinearGradient
@@ -489,11 +574,15 @@ export default function CommunityProfileScreen() {
                         style={styles.friendRing}
                       >
                         <View style={[styles.friendCircle, { backgroundColor: role.chipBg }]}>
-                          <ThemedText style={[styles.friendInitials, { color: role.chipFg }]}>{initials}</ThemedText>
+                          {hasAvatar ? (
+                            <Image source={{ uri: u.avatar_url! }} style={styles.friendAvatarImage} />
+                          ) : (
+                            <ThemedText style={[styles.friendInitials, { color: role.chipFg }]}>{initials}</ThemedText>
+                          )}
                         </View>
                       </LinearGradient>
                       <ThemedText style={styles.friendName} numberOfLines={1}>
-                        {u.first_name}
+                        {displayName}
                       </ThemedText>
                     </TouchableOpacity>
                   );
@@ -505,59 +594,68 @@ export default function CommunityProfileScreen() {
                   </View>
                 )}
               </ScrollView>
-            </View>
+            </LiquidGlassCard>
 
             {/* Inhalte (Posts als Standard) */}
-            <View style={styles.tabContent}>
-              {activeTab === ProfileTab.FOLLOWERS && (
-                <FlatList
-                  data={followers}
-                  renderItem={renderUserItem}
-                  keyExtractor={(item) => item.id}
-                  ListEmptyComponent={() => (
-                    <View style={styles.emptyContainer}>
-                      <IconSymbol name="person.2.slash" size={32} color={theme.tabIconDefault} />
-                      <ThemedText style={styles.emptyText}>Keine Follower</ThemedText>
-                      <ThemedText style={styles.emptySubtext}>Du hast noch keine Follower.</ThemedText>
-                    </View>
-                  )}
-                  contentContainerStyle={styles.flatListContent}
-                />
-              )}
-              {activeTab === ProfileTab.FOLLOWING && (
-                <FlatList
-                  data={following}
-                  renderItem={renderUserItem}
-                  keyExtractor={(item) => item.id}
-                  ListEmptyComponent={() => (
-                    <View style={styles.emptyContainer}>
-                      <IconSymbol name="person.2.slash" size={32} color={theme.tabIconDefault} />
-                      <ThemedText style={styles.emptyText}>Folgt niemandem</ThemedText>
-                      <ThemedText style={styles.emptySubtext}>Du folgst noch keinem anderen Benutzer.</ThemedText>
-                    </View>
-                  )}
-                  contentContainerStyle={styles.flatListContent}
-                />
-              )}
-              {activeTab === ProfileTab.POSTS && (
-                posts.length === 0 ? (
-                  <View style={styles.emptyContainer}>
-                    <IconSymbol name="text.bubble" size={32} color={theme.tabIconDefault} />
-                    <ThemedText style={styles.emptyText}>Keine Beiträge</ThemedText>
-                    <ThemedText style={styles.emptySubtext}>Du hast noch keine Beiträge erstellt.</ThemedText>
-                  </View>
-                ) : (
+            <LiquidGlassCard
+              style={styles.tabCard}
+              intensity={34}
+              overlayColor={colorScheme === 'dark' ? CARD_OVERLAY_DARK : CARD_OVERLAY_LIGHT}
+              borderColor={colorScheme === 'dark' ? CARD_BORDER_DARK : CARD_BORDER_LIGHT}
+            >
+              <View style={styles.tabContent}>
+                {activeTab === ProfileTab.FOLLOWERS && (
                   <FlatList
-                    data={posts}
+                    data={followers}
+                    renderItem={renderUserItem}
                     keyExtractor={(item) => item.id}
-                    renderItem={renderFeedItem}
-                    contentContainerStyle={{ paddingTop: 4, paddingBottom: 12 }}
+                    ListEmptyComponent={() => (
+                      <View style={styles.emptyContainer}>
+                        <IconSymbol name="person.2.slash" size={32} color={theme.tabIconDefault} />
+                        <ThemedText style={styles.emptyText}>Keine Follower</ThemedText>
+                        <ThemedText style={styles.emptySubtext}>Du hast noch keine Follower.</ThemedText>
+                      </View>
+                    )}
+                    contentContainerStyle={styles.flatListContent}
                   />
-                )
-              )}
-            </View>
-          </ScrollView>
+                )}
+                {activeTab === ProfileTab.FOLLOWING && (
+                  <FlatList
+                    data={following}
+                    renderItem={renderUserItem}
+                    keyExtractor={(item) => item.id}
+                    ListEmptyComponent={() => (
+                      <View style={styles.emptyContainer}>
+                        <IconSymbol name="person.2.slash" size={32} color={theme.tabIconDefault} />
+                        <ThemedText style={styles.emptyText}>Folgt niemandem</ThemedText>
+                        <ThemedText style={styles.emptySubtext}>Du folgst noch keinem anderen Benutzer.</ThemedText>
+                      </View>
+                    )}
+                    contentContainerStyle={styles.flatListContent}
+                  />
+                )}
+                {activeTab === ProfileTab.POSTS && (
+                  posts.length === 0 ? (
+                    <View style={styles.emptyContainer}>
+                      <IconSymbol name="text.bubble" size={32} color={theme.tabIconDefault} />
+                      <ThemedText style={styles.emptyText}>Keine Beiträge</ThemedText>
+                      <ThemedText style={styles.emptySubtext}>Du hast noch keine Beiträge erstellt.</ThemedText>
+                    </View>
+                  ) : (
+                    <FlatList
+                      data={posts}
+                      keyExtractor={(item) => item.id}
+                      renderItem={renderFeedItem}
+                      contentContainerStyle={{ paddingTop: 4, paddingBottom: 12 }}
+                    />
+                  )
+                )}
+              </View>
+            </LiquidGlassCard>
+          </View>
+        </ScrollView>
         )}
+        </View>
       </SafeAreaView>
     </ThemedBackground>
   );
@@ -566,6 +664,23 @@ export default function CommunityProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  backgroundImage: {
+    flex: 1,
+  },
+  overlayContainer: {
+    flex: 1,
+    paddingHorizontal: LAYOUT_PAD,
+    paddingBottom: 32,
+    alignItems: 'stretch',
+  },
+  scrollArea: {
+    flex: 1,
+    width: '100%',
+  },
+  sectionColumn: {
+    width: '100%',
+    alignSelf: 'stretch',
   },
   loadingContainer: {
     flex: 1,
@@ -594,14 +709,16 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   profileCard: {
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 16,
+    borderRadius: 26,
+    padding: 22,
+    marginBottom: 24,
+    width: '100%',
+    alignSelf: 'stretch',
   },
   // Feed styles (Community-like)
   feedCard: {
-    marginBottom: 12,
-    borderRadius: 12,
+    marginBottom: 16,
+    borderRadius: 24,
   },
   feedInner: {
     padding: 16,
@@ -624,6 +741,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 8,
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 14,
+    resizeMode: 'cover',
   },
   avatarText: {
     fontSize: 13,
@@ -674,9 +798,11 @@ const styles = StyleSheet.create({
     color: '#888',
   },
   friendsSection: {
-    marginTop: 4,
-    marginBottom: 12,
-    paddingHorizontal: 12,
+    marginBottom: 24,
+    padding: 22,
+    width: '100%',
+    alignSelf: 'stretch',
+    borderRadius: 26,
   },
   friendsHeaderRow: {
     flexDirection: 'row',
@@ -692,7 +818,7 @@ const styles = StyleSheet.create({
   friendsAction: {
     fontSize: 13,
     fontWeight: '600',
-    opacity: 0.7,
+    color: '#9775FA',
   },
   friendsRow: {
     paddingHorizontal: 4,
@@ -717,7 +843,13 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#EEE'
+    backgroundColor: '#EEE',
+    overflow: 'hidden',
+  },
+  friendAvatarImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 26,
   },
   friendInitials: {
     fontSize: 18,
@@ -748,6 +880,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
+  },
+  profileAvatarImage: {
+    width: 74,
+    height: 74,
+    borderRadius: 37,
+    resizeMode: 'cover',
   },
   nameContainer: {
     flex: 1,
@@ -796,19 +934,27 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     borderTopWidth: 1,
     borderTopColor: 'rgba(0, 0, 0, 0.1)',
+    width: '100%',
+    alignSelf: 'stretch',
   },
   statItem: {
     flex: 1,
+    flexBasis: 0,
     alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 0,
+    paddingHorizontal: 8,
   },
   statValue: {
     fontSize: 24,
     fontWeight: 'bold',
     marginBottom: 4,
+    textAlign: 'center',
   },
   statLabel: {
     fontSize: 14,
     opacity: 0.7,
+    textAlign: 'center',
   },
   tabContainer: {
     flexDirection: 'row',
@@ -826,8 +972,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   contentContainer: {
-    flex: 1,
-    marginBottom: 20,
+    flexGrow: 1,
+    width: '100%',
+    paddingBottom: 32,
+    alignItems: 'stretch',
   },
   loadingContentContainer: {
     flex: 1,
@@ -837,13 +985,14 @@ const styles = StyleSheet.create({
   listContent: {
     paddingBottom: 20,
   },
-  userItem: {
+  userItemCard: {
+    marginBottom: 10,
+    borderRadius: 18,
+  },
+  userItemRow: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 12,
-    borderRadius: 8,
-    marginBottom: 8,
-    backgroundColor: 'rgba(0, 0, 0, 0.05)',
   },
   userAvatar: {
     width: 40,
@@ -852,6 +1001,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
+  },
+  userAvatarImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 20,
+    resizeMode: 'cover',
   },
   userInfo: {
     flex: 1,
@@ -929,11 +1084,19 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
   },
+  tabCard: {
+    width: '100%',
+    alignSelf: 'stretch',
+    borderRadius: 26,
+    padding: 22,
+    marginBottom: 24,
+  },
   tabContent: {
     flex: 1,
     padding: 16,
   },
   activeStatItem: {
+    paddingBottom: 4,
     borderBottomWidth: 2,
     borderBottomColor: '#9775FA',
   },

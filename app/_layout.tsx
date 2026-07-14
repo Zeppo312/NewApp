@@ -10,13 +10,19 @@ import 'react-native-reanimated';
 import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
 
-
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { BabyStatusProvider } from '@/contexts/BabyStatusContext';
+import { ActiveBabyProvider, useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { ThemeProvider as AppThemeProvider } from '@/contexts/ThemeContext';
 import { NavigationProvider } from '@/contexts/NavigationContext';
 import { checkForNewNotifications, registerBackgroundNotificationTask, BACKGROUND_NOTIFICATION_TASK } from '@/lib/notificationService';
+import { useNotifications } from '@/hooks/useNotifications';
+import { useSleepWindowNotifications } from '@/hooks/useSleepWindowNotifications';
+import { predictNextSleepWindow, type SleepWindowPrediction } from '@/lib/sleep-window';
+import { getBabyInfo } from '@/lib/baby';
+import { supabase } from '@/lib/supabase';
+import type { SleepEntry } from '@/lib/sleepData';
 
 // Importieren der Meilenstein-Task-Definition
 import { defineMilestoneCheckerTask } from '@/tasks/milestoneCheckerTask';
@@ -73,15 +79,96 @@ function RootLayoutNav() {
   const colorScheme = useColorScheme();
   const { loading, user } = useAuth();
   const [initialRoute, setInitialRoute] = useState<string | null>(null);
+  const { requestPermissions } = useNotifications();
+  const { activeBabyId } = useActiveBaby();
+  const [sleepPrediction, setSleepPrediction] = useState<SleepWindowPrediction | null>(null);
 
-  // Registriere den Benachrichtigungs-Hintergrundtask, wenn der Benutzer angemeldet ist
+  // Registriere Push-Notifications und Hintergrundtask, wenn der Benutzer angemeldet ist
   useEffect(() => {
     if (user) {
+      // Push-Token registrieren für Remote-Notifications
+      requestPermissions().catch(error => {
+        console.error('Fehler beim Registrieren von Push-Notifications:', error);
+      });
+
+      // Hintergrundtask registrieren (für Polling, falls nötig)
       registerBackgroundNotificationTask().catch(error => {
         console.error('Fehler beim Registrieren des Benachrichtigungs-Hintergrundtasks:', error);
       });
     }
-  }, [user]);
+  }, [user, requestPermissions]);
+
+  // Sleep Window Prediction für Benachrichtigungen berechnen
+  useEffect(() => {
+    if (!user || !activeBabyId) {
+      setSleepPrediction(null);
+      return;
+    }
+
+    const loadSleepPrediction = async () => {
+      try {
+        // Baby-Info laden
+        const { data: babyInfo, error: babyError } = await getBabyInfo(activeBabyId);
+        if (babyError || !babyInfo?.birthdate) {
+          setSleepPrediction(null);
+          return;
+        }
+
+        // Schlafeinträge der letzten 30 Tage laden
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+        const { data: entries, error } = await supabase
+          .from('sleep_entries')
+          .select('*')
+          .eq('baby_id', activeBabyId)
+          .gte('start_time', thirtyDaysAgo.toISOString())
+          .order('start_time', { ascending: false });
+
+        if (error) {
+          console.error('Fehler beim Laden der Schlafeinträge für Prediction:', error);
+          setSleepPrediction(null);
+          return;
+        }
+
+        // Prediction berechnen
+        const prediction = await predictNextSleepWindow({
+          userId: user.id,
+          birthdate: babyInfo.birthdate,
+          entries: (entries || []) as SleepEntry[],
+          anchorBedtime: '19:30',
+        });
+
+        // Nur setzen, wenn Confidence ausreichend ist (mindestens 5 historische Samples)
+        // Diese Logik entspricht der im Hook verwendeten confidence >= 0.6 Prüfung
+        if (prediction && prediction.debug) {
+          const historicalSamples = (prediction.debug.historicalSampleCount as number) ?? 0;
+          const personalizationSamples = (prediction.debug.personalizationSampleCount as number) ?? 0;
+          const hasGoodConfidence = historicalSamples >= 5 || (historicalSamples + personalizationSamples) >= 6;
+
+          if (hasGoodConfidence) {
+            setSleepPrediction(prediction);
+          } else {
+            setSleepPrediction(null);
+          }
+        } else {
+          setSleepPrediction(null);
+        }
+      } catch (error) {
+        console.error('Fehler beim Berechnen der Sleep Prediction:', error);
+        setSleepPrediction(null);
+      }
+    };
+
+    loadSleepPrediction();
+
+    // Alle 5 Minuten aktualisieren
+    const interval = setInterval(loadSleepPrediction, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [user, activeBabyId]);
+
+  // Sleep Window Notifications Hook (läuft unabhängig vom Screen)
+  useSleepWindowNotifications(sleepPrediction);
 
   // Wir verwenden jetzt die index.tsx Datei als Einstiegspunkt, die die Weiterleitung basierend auf dem Auth-Status übernimmt
   useEffect(() => {
@@ -139,15 +226,16 @@ function RootLayoutNav() {
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="diary-entries" />
         <Stack.Screen name="mini-wiki" />
-        <Stack.Screen name="faq" />
         <Stack.Screen name="community" />
         <Stack.Screen name="chat/[id]" />
         <Stack.Screen name="notifications" />
+        <Stack.Screen name="paywall" />
         <Stack.Screen name="pregnancy-stats" />
         <Stack.Screen name="account-linking" />
         <Stack.Screen name="sync-test" />
         <Stack.Screen name="+not-found" />
         <Stack.Screen name="auth/callback" />
+        <Stack.Screen name="auth/reset-password" />
       </Stack>
       <StatusBar hidden={true} />
     </ThemeProvider>
@@ -208,9 +296,11 @@ export default Sentry.wrap(function RootLayout() {
     <AuthProvider>
       <AppThemeProvider>
         <NavigationProvider>
-          <BabyStatusProvider>
-            <RootLayoutNav />
-          </BabyStatusProvider>
+          <ActiveBabyProvider>
+            <BabyStatusProvider>
+              <RootLayoutNav />
+            </BabyStatusProvider>
+          </ActiveBabyProvider>
         </NavigationProvider>
       </AppThemeProvider>
     </AuthProvider>

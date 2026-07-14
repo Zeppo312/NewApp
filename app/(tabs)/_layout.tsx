@@ -135,6 +135,14 @@ export default function TabLayout() {
         }}
       />
       
+      {/* Backup-Route ausblenden */}
+      <Tabs.Screen
+        name="sleep-tracker.backup"
+        options={{
+          href: null,
+        }}
+      />
+
       {/* Tab 2/5: Unser Tag */}
       <Tabs.Screen
         name="daily_old"

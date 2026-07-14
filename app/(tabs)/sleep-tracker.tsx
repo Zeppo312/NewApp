@@ -4,7 +4,6 @@ import {
   SafeAreaView,
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
@@ -16,17 +15,25 @@ import {
   Platform,
   Dimensions,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import TextInputOverlay from '@/components/modals/TextInputOverlay';
 
-import { SleepEntry, SleepQuality, startSleepTracking, stopSleepTracking } from '@/lib/sleepData';
+import { SleepEntry, SleepQuality, startSleepTracking, stopSleepTracking, loadConnectedUsers } from '@/lib/sleepData';
 import { loadAllVisibleSleepEntries } from '@/lib/sleepSharing';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import {
+  CacheStrategy,
+  loadWithRevalidate,
+  invalidateCacheAfterAction
+} from '@/lib/screenCache';
 import Header from '@/components/Header';
 import ActivityCard from '@/components/ActivityCard';
 import ActivityInputModal from '@/components/ActivityInputModal';
@@ -37,7 +44,11 @@ import { ProgressCircle } from '@/components/ProgressCircle';
 import type { ViewStyle } from 'react-native';
 import { GlassCard, LiquidGlassCard, LAYOUT_PAD, SECTION_GAP_TOP, SECTION_GAP_BOTTOM, RADIUS, PRIMARY, GLASS_BORDER, GLASS_OVERLAY, FONT_SM, FONT_MD, FONT_LG } from '@/constants/DesignGuide';
 import { getBabyInfo } from '@/lib/baby';
-import { predictNextSleepWindow, updatePersonalizationAfterNap, type SleepWindowPrediction } from '@/lib/sleep-window';
+import { useActiveBaby } from '@/contexts/ActiveBabyContext';
+import { predictNextSleepWindow, updatePersonalizationAfterNap, initializePersonalization, type SleepWindowPrediction } from '@/lib/sleep-window';
+import { markPaywallShown, shouldShowPaywall } from '@/lib/paywall';
+import { useNotifications } from '@/hooks/useNotifications';
+import { usePartnerNotifications } from '@/hooks/usePartnerNotifications';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -92,6 +103,401 @@ interface ClassifiedSleepEntry extends SleepEntry {
   period: SleepPeriod;
   isActive: boolean;
 }
+
+type SleepStats = {
+  totalMinutes: number;
+  napsCount: number;
+  longestStretch: number;
+  score: number;
+};
+
+type StatusMetricsBarProps = {
+  stats: SleepStats;
+  selectedDate: Date;
+  sleepPrediction: SleepWindowPrediction | null;
+  activeSleepEntry: ClassifiedSleepEntry | null;
+  statsPage: number;
+  onPageChange: (page: number) => void;
+};
+
+const isSameDay = (a: Date, b: Date) =>
+  a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+
+const minutesToHMM = (mins: number) => {
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (h <= 0) return `${m}m`;
+  return `${h}h ${m}m`;
+};
+
+const StatusMetricsBar = ({
+  stats,
+  selectedDate,
+  sleepPrediction,
+  activeSleepEntry,
+  statsPage,
+  onPageChange,
+}: StatusMetricsBarProps) => {
+  const statsPageCount = 3;
+  const statsScrollRef = useRef<ScrollView>(null);
+  const [autoScrollEnabled, setAutoScrollEnabled] = useState(true);
+
+  const getConfidenceLevel = (): 'high' | 'medium' | 'low' => {
+    if (!sleepPrediction || !sleepPrediction.debug) return 'low';
+    const historicalSamples = sleepPrediction.debug.historicalSampleCount ?? 0;
+    const personalizationSamples = sleepPrediction.debug.personalizationSampleCount ?? 0;
+    const totalSamples = historicalSamples + personalizationSamples;
+    if (historicalSamples >= 10 || totalSamples >= 12) return 'high';
+    if (historicalSamples >= 5 || totalSamples >= 6) return 'medium';
+    return 'low';
+  };
+
+  const getTirednessLevel = (): { emoji: string; label: string; color: string } => {
+    if (!sleepPrediction || !sleepPrediction.debug.lastNapEnd || activeSleepEntry) {
+      return { emoji: '😌', label: 'entspannt', color: '#A8C4A2' };
+    }
+
+    const windowMinutes = sleepPrediction.windowMinutes as number;
+    const minutesUntilWindow = sleepPrediction.debug.awakeSinceLastNap !== null
+      ? (windowMinutes - (sleepPrediction.debug.awakeSinceLastNap as number))
+      : windowMinutes;
+
+    if (minutesUntilWindow > 20) {
+      return { emoji: '😌', label: 'entspannt', color: '#A8C4A2' };
+    }
+
+    if (minutesUntilWindow > 10) {
+      return { emoji: '🙂', label: 'wird müde', color: '#FF8C42' };
+    }
+
+    if (minutesUntilWindow >= -5 && minutesUntilWindow <= 10) {
+      return { emoji: '😴', label: 'optimal', color: '#8E4EC6' };
+    }
+
+    return { emoji: '😵', label: 'übermüdet', color: '#E53E3E' };
+  };
+
+  const getReasoningText = (): string => {
+    if (!sleepPrediction || !sleepPrediction.debug) return 'Keine Vorhersage verfügbar';
+
+    const { lastNapDuration, targetNapDuration, sleepDebt, circadianHour, napDurationAdjustment, sleepDebtAdjustment } = sleepPrediction.debug;
+
+    const reasons: string[] = [];
+
+    if (lastNapDuration && targetNapDuration && Math.abs(napDurationAdjustment as number) > 5) {
+      if ((napDurationAdjustment as number) < -5) {
+        reasons.push('Letzter Nap war kurz');
+      } else if ((napDurationAdjustment as number) > 5) {
+        reasons.push('Letzter Nap war lang');
+      }
+    }
+
+    if (Math.abs(sleepDebt as number) > 30) {
+      if ((sleepDebtAdjustment as number) < -5) {
+        reasons.push('Heute schon viel wach gewesen');
+      } else if ((sleepDebtAdjustment as number) > 5) {
+        reasons.push('Heute schon viel geschlafen');
+      }
+    }
+
+    if (circadianHour !== null && (circadianHour as number) >= 16) {
+      reasons.push('Nachmittags werden Babys schneller müde');
+    }
+
+    if (reasons.length === 0) {
+      return 'Normale Schlafzeit für dieses Alter';
+    }
+
+    return reasons[0];
+  };
+
+  const getCountdownText = (): string => {
+    if (!sleepPrediction || activeSleepEntry) {
+      return activeSleepEntry ? 'Schläft gerade' : 'Keine Vorhersage';
+    }
+
+    const now = new Date();
+    const minutesUntil = Math.round((sleepPrediction.recommendedStart.getTime() - now.getTime()) / 60000);
+
+    if (minutesUntil <= 0 && minutesUntil >= -10) {
+      return 'Schlafenszeit jetzt optimal';
+    }
+
+    if (minutesUntil < -10) {
+      return 'Fenster bereits verpasst';
+    }
+
+    if (minutesUntil <= 5) {
+      return 'Bereit zum Schlafen';
+    }
+
+    const hours = Math.floor(minutesUntil / 60);
+    const mins = minutesUntil % 60;
+
+    if (hours > 0) {
+      return `In ca. ${hours}h ${mins}m müde`;
+    }
+
+    return `In ca. ${mins} Min müde`;
+  };
+
+  const getBedtimeWarning = (): string | null => {
+    if (!sleepPrediction || !sleepPrediction.debug.anchorConstraintApplied) {
+      return null;
+    }
+
+    const { dynamicBedtimeGap } = sleepPrediction.debug;
+    if (!dynamicBedtimeGap || (dynamicBedtimeGap as number) < 90) {
+      return null;
+    }
+
+    return 'Ein später Nap könnte den Nachtschlaf erschweren';
+  };
+
+  const getHistoricalText = (): string | null => {
+    if (!sleepPrediction || !sleepPrediction.debug.historicalSampleCount) {
+      return null;
+    }
+
+    const { historicalSampleCount } = sleepPrediction.debug;
+    if ((historicalSampleCount as number) < 5) {
+      return null;
+    }
+
+    // windowMinutes aus der Prediction selbst nehmen (nicht aus debug)
+    const windowMinutes = sleepPrediction.windowMinutes as number;
+    const hours = Math.floor(windowMinutes / 60);
+    const mins = windowMinutes % 60;
+    const timeStr = hours > 0 ? `${hours}h ${mins}min` : `${mins} Min`;
+
+    return `In den letzten Tagen klappt Schlaf meist nach ~${timeStr} Wachzeit`;
+  };
+
+  useEffect(() => {
+    if (!autoScrollEnabled) return;
+    const timer = setInterval(() => {
+      const nextPage = (statsPage + 1) % statsPageCount;
+      statsScrollRef.current?.scrollTo({ x: nextPage * screenWidth, animated: true });
+      onPageChange(nextPage);
+    }, 8000);
+    return () => clearInterval(timer);
+  }, [autoScrollEnabled, onPageChange, statsPage, statsPageCount]);
+
+  const tirednessLevel = getTirednessLevel();
+  const reasoningText = getReasoningText();
+  const countdownText = getCountdownText();
+  const bedtimeWarning = getBedtimeWarning();
+  const historicalText = getHistoricalText();
+  const hintText = bedtimeWarning ?? 'Kein besonderer Hinweis';
+  const historyText = historicalText ?? 'Noch zu wenig Daten für einen Trend';
+  const personalizationSamples = sleepPrediction?.debug?.personalizationSampleCount ?? 0;
+  const hasPersonalization = personalizationSamples > 0;
+  const confidenceLevel = sleepPrediction ? getConfidenceLevel() : null;
+  const confidenceLabel =
+    confidenceLevel === 'high'
+      ? 'zuverlässig'
+      : confidenceLevel === 'medium'
+        ? 'wird besser'
+        : 'lernt noch';
+  const confidenceDot =
+    confidenceLevel === 'high' ? '🟢' : confidenceLevel === 'medium' ? '🟡' : '⚪';
+  const dayLabel = isSameDay(selectedDate, new Date())
+    ? 'Heute'
+    : selectedDate.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' });
+
+  return (
+    <View style={styles.statsContainer}>
+      <ScrollView
+        ref={statsScrollRef}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        onScrollBeginDrag={() => setAutoScrollEnabled(false)}
+        onScroll={(e) => {
+          const page = Math.round(e.nativeEvent.contentOffset.x / screenWidth);
+          onPageChange(page);
+        }}
+        scrollEventThrottle={16}
+        style={styles.statsScroll}
+      >
+        <View style={[styles.statsPage, { width: screenWidth }]}>
+          <View style={styles.kpiRow}>
+            <GlassCard
+              style={styles.kpiCard}
+              intensity={20}
+              overlayColor="rgba(142, 78, 198, 0.1)"
+              borderColor="rgba(142, 78, 198, 0.25)"
+            >
+              <View style={styles.kpiHeaderRow}>
+                <IconSymbol name="moon.fill" size={12} color="#8E4EC6" />
+                <Text style={styles.kpiTitle}>{dayLabel}</Text>
+              </View>
+              <Text style={[styles.kpiValue, styles.kpiValueCentered]}>{minutesToHMM(stats.totalMinutes)}</Text>
+            </GlassCard>
+
+            <GlassCard
+              style={styles.kpiCard}
+              intensity={20}
+              overlayColor="rgba(255, 140, 66, 0.1)"
+              borderColor="rgba(255, 140, 66, 0.25)"
+            >
+              <View style={styles.kpiHeaderRow}>
+                <IconSymbol name="zzz" size={12} color="#FF8C42" />
+                <Text style={styles.kpiTitle}>Naps</Text>
+              </View>
+              <Text style={[styles.kpiValue, styles.kpiValueCentered]}>{stats.napsCount}</Text>
+            </GlassCard>
+          </View>
+
+          <View style={styles.kpiRow}>
+            <GlassCard
+              style={styles.kpiCard}
+              intensity={20}
+              overlayColor="rgba(168, 196, 162, 0.1)"
+              borderColor="rgba(168, 196, 162, 0.25)"
+            >
+              <View style={styles.kpiHeaderRow}>
+                <IconSymbol name="clock.fill" size={12} color="#A8C4A2" />
+                <Text style={styles.kpiTitle}>Längster</Text>
+              </View>
+              <Text style={[styles.kpiValue, styles.kpiValueCentered]}>{minutesToHMM(stats.longestStretch)}</Text>
+            </GlassCard>
+
+            <GlassCard
+              style={styles.kpiCard}
+              intensity={20}
+              overlayColor="rgba(255, 155, 155, 0.1)"
+              borderColor="rgba(255, 155, 155, 0.25)"
+            >
+              <View style={styles.kpiHeaderRow}>
+                <IconSymbol name="chart.line.uptrend.xyaxis" size={12} color="#FF9B9B" />
+                <Text style={styles.kpiTitle}>Score</Text>
+              </View>
+              <Text style={[styles.kpiValue, styles.kpiValueCentered]}>{stats.score}%</Text>
+            </GlassCard>
+          </View>
+        </View>
+
+        <View style={[styles.statsPage, { width: screenWidth }]}>
+          <View style={styles.kpiRow}>
+            <GlassCard
+              style={[styles.kpiCard, styles.kpiCardWide]}
+              intensity={20}
+              overlayColor="rgba(142, 78, 198, 0.1)"
+              borderColor="rgba(142, 78, 198, 0.25)"
+            >
+              <View style={styles.kpiHeaderRow}>
+                <IconSymbol name="clock.badge" size={12} color="#8E4EC6" />
+                <Text style={styles.kpiTitle}>Nächstes Fenster</Text>
+                {(hasPersonalization || confidenceLevel) && (
+                  <View style={styles.predictionMetaInline}>
+                    {hasPersonalization && (
+                      <View style={styles.predictionBadge}>
+                        <Text style={styles.predictionBadgeText}>✨ abgestimmt</Text>
+                      </View>
+                    )}
+                    {confidenceLevel && (
+                      <View style={styles.predictionBadge}>
+                        <Text style={styles.predictionBadgeText}>{confidenceDot} {confidenceLabel}</Text>
+                      </View>
+                    )}
+                  </View>
+                )}
+              </View>
+              {sleepPrediction && !activeSleepEntry ? (
+                <>
+                  <Text style={[styles.kpiValue, styles.kpiValueCentered, { fontSize: 16 }]}>
+                    {sleepPrediction.earliest.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
+                    {' – '}
+                    {sleepPrediction.latest.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
+                  </Text>
+                  <Text style={styles.kpiSub}>{countdownText}</Text>
+                </>
+              ) : (
+                <Text style={[styles.kpiValue, styles.kpiValueCentered]}>
+                  {activeSleepEntry ? '💤' : '—'}
+                </Text>
+              )}
+            </GlassCard>
+          </View>
+
+          <View style={styles.kpiRow}>
+            <GlassCard
+              style={styles.kpiCard}
+              intensity={20}
+              overlayColor={`${tirednessLevel.color}20`}
+              borderColor={`${tirednessLevel.color}40`}
+            >
+              <View style={styles.kpiHeaderRow}>
+                <Text style={{ fontSize: 14 }}>{tirednessLevel.emoji}</Text>
+                <Text style={styles.kpiTitle}>Müdigkeit</Text>
+              </View>
+              <Text style={[styles.kpiValue, styles.kpiValueCentered, { fontSize: 14 }]}>
+                {tirednessLevel.label}
+              </Text>
+            </GlassCard>
+
+            <GlassCard
+              style={styles.kpiCard}
+              intensity={20}
+              overlayColor="rgba(168, 196, 162, 0.1)"
+              borderColor="rgba(168, 196, 162, 0.25)"
+            >
+              <View style={styles.kpiHeaderRow}>
+                <IconSymbol name="lightbulb.fill" size={12} color="#A8C4A2" />
+                <Text style={styles.kpiTitle}>Grund</Text>
+              </View>
+              <Text style={[styles.kpiValue, styles.kpiValueCentered, { fontSize: 11, lineHeight: 14 }]} numberOfLines={2}>
+                {reasoningText}
+              </Text>
+              </GlassCard>
+          </View>
+
+        </View>
+
+        <View style={[styles.statsPage, { width: screenWidth }]}>
+          <View style={styles.kpiColumn}>
+            <GlassCard
+              style={[styles.kpiCard, styles.kpiCardWide, styles.kpiCardStack]}
+              intensity={20}
+              overlayColor="rgba(255, 140, 66, 0.1)"
+              borderColor="rgba(255, 140, 66, 0.25)"
+            >
+              <View style={styles.kpiHeaderRow}>
+                <IconSymbol name="chart.xyaxis.line" size={12} color="#FF8C42" />
+                <Text style={styles.kpiTitle}>Verlauf</Text>
+              </View>
+              <Text style={[styles.kpiValue, styles.kpiValueCentered, { fontSize: 10, lineHeight: 13 }]} numberOfLines={3}>
+                {historyText}
+              </Text>
+            </GlassCard>
+
+            <GlassCard
+              style={[styles.kpiCard, styles.kpiCardWide]}
+              intensity={20}
+              overlayColor="rgba(255, 155, 155, 0.1)"
+              borderColor="rgba(255, 155, 155, 0.25)"
+            >
+              <View style={styles.kpiHeaderRow}>
+                <IconSymbol name="exclamationmark.triangle.fill" size={12} color="#FF9B9B" />
+                <Text style={styles.kpiTitle}>Hinweis</Text>
+              </View>
+              <Text style={[styles.kpiValue, styles.kpiValueCentered, { fontSize: 11, lineHeight: 14 }]} numberOfLines={2}>
+                {hintText}
+              </Text>
+            </GlassCard>
+          </View>
+        </View>
+      </ScrollView>
+
+      <View style={styles.pagingDots}>
+        <View style={[styles.pagingDot, statsPage === 0 && styles.pagingDotActive]} />
+        <View style={[styles.pagingDot, statsPage === 1 && styles.pagingDotActive]} />
+        <View style={[styles.pagingDot, statsPage === 2 && styles.pagingDotActive]} />
+      </View>
+    </View>
+  );
+};
 
 // Convert SleepEntry to DailyEntry format for ActivityCard
 const convertSleepToDailyEntry = (sleepEntry: ClassifiedSleepEntry): any => {
@@ -220,6 +626,13 @@ export default function SleepTrackerScreen() {
   const theme = Colors[colorScheme];
   const router = useRouter();
   const { user } = useAuth();
+  const { activeBabyId } = useActiveBaby();
+  const paywallCheckInFlight = useRef(false);
+  const triggerHaptic = useCallback(() => {
+    try {
+      Haptics.selectionAsync();
+    } catch {}
+  }, []);
 
   // State management
   const [sleepEntries, setSleepEntries] = useState<ClassifiedSleepEntry[]>([]);
@@ -230,6 +643,8 @@ export default function SleepTrackerScreen() {
   const [selectedTab, setSelectedTab] = useState<'day' | 'week' | 'month'>('day');
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [editingEntry, setEditingEntry] = useState<ClassifiedSleepEntry | null>(null);
+  const hasAutoSelectedDateRef = useRef(false);
+  const [partnerId, setPartnerId] = useState<string | null>(null);
 
   // Navigation offsets für Woche und Monat
   const [weekOffset, setWeekOffset] = useState(0);   // 0 = diese Woche, -1 = letzte, +1 = nächste
@@ -240,6 +655,11 @@ export default function SleepTrackerScreen() {
   const [predictionLoading, setPredictionLoading] = useState(false);
   const [predictionError, setPredictionError] = useState<string | null>(null);
   const predictionRef = useRef<SleepWindowPrediction | null>(null);
+  const [statsPage, setStatsPage] = useState(0);
+
+  // Notification hooks
+  const { requestPermissions } = useNotifications();
+  const { isPartnerLinked } = usePartnerNotifications();
 
   // Bei Tabwechsel Offsets zurücksetzen
   useEffect(() => {
@@ -256,6 +676,58 @@ export default function SleepTrackerScreen() {
     quality: null as SleepQuality | null,
     notes: ''
   });
+
+  // Notes overlay (wie Planner)
+  const [notesOverlayVisible, setNotesOverlayVisible] = useState(false);
+  const [notesOverlayValue, setNotesOverlayValue] = useState('');
+
+  const openNotesEditor = () => {
+    setNotesOverlayValue(sleepModalData.notes ?? '');
+    setNotesOverlayVisible(true);
+  };
+
+  const closeNotesEditor = () => {
+    setNotesOverlayVisible(false);
+    setNotesOverlayValue('');
+  };
+
+  const saveNotesEditor = (next?: string) => {
+    const val = typeof next === 'string' ? next : notesOverlayValue;
+    setSleepModalData((prev) => ({ ...prev, notes: val }));
+    closeNotesEditor();
+  };
+
+  useEffect(() => {
+    if (!showInputModal) {
+      closeNotesEditor();
+    }
+  }, [showInputModal]);
+
+  const checkPaywallGate = useCallback(async () => {
+    if (paywallCheckInFlight.current || !user) return;
+    paywallCheckInFlight.current = true;
+
+    try {
+      const { shouldShow } = await shouldShowPaywall();
+      if (shouldShow) {
+        await markPaywallShown('sleep-tracker');
+        router.push({
+          pathname: '/paywall',
+          params: { next: '/(tabs)/sleep-tracker', origin: 'sleep-tracker' }
+        });
+      }
+    } catch (err) {
+      console.error('Paywall check on sleep tracker failed:', err);
+    } finally {
+      paywallCheckInFlight.current = false;
+    }
+  }, [router, user]);
+
+  useFocusEffect(
+    useCallback(() => {
+      checkPaywallGate();
+    }, [checkPaywallGate])
+  );
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
 
@@ -271,6 +743,21 @@ export default function SleepTrackerScreen() {
   const [splashSubtitle, setSplashSubtitle] = useState<string>('');
   const [splashStatus, setSplashStatus] = useState<string>('');
   const [splashHint, setSplashHint] = useState<string>('');
+  const [isStartingSleep, setIsStartingSleep] = useState(false);
+  const [isStoppingSleep, setIsStoppingSleep] = useState(false);
+
+  const normalizePickerDate = useCallback((value?: Date | null) => {
+    if (!value || Number.isNaN(value.getTime())) {
+      return new Date();
+    }
+    if (value.getFullYear() < 2000) {
+      const now = new Date();
+      const patched = new Date(value);
+      patched.setFullYear(now.getFullYear(), now.getMonth(), now.getDate());
+      return patched;
+    }
+    return value;
+  }, []);
 
   // Animation refs
   const timerAnim = useRef(new Animated.Value(1)).current;
@@ -280,7 +767,45 @@ export default function SleepTrackerScreen() {
 
   useEffect(() => {
     loadSleepData();
-  }, []);
+  }, [activeBabyId]);
+
+  // Initialize personalization on mount or when baby changes
+  useEffect(() => {
+    initializePersonalization(activeBabyId ?? undefined);
+  }, [activeBabyId]);
+
+  // Request notification permissions on mount
+  useEffect(() => {
+    requestPermissions();
+  }, [requestPermissions]);
+
+  // Lade die aktuelle Partner-ID (aus account_links) für neue Einträge
+  const refreshPartnerId = useCallback(async () => {
+    if (!user?.id) {
+      setPartnerId(null);
+      return null;
+    }
+    try {
+      const { success, linkedUsers } = await loadConnectedUsers(true);
+      if (success && linkedUsers && linkedUsers.length > 0) {
+        setPartnerId(linkedUsers[0].userId);
+        return linkedUsers[0].userId;
+      }
+    } catch (err) {
+      console.error('Failed to load partner id:', err);
+    }
+    setPartnerId(null);
+    return null;
+  }, [user?.id, activeBabyId]);
+
+  const getEffectivePartnerId = useCallback(async () => {
+    if (partnerId) return partnerId;
+    return refreshPartnerId();
+  }, [partnerId, refreshPartnerId]);
+
+  useEffect(() => {
+    refreshPartnerId();
+  }, [refreshPartnerId]);
 
   useEffect(() => {
     if (!user?.id) {
@@ -292,7 +817,7 @@ export default function SleepTrackerScreen() {
 
     const fetchBabyProfile = async () => {
       try {
-        const { data } = await getBabyInfo();
+        const { data } = await getBabyInfo(activeBabyId ?? undefined);
         if (!isMounted) return;
 
         if (data?.birth_date) {
@@ -377,6 +902,7 @@ export default function SleepTrackerScreen() {
       try {
         const prediction = await predictNextSleepWindow({
           userId: user.id,
+          babyId: activeBabyId ?? undefined, // Gemeinsame Personalization für Partner
           birthdate: babyBirthdate ?? undefined,
           entries,
           anchorBedtime: '19:30',
@@ -413,21 +939,98 @@ export default function SleepTrackerScreen() {
     };
   };
 
-  // Load sleep data
+  // Load LIVE status (active sleep entry) - NEVER cache!
+  const loadLiveStatus = async () => {
+    try {
+      const { success, entries } = await loadAllVisibleSleepEntries(activeBabyId ?? undefined);
+      if (success && entries) {
+        const active = entries.find(entry => !entry.end_time);
+        return active ? classifySleepEntry(active) : null;
+      }
+    } catch (error) {
+      console.error('Failed to load live status:', error);
+    }
+    return null;
+  };
+
+  // Load sleep history (finished entries) - WITH cache!
+  const loadSleepHistory = async () => {
+    // WICHTIG: Cache-Key nur mit Baby-ID, damit Partner denselben Cache teilen!
+    const cacheKey = `screen_cache_sleep_history_${activeBabyId || 'default'}`;
+
+    const result = await loadWithRevalidate(
+      cacheKey,
+      async () => {
+        const { success, entries } = await loadAllVisibleSleepEntries(activeBabyId ?? undefined);
+        if (success && entries) {
+          // Only return finished entries for history
+          return entries.filter(entry => entry.end_time);
+        }
+        return [];
+      },
+      CacheStrategy.SHORT // 30 Sekunden cache für Predictions-Synchronität
+    );
+
+    return result;
+  };
+
+  // Load sleep data (combines live + cached history)
   const loadSleepData = async () => {
     try {
       setIsLoading(true);
-      const { success, entries, error } = await loadAllVisibleSleepEntries();
-      
-      if (success && entries) {
-        const classifiedEntries = entries.map(classifySleepEntry);
-        setSleepEntries(classifiedEntries);
-        
-        // Find active entry
-        const active = classifiedEntries.find(entry => entry.isActive);
-        setActiveSleepEntry(active || null);
-      } else {
-        console.error('Error loading sleep data:', error);
+
+      // LIVE: Always fresh, no cache
+      const activeSleep = await loadLiveStatus();
+      setActiveSleepEntry(activeSleep);
+
+      // HISTORY: With cache, refresh in background
+      const { data: finishedEntries, isStale, refresh } = await loadSleepHistory();
+
+      // Handle null data gracefully
+      const safeFinishedEntries = finishedEntries || [];
+
+      // Combine active + finished entries
+      const allEntries = activeSleep
+        ? [activeSleep, ...safeFinishedEntries.map(classifySleepEntry)]
+        : safeFinishedEntries.map(classifySleepEntry);
+
+      setSleepEntries(allEntries);
+
+      // Background refresh if cache was stale
+      if (isStale) {
+        refresh().then(freshEntries => {
+          const safeFreshEntries = freshEntries || [];
+          const combinedFresh = activeSleep
+            ? [activeSleep, ...safeFreshEntries.map(classifySleepEntry)]
+            : safeFreshEntries.map(classifySleepEntry);
+          setSleepEntries(combinedFresh);
+        });
+      }
+
+      // Auto-select latest entry logic
+      if (
+        !hasAutoSelectedDateRef.current &&
+        allEntries.length > 0 &&
+        !allEntries.some(e => {
+          const s = new Date(e.start_time);
+          const ee = e.end_time ? new Date(e.end_time) : new Date();
+          const ds = startOfDay(selectedDate);
+          const de = endOfDay(selectedDate);
+          return overlapMinutes(s, ee, ds, de) > 0;
+        })
+      ) {
+        const latest = allEntries.reduce((latestEntry, entry) => {
+          if (!latestEntry) return entry;
+          return new Date(entry.start_time).getTime() > new Date(latestEntry.start_time).getTime()
+            ? entry
+            : latestEntry;
+        }, null as ClassifiedSleepEntry | null);
+
+        if (latest) {
+          hasAutoSelectedDateRef.current = true;
+          setSelectedTab('day');
+          setSelectedDate(new Date(latest.start_time));
+        }
       }
     } catch (error) {
       console.error('Failed to load sleep data:', error);
@@ -446,17 +1049,26 @@ export default function SleepTrackerScreen() {
 
   // Start sleep tracking
   const handleStartSleep = async (_period: SleepPeriod) => {
+    if (isStartingSleep) return;
+    setIsStartingSleep(true);
     try {
-      const { success, entry, error } = await startSleepTracking();
+      const effectivePartnerId = await getEffectivePartnerId();
+      const { success, entry, error } = await startSleepTracking(
+        undefined,
+        effectivePartnerId || undefined,
+        activeBabyId ?? undefined
+      );
       
       if (success && entry) {
         const classifiedEntry = classifySleepEntry(entry);
         setActiveSleepEntry(classifiedEntry);
+        setIsStartingSleep(false);
 
         if (user?.id && predictionRef.current) {
           try {
+            // Verwende babyId statt userId für gemeinsame Personalization zwischen Partnern
             await updatePersonalizationAfterNap(
-              user.id,
+              activeBabyId || user.id,
               predictionRef.current.napIndexToday,
               predictionRef.current.timeOfDayBucket,
               predictionRef.current.recommendedStart,
@@ -487,30 +1099,44 @@ export default function SleepTrackerScreen() {
       }
     } catch (error) {
       Alert.alert('Fehler', 'Unerwarteter Fehler beim Starten des Schlaftrackers');
+    } finally {
+      setIsStartingSleep(false);
     }
   };
 
   // Stop sleep tracking
   const handleStopSleep = async (quality?: SleepQuality, notes?: string) => {
-    if (!activeSleepEntry?.id) return;
+    if (!activeSleepEntry?.id || isStoppingSleep) return;
+    const resolvedQuality = quality || 'medium';
+    setIsStoppingSleep(true);
 
     try {
-      const { success, error } = await stopSleepTracking(activeSleepEntry.id, quality || 'medium', notes);
+      const { success, error } = await stopSleepTracking(
+        activeSleepEntry.id,
+        resolvedQuality,
+        notes,
+        undefined,
+        activeBabyId ?? undefined
+      );
       
       if (success) {
         setActiveSleepEntry(null);
-        await loadSleepData();
-
-        // Splash anzeigen je nach Qualität
-        const splashKind = quality === 'good' ? 'sleep_stop_good' : quality === 'bad' ? 'sleep_stop_bad' : 'sleep_stop_medium';
-        const splashColor = quality === 'good' ? '#38A169' : quality === 'bad' ? '#E53E3E' : '#F5A623';
-        const splashEmoji = quality === 'good' ? '😴' : quality === 'bad' ? '😵' : '😐';
+        const splashKind = resolvedQuality === 'good' ? 'sleep_stop_good' : resolvedQuality === 'bad' ? 'sleep_stop_bad' : 'sleep_stop_medium';
+        const splashColor = resolvedQuality === 'good' ? '#38A169' : resolvedQuality === 'bad' ? '#E53E3E' : '#F5A623';
+        const splashEmoji = resolvedQuality === 'good' ? '😴' : resolvedQuality === 'bad' ? '😵' : '😐';
         showSuccessSplash(splashColor, splashEmoji, splashKind);
+
+        // Invalidate cache because stopped sleep now appears in history
+        // WICHTIG: Korrekter Cache-Key wie in loadSleepHistory!
+        await invalidateCacheAfterAction(`sleep_history_${activeBabyId || 'default'}`);
+        await loadSleepData();
       } else {
         Alert.alert('Fehler', error || 'Schlaftracking konnte nicht gestoppt werden');
       }
     } catch (error) {
       Alert.alert('Fehler', 'Unerwarteter Fehler beim Stoppen des Schlaftrackers');
+    } finally {
+      setIsStoppingSleep(false);
     }
   };
 
@@ -525,6 +1151,8 @@ export default function SleepTrackerScreen() {
       console.log('🔍 handleSaveEntry called with:', payload);
       console.log('🔍 editingEntry:', editingEntry);
 
+      const effectivePartnerId = await getEffectivePartnerId();
+
       // SleepInputModal sendet die Daten direkt als Objekt
       const sleepData = payload;
 
@@ -534,22 +1162,59 @@ export default function SleepTrackerScreen() {
         return;
       }
 
+      // Robuste Berechnung der duration_minutes
+      const calculateDurationMinutes = (startTime: string | Date, endTime: string | Date | null): number | null => {
+        if (!endTime) return null;
+
+        try {
+          const startDate = new Date(startTime);
+          const endDate = new Date(endTime);
+
+          // Validiere dass beide Daten gültig sind
+          if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+            console.warn('Invalid date in duration calculation');
+            return null;
+          }
+
+          // Berechne die Differenz in Millisekunden und konvertiere zu Minuten
+          const durationMs = endDate.getTime() - startDate.getTime();
+
+          // Stelle sicher, dass die Dauer nicht negativ ist
+          if (durationMs < 0) {
+            console.warn('End time is before start time');
+            return null;
+          }
+
+          return Math.round(durationMs / 60000);
+        } catch (error) {
+          console.error('Error calculating duration:', error);
+          return null;
+        }
+      };
+
+      const calculatedDuration = calculateDurationMinutes(sleepData.start_time, sleepData.end_time);
+      console.log('🔍 Calculated duration:', calculatedDuration, 'minutes');
+
       if (editingEntry?.id) {
         console.log('🔄 Updating existing entry:', editingEntry.id);
         // Update existing entry
-        const { data, error } = await supabase
-        .from('sleep_entries')
+        let updateQuery = supabase
+          .from('sleep_entries')
           .update({
             start_time: sleepData.start_time,
             end_time: sleepData.end_time ?? null,
             quality: sleepData.quality || null,
             notes: sleepData.notes ?? null,
-            duration_minutes: sleepData.end_time
-              ? Math.round((new Date(sleepData.end_time).getTime() - new Date(sleepData.start_time).getTime()) / 60000)
-            : null
+            duration_minutes: calculatedDuration,
+            partner_id: editingEntry.partner_id ?? effectivePartnerId ?? null
         })
-          .eq('id', editingEntry.id)
-          .select();
+          .eq('id', editingEntry.id);
+
+        if (activeBabyId) {
+          updateQuery = updateQuery.eq('baby_id', activeBabyId);
+        }
+
+        const { data, error } = await updateQuery.select();
 
         if (error) {
           console.error('❌ Update error:', error);
@@ -564,16 +1229,16 @@ export default function SleepTrackerScreen() {
         console.log('➕ Creating new entry');
         // Create new entry
         const { data, error } = await supabase
-        .from('sleep_entries')
+          .from('sleep_entries')
           .insert({
             user_id: user.id,
+            baby_id: activeBabyId ?? null,
             start_time: sleepData.start_time,
             end_time: sleepData.end_time ?? null,
             quality: sleepData.quality || null,
             notes: sleepData.notes ?? null,
-            duration_minutes: sleepData.end_time
-              ? Math.round((new Date(sleepData.end_time).getTime() - new Date(sleepData.start_time).getTime()) / 60000)
-            : null
+            duration_minutes: calculatedDuration,
+            partner_id: effectivePartnerId ?? null
           })
           .select();
 
@@ -598,11 +1263,15 @@ export default function SleepTrackerScreen() {
       });
       setShowStartPicker(false);
       setShowEndPicker(false);
+
+      // Invalidate cache because new/updated entry should appear immediately
+      // WICHTIG: Korrekter Cache-Key wie in loadSleepHistory!
+      await invalidateCacheAfterAction(`sleep_history_${activeBabyId || 'default'}`);
       await loadSleepData();
     } catch (error) {
       console.error('❌ Sleep entry save error:', error);
       Alert.alert(
-        'Unerwarteter Fehler', 
+        'Unerwarteter Fehler',
         `${error instanceof Error ? error.message : 'Unbekannter Fehler'}\n\nBitte versuche es erneut oder kontaktiere den Support.`
       );
     }
@@ -615,19 +1284,29 @@ export default function SleepTrackerScreen() {
       'Eintrag löschen',
       'Möchtest du diesen Schlaf-Eintrag wirklich löschen?',
       [
-        { text: 'Abbrechen', style: 'cancel' },
+        { text: 'Abbrechen', style: 'cancel', onPress: () => { triggerHaptic(); } },
         {
           text: 'Löschen',
           style: 'destructive',
           onPress: async () => {
+            triggerHaptic();
             try {
-              const { error } = await supabase
+              let deleteQuery = supabase
                 .from('sleep_entries')
                 .delete()
                 .eq('id', entryId);
 
+              if (activeBabyId) {
+                deleteQuery = deleteQuery.eq('baby_id', activeBabyId);
+              }
+
+              const { error } = await deleteQuery;
+
               if (error) throw error;
-              
+
+              // Invalidate cache because entry was deleted
+              // WICHTIG: Korrekter Cache-Key wie in loadSleepHistory!
+              await invalidateCacheAfterAction(`sleep_history_${activeBabyId || 'default'}`);
               await loadSleepData();
               Alert.alert('Erfolg', 'Eintrag wurde gelöscht! 🗑️');
             } catch (error) {
@@ -802,17 +1481,10 @@ export default function SleepTrackerScreen() {
 
   const stats = computeStats();
 
-  const minutesToHMM = (mins: number) => {
-    const h = Math.floor(mins / 60);
-    const m = mins % 60;
-    if (h <= 0) return `${m}m`;
-    return `${h}h ${m}m`;
-  };
   const formatClockTime = (date: Date) =>
     date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
 
   // Daily navigation helpers
-  const isSameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
   const goPrevDay = () => setSelectedDate(d => { const nd = new Date(d); nd.setDate(nd.getDate() - 1); return nd; });
   const goNextDay = () => setSelectedDate(d => { const nd = new Date(d); nd.setDate(nd.getDate() + 1); return nd; });
   const today = new Date();
@@ -823,29 +1495,78 @@ export default function SleepTrackerScreen() {
       q === 'good' ? 'rgba(56,161,105,0.25)' : q === 'medium' ? 'rgba(245,166,35,0.25)' : 'rgba(229,62,62,0.25)',
   });
 
+  // Einträge für den aktuell ausgewählten Tag (Tag-Ansicht)
+  const dayEntries = useMemo(() => {
+    const ds = startOfDay(selectedDate);
+    const de = endOfDay(selectedDate);
+    return sleepEntries
+      .filter(e => {
+        const s = new Date(e.start_time);
+        const ee = e.end_time ? new Date(e.end_time) : new Date();
+        return overlapMinutes(s, ee, ds, de) > 0;
+      })
+      .sort((a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime());
+  }, [sleepEntries, selectedDate]);
+
+  const jumpToLatestEntry = useCallback(() => {
+    if (sleepEntries.length === 0) return;
+    const latest = sleepEntries.reduce((latestEntry, entry) => {
+      if (!latestEntry) return entry;
+      return new Date(entry.start_time).getTime() > new Date(latestEntry.start_time).getTime()
+        ? entry
+        : latestEntry;
+    }, null as ClassifiedSleepEntry | null);
+
+    if (latest) {
+      setSelectedTab('day');
+      setSelectedDate(new Date(latest.start_time));
+    }
+  }, [sleepEntries]);
+
     // Setze die Modal-Daten beim Öffnen
     useEffect(() => {
       if (showInputModal) {
         if (editingEntry) {
           // Bearbeitungsmodus - lade vorhandene Daten
+          const startCandidate = new Date(editingEntry.start_time);
+          const endCandidate = editingEntry.end_time ? new Date(editingEntry.end_time) : null;
           setSleepModalData({
-            start_time: new Date(editingEntry.start_time),
-            end_time: editingEntry.end_time ? new Date(editingEntry.end_time) : null,
+            start_time: normalizePickerDate(startCandidate),
+            end_time: endCandidate ? normalizePickerDate(endCandidate) : null,
             quality: editingEntry.quality || null,
-          notes: editingEntry.notes || ''
+            notes: editingEntry.notes || ''
           });
         } else {
           // Neuer Eintrag - setze Standardwerte
           setSleepModalData({
-            start_time: new Date(),
+            start_time: normalizePickerDate(new Date()),
             end_time: null,
             quality: null,
-          notes: ''
+            notes: ''
           });
         }
       }
-    }, [showInputModal, editingEntry]);
+    }, [showInputModal, editingEntry, normalizePickerDate]);
 
+  const openStartPicker = () => {
+    triggerHaptic();
+    setShowEndPicker(false);
+    setSleepModalData((prev) => ({
+      ...prev,
+      start_time: normalizePickerDate(prev.start_time),
+    }));
+    setShowStartPicker(true);
+  };
+
+  const openEndPicker = () => {
+    triggerHaptic();
+    setShowStartPicker(false);
+    setSleepModalData((prev) => ({
+      ...prev,
+      end_time: normalizePickerDate(prev.end_time ?? prev.start_time ?? new Date()),
+    }));
+    setShowEndPicker(true);
+  };
 
   // Top Tabs Component (exakt wie daily_old.tsx)
   const TopTabs = () => (
@@ -854,7 +1575,14 @@ export default function SleepTrackerScreen() {
         <GlassCard key={tab} style={[styles.topTab, selectedTab === tab && styles.activeTopTab]} intensity={22}>
           <TouchableOpacity
             style={styles.topTabInner}
-            onPress={() => setSelectedTab(tab)} // Erstmal nur visuell - ohne Funktion
+            onPress={() => {
+              triggerHaptic();
+              setSelectedTab(tab);
+              // Wenn Tag-Tab gewählt wird, springe zu heute
+              if (tab === 'day') {
+                setSelectedDate(new Date());
+              }
+            }}
             activeOpacity={0.85}
           >
             <Text style={[styles.topTabText, selectedTab === tab && styles.activeTopTabText]}>
@@ -866,67 +1594,6 @@ export default function SleepTrackerScreen() {
     </View>
   );
 
-  // Status Metrics Bar Component (Standard App-Layout)
-  const StatusMetricsBar = () => (
-    <>
-      <View style={styles.kpiRow}>
-        <GlassCard
-          style={styles.kpiCard}
-          intensity={20}
-          overlayColor="rgba(142, 78, 198, 0.1)"
-          borderColor="rgba(142, 78, 198, 0.25)"
-        >
-          <View style={styles.kpiHeaderRow}>
-            <IconSymbol name="moon.fill" size={12} color="#8E4EC6" />
-            <Text style={styles.kpiTitle}>{isSameDay(selectedDate, today) ? 'Heute' : selectedDate.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' })}</Text>
-        </View>
-          <Text style={[styles.kpiValue, styles.kpiValueCentered]}>{minutesToHMM(stats.totalMinutes)}</Text>
-        </GlassCard>
-
-        <GlassCard
-          style={styles.kpiCard}
-          intensity={20}
-          overlayColor="rgba(255, 140, 66, 0.1)"
-          borderColor="rgba(255, 140, 66, 0.25)"
-        >
-          <View style={styles.kpiHeaderRow}>
-            <IconSymbol name="zzz" size={12} color="#FF8C42" />
-            <Text style={styles.kpiTitle}>Naps</Text>
-        </View>
-          <Text style={[styles.kpiValue, styles.kpiValueCentered]}>{stats.napsCount}</Text>
-        </GlassCard>
-        </View>
-
-      <View style={styles.kpiRow}>
-        <GlassCard
-          style={styles.kpiCard}
-          intensity={20}
-          overlayColor="rgba(168, 196, 162, 0.1)"
-          borderColor="rgba(168, 196, 162, 0.25)"
-        >
-          <View style={styles.kpiHeaderRow}>
-            <IconSymbol name="clock.fill" size={12} color="#A8C4A2" />
-            <Text style={styles.kpiTitle}>Längster</Text>
-        </View>
-          <Text style={[styles.kpiValue, styles.kpiValueCentered]}>{minutesToHMM(stats.longestStretch)}</Text>
-        </GlassCard>
-
-        <GlassCard
-          style={styles.kpiCard}
-          intensity={20}
-          overlayColor="rgba(255, 155, 155, 0.1)"
-          borderColor="rgba(255, 155, 155, 0.25)"
-        >
-          <View style={styles.kpiHeaderRow}>
-            <IconSymbol name="chart.line.uptrend.xyaxis" size={12} color="#FF9B9B" />
-            <Text style={styles.kpiTitle}>Score</Text>
-      </View>
-          <Text style={[styles.kpiValue, styles.kpiValueCentered]}>{stats.score}%</Text>
-        </GlassCard>
-      </View>
-    </>
-  );
-
   // Central Timer Component (Baby Blue Circle Only)
   const CentralTimer = () => {
     const ringSize = screenWidth * 0.75;
@@ -935,7 +1602,7 @@ export default function SleepTrackerScreen() {
     
     return (
       <View style={styles.centralTimerContainer}>
-        <Animated.View style={[styles.centralContainer, { transform: [{ scale: pulseAnim }] }]}>
+        <Animated.View pointerEvents="none" style={[styles.centralContainer, { transform: [{ scale: pulseAnim }] }]}>
           <View
             style={[
               styles.circleArea,
@@ -967,10 +1634,19 @@ export default function SleepTrackerScreen() {
           
           {/* Absolute centered time - always in perfect center */}
             <View pointerEvents="none" style={styles.centerOverlay}>
-              <Text style={[styles.centralTime, { color: '#6B4C3B', fontWeight: '800' }]}>
+              <Text
+                style={[
+                  styles.centralTime,
+                  { color: '#6B4C3B', fontWeight: '800' },
+                ]}
+              >
                 {activeSleepEntry
-                  ? formatDuration(elapsedTime)
-                  : currentTime.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
+                  ? isStoppingSleep
+                    ? 'Stoppe...'
+                    : formatDuration(elapsedTime)
+                  : isStartingSleep
+                    ? 'Starte...'
+                    : currentTime.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
               </Text>
           </View>
           
@@ -996,14 +1672,10 @@ export default function SleepTrackerScreen() {
                   Schlaffenster wird berechnet...
                 </Text>
               ) : sleepPrediction ? (
-                <>
-                  <Text style={[styles.centralHintPrimary, { color: '#6B4C3B' }]}>
-                    Nächste Schlafphase um
-                  </Text>
-                  <Text style={[styles.centralHintSecondary, { color: '#7D5A50' }]}>
-                    {formatClockTime(sleepPrediction.recommendedStart)}
-                  </Text>
-                </>
+                <Text style={[styles.centralHintPrimary, { color: '#6B4C3B' }]}>
+                  Nächstes Schlaffenster{'\n'}
+                  {formatClockTime(sleepPrediction.earliest)} – {formatClockTime(sleepPrediction.latest)}
+                </Text>
               ) : (
                 <Text style={[styles.centralHint, { color: '#7D5A50', fontWeight: '500' }]}>
                   {predictionError || 'Bereit für den nächsten Schlaf'}
@@ -1024,7 +1696,10 @@ export default function SleepTrackerScreen() {
           // Vollbreite Schlaf-beenden Button
         <TouchableOpacity
             style={[styles.fullWidthStopButton]}
-          onPress={() => handleStopSleep()}
+          onPress={() => {
+            triggerHaptic();
+            handleStopSleep();
+          }}
           activeOpacity={0.9}
         >
           <BlurView intensity={24} tint="light" style={styles.liquidGlassCardBackground}>
@@ -1041,7 +1716,10 @@ export default function SleepTrackerScreen() {
         <>
           <TouchableOpacity
             style={[styles.liquidGlassCardWrapper, { width: GRID_COL_W, marginRight: GRID_GUTTER }]}
-              onPress={() => handleStartSleep(currentTime.getHours() >= 20 || currentTime.getHours() < 10 ? 'night' : 'day')}
+              onPress={() => {
+                triggerHaptic();
+                handleStartSleep(currentTime.getHours() >= 20 || currentTime.getHours() < 10 ? 'night' : 'day');
+              }}
             activeOpacity={0.9}
           >
             <BlurView intensity={24} tint="light" style={styles.liquidGlassCardBackground}>
@@ -1058,6 +1736,7 @@ export default function SleepTrackerScreen() {
           <TouchableOpacity
             style={[styles.liquidGlassCardWrapper, { width: GRID_COL_W }]}
               onPress={() => {
+                triggerHaptic();
                 setEditingEntry(null);
                 setShowInputModal(true);
               }}
@@ -1189,7 +1868,13 @@ export default function SleepTrackerScreen() {
       <View style={styles.weekViewContainer}>
         {/* Week Navigation - Design Guide konform */}
         <View style={styles.weekNavigationContainer}>
-          <TouchableOpacity style={styles.weekNavButton} onPress={() => setWeekOffset(o => o - 1)}>
+          <TouchableOpacity
+            style={styles.weekNavButton}
+            onPress={() => {
+              triggerHaptic();
+              setWeekOffset(o => o - 1);
+            }}
+          >
             <Text style={styles.weekNavButtonText}>‹</Text>
           </TouchableOpacity>
 
@@ -1203,7 +1888,10 @@ export default function SleepTrackerScreen() {
           <TouchableOpacity
             style={[styles.weekNavButton, weekOffset >= 0 && { opacity: 0.4 }]}
             disabled={weekOffset >= 0}
-            onPress={() => setWeekOffset(o => o + 1)}
+            onPress={() => {
+              triggerHaptic();
+              setWeekOffset(o => o + 1);
+            }}
           >
             <Text style={styles.weekNavButtonText}>›</Text>
           </TouchableOpacity>
@@ -1233,7 +1921,11 @@ export default function SleepTrackerScreen() {
                     marginRight: i < (COLS - 1) ? GUTTER : 0,
                     alignItems: 'center',
                   }}
-                  onPress={() => { setSelectedDate(day); setSelectedTab('day'); }}
+                  onPress={() => {
+                    triggerHaptic();
+                    setSelectedDate(day);
+                    setSelectedTab('day');
+                  }}
                 >
                   <View style={[styles.chartBarContainer, { width: WEEK_COL_WIDTH + extra }]}>
                     {totalH > 0 && <View
@@ -1277,23 +1969,6 @@ export default function SleepTrackerScreen() {
                   <Text style={styles.statValue}>{Math.round(totalWeekMins / 7 / 60)}h</Text>
                   <Text style={styles.statLabel}>Ø pro Tag</Text>
                 </View>
-            </View>
-          </View>
-        </LiquidGlassCard>
-
-        {/* Trend-Analyse - Design Guide konform */}
-        <LiquidGlassCard style={styles.trendCard}>
-          <View style={styles.trendInner}>
-            <Text style={styles.trendTitle}>Trend-Analyse</Text>
-            <View style={styles.trendContent}>
-              <View style={styles.trendItem}>
-                <Text style={styles.trendEmoji}>📈</Text>
-                <Text style={styles.trendText}>Gute Schlafqualität</Text>
-              </View>
-              <View style={styles.trendItem}>
-                <Text style={styles.trendEmoji}>😴</Text>
-                <Text style={styles.trendText}>Stabile Einschlafzeiten</Text>
-              </View>
             </View>
           </View>
         </LiquidGlassCard>
@@ -1441,7 +2116,13 @@ export default function SleepTrackerScreen() {
       <View style={styles.monthViewContainer}>
         {/* Monats-Navigation - Design Guide konform */}
         <View style={styles.monthNavigationContainer}>
-          <TouchableOpacity style={styles.monthNavButton} onPress={() => setMonthOffset(o => o - 1)}>
+          <TouchableOpacity
+            style={styles.monthNavButton}
+            onPress={() => {
+              triggerHaptic();
+              setMonthOffset(o => o - 1);
+            }}
+          >
             <Text style={styles.monthNavButtonText}>‹</Text>
           </TouchableOpacity>
 
@@ -1454,7 +2135,10 @@ export default function SleepTrackerScreen() {
           <TouchableOpacity
             style={[styles.monthNavButton, monthOffset >= 0 && { opacity: 0.4 }]}
             disabled={monthOffset >= 0}
-            onPress={() => setMonthOffset(o => o + 1)}
+            onPress={() => {
+              triggerHaptic();
+              setMonthOffset(o => o + 1);
+            }}
           >
             <Text style={styles.monthNavButtonText}>›</Text>
           </TouchableOpacity>
@@ -1509,7 +2193,11 @@ export default function SleepTrackerScreen() {
                               styles.calendarDayButton,
                               { backgroundColor: c.bg, borderColor: c.border }
                             ]}
-                            onPress={() => { setSelectedDate(date); setSelectedTab('day'); }}
+                            onPress={() => {
+                              triggerHaptic();
+                              setSelectedDate(date);
+                              setSelectedTab('day');
+                            }}
                           >
                             <Text style={[styles.calendarDayNumber, { color: c.text }]}>{date.getDate()}</Text>
                             {totalMins > 0 && (
@@ -1569,13 +2257,22 @@ export default function SleepTrackerScreen() {
         <Header 
           title="Schlaf-Tracker"
           subtitle="Verfolge Levis Schlafmuster"
+          showBackButton
+          onBackPress={() => router.push('/(tabs)/home')}
         />
 
         {/* Top Tabs - über der Status Bar */}
         <TopTabs />
 
         {/* Status Bar */}
-        <StatusMetricsBar />
+        <StatusMetricsBar
+          stats={stats}
+          selectedDate={selectedDate}
+          sleepPrediction={sleepPrediction}
+          activeSleepEntry={activeSleepEntry}
+          statsPage={statsPage}
+          onPageChange={setStatsPage}
+        />
 
         <ScrollView
           style={styles.scrollContainer}
@@ -1596,8 +2293,14 @@ export default function SleepTrackerScreen() {
           ) : (
             <>
               {/* Day Navigation - gleiche Position/Höhe wie Woche/Monat */}
-              <View style={styles.weekNavigationContainer}>
-                <TouchableOpacity style={styles.weekNavButton} onPress={goPrevDay}>
+              <View style={[styles.weekNavigationContainer, styles.dayNavigationContainer]}>
+                <TouchableOpacity
+                  style={styles.weekNavButton}
+                  onPress={() => {
+                    triggerHaptic();
+                    goPrevDay();
+                  }}
+                >
                   <Text style={styles.weekNavButtonText}>‹</Text>
                 </TouchableOpacity>
                 <View style={styles.weekHeaderCenter}>
@@ -1608,7 +2311,14 @@ export default function SleepTrackerScreen() {
                       : selectedDate.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long' })}
                   </Text>
                 </View>
-                <TouchableOpacity style={[styles.weekNavButton, nextDisabled && { opacity: 0.4 }]} disabled={nextDisabled} onPress={goNextDay}>
+                <TouchableOpacity
+                  style={[styles.weekNavButton, nextDisabled && { opacity: 0.4 }]}
+                  disabled={nextDisabled}
+                  onPress={() => {
+                    triggerHaptic();
+                    goNextDay();
+                  }}
+                >
                   <Text style={styles.weekNavButtonText}>›</Text>
                 </TouchableOpacity>
               </View>
@@ -1627,43 +2337,83 @@ export default function SleepTrackerScreen() {
               </View>
 
               {/* Timeline Section - nur in Tag-Ansicht */}
-              <View style={styles.timelineSection}>
-                <Text style={[styles.sectionTitle, styles.sectionTitleTight]}>Timeline</Text>
+            <View style={styles.timelineSection}>
+              <Text style={[styles.sectionTitle, styles.sectionTitleTight]}>Timeline</Text>
 
-                {/* Sleep Entries - Timeline Style like daily_old.tsx - nur in Tag-Ansicht */}
-                <View style={styles.entriesContainer}>
-            {sleepEntries.filter(e => {
-                const s = new Date(e.start_time);
-                const ee = e.end_time ? new Date(e.end_time) : new Date();
-                const ds = startOfDay(selectedDate);
-                const de = endOfDay(selectedDate);
-                return overlapMinutes(s, ee, ds, de) > 0;
-              }).map((entry, index) => (
+              {/* Sleep Entries - Timeline Style like daily_old.tsx - nur in Tag-Ansicht */}
+              <View style={styles.entriesContainer}>
+            {dayEntries.map((entry, index) => (
                 <ActivityCard
                   key={entry.id || index}
                   entry={convertSleepToDailyEntry(entry)}
-                  onDelete={handleDeleteEntry}
+                  onDelete={(entryId) => {
+                    triggerHaptic();
+                    handleDeleteEntry(entryId);
+                  }}
                   onEdit={(entry) => {
+                    triggerHaptic();
                     setEditingEntry(entry as any);
                     setShowInputModal(true);
                   }}
                   marginHorizontal={8}
                 />
             ))}
-          {sleepEntries.length === 0 && !isLoading && (
+          {dayEntries.length === 0 && !isLoading && (
             <LiquidGlassCard style={styles.emptyState}>
               <Text style={styles.emptyEmoji}>💤</Text>
-              <Text style={styles.emptyTitle}>Noch keine Schlafphasen</Text>
-              <Text style={styles.emptySubtitle}>Starte den ersten Schlaf-Eintrag!</Text>
-                <TouchableOpacity style={[styles.actionButton, styles.manualButton, { marginTop: 16 }]} onPress={() => {
-                  setEditingEntry(null);
-                  setShowInputModal(true);
-                }}>
+              <Text style={styles.emptyTitle}>Keine Einträge für diesen Tag</Text>
+              <Text style={styles.emptySubtitle}>
+                {sleepEntries.length > 0
+                  ? 'Wechsle das Datum oder springe zum letzten Eintrag.'
+                  : 'Starte den ersten Schlaf-Eintrag!'}
+              </Text>
+              {sleepEntries.length > 0 && (
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.manualButton, { marginTop: 12 }]}
+                  onPress={() => {
+                    triggerHaptic();
+                    jumpToLatestEntry();
+                  }}
+                >
+                  <Text style={styles.actionButtonText}>Zum letzten Eintrag</Text>
+                </TouchableOpacity>
+              )}
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.manualButton, { marginTop: 16 }]}
+                  onPress={() => {
+                    triggerHaptic();
+                    setEditingEntry(null);
+                    setShowInputModal(true);
+                  }}
+                >
                 <Text style={styles.actionButtonText}>Manuell hinzufügen</Text>
               </TouchableOpacity>
             </LiquidGlassCard>
           )}
           </View>
+
+          {/* Manuell Button - erscheint nur bei aktivem Schlaf */}
+          {activeSleepEntry && (
+            <TouchableOpacity
+              style={[styles.liquidGlassCardWrapper, { width: '100%', marginTop: 16, marginHorizontal: 8 }]}
+              onPress={() => {
+                triggerHaptic();
+                setEditingEntry(null);
+                setShowInputModal(true);
+              }}
+              activeOpacity={0.9}
+            >
+              <BlurView intensity={24} tint="light" style={styles.liquidGlassCardBackground}>
+                <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(168, 196, 193, 0.6)', borderColor: 'rgba(255, 255, 255, 0.6)' }]}>
+                  <View style={[styles.iconContainer, { backgroundColor: 'rgba(168, 196, 193, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.6)', shadowColor: 'rgba(255, 255, 255, 0.3)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.12, shadowRadius: 2, elevation: 4 }]}>
+                    <IconSymbol name="plus.circle.fill" size={28} color="#FFFFFF" />
+                  </View>
+                  <Text style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: '#7D5A50', fontWeight: '700' }]}>Manuell</Text>
+                  <Text style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: '#7D5A50', fontWeight: '500' }]}>Eintrag hinzufügen</Text>
+                </View>
+              </BlurView>
+            </TouchableOpacity>
+          )}
               </View>
             </>
           )}
@@ -1680,7 +2430,10 @@ export default function SleepTrackerScreen() {
             {/* Background tap to close */}
             <TouchableOpacity 
               style={StyleSheet.absoluteFill} 
-              onPress={() => setShowInputModal(false)}
+              onPress={() => {
+                triggerHaptic();
+                setShowInputModal(false);
+              }}
               activeOpacity={1}
             />
 
@@ -1693,7 +2446,10 @@ export default function SleepTrackerScreen() {
               <View style={styles.header}>
                 <TouchableOpacity 
                   style={styles.headerButton}
-                  onPress={() => setShowInputModal(false)}
+                  onPress={() => {
+                    triggerHaptic();
+                    setShowInputModal(false);
+                  }}
                 >
                   <Text style={styles.closeHeaderButtonText}>✕</Text>
                 </TouchableOpacity>
@@ -1709,20 +2465,22 @@ export default function SleepTrackerScreen() {
 
                 <TouchableOpacity
                   style={[styles.headerButton, styles.saveHeaderButton, { backgroundColor: '#8E4EC6' }]}
-                  onPress={() => handleSaveEntry({
-                    start_time: sleepModalData.start_time.toISOString(),
-                    end_time: sleepModalData.end_time?.toISOString() || null,
-                    quality: sleepModalData.quality,
-                    notes: sleepModalData.notes
-                  })}
+                  onPress={() => {
+                    triggerHaptic();
+                    handleSaveEntry({
+                      start_time: sleepModalData.start_time.toISOString(),
+                      end_time: sleepModalData.end_time?.toISOString() || null,
+                      quality: sleepModalData.quality,
+                      notes: sleepModalData.notes
+                    });
+                  }}
                 >
                   <Text style={styles.saveHeaderButtonText}>✓</Text>
                 </TouchableOpacity>
               </View>
 
               <ScrollView showsVerticalScrollIndicator={false}>
-                <TouchableOpacity activeOpacity={1} onPress={() => {}}>
-                  <View style={{width: '100%', alignItems: 'center'}}>
+                <View style={{width: '100%', alignItems: 'center'}}>
                     
                     {/* Zeit Sektion */}
                     <View style={styles.section}>
@@ -1731,7 +2489,7 @@ export default function SleepTrackerScreen() {
                       <View style={styles.timeRow}>
                         <TouchableOpacity 
                           style={styles.timeButton}
-                          onPress={() => setShowStartPicker(true)}
+                          onPress={openStartPicker}
                         >
                           <Text style={styles.timeLabel}>Start</Text>
                           <Text style={styles.timeValue}>
@@ -1746,7 +2504,7 @@ export default function SleepTrackerScreen() {
 
                         <TouchableOpacity 
                           style={styles.timeButton}
-                          onPress={() => setShowEndPicker(true)}
+                          onPress={openEndPicker}
                         >
                           <Text style={styles.timeLabel}>Ende</Text>
                           <Text style={styles.timeValue}>
@@ -1767,18 +2525,23 @@ export default function SleepTrackerScreen() {
                       {showStartPicker && (
                         <View style={styles.datePickerContainer}>
                           <DateTimePicker
-                            value={sleepModalData.start_time}
+                            value={normalizePickerDate(sleepModalData.start_time)}
                             mode="datetime"
                             display={Platform.OS === 'ios' ? 'compact' : 'default'}
                             onChange={(_, date) => {
-                              if (date) setSleepModalData(prev => ({ ...prev, start_time: date }));
+                              if (date && !Number.isNaN(date.getTime())) {
+                                setSleepModalData(prev => ({ ...prev, start_time: date }));
+                              }
                             }}
                             style={styles.dateTimePicker}
                           />
                           <View style={styles.datePickerActions}>
                             <TouchableOpacity
                               style={styles.datePickerCancel}
-                              onPress={() => setShowStartPicker(false)}
+                              onPress={() => {
+                                triggerHaptic();
+                                setShowStartPicker(false);
+                              }}
                             >
                               <Text style={styles.datePickerCancelText}>Fertig</Text>
                             </TouchableOpacity>
@@ -1789,18 +2552,23 @@ export default function SleepTrackerScreen() {
                       {showEndPicker && (
                         <View style={styles.datePickerContainer}>
                           <DateTimePicker
-                            value={sleepModalData.end_time || new Date()}
+                            value={normalizePickerDate(sleepModalData.end_time ?? sleepModalData.start_time)}
                             mode="datetime"
                             display={Platform.OS === 'ios' ? 'compact' : 'default'}
                             onChange={(_, date) => {
-                              if (date) setSleepModalData(prev => ({ ...prev, end_time: date }));
+                              if (date && !Number.isNaN(date.getTime())) {
+                                setSleepModalData(prev => ({ ...prev, end_time: date }));
+                              }
                             }}
                             style={styles.dateTimePicker}
                           />
                           <View style={styles.datePickerActions}>
                             <TouchableOpacity
                               style={styles.datePickerCancel}
-                              onPress={() => setShowEndPicker(false)}
+                              onPress={() => {
+                                triggerHaptic();
+                                setShowEndPicker(false);
+                              }}
                             >
                               <Text style={styles.datePickerCancelText}>Fertig</Text>
                             </TouchableOpacity>
@@ -1827,7 +2595,10 @@ export default function SleepTrackerScreen() {
                                 marginHorizontal: 3
                               }
                             ]}
-                            onPress={() => setSleepModalData(prev => ({ ...prev, quality: q }))}
+                            onPress={() => {
+                              triggerHaptic();
+                              setSleepModalData(prev => ({ ...prev, quality: q }));
+                            }}
                           >
                             <Text style={styles.optionIcon}>
                               {q === 'good' ? '😴' : q === 'medium' ? '😐' : '😵'}
@@ -1848,15 +2619,21 @@ export default function SleepTrackerScreen() {
                     {/* Notizen Sektion */}
                     <View style={styles.section}>
                       <Text style={styles.sectionTitle}>📝 Notizen</Text>
-                      <TextInput
+                      <TouchableOpacity
                         style={styles.notesInput}
-                        placeholder="Optionale Notizen zum Schlaf..."
-                        placeholderTextColor="#A8978E"
-                        value={sleepModalData.notes}
-                        onChangeText={notes => setSleepModalData(prev => ({ ...prev, notes }))}
-                        multiline
-                        numberOfLines={3}
-                      />
+                        activeOpacity={0.9}
+                        onPress={() => {
+                          triggerHaptic();
+                          openNotesEditor();
+                        }}
+                      >
+                        <Text
+                          style={sleepModalData.notes.trim() ? styles.notesText : styles.notesPlaceholder}
+                          numberOfLines={3}
+                        >
+                          {sleepModalData.notes.trim() || 'Optionale Notizen zum Schlaf...'}
+                        </Text>
+                      </TouchableOpacity>
                     </View>
 
                     {/* Delete Button für Bearbeitung */}
@@ -1865,6 +2642,7 @@ export default function SleepTrackerScreen() {
                         <TouchableOpacity
                           style={[styles.deleteButton]}
                           onPress={() => {
+                            triggerHaptic();
                             if (editingEntry.id) {
                               handleDeleteEntry(editingEntry.id);
                               setShowInputModal(false);
@@ -1877,13 +2655,23 @@ export default function SleepTrackerScreen() {
                       </View>
                     )}
 
-                  </View>
-                </TouchableOpacity>
+                </View>
               </ScrollView>
-            </BlurView>
-          </View>
+	            </BlurView>
+	          </View>
 
-        </Modal>
+	          <TextInputOverlay
+	            visible={notesOverlayVisible}
+	            label="Notizen"
+	            value={notesOverlayValue}
+	            placeholder="Optionale Notizen zum Schlaf..."
+	            multiline
+	            accentColor={PRIMARY}
+	            onClose={closeNotesEditor}
+	            onSubmit={(next) => saveNotesEditor(next)}
+	          />
+
+	        </Modal>
       </SafeAreaView>
 
       {/* Splash Popup wie in daily_old.tsx */}
@@ -1921,6 +2709,36 @@ const styles = StyleSheet.create({
   scrollContainer: { flex: 1 },
   scrollContent: { paddingBottom: 140, paddingHorizontal: LAYOUT_PAD },
 
+  // Stats Container (Swipeable)
+  statsContainer: {
+    width: '100%',
+    marginBottom: 0,
+  },
+  statsScroll: {
+    width: '100%',
+  },
+  statsPage: {
+    paddingHorizontal: LAYOUT_PAD,
+  },
+  pagingDots: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 1,
+    marginBottom: -6,
+    gap: 8,
+  },
+  pagingDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(125, 90, 80, 0.3)',
+  },
+  pagingDotActive: {
+    backgroundColor: '#8E4EC6',
+    width: 24,
+  },
+
   // KPI glass cards (Kompakt)
   kpiRow: {
     flexDirection: 'row',
@@ -1938,6 +2756,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     overflow: 'hidden',
     minHeight: 64,
+  },
+  kpiCardWide: {
+    width: '100%', // Vollbreite für spezielle Karten
+  },
+  kpiColumn: {
+    alignSelf: 'center',
+    width: contentWidth,
+    marginTop: 6,
+    marginBottom: 4,
+  },
+  kpiCardStack: {
+    marginBottom: 8,
   },
   kpiHeaderRow: { 
     flexDirection: 'row', 
@@ -1962,11 +2792,31 @@ const styles = StyleSheet.create({
     textAlign: 'center', 
     width: '100%' 
   },
-  kpiSub: { 
+  kpiSub: {
     marginTop: 2,
-    fontSize: 9, 
+    fontSize: 9,
     color: '#7D5A50',
     textAlign: 'center',
+    opacity: 0.8,
+  },
+  predictionMetaInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 'auto',
+    gap: 6,
+  },
+  predictionBadge: {
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    backgroundColor: 'rgba(255, 255, 255, 0.35)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.65)',
+  },
+  predictionBadgeText: {
+    fontSize: 9,
+    fontWeight: '600',
+    color: '#7D5A50',
     opacity: 0.8,
   },
 
@@ -2329,6 +3179,47 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
+  // 🆕 Insights Rondell Styles (wie KPI-Cards)
+  insightsRondellScroll: {
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  insightsRondellContainer: {
+    paddingHorizontal: LAYOUT_PAD,
+    gap: 10,
+  },
+  insightCard: {
+    width: 110,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    overflow: 'hidden',
+    minHeight: 64,
+  },
+  insightHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 6,
+  },
+  insightIconText: {
+    fontSize: 14,
+  },
+  insightTitle: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#7D5A50',
+    flex: 1,
+  },
+  insightValue: {
+    fontSize: 16,
+    fontWeight: '800',
+    textAlign: 'center',
+    letterSpacing: -0.5,
+    fontVariant: ['tabular-nums'],
+  },
+
   // Sleep Modal Styles - wie ActivityInputModal
   modalOverlay: {
     flex: 1,
@@ -2459,14 +3350,19 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.8)',
     borderRadius: 15,
     padding: 15,
-    fontSize: 16,
-    color: '#333333',
-    textAlignVertical: 'top',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 3,
     elevation: 3,
+  },
+  notesText: {
+    fontSize: 16,
+    color: '#333333',
+  },
+  notesPlaceholder: {
+    fontSize: 16,
+    color: '#A8978E',
   },
   deleteButton: {
     backgroundColor: '#FF6B6B',
@@ -2613,16 +3509,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: SECTION_GAP_TOP,     // wie sectionTitle oben
-    marginBottom: SECTION_GAP_BOTTOM, // wie sectionTitle unten
+    marginTop: -4,     // noch näher an die Dots
+    marginBottom: 0, // kompakter zum Content
     paddingHorizontal: LAYOUT_PAD, // Navigation braucht eigenen Abstand
+  },
+  dayNavigationContainer: {
+    marginTop: 2, // minimal mehr Abstand zu den Dots in der Tagesansicht
   },
   monthNavigationContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: SECTION_GAP_TOP,     // wie sectionTitle oben
-    marginBottom: SECTION_GAP_BOTTOM, // wie sectionTitle unten
+    marginTop: -4,     // noch näher an die Dots
+    marginBottom: 0, // kompakter zum Content
     paddingHorizontal: LAYOUT_PAD, // Navigation braucht eigenen Abstand
   },
   weekNavButton: {

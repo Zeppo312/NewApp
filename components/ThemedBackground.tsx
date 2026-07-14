@@ -25,10 +25,7 @@ export function ThemedBackground({ children, style, resizeMode = "repeat", ...re
   const screenHeight = Dimensions.get('window').height;
 
   // Wähle das richtige Hintergrundbild basierend auf dem Farbschema
-  const backgroundImage =
-    colorScheme === 'dark'
-      ? require('@/assets/images/Background_Dunkel.png')
-      : require('@/assets/images/Background_Hell.png');
+  const backgroundImage = require('@/assets/images/Background_Hell.png');
 
   return (
     <ImageBackground

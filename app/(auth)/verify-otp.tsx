@@ -25,7 +25,7 @@ export default function VerifyOTPScreen() {
 
   useEffect(() => {
     // Countdown für erneutes Senden
-    let interval: NodeJS.Timeout;
+    let interval: ReturnType<typeof setInterval>;
     if (countdown > 0) {
       interval = setInterval(() => {
         setCountdown(prev => {
@@ -201,7 +201,7 @@ export default function VerifyOTPScreen() {
                   {otp.map((digit, index) => (
                     <TextInput
                       key={index}
-                      ref={ref => inputRefs.current[index] = ref!}
+                      ref={ref => { inputRefs.current[index] = ref!; }}
                       style={[
                         styles.otpInput,
                         {

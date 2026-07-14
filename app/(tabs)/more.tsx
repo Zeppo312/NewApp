@@ -112,6 +112,8 @@ export default function MoreScreen() {
         <Header 
           title="Mehr" 
           subtitle="Einstellungen und weitere Funktionen" 
+          showBackButton
+          onBackPress={() => router.push('/(tabs)/home')}
         />
         
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
@@ -167,6 +169,24 @@ export default function MoreScreen() {
 
             <TouchableOpacity
               style={styles.menuItem}
+              onPress={() => router.push('/lottis-empfehlungen')}
+            >
+              <View style={styles.menuItemIcon}>
+                <IconSymbol name="star.fill" size={24} color={theme.accent} />
+              </View>
+              <View style={styles.menuItemContent}>
+                <ThemedText style={styles.menuItemTitle}>
+                  Lottis Empfehlungen
+                </ThemedText>
+                <ThemedText style={styles.menuItemDescription}>
+                  Handverlesene Produkte für dich und dein Baby
+                </ThemedText>
+              </View>
+              <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.menuItem}
               onPress={() => router.push('/mini-wiki')}
             >
               <View style={styles.menuItemIcon}>
@@ -183,23 +203,6 @@ export default function MoreScreen() {
               <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={() => router.push('/faq')}
-            >
-              <View style={styles.menuItemIcon}>
-                <IconSymbol name="questionmark.circle.fill" size={24} color={theme.accent} />
-              </View>
-              <View style={styles.menuItemContent}>
-                <ThemedText style={styles.menuItemTitle}>
-                  Häufige Fragen
-                </ThemedText>
-                <ThemedText style={styles.menuItemDescription}>
-                  Antworten auf typische Fragen nach der Geburt
-                </ThemedText>
-              </View>
-              <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
-            </TouchableOpacity>
           </LiquidGlassCard>
 
           <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
@@ -306,34 +309,22 @@ export default function MoreScreen() {
 
           <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
             <ThemedText style={styles.sectionTitle}>
-              Über die App
+              Support
             </ThemedText>
 
-            <TouchableOpacity style={styles.menuItem}>
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => router.push('/support' as any)}
+            >
               <View style={styles.menuItemIcon}>
-                <IconSymbol name="info.circle.fill" size={24} color={theme.accent} />
+                <IconSymbol name="envelope.fill" size={24} color={theme.accent} />
               </View>
               <View style={styles.menuItemContent}>
                 <ThemedText style={styles.menuItemTitle}>
-                  Informationen
+                  Support kontaktieren
                 </ThemedText>
                 <ThemedText style={styles.menuItemDescription}>
-                  Version, Datenschutz, Impressum
-                </ThemedText>
-              </View>
-              <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.menuItem}>
-              <View style={styles.menuItemIcon}>
-                <IconSymbol name="star.fill" size={24} color={theme.accent} />
-              </View>
-              <View style={styles.menuItemContent}>
-                <ThemedText style={styles.menuItemTitle}>
-                  Bewerten
-                </ThemedText>
-                <ThemedText style={styles.menuItemDescription}>
-                  Bewerte die App im App Store
+                  support@lottibaby.de
                 </ThemedText>
               </View>
               <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />

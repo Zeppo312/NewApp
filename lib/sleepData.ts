@@ -1,4 +1,4 @@
-import { supabase } from "./supabase";
+import { supabase, getCachedUser } from "./supabase";
 import { RealtimeChannel } from '@supabase/supabase-js';
 
 // Sleep Quality type
@@ -8,6 +8,7 @@ export type SleepQuality = 'good' | 'medium' | 'bad' | null;
 export interface SleepEntry {
   id?: string;
   user_id?: string;
+  baby_id?: string | null;
   start_time: Date | string;
   end_time?: Date | string | null;
   duration_minutes?: number;
@@ -41,7 +42,7 @@ export async function getLinkedUsersWithDetails(): Promise<{
   error?: string;
 }> {
   try {
-    const { data: user } = await supabase.auth.getUser();
+    const { data: user } = await getCachedUser();
     if (!user || !user.user) {
       console.log('getLinkedUsersWithDetails: Kein Benutzer angemeldet');
       return { success: false, error: 'Kein Benutzer angemeldet' };
@@ -79,7 +80,7 @@ export async function getLinkedUsersAlternative(): Promise<{
   error?: string;
 }> {
   try {
-    const { data: user } = await supabase.auth.getUser();
+    const { data: user } = await getCachedUser();
     if (!user || !user.user) {
       console.log('getLinkedUsersAlternative: Kein Benutzer angemeldet');
       return { success: false, error: 'Kein Benutzer angemeldet' };
@@ -159,7 +160,7 @@ export async function setupSleepEntriesRealtime(callback: (payload: any) => void
     }
 
     // Aktuellen Benutzer abrufen
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData?.user) {
       return { success: false, error: 'Nicht angemeldet' };
     }
@@ -212,7 +213,7 @@ export async function syncAllExistingSleepEntries(): Promise<{
   linkedUsers?: ConnectedUser[];
 }> {
   try {
-    const { data: user } = await supabase.auth.getUser();
+    const { data: user } = await getCachedUser();
     if (!user || !user.user) {
       return { success: false, error: 'Kein Benutzer angemeldet' };
     }
@@ -282,7 +283,9 @@ export async function syncAllExistingSleepEntries(): Promise<{
 
 // Sleep tracking start - angepasst für Partner-Funktionalität
 export async function startSleepTracking(
-  targetUserId?: string // Optional: Benutzer, für den der Eintrag gestartet wird
+  targetUserId?: string, // Optional: Benutzer, für den der Eintrag gestartet wird
+  partnerOverride?: string | null, // Optional: explizite Partner-ID (z. B. aus dem UI-State)
+  babyId?: string
 ): Promise<{
   success: boolean;
   entry?: SleepEntry;
@@ -291,7 +294,7 @@ export async function startSleepTracking(
 }> {
   try {
     // Get current user
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) {
       return { success: false, error: 'Nicht angemeldet' };
     }
@@ -307,7 +310,7 @@ export async function startSleepTracking(
     }
     
     // Partnerinformationen aus account_links-Beziehungen
-    let partnerId: string | null = null;
+    let partnerId: string | null = partnerOverride ?? null;
     
     // Log verbundene Benutzer
     if (linkedUsers && linkedUsers.length > 0) {
@@ -329,10 +332,12 @@ export async function startSleepTracking(
       }
       
       console.log(`startSleepTracking: Erstelle Eintrag für Partner ${matchingPartner.displayName}`);
-      partnerId = userData.user.id; // Wenn wir für den Partner aufzeichnen, sind wir selbst der Partner
+      partnerId = partnerOverride ?? userData.user.id; // Wenn wir für den Partner aufzeichnen, sind wir selbst der Partner
     } else {
       // Wenn wir für uns selbst aufzeichnen, verwenden wir den ersten Partner aus account_links
-      if (linkedUsers && linkedUsers.length > 0) {
+      if (partnerId) {
+        console.log(`startSleepTracking: Partner-ID via Override: ${partnerId}`);
+      } else if (linkedUsers && linkedUsers.length > 0) {
         partnerId = linkedUsers[0].userId;
         console.log(`startSleepTracking: Setze Partner-ID auf ${partnerId} (${linkedUsers[0].displayName})`);
       } else {
@@ -343,7 +348,7 @@ export async function startSleepTracking(
     const effectiveUserId = targetUserId || userData.user.id;
     
     // Prüfe zuerst, ob bereits eine aktive Aufzeichnung vorhanden ist
-    const { success: checkSuccess, activeEntry, partnerHasActiveEntry, partnerName } = await checkForActiveSleepEntry();
+    const { success: checkSuccess, activeEntry, partnerHasActiveEntry, partnerName } = await checkForActiveSleepEntry(babyId);
     
     if (checkSuccess && activeEntry) {
       return { 
@@ -366,6 +371,7 @@ export async function startSleepTracking(
       .from('sleep_entries')
       .insert({
         user_id: effectiveUserId,
+        baby_id: babyId ?? null,
         start_time: now.toISOString(),
         partner_id: partnerId,  // Nutze partner_id statt shared_with_user_id
         updated_by: userData.user.id, // Wer hat den Eintrag erstellt/aktualisiert
@@ -404,7 +410,8 @@ export async function stopSleepTracking(
   entryId: string,
   quality: SleepQuality = null,
   notes?: string,
-  targetUserId?: string // Optional: Benutzer, für den der Eintrag gestoppt wird
+  targetUserId?: string, // Optional: Benutzer, für den der Eintrag gestoppt wird
+  babyId?: string
 ): Promise<{
   success: boolean;
   entry?: SleepEntry;
@@ -413,7 +420,7 @@ export async function stopSleepTracking(
 }> {
   try {
     // Get current user
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) {
       return { success: false, error: 'Nicht angemeldet' };
     }
@@ -424,11 +431,16 @@ export async function stopSleepTracking(
     const { linkedUsers } = await loadConnectedUsers();
     
     // Prüfe Berechtigungen mit FOR UPDATE Lock für Atomarität
-    const { data: entryData, error: fetchError } = await supabase
+    let fetchQuery = supabase
       .from('sleep_entries')
       .select('*')
-      .eq('id', entryId)
-      .single();
+      .eq('id', entryId);
+
+    if (babyId) {
+      fetchQuery = fetchQuery.eq('baby_id', babyId);
+    }
+
+    const { data: entryData, error: fetchError } = await fetchQuery.single();
       
     if (fetchError || !entryData) {
       console.error('stopSleepTracking: Error fetching entry:', fetchError);
@@ -447,7 +459,7 @@ export async function stopSleepTracking(
     const endTime = now.toISOString();
     const durationMinutes = Math.round((now.getTime() - new Date(entryData.start_time).getTime()) / (1000 * 60));
     
-    const { data: updatedEntry, error: updateError } = await supabase
+    let updateQuery = supabase
       .from('sleep_entries')
       .update({
         end_time: endTime,
@@ -457,9 +469,13 @@ export async function stopSleepTracking(
         updated_by: userData.user.id, // Wer hat den Eintrag zuletzt aktualisiert
         // Wir aktualisieren hier nicht partner_id, da dies nur beim Erstellen gesetzt wird
       })
-      .eq('id', entryId)
-      .select('*')
-      .single();
+      .eq('id', entryId);
+
+    if (babyId) {
+      updateQuery = updateQuery.eq('baby_id', babyId);
+    }
+
+    const { data: updatedEntry, error: updateError } = await updateQuery.select('*').single();
     
     if (updateError) {
       console.error('stopSleepTracking: Error updating entry:', updateError);
@@ -499,7 +515,7 @@ export async function updateSleepEntry(
 }> {
   try {
     // Get current user
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) {
       return { success: false, error: 'Nicht angemeldet' };
     }
@@ -602,7 +618,7 @@ export async function deleteSleepEntry(id: string): Promise<{
 }> {
   try {
     // Get current user
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) {
       return { success: false, error: 'Nicht angemeldet' };
     }
@@ -636,7 +652,7 @@ export async function deleteSleepEntry(id: string): Promise<{
 }
 
 // Check for active sleep entries with improved partner check
-export async function checkForActiveSleepEntry(): Promise<{
+export async function checkForActiveSleepEntry(babyId?: string): Promise<{
   success: boolean;
   activeEntry?: SleepEntry | null;
   error?: string;
@@ -645,7 +661,7 @@ export async function checkForActiveSleepEntry(): Promise<{
 }> {
   try {
     // Get current user
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) {
       return { success: false, error: 'Nicht angemeldet' };
     }
@@ -662,13 +678,17 @@ export async function checkForActiveSleepEntry(): Promise<{
     const partnerIds: string[] = linkedUsers?.map(user => user.userId) || [];
     
     // Überprüfe, ob es einen aktiven Eintrag vom aktuellen Benutzer gibt
-    const { data, error } = await supabase
+    let activeQuery = supabase
       .from('sleep_entries')
       .select('*')
       .eq('user_id', userData.user.id)
-      .is('end_time', null)
-      .order('start_time', { ascending: false })
-      .limit(1);
+      .is('end_time', null);
+
+    if (babyId) {
+      activeQuery = activeQuery.eq('baby_id', babyId);
+    }
+
+    const { data, error } = await activeQuery.order('start_time', { ascending: false }).limit(1);
 
     if (error) {
       console.error('checkForActiveSleepEntry: Error getting active entry:', error);
@@ -680,11 +700,17 @@ export async function checkForActiveSleepEntry(): Promise<{
     let partnerName = null;
     
     if (partnerIds.length > 0) {
-      const { data: partnerData, error: partnerError } = await supabase
+      let partnerQuery = supabase
         .from('sleep_entries')
         .select('*, profiles:user_id(display_name)')
         .in('user_id', partnerIds)
-        .is('end_time', null)
+        .is('end_time', null);
+
+      if (babyId) {
+        partnerQuery = partnerQuery.eq('baby_id', babyId);
+      }
+
+      const { data: partnerData, error: partnerError } = await partnerQuery
         .order('start_time', { ascending: false })
         .limit(1);
       
@@ -749,7 +775,7 @@ export async function loadSleepEntries(): Promise<{
 }> {
   try {
     // Aktuellen Benutzer abrufen
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData?.user) {
       console.error('loadSleepEntries: Nicht angemeldet');
       return { success: false, error: 'Nicht angemeldet' };
@@ -816,7 +842,7 @@ export async function shareSleepEntry(
 }> {
   try {
     // Aktuellen Benutzer abrufen
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) {
       return { success: false, error: 'Nicht angemeldet' };
     }
@@ -873,7 +899,7 @@ export async function unshareSleepEntry(
 }> {
   try {
     // Aktuellen Benutzer abrufen
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) {
       return { success: false, error: 'Nicht angemeldet' };
     }
@@ -926,7 +952,7 @@ export async function debugCompareLinkedUserMethods(): Promise<{
 }> {
   try {
     // Aktuellen Benutzer prüfen
-    const { data: user } = await supabase.auth.getUser();
+    const { data: user } = await getCachedUser();
     if (!user || !user.user) {
       return { success: false };
     }
@@ -1057,7 +1083,7 @@ export async function checkDatabaseStructure(): Promise<{
 }> {
   try {
     // Aktuellen Benutzer abrufen
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) {
       return { success: false, error: 'Nicht angemeldet' };
     }
