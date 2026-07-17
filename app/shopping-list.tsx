@@ -38,6 +38,8 @@ import {
   fetchInventoryUsageSummaries,
   fetchShoppingState,
   findInventoryItemByBarcode,
+  getInventoryLevelOption,
+  INVENTORY_LEVEL_OPTIONS,
   InventoryItem,
   InventoryUsageSummary,
   isLowStock,
@@ -47,6 +49,7 @@ import {
   resolveBarcodeProduct,
   ResolvedBarcodeProduct,
   saveProductToCatalog,
+  setInventoryStockLevel,
   ShoppingListItem,
   toggleShoppingItemPurchased,
   upsertInventoryItem,
@@ -137,6 +140,16 @@ const matchesInventorySearch = (item: InventoryItem, query: string) => {
     .join(' ')
     .toLowerCase()
     .includes(query);
+};
+
+const isLevelTracked = (item: Partial<InventoryItem>) => item.tracking_mode === 'level';
+
+const inventoryRemainingLabel = (item: InventoryItem) => {
+  if (isLevelTracked(item)) {
+    const level = getInventoryLevelOption(item.stock_level_percent);
+    return `${level.label} (${level.percent} %)`;
+  }
+  return formatUnitQuantity(computeTotalQuantity(item), item.unit);
 };
 
 const SCAN_DEBOUNCE_MS = 2500;
@@ -383,7 +396,7 @@ function ShoppingListScreenContent() {
       if (now - lastReminded < REMINDER_COOLDOWN_MS) continue;
       scheduleNotification(
         'Vorrat wird knapp',
-        `${item.name}: nur noch ${formatUnitQuantity(computeTotalQuantity(item), item.unit)} übrig.`,
+        `${item.name}: nur noch ${inventoryRemainingLabel(item)} übrig.`,
         { type: 'inventory_low', referenceId: item.id },
         null,
         `inventory_low_${item.id}`
@@ -445,20 +458,22 @@ function ShoppingListScreenContent() {
           ? `Einkauf: ${item.title}`
           : `Kauf zurückgenommen: ${item.title}`;
         const hasPackage = (linkedInventory.package_quantity ?? 0) > 0;
-        const { data } = hasPackage
-          ? await adjustSealedPackages(
-              linkedInventory,
-              (item.quantity_unit === 'Packung' ? item.quantity_value ?? 1 : 1) *
-                (nowPurchased ? 1 : -1),
-              nowPurchased ? 'refill' : 'correction',
-              note
-            )
-          : await adjustInventoryQuantity(
-              linkedInventory,
-              (item.quantity_value ?? 1) * (nowPurchased ? 1 : -1),
-              nowPurchased ? 'refill' : 'correction',
-              note
-            );
+        const { data } = isLevelTracked(linkedInventory)
+          ? await setInventoryStockLevel(linkedInventory.id, nowPurchased ? 100 : 0)
+          : hasPackage
+            ? await adjustSealedPackages(
+                linkedInventory,
+                (item.quantity_unit === 'Packung' ? item.quantity_value ?? 1 : 1) *
+                  (nowPurchased ? 1 : -1),
+                nowPurchased ? 'refill' : 'correction',
+                note
+              )
+            : await adjustInventoryQuantity(
+                linkedInventory,
+                (item.quantity_value ?? 1) * (nowPurchased ? 1 : -1),
+                nowPurchased ? 'refill' : 'correction',
+                note
+              );
         if (data) {
           applyInventoryUpdate(data);
         }
@@ -570,15 +585,25 @@ function ShoppingListScreenContent() {
   );
 
   const handleInventoryToShoppingList = useCallback(
-    async (item: InventoryItem) => {
+    async (item: InventoryItem, showConfirmation = true) => {
       if (!activeBabyId) return;
+      const existingOpenItem = shoppingItems.find(
+        (shoppingItem) =>
+          !shoppingItem.is_purchased && shoppingItem.inventory_item_id === item.id
+      );
+      if (existingOpenItem) {
+        if (showConfirmation) {
+          Alert.alert('Schon vorgemerkt', `${item.name} steht bereits auf der Einkaufsliste.`);
+        }
+        return;
+      }
       // Packungsartikel landen als "1 Packung" auf der Liste, lose Artikel als Menge.
       const hasPackage = (item.package_quantity ?? 0) > 0;
       const { data, error } = await upsertShoppingItem(activeBabyId, {
         title: item.name,
         category: item.category,
-        quantity_value: hasPackage ? 1 : item.package_quantity,
-        quantity_unit: hasPackage ? 'Packung' : item.unit,
+        quantity_value: isLevelTracked(item) ? null : hasPackage ? 1 : item.package_quantity,
+        quantity_unit: isLevelTracked(item) ? null : hasPackage ? 'Packung' : item.unit,
         source_type: 'inventory',
         inventory_item_id: item.id,
       });
@@ -587,9 +612,26 @@ function ShoppingListScreenContent() {
         return;
       }
       setShoppingItems((items) => [data, ...items.filter((it) => it.id !== data.id)]);
-      Alert.alert('Hinzugefügt', `${item.name} steht jetzt auf der Einkaufsliste.`);
+      if (showConfirmation) {
+        Alert.alert('Hinzugefügt', `${item.name} steht jetzt auf der Einkaufsliste.`);
+      }
     },
-    [activeBabyId]
+    [activeBabyId, shoppingItems]
+  );
+
+  const handleSetStockLevel = useCallback(
+    async (item: InventoryItem, percent: number) => {
+      const { data, error } = await setInventoryStockLevel(item.id, percent);
+      if (error || !data) {
+        Alert.alert('Fehler', 'Der Füllstand konnte nicht gespeichert werden.');
+        return;
+      }
+      applyInventoryUpdate(data);
+      if (percent === 0) {
+        await handleInventoryToShoppingList(data, false);
+      }
+    },
+    [applyInventoryUpdate, handleInventoryToShoppingList]
   );
 
   const handleSaveInventoryForm = useCallback(async () => {
@@ -611,6 +653,9 @@ function ShoppingListScreenContent() {
       reorder_threshold: editingInventory.reorder_threshold ?? 0,
       daily_usage_estimate: editingInventory.daily_usage_estimate ?? null,
       dosage_grams_per_100ml: editingInventory.dosage_grams_per_100ml ?? null,
+      tracking_mode: editingInventory.tracking_mode ?? 'quantity',
+      stock_level_percent: editingInventory.stock_level_percent ?? 100,
+      reorder_level_percent: editingInventory.reorder_level_percent ?? 20,
     });
     if (error || !data) {
       Alert.alert('Fehler', 'Der Vorrat konnte nicht gespeichert werden.');
@@ -618,7 +663,15 @@ function ShoppingListScreenContent() {
     }
     applyInventoryUpdate(data);
     setEditingInventory(null);
-  }, [activeBabyId, editingInventory, applyInventoryUpdate]);
+    if (isLevelTracked(data) && getInventoryLevelOption(data.stock_level_percent).percent === 0) {
+      await handleInventoryToShoppingList(data, false);
+    }
+  }, [
+    activeBabyId,
+    editingInventory,
+    applyInventoryUpdate,
+    handleInventoryToShoppingList,
+  ]);
 
   const handleDeleteInventory = useCallback((item: InventoryItem) => {
     Alert.alert('Vorrat löschen', `„${item.name}" wirklich löschen?`, [
@@ -699,7 +752,9 @@ function ShoppingListScreenContent() {
     setScanSheet(null);
     Alert.alert(
       'Aufgefüllt',
-      `${product.name}: +1 Packung (${formatUnitQuantity(packageQuantity, product.unit ?? 'Stück')}).`
+      isLevelTracked(data)
+        ? `${product.name} ist jetzt wieder voll.`
+        : `${product.name}: +1 Packung (${formatUnitQuantity(packageQuantity, product.unit ?? 'Stück')}).`
     );
   }, [activeBabyId, scanSheet, applyInventoryUpdate]);
 
@@ -1075,6 +1130,8 @@ function ShoppingListScreenContent() {
   };
 
   const renderInventoryCard = (item: InventoryItem) => {
+    const levelTracked = isLevelTracked(item);
+    const levelOption = getInventoryLevelOption(item.stock_level_percent);
     const daysLeft = computeDaysLeft(item);
     const low = isLowStock(item);
     const usageSummary = usageSummaries[item.id];
@@ -1086,6 +1143,10 @@ function ShoppingListScreenContent() {
       ? Math.max(0, Math.min(1, item.current_quantity / packageQuantity))
       : 0;
     const isExpanded = expandedInventoryIds.has(item.id);
+    const isOnShoppingList = shoppingItems.some(
+      (shoppingItem) =>
+        !shoppingItem.is_purchased && shoppingItem.inventory_item_id === item.id
+    );
     return (
       <LiquidGlassCard
         key={item.id}
@@ -1116,13 +1177,17 @@ function ShoppingListScreenContent() {
               {low ? (
                 <View style={styles.lowStockBadge}>
                   <IconSymbol name="exclamationmark.triangle.fill" size={12} color="#FFFFFF" />
-                  <ThemedText style={styles.lowStockBadgeText}>Knapp</ThemedText>
+                  <ThemedText style={styles.lowStockBadgeText}>
+                    {levelTracked && levelOption.percent === 0 ? 'Leer' : 'Knapp'}
+                  </ThemedText>
                 </View>
               ) : null}
             </View>
             <ThemedText style={styles.inventoryCategory} numberOfLines={1}>
               {categoryLabel(item.category)}
-              {item.reorder_threshold > 0
+              {levelTracked
+                ? ' · einfacher Füllstand'
+                : item.reorder_threshold > 0
                 ? ` · ab ${formatUnitQuantity(item.reorder_threshold, item.unit)} nachkaufen`
                 : ''}
             </ThemedText>
@@ -1132,10 +1197,14 @@ function ShoppingListScreenContent() {
               style={[styles.inventoryCompactQuantity, low && styles.inventoryCompactQuantityLow]}
               numberOfLines={1}
             >
-              {formatUnitQuantity(totalQuantity, item.unit)}
+              {levelTracked ? levelOption.label : formatUnitQuantity(totalQuantity, item.unit)}
             </ThemedText>
             <ThemedText style={styles.inventoryCompactMeta} numberOfLines={1}>
-              {daysLeft !== null ? `~${daysLeft} Tage` : 'Bestand'}
+              {levelTracked
+                ? `${levelOption.percent} % Füllstand`
+                : daysLeft !== null
+                  ? `~${daysLeft} Tage`
+                  : 'Bestand'}
             </ThemedText>
           </View>
           <IconSymbol
@@ -1150,11 +1219,22 @@ function ShoppingListScreenContent() {
             <View style={styles.inventoryHero}>
               <View style={styles.inventoryHeroTile}>
                 <ThemedText style={[styles.inventoryHeroValue, low && styles.inventoryHeroValueLow]}>
-                  {formatUnitQuantity(totalQuantity, item.unit)}
+                  {levelTracked
+                    ? `${levelOption.percent} %`
+                    : formatUnitQuantity(totalQuantity, item.unit)}
                 </ThemedText>
-                <ThemedText style={styles.inventoryHeroLabel}>gesamt</ThemedText>
+                <ThemedText style={styles.inventoryHeroLabel}>
+                  {levelTracked ? 'Füllstand' : 'gesamt'}
+                </ThemedText>
               </View>
-              {hasPackages ? (
+              {levelTracked ? (
+                <View style={styles.inventoryHeroTile}>
+                  <ThemedText style={[styles.inventoryHeroValue, low && styles.inventoryHeroValueLow]}>
+                    {levelOption.label}
+                  </ThemedText>
+                  <ThemedText style={styles.inventoryHeroLabel}>Status</ThemedText>
+                </View>
+              ) : hasPackages ? (
                 <View style={styles.inventoryHeroTile}>
                   <ThemedText style={styles.inventoryHeroValue}>{sealedPackages}</ThemedText>
                   <ThemedText style={styles.inventoryHeroLabel}>
@@ -1162,7 +1242,7 @@ function ShoppingListScreenContent() {
                   </ThemedText>
                 </View>
               ) : null}
-              {daysLeft !== null ? (
+              {!levelTracked && daysLeft !== null ? (
                 <View style={styles.inventoryHeroTile}>
                   <ThemedText style={styles.inventoryHeroValue}>~{daysLeft}</ThemedText>
                   <ThemedText style={styles.inventoryHeroLabel}>Tage Reichweite</ThemedText>
@@ -1170,7 +1250,22 @@ function ShoppingListScreenContent() {
               ) : null}
             </View>
 
-            {hasPackages ? (
+            {levelTracked ? (
+              <View style={styles.packageProgressBlock}>
+                <View style={styles.packageProgressTrack}>
+                  <View
+                    style={[
+                      styles.packageProgressFill,
+                      { width: `${levelOption.percent}%` },
+                      low && styles.packageProgressFillLow,
+                    ]}
+                  />
+                </View>
+                <ThemedText style={styles.packageProgressLabel}>
+                  Grober Füllstand – keine einzelnen Verbräuche nötig
+                </ThemedText>
+              </View>
+            ) : hasPackages ? (
               <View style={styles.packageProgressBlock}>
                 <View style={styles.packageProgressTrack}>
                   <View
@@ -1188,48 +1283,102 @@ function ShoppingListScreenContent() {
               </View>
             ) : null}
 
-            <View style={styles.usageSummaryRow}>
-              <IconSymbol name="chart.line.uptrend.xyaxis" size={15} color={PRIMARY} />
-              <ThemedText style={styles.usageSummaryText}>
-                7 Tage: {formatUnitQuantity(usageSummary?.usedLast7Days ?? 0, item.unit)} verbraucht
-                {usageSummary?.lastTransactionAt
-                  ? ` · letzte Buchung ${formatShortDate(usageSummary.lastTransactionAt)}`
-                  : ''}
-              </ThemedText>
-            </View>
-
-            <View style={styles.inventoryDetailControls}>
-              <ThemedText style={styles.inventoryControlLabel}>Bestand anpassen</ThemedText>
-              <View style={styles.quantityStepper}>
-                <TouchableOpacity
-                  style={[styles.stepperButton, totalQuantity <= 0 && styles.stepperButtonDisabled]}
-                  onPress={() => handleAdjustQuantity(item, -1, 'usage')}
-                  disabled={totalQuantity <= 0}
-                  accessibilityLabel={`${item.name} Bestand um eins reduzieren`}
-                >
-                  <IconSymbol
-                    name="minus"
-                    size={18}
-                    color={totalQuantity <= 0 ? 'rgba(125,90,80,0.35)' : PRIMARY}
-                  />
-                </TouchableOpacity>
-                <View style={styles.stepperValue}>
-                  <ThemedText style={styles.stepperValueText}>
-                    {formatUnitQuantity(totalQuantity, item.unit)}
+            {levelTracked ? (
+              <View style={styles.levelControlBlock}>
+                <ThemedText style={styles.inventoryControlLabel}>Füllstand setzen</ThemedText>
+                <View style={styles.levelOptionsRow}>
+                  {INVENTORY_LEVEL_OPTIONS.map((option) => {
+                    const active = levelOption.percent === option.percent;
+                    return (
+                      <TouchableOpacity
+                        key={option.percent}
+                        style={[
+                          styles.levelOptionButton,
+                          active && styles.levelOptionButtonActive,
+                          option.percent === 0 && active && styles.levelOptionButtonEmpty,
+                        ]}
+                        onPress={() => handleSetStockLevel(item, option.percent)}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: active }}
+                        accessibilityLabel={`${item.name}: ${option.label}`}
+                      >
+                        <ThemedText
+                          style={[
+                            styles.levelOptionValue,
+                            active && styles.levelOptionValueActive,
+                          ]}
+                        >
+                          {option.percent} %
+                        </ThemedText>
+                        <ThemedText
+                          style={[
+                            styles.levelOptionLabel,
+                            active && styles.levelOptionValueActive,
+                          ]}
+                        >
+                          {option.label}
+                        </ThemedText>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                {levelOption.percent === 0 ? (
+                  <View style={styles.levelEmptyHint}>
+                    <IconSymbol name="cart" size={14} color={PRIMARY} />
+                    <ThemedText style={styles.levelEmptyHintText}>
+                      {isOnShoppingList
+                        ? 'Aufgebraucht und bereits auf der Einkaufsliste'
+                        : 'Aufgebraucht – wird zur Einkaufsliste hinzugefügt'}
+                    </ThemedText>
+                  </View>
+                ) : null}
+              </View>
+            ) : (
+              <>
+                <View style={styles.usageSummaryRow}>
+                  <IconSymbol name="chart.line.uptrend.xyaxis" size={15} color={PRIMARY} />
+                  <ThemedText style={styles.usageSummaryText}>
+                    7 Tage: {formatUnitQuantity(usageSummary?.usedLast7Days ?? 0, item.unit)} verbraucht
+                    {usageSummary?.lastTransactionAt
+                      ? ` · letzte Buchung ${formatShortDate(usageSummary.lastTransactionAt)}`
+                      : ''}
                   </ThemedText>
                 </View>
-                <TouchableOpacity
-                  style={styles.stepperButton}
-                  onPress={() => handleAdjustQuantity(item, 1, 'refill')}
-                  accessibilityLabel={`${item.name} Bestand um eins erhöhen`}
-                >
-                  <IconSymbol name="plus" size={18} color={PRIMARY} />
-                </TouchableOpacity>
-              </View>
-            </View>
+
+                <View style={styles.inventoryDetailControls}>
+                  <ThemedText style={styles.inventoryControlLabel}>Bestand anpassen</ThemedText>
+                  <View style={styles.quantityStepper}>
+                    <TouchableOpacity
+                      style={[styles.stepperButton, totalQuantity <= 0 && styles.stepperButtonDisabled]}
+                      onPress={() => handleAdjustQuantity(item, -1, 'usage')}
+                      disabled={totalQuantity <= 0}
+                      accessibilityLabel={`${item.name} Bestand um eins reduzieren`}
+                    >
+                      <IconSymbol
+                        name="minus"
+                        size={18}
+                        color={totalQuantity <= 0 ? 'rgba(125,90,80,0.35)' : PRIMARY}
+                      />
+                    </TouchableOpacity>
+                    <View style={styles.stepperValue}>
+                      <ThemedText style={styles.stepperValueText}>
+                        {formatUnitQuantity(totalQuantity, item.unit)}
+                      </ThemedText>
+                    </View>
+                    <TouchableOpacity
+                      style={styles.stepperButton}
+                      onPress={() => handleAdjustQuantity(item, 1, 'refill')}
+                      accessibilityLabel={`${item.name} Bestand um eins erhöhen`}
+                    >
+                      <IconSymbol name="plus" size={18} color={PRIMARY} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </>
+            )}
 
             <View style={styles.inventoryActions}>
-              {hasPackages ? (
+              {!levelTracked && hasPackages ? (
                 <TouchableOpacity
                   style={styles.inventoryActionButton}
                   onPress={() => handleAddPackage(item)}
@@ -1238,15 +1387,17 @@ function ShoppingListScreenContent() {
                   <ThemedText style={styles.inventoryActionText}>Packung</ThemedText>
                 </TouchableOpacity>
               ) : null}
-              <TouchableOpacity
-                style={styles.inventoryActionButton}
-                onPress={() =>
-                  handleAdjustQuantity(item, -(item.daily_usage_estimate || 1), 'usage')
-                }
-              >
-                <IconSymbol name="minus" size={15} color={PRIMARY} />
-                <ThemedText style={styles.inventoryActionText}>Verbrauch</ThemedText>
-              </TouchableOpacity>
+              {!levelTracked ? (
+                <TouchableOpacity
+                  style={styles.inventoryActionButton}
+                  onPress={() =>
+                    handleAdjustQuantity(item, -(item.daily_usage_estimate || 1), 'usage')
+                  }
+                >
+                  <IconSymbol name="minus" size={15} color={PRIMARY} />
+                  <ThemedText style={styles.inventoryActionText}>Verbrauch</ThemedText>
+                </TouchableOpacity>
+              ) : null}
               <TouchableOpacity
                 style={styles.inventoryActionButton}
                 onPress={() => setEditingInventory(item)}
@@ -1256,12 +1407,25 @@ function ShoppingListScreenContent() {
                 <ThemedText style={styles.inventoryActionText}>Bearbeiten</ThemedText>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.inventoryActionButton, styles.inventoryActionPrimary]}
+                style={[
+                  styles.inventoryActionButton,
+                  !isOnShoppingList && styles.inventoryActionPrimary,
+                  isOnShoppingList && styles.inventoryActionOnList,
+                ]}
                 onPress={() => handleInventoryToShoppingList(item)}
               >
-                <IconSymbol name="cart" size={15} color="#FFFFFF" />
-                <ThemedText style={[styles.inventoryActionText, styles.inventoryActionPrimaryText]}>
-                  Einkaufsliste
+                <IconSymbol
+                  name={isOnShoppingList ? 'checkmark' : 'cart'}
+                  size={15}
+                  color={isOnShoppingList ? PRIMARY : '#FFFFFF'}
+                />
+                <ThemedText
+                  style={[
+                    styles.inventoryActionText,
+                    !isOnShoppingList && styles.inventoryActionPrimaryText,
+                  ]}
+                >
+                  {isOnShoppingList ? 'Auf Liste' : 'Einkaufsliste'}
                 </ThemedText>
               </TouchableOpacity>
             </View>
@@ -1439,7 +1603,7 @@ function ShoppingListScreenContent() {
                           <View style={styles.suggestionTextBlock}>
                             <ThemedText style={styles.suggestionTitle}>{item.name}</ThemedText>
                             <ThemedText style={styles.suggestionMeta}>
-                              {formatUnitQuantity(computeTotalQuantity(item), item.unit)} übrig
+                              {inventoryRemainingLabel(item)} übrig
                             </ThemedText>
                           </View>
                           <TouchableOpacity
@@ -1609,7 +1773,14 @@ function ShoppingListScreenContent() {
                   <TouchableOpacity
                     style={[styles.primaryButton, styles.addInventoryButtonCompact]}
                     onPress={() =>
-                      setEditingInventory({ category: 'diapers', unit: 'Stück', reminder_enabled: true })
+                      setEditingInventory({
+                        category: 'diapers',
+                        unit: 'Stück',
+                        tracking_mode: 'quantity',
+                        stock_level_percent: 100,
+                        reorder_level_percent: 20,
+                        reminder_enabled: true,
+                      })
                     }
                   >
                     <IconSymbol name="plus" size={15} color="#FFFFFF" />
@@ -1824,7 +1995,14 @@ function ShoppingListScreenContent() {
                             editingInventory?.category === option.id && styles.categoryChipActive,
                           ]}
                           onPress={() =>
-                            setEditingInventory((prev) => ({ ...prev, category: option.id }))
+                            setEditingInventory((prev) => ({
+                              ...prev,
+                              category: option.id,
+                              tracking_mode:
+                                !prev?.id && option.id === 'care'
+                                  ? 'level'
+                                  : prev?.tracking_mode ?? 'quantity',
+                            }))
                           }
                         >
                           <ThemedText
@@ -1844,6 +2022,136 @@ function ShoppingListScreenContent() {
 
                 <View style={styles.formSection}>
                   <ThemedText style={styles.formSectionTitle}>Bestand</ThemedText>
+                  <View style={styles.trackingModeRow}>
+                    <TouchableOpacity
+                      style={[
+                        styles.trackingModeButton,
+                        !isLevelTracked(editingInventory ?? {}) && styles.trackingModeButtonActive,
+                      ]}
+                      onPress={() =>
+                        setEditingInventory((prev) => ({ ...prev, tracking_mode: 'quantity' }))
+                      }
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: !isLevelTracked(editingInventory ?? {}) }}
+                    >
+                      <IconSymbol
+                        name="number"
+                        size={17}
+                        color={!isLevelTracked(editingInventory ?? {}) ? '#FFFFFF' : PRIMARY}
+                      />
+                      <View style={styles.trackingModeTextBlock}>
+                        <ThemedText
+                          style={[
+                            styles.trackingModeTitle,
+                            !isLevelTracked(editingInventory ?? {}) && styles.trackingModeTextActive,
+                          ]}
+                        >
+                          Genaue Menge
+                        </ThemedText>
+                        <ThemedText
+                          style={[
+                            styles.trackingModeSubtitle,
+                            !isLevelTracked(editingInventory ?? {}) && styles.trackingModeTextActive,
+                          ]}
+                        >
+                          Gramm, Stück oder ml
+                        </ThemedText>
+                      </View>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.trackingModeButton,
+                        isLevelTracked(editingInventory ?? {}) && styles.trackingModeButtonActive,
+                      ]}
+                      onPress={() =>
+                        setEditingInventory((prev) => ({
+                          ...prev,
+                          tracking_mode: 'level',
+                          stock_level_percent: prev?.stock_level_percent ?? 100,
+                          reorder_level_percent: prev?.reorder_level_percent ?? 20,
+                        }))
+                      }
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: isLevelTracked(editingInventory ?? {}) }}
+                    >
+                      <IconSymbol
+                        name="chart.bar.fill"
+                        size={17}
+                        color={isLevelTracked(editingInventory ?? {}) ? '#FFFFFF' : PRIMARY}
+                      />
+                      <View style={styles.trackingModeTextBlock}>
+                        <ThemedText
+                          style={[
+                            styles.trackingModeTitle,
+                            isLevelTracked(editingInventory ?? {}) && styles.trackingModeTextActive,
+                          ]}
+                        >
+                          Füllstand
+                        </ThemedText>
+                        <ThemedText
+                          style={[
+                            styles.trackingModeSubtitle,
+                            isLevelTracked(editingInventory ?? {}) && styles.trackingModeTextActive,
+                          ]}
+                        >
+                          Voll, halb, knapp, leer
+                        </ThemedText>
+                      </View>
+                    </TouchableOpacity>
+                  </View>
+
+                  {isLevelTracked(editingInventory ?? {}) ? (
+                    <>
+                      <ThemedText style={styles.fieldLabel}>Aktueller Füllstand</ThemedText>
+                      <View style={styles.levelOptionsRow}>
+                        {INVENTORY_LEVEL_OPTIONS.map((option) => {
+                          const active =
+                            getInventoryLevelOption(editingInventory?.stock_level_percent).percent ===
+                            option.percent;
+                          return (
+                            <TouchableOpacity
+                              key={option.percent}
+                              style={[
+                                styles.levelOptionButton,
+                                active && styles.levelOptionButtonActive,
+                                option.percent === 0 && active && styles.levelOptionButtonEmpty,
+                              ]}
+                              onPress={() =>
+                                setEditingInventory((prev) => ({
+                                  ...prev,
+                                  stock_level_percent: option.percent,
+                                }))
+                              }
+                              accessibilityRole="button"
+                              accessibilityState={{ selected: active }}
+                            >
+                              <ThemedText
+                                style={[
+                                  styles.levelOptionValue,
+                                  active && styles.levelOptionValueActive,
+                                ]}
+                              >
+                                {option.percent} %
+                              </ThemedText>
+                              <ThemedText
+                                style={[
+                                  styles.levelOptionLabel,
+                                  active && styles.levelOptionValueActive,
+                                ]}
+                              >
+                                {option.label}
+                              </ThemedText>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                      <ThemedText style={styles.fieldFootnote}>
+                        Bei „Leer“ wird das Produkt direkt auf die
+                        Einkaufsliste gesetzt. Ab „Knapp“ gilt es als niedriger Vorrat.
+                      </ThemedText>
+                    </>
+                  ) : (
+                    <>
                   <View style={styles.modalInputRow}>
                     <View style={[styles.fieldBlock, styles.modalInputHalf]}>
                       <ThemedText style={styles.fieldLabel}>Angebrochene Packung</ThemedText>
@@ -1922,9 +2230,12 @@ function ShoppingListScreenContent() {
                     Die Gesamtmenge rechnet die App selbst aus: angebrochene Packung plus volle
                     Packungen mal Packungsgröße.
                   </ThemedText>
+                    </>
+                  )}
                 </View>
 
-                <View style={styles.formSection}>
+                {!isLevelTracked(editingInventory ?? {}) ? (
+                  <View style={styles.formSection}>
                   <ThemedText style={styles.formSectionTitle}>Nachkaufen & Verbrauch</ThemedText>
                   <View style={styles.modalInputRow}>
                     <View style={[styles.fieldBlock, styles.modalInputHalf]}>
@@ -1972,9 +2283,11 @@ function ShoppingListScreenContent() {
                     Fällt der Bestand unter „Nachkaufen ab“, landet das Produkt als Vorschlag auf
                     der Einkaufsliste.
                   </ThemedText>
-                </View>
+                  </View>
+                ) : null}
 
-                {editingInventory?.category === 'formula' ? (
+                {editingInventory?.category === 'formula' &&
+                !isLevelTracked(editingInventory ?? {}) ? (
                   <View style={styles.formSection}>
                     <ThemedText style={styles.formSectionTitle}>Dosierung</ThemedText>
                     <View style={styles.fieldBlock}>
@@ -2478,8 +2791,56 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.5)',
   },
   inventoryActionPrimary: { backgroundColor: PRIMARY },
+  inventoryActionOnList: {
+    backgroundColor: 'rgba(142,78,198,0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(142,78,198,0.20)',
+  },
   inventoryActionText: { fontSize: 13, fontWeight: '600', color: PRIMARY },
   inventoryActionPrimaryText: { color: '#FFFFFF' },
+  levelControlBlock: { gap: 8 },
+  levelOptionsRow: { flexDirection: 'row', gap: 6 },
+  levelOptionButton: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 54,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+    paddingHorizontal: 4,
+    paddingVertical: 7,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.50)',
+    borderWidth: 1,
+    borderColor: 'rgba(142,78,198,0.12)',
+  },
+  levelOptionButtonActive: {
+    backgroundColor: PRIMARY,
+    borderColor: PRIMARY,
+  },
+  levelOptionButtonEmpty: {
+    backgroundColor: '#C4453A',
+    borderColor: '#C4453A',
+  },
+  levelOptionValue: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: PRIMARY,
+    fontVariant: ['tabular-nums'],
+  },
+  levelOptionLabel: { fontSize: 10, fontWeight: '700', color: 'rgba(125,90,80,0.72)' },
+  levelOptionValueActive: { color: '#FFFFFF' },
+  levelEmptyHint: {
+    minHeight: 34,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 12,
+    backgroundColor: 'rgba(142,78,198,0.08)',
+  },
+  levelEmptyHintText: { flex: 1, fontSize: 12, fontWeight: '600', color: PRIMARY },
   lowStockHintRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   lowStockHintText: { fontSize: 14, fontWeight: '600' },
   suggestionList: { gap: 8 },
@@ -2698,6 +3059,25 @@ const styles = StyleSheet.create({
     color: PRIMARY,
     opacity: 0.85,
   },
+  trackingModeRow: { flexDirection: 'row', gap: 8 },
+  trackingModeButton: {
+    flex: 1,
+    minHeight: 68,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    borderRadius: 14,
+    backgroundColor: 'rgba(142,78,198,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(142,78,198,0.12)',
+  },
+  trackingModeButtonActive: { backgroundColor: PRIMARY, borderColor: PRIMARY },
+  trackingModeTextBlock: { flex: 1, gap: 2 },
+  trackingModeTitle: { fontSize: 12, fontWeight: '800', color: PRIMARY },
+  trackingModeSubtitle: { fontSize: 10, lineHeight: 13, color: 'rgba(125,90,80,0.65)' },
+  trackingModeTextActive: { color: '#FFFFFF' },
   fieldBlock: { gap: 5 },
   fieldLabel: { fontSize: 12, fontWeight: '600', opacity: 0.65 },
   fieldFootnote: { fontSize: 12, lineHeight: 17, opacity: 0.55 },

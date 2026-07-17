@@ -3,16 +3,19 @@ import {
   adjustInventoryQuantity,
   applyQuantityChange,
   clampQuantity,
+  clampStockLevel,
   computeDaysLeft,
   computeTotalQuantity,
   dedupeParsedIngredients,
   fetchLowStockCount,
+  getInventoryLevelOption,
   isLowStock,
   normalizeItemName,
   parseIngredientLine,
   recordBottleUsage,
   recordDiaperUsage,
   resolveBarcodeProduct,
+  setInventoryStockLevel,
 } from '../shopping';
 import { getCachedUser, supabase } from '../supabase';
 
@@ -122,6 +125,18 @@ describe('Mengenlogik', () => {
     expect(clampQuantity(3)).toBe(3);
   });
 
+  it('clampStockLevel begrenzt Füllstände auf ganze Prozentwerte', () => {
+    expect(clampStockLevel(-5)).toBe(0);
+    expect(clampStockLevel(49.6)).toBe(50);
+    expect(clampStockLevel(140)).toBe(100);
+  });
+
+  it('ordnet freie Prozentwerte der nächsten Füllstandsstufe zu', () => {
+    expect(getInventoryLevelOption(100).label).toBe('Voll');
+    expect(getInventoryLevelOption(54).label).toBe('Halbvoll');
+    expect(getInventoryLevelOption(8).label).toBe('Leer');
+  });
+
   it('computeTotalQuantity summiert angebrochene Menge und volle Packungen', () => {
     expect(computeTotalQuantity(stock(340, 2, 800))).toBe(1940);
     expect(computeTotalQuantity(stock(5))).toBe(5);
@@ -137,11 +152,35 @@ describe('Mengenlogik', () => {
     expect(isLowStock({ ...stock(100, 1, 800), reorder_threshold: 200 })).toBe(false);
   });
 
+  it('isLowStock verwendet bei Füllständen den Prozent-Schwellenwert', () => {
+    expect(
+      isLowStock({
+        ...stock(0),
+        reorder_threshold: 0,
+        tracking_mode: 'level',
+        stock_level_percent: 20,
+        reorder_level_percent: 20,
+      })
+    ).toBe(true);
+    expect(
+      isLowStock({
+        ...stock(0),
+        reorder_threshold: 0,
+        tracking_mode: 'level',
+        stock_level_percent: 50,
+        reorder_level_percent: 20,
+      })
+    ).toBe(false);
+  });
+
   it('computeDaysLeft rundet auf ganze Tage ab und rechnet Packungen mit', () => {
     expect(computeDaysLeft({ ...stock(22), daily_usage_estimate: 6 })).toBe(3);
     expect(computeDaysLeft({ ...stock(22), daily_usage_estimate: null })).toBeNull();
     expect(computeDaysLeft({ ...stock(22), daily_usage_estimate: 0 })).toBeNull();
     expect(computeDaysLeft({ ...stock(100, 1, 800), daily_usage_estimate: 90 })).toBe(10);
+    expect(
+      computeDaysLeft({ ...stock(100), daily_usage_estimate: 10, tracking_mode: 'level' })
+    ).toBeNull();
   });
 });
 
@@ -195,6 +234,23 @@ describe('applyQuantityChange', () => {
     const result = applyQuantityChange(stock(0.1, 1, 800), -0.3);
     expect(result.current_quantity).toBe(799.8);
     expect(result.effectiveChange).toBe(-0.3);
+  });
+});
+
+describe('setInventoryStockLevel', () => {
+  it('speichert einen begrenzten Prozentwert', async () => {
+    const chain = chainResolving({
+      data: { id: 'inventory-1', tracking_mode: 'level', stock_level_percent: 100 },
+      error: null,
+    });
+    mockedFrom.mockReturnValueOnce(chain);
+
+    const { data, error } = await setInventoryStockLevel('inventory-1', 140);
+
+    expect(error).toBeNull();
+    expect(data?.stock_level_percent).toBe(100);
+    expect(chain.update).toHaveBeenCalledWith({ stock_level_percent: 100 });
+    expect(chain.eq).toHaveBeenCalledWith('id', 'inventory-1');
   });
 });
 
@@ -480,6 +536,13 @@ describe('fetchLowStockCount', () => {
           { current_quantity: 10, reorder_threshold: 5 },
           { current_quantity: 5, reorder_threshold: 5 },
           { current_quantity: 0, reorder_threshold: 0 },
+          {
+            current_quantity: 0,
+            reorder_threshold: 0,
+            tracking_mode: 'level',
+            stock_level_percent: 20,
+            reorder_level_percent: 20,
+          },
         ],
         error: null,
       })
@@ -488,7 +551,7 @@ describe('fetchLowStockCount', () => {
     const { count, error } = await fetchLowStockCount('baby-1');
 
     expect(error).toBeNull();
-    expect(count).toBe(2);
+    expect(count).toBe(3);
   });
 
   it('liefert 0 bei Fehler', async () => {

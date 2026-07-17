@@ -45,7 +45,10 @@ type NightSleepEditorProps = {
     targetEntry: ClassifiedSleepEntry;
     splitTime: Date;
     wakeMinutes: number;
-  }) => Promise<boolean>;
+  }) => Promise<{
+    firstEntry: ClassifiedSleepEntry;
+    secondEntry: ClassifiedSleepEntry;
+  } | null>;
   onMerge: (entryA: ClassifiedSleepEntry, entryB: ClassifiedSleepEntry) => Promise<boolean>;
   onAdjustBoundary: (
     entry: ClassifiedSleepEntry,
@@ -990,6 +993,7 @@ export default function NightSleepEditor({
   const [newWakeStart, setNewWakeStart] = useState<Date | null>(null);
   const [newWakeDurationMin, setNewWakeDurationMin] = useState(5);
   const [isSubmittingWake, setIsSubmittingWake] = useState(false);
+  const isSubmittingWakeRef = useRef(false);
   const [showAutoFixInfoModal, setShowAutoFixInfoModal] = useState(false);
   // Linked-shift display overrides: wenn Eingeschlafen die Aufgewacht-Zeit mitschiebt
   // (oder umgekehrt), zeigen wir den neuen Wert sofort — bevor der DB-Save zurückkommt.
@@ -1491,7 +1495,7 @@ export default function NightSleepEditor({
   }, [entries, nightStart]);
 
   const handleConfirmAddWake = useCallback(async () => {
-    if (!newWakeStart || isSubmittingWake) return;
+    if (!newWakeStart || isSubmittingWakeRef.current) return;
 
     const wakeMinutes = Math.max(1, newWakeDurationMin);
 
@@ -1514,39 +1518,34 @@ export default function NightSleepEditor({
       return;
     }
 
+    // State allein sperrt einen schnellen Doppeltipp nicht synchron. Der Ref verhindert,
+    // dass derselbe Eintrag zweimal parallel geteilt wird.
+    isSubmittingWakeRef.current = true;
     setIsSubmittingWake(true);
     try {
-      const didSave = await onSplit({
+      const savedSplit = await onSplit({
         targetEntry,
         splitTime: newWakeStart,
         wakeMinutes,
       });
 
-      if (!didSave) {
+      if (!savedSplit) {
         Alert.alert('Konnte nicht speichern', 'Bitte versuche es erneut.');
         return;
       }
 
-      // Optimistisches Update: Wachphase sofort in der Liste zeigen, bevor der Parent
-      // nach dem DB-Reload eine neue nightGroup liefert.
-      const wakeEnd = new Date(newWakeStart.getTime() + wakeMinutes * ONE_MINUTE_MS);
-      const optimisticFirstHalf: ClassifiedSleepEntry = {
-        ...targetEntry,
-        end_time: newWakeStart.toISOString(),
-      };
-      const optimisticSecondHalf: ClassifiedSleepEntry = {
-        ...targetEntry,
-        id: undefined,   // temporäre ID — wird nach DB-Reload durch echte ID ersetzt
-        start_time: wakeEnd.toISOString(),
-      };
+      // Direkt die vom Backend bestätigten Segmente verwenden. Dadurch bleibt die
+      // Wachphase auch dann sichtbar, wenn ein unmittelbar folgender Read noch alt ist.
       const currentEntries = entries;
       const insertIdx = currentEntries.findIndex((e) => e === targetEntry || e.id === targetEntry.id);
-      const newEntries: ClassifiedSleepEntry[] = [
-        ...currentEntries.slice(0, insertIdx),
-        optimisticFirstHalf,
-        optimisticSecondHalf,
-        ...currentEntries.slice(insertIdx + 1),
-      ];
+      const newEntries: ClassifiedSleepEntry[] = insertIdx >= 0
+        ? [
+            ...currentEntries.slice(0, insertIdx),
+            savedSplit.firstEntry,
+            savedSplit.secondEntry,
+            ...currentEntries.slice(insertIdx + 1),
+          ]
+        : [savedSplit.firstEntry, savedSplit.secondEntry, ...currentEntries];
       setOptimisticEntries(newEntries);
 
       setAddingWake(false);
@@ -1555,9 +1554,10 @@ export default function NightSleepEditor({
     } catch {
       Alert.alert('Konnte nicht speichern', 'Beim Speichern ist ein Fehler aufgetreten.');
     } finally {
+      isSubmittingWakeRef.current = false;
       setIsSubmittingWake(false);
     }
-  }, [newWakeStart, newWakeDurationMin, entries, onSplit, isSubmittingWake]);
+  }, [newWakeStart, newWakeDurationMin, entries, onSplit]);
 
   const handleChangeNewWakeStart = useCallback((pickedTime: Date): boolean => {
     if (!newWakeStart) return false;

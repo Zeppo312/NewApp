@@ -2860,16 +2860,16 @@ export default function SleepTrackerScreen() {
     splitTime: Date;
     wakeMinutes: number;
   }) => {
-    if (!ensureWritableInCurrentMode()) return false;
+    if (!ensureWritableInCurrentMode()) return null;
     const { targetEntry, splitTime: paramSplitTime, wakeMinutes: paramWakeMinutes } = params;
 
     if (!sleepService || !user?.id) {
       Alert.alert('Fehler', 'Service nicht verfügbar. Bitte neu anmelden und erneut versuchen.');
-      return false;
+      return null;
     }
     if (isSplittingSegment) {
       Alert.alert('Bitte warten', 'Es läuft bereits ein Speichervorgang.');
-      return false;
+      return null;
     }
 
     const targetStartMs = new Date(targetEntry.start_time).getTime();
@@ -2896,7 +2896,7 @@ export default function SleepTrackerScreen() {
 
     if (!resolvedTarget?.id) {
       Alert.alert('Nicht speicherbar', 'Das gewählte Segment konnte nicht eindeutig zugeordnet werden.');
-      return false;
+      return null;
     }
 
     const segmentStart = new Date(resolvedTarget.start_time);
@@ -2944,10 +2944,14 @@ export default function SleepTrackerScreen() {
         } else {
           Alert.alert('Fehler', `Segment konnte nicht aufgeteilt werden: ${result.message}`);
         }
-        return false;
+        return null;
       }
 
-      if (result.mode === 'split' && result.secondIsActive) {
+      if (result.mode !== 'split') {
+        return null;
+      }
+
+      if (result.secondIsActive) {
         if (resolvedTarget.period === 'night' && result.secondEntry.id) {
           activeEntryPeriodOverridesRef.current[result.secondEntry.id] = 'night';
         }
@@ -2956,15 +2960,54 @@ export default function SleepTrackerScreen() {
         }
       }
 
+      const forcedPeriod = resolvedTarget.period === 'night' ? 'night' : undefined;
+      const savedFirstEntry = classifySleepEntry(result.firstEntry, forcedPeriod);
+      const savedSecondEntry = classifySleepEntry(result.secondEntry, forcedPeriod);
+
+      // Die Mutation liefert bereits den autoritativen Stand. Diesen sofort lokal
+      // übernehmen, statt ihn durch einen möglicherweise noch alten Read zu ersetzen.
+      setSleepEntries((currentEntries) => {
+        const replacementIds = new Set([savedFirstEntry.id, savedSecondEntry.id]);
+        const nextEntries: ClassifiedSleepEntry[] = [];
+        let didReplaceTarget = false;
+
+        for (const entry of currentEntries) {
+          if (entry.id === resolvedTarget.id) {
+            nextEntries.push(savedSecondEntry, savedFirstEntry);
+            didReplaceTarget = true;
+            continue;
+          }
+          if (replacementIds.has(entry.id)) continue;
+          nextEntries.push(entry);
+        }
+
+        return didReplaceTarget
+          ? nextEntries
+          : [savedSecondEntry, savedFirstEntry, ...nextEntries];
+      });
+
+      if (result.secondIsActive) {
+        activeSleepEntryRef.current = savedSecondEntry;
+        setActiveSleepEntry(savedSecondEntry);
+      }
+
       showSuccessSplash('#4A90E2', '✂️', 'sleep_split_save');
 
-      await invalidateCacheAfterAction(`sleep_history_${activeBackend}_${activeBabyId || 'default'}`);
-      await loadSleepData();
-      return true;
+      try {
+        await invalidateCacheAfterAction(`sleep_history_${activeBackend}_${activeBabyId || 'default'}`);
+      } catch (cacheError) {
+        // Der Split ist bereits bestätigt und lokal übernommen. Ein Cache-Fehler darf
+        // deshalb nicht fälschlich als fehlgeschlagene Wachphase gemeldet werden.
+        console.warn('[SleepTracker] Cache invalidation after split failed:', cacheError);
+      }
+      return {
+        firstEntry: savedFirstEntry,
+        secondEntry: savedSecondEntry,
+      };
     } catch (error) {
       console.error('Unexpected split error:', error);
       Alert.alert('Fehler', 'Unerwarteter Fehler beim Aufteilen');
-      return false;
+      return null;
     } finally {
       setIsSplittingSegment(false);
     }
@@ -3479,6 +3522,11 @@ export default function SleepTrackerScreen() {
   useEffect(() => {
     if (!showNightEditor || !nightEditorGroup || nightGroups.length === 0) return;
 
+    const currentEntryIds = new Set(
+      nightEditorGroup.entries
+        .map((entry) => entry.id)
+        .filter((id): id is string => typeof id === 'string' && id.length > 0)
+    );
     const currentIdentities = new Set(
       nightEditorGroup.entries.map((entry) => getEntryIdentity(entry))
     );
@@ -3488,7 +3536,9 @@ export default function SleepTrackerScreen() {
 
     for (const group of nightGroups) {
       const overlap = group.entries.reduce((sum, entry) => {
-        return sum + (currentIdentities.has(getEntryIdentity(entry)) ? 1 : 0);
+        const hasStableIdMatch = Boolean(entry.id && currentEntryIds.has(entry.id));
+        const hasIdentityFallback = currentIdentities.has(getEntryIdentity(entry));
+        return sum + (hasStableIdMatch || hasIdentityFallback ? 1 : 0);
       }, 0);
 
       if (overlap > bestOverlap) {

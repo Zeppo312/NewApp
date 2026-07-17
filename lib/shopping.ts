@@ -23,6 +23,14 @@ export interface ShoppingListItem {
 }
 
 export type InventoryCategory = 'diapers' | 'formula' | 'care' | 'food' | 'other';
+export type InventoryTrackingMode = 'quantity' | 'level';
+
+export const INVENTORY_LEVEL_OPTIONS = [
+  { percent: 100, label: 'Voll' },
+  { percent: 50, label: 'Halbvoll' },
+  { percent: 20, label: 'Knapp' },
+  { percent: 0, label: 'Leer' },
+] as const;
 
 export interface InventoryItem {
   id: string;
@@ -38,6 +46,9 @@ export interface InventoryItem {
   reorder_threshold: number;
   daily_usage_estimate: number | null;
   dosage_grams_per_100ml: number | null;
+  tracking_mode: InventoryTrackingMode;
+  stock_level_percent: number;
+  reorder_level_percent: number;
   reminder_enabled: boolean;
   last_reminded_at: string | null;
   created_at: string;
@@ -188,6 +199,20 @@ const formatIngredientTitle = (item: ParsedIngredient): string => {
 // --- Mengenlogik ---------------------------------------------------------------
 
 export const clampQuantity = (value: number): number => Math.max(0, value);
+export const clampStockLevel = (value: number): number =>
+  Math.max(0, Math.min(100, Math.round(value)));
+
+export const getInventoryLevelOption = (percent: number | null | undefined) => {
+  const normalized = clampStockLevel(percent ?? 100);
+  return (
+    INVENTORY_LEVEL_OPTIONS.find((option) => option.percent === normalized) ??
+    INVENTORY_LEVEL_OPTIONS.reduce((closest, option) =>
+      Math.abs(option.percent - normalized) < Math.abs(closest.percent - normalized)
+        ? option
+        : closest
+    )
+  );
+};
 
 // Auf 2 Nachkommastellen runden, damit keine Float-Artefakte
 // (z. B. -17.80000000000001) in Bestand und Audit-Log landen.
@@ -199,13 +224,29 @@ type PackagedQuantity = Pick<InventoryItem, 'current_quantity' | 'packages_seale
 export const computeTotalQuantity = (item: PackagedQuantity): number =>
   round2(item.current_quantity + (item.packages_sealed ?? 0) * (item.package_quantity ?? 0));
 
-export const isLowStock = (item: PackagedQuantity & Pick<InventoryItem, 'reorder_threshold'>): boolean =>
-  item.reorder_threshold > 0 && computeTotalQuantity(item) <= item.reorder_threshold;
+type StockStatusItem = PackagedQuantity &
+  Pick<InventoryItem, 'reorder_threshold'> &
+  Partial<
+    Pick<InventoryItem, 'tracking_mode' | 'stock_level_percent' | 'reorder_level_percent'>
+  >;
+
+export const isLowStock = (item: StockStatusItem): boolean => {
+  if (item.tracking_mode === 'level') {
+    return (
+      clampStockLevel(item.stock_level_percent ?? 100) <=
+      clampStockLevel(item.reorder_level_percent ?? 20)
+    );
+  }
+  return item.reorder_threshold > 0 && computeTotalQuantity(item) <= item.reorder_threshold;
+};
 
 /** Geschätzte Reichweite in ganzen Tagen; null ohne Verbrauchsschätzung. */
 export const computeDaysLeft = (
-  item: PackagedQuantity & Pick<InventoryItem, 'daily_usage_estimate'>
+  item: PackagedQuantity &
+    Pick<InventoryItem, 'daily_usage_estimate'> &
+    Partial<Pick<InventoryItem, 'tracking_mode'>>
 ): number | null => {
+  if (item.tracking_mode === 'level') return null;
   if (!item.daily_usage_estimate || item.daily_usage_estimate <= 0) return null;
   return Math.floor(computeTotalQuantity(item) / item.daily_usage_estimate);
 };
@@ -462,6 +503,9 @@ export type InventoryItemUpsert = {
   reorder_threshold?: number;
   daily_usage_estimate?: number | null;
   dosage_grams_per_100ml?: number | null;
+  tracking_mode?: InventoryTrackingMode;
+  stock_level_percent?: number;
+  reorder_level_percent?: number;
   reminder_enabled?: boolean;
 };
 
@@ -489,6 +533,9 @@ export const upsertInventoryItem = async (
     reorder_threshold: clampQuantity(payload.reorder_threshold ?? 0),
     daily_usage_estimate: payload.daily_usage_estimate ?? null,
     dosage_grams_per_100ml: payload.dosage_grams_per_100ml ?? null,
+    tracking_mode: payload.tracking_mode ?? 'quantity',
+    stock_level_percent: clampStockLevel(payload.stock_level_percent ?? 100),
+    reorder_level_percent: clampStockLevel(payload.reorder_level_percent ?? 20),
     reminder_enabled: payload.reminder_enabled ?? true,
   };
 
@@ -503,6 +550,20 @@ export const upsertInventoryItem = async (
 export const deleteInventoryItem = async (itemId: string): Promise<{ error: PostgrestError | null }> => {
   const { error } = await supabase.from('inventory_items').delete().eq('id', itemId);
   return { error };
+};
+
+/** Setzt einen groben Füllstand für Artikel ohne exakte Verbrauchsbuchungen. */
+export const setInventoryStockLevel = async (
+  itemId: string,
+  percent: number
+): Promise<DataResult<InventoryItem>> => {
+  const { data, error } = await supabase
+    .from('inventory_items')
+    .update({ stock_level_percent: clampStockLevel(percent) })
+    .eq('id', itemId)
+    .select()
+    .single();
+  return { data: (data as InventoryItem) ?? null, error };
 };
 
 /**
@@ -612,6 +673,9 @@ export const refillInventoryFromProduct = async (
 
   const existing = (existingItems?.[0] as InventoryItem | undefined) ?? null;
   if (existing) {
+    if (existing.tracking_mode === 'level') {
+      return setInventoryStockLevel(existing.id, 100);
+    }
     return adjustSealedPackages(existing, 1, 'scan_refill', product.name);
   }
 
@@ -747,12 +811,20 @@ export const recordDiaperUsage = async (
 export const fetchLowStockCount = async (babyId: string): Promise<{ count: number; error: PostgrestError | null }> => {
   const { data, error } = await supabase
     .from('inventory_items')
-    .select('current_quantity, packages_sealed, package_quantity, reorder_threshold')
+    .select(
+      'current_quantity, packages_sealed, package_quantity, reorder_threshold, tracking_mode, stock_level_percent, reorder_level_percent'
+    )
     .eq('baby_id', babyId);
   if (error) return { count: 0, error };
   const rows = (data ?? []) as Pick<
     InventoryItem,
-    'current_quantity' | 'packages_sealed' | 'package_quantity' | 'reorder_threshold'
+    | 'current_quantity'
+    | 'packages_sealed'
+    | 'package_quantity'
+    | 'reorder_threshold'
+    | 'tracking_mode'
+    | 'stock_level_percent'
+    | 'reorder_level_percent'
   >[];
   return { count: rows.filter(isLowStock).length, error: null };
 };
