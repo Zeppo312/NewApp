@@ -2219,6 +2219,9 @@ export default function SleepTrackerScreen() {
         classifiedEntry,
         ...prevEntries.filter((existingEntry) => existingEntry.id !== classifiedEntry.id),
       ]);
+      hasAutoSelectedDateRef.current = true;
+      selectTab('day');
+      setSelectedDate(getAssignedDateForEntry(classifiedEntry, nightWindowSettings));
 
       if (predictionRef.current) {
         try {
@@ -2620,6 +2623,7 @@ export default function SleepTrackerScreen() {
 
       // SleepInputModal sendet die Daten direkt als Objekt
       const sleepData = payload;
+      let createdEntryDateToSelect: Date | null = null;
 
       // Validierung der Daten
       if (!sleepData.start_time) {
@@ -2815,8 +2819,18 @@ export default function SleepTrackerScreen() {
         }
 
         console.log('✅ Entry created successfully:', result.primary.data);
+        const createdEntry = classifySleepEntry(result.primary.data!);
+        createdEntryDateToSelect = getAssignedDateForEntry(createdEntry, nightWindowSettings);
         // Splash anzeigen für neuen Eintrag
         showSuccessSplash('#8E4EC6', '💤', 'sleep_manual_save');
+      }
+
+      if (createdEntryDateToSelect) {
+        // Nach einer Neuanlage immer den Tag zeigen, dem der gespeicherte Eintrag
+        // zugeordnet ist. Bei Nachtschlaf ist das der Beginn des Nachtfensters.
+        hasAutoSelectedDateRef.current = true;
+        selectTab('day');
+        setSelectedDate(createdEntryDateToSelect);
       }
 
       if (
@@ -3475,6 +3489,12 @@ export default function SleepTrackerScreen() {
   const goNextDay = () => setSelectedDate(d => { const nd = new Date(d); nd.setDate(nd.getDate() + 1); return nd; });
   const today = new Date();
   const nextDisabled = isSameDay(selectedDate, today) || selectedDate > today;
+  const hasEntryToday = useMemo(() => {
+    const currentDate = new Date();
+    return sleepEntries.some((entry) =>
+      isEntryAssignedToDate(entry, currentDate, nightWindowSettings)
+    );
+  }, [nightWindowSettings, sleepEntries]);
 
   // Einträge für den aktuell ausgewählten Tag (Tag-Ansicht)
   const dayEntries = useMemo(() => {
@@ -4588,6 +4608,9 @@ export default function SleepTrackerScreen() {
                       ? new Date().toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long' })
                       : selectedDate.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long' })}
                   </Text>
+                  {!isLoading && !hasEntryToday && (
+                    <Text style={[styles.todayEmptyHint, { color: textSecondary }]}>Heute noch kein Eintrag</Text>
+                  )}
                 </View>
                 <TouchableOpacity
                   style={[styles.weekNavButton, nextDisabled && { opacity: 0.4 }]}
@@ -6667,6 +6690,12 @@ const styles = StyleSheet.create({
   weekHeaderSubtitle: {
     fontSize: 12,
     color: '#7D5A50',
+  },
+  todayEmptyHint: {
+    marginTop: 4,
+    fontSize: 10,
+    fontWeight: '500',
+    opacity: 0.5,
   },
 
   // Chart Styles (Design Guide konform)

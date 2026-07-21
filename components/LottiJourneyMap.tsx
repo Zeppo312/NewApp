@@ -337,7 +337,7 @@ export function LottiJourneyMap({
           Eure Lotti-Reise
         </ThemedText>
         <ThemedText adaptive={false} style={[styles.subtitle, { color: textSecondary }]}>
-          Jede Woche wächst ihr ein kleines Stück weiter.
+          Jede Woche wachst ihr ein kleines Stück weiter.
         </ThemedText>
       </View>
 

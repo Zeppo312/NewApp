@@ -8,6 +8,9 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { supabase, addBabyCareEntry } from '@/lib/supabase';
 import { emitLottiMoment } from '@/lib/lottiMomentEvents';
 
+import { inferRecentMilkPreference } from './feedingPreference';
+import { getVoiceLogEntryEmoji } from './presentation';
+import { resolveVoiceLogEnd } from './timer';
 import type { VoiceLogParsedEntry, VoiceLogParseResult } from './types';
 
 const pad2 = (value: number) => String(value).padStart(2, '0');
@@ -65,30 +68,69 @@ const DIAPER_LABELS: Record<string, string> = {
   BOTH: 'Nass + Stuhlgang',
 };
 
+const fetchRecentMilkPreference = async (
+  babyId?: string | null,
+): Promise<'BREAST' | 'BOTTLE' | null> => {
+  try {
+    let query = supabase
+      .from('baby_care_entries')
+      .select('feeding_type')
+      .eq('entry_type', 'feeding')
+      .in('feeding_type', ['BREAST', 'BOTTLE'])
+      .order('start_time', { ascending: false })
+      .limit(5);
+
+    query = babyId ? query.eq('baby_id', babyId) : query.is('baby_id', null);
+
+    const { data, error } = await query;
+    if (error) {
+      console.error('Failed to load recent feeding preference:', error);
+      return null;
+    }
+
+    return inferRecentMilkPreference((data ?? []).map((entry) => entry.feeding_type));
+  } catch (error) {
+    console.error('Failed to resolve recent feeding preference:', error);
+    return null;
+  }
+};
+
 /** Kurzbeschreibung für die Bestätigungs-Liste, z. B. "Fläschchen 120 ml · 14:30". */
 export const describeVoiceLogEntry = (
   entry: VoiceLogParsedEntry,
 ): { emoji: string; title: string; timeText: string } => {
   const start = localTimeToDate(entry.start_local);
   const end = localTimeToDate(entry.end_local);
+  const displayEnd =
+    start && end && end.getTime() > start.getTime() ? end : null;
   const timeText = start
-    ? `${formatDayPrefix(start)}${formatTime(start)}${end ? ` – ${formatTime(end)}` : ''}`
+    ? `${formatDayPrefix(start)}${formatTime(start)}${displayEnd ? ` – ${formatTime(displayEnd)}` : ''}`
     : '';
 
   if (entry.type === 'sleep') {
-    return { emoji: '😴', title: end ? 'Schlaf' : 'Schlaf (offen)', timeText };
+    return {
+      emoji: getVoiceLogEntryEmoji(entry),
+      title: entry.timer_requested ? 'Schlaf · Timer läuft' : 'Schlaf',
+      timeText,
+    };
   }
   if (entry.type === 'diaper') {
+    const diaperType = entry.diaper_type ?? 'WET';
     return {
-      emoji: '💧',
-      title: `Windel · ${DIAPER_LABELS[entry.diaper_type ?? 'WET'] ?? 'Nass'}`,
+      emoji: getVoiceLogEntryEmoji(entry),
+      title: `Windel · ${DIAPER_LABELS[diaperType] ?? 'Nass'}`,
       timeText,
     };
   }
   const parts = [FEEDING_LABELS[entry.feeding_type ?? ''] ?? 'Fütterung'];
   if (entry.feeding_volume_ml) parts.push(`${entry.feeding_volume_ml} ml`);
   if (entry.feeding_side) parts.push(SIDE_LABELS[entry.feeding_side]);
-  return { emoji: '🍼', title: parts.join(' · '), timeText };
+  if (entry.timer_requested) parts.push('Timer läuft');
+  return {
+    emoji: getVoiceLogEntryEmoji(entry),
+    title: parts.join(' · '),
+    timeText,
+  };
 };
 
 /**
@@ -99,10 +141,12 @@ export const parseVoiceRecording = async (
   localUri: string,
   mimeType: string,
   babyName?: string | null,
+  babyId?: string | null,
 ): Promise<VoiceLogParseResult> => {
-  const audioBase64 = await FileSystem.readAsStringAsync(localUri, {
-    encoding: 'base64',
-  });
+  const [audioBase64, recentMilkPreference] = await Promise.all([
+    FileSystem.readAsStringAsync(localUri, { encoding: 'base64' }),
+    fetchRecentMilkPreference(babyId),
+  ]);
 
   const { data, error } = await supabase.functions.invoke<VoiceLogParseResult>(
     'voice-log-parse',
@@ -112,6 +156,7 @@ export const parseVoiceRecording = async (
         mimeType,
         deviceNow: formatLocalDateTime(new Date()),
         babyName: babyName ?? null,
+        recentMilkPreference,
       },
     },
   );
@@ -167,14 +212,20 @@ export const saveVoiceLogEntries = async (
   let failedCount = 0;
 
   for (const entry of entries) {
+    if (entry.type === 'feeding' && entry.feeding_type_needs_confirmation) {
+      failedCount += 1;
+      continue;
+    }
     const start = localTimeToDate(entry.start_local);
     if (!start) {
       failedCount += 1;
       continue;
     }
-    let end = localTimeToDate(entry.end_local);
-    // Verdrehte Zeiten nicht speichern lassen — Ende dann offen lassen.
-    if (end && end.getTime() <= start.getTime()) end = null;
+    const parsedEnd = localTimeToDate(entry.end_local);
+    const end =
+      entry.type === 'diaper'
+        ? null
+        : resolveVoiceLogEnd(start, parsedEnd, entry.timer_requested === true);
 
     try {
       if (entry.type === 'sleep') {

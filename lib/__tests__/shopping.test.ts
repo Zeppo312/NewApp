@@ -16,6 +16,7 @@ import {
   recordDiaperUsage,
   resolveBarcodeProduct,
   setInventoryStockLevel,
+  toggleShoppingItemPurchased,
 } from '../shopping';
 import { getCachedUser, supabase } from '../supabase';
 
@@ -251,6 +252,32 @@ describe('setInventoryStockLevel', () => {
     expect(data?.stock_level_percent).toBe(100);
     expect(chain.update).toHaveBeenCalledWith({ stock_level_percent: 100 });
     expect(chain.eq).toHaveBeenCalledWith('id', 'inventory-1');
+  });
+});
+
+describe('toggleShoppingItemPurchased', () => {
+  it('speichert das Abhaken über das bestehende Schema', async () => {
+    const chain = chainResolving({
+      data: { id: 'shopping-1', is_purchased: true },
+      error: null,
+    });
+    mockedFrom.mockReturnValueOnce(chain);
+
+    await toggleShoppingItemPurchased('shopping-1', true);
+
+    expect(chain.update).toHaveBeenCalledWith({ is_purchased: true });
+  });
+
+  it('speichert das Zurücknehmen ebenfalls über das bestehende Schema', async () => {
+    const chain = chainResolving({
+      data: { id: 'shopping-1', is_purchased: false },
+      error: null,
+    });
+    mockedFrom.mockReturnValueOnce(chain);
+
+    await toggleShoppingItemPurchased('shopping-1', false);
+
+    expect(chain.update).toHaveBeenCalledWith({ is_purchased: false });
   });
 });
 

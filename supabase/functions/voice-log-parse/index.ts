@@ -63,6 +63,8 @@ interface ParseRequest {
   /** Lokale Gerätezeit 'YYYY-MM-DDTHH:mm' — Referenz für relative Zeitangaben. */
   deviceNow: string;
   babyName?: string | null;
+  /** Aus den letzten fünf Einträgen des aktiven Babys abgeleiteter Vorschlag. */
+  recentMilkPreference?: 'BREAST' | 'BOTTLE' | null;
 }
 
 type EntryType = 'sleep' | 'feeding' | 'diaper';
@@ -72,6 +74,8 @@ interface ParsedEntry {
   start_local: string;
   end_local: string | null;
   feeding_type: 'BREAST' | 'BOTTLE' | 'SOLIDS' | 'PUMP' | 'WATER' | null;
+  feeding_type_needs_confirmation: boolean;
+  timer_requested: boolean;
   feeding_volume_ml: number | null;
   feeding_side: 'LEFT' | 'RIGHT' | 'BOTH' | null;
   diaper_type: 'WET' | 'DIRTY' | 'BOTH' | null;
@@ -84,9 +88,14 @@ const FEEDING_TYPES = new Set(['BREAST', 'BOTTLE', 'SOLIDS', 'PUMP', 'WATER']);
 const FEEDING_SIDES = new Set(['LEFT', 'RIGHT', 'BOTH']);
 const DIAPER_TYPES = new Set(['WET', 'DIRTY', 'BOTH']);
 
-const buildSystemPrompt = (deviceNow: string, babyName?: string | null) =>
+const buildSystemPrompt = (
+  deviceNow: string,
+  babyName?: string | null,
+  recentMilkPreference?: 'BREAST' | 'BOTTLE' | null,
+) =>
   `Du extrahierst Baby-Tracking-Einträge aus der transkribierten deutschen Sprachnotiz eines Elternteils.
 Aktuelle lokale Zeit des Geräts: ${deviceNow}${babyName ? `\nDas Baby heißt ${babyName}.` : ''}
+Bevorzugte Milch-Fütterung aus den letzten Einträgen: ${recentMilkPreference ?? 'nicht bekannt'}.
 
 Antworte ausschließlich als JSON: {"entries": [ ... ]}
 
@@ -94,7 +103,9 @@ Jeder Eintrag hat exakt diese Felder:
 - "type": "sleep" (Schlaf/Nickerchen), "feeding" (Stillen/Fläschchen/Beikost/Trinken) oder "diaper" (Wickeln/Windel).
 - "start_local": Beginn als "YYYY-MM-DDTHH:mm". Relative Angaben ("vor einer halben Stunde", "heute Mittag") relativ zur aktuellen Zeit auflösen. Ohne Zeitangabe: die aktuelle Zeit verwenden. "Gerade aufgewacht nach 2 Stunden Schlaf" heißt: Ende = jetzt, Beginn = vor 2 Stunden.
 - "end_local": Ende als "YYYY-MM-DDTHH:mm" oder null (z. B. Windel hat nie ein Ende; laufender Schlaf hat noch keins).
-- "feeding_type": nur bei feeding — "BREAST" (gestillt/Brust), "BOTTLE" (Flasche/Fläschchen), "SOLIDS" (Brei/Beikost/feste Nahrung), "PUMP" (abgepumpte Milch), "WATER" (Wasser/Tee); sonst null. Im Zweifel bei Milch ohne Details: "BREAST".
+- "feeding_type": nur bei feeding — "BREAST" (gestillt/Brust), "BOTTLE" (Flasche/Fläschchen), "SOLIDS" (Brei/Beikost/feste Nahrung), "PUMP" (abgepumpte Milch), "WATER" (Wasser/Tee); sonst null.
+- "feeding_type_needs_confirmation": true nur dann, wenn sicher eine Milch-Fütterung gemeint ist, die Formulierung aber nicht erkennen lässt, ob gestillt oder ein Fläschchen gegeben wurde. In diesem Fall "feeding_type" auf die bevorzugte Milch-Fütterung oben setzen; ist sie nicht bekannt, null setzen. Bei eindeutigen Angaben immer false.
+- "timer_requested": true NUR wenn ausdrücklich ein laufender Timer gewünscht oder eine gerade laufende Aktivität genannt wird (z. B. "Timer fürs Stillen starten", "ich stille gerade", "schläft seit 10 Minuten"). Dann muss "end_local" null sein. Bei vergangenen, abgeschlossenen oder zeitlich nicht näher beschriebenen Einträgen immer false. Eine fehlende Endzeit allein ist ausdrücklich KEIN Grund für einen Timer.
 - "feeding_volume_ml": Menge in ml als Zahl oder null.
 - "feeding_side": nur beim Stillen — "LEFT", "RIGHT" oder "BOTH"; sonst null.
 - "diaper_type": nur bei diaper — "WET" (Pipi/nass), "DIRTY" (Stuhlgang/groß), "BOTH" (beides); ohne Details: "WET".
@@ -102,10 +113,15 @@ Jeder Eintrag hat exakt diese Felder:
 
 Regeln:
 - Erfinde NICHTS. Nur Einträge extrahieren, die klar aus der Notiz hervorgehen.
+- Standard ist immer "timer_requested": false. Beispiele ohne Timer: "hat getrunken", "wurde gestillt", "hat geschlafen", "vorhin Fläschchen gegeben". Beispiele mit Timer: "Starte den Still-Timer", "sie trinkt gerade ihr Fläschchen", "sie ist gerade eingeschlafen".
+- Eindeutige Wörter wie "gestillt", "Brust", "Flasche" oder "Fläschchen" haben immer Vorrang vor der bisherigen Präferenz. Auch eine konkrete ml-Menge bedeutet Fläschchen. "Milch getrunken" oder nur "gefüttert" ist dagegen zwischen Stillen und Fläschchen uneindeutig und muss bestätigt werden.
 - Eine Notiz kann mehrere Einträge enthalten ("hat getrunken und ich habe sie gewickelt" = 2 Einträge).
 - Ist die Notiz kein Baby-Tracking-Inhalt, gib {"entries": []} zurück.`;
 
-const sanitizeEntries = (raw: unknown): ParsedEntry[] => {
+const sanitizeEntries = (
+  raw: unknown,
+  recentMilkPreference: 'BREAST' | 'BOTTLE' | null,
+): ParsedEntry[] => {
   if (!Array.isArray(raw)) return [];
   const entries: ParsedEntry[] = [];
   for (const item of raw.slice(0, MAX_ENTRIES)) {
@@ -126,14 +142,28 @@ const sanitizeEntries = (raw: unknown): ParsedEntry[] => {
         ? Math.min(Math.round(e.feeding_volume_ml), 2000)
         : null;
 
+    const parsedFeedingType =
+      type === 'feeding' && typeof e.feeding_type === 'string' && FEEDING_TYPES.has(e.feeding_type)
+        ? (e.feeding_type as ParsedEntry['feeding_type'])
+        : null;
+    const feedingTypeNeedsConfirmation =
+      type === 'feeding' &&
+      e.feeding_type_needs_confirmation === true &&
+      (parsedFeedingType === null ||
+        parsedFeedingType === 'BREAST' ||
+        parsedFeedingType === 'BOTTLE');
+    const timerRequested =
+      type !== 'diaper' && e.timer_requested === true && endLocal === null;
+
     entries.push({
       type,
       start_local: e.start_local,
       end_local: endLocal,
-      feeding_type:
-        type === 'feeding' && typeof e.feeding_type === 'string' && FEEDING_TYPES.has(e.feeding_type)
-          ? (e.feeding_type as ParsedEntry['feeding_type'])
-          : null,
+      feeding_type: feedingTypeNeedsConfirmation
+        ? recentMilkPreference
+        : parsedFeedingType,
+      feeding_type_needs_confirmation: feedingTypeNeedsConfirmation,
+      timer_requested: timerRequested,
       feeding_volume_ml: type === 'feeding' ? volume : null,
       feeding_side:
         type === 'feeding' && typeof e.feeding_side === 'string' && FEEDING_SIDES.has(e.feeding_side)
@@ -186,6 +216,10 @@ serve(async (req: Request) => {
     if (body.audioBase64.length > MAX_AUDIO_BASE64_LENGTH) {
       return json({ error: 'audio too large' }, 413);
     }
+    const recentMilkPreference =
+      body.recentMilkPreference === 'BREAST' || body.recentMilkPreference === 'BOTTLE'
+        ? body.recentMilkPreference
+        : null;
 
     // Zugriff: Premium-Feature — aktuell Premiumtester/Admins.
     // TODO(Premium-Abo): später zusätzlich Premium-Entitlement zulassen.
@@ -274,7 +308,14 @@ serve(async (req: Request) => {
         temperature: 0,
         response_format: { type: 'json_object' },
         messages: [
-          { role: 'system', content: buildSystemPrompt(body.deviceNow, body.babyName) },
+          {
+            role: 'system',
+            content: buildSystemPrompt(
+              body.deviceNow,
+              body.babyName,
+              recentMilkPreference,
+            ),
+          },
           { role: 'user', content: transcript },
         ],
       }),
@@ -295,7 +336,10 @@ serve(async (req: Request) => {
       return json({ error: 'parsing failed' }, 502);
     }
 
-    const entries = sanitizeEntries((parsed as { entries?: unknown })?.entries);
+    const entries = sanitizeEntries(
+      (parsed as { entries?: unknown })?.entries,
+      recentMilkPreference,
+    );
     return json({ transcript, entries });
   } catch (error) {
     console.error('voice-log-parse error:', error);
