@@ -1725,38 +1725,46 @@ export default function HomeScreen() {
           >
             {showShopCard ? (
               <View style={styles.recommendationCard}>
-                <View style={styles.sectionTitleContainer}>
-                  <ThemedText adaptive={false} style={[styles.sectionTitle, styles.liquidGlassText, { color: textPrimary, fontSize: 22 }]}>
-                    Lotti Baby Shop
-                  </ThemedText>
-                  <View style={[styles.liquidGlassChevron, styles.recommendationHeaderSpacer]} />
-                </View>
                 <TouchableOpacity
                   style={styles.recommendationInnerCard}
                   onPress={handleFocusRecommendation}
                   activeOpacity={0.9}
+                  accessibilityRole="button"
+                  accessibilityLabel="Lotti Baby Shop öffnen"
                 >
-                  <View style={styles.recommendationRow}>
-                    <View style={styles.recommendationImagePane}>
-                      <Image
-                        source={require('../../assets/images/lotti-baby-shop-hero.png')}
-                        style={styles.recommendationImage}
-                        resizeMode="cover"
-                      />
-                    </View>
-                    <View style={styles.recommendationContentPane}>
+                  <Image
+                    source={require('../../assets/images/lotti-baby-shop-hero.png')}
+                    style={[StyleSheet.absoluteFill, styles.recommendationImage]}
+                    resizeMode="cover"
+                  />
+                  <LinearGradient
+                    pointerEvents="none"
+                    colors={[
+                      'rgba(32, 19, 13, 0.02)',
+                      'rgba(32, 19, 13, 0.16)',
+                      'rgba(32, 19, 13, 0.88)',
+                    ]}
+                    locations={[0, 0.38, 1]}
+                    style={StyleSheet.absoluteFill}
+                  />
+                  <View style={styles.recommendationContentPane}>
+                    <ThemedText adaptive={false} style={styles.recommendationEyebrow}>
+                      Lotti Baby Shop
+                    </ThemedText>
+                    <View style={styles.recommendationFooter}>
                       <View style={styles.recommendationTextWrap}>
-                        <ThemedText adaptive={false} style={[styles.recommendationTitle, { color: textPrimary }]}>
+                        <ThemedText adaptive={false} style={styles.recommendationTitle}>
                           Prints zum Aufbügeln
                         </ThemedText>
-                        <ThemedText adaptive={false} style={[styles.recommendationDescription, { color: isDark ? Colors.dark.textSecondary : 'rgba(125, 90, 80, 0.88)' }]}>
+                        <ThemedText adaptive={false} style={styles.recommendationDescription} numberOfLines={2}>
                           Lieblingsmotiv wählen und direkt bestellen
                         </ThemedText>
                       </View>
                       <View style={styles.recommendationButton}>
-                        <ThemedText style={styles.recommendationButtonText} numberOfLines={1}>
+                        <ThemedText adaptive={false} style={styles.recommendationButtonText} numberOfLines={1}>
                           {buttonLabel}
                         </ThemedText>
+                        <IconSymbol name="chevron.right" size={14} color="#5E3DB3" />
                       </View>
                     </View>
                   </View>
@@ -2487,39 +2495,21 @@ const styles = StyleSheet.create({
   // Recommendation Card
   recommendationContainer: {
     flex: 1,
-    padding: 18,
+    padding: 12,
   },
   recommendationCard: {
     flex: 1,
     width: '100%',
     borderRadius: 20,
+    overflow: 'hidden',
   },
   recommendationInnerCard: {
     flex: 1,
     borderRadius: 18,
-    padding: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.55)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.55)',
-  },
-  recommendationRow: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-  },
-  recommendationImagePane: {
-    width: '40%',
-    maxWidth: 120,
-    maxHeight: 120,
-    aspectRatio: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.75)',
-    borderRadius: 10,
     overflow: 'hidden',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
+    backgroundColor: '#6B4C3B',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.6)',
+    borderColor: 'rgba(255, 255, 255, 0.7)',
   },
   recommendationImageFallback: {
     flex: 1,
@@ -2535,45 +2525,67 @@ const styles = StyleSheet.create({
   },
   recommendationContentPane: {
     flex: 1,
-    minWidth: 0,
-    flexShrink: 1,
-    paddingVertical: 4,
-    justifyContent: 'space-between',
-    backgroundColor: 'transparent',
+    justifyContent: 'flex-end',
+    padding: 16,
+  },
+  recommendationEyebrow: {
+    color: 'rgba(255, 255, 255, 0.84)',
+    fontSize: 10,
+    lineHeight: 13,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    marginBottom: 3,
+    textShadowColor: 'rgba(0, 0, 0, 0.35)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  recommendationFooter: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 12,
   },
   recommendationTextWrap: {
     flex: 1,
+    minWidth: 0,
     flexShrink: 1,
   },
   recommendationTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#6B4C3B',
-    marginBottom: 4,
-    letterSpacing: 0.2,
-    flexWrap: 'wrap',
+    fontSize: 20,
+    lineHeight: 24,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: -0.25,
+    textShadowColor: 'rgba(0, 0, 0, 0.45)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
   },
   recommendationDescription: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: 'rgba(125, 90, 80, 0.88)',
-    lineHeight: 18,
-    flexWrap: 'wrap',
+    fontSize: 12,
+    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.9)',
+    lineHeight: 16,
+    marginTop: 2,
+    textShadowColor: 'rgba(0, 0, 0, 0.4)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   recommendationButton: {
-    alignSelf: 'flex-end',
-    marginTop: 8,
-    paddingVertical: 7,
-    paddingHorizontal: 14,
-    borderRadius: 14,
-    backgroundColor: '#5E3DB3',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 9,
+    paddingLeft: 14,
+    paddingRight: 11,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.94)',
     borderWidth: 1,
-    borderColor: 'rgba(94, 61, 179, 0.7)',
+    borderColor: 'rgba(255, 255, 255, 0.9)',
   },
   recommendationButtonText: {
     fontSize: 12,
-    fontWeight: '700',
-    color: '#FFFFFF',
+    fontWeight: '800',
+    color: '#5E3DB3',
   },
   recommendationEmptyWrapper: {
     flex: 1,
