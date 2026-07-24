@@ -132,3 +132,11 @@ const supabaseAnonKey = 'ihr-anon-key';
 - Implementieren Sie zusätzliche Funktionen wie Benutzerprofile oder Statistiken.
 - Fügen Sie Echtzeit-Updates mit Supabase Realtime hinzu.
 - Implementieren Sie Datensynchronisierung für Offline-Nutzung.
+
+## BLW-Rezeptdatenbank aktivieren
+
+1. Öffnen Sie den Supabase SQL Editor und führen Sie das Skript `scripts/setup_recipes_table.sql` aus.
+   - Das Skript legt die Tabelle `baby_recipes`, zugehörige Policies und den Storage-Bucket `recipe-images` an.
+   - Es kann beliebig oft ausgeführt werden, da alle Schritte idempotent sind.
+2. Starten Sie anschließend die App. Auf dem Rezept-Screen finden Sie einen Button „Standardrezepte importieren“, der eine umfangreiche Beispielbibliothek für den angemeldeten Benutzer erstellt.
+3. Alternativ können Sie eigene Rezepte direkt in der App hinzufügen – alle Daten landen automatisch in der neuen Supabase-Tabelle.

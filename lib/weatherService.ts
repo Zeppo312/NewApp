@@ -151,6 +151,83 @@ function transformWeatherData(data: any): WeatherData {
   };
 }
 
+/* ------------------------------------------------------------------ *
+ *  Tagesforecast (Open-Meteo) — für Lottis Fürsorge.
+ *
+ *  Liefert die Tageswerte für HEUTE: Höchsttemperatur, gefühltes
+ *  Maximum, UV-Index-Maximum und Regenwahrscheinlichkeit. Open-Meteo
+ *  ist kostenlos und braucht keinen API-Key; übertragen werden nur
+ *  die (bereits gerundeten) Koordinaten.
+ * ------------------------------------------------------------------ */
+
+export interface DailyForecast {
+  /** Höchsttemperatur heute in °C. */
+  tempMax: number;
+  /** Gefühltes Tagesmaximum in °C. */
+  feelsLikeMax: number;
+  /** UV-Index-Maximum heute (null = nicht verfügbar). */
+  uvIndexMax: number | null;
+  /** Regenwahrscheinlichkeit heute in % (null = nicht verfügbar). */
+  rainProbability: number | null;
+  /** Kurze deutsche Wetterbeschreibung (aus dem WMO-Wettercode). */
+  description: string;
+}
+
+/** WMO-Wettercode → kurze deutsche Beschreibung. */
+export function describeWeatherCode(code: number | null | undefined): string {
+  if (code == null) return '';
+  if (code === 0) return 'sonnig';
+  if (code <= 2) return 'leicht bewölkt';
+  if (code === 3) return 'bewölkt';
+  if (code === 45 || code === 48) return 'neblig';
+  if (code <= 57) return 'Nieselregen';
+  if (code <= 67) return 'Regen';
+  if (code <= 77) return 'Schnee';
+  if (code <= 82) return 'Regenschauer';
+  if (code <= 86) return 'Schneeschauer';
+  return 'Gewitter';
+}
+
+export async function getDailyForecastByCoordinates(
+  lat: number,
+  lon: number,
+): Promise<DailyForecast> {
+  const url =
+    'https://api.open-meteo.com/v1/forecast' +
+    `?latitude=${lat}&longitude=${lon}` +
+    '&daily=temperature_2m_max,apparent_temperature_max,uv_index_max,precipitation_probability_max,weather_code' +
+    '&timezone=auto&forecast_days=1';
+
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new Error(`Forecast API error: ${response.status} - ${errorBody}`);
+    }
+    const data = await response.json();
+    const daily = data?.daily;
+    const num = (v: unknown): number | null =>
+      typeof v === 'number' && Number.isFinite(v) ? v : null;
+
+    const tempMax = num(daily?.temperature_2m_max?.[0]);
+    if (tempMax == null) throw new Error('Forecast API: no daily data');
+
+    return {
+      tempMax: Math.round(tempMax),
+      feelsLikeMax: Math.round(num(daily?.apparent_temperature_max?.[0]) ?? tempMax),
+      uvIndexMax:
+        num(daily?.uv_index_max?.[0]) != null
+          ? Math.round(num(daily?.uv_index_max?.[0])! * 10) / 10
+          : null,
+      rainProbability: num(daily?.precipitation_probability_max?.[0]),
+      description: describeWeatherCode(num(daily?.weather_code?.[0])),
+    };
+  } catch (error) {
+    logApiError('getDailyForecastByCoordinates', error, url);
+    throw error;
+  }
+}
+
 /**
  * Gibt Mock-Wetterdaten zurück (als Fallback bei API-Problemen)
  */

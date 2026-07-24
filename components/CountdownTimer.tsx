@@ -3,12 +3,12 @@ import { View, StyleSheet, Dimensions, AppState, AppStateStatus, TouchableOpacit
 import { ThemedText } from './ThemedText';
 import { ThemedView } from './ThemedView';
 import { Colors } from '@/constants/Colors';
-import { pregnancyWeekInfo, pregnancyWeekCircleInfo } from '@/constants/PregnancyWeekInfo';
-import { babySizeComparison } from '@/constants/BabySizeComparison';
+import { pregnancyWeekCircleInfo } from '@/constants/PregnancyWeekInfo';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { router } from 'expo-router';
 import Svg, { Circle, G, Text as SvgText, Defs, LinearGradient, Stop } from 'react-native-svg';
-import { PRIMARY, TEXT_PRIMARY, GLASS_BORDER, FONT_SM, FONT_MD, FONT_LG, RADIUS } from '@/constants/DesignGuide';
+import { PRIMARY, TEXT_PRIMARY, FONT_SM, FONT_MD, FONT_LG, RADIUS } from '@/constants/DesignGuide';
 
 // Hilfsfunktion zum Aufteilen von Text in mehrere Zeilen
 const splitTextIntoLines = (text: string, maxCharsPerLine: number): string[] => {
@@ -44,20 +44,21 @@ interface CountdownTimerProps {
   dueDate: Date | null;
   // Darstellung: 'standalone' hat eigenen Card-Look, 'embedded' ist für GlassCards
   variant?: 'standalone' | 'embedded';
-  // Optional: Babygrößen-Block unterhalb ein-/ausblenden
-  showBabySize?: boolean;
   // Optional: eigener Handler beim Tippen auf den Kreis
   onPressRing?: () => void;
 }
 
-const CountdownTimer: React.FC<CountdownTimerProps> = ({ 
+const CountdownTimer: React.FC<CountdownTimerProps> = ({
   dueDate,
   variant = 'standalone',
-  showBabySize = true,
   onPressRing,
 }) => {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
+  const adaptiveColors = useAdaptiveColors();
+  const isDark = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
+  const textPrimary = isDark ? adaptiveColors.textPrimary : TEXT_PRIMARY;
+  const accentColor = isDark ? adaptiveColors.accent : PRIMARY;
   const [daysLeft, setDaysLeft] = useState<number | null>(null);
   const [currentWeek, setCurrentWeek] = useState<number | null>(null);
   const [currentDay, setCurrentDay] = useState<number | null>(null);
@@ -90,10 +91,14 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({
       // Schwangerschaft dauert ca. 40 Wochen
       const totalDaysInPregnancy = 280; // 40 Wochen * 7 Tage
 
-      // Berechne die Tage der Schwangerschaft
-      // Wir verwenden Math.max, um negative Werte zu vermeiden (falls das Datum in der Vergangenheit liegt)
+      // Berechne die Tage der Schwangerschaft.
+      // Die Werte werden auf den gültigen Bereich einer Schwangerschaft begrenzt,
+      // damit bei einem sehr weit entfernten ET keine SSW 0 oder negativ entsteht.
       const daysRemaining = Math.max(0, days);
-      const daysPregnant = totalDaysInPregnancy - daysRemaining;
+      const daysPregnant = Math.min(
+        totalDaysInPregnancy,
+        Math.max(0, totalDaysInPregnancy - daysRemaining)
+      );
 
       // Berechne SSW und Tag
       const weeksPregnant = Math.floor(daysPregnant / 7);
@@ -101,7 +106,7 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({
       
       // In der SSW-Zählung ist man bereits in der nächsten Woche, selbst bei 0 Tagen
       // Das heißt: 36+6 bedeutet 37. SSW
-      const currentSSW = weeksPregnant + 1;
+      const currentSSW = Math.max(1, weeksPregnant + 1);
 
       setCurrentWeek(currentSSW);
       setCurrentDay(daysInCurrentWeek);
@@ -179,10 +184,6 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({
     router.push('/pregnancy-stats');
   };
 
-  const navigateToBabySize = () => {
-    router.push('/baby-size');
-  };
-
   // Erhöhe die Größe des Kreises etwas
   const size = Dimensions.get('window').width * 0.75; // Größerer Kreis (Design ähnlich Sleep-Tracker)
   const strokeWidth = 14;
@@ -190,8 +191,7 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({
   const circumference = radius * 2 * Math.PI;
   const strokeDashoffset = circumference * (1 - progress);
   const WARN = '#E57373';
-  const bgStroke = colorScheme === 'dark' ? 'rgba(255,255,255,0.22)' : GLASS_BORDER;
-  const bgStrokeGlass = colorScheme === 'dark' ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.55)';
+  const bgStrokeGlass = isDark ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.55)';
 
   return (
     <ThemedView 
@@ -212,9 +212,9 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({
           <Defs>
             {/* Gradient für den Fortschrittsring (Liquid Glass Stil) */}
             <LinearGradient id="progressGradient" x1="0" y1="0" x2={String(size)} y2={String(size)} gradientUnits="userSpaceOnUse">
-              <Stop offset="0%" stopColor={colorScheme === 'dark' ? '#C9B3E8' : '#E6D8F7'} stopOpacity={1} />
-              <Stop offset="55%" stopColor={colorScheme === 'dark' ? '#A677D8' : '#B88CE8'} stopOpacity={1} />
-              <Stop offset="100%" stopColor={PRIMARY} stopOpacity={1} />
+              <Stop offset="0%" stopColor={isDark ? '#C9B3E8' : '#E6D8F7'} stopOpacity={1} />
+              <Stop offset="55%" stopColor={isDark ? '#A677D8' : '#B88CE8'} stopOpacity={1} />
+              <Stop offset="100%" stopColor={accentColor} stopOpacity={1} />
             </LinearGradient>
             {/* Gradient für Überfälligkeit (warme Glas-Töne) */}
             <LinearGradient id="overdueGradient" x1="0" y1="0" x2={String(size)} y2={String(size)} gradientUnits="userSpaceOnUse">
@@ -252,7 +252,7 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({
             cx={size / 2}
             cy={size / 2}
             r={radius}
-            stroke={colorScheme === 'dark' ? 'rgba(255,255,255,0.28)' : 'rgba(255,255,255,0.45)'}
+            stroke={isDark ? 'rgba(255,255,255,0.28)' : 'rgba(255,255,255,0.45)'}
             strokeWidth={strokeWidth * 0.55}
             strokeDasharray={`${(circumference * 0.22).toFixed(2)} ${(circumference).toFixed(2)}`}
             strokeDashoffset={(circumference * 0.15).toFixed(2)}
@@ -269,11 +269,7 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({
               textAnchor="middle"
               fontSize="64"
               fontWeight="bold"
-              fill={
-                isOverdue
-                  ? (colorScheme === 'dark' ? '#FFFFFF' : TEXT_PRIMARY)
-                  : (colorScheme === 'dark' ? '#FFFFFF' : TEXT_PRIMARY)
-              }
+              fill={textPrimary}
             >
               {currentWeek}
             </SvgText>
@@ -282,7 +278,7 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({
               y={size / 2}
               textAnchor="middle"
               fontSize="22"
-              fill={colorScheme === 'dark' ? '#FFFFFF' : TEXT_PRIMARY}
+              fill={textPrimary}
             >
               SSW
             </SvgText>
@@ -292,7 +288,7 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({
               textAnchor="middle"
               fontSize="22"
               fontWeight="bold"
-              fill={isOverdue ? WARN : PRIMARY}
+              fill={isOverdue ? WARN : accentColor}
             >
               {isOverdue 
                 ? 'Überfällig' 
@@ -312,7 +308,7 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({
                     textAnchor="middle"
                     fontSize="15"
                     fontWeight="500"
-                    fill={colorScheme === 'dark' ? '#FFFFFF' : TEXT_PRIMARY}
+                    fill={textPrimary}
                   >
                     Geburtszeit! Dein
                   </SvgText>
@@ -322,7 +318,7 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({
                     textAnchor="middle"
                     fontSize="15"
                     fontWeight="500"
-                    fill={colorScheme === 'dark' ? '#FFFFFF' : TEXT_PRIMARY}
+                    fill={textPrimary}
                   >
                     Baby macht sich auf
                   </SvgText>
@@ -332,7 +328,7 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({
                     textAnchor="middle"
                     fontSize="15"
                     fontWeight="500"
-                    fill={colorScheme === 'dark' ? '#FFFFFF' : TEXT_PRIMARY}
+                    fill={textPrimary}
                   >
                     den Weg in die Welt.
                   </SvgText>
@@ -355,7 +351,7 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({
                       textAnchor="middle"
                       fontSize="15"
                       fontWeight="500"
-                      fill={colorScheme === 'dark' ? '#FFFFFF' : TEXT_PRIMARY}
+                      fill={textPrimary}
                     >
                       {line}
                     </SvgText>
@@ -365,18 +361,18 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({
           </G>
         </Svg>
 
-        <ThemedText style={[styles.tapHint]} lightColor={TEXT_PRIMARY} darkColor={TEXT_PRIMARY}>
+        <ThemedText style={[styles.tapHint, { color: textPrimary }]}>
           Tippen für Details
         </ThemedText>
 
         {/* Tage bis zur Geburt oder Tage überfällig */}
         <View style={styles.detailsContainer}>
           <View style={styles.detailRow}>
-            <ThemedText style={styles.detailLabel} lightColor={TEXT_PRIMARY} darkColor={TEXT_PRIMARY}>Noch:</ThemedText>
+            <ThemedText style={[styles.detailLabel, { color: textPrimary }]}>Noch:</ThemedText>
             <ThemedText 
               style={[
                 styles.detailValue,
-                { color: isOverdue ? WARN : PRIMARY }
+                { color: isOverdue ? WARN : accentColor }
               ]}
             >
               {daysLeft !== null ? (
@@ -388,38 +384,22 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({
           </View>
           
           <View style={styles.detailRow}>
-            <ThemedText style={styles.detailLabel} lightColor={TEXT_PRIMARY} darkColor={TEXT_PRIMARY}>Genau:</ThemedText>
-            <ThemedText style={[styles.detailValue, { color: TEXT_PRIMARY }]}>
+            <ThemedText style={[styles.detailLabel, { color: textPrimary }]}>Genau:</ThemedText>
+            <ThemedText style={[styles.detailValue, { color: textPrimary }]}>
               {currentWeek !== null && currentDay !== null ? 
                 `SSW ${currentWeek-1}+${currentDay}` : ''}
             </ThemedText>
           </View>
           
           <View style={styles.detailRow}>
-            <ThemedText style={styles.detailLabel} lightColor={TEXT_PRIMARY} darkColor={TEXT_PRIMARY}>Geschafft:</ThemedText>
-            <ThemedText style={[styles.detailValue, { color: PRIMARY }]}>
+            <ThemedText style={[styles.detailLabel, { color: textPrimary }]}>Geschafft:</ThemedText>
+            <ThemedText style={[styles.detailValue, { color: accentColor }]}>
               {progress ? `${Math.round(progress * 100)}%` : '0%'}
             </ThemedText>
           </View>
         </View>
       </TouchableOpacity>
 
-      {/* Container für die Babygröße */}
-      {showBabySize && currentWeek && currentWeek >= 4 && (
-        <TouchableOpacity
-          style={styles.babySizeContainer}
-          onPress={navigateToBabySize}
-          activeOpacity={0.8}
-        >
-          <ThemedView style={styles.babySizeInnerContainer} lightColor={'transparent'} darkColor={'transparent'}>
-            <ThemedText style={styles.babySizeLabel} lightColor={TEXT_PRIMARY} darkColor={TEXT_PRIMARY}>Babygröße:</ThemedText>
-            <ThemedText style={[styles.babySizeValue, { color: PRIMARY }]}>
-              {babySizeComparison[currentWeek] || "Noch nicht berechenbar"}
-            </ThemedText>
-            <ThemedText style={styles.babySizeTapHint}>Tippen für mehr Details</ThemedText>
-          </ThemedView>
-        </TouchableOpacity>
-      )}
     </ThemedView>
   );
 };
@@ -484,31 +464,6 @@ const styles = StyleSheet.create({
   detailValue: {
     fontSize: FONT_LG,
     fontWeight: 'bold',
-  },
-  babySizeContainer: {
-    marginTop: 15,
-    width: '100%',
-  },
-  babySizeInnerContainer: {
-    padding: 12,
-    borderRadius: 16,
-    width: '100%',
-    alignItems: 'center',
-  },
-  babySizeLabel: {
-    fontSize: FONT_MD,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  babySizeValue: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    marginBottom: 5,
-  },
-  babySizeTapHint: {
-    fontSize: FONT_SM,
-    opacity: 0.6,
-    fontStyle: 'italic',
   },
 });
 

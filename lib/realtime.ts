@@ -27,14 +27,15 @@ export const subscribeToDailyEntries = (
       },
       (payload) => {
         console.log('Received realtime update:', payload);
+        const payloadNew = (payload.new ?? null) as { user_id?: string } | null;
 
         // Prüfe, ob der Eintrag für den aktuellen Benutzer relevant ist
-        const isForCurrentUser = payload.new?.user_id === userId;
+        const isForCurrentUser = payloadNew?.user_id === userId;
         
         // Prüfe, ob der Eintrag von einem verknüpften Benutzer stammt
         // Dies erfordert eine zusätzliche Abfrage, um zu prüfen, ob der Benutzer verknüpft ist
         const checkIfLinked = async () => {
-          if (!isForCurrentUser && payload.new) {
+          if (!isForCurrentUser && payloadNew?.user_id) {
             try {
               // Prüfe, ob der Benutzer mit dem Ersteller des Eintrags verknüpft ist
               const { data } = await supabase.rpc('get_linked_users_with_info', {
@@ -43,7 +44,7 @@ export const subscribeToDailyEntries = (
               
               if (data?.success && data.linkedUsers) {
                 const isLinked = data.linkedUsers.some(
-                  (user: any) => user.userId === payload.new.user_id
+                  (user: any) => user.userId === payloadNew.user_id
                 );
                 
                 if (isLinked) {

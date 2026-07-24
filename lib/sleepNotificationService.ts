@@ -15,6 +15,8 @@ Notifications.setNotificationHandler({
     shouldShowAlert: true,
     shouldPlaySound: false,
     shouldSetBadge: false,
+    shouldShowBanner: true,
+    shouldShowList: true,
   }),
 });
 
@@ -47,8 +49,8 @@ class SleepNotificationService {
 
       // Fordere Benachrichtigungsberechtigungen an (für iOS)
       if (Platform.OS === 'ios') {
-        const { status } = await Notifications.requestPermissionsAsync();
-        if (status !== 'granted') {
+        const permissions = await Notifications.requestPermissionsAsync();
+        if (!permissions.granted) {
           console.log('Benachrichtigungsberechtigungen nicht gewährt');
           return;
         }

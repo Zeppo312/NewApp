@@ -1,0 +1,317 @@
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { BabyInfo, createBaby, listBabies, syncBabiesForLinkedUsers } from '@/lib/baby';
+import { useAuth } from './AuthContext';
+import { supabase } from '@/lib/supabase';
+
+type ActiveBabyContextType = {
+  babies: BabyInfo[];
+  activeBabyId: string | null;
+  activeBaby: BabyInfo | null;
+  isLoading: boolean;
+  isReady: boolean;
+  loadError: string | null;
+  setActiveBabyId: (babyId: string) => Promise<void>;
+  refreshBabies: () => Promise<void>;
+};
+
+const ACTIVE_BABY_STORAGE_KEY_PREFIX = 'active_baby_id';
+
+const ActiveBabyContext = createContext<ActiveBabyContextType | undefined>(
+  undefined,
+);
+
+export const ActiveBabyProvider: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
+  const { user } = useAuth();
+
+  const [babies, setBabies] = useState<BabyInfo[]>([]);
+  const [activeBabyId, setActiveBabyIdState] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isReady, setIsReady] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const getActiveBabyStorageKey = useCallback((userId: string) => {
+    return `${ACTIVE_BABY_STORAGE_KEY_PREFIX}:${userId}`;
+  }, []);
+
+  const formatLoadError = useCallback((error: unknown) => {
+    if (!error) return null;
+    if (error instanceof Error) return error.message;
+    if (typeof error === 'string') return error;
+    if (typeof error === 'object') {
+      const err = error as {
+        message?: string;
+        details?: string;
+        hint?: string;
+        code?: string;
+      };
+      const parts = [
+        err.message,
+        err.details,
+        err.hint,
+        err.code ? `code: ${err.code}` : null,
+      ].filter(Boolean);
+      if (parts.length > 0) return parts.join(' | ');
+      try {
+        return JSON.stringify(error);
+      } catch {
+        return '[unlesbarer Fehler]';
+      }
+    }
+    return String(error);
+  }, []);
+
+  const shouldSkipPlaceholderBabyCreation = useCallback(async () => {
+    if (!user?.id) return false;
+
+    try {
+      const { data, error } = await supabase
+        .from('account_links')
+        .select('id, status')
+        .eq('invited_id', user.id)
+        .in('status', ['pending', 'accepted'])
+        .limit(1);
+
+      if (error) {
+        console.error('Error checking incoming account links before placeholder baby creation:', error);
+        return false;
+      }
+
+      return (data?.length ?? 0) > 0;
+    } catch (error) {
+      console.error('Unexpected error checking incoming account links:', error);
+      return false;
+    }
+  }, [user?.id]);
+
+  /**
+   * Resolves which baby should be active:
+   * 1) Stored baby id (AsyncStorage)
+   * 2) First baby in list
+   * 3) null
+   *
+   * IMPORTANT:
+   * - Returns resolvedId so caller can decide when state is stable
+   */
+  const resolveActiveBabyId = useCallback(
+    async (nextBabies: BabyInfo[]): Promise<string | null> => {
+      if (!user?.id) {
+        setActiveBabyIdState(null);
+        return null;
+      }
+
+      const scopedStorageKey = getActiveBabyStorageKey(user.id);
+      const storedId =
+        await AsyncStorage.getItem(scopedStorageKey) ??
+        await AsyncStorage.getItem(ACTIVE_BABY_STORAGE_KEY_PREFIX);
+      const firstWithBirthDate = nextBabies.find((b) => Boolean(b.birth_date))?.id ?? null;
+
+      const resolvedId =
+        nextBabies.find((b) => b.id === storedId)?.id ??
+        firstWithBirthDate ??
+        nextBabies[0]?.id ??
+        null;
+
+      setActiveBabyIdState(resolvedId);
+
+      await AsyncStorage.removeItem(ACTIVE_BABY_STORAGE_KEY_PREFIX);
+
+      if (resolvedId) {
+        await AsyncStorage.setItem(scopedStorageKey, resolvedId);
+      } else {
+        await AsyncStorage.removeItem(scopedStorageKey);
+      }
+
+      return resolvedId;
+    },
+    [getActiveBabyStorageKey, user?.id],
+  );
+
+  /**
+   * Loads babies from DB and guarantees:
+   * - at least one baby exists
+   * - activeBabyId is resolved BEFORE isReady = true
+   *
+   * OPTIMIZATION: Nutzt Cache für schnelles Laden (5 Min Cache)
+   */
+  const loadBabies = useCallback(async (forceRefresh = false) => {
+    if (!user) {
+      setBabies([]);
+      setActiveBabyIdState(null);
+      setIsLoading(false);
+      setIsReady(true);
+      setLoadError(null);
+      return;
+    }
+
+    setIsLoading(true);
+    setIsReady(false);
+
+    const { data, error } = await listBabies(forceRefresh);
+    if (error) {
+      console.error('Error loading babies:', error);
+      setBabies([]);
+      setActiveBabyIdState(null);
+      setIsLoading(false);
+      setIsReady(true);
+      setLoadError(formatLoadError(error));
+      return;
+    }
+
+    let nextBabies = data ?? [];
+    setLoadError(null);
+
+    // Try to pull shared babies from linked accounts before creating a placeholder
+    if (nextBabies.length === 0) {
+      const syncResult = await syncBabiesForLinkedUsers();
+      if (syncResult.success) {
+        const { data: reloaded } = await listBabies(true);
+        nextBabies = reloaded ?? [];
+      }
+    }
+
+    // Skip auto-creation while the profile is unfinished (early onboarding)
+    if (nextBabies.length === 0) {
+      try {
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('first_name')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        if (!profileError || profileError?.code === 'PGRST116') {
+          if (!profileData || !profileData.first_name) {
+            setBabies([]);
+            setActiveBabyIdState(null);
+            setIsLoading(false);
+            setIsReady(true);
+            setLoadError(null);
+            return;
+          }
+        }
+
+        if (profileError && profileError.code !== 'PGRST116') {
+          setBabies([]);
+          setActiveBabyIdState(null);
+          setIsLoading(false);
+          setIsReady(true);
+          setLoadError(null);
+          console.error('Error loading profile during baby sync:', profileError);
+          return;
+        }
+      } catch (profileCheckError) {
+        console.error('Unexpected error during profile check:', profileCheckError);
+      }
+    }
+
+    // Ensure at least one baby exists
+    if (nextBabies.length === 0) {
+      // Give partner sync one final chance before creating a local placeholder baby.
+      const finalSyncResult = await syncBabiesForLinkedUsers();
+      if (finalSyncResult.success) {
+        const { data: reloaded } = await listBabies(true);
+        nextBabies = reloaded ?? [];
+      }
+    }
+
+    if (nextBabies.length === 0) {
+      const skipPlaceholderBabyCreation = await shouldSkipPlaceholderBabyCreation();
+      if (skipPlaceholderBabyCreation) {
+        setBabies([]);
+        setActiveBabyIdState(null);
+        setIsLoading(false);
+        setIsReady(true);
+        setLoadError(null);
+        return;
+      }
+
+      const { error: createError } = await createBaby({});
+      if (createError) {
+        console.error('Error creating default baby:', createError);
+        setLoadError(formatLoadError(createError));
+      } else {
+        // Force refresh after creating baby to skip cache
+        const { data: reloaded } = await listBabies(true);
+        nextBabies = reloaded ?? [];
+      }
+    }
+
+    setBabies(nextBabies);
+
+    const resolvedId = await resolveActiveBabyId(nextBabies);
+
+    if (!resolvedId) {
+      console.warn('[ActiveBaby] No active baby could be resolved');
+    }
+
+    setIsLoading(false);
+    setIsReady(true);
+  }, [formatLoadError, resolveActiveBabyId, shouldSkipPlaceholderBabyCreation, user]);
+
+  /**
+   * Initial load + reload on login change
+   */
+  useEffect(() => {
+    loadBabies();
+  }, [loadBabies]);
+
+  /**
+   * Explicit baby switch (BabySwitcher)
+   * IMPORTANT:
+   * - temporarily sets isReady=false to avoid race conditions
+   */
+  const setActiveBabyId = useCallback(async (babyId: string) => {
+    if (!user?.id) return;
+
+    setIsReady(false);
+
+    setActiveBabyIdState(babyId);
+    await AsyncStorage.removeItem(ACTIVE_BABY_STORAGE_KEY_PREFIX);
+    await AsyncStorage.setItem(getActiveBabyStorageKey(user.id), babyId);
+
+    setIsReady(true);
+  }, [getActiveBabyStorageKey, user?.id]);
+
+  const activeBaby = useMemo(
+    () => babies.find((b) => b.id === activeBabyId) ?? null,
+    [babies, activeBabyId],
+  );
+
+  const refreshBabiesForced = useCallback(async () => {
+    await loadBabies(true); // Force refresh = skip cache
+  }, [loadBabies]);
+
+  return (
+    <ActiveBabyContext.Provider
+      value={{
+        babies,
+        activeBabyId,
+        activeBaby,
+        isLoading,
+        isReady,
+        loadError,
+        setActiveBabyId,
+        refreshBabies: refreshBabiesForced,
+      }}
+    >
+      {children}
+    </ActiveBabyContext.Provider>
+  );
+};
+
+export const useActiveBaby = () => {
+  const context = useContext(ActiveBabyContext);
+  if (!context) {
+    throw new Error('useActiveBaby must be used within an ActiveBabyProvider');
+  }
+  return context;
+};

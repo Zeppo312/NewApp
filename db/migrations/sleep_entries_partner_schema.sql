@@ -46,6 +46,10 @@ BEGIN
     USING (
           (current_setting('request.jwt.claims', true)::jsonb->>'sub')::uuid = user_id
        OR (current_setting('request.jwt.claims', true)::jsonb->>'sub')::uuid = partner_id
+    )
+    WITH CHECK (
+          (current_setting('request.jwt.claims', true)::jsonb->>'sub')::uuid = user_id
+       OR (current_setting('request.jwt.claims', true)::jsonb->>'sub')::uuid = partner_id
     );
   ELSE
     -- Wenn die Policy bereits existiert, vorsichtshalber aktualisieren
@@ -54,6 +58,10 @@ BEGIN
     ON sleep_entries
     FOR ALL
     USING (
+          (current_setting('request.jwt.claims', true)::jsonb->>'sub')::uuid = user_id
+       OR (current_setting('request.jwt.claims', true)::jsonb->>'sub')::uuid = partner_id
+    )
+    WITH CHECK (
           (current_setting('request.jwt.claims', true)::jsonb->>'sub')::uuid = user_id
        OR (current_setting('request.jwt.claims', true)::jsonb->>'sub')::uuid = partner_id
     );
@@ -101,3 +109,44 @@ BEGIN
   END IF;
 END
 $$;
+
+-- 6. Funktion: Bestehende Einträge des Einladenden mit neuem Partner verknüpfen
+DROP FUNCTION IF EXISTS sync_sleep_entries_for_partner(UUID, UUID);
+
+CREATE OR REPLACE FUNCTION sync_sleep_entries_for_partner(
+  p_inviter UUID, -- Nutzer, der eingeladen hat (owner der Einträge)
+  p_partner UUID  -- Neuer Partner (eingeladener Nutzer)
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_updated INT := 0;
+BEGIN
+  -- Setze partner_id für alle Einträge des Einladenden, sofern noch nicht (korrekt) gesetzt
+  UPDATE sleep_entries se
+    SET partner_id = p_partner,
+        shared_with_user_id = NULL, -- Legacy-Feld aufräumen
+        updated_by = p_partner
+  WHERE se.user_id = p_inviter
+    AND (se.partner_id IS NULL OR se.partner_id = se.shared_with_user_id OR se.partner_id = p_inviter)
+    AND NOT EXISTS (
+      SELECT 1
+      FROM sleep_entries sx
+      WHERE sx.user_id = se.user_id
+        AND sx.partner_id = p_partner
+        AND sx.start_time = se.start_time
+        AND sx.id <> se.id
+    );
+
+  GET DIAGNOSTICS v_updated = ROW_COUNT;
+
+  RETURN jsonb_build_object(
+    'success', TRUE,
+    'updated', v_updated
+  );
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION sync_sleep_entries_for_partner(UUID, UUID) TO authenticated;

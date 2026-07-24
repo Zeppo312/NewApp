@@ -15,6 +15,9 @@ interface WeekScrollerProps {
 const WeekScroller: React.FC<WeekScrollerProps> = ({ selectedDate, onDateSelect }) => {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
+  const isDark = colorScheme === 'dark';
+  const todayBorderColor = isDark ? Colors.dark.accent : '#7D5A50';
+  const todayBgColor = isDark ? Colors.dark.accent : '#7D5A50';
   const [weeks, setWeeks] = useState<Date[][]>([]);
   const [currentWeekIndex, setCurrentWeekIndex] = useState(0);
   const [entries, setEntries] = useState<DailyEntry[]>([]);
@@ -189,7 +192,7 @@ const WeekScroller: React.FC<WeekScrollerProps> = ({ selectedDate, onDateSelect 
         <ThemedView
           style={[
             styles.dayCard,
-            isToday && styles.todayCard,
+            isToday && [styles.todayCard, { borderColor: todayBorderColor }],
             isSelected && styles.selectedDayCard
           ]}
           lightColor={isSelected ? theme.accent : theme.cardLight}
@@ -206,7 +209,7 @@ const WeekScroller: React.FC<WeekScrollerProps> = ({ selectedDate, onDateSelect 
           <ThemedView
             style={[
               styles.dayNumberContainer,
-              isToday && styles.todayNumberContainer,
+              isToday && [styles.todayNumberContainer, { backgroundColor: todayBgColor }],
               isSelected && styles.selectedNumberContainer
             ]}
             lightColor={isToday ? theme.accent : 'transparent'}
@@ -394,7 +397,7 @@ const styles = StyleSheet.create({
   },
   todayCard: {
     borderWidth: 2,
-    borderColor: '#7D5A50',
+    // borderColor wird dynamisch gesetzt
   },
   selectedDayCard: {
     borderWidth: 0,
@@ -414,7 +417,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   todayNumberContainer: {
-    backgroundColor: '#7D5A50',
+    // backgroundColor wird dynamisch gesetzt
   },
   selectedNumberContainer: {
     backgroundColor: 'rgba(255, 255, 255, 0.3)',

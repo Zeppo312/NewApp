@@ -591,8 +591,8 @@ export class SupabaseErrorHandler {
     console.groupEnd();
 
     // Add to debug panel if available
-    if (__DEV__ && (global as any).addDebugLog) {
-      (global as any).addDebugLog({
+    if (__DEV__ && (globalThis as any).addDebugLog) {
+      (globalThis as any).addDebugLog({
         timestamp: new Date().toISOString(),
         operation,
         errorCode: errorDetail.code,

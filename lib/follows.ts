@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { getCachedUser } from './supabase';
 import { createNotification } from './community';
 
 // Interface für einen Follow
@@ -15,6 +16,7 @@ export interface UserWithFollow {
   first_name: string;
   last_name?: string;
   user_role?: string;
+  username?: string | null;
   is_following: boolean;
 }
 
@@ -24,7 +26,7 @@ export interface UserWithFollow {
  */
 export const followUser = async (userId: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData?.user) return { success: false, error: 'Nicht angemeldet' };
 
     console.log(`User ${userData.user.id} is attempting to follow user ${userId}`);
@@ -95,7 +97,7 @@ export const followUser = async (userId: string) => {
  */
 export const unfollowUser = async (userId: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData?.user) return { success: false, error: 'Nicht angemeldet' };
 
     const { error } = await supabase
@@ -124,7 +126,7 @@ export const unfollowUser = async (userId: string) => {
  */
 export const isFollowingUser = async (userId: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData?.user) return { isFollowing: false, error: 'Nicht angemeldet' };
 
     const { data, error } = await supabase
@@ -150,7 +152,7 @@ export const isFollowingUser = async (userId: string) => {
  */
 export const getFollowedUsers = async () => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData?.user) return { data: null, error: 'Nicht angemeldet' };
 
     const { data, error } = await supabase
@@ -221,7 +223,7 @@ export const getFollowingCount = async (userId: string) => {
  */
 export const getFollowers = async () => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData?.user) return { data: null, error: 'Nicht angemeldet' };
 
     console.log(`Getting followers for user ${userData.user.id}`);
@@ -251,7 +253,7 @@ export const getFollowers = async () => {
         // Versuche zuerst, das Profil über die profiles-Tabelle zu finden
         const { data: profileData, error: profileError } = await supabase
           .from('profiles')
-          .select('id, first_name, last_name, user_role')
+          .select('id, first_name, last_name, user_role, username')
           .eq('id', followerId)
           .single();
           
@@ -260,7 +262,8 @@ export const getFollowers = async () => {
             id: profileData.id,
             first_name: profileData.first_name || 'Benutzer',
             last_name: profileData.last_name || '',
-            user_role: profileData.user_role || 'unknown'
+            user_role: profileData.user_role || 'unknown',
+            username: profileData.username || null,
           });
           continue;
         }
@@ -277,7 +280,8 @@ export const getFollowers = async () => {
               id: followerId,
               first_name: rpcProfile.first_name || 'Benutzer',
               last_name: rpcProfile.last_name || '',
-              user_role: rpcProfile.user_role || 'unknown'
+              user_role: rpcProfile.user_role || 'unknown',
+              username: rpcProfile.username || null,
             });
             continue;
           }
@@ -289,7 +293,8 @@ export const getFollowers = async () => {
           id: followerId,
           first_name: 'Benutzer',
           last_name: '',
-          user_role: 'unknown'
+          user_role: 'unknown',
+          username: null,
         });
         
       } catch (followerError) {
@@ -299,7 +304,8 @@ export const getFollowers = async () => {
           id: followerId,
           first_name: 'Benutzer',
           last_name: '',
-          user_role: 'unknown'
+          user_role: 'unknown',
+          username: null,
         });
       }
     }
@@ -318,7 +324,7 @@ export const getFollowers = async () => {
  */
 export const createMissingFollowNotifications = async () => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData?.user) return { success: false, error: 'Nicht angemeldet' };
 
     console.log(`Looking for missing follow notifications for user ${userData.user.id}`);
