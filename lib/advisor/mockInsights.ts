@@ -10,12 +10,21 @@
  */
 
 import type { AdvisorAnalysis, AdvisorInsight, AnalysisCard, DailySignals } from './types';
-
-/** Tagesschnitt-Referenzen (später aus echten Mustern). */
-const TYPICAL_FEEDINGS = 5;
-const TYPICAL_SLEEP_MIN = 360; // 6 Std
+import { activeDayProgress } from './baselines';
 
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+
+const expectedFeedingsByNow = (s: DailySignals): number => {
+  if (typeof s.feeding.typicalByNow === 'number') return s.feeding.typicalByNow;
+  const daily = s.feeding.typicalPerDay;
+  if (typeof daily !== 'number') return 0;
+  return daily * activeDayProgress(s.context.localHour, s.context.localMinute);
+};
+
+const expectedFeedingInterval = (s: DailySignals): number | null => {
+  if (!s.feeding.typicalPerDay) return null;
+  return Math.min(6, Math.max(2, 16 / s.feeding.typicalPerDay));
+};
 
 const buildCards = (s: DailySignals): AnalysisCard[] => {
   const cards: AnalysisCard[] = [
@@ -25,8 +34,10 @@ const buildCards = (s: DailySignals): AnalysisCard[] => {
       label: 'Schlaf',
       value: s.sleep.text,
       caption: s.sleep.minutes > 0 ? 'Heute erfasst' : 'Noch nichts erfasst',
-      // Referenz: ~10 Std Tagesschlaf als „voll".
-      progress: clamp01(s.sleep.minutes / 600),
+      progress:
+        s.sleep.typicalMinutesByNow && s.sleep.typicalMinutesByNow > 0
+          ? clamp01(s.sleep.minutes / s.sleep.typicalMinutesByNow)
+          : 0,
       isReal: s.sleep.isReal,
     },
     {
@@ -38,8 +49,10 @@ const buildCards = (s: DailySignals): AnalysisCard[] => {
           ? `${s.feeding.totalBottleMl} ml`
           : `${s.feeding.totalCount}×`,
       caption: s.feeding.summaryText,
-      // Referenz: ~6 Mahlzeiten/Tag.
-      progress: clamp01((s.feeding.totalCount || 0) / 6),
+      progress:
+        expectedFeedingsByNow(s) > 0
+          ? clamp01(s.feeding.totalCount / expectedFeedingsByNow(s))
+          : 0,
       isReal: s.feeding.isReal,
     },
     {
@@ -86,8 +99,25 @@ const buildCards = (s: DailySignals): AnalysisCard[] => {
 /** Wählt den wichtigsten Hinweis (Prioritäten wie im Konzept, vereinfacht). */
 const buildMainInsight = (s: DailySignals): { insight: AdvisorInsight; reasons: string[] } => {
   const name = s.babyName;
-  const lowFeeding = s.feeding.totalCount > 0 && s.feeding.totalCount < TYPICAL_FEEDINGS;
-  const lowSleep = s.sleep.minutes > 0 && s.sleep.minutes < TYPICAL_SLEEP_MIN;
+  const expectedByNow = expectedFeedingsByNow(s);
+  const expectedInterval = expectedFeedingInterval(s);
+  const longInterval =
+    expectedInterval != null &&
+    s.feeding.hoursSinceLastFeeding != null &&
+    s.feeding.hoursSinceLastFeeding > expectedInterval * 1.3;
+  const lowFeeding =
+    longInterval ||
+    (expectedByNow >= 2 && s.feeding.totalCount + 1 < expectedByNow);
+  const lowSleep =
+    s.sleep.typicalMinutesByNow != null &&
+    s.sleep.typicalMinutesByNow >= 60 &&
+    s.sleep.minutes + 60 < s.sleep.typicalMinutesByNow * 0.75;
+  const feedingReason = longInterval && s.feeding.hoursSinceLastFeeding != null
+    ? `Letzte Mahlzeit vor ${s.feeding.hoursSinceLastFeeding.toString().replace('.', ',')} Std`
+    : `Bis jetzt ${s.feeding.totalCount} Mahlzeiten, bei euch sonst etwa ${Math.round(expectedByNow * 10) / 10}`;
+  const sleepReason = s.sleep.typicalMinutesByNow != null
+    ? `Bis jetzt ${s.sleep.text}, bei euch sonst etwa ${formatMinutes(s.sleep.typicalMinutesByNow)}`
+    : 'Persönliches Schlafmuster berücksichtigt';
 
   // 1) Kombi: Hitze + heute wenig getrunken (Kern-USP)
   if (s.weather.isHot && lowFeeding) {
@@ -101,7 +131,7 @@ const buildMainInsight = (s: DailySignals): { insight: AdvisorInsight; reasons: 
         body: `${name} hat heute bisher etwas weniger getrunken als sonst – und es wird warm. Biete ruhig öfter mal Brust oder Flasche an, an heißen Tagen darf es gern ein Schluck mehr sein.`,
       },
       reasons: [
-        'Heutige Mahlzeiten liegen unter deinem üblichen Schnitt',
+        feedingReason,
         `Wetter heute: warm (${s.weather.temperature ?? '–'}°)`,
         `Alter berücksichtigt: ${s.ageText || 'unbekannt'}`,
       ],
@@ -120,7 +150,7 @@ const buildMainInsight = (s: DailySignals): { insight: AdvisorInsight; reasons: 
         body: `${name} hat heute etwas weniger geschlafen, und es wird schwül. Wärme kann den Babyschlaf stören – ein kühler, ruhiger Raum für den nächsten Schlaf hilft euch beiden.`,
       },
       reasons: [
-        'Heutiger Schlaf liegt unter eurem üblichen Schnitt',
+        sleepReason,
         `Wetter heute: warm (${s.weather.temperature ?? '–'}°)`,
         'Schlafmuster der letzten Tage',
       ],
@@ -193,8 +223,8 @@ const buildMainInsight = (s: DailySignals): { insight: AdvisorInsight; reasons: 
         body: `${name} hat heute etwas weniger geschlafen als sonst. Plant den nächsten Schlaf vielleicht etwas früher – und gönn auch dir eine kleine Pause, wenn es geht.`,
       },
       reasons: [
-        'Heutiger Schlaf liegt unter eurem üblichen Schnitt',
-        'Schlafmuster der letzten Tage',
+        sleepReason,
+        `${s.sleep.baselineSampleDays} Vergleichstage berücksichtigt`,
       ],
     };
   }
@@ -217,7 +247,44 @@ const buildMainInsight = (s: DailySignals): { insight: AdvisorInsight; reasons: 
     };
   }
 
-  // 6) Positiv-Fallback (alles im grünen Bereich)
+  // 6b) Persönliches Mahlzeiten-Intervall — zeitabhängig, kein Tageszähler.
+  if (lowFeeding && s.feeding.isReal && s.feeding.likelyFeedingMode !== 'solids') {
+    const intervalText =
+      longInterval && s.feeding.hoursSinceLastFeeding != null
+        ? `Die letzte Mahlzeit ist ${s.feeding.hoursSinceLastFeeding
+            .toString()
+            .replace('.', ',')} Std her. Magst du ${name} bald wieder etwas anbieten?`
+        : `${name} hatte bis jetzt ${s.feeding.totalCount} Mahlzeiten – um diese Uhrzeit sind es bei euch meist etwa ${Math.round(expectedByNow * 10) / 10}. Magst du bald wieder etwas anbieten?`;
+    return {
+      insight: {
+        id: 'low_feeding',
+        tone: 'gentle',
+        emoji: '🍼',
+        title: 'Heute wichtig',
+        headline: 'Vielleicht bald wieder anbieten',
+        body: intervalText,
+      },
+      reasons: [feedingReason, `${s.feeding.baselineSampleDays} Vergleichstage berücksichtigt`],
+    };
+  }
+
+  const hasPersonalBaseline =
+    s.feeding.typicalByNow != null || s.sleep.typicalMinutesByNow != null;
+  if (!hasPersonalBaseline) {
+    return {
+      insight: {
+        id: 'learning',
+        tone: 'neutral',
+        emoji: '🌱',
+        title: 'Lotti lernt euch kennen',
+        headline: 'Noch kein Vergleich nötig',
+        body: `Erfasse ein paar Tage lang Schlaf und Mahlzeiten von ${name}. Ab drei Vergleichstagen kann Lotti euren eigenen Rhythmus statt allgemeiner Grenzwerte nutzen.`,
+      },
+      reasons: ['Noch weniger als 3 ausreichend erfasste Vergleichstage'],
+    };
+  }
+
+  // 7) Positiv-Fallback, aber nur mit einer belastbaren persönlichen Baseline.
   return {
     insight: {
       id: 'all_good',
@@ -234,6 +301,15 @@ const buildMainInsight = (s: DailySignals): { insight: AdvisorInsight; reasons: 
   };
 };
 
+const formatMinutes = (minutes: number): string => {
+  const rounded = Math.round(minutes);
+  const hours = Math.floor(rounded / 60);
+  const rest = rounded % 60;
+  if (hours === 0) return `${rest} Min`;
+  if (rest === 0) return `${hours} Std`;
+  return `${hours} Std ${rest} Min`;
+};
+
 /**
  * Kleinere Zusatz-Hinweise, direkt aus den heutigen echten Daten abgeleitet.
  * Nur zeigen, was wir wirklich wissen — keine Füll-Behauptungen.
@@ -245,7 +321,8 @@ const buildHistory = (s: DailySignals): AdvisorInsight[] => {
 
   if (s.sleep.minutes > 0) {
     history.push(
-      s.sleep.minutes >= TYPICAL_SLEEP_MIN
+      s.sleep.typicalMinutesByNow != null &&
+      s.sleep.minutes >= s.sleep.typicalMinutesByNow * 0.85
         ? {
             id: 'h_sleep_stable',
             tone: 'positive',
@@ -265,7 +342,8 @@ const buildHistory = (s: DailySignals): AdvisorInsight[] => {
 
   if (s.feeding.totalCount > 0) {
     history.push(
-      s.feeding.totalCount < TYPICAL_FEEDINGS
+      expectedFeedingsByNow(s) >= 2 &&
+      s.feeding.totalCount + 1 < expectedFeedingsByNow(s)
         ? {
             id: 'h_feeding_low',
             tone: 'gentle',

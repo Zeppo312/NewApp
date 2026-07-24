@@ -5,7 +5,7 @@ import {
   Easing,
   LayoutAnimation,
   Platform,
-  SafeAreaView,
+  Share,
   ScrollView,
   StatusBar,
   StyleProp,
@@ -20,21 +20,25 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter , useFocusEffect } from 'expo-router';
 import * as Haptics from 'expo-haptics';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Header from '@/components/Header';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { GlassCard } from '@/components/ui/GlassCard';
-import { MagicBriefingIntroOverlay } from '@/components/MagicBriefingIntroOverlay';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { useAdvisorAccess } from '@/lib/advisor/access';
 import {
   fetchAdvisorSettings,
   fetchHistory,
+  fetchTodayMamaCheckin,
+  fetchTodayState,
   localDateString,
+  markInsightShared,
   markTodayRead,
   saveAdvisorSettings,
+  saveMamaCheckin,
   saveTodayInsight,
   setActed,
   updateAdvisorContext,
@@ -42,6 +46,8 @@ import {
   type AdvisorFrequency,
   type AdvisorHistoryItem,
   type AdvisorSettings,
+  type AdvisorTodayState,
+  type MamaEnergy,
 } from '@/lib/advisor/advisorStorage';
 import { buildDailySignals } from '@/lib/advisor/buildDailySignals';
 import {
@@ -50,11 +56,13 @@ import {
 } from '@/lib/notificationService';
 import { generateAdvisorInsight } from '@/lib/advisor/generateInsight';
 import { buildMockAnalysis } from '@/lib/advisor/mockInsights';
+import { buildCareHorizon } from '@/lib/advisor/care-horizon';
 import type {
   AdvisorAnalysis,
   AdvisorInsight,
   AdvisorTone,
   AnalysisCard,
+  DailySignals,
 } from '@/lib/advisor/types';
 
 const BRAND_PURPLE = '#5E3DB3';
@@ -260,19 +268,29 @@ export default function LottisFuersorgeScreen() {
   const access = useAdvisorAccess();
 
   const [analysis, setAnalysis] = useState<AdvisorAnalysis | null>(null);
+  const [dailySignals, setDailySignals] = useState<DailySignals | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const [showIntro, setShowIntro] = useState(false);
   /** Echter Verlauf aus Supabase; null = (noch) nicht verfügbar → Mock zeigen. */
   const [history, setHistory] = useState<AdvisorHistoryItem[] | null>(null);
   const [settings, setSettings] = useState<AdvisorSettings | null>(null);
+  const [todayState, setTodayState] = useState<AdvisorTodayState | null>(null);
+  const [mamaEnergy, setMamaEnergy] = useState<MamaEnergy | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
+  const [clockNow, setClockNow] = useState(() => new Date());
 
   const runIdRef = useRef(0);
   const ready = !!analysis;
 
-  // Weiche Hero-Einblendung, sobald Intro vorbei und Daten da sind.
+  useEffect(() => {
+    const timer = setInterval(() => setClockNow(new Date()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Weiche Einblendung für das stets sichtbare Copilot-Briefing.
   const heroIn = React.useState(() => new Animated.Value(0))[0];
   useEffect(() => {
-    if (ready && !showIntro) {
+    if (ready) {
+      heroIn.setValue(0);
       Animated.timing(heroIn, {
         toValue: 1,
         duration: 520,
@@ -280,7 +298,7 @@ export default function LottisFuersorgeScreen() {
         useNativeDriver: true,
       }).start();
     }
-  }, [ready, showIntro, heroIn]);
+  }, [ready, heroIn]);
 
   const heroAnimStyle = {
     opacity: heroIn,
@@ -293,10 +311,6 @@ export default function LottisFuersorgeScreen() {
       },
     ],
   };
-
-  const handleIntroFinish = useCallback(() => {
-    setShowIntro(false);
-  }, []);
 
   // --- Datenquelle: Signale -> Edge Function (Regeln + KI),
   //     Fallback auf die lokale Mock-Analyse. ---
@@ -313,6 +327,7 @@ export default function LottisFuersorgeScreen() {
     } catch {
       signals = await buildDailySignals(null);
     }
+    setDailySignals(signals);
     let result: AdvisorAnalysis = buildMockAnalysis(signals);
     if (!alive()) return;
     // Lokales Ergebnis sofort zeigen …
@@ -322,6 +337,7 @@ export default function LottisFuersorgeScreen() {
     // Der Server persistiert den Hinweis selbst; klappt es nicht, bleibt
     // der Mock und wir speichern wie bisher clientseitig.
     let persistedByServer = false;
+    let messageId: string | null = null;
     const babyId = activeBaby?.id;
     if (babyId) {
       const remote = await generateAdvisorInsight(babyId, signals);
@@ -329,6 +345,7 @@ export default function LottisFuersorgeScreen() {
       if (remote) {
         result = { ...result, main: remote.main, reasons: remote.reasons };
         persistedByServer = remote.persisted;
+        messageId = remote.messageId;
         setAnalysis(result);
       }
     }
@@ -336,20 +353,37 @@ export default function LottisFuersorgeScreen() {
     // Persistenz: heutigen Hinweis in Supabase ablegen, Verlauf +
     // Einstellungen laden. Fällt still zurück, wenn Tabellen fehlen.
     if (babyId) {
-      if (!persistedByServer) await saveTodayInsight(babyId, result);
-      const [dbHistory, dbSettings] = await Promise.all([
+      if (!persistedByServer) messageId = await saveTodayInsight(babyId, result);
+      const [dbHistory, dbSettings, dbTodayState, dbMamaEnergy] = await Promise.all([
         fetchHistory(babyId),
         fetchAdvisorSettings(),
+        fetchTodayState(babyId),
+        fetchTodayMamaCheckin(babyId),
       ]);
       if (!alive()) return;
       setHistory(dbHistory);
       setSettings(dbSettings);
+      setTodayState(
+        dbTodayState ??
+          (messageId
+            ? {
+                id: messageId,
+                actedAt: null,
+                remindAt: null,
+                reminderNotificationId: null,
+                sharedAt: null,
+              }
+            : null),
+      );
+      setMamaEnergy(dbMamaEnergy);
       markTodayRead(babyId);
     } else {
       const dbSettings = await fetchAdvisorSettings();
       if (!alive()) return;
       setHistory(null);
       setSettings(dbSettings);
+      setTodayState(null);
+      setMamaEnergy(null);
     }
   }, [activeBaby]);
 
@@ -359,21 +393,11 @@ export default function LottisFuersorgeScreen() {
       // von Hinweisen für Nutzer ohne Freischaltung).
       if (access !== true) return;
       loadAnalysis();
-      // Magic-Intro bei jedem Öffnen abspielen.
-      heroIn.setValue(0);
-      setShowIntro(true);
       return () => {
         runIdRef.current += 1;
       };
-    }, [access, loadAnalysis, heroIn]),
+    }, [access, loadAnalysis]),
   );
-
-  const handleCta = () => {
-    if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    }
-    router.push('/(tabs)/daily_old');
-  };
 
   /** „Erledigt"-Haken einer Verlaufskarte umschalten (optimistisch). */
   const toggleActed = (item: AdvisorHistoryItem) => {
@@ -453,6 +477,58 @@ export default function LottisFuersorgeScreen() {
   const chips = useMemo(() => (main ? chipsForInsight(main.id) : []), [main]);
   const summary = main?.headline ?? main?.title ?? '';
   const whyLine = analysis?.reasons?.[0] ?? '';
+  const atLimit = mamaEnergy === 'low';
+  const careHorizon = useMemo(
+    () =>
+      dailySignals
+        ? buildCareHorizon(dailySignals, { now: clockNow, atLimit })
+        : null,
+    [atLimit, clockNow, dailySignals],
+  );
+
+  const haptic = () => {
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    }
+  };
+
+  const shareCareHandoff = async () => {
+    if (!careHorizon || actionBusy) return;
+    haptic();
+    setActionBusy(true);
+    try {
+      const result = await Share.share({
+        title: 'Übergabe für Lotti',
+        message: careHorizon.handoffMessage,
+      });
+      if (result.action === Share.sharedAction && todayState?.id) {
+        await markInsightShared(todayState.id);
+        setTodayState({ ...todayState, sharedAt: new Date().toISOString() });
+      }
+    } catch {
+      Alert.alert('Teilen nicht möglich', 'Die Übergabe konnte gerade nicht geöffnet werden.');
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
+  const activateLimitMode = async () => {
+    if (actionBusy) return;
+    haptic();
+    setMamaEnergy('low');
+    setActionBusy(true);
+    if (activeBaby?.id) await saveMamaCheckin(activeBaby.id, 'low');
+    setActionBusy(false);
+  };
+
+  const leaveLimitMode = async () => {
+    if (actionBusy) return;
+    haptic();
+    setMamaEnergy('okay');
+    setActionBusy(true);
+    if (activeBaby?.id) await saveMamaCheckin(activeBaby.id, 'okay');
+    setActionBusy(false);
+  };
 
   /* ---- Tagesbriefing-Karte: Struktur steht sofort, Text per Skeleton ---- */
   const renderBriefing = () => (
@@ -574,19 +650,138 @@ export default function LottisFuersorgeScreen() {
         </View>
       ) : null}
 
-      {/* CTA – Navigation unverändert */}
-      <TouchableOpacity activeOpacity={0.9} onPress={handleCta} style={styles.ctaWrap} disabled={!ready}>
-        <LinearGradient
-          colors={[BRAND_PURPLE_SOFT, BRAND_PURPLE]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={[styles.ctaButton, !ready && styles.ctaButtonDisabled]}
-        >
-          <Text style={styles.ctaText}>Analyse ansehen</Text>
-          <IconSymbol name="chevron.right" size={15} color="#FFFFFF" />
-        </LinearGradient>
-      </TouchableOpacity>
     </GlassCard>
+  );
+
+  const renderCareHorizon = () => (
+    <GlassCard {...TILE_PROPS} radius={28} style={styles.horizonShadow} contentStyle={styles.horizonContent}>
+      {!careHorizon ? (
+        <View style={styles.horizonSkeleton}>
+          <Skeleton width={128} height={25} radius={999} />
+          <Skeleton width="82%" height={28} radius={8} />
+          <Skeleton width="100%" height={74} radius={16} />
+          <Skeleton width="100%" height={48} radius={999} />
+        </View>
+      ) : (
+        <>
+          <View
+            style={[
+              styles.horizonBadge,
+              atLimit && styles.horizonBadgeLimit,
+              careHorizon.roughNight && !atLimit && styles.horizonBadgeNight,
+            ]}
+          >
+            <Text style={styles.horizonBadgeText}>
+              {atLimit
+                ? '🫶 Am-Limit-Modus'
+                : careHorizon.roughNight
+                  ? '🌙 Kurze Nacht erkannt'
+                  : '✨ Aus eurem Rhythmus'}
+            </Text>
+          </View>
+
+          <ThemedText adaptive={false} style={styles.horizonTitle}>
+            {careHorizon.headline}
+          </ThemedText>
+
+          {atLimit ? (
+            <ThemedText adaptive={false} style={styles.horizonLimitText}>
+              Lotti hat den aktuellen Stand schon in eine konkrete Übergabe gepackt. Du musst nichts erklären oder zusätzlich dokumentieren.
+            </ThemedText>
+          ) : (
+            <View style={styles.horizonRows}>
+              {[
+                { emoji: '●', label: 'Jetzt', text: careHorizon.nowText },
+                { emoji: '→', label: 'Als Nächstes', text: careHorizon.nextText },
+                { emoji: '○', label: 'Dein Fenster', text: careHorizon.windowText },
+              ].map((row) => (
+                <View key={row.label} style={styles.horizonRow}>
+                  <View style={styles.horizonRowIcon}>
+                    <Text style={styles.horizonRowIconText}>{row.emoji}</Text>
+                  </View>
+                  <View style={styles.horizonRowText}>
+                    <ThemedText adaptive={false} style={styles.horizonRowLabel}>
+                      {row.label}
+                    </ThemedText>
+                    <ThemedText adaptive={false} style={styles.horizonRowBody}>
+                      {row.text}
+                    </ThemedText>
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {!atLimit ? (
+            <ThemedText adaptive={false} style={styles.horizonConfidence}>
+              {careHorizon.confidenceText}
+            </ThemedText>
+          ) : null}
+
+          <TouchableOpacity
+            activeOpacity={0.9}
+            disabled={actionBusy}
+            onPress={shareCareHandoff}
+            style={styles.horizonPrimaryWrap}
+          >
+            <LinearGradient
+              colors={atLimit ? ['#A14D74', '#74335B'] : [BRAND_PURPLE_SOFT, BRAND_PURPLE]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[styles.horizonPrimary, actionBusy && styles.ctaButtonDisabled]}
+            >
+              <Text style={styles.horizonPrimaryText}>{careHorizon.handoffLabel}</Text>
+              <IconSymbol name="square.and.arrow.up" size={15} color="#FFFFFF" />
+            </LinearGradient>
+          </TouchableOpacity>
+
+          {atLimit ? (
+            <TouchableOpacity
+              activeOpacity={0.72}
+              disabled={actionBusy}
+              onPress={leaveLimitMode}
+              style={styles.horizonQuietButton}
+            >
+              <Text style={styles.horizonQuietButtonText}>Normalen Überblick anzeigen</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              activeOpacity={0.78}
+              disabled={actionBusy}
+              onPress={activateLimitMode}
+              style={styles.limitButton}
+            >
+              <Text style={styles.limitButtonEmoji}>🫶</Text>
+              <View style={styles.limitButtonTextColumn}>
+                <Text style={styles.limitButtonTitle}>Ich bin am Limit</Text>
+                <Text style={styles.limitButtonHint}>Alles ausblenden und sofort Ablösung anfragen</Text>
+              </View>
+              <IconSymbol name="chevron.right" size={14} color="#8A4165" />
+            </TouchableOpacity>
+          )}
+        </>
+      )}
+    </GlassCard>
+  );
+
+  const renderCopilotBriefing = () => (
+    <View style={styles.copilotSection}>
+      <View style={styles.copilotHeading}>
+        <View style={styles.copilotIcon}>
+          <Text style={styles.copilotEmoji}>👶</Text>
+        </View>
+        <View style={styles.copilotHeadingText}>
+          <ThemedText adaptive={false} style={styles.copilotTitle}>
+            Dein Eltern-Copilot
+          </ThemedText>
+          <ThemedText adaptive={false} style={styles.copilotHint}>
+            Lotti ordnet Babys Tag ein und sagt dir, was jetzt wichtig ist.
+          </ThemedText>
+        </View>
+      </View>
+      {renderBriefing()}
+      {renderCards()}
+    </View>
   );
 
   const renderCards = () => (
@@ -801,6 +996,8 @@ export default function LottisFuersorgeScreen() {
               🛡️ Deine Daten
             </ThemedText>
             <ThemedText adaptive={false} style={styles.privacyText}>
+              Wenn du den Am-Limit-Modus aktivierst, wird diese Auswahl in
+              deinem Konto gespeichert, aber nicht an den KI-Dienst übertragen.{' '}
               Für den Wetterteil wird dein ungefährer Standort (auf ca. 1 km
               gerundet) gespeichert und an den Wetterdienst Open-Meteo
               übertragen – nie deine genaue Position. Für die persönliche
@@ -833,7 +1030,7 @@ export default function LottisFuersorgeScreen() {
           <StatusBar barStyle="dark-content" />
           <Header
             title="Lottis Fürsorge"
-            subtitle="Dein tägliches Briefing"
+            subtitle="Eine Sache weniger im Kopf"
             showBackButton
             showBabySwitcher={false}
           />
@@ -863,23 +1060,28 @@ export default function LottisFuersorgeScreen() {
         <StatusBar barStyle="dark-content" />
         <Header
           title="Lottis Fürsorge"
-          subtitle="Dein tägliches Briefing"
+          subtitle="Eine Sache weniger im Kopf"
           showBackButton
           showBabySwitcher={false}
         />
 
         <ScrollView
+          contentInsetAdjustmentBehavior="automatic"
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          {renderBriefing()}
-          {renderCards()}
-          {history && history.length > 0
-            ? renderRealHistory(history)
-            : analysis && analysis.history.length > 0
-              ? renderHistory(analysis.history)
-              : null}
-          {renderSettings()}
+          {renderCareHorizon()}
+          {renderCopilotBriefing()}
+          {!atLimit ? (
+            <>
+              {history && history.length > 0
+                ? renderRealHistory(history)
+                : analysis && analysis.history.length > 0
+                  ? renderHistory(analysis.history)
+                  : null}
+              {renderSettings()}
+            </>
+          ) : null}
 
           <View style={styles.disclaimerWrap}>
             <IconSymbol name="info.circle" size={14} color={TEXT_TERTIARY} />
@@ -895,9 +1097,6 @@ export default function LottisFuersorgeScreen() {
         </ScrollView>
       </SafeAreaView>
 
-      {/* Premium-Intro: liegt fullscreen über dem Screen, blendet sich am
-          Ende selbst aus und gibt dann die Empfehlungskarte frei. */}
-      {showIntro ? <MagicBriefingIntroOverlay onFinish={handleIntroFinish} /> : null}
     </ThemedBackground>
   );
 }
@@ -1043,6 +1242,162 @@ const styles = StyleSheet.create({
   },
   ctaButtonDisabled: { opacity: 0.55 },
   ctaText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
+  secondaryActionRow: { flexDirection: 'row', gap: 9, marginTop: 10 },
+  secondaryAction: {
+    flex: 1,
+    minHeight: 42,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    borderRadius: 14,
+    borderCurve: 'continuous',
+    backgroundColor: 'rgba(94,61,179,0.09)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(94,61,179,0.2)',
+  },
+  secondaryActionEmoji: { fontSize: 14 },
+  secondaryActionText: { fontSize: 12.5, fontWeight: '700', color: BRAND_PURPLE },
+  reminderPanel: {
+    gap: 9,
+    marginTop: 10,
+    padding: 12,
+    borderRadius: 16,
+    borderCurve: 'continuous',
+    backgroundColor: 'rgba(142,78,198,0.08)',
+  },
+  reminderLabel: { fontSize: 12.5, fontWeight: '700', color: TEXT_SECONDARY },
+  reminderChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
+  reminderChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: '#FFFFFF',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(94,61,179,0.22)',
+  },
+  reminderChipText: { fontSize: 12.5, fontWeight: '700', color: BRAND_PURPLE },
+  reminderScheduledText: {
+    marginTop: 10,
+    textAlign: 'center',
+    fontSize: 12,
+    fontWeight: '600',
+    color: TEXT_SECONDARY,
+  },
+
+  /* Jetzt – Als Nächstes – Dein Fenster */
+  horizonShadow: {
+    boxShadow: '0 10px 30px rgba(94, 61, 179, 0.13)',
+  },
+  horizonContent: { padding: 20, gap: 14 },
+  horizonSkeleton: { gap: 13 },
+  horizonBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: 'rgba(94,61,179,0.10)',
+  },
+  horizonBadgeNight: { backgroundColor: 'rgba(83,73,145,0.13)' },
+  horizonBadgeLimit: { backgroundColor: 'rgba(161,77,116,0.13)' },
+  horizonBadgeText: {
+    fontSize: 11.5,
+    fontWeight: '800',
+    color: BRAND_PURPLE,
+    letterSpacing: 0.15,
+  },
+  horizonTitle: {
+    fontSize: 25,
+    lineHeight: 30,
+    fontWeight: '800',
+    color: TEXT_PRIMARY,
+    letterSpacing: -0.45,
+  },
+  horizonLimitText: { fontSize: 14.5, lineHeight: 21, color: TEXT_SECONDARY },
+  horizonRows: { gap: 4 },
+  horizonRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 11,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(74,58,51,0.10)',
+  },
+  horizonRowIcon: {
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 10,
+    borderCurve: 'continuous',
+    backgroundColor: 'rgba(94,61,179,0.09)',
+  },
+  horizonRowIconText: { fontSize: 14, fontWeight: '800', color: BRAND_PURPLE },
+  horizonRowText: { flex: 1, gap: 3 },
+  horizonRowLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: BRAND_PURPLE,
+    letterSpacing: 0.45,
+    textTransform: 'uppercase',
+  },
+  horizonRowBody: { fontSize: 14, lineHeight: 20, color: TEXT_PRIMARY },
+  horizonConfidence: { fontSize: 11.5, lineHeight: 16, color: TEXT_TERTIARY },
+  horizonPrimaryWrap: { paddingTop: 2 },
+  horizonPrimary: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    paddingHorizontal: 18,
+    paddingVertical: 13,
+    borderRadius: 999,
+  },
+  horizonPrimaryText: { color: '#FFFFFF', fontSize: 14.5, fontWeight: '800' },
+  horizonQuietButton: { alignSelf: 'center', paddingHorizontal: 12, paddingVertical: 6 },
+  horizonQuietButtonText: { fontSize: 12.5, fontWeight: '700', color: TEXT_TERTIARY },
+  limitButton: {
+    minHeight: 58,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 13,
+    paddingVertical: 10,
+    borderRadius: 18,
+    borderCurve: 'continuous',
+    backgroundColor: 'rgba(161,77,116,0.08)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(161,77,116,0.22)',
+  },
+  limitButtonEmoji: { fontSize: 20 },
+  limitButtonTextColumn: { flex: 1, gap: 2 },
+  limitButtonTitle: { fontSize: 13.5, fontWeight: '800', color: '#74335B' },
+  limitButtonHint: { fontSize: 11.5, lineHeight: 15, color: '#95617A' },
+
+  /* Sichtbarer Eltern-Copilot: Orientierung und Tagesbriefing gehören zusammen. */
+  copilotSection: { gap: 14 },
+  copilotHeading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 4,
+  },
+  copilotIcon: {
+    width: 42,
+    height: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 15,
+    borderCurve: 'continuous',
+    backgroundColor: 'rgba(94,61,179,0.10)',
+  },
+  copilotEmoji: { fontSize: 21 },
+  copilotHeadingText: { flex: 1, gap: 2 },
+  copilotTitle: { fontSize: 17, fontWeight: '800', color: TEXT_PRIMARY },
+  copilotHint: { fontSize: 12.5, lineHeight: 17, color: TEXT_TERTIARY },
 
   /* Mini cards */
   cardGrid: {

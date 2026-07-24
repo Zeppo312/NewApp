@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, Image, TextInput, Alert, SafeAreaView, StatusBar, Platform, BackHandler, Switch } from 'react-native';
+import { StyleSheet, ScrollView, View, TouchableOpacity, TextInput, Alert, StatusBar, Platform, BackHandler, Switch } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedBackground } from '@/components/ThemedBackground';
@@ -44,6 +46,18 @@ import {
   addMonths,
   addDays,
 } from 'date-fns';
+import {
+  DEFAULT_BABY_LOCALE,
+  formatBabyAge,
+  getBabyLocaleTag,
+  translateBabyText,
+  type BabyTranslationKey,
+} from '@/lib/babyTranslations';
+
+const ACTIVE_BABY_LOCALE = DEFAULT_BABY_LOCALE;
+const BABY_LOCALE_TAG = getBabyLocaleTag(ACTIVE_BABY_LOCALE);
+const t = (key: BabyTranslationKey, params?: Record<string, string | number>) =>
+  translateBabyText(ACTIVE_BABY_LOCALE, key, params);
 
 const initialStats = {
   years: 0,
@@ -52,7 +66,7 @@ const initialStats = {
   totalDays: 0,
   totalWeeks: 0,
   totalMonths: 0,
-  milestones: [] as { name: string; reached: boolean; date?: Date }[],
+  milestones: [] as { labelKey: BabyTranslationKey; reached: boolean; date?: Date }[],
 };
 
 const HEADER_TEXT_COLOR = '#7D5A50';
@@ -226,10 +240,10 @@ export default function BabyScreen() {
     (rawValue: string, showAlert = false): string | null => {
       const parsed = parseManualBedtimeAnchor(rawValue);
       if (!parsed) {
-        const message = 'Bitte Uhrzeit im Format HH:mm eingeben (z.B. 19:30).';
+        const message = t('error.bedtimeMessage');
         setBedtimeInputError(message);
         if (showAlert) {
-          Alert.alert('Ungültige Schlafenszeit', message);
+          Alert.alert(t('error.bedtimeTitle'), message);
         }
         return null;
       }
@@ -392,16 +406,16 @@ export default function BabyScreen() {
     ageMonths < 1 ? 16 : ageMonths < 6 ? 14 : ageMonths < 12 ? 13 : 12;
 
   const genderLabels = {
-    male: 'Männlich',
-    female: 'Weiblich',
-    unknown: 'Nicht angegeben',
+    male: t('gender.male'),
+    female: t('gender.female'),
+    unknown: t('gender.unknown'),
   };
 
   const pickBabyPhoto = async () => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Berechtigung erforderlich', 'Bitte erlaube den Zugriff auf deine Fotos.');
+        Alert.alert(t('photo.permissionTitle'), t('photo.permissionMessage'));
         return;
       }
 
@@ -431,13 +445,13 @@ export default function BabyScreen() {
             });
           } catch (error) {
             console.error('Fehler bei der Bildkonvertierung:', error);
-            Alert.alert('Fehler', 'Das Bild konnte nicht verarbeitet werden.');
+            Alert.alert(t('error.title'), t('photo.processError'));
             return;
           }
         }
 
         if (!base64Data) {
-          Alert.alert('Fehler', 'Das Bild konnte nicht verarbeitet werden.');
+          Alert.alert(t('error.title'), t('photo.processError'));
           return;
         }
 
@@ -448,7 +462,7 @@ export default function BabyScreen() {
       }
     } catch (error) {
       console.error('Error picking baby photo:', error);
-      Alert.alert('Fehler', 'Das Babyfoto konnte nicht ausgewählt werden.');
+      Alert.alert(t('error.title'), t('photo.selectError'));
     }
   };
 
@@ -473,7 +487,7 @@ export default function BabyScreen() {
       : null;
 
     if (isBabyBornForCurrentBaby && !birthDateForSave) {
-      Alert.alert('Fehlendes Geburtsdatum', 'Bitte trage das Geburtsdatum ein oder markiere, dass dein Baby noch nicht geboren ist.');
+      Alert.alert(t('error.missingBirthTitle'), t('error.missingBirthMessage'));
       return;
     }
 
@@ -487,7 +501,7 @@ export default function BabyScreen() {
       const { error } = await saveBabyInfo(sanitizedBabyInfo, targetBabyId);
       if (error) {
         console.error('Error saving baby info:', error);
-        Alert.alert('Fehler', 'Die Informationen konnten nicht gespeichert werden.');
+        Alert.alert(t('error.title'), t('save.errorMessage'));
       } else {
         const { data: existingSettings, error: existingSettingsError } = await supabase
           .from('user_settings')
@@ -520,7 +534,7 @@ export default function BabyScreen() {
           throw settingsResult.error;
         }
 
-        Alert.alert('Erfolg', 'Die Informationen wurden erfolgreich gespeichert.');
+        Alert.alert(t('save.successTitle'), t('save.successMessage'));
         setIsEditing(false);
         if (targetBabyId !== activeBabyId) {
           await setActiveBabyId(targetBabyId);
@@ -542,7 +556,7 @@ export default function BabyScreen() {
       }
     } catch (err) {
       console.error('Failed to save baby info:', err);
-      Alert.alert('Fehler', 'Die Informationen konnten nicht gespeichert werden.');
+      Alert.alert(t('error.title'), t('save.errorMessage'));
     }
   };
 
@@ -603,23 +617,23 @@ export default function BabyScreen() {
     const totalWeeks = Math.floor(totalDays / 7);
     const totalMonths = years * 12 + months;
 
-    const milestoneDefinitions = [
-      { name: '1 Woche', addFn: () => addDays(birthDate, 7) },
-      { name: '1 Monat', addFn: () => addMonths(birthDate, 1) },
-      { name: '2 Monate', addFn: () => addMonths(birthDate, 2) },
-      { name: '3 Monate', addFn: () => addMonths(birthDate, 3) },
-      { name: '100 Tage', addFn: () => addDays(birthDate, 100) },
-      { name: '6 Monate', addFn: () => addMonths(birthDate, 6) },
-      { name: '1 Jahr', addFn: () => addMonths(birthDate, 12) },
-      { name: '500 Tage', addFn: () => addDays(birthDate, 500) },
-      { name: '1000 Tage', addFn: () => addDays(birthDate, 1000) },
-      { name: '1111 Tage', addFn: () => addDays(birthDate, 1111) },
+    const milestoneDefinitions: { labelKey: BabyTranslationKey; addFn: () => Date }[] = [
+      { labelKey: 'milestone.weekOne', addFn: () => addDays(birthDate, 7) },
+      { labelKey: 'milestone.monthOne', addFn: () => addMonths(birthDate, 1) },
+      { labelKey: 'milestone.monthTwo', addFn: () => addMonths(birthDate, 2) },
+      { labelKey: 'milestone.monthThree', addFn: () => addMonths(birthDate, 3) },
+      { labelKey: 'milestone.dayHundred', addFn: () => addDays(birthDate, 100) },
+      { labelKey: 'milestone.monthSix', addFn: () => addMonths(birthDate, 6) },
+      { labelKey: 'milestone.yearOne', addFn: () => addMonths(birthDate, 12) },
+      { labelKey: 'milestone.dayFiveHundred', addFn: () => addDays(birthDate, 500) },
+      { labelKey: 'milestone.dayThousand', addFn: () => addDays(birthDate, 1000) },
+      { labelKey: 'milestone.dayElevenEleven', addFn: () => addDays(birthDate, 1111) },
     ];
 
-    const milestones = milestoneDefinitions.map(({ name, addFn }) => {
+    const milestones = milestoneDefinitions.map(({ labelKey, addFn }) => {
       const date = addFn();
       const reached = now >= date;
-      return { name, reached, date: reached ? date : undefined };
+      return { labelKey, reached, date: reached ? date : undefined };
     });
 
     return { years, months, days, totalDays, totalWeeks, totalMonths, milestones };
@@ -632,26 +646,17 @@ export default function BabyScreen() {
 
   const renderAgeDescription = () => {
     const { years, months, days } = stats;
-
-    if (years > 0) {
-      return `${years} Jahr${years !== 1 ? 'e' : ''}, ${months} Monat${months !== 1 ? 'e' : ''} und ${days} Tag${days !== 1 ? 'e' : ''}`;
-    }
-
-    if (months > 0) {
-      return `${months} Monat${months !== 1 ? 'e' : ''} und ${days} Tag${days !== 1 ? 'e' : ''}`;
-    }
-
-    return `${days} Tag${days !== 1 ? 'e' : ''}`;
+    return formatBabyAge(ACTIVE_BABY_LOCALE, { years, months, days });
   };
 
   const formatDate = (date: Date) =>
-    date.toLocaleDateString('de-DE', {
+    date.toLocaleDateString(BABY_LOCALE_TAG, {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',
     });
 
-  const renderMilestoneStatus = (milestone: { name: string; reached: boolean; date?: Date }) => {
+  const renderMilestoneStatus = (milestone: { labelKey: BabyTranslationKey; reached: boolean; date?: Date }) => {
     const reached = milestone.reached;
 
     const tint = reached
@@ -681,9 +686,11 @@ export default function BabyScreen() {
           />
         </View>
         <View style={styles.statsMilestoneInfo}>
-          <ThemedText style={[styles.statsMilestoneName, { color: textPrimary }]}>{milestone.name}</ThemedText>
+          <ThemedText style={[styles.statsMilestoneName, { color: textPrimary }]}>{t(milestone.labelKey)}</ThemedText>
           <ThemedText style={[styles.statsMilestoneDate, { color: textSecondary }]}>
-            {reached && milestone.date ? `Erreicht am ${formatDate(milestone.date)}` : 'Noch nicht erreicht'}
+            {reached && milestone.date
+              ? t('milestone.reached', { date: formatDate(milestone.date) })
+              : t('milestone.upcoming')}
           </ThemedText>
         </View>
       </View>
@@ -702,9 +709,9 @@ export default function BabyScreen() {
     const factItems = [
       {
         key: 'heart',
-        label: 'Herzschläge',
-        value: heartbeats.toLocaleString('de-DE'),
-        caption: 'geschätzt',
+        label: t('fact.heartbeats'),
+        value: heartbeats.toLocaleString(BABY_LOCALE_TAG),
+        caption: t('fact.estimated'),
         icon: 'heart.fill' as const,
         accent: pastelPalette.rose,
         iconColor: isDark ? '#FFB8C8' : '#D06262',
@@ -712,9 +719,9 @@ export default function BabyScreen() {
       },
       {
         key: 'breath',
-        label: 'Atemzüge',
-        value: breaths.toLocaleString('de-DE'),
-        caption: 'seit Geburt',
+        label: t('fact.breaths'),
+        value: breaths.toLocaleString(BABY_LOCALE_TAG),
+        caption: t('fact.sinceBirth'),
         icon: 'wind' as const,
         accent: pastelPalette.sage,
         iconColor: isDark ? '#9BE0CB' : '#5A8F80',
@@ -722,9 +729,9 @@ export default function BabyScreen() {
       },
       {
         key: 'diapers',
-        label: 'Windeln',
-        value: diapers.toLocaleString('de-DE'),
-        caption: 'insgesamt',
+        label: t('fact.diapers'),
+        value: diapers.toLocaleString(BABY_LOCALE_TAG),
+        caption: t('fact.total'),
         icon: 'drop.fill' as const,
         accent: pastelPalette.honey,
         iconColor: isDark ? '#FFCA9E' : '#B98160',
@@ -732,9 +739,9 @@ export default function BabyScreen() {
       },
       {
         key: 'sleep',
-        label: 'Schlafstunden',
-        value: sleep.toLocaleString('de-DE'),
-        caption: 'seit Geburt',
+        label: t('fact.sleepHours'),
+        value: sleep.toLocaleString(BABY_LOCALE_TAG),
+        caption: t('fact.sinceBirth'),
         icon: 'moon.stars.fill' as const,
         accent: pastelPalette.sky,
         iconColor: isDark ? '#C3B8FF' : '#7A6FD1',
@@ -750,7 +757,7 @@ export default function BabyScreen() {
         borderColor={glassBorderColor}
       >
         <View style={styles.statsGlassInner}>
-          <ThemedText style={[styles.statsSectionTitle, { color: textSecondary }]}>Interessante Fakten</ThemedText>
+          <ThemedText style={[styles.statsSectionTitle, { color: textSecondary }]}>{t('section.facts')}</ThemedText>
           <View style={styles.statsFactGrid}>
             {factItems.map((fact) => (
               <View key={fact.key} style={[styles.statsFactTile, styles.statsGlassSurface, glassSurfaceStyle]}>
@@ -770,32 +777,32 @@ export default function BabyScreen() {
   };
 
   const ageChips = [
-    { key: 'years', label: 'Jahre', value: stats.years, accent: pastelPalette.rose },
-    { key: 'months', label: 'Monate', value: stats.months, accent: pastelPalette.honey },
-    { key: 'days', label: 'Tage', value: stats.days, accent: pastelPalette.sky },
+    { key: 'years', label: t(stats.years === 1 ? 'unit.year.one' : 'unit.year.other'), value: stats.years, accent: pastelPalette.rose },
+    { key: 'months', label: t(stats.months === 1 ? 'unit.month.one' : 'unit.month.other'), value: stats.months, accent: pastelPalette.honey },
+    { key: 'days', label: t(stats.days === 1 ? 'unit.day.one' : 'unit.day.other'), value: stats.days, accent: pastelPalette.sky },
   ];
 
   const statChips = [
     {
       key: 'total-days',
-      label: 'Tage gesamt',
-      value: stats.totalDays.toLocaleString('de-DE'),
+      label: t('stat.totalDays'),
+      value: stats.totalDays.toLocaleString(BABY_LOCALE_TAG),
       icon: 'calendar' as const,
       accent: pastelPalette.peach,
       iconColor: isDark ? '#FFC5A7' : '#C17055',
     },
     {
       key: 'total-weeks',
-      label: 'Wochen',
-      value: stats.totalWeeks.toLocaleString('de-DE'),
+      label: t('stat.weeks'),
+      value: stats.totalWeeks.toLocaleString(BABY_LOCALE_TAG),
       icon: 'clock' as const,
       accent: pastelPalette.lavender,
       iconColor: isDark ? '#C2B7FF' : '#7A6FD1',
     },
     {
       key: 'total-months',
-      label: 'Monate',
-      value: stats.totalMonths.toLocaleString('de-DE'),
+      label: t('stat.months'),
+      value: stats.totalMonths.toLocaleString(BABY_LOCALE_TAG),
       icon: 'moon.stars.fill' as const,
       accent: pastelPalette.blush,
       iconColor: isDark ? '#FFB6D1' : '#CF6F8B',
@@ -805,28 +812,79 @@ export default function BabyScreen() {
   const bodyMetrics = [
     {
       key: 'height',
-      label: 'Größe',
-      value: babyInfo.height ? `${babyInfo.height} cm` : 'Nicht angegeben',
+      label: t('metric.height'),
+      value: babyInfo.height || t('profile.notProvided'),
       icon: 'person.fill' as const,
       accent: pastelPalette.sky,
       iconColor: isDark ? '#B6CEFF' : '#6C87C1',
     },
     {
       key: 'weight',
-      label: 'Gewicht',
-      value: babyInfo.weight ? `${babyInfo.weight} kg` : 'Nicht angegeben',
+      label: t('metric.weight'),
+      value: babyInfo.weight || t('profile.notProvided'),
       icon: 'chart.bar.fill' as const,
       accent: pastelPalette.honey,
       iconColor: isDark ? '#FFCAA2' : '#B7745D',
     },
     {
       key: 'gender',
-      label: 'Geschlecht',
+      label: t('metric.gender'),
       value: genderLabels[babyInfo.baby_gender as keyof typeof genderLabels] || genderLabels.unknown,
       icon: 'person.2.fill' as const,
       accent: pastelPalette.lavender,
       iconColor: isDark ? '#D1BDFF' : '#8C6AC3',
     },
+  ];
+
+  const profileDetails = [
+    {
+      key: 'gender',
+      label: t('profile.gender'),
+      value: genderLabels[babyInfo.baby_gender as keyof typeof genderLabels] || genderLabels.unknown,
+      icon: 'person.2.fill' as const,
+      accent: pastelPalette.lavender,
+      iconColor: isDark ? '#D1BDFF' : '#8C6AC3',
+    },
+    {
+      key: 'date',
+      label: isBabyBornForCurrentBaby ? t('profile.birthDate') : t('profile.dueDate'),
+      value: isBabyBornForCurrentBaby
+        ? (birthDateForDisplay ? formatDate(birthDateForDisplay) : t('profile.notSet'))
+        : (dueDateForDisplay ? formatDate(dueDateForDisplay) : t('profile.notSet')),
+      icon: 'calendar' as const,
+      accent: pastelPalette.peach,
+      iconColor: isDark ? '#FFC5A7' : '#C17055',
+    },
+    {
+      key: 'bedtime',
+      label: t('profile.bedtime'),
+      value: babyInfo.preferred_bedtime
+        ? bedtimeAnchor
+        : `${DEFAULT_BEDTIME_ANCHOR} · ${t('profile.default')}`,
+      icon: 'moon.stars.fill' as const,
+      accent: pastelPalette.sky,
+      iconColor: isDark ? '#C3B8FF' : '#6C78B8',
+    },
+    ...(isBabyBornForCurrentBaby
+      ? [
+          {
+            key: 'weight',
+            label: t('profile.weight'),
+            value: babyInfo.weight || t('profile.notSet'),
+            icon: 'chart.bar.fill' as const,
+            accent: pastelPalette.honey,
+            iconColor: isDark ? '#FFCAA2' : '#B7745D',
+          },
+          {
+            key: 'height',
+            label: t('profile.height'),
+            value: babyInfo.height || t('profile.notSet'),
+            icon: 'person.fill' as const,
+            accent: pastelPalette.sage,
+            iconColor: isDark ? '#9BE0CB' : '#5A8F80',
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -836,8 +894,8 @@ export default function BabyScreen() {
         <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
         
         <Header
-          title="Mein Baby"
-          subtitle="Alle Infos & Einstellungen"
+          title={t('screen.title')}
+          subtitle={t('screen.subtitle')}
           showBackButton
           onBackPress={() => {
             triggerHaptic();
@@ -848,98 +906,125 @@ export default function BabyScreen() {
         <ScrollView 
           style={styles.scrollView}
           contentContainerStyle={styles.contentContainer}
+          contentInsetAdjustmentBehavior="automatic"
           showsVerticalScrollIndicator={false}
         >
           <LiquidGlassCard style={styles.glassCard} intensity={24} overlayColor={glassOverlay}>
             <View style={styles.glassInner}>
+            <View style={[styles.profileHero, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,244,238,0.58)' }]}>
             <View style={styles.photoContainer}>
               {displayPhoto ? (
-                <Image source={{ uri: displayPhoto }} style={styles.babyPhoto} />
+                <View style={[styles.photoRing, { borderColor: isDark ? 'rgba(255,255,255,0.28)' : 'rgba(255,255,255,0.92)' }]}>
+                  <Image source={{ uri: displayPhoto }} style={styles.babyPhoto} contentFit="cover" />
+                </View>
               ) : (
-                <View style={[styles.placeholderPhoto, { backgroundColor: isDark ? '#555' : '#E0E0E0' }]}>
+                <View style={[styles.placeholderPhoto, { backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.82)', borderColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.95)' }]}>
                   <IconSymbol name="person.fill" size={60} color={isDark ? adaptiveColors.iconSecondary : theme.tabIconDefault} />
                 </View>
               )}
 
+              {!isEditing && (
+                <TouchableOpacity
+                  style={[styles.photoEditBadge, { backgroundColor: isDark ? '#6E5A74' : '#9C7186', borderColor: isDark ? '#342C38' : '#FFFFFF' }]}
+                  onPress={() => {
+                    triggerHaptic();
+                    setIsEditing(true);
+                    pickBabyPhoto();
+                  }}
+                  accessibilityLabel={t('photo.change')}
+                >
+                  <IconSymbol name="camera" size={16} color="#FFFFFF" />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {!isEditing && (
+              <View style={styles.profileIdentity}>
+                <ThemedText style={[styles.profileName, { color: textPrimary }]} numberOfLines={1}>
+                  {babyInfo.name || t('profile.babyFallback')}
+                </ThemedText>
+                <View style={[styles.statusPill, { backgroundColor: isBabyBornForCurrentBaby ? pastelPalette.sage : pastelPalette.peach, borderColor: glassBorderColor }]}>
+                  <IconSymbol
+                    name={isBabyBornForCurrentBaby ? 'checkmark.circle.fill' : 'heart.fill'}
+                    size={14}
+                    color={isBabyBornForCurrentBaby ? (isDark ? '#9BE0CB' : '#5A8F80') : milestoneReachedIconColor}
+                  />
+                  <ThemedText style={[styles.statusPillText, { color: textSecondary }]}>
+                    {isBabyBornForCurrentBaby ? t('profile.statusBorn') : t('profile.statusPregnancy')}
+                  </ThemedText>
+                </View>
+                <ThemedText style={[styles.profileDateLine, { color: textSecondary }]}>
+                  {isBabyBornForCurrentBaby ? t('profile.birthDate') : t('profile.dueDate')}: {' '}
+                  {isBabyBornForCurrentBaby
+                    ? (birthDateForDisplay ? formatDate(birthDateForDisplay) : t('profile.notSet'))
+                    : (dueDateForDisplay ? formatDate(dueDateForDisplay) : t('profile.notSet'))}
+                </ThemedText>
+              </View>
+            )}
+
+            {isEditing && (
               <View style={styles.photoHintContainer}>
-                {isEditing ? (
-                  <>
                     <ThemedText style={[styles.photoHintText, { color: textSecondary }]}>
-                      {displayPhoto ? 'Babyfoto anpassen' : 'Füge ein Babyfoto hinzu'}
+                      {displayPhoto ? t('photo.adjust') : t('photo.add')}
                     </ThemedText>
-                    <TouchableOpacity
-                      style={[styles.photoHintButton, { backgroundColor: photoButtonBackground, borderColor: photoButtonBorder }]}
-                      onPress={() => {
-                        triggerHaptic();
-                        pickBabyPhoto();
-                      }}
-                    >
-                      <ThemedText style={[styles.photoHintButtonText, { color: textPrimary }]}>
-                        Foto wählen
-                      </ThemedText>
-                    </TouchableOpacity>
+                    <View style={styles.photoActionRow}>
+                      <TouchableOpacity
+                        style={[styles.photoHintButton, { backgroundColor: photoButtonBackground, borderColor: photoButtonBorder }]}
+                        onPress={() => {
+                          triggerHaptic();
+                          pickBabyPhoto();
+                        }}
+                      >
+                        <IconSymbol name="photo" size={15} color={textPrimary} />
+                        <ThemedText style={[styles.photoHintButtonText, { color: textPrimary }]}>
+                          {t('photo.choose')}
+                        </ThemedText>
+                      </TouchableOpacity>
                     {!!displayPhoto && (
                       <TouchableOpacity
-                        style={[styles.photoHintButton, styles.photoRemoveButton, { backgroundColor: photoButtonBackground, borderColor: photoButtonBorder }]}
+                        style={[styles.photoHintButton, { backgroundColor: photoButtonBackground, borderColor: photoButtonBorder }]}
                         onPress={() => {
                           triggerHaptic();
                           removeBabyPhoto();
                         }}
                       >
+                        <IconSymbol name="trash" size={15} color={textPrimary} />
                         <ThemedText style={[styles.photoHintButtonText, { color: textPrimary }]}>
-                          Foto entfernen
+                          {t('photo.remove')}
                         </ThemedText>
                       </TouchableOpacity>
                     )}
-                  </>
-                ) : (
-                  <>
-                    <ThemedText style={[styles.photoHintText, { color: textSecondary }]}>
-                      Ändere das Babyfoto direkt hier.
-                    </ThemedText>
-                    <TouchableOpacity
-                      style={[styles.photoHintButton, { backgroundColor: photoButtonBackground, borderColor: photoButtonBorder }]}
-                      onPress={() => {
-                        triggerHaptic();
-                        setIsEditing(true);
-                        pickBabyPhoto();
-                      }}
-                    >
-                      <ThemedText style={[styles.photoHintButtonText, { color: textPrimary }]}>
-                        Foto ändern
-                      </ThemedText>
-                    </TouchableOpacity>
-                  </>
-                )}
+                    </View>
               </View>
+            )}
             </View>
 
             <View style={styles.infoContainer}>
               {showCreatedHint && (
                 <View style={styles.createdHintBox}>
                   <ThemedText style={[styles.createdHintText, { color: textSecondary }]}>
-                    Neues Kind angelegt. Trage jetzt die wichtigsten Daten ein.
+                    {t('created.hint')}
                   </ThemedText>
                 </View>
               )}
               {isEditing ? (
                 <>
                   <View style={styles.inputRow}>
-                    <ThemedText style={styles.label}>Name:</ThemedText>
+                    <ThemedText style={[styles.label, { color: textSecondary }]}>{t('form.name')}</ThemedText>
                     <TextInput
                       style={[styles.glassInput, { color: textPrimary, backgroundColor: inputBackground, borderColor: inputBorder }]}
                       value={babyInfo.name}
                       onChangeText={(text) => setBabyInfo({ ...babyInfo, name: text })}
-                      placeholder="Name des Babys"
+                      placeholder={t('form.namePlaceholder')}
                       placeholderTextColor={textTertiary}
                     />
                   </View>
 
                   <View style={styles.inputRow}>
-                    <ThemedText style={styles.label}>Baby bereits geboren?</ThemedText>
+                    <ThemedText style={[styles.label, { color: textSecondary }]}>{t('form.isBorn')}</ThemedText>
                     <View style={[styles.switchRow, { backgroundColor: inputBackground, borderColor: inputBorder }]}>
                       <ThemedText style={[styles.switchValue, { color: textPrimary }]}>
-                        {isBabyBornForCurrentBaby ? 'Ja' : 'Nein'}
+                        {isBabyBornForCurrentBaby ? t('form.yes') : t('form.no')}
                       </ThemedText>
                       <Switch
                         value={isBabyBornForCurrentBaby}
@@ -964,7 +1049,7 @@ export default function BabyScreen() {
                   </View>
 
                   <View style={styles.inputRow}>
-                    <ThemedText style={styles.label}>Geschlecht:</ThemedText>
+                    <ThemedText style={[styles.label, { color: textSecondary }]}>{t('form.gender')}</ThemedText>
                     <View style={styles.choiceRow}>
                       <TouchableOpacity
                         style={[
@@ -977,7 +1062,7 @@ export default function BabyScreen() {
                         onPress={() => setBabyInfo({ ...babyInfo, baby_gender: 'male' })}
                         activeOpacity={0.85}
                       >
-                        <ThemedText style={[styles.choiceButtonText, { color: babyInfo.baby_gender === 'male' ? '#FFFFFF' : textPrimary }]}>Junge</ThemedText>
+                        <ThemedText style={[styles.choiceButtonText, { color: babyInfo.baby_gender === 'male' ? '#FFFFFF' : textPrimary }]}>{t('form.genderBoy')}</ThemedText>
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={[
@@ -990,7 +1075,7 @@ export default function BabyScreen() {
                         onPress={() => setBabyInfo({ ...babyInfo, baby_gender: 'female' })}
                         activeOpacity={0.85}
                       >
-                        <ThemedText style={[styles.choiceButtonText, { color: babyInfo.baby_gender === 'female' ? '#FFFFFF' : textPrimary }]}>Mädchen</ThemedText>
+                        <ThemedText style={[styles.choiceButtonText, { color: babyInfo.baby_gender === 'female' ? '#FFFFFF' : textPrimary }]}>{t('form.genderGirl')}</ThemedText>
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={[
@@ -1003,14 +1088,14 @@ export default function BabyScreen() {
                         onPress={() => setBabyInfo({ ...babyInfo, baby_gender: 'unknown' })}
                         activeOpacity={0.85}
                       >
-                        <ThemedText style={[styles.choiceButtonText, { color: textPrimary }]}>Offen</ThemedText>
+                        <ThemedText style={[styles.choiceButtonText, { color: textPrimary }]}>{t('form.genderOpen')}</ThemedText>
                       </TouchableOpacity>
                     </View>
                   </View>
 
                   {!isBabyBornForCurrentBaby ? (
                     <View style={styles.inputRow}>
-                      <ThemedText style={styles.label}>Errechneter Geburtstermin:</ThemedText>
+                      <ThemedText style={[styles.label, { color: textSecondary }]}>{t('form.dueDate')}</ThemedText>
                       <TouchableOpacity
                         style={[styles.glassDateButton, { backgroundColor: inputBackground, borderColor: inputBorder }]}
                         onPress={() => {
@@ -1019,7 +1104,7 @@ export default function BabyScreen() {
                         }}
                       >
                         <ThemedText style={[styles.dateText, { color: textPrimary }]}>
-                          {dueDateForDisplay ? dueDateForDisplay.toLocaleDateString('de-DE') : 'Termin wählen'}
+                          {dueDateForDisplay ? formatDate(dueDateForDisplay) : t('form.chooseDueDate')}
                         </ThemedText>
                         <IconSymbol name="calendar" size={20} color={textPrimary} />
                       </TouchableOpacity>
@@ -1038,7 +1123,7 @@ export default function BabyScreen() {
                       {Platform.OS === 'ios' && (
                         <IOSBottomDatePicker
                           visible={showDueDatePicker}
-                          title="Geburtstermin wählen"
+                          title={t('form.dueDatePickerTitle')}
                           value={dueDatePickerValue}
                           mode="date"
                           minimumDate={dueDateBounds.minimumDate}
@@ -1046,12 +1131,15 @@ export default function BabyScreen() {
                           onClose={() => setShowDueDatePicker(false)}
                           onConfirm={handleIOSDueDateConfirm}
                           initialVariant="calendar"
+                          confirmLabel={t('form.done')}
+                          cancelLabel={t('form.cancel')}
+                          locale={BABY_LOCALE_TAG}
                         />
                       )}
                     </View>
                   ) : (
                     <View style={styles.inputRow}>
-                      <ThemedText style={styles.label}>Geburtsdatum:</ThemedText>
+                      <ThemedText style={[styles.label, { color: textSecondary }]}>{t('form.birthDate')}</ThemedText>
                       <TouchableOpacity
                         style={[styles.glassDateButton, { backgroundColor: inputBackground, borderColor: inputBorder }]}
                         onPress={() => {
@@ -1061,8 +1149,8 @@ export default function BabyScreen() {
                       >
                         <ThemedText style={[styles.dateText, { color: textPrimary }]}>
                           {birthDateForDisplay
-                            ? birthDateForDisplay.toLocaleDateString('de-DE')
-                            : 'Datum wählen'}
+                            ? formatDate(birthDateForDisplay)
+                            : t('form.chooseBirthDate')}
                         </ThemedText>
                         <IconSymbol name="calendar" size={20} color={textPrimary} />
                       </TouchableOpacity>
@@ -1081,7 +1169,7 @@ export default function BabyScreen() {
                       {Platform.OS === 'ios' && (
                         <IOSBottomDatePicker
                           visible={showDatePicker}
-                          title="Geburtsdatum wählen"
+                          title={t('form.birthDatePickerTitle')}
                           value={birthDatePickerValue}
                           mode="date"
                           minimumDate={birthDateBounds.minimumDate}
@@ -1089,13 +1177,16 @@ export default function BabyScreen() {
                           onClose={() => setShowDatePicker(false)}
                           onConfirm={handleIOSBirthDateConfirm}
                           initialVariant="calendar"
+                          confirmLabel={t('form.done')}
+                          cancelLabel={t('form.cancel')}
+                          locale={BABY_LOCALE_TAG}
                         />
                       )}
                     </View>
                   )}
 
                   <View style={styles.inputRow}>
-                    <ThemedText style={styles.label}>Schlafenszeit (Nacht):</ThemedText>
+                    <ThemedText style={[styles.label, { color: textSecondary }]}>{t('form.bedtime')}</ThemedText>
 
                     <TextInput
                       style={[styles.glassInput, styles.bedtimeManualInput, { color: textPrimary, backgroundColor: inputBackground, borderColor: inputBorder }]}
@@ -1111,7 +1202,7 @@ export default function BabyScreen() {
                       onSubmitEditing={() => {
                         commitBedtimeInput(bedtimeInput);
                       }}
-                      placeholder="HH:mm (z.B. 19:30)"
+                      placeholder={t('form.bedtimePlaceholder')}
                       placeholderTextColor={textTertiary}
                       keyboardType={Platform.OS === 'ios' ? 'numbers-and-punctuation' : 'numeric'}
                       maxLength={5}
@@ -1131,30 +1222,30 @@ export default function BabyScreen() {
                     ) : null}
 
                     <ThemedText style={[styles.photoHintText, { color: textSecondary, textAlign: 'left', marginTop: 8, marginBottom: 0 }]}>
-                      Diese Uhrzeit wird für die Schlafvorhersage und Schlaffenster-Erinnerungen genutzt.
+                      {t('form.bedtimeHelp')}
                     </ThemedText>
                   </View>
 
                   {isBabyBornForCurrentBaby && (
                     <>
                       <View style={styles.inputRow}>
-                        <ThemedText style={styles.label}>Gewicht:</ThemedText>
+                        <ThemedText style={[styles.label, { color: textSecondary }]}>{t('form.weight')}</ThemedText>
                         <TextInput
                           style={[styles.glassInput, { color: textPrimary, backgroundColor: inputBackground, borderColor: inputBorder }]}
                           value={babyInfo.weight}
                           onChangeText={(text) => setBabyInfo({ ...babyInfo, weight: text })}
-                          placeholder="z.B. 3250g"
+                          placeholder={t('form.weightPlaceholder')}
                           placeholderTextColor={textTertiary}
                         />
                       </View>
 
                       <View style={styles.inputRow}>
-                        <ThemedText style={styles.label}>Größe:</ThemedText>
+                        <ThemedText style={[styles.label, { color: textSecondary }]}>{t('form.height')}</ThemedText>
                         <TextInput
                           style={[styles.glassInput, { color: textPrimary, backgroundColor: inputBackground, borderColor: inputBorder }]}
                           value={babyInfo.height}
                           onChangeText={(text) => setBabyInfo({ ...babyInfo, height: text })}
-                          placeholder="z.B. 52cm"
+                          placeholder={t('form.heightPlaceholder')}
                           placeholderTextColor={textTertiary}
                         />
                       </View>
@@ -1178,7 +1269,7 @@ export default function BabyScreen() {
                       }}
                     >
                       <ThemedText style={[styles.buttonText, { color: textPrimary }]}>
-                        Abbrechen
+                        {t('form.cancel')}
                       </ThemedText>
                     </TouchableOpacity>
 
@@ -1190,69 +1281,34 @@ export default function BabyScreen() {
                       }}
                     >
                       <ThemedText style={[styles.buttonText, { color: textPrimary }]}>
-                        Speichern
+                        {t('form.save')}
                       </ThemedText>
                     </TouchableOpacity>
                   </View>
                 </>
               ) : (
                 <>
-                  <View style={styles.infoRow}>
-                    <ThemedText style={styles.infoLabel}>Name:</ThemedText>
-                    <ThemedText style={styles.infoValue}>
-                      {babyInfo.name || 'Noch nicht festgelegt'}
-                    </ThemedText>
+                  <View style={styles.profileDetailList}>
+                    {profileDetails.map((detail) => (
+                      <View
+                        key={detail.key}
+                        style={[styles.profileDetailRow, styles.statsGlassSurface, glassSurfaceStyle]}
+                      >
+                        <GlassLayer tint={detail.accent} sheenOpacity={0.15} isDark={isDark} />
+                        <View style={[styles.profileDetailIcon, { backgroundColor: iconBubbleBackground }]}>
+                          <IconSymbol name={detail.icon} size={17} color={detail.iconColor} />
+                        </View>
+                        <View style={styles.profileDetailCopy}>
+                          <ThemedText style={[styles.profileDetailLabel, { color: textSecondary }]}>
+                            {detail.label}
+                          </ThemedText>
+                          <ThemedText style={[styles.profileDetailValue, { color: textPrimary }]} numberOfLines={2}>
+                            {detail.value}
+                          </ThemedText>
+                        </View>
+                      </View>
+                    ))}
                   </View>
-
-                  <View style={styles.infoRow}>
-                    <ThemedText style={styles.infoLabel}>Status:</ThemedText>
-                    <ThemedText style={styles.infoValue}>
-                      {isBabyBornForCurrentBaby ? 'Bereits geboren' : 'Noch in der Schwangerschaft'}
-                    </ThemedText>
-                  </View>
-
-                  <View style={styles.infoRow}>
-                    <ThemedText style={styles.infoLabel}>Geschlecht:</ThemedText>
-                    <ThemedText style={styles.infoValue}>
-                      {genderLabels[babyInfo.baby_gender as keyof typeof genderLabels] || genderLabels.unknown}
-                    </ThemedText>
-                  </View>
-
-                  <View style={styles.infoRow}>
-                    <ThemedText style={styles.infoLabel}>{isBabyBornForCurrentBaby ? 'Geburtsdatum:' : 'Geburtstermin:'}</ThemedText>
-                    <ThemedText style={styles.infoValue}>
-                      {isBabyBornForCurrentBaby
-                        ? (birthDateForDisplay ? birthDateForDisplay.toLocaleDateString('de-DE') : 'Noch nicht festgelegt')
-                        : (dueDateForDisplay ? dueDateForDisplay.toLocaleDateString('de-DE') : 'Noch nicht festgelegt')}
-                    </ThemedText>
-                  </View>
-
-                  <View style={styles.infoRow}>
-                    <ThemedText style={styles.infoLabel}>Schlafenszeit:</ThemedText>
-                    <ThemedText style={styles.infoValue}>
-                      {babyInfo.preferred_bedtime
-                        ? bedtimeAnchor
-                        : `${DEFAULT_BEDTIME_ANCHOR} (Standard)`}
-                    </ThemedText>
-                  </View>
-
-                  {isBabyBornForCurrentBaby && (
-                    <View style={styles.infoRow}>
-                      <ThemedText style={styles.infoLabel}>Gewicht:</ThemedText>
-                      <ThemedText style={styles.infoValue}>
-                        {babyInfo.weight || 'Noch nicht festgelegt'}
-                      </ThemedText>
-                    </View>
-                  )}
-
-                  {isBabyBornForCurrentBaby && (
-                    <View style={styles.infoRow}>
-                      <ThemedText style={styles.infoLabel}>Größe:</ThemedText>
-                      <ThemedText style={styles.infoValue}>
-                        {babyInfo.height || 'Noch nicht festgelegt'}
-                      </ThemedText>
-                    </View>
-                  )}
 
                   <TouchableOpacity
                     style={[styles.button, styles.editButton, { backgroundColor: accentButtonBackground, borderColor: accentButtonBorder }]}
@@ -1261,8 +1317,9 @@ export default function BabyScreen() {
                       setIsEditing(true);
                     }}
                   >
+                    <IconSymbol name="pencil" size={16} color={textPrimary} />
                     <ThemedText style={[styles.buttonText, { color: textPrimary }]}>
-                      Bearbeiten
+                      {t('profile.edit')}
                     </ThemedText>
                   </TouchableOpacity>
                 </>
@@ -1280,7 +1337,7 @@ export default function BabyScreen() {
                 borderColor={glassBorderColor}
               >
                 <View style={styles.statsGlassInner}>
-                  <ThemedText style={[styles.statsSectionTitle, { color: textSecondary }]}>Alter</ThemedText>
+                  <ThemedText style={[styles.statsSectionTitle, { color: textSecondary }]}>{t('section.age')}</ThemedText>
 
                   <View style={[styles.statsAgeHighlight, styles.statsGlassSurface, glassSurfaceStyle]}>
                     <GlassLayer
@@ -1293,7 +1350,7 @@ export default function BabyScreen() {
                     </View>
                     <View style={styles.statsAgeHighlightText}>
                       <ThemedText style={[styles.statsAgeValue, { color: textPrimary }]}>{renderAgeDescription()}</ThemedText>
-                      <ThemedText style={[styles.statsAgeSubline, { color: textSecondary }]}>Stand heute</ThemedText>
+                      <ThemedText style={[styles.statsAgeSubline, { color: textSecondary }]}>{t('section.today')}</ThemedText>
                     </View>
                   </View>
 
@@ -1329,7 +1386,7 @@ export default function BabyScreen() {
                 borderColor={glassBorderColor}
               >
                 <View style={styles.statsGlassInner}>
-                  <ThemedText style={[styles.statsSectionTitle, { color: textSecondary }]}>Geburtsdaten</ThemedText>
+                  <ThemedText style={[styles.statsSectionTitle, { color: textSecondary }]}>{t('section.birthData')}</ThemedText>
                   <View style={styles.statsBodyGrid}>
                     {bodyMetrics.map((metric) => (
                       <View key={metric.key} style={[styles.statsBodyBadge, styles.statsGlassSurface, glassSurfaceStyle]}>
@@ -1356,7 +1413,7 @@ export default function BabyScreen() {
                 borderColor={glassBorderColor}
               >
                 <View style={styles.statsGlassInner}>
-                  <ThemedText style={[styles.statsSectionTitle, { color: textSecondary }]}>Meilensteine</ThemedText>
+                  <ThemedText style={[styles.statsSectionTitle, { color: textSecondary }]}>{t('section.milestones')}</ThemedText>
                   <View style={styles.statsMilestoneContainer}>
                     {stats.milestones.map((milestone, index) => (
                       <View key={index}>
@@ -1376,7 +1433,7 @@ export default function BabyScreen() {
             >
               <View style={styles.statsGlassInner}>
                 <ThemedText style={[styles.statsNoDataText, { color: textSecondary }]}>
-                  Kein Geburtsdatum verfügbar. Bitte füge das Geburtsdatum deines Babys hinzu, um Statistiken anzuzeigen.
+                  {t('section.noBirthDate')}
                 </ThemedText>
               </View>
             </LiquidGlassCard>
@@ -1451,40 +1508,109 @@ const styles = StyleSheet.create({
   // Liquid Glass wrappers (Sleep-Tracker look)
   glassCard: {
     marginBottom: 20,
-    borderRadius: 22,
+    borderRadius: 26,
+    overflow: 'hidden',
   },
   glassInner: {
-    padding: 20,
+    padding: 14,
+    gap: 16,
+  },
+  profileHero: {
+    alignItems: 'center',
+    borderRadius: 22,
+    paddingHorizontal: 18,
+    paddingVertical: 22,
+    borderCurve: 'continuous',
   },
   photoContainer: {
     alignItems: 'center',
-    marginBottom: 20,
     position: 'relative',
   },
+  photoRing: {
+    width: 126,
+    height: 126,
+    borderRadius: 63,
+    borderWidth: 4,
+    padding: 3,
+    borderCurve: 'continuous',
+    boxShadow: '0 10px 24px rgba(92, 64, 51, 0.14)',
+  },
   babyPhoto: {
-    width: 150,
-    height: 150,
-    borderRadius: 75,
+    width: '100%',
+    height: '100%',
+    borderRadius: 58,
   },
   placeholderPhoto: {
-    width: 150,
-    height: 150,
-    borderRadius: 75,
+    width: 126,
+    height: 126,
+    borderRadius: 63,
+    borderWidth: 4,
     justifyContent: 'center',
     alignItems: 'center',
+    borderCurve: 'continuous',
+    boxShadow: '0 10px 24px rgba(92, 64, 51, 0.12)',
+  },
+  photoEditBadge: {
+    position: 'absolute',
+    right: 0,
+    bottom: 2,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileIdentity: {
+    alignItems: 'center',
+    paddingTop: 14,
+    gap: 8,
+    width: '100%',
+  },
+  profileName: {
+    fontSize: 27,
+    lineHeight: 33,
+    fontWeight: '800',
+    letterSpacing: -0.4,
+  },
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+  },
+  statusPillText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  profileDateLine: {
+    fontSize: 13,
+    textAlign: 'center',
   },
   photoHintContainer: {
-    marginTop: 16,
+    paddingTop: 14,
     alignItems: 'center',
+    gap: 10,
+  },
+  photoActionRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 8,
   },
   photoHintText: {
     fontSize: 14,
     textAlign: 'center',
-    marginBottom: 8,
   },
   photoHintButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 10,
     borderRadius: 20,
     borderWidth: 1,
   },
@@ -1497,6 +1623,40 @@ const styles = StyleSheet.create({
   },
   infoContainer: {
     width: '100%',
+  },
+  profileDetailList: {
+    gap: 9,
+  },
+  profileDetailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 17,
+    paddingHorizontal: 13,
+    paddingVertical: 11,
+    borderCurve: 'continuous',
+  },
+  profileDetailIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileDetailCopy: {
+    flex: 1,
+    paddingLeft: 12,
+  },
+  profileDetailLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+  },
+  profileDetailValue: {
+    fontSize: 16,
+    lineHeight: 21,
+    fontWeight: '700',
+    paddingTop: 1,
   },
   createdHintBox: {
     borderWidth: 1,
@@ -1526,12 +1686,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   inputRow: {
-    marginBottom: 15,
+    marginBottom: 16,
   },
   label: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 5,
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 7,
+    letterSpacing: 0.2,
   },
   switchRow: {
     flexDirection: 'row',
@@ -1598,38 +1759,36 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginTop: 20,
+    gap: 10,
   },
   button: {
+    flexDirection: 'row',
+    gap: 8,
     paddingVertical: 12,
     paddingHorizontal: 20,
-    borderRadius: 10,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-    elevation: 2,
+    borderCurve: 'continuous',
+    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
   },
   editButton: {
     backgroundColor: 'rgba(142, 78, 198, 0.16)',
     borderColor: 'rgba(142, 78, 198, 0.35)',
     borderWidth: 1,
-    marginTop: 10,
+    marginTop: 14,
   },
   cancelButton: {
     backgroundColor: 'rgba(255,255,255,0.18)',
     borderColor: 'rgba(255,255,255,0.35)',
     borderWidth: 1,
     flex: 1,
-    marginRight: 10,
   },
   saveButton: {
     backgroundColor: 'rgba(142, 78, 198, 0.16)',
     borderColor: 'rgba(142, 78, 198, 0.35)',
     borderWidth: 1,
     flex: 1,
-    marginLeft: 10,
   },
   buttonText: {
     fontSize: 16,

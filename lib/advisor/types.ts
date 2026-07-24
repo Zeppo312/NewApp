@@ -42,6 +42,13 @@ export interface DailySignals {
     likelyFeedingMode: 'breast' | 'bottle' | 'mixed' | 'solids' | 'unknown';
     /** Eigene Baseline: Ø Mahlzeiten/Tag der letzten 14 Tage (null = zu wenig Historie). */
     typicalPerDay: number | null;
+    /** Eigene Baseline bis zur aktuellen Uhrzeit. */
+    typicalByNow: number | null;
+    /** Anzahl historischer Tage, aus denen die Baseline entstand. */
+    baselineSampleDays: number;
+    /** Persönlicher Median zwischen Mahlzeiten am Tag. */
+    typicalIntervalMinutes: number | null;
+    intervalSampleCount: number;
   };
 
   diaper: {
@@ -56,6 +63,26 @@ export interface DailySignals {
     minutes: number;
     text: string;
     isReal: boolean;
+    /** Eigener Schlafdurchschnitt bis zur aktuellen Uhrzeit. */
+    typicalMinutesByNow: number | null;
+    baselineSampleDays: number;
+    lastSleepEndAt: string | null;
+    currentSleepStartedAt: string | null;
+    isSleepingNow: boolean;
+    currentAwakeMinutes: number | null;
+    /** Persönlicher Median der Wachphasen zwischen Tagesschläfen. */
+    typicalWakeMinutes: number | null;
+    wakeSampleCount: number;
+    lastNightMinutes: number | null;
+    typicalNightMinutes: number | null;
+    nightSampleDays: number;
+    /** Nur relativ zum persönlichen Nachtverlauf, keine medizinische Bewertung. */
+    roughNight: boolean;
+  };
+
+  context: {
+    localHour: number;
+    localMinute: number;
   };
 
   weather: {

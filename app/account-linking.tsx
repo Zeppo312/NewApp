@@ -6,13 +6,11 @@ import {
   TouchableOpacity,
   Share,
   Alert,
-  SafeAreaView,
   ActivityIndicator,
-  StatusBar,
   TextInput,
-  Platform,
 } from 'react-native';
-import { BlurView } from 'expo-blur';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
@@ -31,6 +29,12 @@ import { LinkedBabySelectionModal } from '@/components/LinkedBabySelectionModal'
 import { LiquidGlassCard, GLASS_OVERLAY, GLASS_OVERLAY_DARK, LAYOUT_PAD } from '@/constants/DesignGuide';
 import { LockedFeatureScreen } from '@/components/LockedFeatureScreen';
 import { useFeatureAccess } from '@/lib/entitlements';
+import {
+  DEFAULT_ACCOUNT_LINKING_LOCALE,
+  getAccountLinkingLocaleTag,
+  translateAccountLinkingText,
+  type AccountLinkingTranslationKey,
+} from '@/lib/accountLinkingTranslations';
 
 type Invitation = {
   id: string;
@@ -47,11 +51,17 @@ type LinkedUser = {
   userRole: 'mama' | 'papa' | string;
 };
 
-const PRIMARY_TEXT   = '#7D5A50';    // Sleep-Tracker Typo-Farbe
-const ACCENT_PURPLE  = '#8E4EC6';    // Sleep-Tracker Akzent
+const ACCENT_PURPLE  = '#8E4EC6';
 const ACCENT_MINT    = '#A8C4C1';
 const ACCENT_ORANGE  = '#FF8C42';
 const ACCENT_RED     = '#E06464';
+
+const ACTIVE_ACCOUNT_LINKING_LOCALE = DEFAULT_ACCOUNT_LINKING_LOCALE;
+const ACCOUNT_LINKING_LOCALE_TAG = getAccountLinkingLocaleTag(ACTIVE_ACCOUNT_LINKING_LOCALE);
+const t = (
+  key: AccountLinkingTranslationKey,
+  params?: Record<string, string | number>,
+) => translateAccountLinkingText(ACTIVE_ACCOUNT_LINKING_LOCALE, key, params);
 
 const toRgba = (hex: string, opacity = 1) => {
   const cleanHex = hex.replace('#', '');
@@ -102,7 +112,6 @@ function AccountLinkingScreenContent() {
   const accentOrange = isDark ? lightenHex(ACCENT_ORANGE) : ACCENT_ORANGE;
   const accentRed = isDark ? lightenHex(ACCENT_RED) : ACCENT_RED;
 
-  const cardBorderColor = isDark ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.6)';
   const listItemBorderColor = isDark ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.6)';
   const listItemBg = isDark ? 'rgba(0,0,0,0.28)' : 'rgba(255,255,255,0.6)';
   const inputBorderColor = isDark ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.6)';
@@ -111,17 +120,19 @@ function AccountLinkingScreenContent() {
   const inputPlaceholderColor = isDark ? 'rgba(240,230,220,0.7)' : '#9BA0A6';
   const sharePillBg = isDark ? 'rgba(0,0,0,0.35)' : 'rgba(255,255,255,0.9)';
   const sharePillBorder = isDark ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.6)';
-  const cardBlurTint = isDark ? 'dark' : 'light';
   const { user } = useAuth();
   const { refreshBabies } = useActiveBaby();
   const { refreshBabyDetails } = useBabyStatus();
   const { syncUser } = useConvex();
   const params = useLocalSearchParams<{ invitationCode?: string }>();
+  const prefilledInvitationCode = typeof params.invitationCode === 'string'
+    ? params.invitationCode.replace(/\s+/g, '').toUpperCase()
+    : '';
 
   const [isLoading, setIsLoading] = useState(false);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [linkedUsers, setLinkedUsers] = useState<LinkedUser[]>([]);
-  const [invitationCode, setInvitationCode] = useState('');
+  const [invitationCode, setInvitationCode] = useState(prefilledInvitationCode);
   const [isRedeeming, setIsRedeeming] = useState(false);
   const [unlinkingId, setUnlinkingId] = useState<string | null>(null);
   const [autoRedeemAttempted, setAutoRedeemAttempted] = useState(false);
@@ -129,9 +140,7 @@ function AccountLinkingScreenContent() {
     linkedUserId: string;
     linkedUserName?: string | null;
   } | null>(null);
-  const prefilledInvitationCode = typeof params.invitationCode === 'string'
-    ? params.invitationCode.replace(/\s+/g, '').toUpperCase()
-    : '';
+  const pendingInvitations = invitations.filter((invitation) => invitation.status === 'pending');
 
   const loadData = useCallback(async () => {
     if (!user?.id) {
@@ -149,11 +158,11 @@ function AccountLinkingScreenContent() {
       if (linkedUsersResult.success) setLinkedUsers(linkedUsersResult.linkedUsers);
     } catch (error) {
       console.error('Error loading account linking data:', error);
-      Alert.alert('Fehler', 'Die Daten konnten nicht geladen werden.');
+      Alert.alert(t('common.error'), t('screen.loadFailed'));
     } finally {
       setIsLoading(false);
     }
-  }, [user?.id]);
+  }, [user]);
 
   useEffect(() => {
     if (user) {
@@ -178,26 +187,29 @@ function AccountLinkingScreenContent() {
 
   const handleCreateInvitation = async () => {
     if (!user?.id) {
-      Alert.alert('Fehler', 'Bitte erneut anmelden.');
+      Alert.alert(t('common.error'), t('auth.signInAgain'));
       return;
     }
 
     setIsLoading(true);
     try {
       const result = await createInvitationLink(user.id);
-      if (result.success) {
+      if (result.success && result.invitationCode && result.invitationLink) {
         await Share.share({
-          message: `Verbinde dich mit mir in der App! Einladungscode: ${result.invitationCode} • Link: ${result.invitationLink}`,
-          title: 'Einladung'
+          message: t('create.shareMessage', {
+            code: result.invitationCode,
+            link: result.invitationLink,
+          }),
+          title: t('create.shareTitle'),
         });
         await loadData();
         void syncUser();
       } else {
-        Alert.alert('Fehler', 'Der Einladungscode konnte nicht erstellt werden.');
+        Alert.alert(t('common.error'), t('create.failed'));
       }
     } catch (error) {
       console.error('Error creating invitation:', error);
-      Alert.alert('Fehler', 'Der Einladungscode konnte nicht erstellt werden.');
+      Alert.alert(t('common.error'), t('create.failed'));
     } finally {
       setIsLoading(false);
     }
@@ -205,7 +217,7 @@ function AccountLinkingScreenContent() {
 
   const redeemInvitation = useCallback(async (rawCode: string, shouldShowSuccessAlert = true) => {
     if (!rawCode.trim()) {
-      Alert.alert('Fehler', 'Bitte gib einen Einladungscode ein.');
+      Alert.alert(t('common.error'), t('redeem.empty'));
       return;
     }
     const cleanedCode = rawCode.replace(/\s+/g, '').toUpperCase();
@@ -213,12 +225,12 @@ function AccountLinkingScreenContent() {
     setIsRedeeming(true);
     try {
       if (!user?.id) {
-        Alert.alert('Fehler', 'Bitte erneut anmelden.');
+        Alert.alert(t('common.error'), t('auth.signInAgain'));
         return;
       }
       const result = await redeemInvitationCodeFixed(user.id, cleanedCode);
       if (result.success) {
-        const creatorName = result.creatorInfo?.firstName || 'einem anderen Benutzer';
+        const creatorName = result.creatorInfo?.firstName || t('redeem.creatorFallback');
         setInvitationCode('');
         await refreshLinkedBabyState();
 
@@ -231,20 +243,26 @@ function AccountLinkingScreenContent() {
         }
 
         if (shouldShowSuccessAlert) {
-          Alert.alert('Erfolg', `Code eingelöst. Jetzt verknüpft mit ${creatorName}.`);
+          Alert.alert(
+            t('redeem.successTitle'),
+            t('redeem.successMessage', { name: creatorName }),
+          );
         }
       } else {
         const errorMessage = result.error?.message ||
-          'Der Einladungscode konnte nicht eingelöst werden. Bitte versuche es später erneut.';
-        Alert.alert('Fehler', errorMessage);
+          t('redeem.failed');
+        Alert.alert(t('common.error'), errorMessage);
       }
     } catch (error: any) {
       console.error('Exception redeeming invitation:', error);
-      Alert.alert('Fehler', `Unerwarteter Fehler: ${error?.message ?? 'Unbekannt'}`);
+      Alert.alert(
+        t('common.error'),
+        t('redeem.unexpected', { message: error?.message ?? t('redeem.unknownError') }),
+      );
     } finally {
       setIsRedeeming(false);
     }
-  }, [refreshLinkedBabyState, user?.id]);
+  }, [refreshLinkedBabyState, setInvitationCode, setIsRedeeming, setPendingBabySelection, user]);
 
   const handleRedeemInvitation = async () => {
     await redeemInvitation(invitationCode, true);
@@ -265,30 +283,30 @@ function AccountLinkingScreenContent() {
     try {
       const result = await deactivateAccountLink(link.linkId);
       if (result.success) {
-        Alert.alert('Verknüpfung deaktiviert', 'Die Verbindung wurde deaktiviert.');
-        loadData();
+        Alert.alert(t('linked.unlinkedTitle'), t('linked.unlinkedMessage'));
+        void loadData();
         void syncUser();
       } else {
-        const errorMessage = result.error?.message || 'Die Verknüpfung konnte nicht deaktiviert werden.';
-        Alert.alert('Fehler', errorMessage);
+        const errorMessage = result.error?.message || t('linked.unlinkFailed');
+        Alert.alert(t('common.error'), errorMessage);
       }
     } catch (error) {
       console.error('Error deactivating account link:', error);
-      Alert.alert('Fehler', 'Die Verknüpfung konnte nicht deaktiviert werden.');
+      Alert.alert(t('common.error'), t('linked.unlinkFailed'));
     } finally {
       setUnlinkingId(null);
     }
   };
 
   const handleDeactivateLink = (link: LinkedUser) => {
-    const displayName = [link.firstName, link.lastName].filter(Boolean).join(' ').trim() || 'diesem Account';
+    const displayName = [link.firstName, link.lastName].filter(Boolean).join(' ').trim() || t('linked.unnamedAccount');
     Alert.alert(
-      'Verknüpfung deaktivieren',
-      `Möchtest du die Verknüpfung mit ${displayName} wirklich deaktivieren?`,
+      t('linked.unlinkTitle'),
+      t('linked.unlinkQuestion', { name: displayName }),
       [
-        { text: 'Abbrechen', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Deaktivieren',
+          text: t('linked.unlinkAction'),
           style: 'destructive',
           onPress: () => performDeactivateLink(link),
         },
@@ -297,139 +315,239 @@ function AccountLinkingScreenContent() {
   };
 
   const formatDate = (d: string | Date) =>
-    new Date(d).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    new Date(d).toLocaleDateString(ACCOUNT_LINKING_LOCALE_TAG, {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
+
+  const getLinkedUserName = (linkedUser: LinkedUser) =>
+    [linkedUser.firstName, linkedUser.lastName].filter(Boolean).join(' ').trim() || t('common.user');
+
+  const getLinkedUserRole = (role: LinkedUser['userRole']) => {
+    if (role === 'mama') return t('linked.roleMama');
+    if (role === 'papa') return t('linked.rolePapa');
+    return t('linked.roleUser');
+  };
+
+  const linkedCountLabel = t(
+    linkedUsers.length === 1 ? 'hero.linkedCount.one' : 'hero.linkedCount.other',
+    { count: linkedUsers.length },
+  );
+  const pendingCountLabel = t(
+    pendingInvitations.length === 1 ? 'hero.pendingCount.one' : 'hero.pendingCount.other',
+    { count: pendingInvitations.length },
+  );
 
   return (
     <ThemedBackground style={[styles.background, isDark && styles.backgroundDark]}>
       <SafeAreaView style={styles.safeArea}>
-        <StatusBar hidden />
-        <Header title="Accounts verknüpfen" showBackButton onBackPress={() => router.back()} />
+        <StatusBar style={isDark ? 'light' : 'dark'} />
+        <Header
+          title={t('screen.title')}
+          subtitle={t('screen.subtitle')}
+          showBackButton
+          showBabySwitcher={false}
+          onBackPress={() => router.back()}
+        />
 
-        <ScrollView contentContainerStyle={styles.scrollContent}>
+        <ScrollView
+          contentInsetAdjustmentBehavior="automatic"
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
           {isLoading ? (
-            <LiquidGlassCard style={[styles.sectionCard, styles.centerCard]} intensity={26} overlayColor={glassOverlay}>
+            <LiquidGlassCard style={styles.centerCard} intensity={26} overlayColor={glassOverlay}>
               <ActivityIndicator size="large" color={isDark ? adaptiveColors.accent : theme.accent} />
-              <ThemedText style={[styles.loadingText, { color: textSecondary }]}>Lade Daten…</ThemedText>
+              <ThemedText style={[styles.loadingText, { color: textSecondary }]}>
+                {t('screen.loading')}
+              </ThemedText>
             </LiquidGlassCard>
           ) : (
             <>
-              {/* Abschnitt: Einladung erstellen */}
-              <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={glassOverlay}>
-                <ThemedText style={[styles.sectionTitle, { color: textPrimary }]}>Einladung erstellen</ThemedText>
-                <ThemedText style={[styles.sectionDescription, { color: textSecondary }]}>
-                  Erstelle einen Code und teile ihn mit deinem Partner oder einer Vertrauensperson.
+              <LiquidGlassCard style={styles.heroCard} intensity={30} overlayColor={glassOverlay}>
+                <View style={[styles.heroOrb, styles.heroOrbTop, { backgroundColor: toRgba(accentPurple, 0.16) }]} />
+                <View style={[styles.heroOrb, styles.heroOrbBottom, { backgroundColor: toRgba(accentMint, 0.2) }]} />
+
+                <View style={[styles.heroIcon, { backgroundColor: toRgba(accentPurple, isDark ? 0.24 : 0.14) }]}>
+                  <IconSymbol name="person.2.fill" size={30} color={accentPurple} />
+                </View>
+                <ThemedText style={[styles.heroEyebrow, { color: accentPurple }]}>
+                  {t('hero.eyebrow')}
                 </ThemedText>
+                <ThemedText style={[styles.heroTitle, { color: textPrimary }]}>
+                  {t('hero.title')}
+                </ThemedText>
+                <ThemedText style={[styles.heroDescription, { color: textSecondary }]}>
+                  {t('hero.description')}
+                </ThemedText>
+
+                <View style={styles.statusRow}>
+                  <View style={[styles.statusPill, { backgroundColor: listItemBg, borderColor: listItemBorderColor }]}>
+                    <IconSymbol name="link" size={15} color={accentPurple} />
+                    <ThemedText style={[styles.statusText, { color: textPrimary }]}>
+                      {linkedCountLabel}
+                    </ThemedText>
+                  </View>
+                  <View style={[styles.statusPill, { backgroundColor: listItemBg, borderColor: listItemBorderColor }]}>
+                    <IconSymbol name="envelope.fill" size={15} color={accentOrange} />
+                    <ThemedText style={[styles.statusText, { color: textPrimary }]}>
+                      {pendingCountLabel}
+                    </ThemedText>
+                  </View>
+                </View>
+              </LiquidGlassCard>
+
+              <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={glassOverlay}>
+                <View style={styles.sectionHeader}>
+                  <View style={[styles.sectionIcon, { backgroundColor: toRgba(accentPurple, isDark ? 0.22 : 0.12) }]}>
+                    <IconSymbol name="paperplane.fill" size={20} color={accentPurple} />
+                  </View>
+                  <View style={styles.sectionHeadingText}>
+                    <ThemedText style={[styles.sectionTitle, { color: textPrimary }]}>
+                      {t('create.title')}
+                    </ThemedText>
+                    <ThemedText style={[styles.sectionDescription, { color: textSecondary }]}>
+                      {t('create.description')}
+                    </ThemedText>
+                  </View>
+                </View>
 
                 <TouchableOpacity
                   onPress={handleCreateInvitation}
+                  disabled={isLoading}
                   activeOpacity={0.9}
-                  style={styles.fullWidthAction}
+                  accessibilityRole="button"
+                  style={[styles.primaryAction, { backgroundColor: accentPurple }]}
                 >
-                  <BlurView intensity={24} tint={cardBlurTint} style={styles.cardBlur}>
-                    <View
-                      style={[
-                        styles.actionCard,
-                        {
-                          backgroundColor: isDark ? toRgba(accentPurple, 0.22) : 'rgba(220,200,255,0.6)',
-                          borderColor: cardBorderColor,
-                        },
-                      ]}
-                    >
-                      <View
-                        style={[
-                          styles.actionIcon,
-                          { backgroundColor: accentPurple, borderColor: cardBorderColor },
-                        ]}
-                      >
-                        <IconSymbol name="plus" size={26} color="#FFFFFF" />
-                      </View>
-                      <ThemedText style={[styles.actionTitle, { color: textPrimary }]}>Einladungscode erstellen</ThemedText>
-                      <ThemedText style={[styles.actionSub, { color: textSecondary }]}>Sicher teilen & verbinden</ThemedText>
-                    </View>
-                  </BlurView>
+                  <View style={styles.actionLabelRow}>
+                    <IconSymbol name="plus" size={20} color="#FFFFFF" />
+                    <ThemedText style={styles.primaryActionText}>{t('create.button')}</ThemedText>
+                  </View>
+                  <View style={styles.actionArrowLight}>
+                    <IconSymbol name="arrow.up.right" size={15} color="#FFFFFF" />
+                  </View>
                 </TouchableOpacity>
+
+                <View style={styles.hintRow}>
+                  <IconSymbol name="lock.shield" size={13} color={textSecondary} />
+                  <ThemedText style={[styles.hintText, { color: textSecondary }]}>
+                    {t('create.hint')}
+                  </ThemedText>
+                </View>
               </LiquidGlassCard>
 
-              {/* Abschnitt: Einladungscode einlösen */}
               <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={glassOverlay}>
-                <ThemedText style={[styles.sectionTitle, { color: textPrimary }]}>Einladungscode einlösen</ThemedText>
-                <ThemedText style={[styles.sectionDescription, { color: textSecondary }]}>
-                  Du hast einen Code bekommen? Gib ihn hier ein und verknüpfe euren Account.
-                </ThemedText>
+                <View style={styles.sectionHeader}>
+                  <View style={[styles.sectionIcon, { backgroundColor: toRgba(accentMint, isDark ? 0.24 : 0.18) }]}>
+                    <IconSymbol name="link" size={20} color={accentMint} />
+                  </View>
+                  <View style={styles.sectionHeadingText}>
+                    <ThemedText style={[styles.sectionTitle, { color: textPrimary }]}>
+                      {t('redeem.title')}
+                    </ThemedText>
+                    <ThemedText style={[styles.sectionDescription, { color: textSecondary }]}>
+                      {t('redeem.description')}
+                    </ThemedText>
+                  </View>
+                </View>
 
-                <View style={styles.inputRow}>
+                <View
+                  style={[
+                    styles.inputShell,
+                    { borderColor: inputBorderColor, backgroundColor: inputBg },
+                  ]}
+                >
                   <TextInput
-                    style={[
-                      styles.inputGlass,
-                      {
-                        borderColor: inputBorderColor,
-                        backgroundColor: inputBg,
-                        color: inputTextColor,
-                      },
-                    ]}
-                    placeholder="CODE"
+                    style={[styles.inputGlass, { color: inputTextColor }]}
+                    placeholder={t('redeem.placeholder')}
                     placeholderTextColor={inputPlaceholderColor}
                     value={invitationCode}
-                    onChangeText={(t) => setInvitationCode(t.replace(/\s+/g, '').toUpperCase())}
+                    onChangeText={(value) => setInvitationCode(value.replace(/\s+/g, '').toUpperCase())}
+                    onSubmitEditing={() => {
+                      if (invitationCode.trim() && !isRedeeming) void handleRedeemInvitation();
+                    }}
                     autoCapitalize="characters"
                     autoCorrect={false}
                     spellCheck={false}
+                    maxLength={8}
+                    returnKeyType="done"
+                    accessibilityLabel={t('redeem.accessibility')}
                   />
+                  {invitationCode.length === 8 && (
+                    <IconSymbol name="checkmark.circle.fill" size={22} color={accentMint} />
+                  )}
                 </View>
 
                 <TouchableOpacity
                   onPress={handleRedeemInvitation}
                   disabled={isRedeeming || !invitationCode.trim()}
                   activeOpacity={0.9}
-                  style={[styles.fullWidthAction, (isRedeeming || !invitationCode.trim()) && { opacity: 0.7 }]}
+                  accessibilityRole="button"
+                  style={[
+                    styles.primaryAction,
+                    styles.redeemAction,
+                    { backgroundColor: accentMint },
+                    (isRedeeming || !invitationCode.trim()) && styles.actionDisabled,
+                  ]}
                 >
-                  <BlurView intensity={24} tint={cardBlurTint} style={styles.cardBlur}>
-                    <View
-                      style={[
-                        styles.actionCard,
-                        {
-                          backgroundColor: isDark ? toRgba(accentMint, 0.22) : 'rgba(168,196,193,0.6)',
-                          borderColor: cardBorderColor,
-                        },
-                      ]}
-                    >
-                      <View style={[styles.actionIcon, { backgroundColor: accentMint, borderColor: cardBorderColor }]}>
-                        {isRedeeming ? (
-                          <ActivityIndicator color="#fff" />
-                        ) : (
-                          <IconSymbol name="checkmark" size={26} color="#FFFFFF" />
-                        )}
-                      </View>
-                      <ThemedText style={[styles.actionTitle, { color: textPrimary }]}>{isRedeeming ? 'Einlösen…' : 'Code einlösen'}</ThemedText>
-                      <ThemedText style={[styles.actionSub, { color: textSecondary }]}>Schnell & sicher</ThemedText>
+                  <View style={styles.actionLabelRow}>
+                    {isRedeeming ? (
+                      <ActivityIndicator color={textPrimary} />
+                    ) : (
+                      <IconSymbol name="checkmark" size={20} color={textPrimary} />
+                    )}
+                    <ThemedText style={[styles.primaryActionText, { color: textPrimary }]}>
+                      {isRedeeming ? t('redeem.loading') : t('redeem.button')}
+                    </ThemedText>
+                  </View>
+                  {!isRedeeming && (
+                    <View style={[styles.actionArrowDark, { backgroundColor: toRgba(textPrimary, 0.1) }]}>
+                      <IconSymbol name="chevron.right" size={15} color={textPrimary} />
                     </View>
-                  </BlurView>
+                  )}
                 </TouchableOpacity>
+
+                <View style={styles.hintRow}>
+                  <IconSymbol name="info.circle" size={13} color={textSecondary} />
+                  <ThemedText style={[styles.hintText, { color: textSecondary }]}>
+                    {t('redeem.hint')}
+                  </ThemedText>
+                </View>
               </LiquidGlassCard>
 
-              {/* Abschnitt: Verknüpfte Accounts */}
               {linkedUsers.length > 0 && (
                 <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={glassOverlay}>
-                  <ThemedText style={[styles.sectionTitle, { color: textPrimary }]}>Verknüpfte Accounts</ThemedText>
+                  <View style={styles.listHeader}>
+                    <ThemedText style={[styles.sectionTitle, { color: textPrimary }]}>
+                      {t('linked.title')}
+                    </ThemedText>
+                    <ThemedText style={[styles.listSubtitle, { color: textSecondary }]}>
+                      {t('linked.subtitle')}
+                    </ThemedText>
+                  </View>
 
                   <View style={styles.list}>
                     {linkedUsers.map((u) => (
                       <View key={u.linkId} style={[styles.listItem, { backgroundColor: listItemBg, borderColor: listItemBorderColor }]}>
                         <View style={styles.listItemLeft}>
-                          <View style={[styles.avatar, { backgroundColor: isDark ? toRgba(accentPurple, 0.2) : 'rgba(142,78,198,0.2)', borderColor: listItemBorderColor }]}>
-                            <IconSymbol name="person.fill" size={18} color={accentPurple} />
+                          <View style={[styles.avatar, { backgroundColor: toRgba(accentPurple, 0.16), borderColor: listItemBorderColor }]}>
+                            <IconSymbol name="person.fill" size={20} color={accentPurple} />
                           </View>
-                          <View style={{ flex: 1 }}>
-                            <ThemedText style={[styles.userName, { color: textPrimary }]}>{u.firstName} {u.lastName}</ThemedText>
+                          <View style={styles.listItemText}>
+                            <ThemedText style={[styles.userName, { color: textPrimary }]}>
+                              {getLinkedUserName(u)}
+                            </ThemedText>
                             <ThemedText style={[styles.userRole, { color: textSecondary }]}>
-                              {u.userRole === 'mama' ? 'Mama' : u.userRole === 'papa' ? 'Papa' : 'Benutzer'}
+                              {getLinkedUserRole(u.userRole)}
                             </ThemedText>
                           </View>
                         </View>
                         <TouchableOpacity
                           onPress={() => handleDeactivateLink(u)}
                           disabled={unlinkingId === u.linkId}
-                          accessibilityLabel="Verknüpfung deaktivieren"
+                          accessibilityLabel={t('linked.unlinkAccessibility', { name: getLinkedUserName(u) })}
                           accessibilityRole="button"
                           style={[
                             styles.unlinkPill,
@@ -452,34 +570,49 @@ function AccountLinkingScreenContent() {
                 </LiquidGlassCard>
               )}
 
-              {/* Abschnitt: Ausstehende Einladungen */}
-              {invitations && invitations.filter(i => i.status === 'pending').length > 0 && (
+              {pendingInvitations.length > 0 && (
                 <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={glassOverlay}>
-                  <ThemedText style={[styles.sectionTitle, { color: textPrimary }]}>Ausstehende Einladungen</ThemedText>
+                  <View style={styles.listHeader}>
+                    <ThemedText style={[styles.sectionTitle, { color: textPrimary }]}>
+                      {t('pending.title')}
+                    </ThemedText>
+                    <ThemedText style={[styles.listSubtitle, { color: textSecondary }]}>
+                      {t('pending.subtitle')}
+                    </ThemedText>
+                  </View>
 
                   <View style={styles.list}>
-                    {invitations
-                      .filter(i => i.status === 'pending')
-                      .map((inv) => (
+                    {pendingInvitations.map((inv) => (
                         <View key={inv.id} style={[styles.listItem, { backgroundColor: listItemBg, borderColor: listItemBorderColor }]}>
                           <View style={styles.listItemLeft}>
-                            <View style={[styles.avatar, { backgroundColor: isDark ? toRgba(accentOrange, 0.2) : 'rgba(255,140,66,0.18)', borderColor: listItemBorderColor }]}>
-                              <IconSymbol name="doc.on.doc" size={18} color={accentOrange} />
+                            <View style={[styles.avatar, { backgroundColor: toRgba(accentOrange, 0.14), borderColor: listItemBorderColor }]}>
+                              <IconSymbol name="doc.on.doc" size={19} color={accentOrange} />
                             </View>
-                            <View style={{ flex: 1 }}>
-                              <ThemedText style={[styles.invCode, { color: textPrimary }]}>Code: {inv.invitationCode}</ThemedText>
-                              <ThemedText style={[styles.metaText, { color: textSecondary }]}>Erstellt: {formatDate(inv.createdAt)}</ThemedText>
-                              <ThemedText style={[styles.metaText, { color: textSecondary }]}>Gültig bis: {formatDate(inv.expiresAt)}</ThemedText>
+                            <View style={styles.listItemText}>
+                              <ThemedText selectable style={[styles.invCode, { color: textPrimary }]}>
+                                {t('pending.code', { code: inv.invitationCode })}
+                              </ThemedText>
+                              <ThemedText style={[styles.metaText, { color: textSecondary }]}>
+                                {t('pending.created', { date: formatDate(inv.createdAt) })}
+                              </ThemedText>
+                              <ThemedText style={[styles.metaText, { color: textSecondary }]}>
+                                {t('pending.expires', { date: formatDate(inv.expiresAt) })}
+                              </ThemedText>
                             </View>
                           </View>
 
                           <TouchableOpacity
                             onPress={() => {
-                              Share.share({
-                                message: `Verbinde dich mit mir! Code: ${inv.invitationCode} • Link: ${buildInvitationLink(inv.invitationCode)}`,
-                                title: 'Einladung teilen'
+                              void Share.share({
+                                message: t('pending.shareMessage', {
+                                  code: inv.invitationCode,
+                                  link: buildInvitationLink(inv.invitationCode),
+                                }),
+                                title: t('pending.shareTitle'),
                               });
                             }}
+                            accessibilityRole="button"
+                            accessibilityLabel={t('pending.shareAccessibility', { code: inv.invitationCode })}
                             style={[styles.sharePill, { backgroundColor: sharePillBg, borderColor: sharePillBorder }]}
                           >
                             <IconSymbol name="square.and.arrow.up" size={18} color={accentPurple} />
@@ -498,10 +631,11 @@ function AccountLinkingScreenContent() {
           currentUserId={user?.id}
           linkedUserId={pendingBabySelection?.linkedUserId}
           linkedUserName={pendingBabySelection?.linkedUserName}
+          locale={ACTIVE_ACCOUNT_LINKING_LOCALE}
           onApplied={async () => {
             setPendingBabySelection(null);
             await refreshLinkedBabyState();
-            Alert.alert('Babys übernommen', 'Die gemeinsame Baby-Auswahl wurde gespeichert.');
+            Alert.alert(t('baby.appliedTitle'), t('baby.appliedMessage'));
           }}
         />
       </SafeAreaView>
@@ -510,117 +644,211 @@ function AccountLinkingScreenContent() {
 }
 
 const styles = StyleSheet.create({
-  background: { flex: 1, width: '100%', backgroundColor: '#f5eee0' }, // wie Sleep-Tracker
+  background: { flex: 1, width: '100%', backgroundColor: '#F5EEE0' },
   backgroundDark: { backgroundColor: Colors.dark.background },
-  safeArea: { flex: 1, paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0 },
-
-  // identischer Scroll-Rhythmus
+  safeArea: { flex: 1 },
   scrollContent: {
     paddingHorizontal: LAYOUT_PAD,
     paddingBottom: 140,
-    paddingTop: 10,
+    paddingTop: 12,
+    gap: 16,
   },
-
-  sectionCard: { marginBottom: 16, borderRadius: 22, overflow: 'hidden' },
-  centerCard: { alignItems: 'center', justifyContent: 'center', paddingVertical: 28 },
-  loadingText: { marginTop: 10, fontSize: 16, color: PRIMARY_TEXT },
-
+  centerCard: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 180,
+    paddingVertical: 32,
+    borderRadius: 26,
+  },
+  loadingText: { marginTop: 12, fontSize: 15, fontWeight: '600' },
+  heroCard: {
+    borderRadius: 28,
+    paddingHorizontal: 22,
+    paddingVertical: 26,
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
+  heroOrb: {
+    position: 'absolute',
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+  },
+  heroOrbTop: { top: -84, right: -52 },
+  heroOrbBottom: { bottom: -104, left: -46 },
+  heroIcon: {
+    width: 62,
+    height: 62,
+    borderRadius: 31,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  heroEyebrow: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    textAlign: 'center',
+    marginBottom: 7,
+  },
+  heroTitle: {
+    maxWidth: 290,
+    fontSize: 24,
+    lineHeight: 30,
+    fontWeight: '800',
+    letterSpacing: -0.4,
+    textAlign: 'center',
+  },
+  heroDescription: {
+    maxWidth: 330,
+    marginTop: 10,
+    fontSize: 14,
+    lineHeight: 21,
+    textAlign: 'center',
+  },
+  statusRow: {
+    marginTop: 20,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  statusPill: {
+    minHeight: 34,
+    paddingHorizontal: 12,
+    borderRadius: 17,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+  statusText: { fontSize: 12, fontWeight: '700' },
+  sectionCard: {
+    borderRadius: 24,
+    padding: 20,
+    overflow: 'hidden',
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 13,
+    marginBottom: 18,
+  },
+  sectionIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sectionHeadingText: { flex: 1, gap: 4 },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 12,
-    paddingHorizontal: 16,
-    color: PRIMARY_TEXT,
-    textAlign: 'center',
+    lineHeight: 23,
+    fontWeight: '800',
+    letterSpacing: -0.2,
   },
   sectionDescription: {
     fontSize: 14,
-    color: PRIMARY_TEXT,
-    opacity: 0.85,
-    textAlign: 'center',
+    lineHeight: 20,
+  },
+  primaryAction: {
+    minHeight: 56,
+    borderRadius: 18,
+    paddingHorizontal: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  redeemAction: { marginTop: 12 },
+  actionDisabled: { opacity: 0.52 },
+  actionLabelRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  primaryActionText: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },
+  actionArrowLight: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.16)',
+  },
+  actionArrowDark: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  hintRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    gap: 7,
+    marginTop: 12,
+    paddingHorizontal: 4,
+  },
+  hintText: { flex: 1, fontSize: 12, lineHeight: 17 },
+  inputShell: {
+    minHeight: 56,
+    borderWidth: 1.5,
+    borderRadius: 18,
     paddingHorizontal: 16,
-    marginBottom: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
-
-  // Input im Glas-Look
-  inputRow: { paddingHorizontal: 20, marginBottom: 10 },
   inputGlass: {
-    height: 48,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.6)',
-    borderRadius: 12,
-    paddingHorizontal: 12,
+    flex: 1,
+    minHeight: 54,
     fontSize: 16,
-    backgroundColor: 'rgba(255,255,255,0.7)',
-    color: '#333',
-    fontWeight: '700',
-    letterSpacing: 1.5,
+    fontWeight: '800',
+    letterSpacing: 1.7,
   },
-
-  // Action-Cards (wie Sleep-Tracker „Schlaf starten / Manuell“)
-  fullWidthAction: { borderRadius: 22, overflow: 'hidden', marginHorizontal: 20, marginTop: 8, marginBottom: 8 },
-  cardBlur: { borderRadius: 22, overflow: 'hidden' },
-  actionCard: {
-    borderRadius: 22,
-    padding: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 128,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.6)',
-  },
-  actionIcon: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 10,
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.6)',
-    shadowColor: 'rgba(255,255,255,0.3)',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.12,
-    shadowRadius: 2,
-    elevation: 4,
-  },
-  actionTitle: { fontSize: 16, fontWeight: '800', color: PRIMARY_TEXT, marginBottom: 4, textAlign: 'center' },
-  actionSub: { fontSize: 11, color: PRIMARY_TEXT, opacity: 0.8, textAlign: 'center' },
-
-  // Listen im Glas-Stil
-  list: { paddingHorizontal: 12, paddingBottom: 8 },
+  listHeader: { gap: 4, marginBottom: 14 },
+  listSubtitle: { fontSize: 13, lineHeight: 19 },
+  list: { gap: 10 },
   listItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.6)',
-    backgroundColor: 'rgba(255,255,255,0.6)',
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    marginBottom: 10,
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 13,
+    gap: 10,
   },
-  listItemLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  listItemLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  listItemText: { flex: 1, minWidth: 0 },
   avatar: {
-    width: 34, height: 34, borderRadius: 17,
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.8)',
+    width: 42,
+    height: 42,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
   },
-  userName: { fontSize: 16, fontWeight: '800', color: PRIMARY_TEXT },
-  userRole: { fontSize: 13, color: PRIMARY_TEXT, opacity: 0.85 },
-
-  invCode: { fontSize: 15, fontWeight: '800', color: PRIMARY_TEXT },
-  metaText: { fontSize: 12, color: PRIMARY_TEXT, opacity: 0.85, marginTop: 2 },
-
+  userName: { fontSize: 15, lineHeight: 20, fontWeight: '800' },
+  userRole: { fontSize: 12, lineHeight: 17, marginTop: 1 },
+  invCode: { fontSize: 15, lineHeight: 20, fontWeight: '800', letterSpacing: 0.5 },
+  metaText: { fontSize: 11, lineHeight: 16, marginTop: 1 },
   sharePill: {
-    width: 40, height: 40, borderRadius: 20,
-    alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.6)',
+    width: 42,
+    height: 42,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
   },
   unlinkPill: {
-    width: 40, height: 40, borderRadius: 20,
-    alignItems: 'center', justifyContent: 'center',
+    width: 42,
+    height: 42,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 1,
   },
 });

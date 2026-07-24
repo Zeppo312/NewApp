@@ -19,6 +19,7 @@ export interface RemoteInsight {
   source: 'rules' | 'ai';
   /** true = Server hat den Hinweis bereits in advisor_messages gespeichert. */
   persisted: boolean;
+  messageId: string | null;
 }
 
 export const generateAdvisorInsight = async (
@@ -53,6 +54,8 @@ export const generateAdvisorInsight = async (
             solidsCountLast21Days: signals.feeding.solidsCountLast21Days,
             likelyFeedingMode: signals.feeding.likelyFeedingMode,
             typicalPerDay: signals.feeding.typicalPerDay,
+            typicalByNow: signals.feeding.typicalByNow,
+            baselineSampleDays: signals.feeding.baselineSampleDays,
           },
           diaper: {
             count: signals.diaper.count,
@@ -63,7 +66,10 @@ export const generateAdvisorInsight = async (
           sleep: {
             minutes: signals.sleep.minutes,
             isReal: signals.sleep.isReal,
+            typicalMinutesByNow: signals.sleep.typicalMinutesByNow,
+            baselineSampleDays: signals.sleep.baselineSampleDays,
           },
+          context: signals.context,
           weather: signals.weather,
         },
       },
@@ -81,6 +87,7 @@ export const generateAdvisorInsight = async (
       reasons: Array.isArray(data.reasons) ? data.reasons : [],
       source: data.source === 'ai' ? 'ai' : 'rules',
       persisted: data.persisted === true,
+      messageId: typeof data.messageId === 'string' ? data.messageId : null,
     };
   } catch {
     return null;

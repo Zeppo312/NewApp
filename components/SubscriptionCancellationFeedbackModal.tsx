@@ -1,9 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -17,24 +16,31 @@ import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import type { SubscriptionCancellationFeedbackReason } from '@/lib/subscriptionCancellationFeedback';
+import {
+  DEFAULT_SUBSCRIPTION_LOCALE,
+  translateSubscriptionText,
+  type SubscriptionLocale,
+  type SubscriptionTranslationKey,
+} from '@/lib/subscriptionTranslations';
 
 type FeedbackOption = {
   value: SubscriptionCancellationFeedbackReason;
-  label: string;
+  labelKey: SubscriptionTranslationKey;
 };
 
 const FEEDBACK_OPTIONS: FeedbackOption[] = [
-  { value: 'too_expensive', label: 'Zu teuer' },
-  { value: 'missing_features', label: 'Mir fehlt etwas' },
-  { value: 'not_using', label: 'Ich nutze es zu selten' },
-  { value: 'technical_issues', label: 'Technische Probleme' },
-  { value: 'temporary_pause', label: 'Nur eine Pause' },
-  { value: 'other', label: 'Anderer Grund' },
+  { value: 'too_expensive', labelKey: 'feedback.tooExpensive' },
+  { value: 'missing_features', labelKey: 'feedback.missingFeatures' },
+  { value: 'not_using', labelKey: 'feedback.notUsing' },
+  { value: 'technical_issues', labelKey: 'feedback.technicalIssues' },
+  { value: 'temporary_pause', labelKey: 'feedback.temporaryPause' },
+  { value: 'other', labelKey: 'feedback.other' },
 ];
 
 type SubscriptionCancellationFeedbackModalProps = {
   visible: boolean;
   isSubmitting?: boolean;
+  locale?: SubscriptionLocale;
   onClose: () => void;
   onSkip: () => void;
   onSubmit: (feedback: {
@@ -46,10 +52,15 @@ type SubscriptionCancellationFeedbackModalProps = {
 export function SubscriptionCancellationFeedbackModal({
   visible,
   isSubmitting = false,
+  locale = DEFAULT_SUBSCRIPTION_LOCALE,
   onClose,
   onSkip,
   onSubmit,
 }: SubscriptionCancellationFeedbackModalProps) {
+  const t = (
+    key: SubscriptionTranslationKey,
+    params?: Record<string, string | number>,
+  ) => translateSubscriptionText(locale, key, params);
   const adaptiveColors = useAdaptiveColors();
   const isDark =
     adaptiveColors.effectiveScheme === 'dark' ||
@@ -74,14 +85,12 @@ export function SubscriptionCancellationFeedbackModal({
     placeholder: isDark ? 'rgba(248,240,229,0.52)' : 'rgba(125,90,80,0.55)',
   };
 
-  useEffect(() => {
-    if (visible) {
-      setSelectedReason(null);
-      setDetails('');
-    }
-  }, [visible]);
-
   const canSubmit = !!selectedReason && !isSubmitting;
+
+  const resetForm = () => {
+    setSelectedReason(null);
+    setDetails('');
+  };
 
   const handleSubmit = () => {
     if (!selectedReason) return;
@@ -93,6 +102,7 @@ export function SubscriptionCancellationFeedbackModal({
       visible={visible}
       transparent
       animationType="fade"
+      onShow={resetForm}
       onRequestClose={onClose}
     >
       <Pressable
@@ -100,7 +110,7 @@ export function SubscriptionCancellationFeedbackModal({
         onPress={onClose}
       />
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={process.env.EXPO_OS === 'ios' ? 'padding' : undefined}
         style={styles.center}
       >
         <BlurView
@@ -117,10 +127,10 @@ export function SubscriptionCancellationFeedbackModal({
             </View>
             <View style={styles.headerText}>
               <ThemedText style={[styles.title, { color: palette.text }]}>
-                Bevor du kündigst
+                {t('feedback.title')}
               </ThemedText>
               <ThemedText style={[styles.subtitle, { color: palette.textSecondary }]}>
-                Was ist der wichtigste Grund?
+                {t('feedback.subtitle')}
               </ThemedText>
             </View>
           </View>
@@ -156,7 +166,7 @@ export function SubscriptionCancellationFeedbackModal({
                     ) : null}
                   </View>
                   <ThemedText style={[styles.optionLabel, { color: palette.text }]}>
-                    {option.label}
+                    {t(option.labelKey)}
                   </ThemedText>
                 </TouchableOpacity>
               );
@@ -173,7 +183,7 @@ export function SubscriptionCancellationFeedbackModal({
               ]}
               value={details}
               onChangeText={setDetails}
-              placeholder="Optional: Was können wir verbessern?"
+              placeholder={t('feedback.placeholder')}
               placeholderTextColor={palette.placeholder}
               multiline
               maxLength={1200}
@@ -188,7 +198,7 @@ export function SubscriptionCancellationFeedbackModal({
               disabled={isSubmitting}
             >
               <ThemedText style={[styles.secondaryButtonText, { color: palette.textSecondary }]}>
-                Ohne Angabe weiter
+                {t('feedback.skip')}
               </ThemedText>
             </TouchableOpacity>
             <TouchableOpacity
@@ -203,7 +213,7 @@ export function SubscriptionCancellationFeedbackModal({
                 <ActivityIndicator color="#FFF" />
               ) : (
                 <ThemedText style={styles.primaryButtonText}>
-                  Speichern & weiter
+                  {t('feedback.submit')}
                 </ThemedText>
               )}
             </TouchableOpacity>

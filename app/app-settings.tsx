@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, SafeAreaView, StatusBar, TouchableOpacity, ScrollView, Switch, Alert, ActivityIndicator, Image, Linking, Platform, Share } from 'react-native';
+import { StyleSheet, View, StatusBar, TouchableOpacity, ScrollView, Switch, Alert, ActivityIndicator, Image, Linking, Platform, Share } from 'react-native';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { ThemedText } from '@/components/ThemedText';
@@ -16,7 +17,6 @@ import { getAppSettings, saveAppSettings, AppSettings } from '@/lib/supabase';
 import { getCachedUserProfile } from '@/lib/appCache';
 import { exportUserData } from '@/lib/dataExport';
 import {
-  buildAccountDeletionWarningMessage,
   deleteUserAccount,
   deleteUserData,
   getAccountDeletionRequirements,
@@ -34,19 +34,35 @@ import { LiquidGlassCard, GLASS_OVERLAY, LAYOUT_PAD } from '@/constants/DesignGu
 import { useNotificationPreferences } from '@/hooks/useNotificationPreferences';
 import { useNotifications } from '@/hooks/useNotifications';
 import { formatVitaminDReminderTime } from '@/lib/vitaminDReminder';
-import { openSubscriptionManagement } from '@/lib/subscriptionManagement';
+import {
+  getSubscriptionManagementStoreLabel,
+  openSubscriptionManagement,
+} from '@/lib/subscriptionManagement';
 import { buildSleepDebugSnapshot, serializeSleepDebugSnapshot } from '@/lib/sleepDebug';
 import { hasFeatureAccess } from '@/lib/entitlements';
+import {
+  AppSettingsTranslationKey,
+  DEFAULT_APP_SETTINGS_LOCALE,
+  getAppSettingsLocaleTag,
+  translateAppSettingsText,
+} from '@/lib/appSettingsTranslations';
 
 const PRESET_OPTIONS = [
-  { id: 'default', label: 'Standard' },
-  { id: 'verspielt', label: 'Verspielt' },
-  { id: 'dunkler', label: 'Dunkler' },
-  { id: 'nightmode', label: 'Night Mode' },
-  { id: 'shadow', label: 'Shadow' },
-  { id: 'wave', label: 'Wave' },
-  { id: 'stone', label: 'Stone' },
+  { id: 'default', labelKey: 'background.preset.default' },
+  { id: 'verspielt', labelKey: 'background.preset.playful' },
+  { id: 'dunkler', labelKey: 'background.preset.darker' },
+  { id: 'nightmode', labelKey: 'background.preset.night' },
+  { id: 'shadow', labelKey: 'background.preset.shadow' },
+  { id: 'wave', labelKey: 'background.preset.wave' },
+  { id: 'stone', labelKey: 'background.preset.stone' },
 ] as const;
+
+const ACTIVE_APP_SETTINGS_LOCALE = DEFAULT_APP_SETTINGS_LOCALE;
+const APP_SETTINGS_LOCALE_TAG = getAppSettingsLocaleTag(ACTIVE_APP_SETTINGS_LOCALE);
+const t = (
+  key: AppSettingsTranslationKey,
+  params?: Record<string, string | number>,
+) => translateAppSettingsText(ACTIVE_APP_SETTINGS_LOCALE, key, params);
 
 export default function AppSettingsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -87,7 +103,7 @@ export default function AppSettingsScreen() {
   const [isDeletingData, setIsDeletingData] = useState(false);
   const [isChangingBackground, setIsChangingBackground] = useState(false);
   const [isSyncingLiveActivities, setIsSyncingLiveActivities] = useState(false);
-  const [liveActivitiesStatusText, setLiveActivitiesStatusText] = useState('Status wird geladen...');
+  const [liveActivitiesStatusText, setLiveActivitiesStatusText] = useState(t('live.statusLoading'));
   const [isAdmin, setIsAdmin] = useState(false);
   const [isExportingSleepDebug, setIsExportingSleepDebug] = useState(false);
 
@@ -124,7 +140,7 @@ export default function AppSettingsScreen() {
   const trailingIconColor = useLightIcons ? 'rgba(255,255,255,0.9)' : theme.tabIconDefault;
   const autoDarkTimeTextColor = useLightIcons ? '#FFFFFF' : '#000000';
   const vitaminDTimeLabel = formatVitaminDReminderTime(
-    'de-DE',
+    APP_SETTINGS_LOCALE_TAG,
     notifPrefs.vitaminDReminderHour,
     notifPrefs.vitaminDReminderMinute,
   );
@@ -168,7 +184,7 @@ export default function AppSettingsScreen() {
 
       if (error) {
         console.error('Error loading app settings:', error);
-        Alert.alert('Fehler', 'Einstellungen konnten nicht geladen werden.');
+        Alert.alert(t('common.error'), t('settings.loadFailed'));
         return;
       }
 
@@ -195,7 +211,7 @@ export default function AppSettingsScreen() {
 
   const refreshLiveActivitiesStatus = async (): Promise<string> => {
     if (!sleepActivityService.isLiveActivitySupported()) {
-      const status = 'Auf diesem Gerät nicht verfügbar.';
+      const status = t('live.unavailable');
       setLiveActivitiesStatusText(status);
       return status;
     }
@@ -207,18 +223,23 @@ export default function AppSettingsScreen() {
         const hasValidStart = Number.isFinite(startDate.getTime());
         const status =
           hasValidStart
-            ? `Aktiv seit ${startDate.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}`
-            : 'Aktiv';
+            ? t('live.activeSince', {
+                time: startDate.toLocaleTimeString(APP_SETTINGS_LOCALE_TAG, {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                }),
+              })
+            : t('live.active');
         setLiveActivitiesStatusText(status);
         return status;
       }
 
-      const status = 'Keine aktive Anzeige oder in iOS deaktiviert.';
+      const status = t('live.none');
       setLiveActivitiesStatusText(status);
       return status;
     } catch (error) {
       console.error('Failed to refresh live activities status:', error);
-      const status = 'Status konnte nicht geladen werden.';
+      const status = t('live.statusFailed');
       setLiveActivitiesStatusText(status);
       return status;
     }
@@ -226,7 +247,7 @@ export default function AppSettingsScreen() {
 
   const handleExportSleepDebug = async () => {
     if (!user?.id) {
-      Alert.alert('Fehler', 'Du musst angemeldet sein.');
+      Alert.alert(t('common.error'), t('auth.mustSignIn'));
       return;
     }
 
@@ -236,12 +257,12 @@ export default function AppSettingsScreen() {
       const payload = serializeSleepDebugSnapshot(snapshot);
 
       await Share.share({
-        title: 'Sleep Debug Snapshot',
+        title: t('debug.shareTitle'),
         message: payload,
       });
     } catch (error) {
       console.error('Failed to export sleep debug snapshot:', error);
-      Alert.alert('Fehler', 'Sleep-Debug konnte nicht exportiert werden.');
+      Alert.alert(t('common.error'), t('debug.exportFailed'));
     } finally {
       setIsExportingSleepDebug(false);
     }
@@ -258,7 +279,7 @@ export default function AppSettingsScreen() {
 
       if (error) {
         console.error('Error saving app settings:', error);
-        Alert.alert('Fehler', 'Einstellungen konnten nicht gespeichert werden.');
+        Alert.alert(t('common.error'), t('settings.saveFailed'));
         // Lade die Einstellungen neu, falls ein Fehler auftritt
         await loadSettings();
         return;
@@ -281,11 +302,11 @@ export default function AppSettingsScreen() {
       const granted = await requestPermissions();
       if (!granted) {
         Alert.alert(
-          'System-Benachrichtigungen fehlen',
-          'Aktiviere Benachrichtigungen bitte auch in den System-Einstellungen, damit Erinnerungen zugestellt werden können.',
+          t('notifications.systemMissingTitle'),
+          t('notifications.systemMissingMessage'),
           [
-            { text: 'Später', style: 'cancel' },
-            { text: 'System-Einstellungen', onPress: () => void handleOpenSystemSettings() },
+            { text: t('common.later'), style: 'cancel' },
+            { text: t('common.systemSettings'), onPress: () => void handleOpenSystemSettings() },
           ],
         );
       }
@@ -305,7 +326,7 @@ export default function AppSettingsScreen() {
       await updateNotifPref(key, value);
     } catch (error) {
       console.error('Failed to save notification preference:', error);
-      Alert.alert('Fehler', 'Die Benachrichtigungseinstellung konnte nicht gespeichert werden.');
+      Alert.alert(t('common.error'), t('notifications.saveFailed'));
       return;
     }
 
@@ -313,11 +334,11 @@ export default function AppSettingsScreen() {
       const granted = await requestPermissions();
       if (!granted) {
         Alert.alert(
-          'System-Benachrichtigungen fehlen',
-          'Die Kategorie wurde gespeichert. Damit sie wirklich ankommt, aktiviere bitte Benachrichtigungen auch im System.',
+          t('notifications.systemMissingTitle'),
+          t('notifications.categorySavedMessage'),
           [
-            { text: 'Später', style: 'cancel' },
-            { text: 'System-Einstellungen', onPress: () => void handleOpenSystemSettings() },
+            { text: t('common.later'), style: 'cancel' },
+            { text: t('common.systemSettings'), onPress: () => void handleOpenSystemSettings() },
           ],
         );
       }
@@ -390,7 +411,7 @@ export default function AppSettingsScreen() {
 
   const updateNightWindowSettings = async (nextStartTime: string, nextEndTime: string) => {
     if (nextStartTime === nextEndTime) {
-      Alert.alert('Ungültige Zeit', 'Start und Ende dürfen nicht identisch sein.');
+      Alert.alert(t('sleep.invalidTimeTitle'), t('sleep.invalidTimeMessage'));
       return;
     }
 
@@ -404,7 +425,7 @@ export default function AppSettingsScreen() {
       setNightWindowEndTime(saved.endTime);
     } catch (error) {
       console.error('Failed to save night window settings:', error);
-      Alert.alert('Fehler', 'Nachtschlaf-Zeitfenster konnte nicht gespeichert werden.');
+      Alert.alert(t('common.error'), t('sleep.windowSaveFailed'));
       const restored = await loadNightWindowSettings(user?.id);
       setNightWindowStartTime(restored.startTime);
       setNightWindowEndTime(restored.endTime);
@@ -457,7 +478,7 @@ export default function AppSettingsScreen() {
       });
     } catch (error) {
       console.error('Failed to save Vitamin D reminder time:', error);
-      Alert.alert('Fehler', 'Die Uhrzeit für die Vitamin-D-Erinnerung konnte nicht gespeichert werden.');
+      Alert.alert(t('common.error'), t('notifications.vitaminTimeSaveFailed'));
     }
   };
 
@@ -471,18 +492,18 @@ export default function AppSettingsScreen() {
       if (result.error) {
         if (result.error === 'Zugriff auf Fotos wurde verweigert') {
           Alert.alert(
-            'Fotos-Zugriff benötigt',
-            'Bitte erlaube den Fotozugriff in den Einstellungen, um ein Hintergrundbild auszuwählen.',
+            t('background.photoPermissionTitle'),
+            t('background.photoPermissionMessage'),
             [
-              { text: 'Abbrechen', style: 'cancel' },
+              { text: t('common.cancel'), style: 'cancel' },
               {
-                text: 'Einstellungen öffnen',
+                text: t('background.openSettings'),
                 onPress: async () => {
                   try {
                     await Linking.openSettings();
                   } catch (error) {
                     console.error('Failed to open app settings:', error);
-                    Alert.alert('Fehler', 'Einstellungen konnten nicht geöffnet werden.');
+                    Alert.alert(t('common.error'), t('system.openFailed'));
                   }
                 },
               },
@@ -491,22 +512,22 @@ export default function AppSettingsScreen() {
           return;
         }
 
-        Alert.alert('Fehler', result.error);
+        Alert.alert(t('common.error'), result.error);
         return;
       }
 
       // Nach erfolgreicher Bildauswahl: Helligkeit abfragen
       if (result.success && result.needsModeSelection) {
         Alert.alert(
-          'Bildhelligkeit',
-          'Ist dein Hintergrundbild eher hell oder dunkel? Dies passt die Textfarben an.',
+          t('background.brightnessTitle'),
+          t('background.brightnessMessage'),
           [
             {
-              text: 'Hell',
+              text: t('common.light'),
               onPress: () => setBackgroundMode(false),
             },
             {
-              text: 'Dunkel',
+              text: t('common.dark'),
               onPress: () => setBackgroundMode(true),
             },
           ]
@@ -514,7 +535,7 @@ export default function AppSettingsScreen() {
       }
     } catch (err) {
       console.error('Error changing background:', err);
-      Alert.alert('Fehler', 'Hintergrundbild konnte nicht geändert werden.');
+      Alert.alert(t('common.error'), t('background.changeFailed'));
     } finally {
       setIsChangingBackground(false);
     }
@@ -524,23 +545,23 @@ export default function AppSettingsScreen() {
     if (isChangingBackground) return;
 
     Alert.alert(
-      'Hintergrund zurücksetzen',
-      'Möchtest du zum Standard-Hintergrundbild zurückkehren?',
+      t('background.resetTitle'),
+      t('background.resetMessage'),
       [
-        { text: 'Abbrechen', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Zurücksetzen',
+          text: t('common.reset'),
           onPress: async () => {
             try {
               setIsChangingBackground(true);
               const result = await resetToDefault();
 
               if (result.error) {
-                Alert.alert('Fehler', result.error);
+                Alert.alert(t('common.error'), result.error);
               }
             } catch (err) {
               console.error('Error resetting background:', err);
-              Alert.alert('Fehler', 'Hintergrundbild konnte nicht zurückgesetzt werden.');
+              Alert.alert(t('common.error'), t('background.resetFailed'));
             } finally {
               setIsChangingBackground(false);
             }
@@ -555,7 +576,7 @@ export default function AppSettingsScreen() {
       await Linking.openSettings();
     } catch (error) {
       console.error('Failed to open app settings:', error);
-      Alert.alert('Fehler', 'Einstellungen konnten nicht geöffnet werden.');
+      Alert.alert(t('common.error'), t('system.openFailed'));
     }
   };
 
@@ -563,10 +584,10 @@ export default function AppSettingsScreen() {
     if (isSyncingLiveActivities) return;
 
     if (!sleepActivityService.isLiveActivitySupported()) {
-      setLiveActivitiesStatusText('Auf diesem Gerät nicht verfügbar.');
+      setLiveActivitiesStatusText(t('live.unavailable'));
       Alert.alert(
-        'Live Activities',
-        'Live Activities werden auf diesem Gerät oder in diesem Build nicht unterstützt.'
+        t('live.title'),
+        t('live.unsupportedMessage')
       );
       return;
     }
@@ -583,8 +604,8 @@ export default function AppSettingsScreen() {
 
       if (!activeEntry?.start_time) {
         await sleepActivityService.endAllSleepActivities();
-        setLiveActivitiesStatusText('Kein aktiver Schlaf. Keine Live Activity aktiv.');
-        Alert.alert('Live Activities', 'Es läuft aktuell kein Schlaftracking.');
+        setLiveActivitiesStatusText(t('live.noActiveSleep'));
+        Alert.alert(t('live.title'), t('live.noTrackingMessage'));
         return;
       }
 
@@ -611,10 +632,10 @@ export default function AppSettingsScreen() {
       if (needsNewActivity) {
         const startedId = await sleepActivityService.startSleepActivity(startDate);
         if (!startedId) {
-          setLiveActivitiesStatusText('In iOS deaktiviert oder derzeit nicht verfügbar.');
+          setLiveActivitiesStatusText(t('live.iosUnavailable'));
           Alert.alert(
-            'Live Activities',
-            'Die Anzeige konnte nicht gestartet werden. Bitte prüfe die iOS-Einstellungen.'
+            t('live.title'),
+            t('live.startFailed')
           );
           return;
         }
@@ -624,14 +645,17 @@ export default function AppSettingsScreen() {
       const elapsedSeconds = Math.max(0, Math.floor((Date.now() - startDate.getTime()) / 1000));
       await sleepActivityService.updateSleepActivity(formatElapsedSeconds(elapsedSeconds));
 
-      setLiveActivitiesStatusText(
-        `Aktiv seit ${startDate.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}`
-      );
-      Alert.alert('Live Activities', 'Die Anzeige wurde synchronisiert.');
+      setLiveActivitiesStatusText(t('live.activeSince', {
+        time: startDate.toLocaleTimeString(APP_SETTINGS_LOCALE_TAG, {
+          hour: '2-digit',
+          minute: '2-digit',
+        }),
+      }));
+      Alert.alert(t('live.title'), t('live.synced'));
     } catch (error) {
       console.error('Failed to synchronize live activities:', error);
-      setLiveActivitiesStatusText('Synchronisierung fehlgeschlagen.');
-      Alert.alert('Fehler', 'Live Activities konnten nicht synchronisiert werden.');
+      setLiveActivitiesStatusText(t('live.syncFailedStatus'));
+      Alert.alert(t('common.error'), t('live.syncFailed'));
     } finally {
       setIsSyncingLiveActivities(false);
     }
@@ -640,20 +664,20 @@ export default function AppSettingsScreen() {
   const handleOpenLiveActivitiesPopup = async () => {
     const status = await refreshLiveActivitiesStatus();
     const message = [
-      `Status: ${status}`,
+      t('live.popupStatus', { status }),
       '',
-      '• Zeigt Schlafzeit auf Sperrbildschirm an.',
-      '• Dynamic Island nur auf unterstützten iPhones.',
-      '• Bei aktivem Schlaf kannst du neu synchronisieren.',
+      t('live.popupLockScreen'),
+      t('live.popupIsland'),
+      t('live.popupSync'),
     ].join('\n');
 
     Alert.alert(
-      'Live Activities',
+      t('live.title'),
       message,
       [
-        { text: 'Schließen', style: 'cancel' },
-        { text: 'iOS-Einstellungen', onPress: () => void handleOpenSystemSettings() },
-        { text: 'Synchronisieren', onPress: () => void handleSyncLiveActivities() },
+        { text: t('common.close'), style: 'cancel' },
+        { text: t('live.iosSettings'), onPress: () => void handleOpenSystemSettings() },
+        { text: t('common.sync'), onPress: () => void handleSyncLiveActivities() },
       ],
       { cancelable: true }
     );
@@ -661,7 +685,7 @@ export default function AppSettingsScreen() {
 
   const handleExportData = async () => {
     if (!user) {
-      Alert.alert('Fehler', 'Bitte melde dich erneut an.');
+      Alert.alert(t('common.error'), t('auth.signInAgain'));
       return;
     }
 
@@ -670,12 +694,12 @@ export default function AppSettingsScreen() {
     const canExport = await hasFeatureAccess('pdfExport');
     if (!canExport) {
       Alert.alert(
-        'Nicht in Lotti Lite',
-        'PDF-Berichte sind ab dem Standard-Abo enthalten. Möchtest du die Abo-Optionen ansehen?',
+        t('data.liteTitle'),
+        t('data.liteMessage'),
         [
-          { text: 'Später', style: 'cancel' },
+          { text: t('common.later'), style: 'cancel' },
           {
-            text: 'Abo ansehen',
+            text: t('data.viewPlans'),
             onPress: () => router.push('/paywall?origin=lock_pdfExport' as any),
           },
         ],
@@ -688,7 +712,7 @@ export default function AppSettingsScreen() {
       const result = await exportUserData('pdf');
 
       if (!result.success) {
-        Alert.alert('Fehler', result.error ?? 'Datenexport fehlgeschlagen.');
+        Alert.alert(t('common.error'), result.error ?? t('data.exportFailed'));
         return;
       }
 
@@ -697,19 +721,28 @@ export default function AppSettingsScreen() {
         : undefined;
       const sizeKb = result.bytesWritten ? (result.bytesWritten / 1024).toFixed(1) : null;
       const warningText = result.warnings && result.warnings.length
-        ? `\n\nHinweise:\n- ${result.warnings.slice(0, 3).join('\n- ')}`
+        ? t('data.warnings', { warnings: result.warnings.slice(0, 3).join('\n- ') })
         : '';
       const locationHint = result.shared || !result.fileUri
         ? ''
-        : `\n\nDatei gespeichert unter:\n${result.fileUri}`;
+        : t('data.location', { path: result.fileUri });
+      const recordHint = totalRecords !== undefined
+        ? t('data.records', { count: totalRecords })
+        : '';
+      const sizeHint = sizeKb ? t('data.size', { size: sizeKb }) : '';
 
       Alert.alert(
-        'Export abgeschlossen',
-        `Deine Daten wurden als PDF vorbereitet${totalRecords !== undefined ? ` (${totalRecords} Einträge)` : ''}${sizeKb ? `, ca. ${sizeKb} KB` : ''}.${locationHint}${warningText}`
+        t('data.exportComplete'),
+        t('data.exportSummary', {
+          records: recordHint,
+          size: sizeHint,
+          location: locationHint,
+          warnings: warningText,
+        }),
       );
     } catch (err) {
       console.error('Failed to export data:', err);
-      Alert.alert('Fehler', 'Datenexport fehlgeschlagen. Bitte versuche es erneut.');
+      Alert.alert(t('common.error'), t('data.exportRetry'));
     } finally {
       setIsExporting(false);
     }
@@ -717,7 +750,7 @@ export default function AppSettingsScreen() {
 
   const runDeleteDataFlow = async (deleteAccount: boolean) => {
     if (!user) {
-      Alert.alert('Fehler', 'Bitte melde dich erneut an.');
+      Alert.alert(t('common.error'), t('auth.signInAgain'));
       return;
     }
 
@@ -728,11 +761,11 @@ export default function AppSettingsScreen() {
 
       if (deleteAccount) {
         Alert.alert(
-          'Konto gelöscht',
-          'Dein Profil und Konto wurden gelöscht. Du wirst jetzt abgemeldet.',
+          t('data.accountDeletedTitle'),
+          t('data.accountDeletedMessage'),
           [
             {
-              text: 'OK',
+              text: t('common.ok'),
               onPress: async () => {
                 await signOut();
               },
@@ -743,10 +776,10 @@ export default function AppSettingsScreen() {
       }
 
       await loadSettings();
-      Alert.alert('Daten gelöscht', 'Deine gespeicherten Daten wurden entfernt.');
+      Alert.alert(t('data.deletedTitle'), t('data.deletedMessage'));
     } catch (err: any) {
       console.error('Failed to delete user data:', err);
-      Alert.alert('Fehler', err?.message || 'Daten konnten nicht gelöscht werden.');
+      Alert.alert(t('common.error'), err?.message || t('data.deleteFailed'));
     } finally {
       setIsDeletingData(false);
     }
@@ -758,19 +791,22 @@ export default function AppSettingsScreen() {
       if (error) throw error;
 
       Alert.alert(
-        'Wichtiger Hinweis',
-        buildAccountDeletionWarningMessage(requirements),
+        t('data.warningTitle'),
+        t('data.warningMessage', {
+          store: getSubscriptionManagementStoreLabel(),
+          apple: requirements?.hasAppleSignIn ? t('data.warningApple') : '',
+        }),
         [
-          { text: 'Abbrechen', style: 'cancel' },
-          { text: 'Abo verwalten', onPress: () => void openSubscriptionManagement() },
-          { text: 'Trotzdem löschen', style: 'destructive', onPress: onConfirm },
+          { text: t('common.cancel'), style: 'cancel' },
+          { text: t('data.manageSubscription'), onPress: () => void openSubscriptionManagement() },
+          { text: t('data.deleteAnyway'), style: 'destructive', onPress: onConfirm },
         ],
       );
     } catch (error: any) {
       console.error('Failed to load account deletion requirements:', error);
       Alert.alert(
-        'Fehler',
-        error?.message || 'Der Löschhinweis konnte nicht geladen werden. Bitte versuche es erneut.',
+        t('common.error'),
+        error?.message || t('data.warningLoadFailed'),
       );
     }
   };
@@ -778,22 +814,22 @@ export default function AppSettingsScreen() {
   const handleDeleteDataRequest = () => {
     if (isDeletingData) return;
     Alert.alert(
-      'Daten löschen',
-      'Möchtest du wirklich alle deine Daten löschen? Diese Aktion kann nicht rückgängig gemacht werden.',
+      t('data.deleteTitle'),
+      t('data.deleteQuestion'),
       [
-        { text: 'Abbrechen', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Weiter',
+          text: t('data.continue'),
           style: 'destructive',
           onPress: () => {
             Alert.alert(
-              'Konto ebenfalls löschen?',
-              'Soll dein Konto auch dauerhaft gelöscht werden?',
+              t('data.deleteAccountTitle'),
+              t('data.deleteAccountQuestion'),
               [
-                { text: 'Abbrechen', style: 'cancel' },
-                { text: 'Nur Daten löschen', style: 'destructive', onPress: () => runDeleteDataFlow(false) },
+                { text: t('common.cancel'), style: 'cancel' },
+                { text: t('data.deleteOnly'), style: 'destructive', onPress: () => runDeleteDataFlow(false) },
                 {
-                  text: 'Daten + Konto löschen',
+                  text: t('data.deleteWithAccount'),
                   style: 'destructive',
                   onPress: () => {
                     void confirmAccountDeletion(() => runDeleteDataFlow(true));
@@ -809,7 +845,7 @@ export default function AppSettingsScreen() {
 
   useEffect(() => {
     if (!user) {
-      setLiveActivitiesStatusText('Bitte anmelden.');
+      setLiveActivitiesStatusText(t('live.signIn'));
       return;
     }
 
@@ -828,25 +864,57 @@ export default function AppSettingsScreen() {
           <StatusBar hidden={true} />
           <View style={styles.container}>
             <Header
-              title="App-Einstellungen"
-              subtitle="Benachrichtigungen und mehr"
+              title={t('screen.title')}
+              subtitle={t('screen.subtitle')}
               showBackButton
               onBackPress={() => router.push('/more')}
             />
-            <ScrollView contentContainerStyle={styles.scrollContent}>
+            <ScrollView
+              contentContainerStyle={styles.scrollContent}
+              contentInsetAdjustmentBehavior="automatic"
+              showsVerticalScrollIndicator={false}
+            >
               {isLoading ? (
                 <View style={styles.loadingContainer}>
                   <ActivityIndicator size="large" color={theme.accent} />
-                  <ThemedText style={styles.loadingText}>Einstellungen werden geladen...</ThemedText>
+                  <ThemedText style={styles.loadingText}>{t('screen.loading')}</ThemedText>
                 </View>
               ) : (
                 <View style={styles.contentWrap}>
                 {settings ? (
                 <>
+                  <LiquidGlassCard style={styles.heroCard} intensity={34} overlayColor={GLASS_OVERLAY}>
+                    <View style={styles.heroGlow} />
+                    <View style={styles.heroTopRow}>
+                      <View style={[styles.heroIcon, { backgroundColor: `${theme.accent}22` }]}>
+                        <IconSymbol name="slider.horizontal.3" size={26} color={primaryIconColor} />
+                      </View>
+                      <View style={styles.heroCopy}>
+                        <ThemedText style={[styles.heroEyebrow, { color: theme.accent }]}>
+                          {t('hero.eyebrow')}
+                        </ThemedText>
+                        <ThemedText style={styles.heroTitle}>{t('hero.title')}</ThemedText>
+                      </View>
+                    </View>
+                    <ThemedText style={styles.heroDescription}>{t('hero.description')}</ThemedText>
+                    <View style={styles.heroPills}>
+                      {[
+                        ['bell', t('hero.notifications')],
+                        ['moon.zzz', t('hero.sleep')],
+                        ['paintpalette', t('hero.appearance')],
+                      ].map(([icon, label]) => (
+                        <View key={label} style={styles.heroPill}>
+                          <IconSymbol name={icon} size={14} color={primaryIconColor} />
+                          <ThemedText style={styles.heroPillLabel}>{label}</ThemedText>
+                        </View>
+                      ))}
+                    </View>
+                  </LiquidGlassCard>
+
                   {/* Benachrichtigungen-Einstellungen */}
                   <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
                     <TouchableOpacity
-                      style={styles.rowItem}
+                      style={[styles.rowItem, styles.firstRow]}
                       onPress={() => setIsNotificationsExpanded((prev) => !prev)}
                       activeOpacity={0.82}
                     >
@@ -854,11 +922,11 @@ export default function AppSettingsScreen() {
                         <IconSymbol name="bell" size={24} color={primaryIconColor} />
                       </View>
                       <View style={styles.rowContent}>
-                        <ThemedText style={styles.rowTitle}>Benachrichtigungen</ThemedText>
+                        <ThemedText style={styles.rowTitle}>{t('notifications.title')}</ThemedText>
                         <ThemedText style={styles.rowDescription}>
                           {settings.notifications_enabled
-                            ? `${activeNotificationTypes} Kategorien aktiv`
-                            : 'Global pausiert'}
+                            ? t('notifications.activeCategories', { count: activeNotificationTypes })
+                            : t('notifications.paused')}
                         </ThemedText>
                       </View>
                       <View style={styles.autoDarkTrailing}>
@@ -880,8 +948,8 @@ export default function AppSettingsScreen() {
                             <IconSymbol name="bell.badge" size={22} color={primaryIconColor} />
                           </View>
                           <View style={styles.rowContent}>
-                            <ThemedText style={styles.rowTitle}>Alle Benachrichtigungen</ThemedText>
-                            <ThemedText style={styles.rowDescription}>Aktiviert die komplette Notification-Logik der App</ThemedText>
+                            <ThemedText style={styles.rowTitle}>{t('notifications.allTitle')}</ThemedText>
+                            <ThemedText style={styles.rowDescription}>{t('notifications.allDescription')}</ThemedText>
                           </View>
                           <View style={styles.trailing}>
                             <Switch
@@ -900,23 +968,23 @@ export default function AppSettingsScreen() {
                             <IconSymbol name="gearshape" size={21} color={primaryIconColor} />
                           </View>
                           <View style={styles.rowContent}>
-                            <ThemedText style={styles.rowTitle}>System-Einstellungen</ThemedText>
-                            <ThemedText style={styles.rowDescription}>Push-Rechte, Banner und Sounds auf dem Gerät prüfen</ThemedText>
+                            <ThemedText style={styles.rowTitle}>{t('common.systemSettings')}</ThemedText>
+                            <ThemedText style={styles.rowDescription}>{t('notifications.systemDescription')}</ThemedText>
                           </View>
                           <View style={styles.trailing}>
                             <IconSymbol name="chevron.right" size={20} color={trailingIconColor} />
                           </View>
                         </TouchableOpacity>
 
-                        <ThemedText style={styles.subsectionLabel}>Einzelne Typen</ThemedText>
+                        <ThemedText style={styles.subsectionLabel}>{t('notifications.types')}</ThemedText>
 
                         <View style={styles.rowItem}>
                           <View style={styles.rowIcon}>
                             <IconSymbol name="moon.zzz" size={22} color={primaryIconColor} />
                           </View>
                           <View style={styles.rowContent}>
-                            <ThemedText style={styles.rowTitle}>Schlaffenster</ThemedText>
-                            <ThemedText style={styles.rowDescription}>Lokale und geräteübergreifende Erinnerung vor dem nächsten Schlaffenster</ThemedText>
+                            <ThemedText style={styles.rowTitle}>{t('notifications.sleepTitle')}</ThemedText>
+                            <ThemedText style={styles.rowDescription}>{t('notifications.sleepDescription')}</ThemedText>
                           </View>
                           <View style={styles.trailing}>
                             <Switch
@@ -935,8 +1003,8 @@ export default function AppSettingsScreen() {
                             <ThemedText style={{ fontSize: 22 }}>🍼</ThemedText>
                           </View>
                           <View style={styles.rowContent}>
-                            <ThemedText style={styles.rowTitle}>Fütterung</ThemedText>
-                            <ThemedText style={styles.rowDescription}>Benachrichtigung kurz bevor die nächste Mahlzeit erwartet wird</ThemedText>
+                            <ThemedText style={styles.rowTitle}>{t('notifications.feedingTitle')}</ThemedText>
+                            <ThemedText style={styles.rowDescription}>{t('notifications.feedingDescription')}</ThemedText>
                           </View>
                           <View style={styles.trailing}>
                             <Switch
@@ -955,8 +1023,8 @@ export default function AppSettingsScreen() {
                             <IconSymbol name="sun.max" size={21} color={primaryIconColor} />
                           </View>
                           <View style={styles.rowContent}>
-                            <ThemedText style={styles.rowTitle}>Vitamin D</ThemedText>
-                            <ThemedText style={styles.rowDescription}>Täglicher Reminder, standardmäßig aktiv</ThemedText>
+                            <ThemedText style={styles.rowTitle}>{t('notifications.vitaminTitle')}</ThemedText>
+                            <ThemedText style={styles.rowDescription}>{t('notifications.vitaminDescription')}</ThemedText>
                           </View>
                           <View style={styles.trailing}>
                             <Switch
@@ -985,8 +1053,10 @@ export default function AppSettingsScreen() {
                                 <IconSymbol name="clock" size={20} color={primaryIconColor} />
                               </View>
                               <View style={styles.rowContent}>
-                                <ThemedText style={styles.rowTitle}>Vitamin-D-Zeit</ThemedText>
-                                <ThemedText style={styles.rowDescription}>Aktuell täglich um {vitaminDTimeLabel}</ThemedText>
+                                <ThemedText style={styles.rowTitle}>{t('notifications.vitaminTimeTitle')}</ThemedText>
+                                <ThemedText style={styles.rowDescription}>
+                                  {t('notifications.vitaminTimeDescription', { time: vitaminDTimeLabel })}
+                                </ThemedText>
                               </View>
                               <View style={styles.trailing}>
                                 <IconSymbol name="chevron.right" size={20} color={trailingIconColor} />
@@ -1009,7 +1079,7 @@ export default function AppSettingsScreen() {
                                     style={styles.autoDarkPickerDone}
                                     onPress={() => setShowVitaminDTimePicker(false)}
                                   >
-                                    <ThemedText style={styles.autoDarkPickerDoneText}>Fertig</ThemedText>
+                                    <ThemedText style={styles.autoDarkPickerDoneText}>{t('common.done')}</ThemedText>
                                   </TouchableOpacity>
                                 )}
                               </View>
@@ -1022,8 +1092,8 @@ export default function AppSettingsScreen() {
                             <IconSymbol name="person.2" size={21} color={primaryIconColor} />
                           </View>
                           <View style={styles.rowContent}>
-                            <ThemedText style={styles.rowTitle}>Partner-Aktivitäten</ThemedText>
-                            <ThemedText style={styles.rowDescription}>Pushs bei Schlaf, Füttern und Wickeln vom Partner</ThemedText>
+                            <ThemedText style={styles.rowTitle}>{t('notifications.partnerTitle')}</ThemedText>
+                            <ThemedText style={styles.rowDescription}>{t('notifications.partnerDescription')}</ThemedText>
                           </View>
                           <View style={styles.trailing}>
                             <Switch
@@ -1042,8 +1112,8 @@ export default function AppSettingsScreen() {
                             <IconSymbol name="calendar" size={21} color={primaryIconColor} />
                           </View>
                           <View style={styles.rowContent}>
-                            <ThemedText style={styles.rowTitle}>Planner</ThemedText>
-                            <ThemedText style={styles.rowDescription}>Pushs für Termine, Fälligkeiten und überfällige Aufgaben</ThemedText>
+                            <ThemedText style={styles.rowTitle}>{t('notifications.plannerTitle')}</ThemedText>
+                            <ThemedText style={styles.rowDescription}>{t('notifications.plannerDescription')}</ThemedText>
                           </View>
                           <View style={styles.trailing}>
                             <Switch
@@ -1059,7 +1129,7 @@ export default function AppSettingsScreen() {
 
                         {!settings.notifications_enabled && (
                           <ThemedText style={styles.inlineNote}>
-                            Einzelne Kategorien bleiben gespeichert, werden aber erst wieder aktiv, wenn globale Benachrichtigungen eingeschaltet sind.
+                            {t('notifications.pausedNote')}
                           </ThemedText>
                         )}
                       </View>
@@ -1067,7 +1137,10 @@ export default function AppSettingsScreen() {
                   </LiquidGlassCard>
 
                   <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
-                    <ThemedText style={styles.sectionTitle}>Schlaftracking</ThemedText>
+                    <View style={styles.sectionHeading}>
+                      <IconSymbol name="bed.double.fill" size={16} color={primaryIconColor} />
+                      <ThemedText style={styles.sectionTitle}>{t('sleep.section')}</ThemedText>
+                    </View>
 
                     <TouchableOpacity
                       style={styles.rowItem}
@@ -1078,9 +1151,12 @@ export default function AppSettingsScreen() {
                         <IconSymbol name="moon.zzz" size={22} color={primaryIconColor} />
                       </View>
                       <View style={styles.rowContent}>
-                        <ThemedText style={styles.rowTitle}>Nachtschlaf-Zeitfenster</ThemedText>
+                        <ThemedText style={styles.rowTitle}>{t('sleep.nightWindowTitle')}</ThemedText>
                         <ThemedText style={styles.rowDescription}>
-                          Von {nightWindowStartTime} bis {nightWindowEndTime} Uhr
+                          {t('sleep.nightWindowRange', {
+                            start: nightWindowStartTime,
+                            end: nightWindowEndTime,
+                          })}
                         </ThemedText>
                       </View>
                       <View style={styles.autoDarkTrailing}>
@@ -1098,12 +1174,12 @@ export default function AppSettingsScreen() {
                     {isNightWindowExpanded && (
                       <View style={styles.autoDarkScheduleContainer}>
                         <View style={styles.autoDarkScheduleHeader}>
-                          <ThemedText style={styles.autoDarkScheduleLabel}>Zeitfenster</ThemedText>
+                          <ThemedText style={styles.autoDarkScheduleLabel}>{t('sleep.window')}</ThemedText>
                           {isSavingNightWindow && <ActivityIndicator size="small" color={theme.accent} />}
                         </View>
 
                         <View style={styles.autoDarkTimeRow}>
-                          <ThemedText style={styles.autoDarkTimeTitle}>Von</ThemedText>
+                          <ThemedText style={styles.autoDarkTimeTitle}>{t('sleep.from')}</ThemedText>
                           <TouchableOpacity
                             style={styles.autoDarkTimeButton}
                             onPress={() => setShowNightWindowStartPicker(true)}
@@ -1116,7 +1192,7 @@ export default function AppSettingsScreen() {
                         </View>
 
                         <View style={styles.autoDarkTimeRow}>
-                          <ThemedText style={styles.autoDarkTimeTitle}>Bis</ThemedText>
+                          <ThemedText style={styles.autoDarkTimeTitle}>{t('sleep.until')}</ThemedText>
                           <TouchableOpacity
                             style={styles.autoDarkTimeButton}
                             onPress={() => setShowNightWindowEndPicker(true)}
@@ -1144,7 +1220,7 @@ export default function AppSettingsScreen() {
                                 style={styles.autoDarkPickerDone}
                                 onPress={() => setShowNightWindowStartPicker(false)}
                               >
-                                <ThemedText style={styles.autoDarkPickerDoneText}>Fertig</ThemedText>
+                                <ThemedText style={styles.autoDarkPickerDoneText}>{t('common.done')}</ThemedText>
                               </TouchableOpacity>
                             )}
                           </View>
@@ -1166,7 +1242,7 @@ export default function AppSettingsScreen() {
                                 style={styles.autoDarkPickerDone}
                                 onPress={() => setShowNightWindowEndPicker(false)}
                               >
-                                <ThemedText style={styles.autoDarkPickerDoneText}>Fertig</ThemedText>
+                                <ThemedText style={styles.autoDarkPickerDoneText}>{t('common.done')}</ThemedText>
                               </TouchableOpacity>
                             )}
                           </View>
@@ -1176,7 +1252,10 @@ export default function AppSettingsScreen() {
                   </LiquidGlassCard>
 
                   <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
-                    <ThemedText style={styles.sectionTitle}>Darstellung</ThemedText>
+                    <View style={styles.sectionHeading}>
+                      <IconSymbol name="paintpalette" size={16} color={primaryIconColor} />
+                      <ThemedText style={styles.sectionTitle}>{t('appearance.section')}</ThemedText>
+                    </View>
 
                     <TouchableOpacity
                       style={styles.rowItem}
@@ -1187,9 +1266,12 @@ export default function AppSettingsScreen() {
                         <IconSymbol name="moon.stars" size={22} color={primaryIconColor} />
                       </View>
                       <View style={styles.rowContent}>
-                        <ThemedText style={styles.rowTitle}>Auto-Dunkelmodus</ThemedText>
+                        <ThemedText style={styles.rowTitle}>{t('appearance.autoDarkTitle')}</ThemedText>
                         <ThemedText style={styles.rowDescription}>
-                          Aktiv von {autoDarkModeStartTime} bis {autoDarkModeEndTime} Uhr.
+                          {t('appearance.autoDarkRange', {
+                            start: autoDarkModeStartTime,
+                            end: autoDarkModeEndTime,
+                          })}
                         </ThemedText>
                       </View>
                       <View style={styles.autoDarkTrailing}>
@@ -1212,12 +1294,12 @@ export default function AppSettingsScreen() {
                     {isAutoDarkExpanded && (
                       <View style={styles.autoDarkScheduleContainer}>
                         <View style={styles.autoDarkScheduleHeader}>
-                          <ThemedText style={styles.autoDarkScheduleLabel}>Zeitfenster</ThemedText>
+                          <ThemedText style={styles.autoDarkScheduleLabel}>{t('sleep.window')}</ThemedText>
                           {isSavingAutoDark && <ActivityIndicator size="small" color={theme.accent} />}
                         </View>
 
                         <View style={styles.autoDarkTimeRow}>
-                          <ThemedText style={styles.autoDarkTimeTitle}>Von</ThemedText>
+                          <ThemedText style={styles.autoDarkTimeTitle}>{t('sleep.from')}</ThemedText>
                           <TouchableOpacity
                             style={styles.autoDarkTimeButton}
                             onPress={() => setShowAutoDarkStartPicker(true)}
@@ -1230,7 +1312,7 @@ export default function AppSettingsScreen() {
                         </View>
 
                         <View style={styles.autoDarkTimeRow}>
-                          <ThemedText style={styles.autoDarkTimeTitle}>Bis</ThemedText>
+                          <ThemedText style={styles.autoDarkTimeTitle}>{t('sleep.until')}</ThemedText>
                           <TouchableOpacity
                             style={styles.autoDarkTimeButton}
                             onPress={() => setShowAutoDarkEndPicker(true)}
@@ -1258,7 +1340,7 @@ export default function AppSettingsScreen() {
                                 style={styles.autoDarkPickerDone}
                                 onPress={() => setShowAutoDarkStartPicker(false)}
                               >
-                                <ThemedText style={styles.autoDarkPickerDoneText}>Fertig</ThemedText>
+                                <ThemedText style={styles.autoDarkPickerDoneText}>{t('common.done')}</ThemedText>
                               </TouchableOpacity>
                             )}
                           </View>
@@ -1280,7 +1362,7 @@ export default function AppSettingsScreen() {
                                 style={styles.autoDarkPickerDone}
                                 onPress={() => setShowAutoDarkEndPicker(false)}
                               >
-                                <ThemedText style={styles.autoDarkPickerDoneText}>Fertig</ThemedText>
+                                <ThemedText style={styles.autoDarkPickerDoneText}>{t('common.done')}</ThemedText>
                               </TouchableOpacity>
                             )}
                           </View>
@@ -1291,7 +1373,7 @@ export default function AppSettingsScreen() {
 
                   <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
                     <TouchableOpacity
-                      style={[styles.rowItem, isSyncingLiveActivities && styles.disabledRow]}
+                      style={[styles.rowItem, styles.firstRow, isSyncingLiveActivities && styles.disabledRow]}
                       onPress={handleOpenLiveActivitiesPopup}
                       disabled={isSyncingLiveActivities}
                     >
@@ -1299,8 +1381,8 @@ export default function AppSettingsScreen() {
                         <IconSymbol name="moon.zzz" size={22} color={primaryIconColor} />
                       </View>
                       <View style={styles.rowContent}>
-                        <ThemedText style={styles.rowTitle}>Live Activities</ThemedText>
-                        <ThemedText style={styles.rowDescription}>Status und Optionen anzeigen</ThemedText>
+                        <ThemedText style={styles.rowTitle}>{t('live.title')}</ThemedText>
+                        <ThemedText style={styles.rowDescription}>{liveActivitiesStatusText}</ThemedText>
                       </View>
                       <View style={styles.trailing}>
                         {isSyncingLiveActivities ? (
@@ -1314,7 +1396,10 @@ export default function AppSettingsScreen() {
 
                   {/* Hintergrundbild */}
                   <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
-                    <ThemedText style={styles.sectionTitle}>Hintergrundbild</ThemedText>
+                    <View style={styles.sectionHeading}>
+                      <IconSymbol name="photo" size={16} color={primaryIconColor} />
+                      <ThemedText style={styles.sectionTitle}>{t('background.section')}</ThemedText>
+                    </View>
 
                     {/* Vorschau */}
                     <View style={styles.backgroundPreviewContainer}>
@@ -1326,8 +1411,11 @@ export default function AppSettingsScreen() {
                       <View style={styles.backgroundPreviewOverlay}>
                         <ThemedText style={styles.backgroundPreviewLabel}>
                           {selectedBackground === 'custom'
-                            ? `Eigenes Bild (${isDarkBackground ? 'dunkel' : 'hell'})`
-                            : PRESET_OPTIONS.find(option => option.id === selectedBackground)?.label ?? 'Standard'}
+                            ? t('background.customPreview', {
+                                mode: t(isDarkBackground ? 'background.modeDark' : 'background.modeLight'),
+                              })
+                            : t(PRESET_OPTIONS.find(option => option.id === selectedBackground)?.labelKey
+                                ?? 'background.preset.default')}
                         </ThemedText>
                       </View>
                     </View>
@@ -1353,7 +1441,7 @@ export default function AppSettingsScreen() {
                                 isSelected && { color: theme.accent, fontWeight: '700' },
                               ]}
                             >
-                              {option.label}
+                              {t(option.labelKey)}
                             </ThemedText>
                           </TouchableOpacity>
                         );
@@ -1369,8 +1457,8 @@ export default function AppSettingsScreen() {
                         <IconSymbol name="photo" size={24} color={primaryIconColor} />
                       </View>
                       <View style={styles.rowContent}>
-                        <ThemedText style={styles.rowTitle}>Hintergrund ändern</ThemedText>
-                        <ThemedText style={styles.rowDescription}>Wähle ein eigenes Bild aus deiner Galerie</ThemedText>
+                        <ThemedText style={styles.rowTitle}>{t('background.changeTitle')}</ThemedText>
+                        <ThemedText style={styles.rowDescription}>{t('background.changeDescription')}</ThemedText>
                       </View>
                       <View style={styles.trailing}>
                         {isChangingBackground ? (
@@ -1388,8 +1476,8 @@ export default function AppSettingsScreen() {
                           onPress={() => {
                             if (isBackgroundModeAutoSynced) {
                               Alert.alert(
-                                'Auto-Dunkelmodus aktiv',
-                                'Die Textfarbe wird automatisch durch den Auto-Dunkelmodus gesteuert. Deaktiviere ihn unter "Darstellung", um die Textfarbe manuell anzupassen.'
+                                t('background.autoDarkActiveTitle'),
+                                t('background.autoDarkActiveMessage')
                               );
                               return;
                             }
@@ -1400,11 +1488,15 @@ export default function AppSettingsScreen() {
                             <IconSymbol name={effectiveIsDarkBackground ? 'sun.max' : 'moon'} size={24} color={primaryIconColor} />
                           </View>
                           <View style={styles.rowContent}>
-                            <ThemedText style={styles.rowTitle}>Textfarbe anpassen</ThemedText>
+                            <ThemedText style={styles.rowTitle}>{t('background.textColorTitle')}</ThemedText>
                             <ThemedText style={styles.rowDescription}>
                               {isBackgroundModeAutoSynced
-                                ? `Automatisch: ${effectiveIsDarkBackground ? 'Heller Text (dunkles Bild)' : 'Dunkler Text (helles Bild)'}`
-                                : `Aktuell: ${effectiveIsDarkBackground ? 'Heller Text (dunkles Bild)' : 'Dunkler Text (helles Bild)'}`}
+                                ? t('background.textColorAuto', {
+                                    mode: t(effectiveIsDarkBackground ? 'background.lightText' : 'background.darkText'),
+                                  })
+                                : t('background.textColorCurrent', {
+                                    mode: t(effectiveIsDarkBackground ? 'background.lightText' : 'background.darkText'),
+                                  })}
                             </ThemedText>
                           </View>
                           <View style={styles.trailing}>
@@ -1421,8 +1513,8 @@ export default function AppSettingsScreen() {
                             <IconSymbol name="arrow.counterclockwise" size={24} color={primaryIconColor} />
                           </View>
                           <View style={styles.rowContent}>
-                            <ThemedText style={styles.rowTitle}>Zurücksetzen</ThemedText>
-                            <ThemedText style={styles.rowDescription}>Standard-Hintergrundbild wiederherstellen</ThemedText>
+                            <ThemedText style={styles.rowTitle}>{t('common.reset')}</ThemedText>
+                            <ThemedText style={styles.rowDescription}>{t('background.resetDescription')}</ThemedText>
                           </View>
                           <View style={styles.trailing}>
                             <IconSymbol name="chevron.right" size={20} color={trailingIconColor} />
@@ -1434,7 +1526,10 @@ export default function AppSettingsScreen() {
 
                   {/* Daten verwalten */}
                   <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
-                    <ThemedText style={styles.sectionTitle}>Daten verwalten</ThemedText>
+                    <View style={styles.sectionHeading}>
+                      <IconSymbol name="lock.shield" size={16} color={primaryIconColor} />
+                      <ThemedText style={styles.sectionTitle}>{t('data.section')}</ThemedText>
+                    </View>
 
                     <TouchableOpacity
                       style={[styles.rowItem, isExporting && styles.disabledRow]}
@@ -1445,8 +1540,8 @@ export default function AppSettingsScreen() {
                         <IconSymbol name="arrow.down.doc" size={24} color={primaryIconColor} />
                       </View>
                       <View style={styles.rowContent}>
-                        <ThemedText style={styles.rowTitle}>Daten exportieren</ThemedText>
-                        <ThemedText style={styles.rowDescription}>Exportiere deine Daten als Backup</ThemedText>
+                        <ThemedText style={styles.rowTitle}>{t('data.exportTitle')}</ThemedText>
+                        <ThemedText style={styles.rowDescription}>{t('data.exportDescription')}</ThemedText>
                       </View>
                       <View style={styles.trailing}>
                         {isExporting ? (
@@ -1466,8 +1561,8 @@ export default function AppSettingsScreen() {
                         <IconSymbol name="trash" size={24} color="#FF6B6B" />
                       </View>
                       <View style={styles.rowContent}>
-                        <ThemedText style={[styles.rowTitle, styles.dangerText]}>Alle Daten löschen</ThemedText>
-                        <ThemedText style={styles.rowDescription}>Lösche alle deine gespeicherten Daten</ThemedText>
+                        <ThemedText style={[styles.rowTitle, styles.dangerText]}>{t('data.deleteTitle')}</ThemedText>
+                        <ThemedText style={styles.rowDescription}>{t('data.deleteDescription')}</ThemedText>
                       </View>
                       <View style={styles.trailing}>
                         {isDeletingData ? (
@@ -1482,7 +1577,10 @@ export default function AppSettingsScreen() {
                   {/* Debug Tools - nur für Admins */}
                   {isAdmin && (
                     <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
-                      <ThemedText style={styles.sectionTitle}>🐛 Debug Tools (Admin)</ThemedText>
+                      <View style={styles.sectionHeading}>
+                        <IconSymbol name="wrench.fill" size={16} color={primaryIconColor} />
+                        <ThemedText style={styles.sectionTitle}>{t('admin.section')}</ThemedText>
+                      </View>
 
                       <TouchableOpacity
                         style={styles.rowItem}
@@ -1492,8 +1590,8 @@ export default function AppSettingsScreen() {
                           <ThemedText style={{ fontSize: 24 }}>🔔</ThemedText>
                         </View>
                         <View style={styles.rowContent}>
-                          <ThemedText style={styles.rowTitle}>Debug Notifications</ThemedText>
-                          <ThemedText style={styles.rowDescription}>Benachrichtigungen testen und debuggen</ThemedText>
+                          <ThemedText style={styles.rowTitle}>{t('admin.notificationsTitle')}</ThemedText>
+                          <ThemedText style={styles.rowDescription}>{t('admin.notificationsDescription')}</ThemedText>
                         </View>
                         <View style={styles.trailing}>
                           <IconSymbol name="chevron.right" size={20} color={trailingIconColor} />
@@ -1509,8 +1607,8 @@ export default function AppSettingsScreen() {
                           <ThemedText style={{ fontSize: 24 }}>😴</ThemedText>
                         </View>
                         <View style={styles.rowContent}>
-                          <ThemedText style={styles.rowTitle}>Sleep-Debug exportieren</ThemedText>
-                          <ThemedText style={styles.rowDescription}>Erzeugt einen JSON-Snapshot mit Schlafdaten, Nachtfenster und Vorhersage</ThemedText>
+                          <ThemedText style={styles.rowTitle}>{t('admin.sleepTitle')}</ThemedText>
+                          <ThemedText style={styles.rowDescription}>{t('admin.sleepDescription')}</ThemedText>
                         </View>
                         <View style={styles.trailing}>
                           {isExportingSleepDebug ? (
@@ -1529,8 +1627,8 @@ export default function AppSettingsScreen() {
                           <ThemedText style={{ fontSize: 24 }}>🧾</ThemedText>
                         </View>
                         <View style={styles.rowContent}>
-                          <ThemedText style={styles.rowTitle}>Paywall-Zugänge verwalten</ThemedText>
-                          <ThemedText style={styles.rowDescription}>Tester- und Kooperationspartner-Rollen vergeben</ThemedText>
+                          <ThemedText style={styles.rowTitle}>{t('admin.accessTitle')}</ThemedText>
+                          <ThemedText style={styles.rowDescription}>{t('admin.accessDescription')}</ThemedText>
                         </View>
                         <View style={styles.trailing}>
                           <IconSymbol name="chevron.right" size={20} color={trailingIconColor} />
@@ -1545,8 +1643,8 @@ export default function AppSettingsScreen() {
                           <ThemedText style={{ fontSize: 24 }}>✍️</ThemedText>
                         </View>
                         <View style={styles.rowContent}>
-                          <ThemedText style={styles.rowTitle}>Paywall-Editor</ThemedText>
-                          <ThemedText style={styles.rowDescription}>Texte anpassen und Pläne ein- oder ausblenden</ThemedText>
+                          <ThemedText style={styles.rowTitle}>{t('admin.editorTitle')}</ThemedText>
+                          <ThemedText style={styles.rowDescription}>{t('admin.editorDescription')}</ThemedText>
                         </View>
                         <View style={styles.trailing}>
                           <IconSymbol name="chevron.right" size={20} color={trailingIconColor} />
@@ -1561,8 +1659,8 @@ export default function AppSettingsScreen() {
                           <ThemedText style={{ fontSize: 24 }}>📣</ThemedText>
                         </View>
                         <View style={styles.rowContent}>
-                          <ThemedText style={styles.rowTitle}>Startmeldungen verwalten</ThemedText>
-                          <ThemedText style={styles.rowDescription}>Popup-Nachrichten und Update-Hinweise für App-Starts</ThemedText>
+                          <ThemedText style={styles.rowTitle}>{t('admin.startupTitle')}</ThemedText>
+                          <ThemedText style={styles.rowDescription}>{t('admin.startupDescription')}</ThemedText>
                         </View>
                         <View style={styles.trailing}>
                           <IconSymbol name="chevron.right" size={20} color={trailingIconColor} />
@@ -1575,10 +1673,10 @@ export default function AppSettingsScreen() {
                           <ThemedText style={{ fontSize: 24 }}>ℹ️</ThemedText>
                         </View>
                         <View style={styles.rowContent}>
-                          <ThemedText style={styles.rowTitle}>Convex Status</ThemedText>
+                          <ThemedText style={styles.rowTitle}>{t('admin.convexTitle')}</ThemedText>
                           <ThemedText style={[styles.rowDescription, { fontSize: 11 }]}>
-                            Client: {convexClient ? '✅ Bereit' : '❌ Nicht verfügbar'}
-                            {lastSyncError && `\n❌ Fehler: ${lastSyncError.message.substring(0, 50)}...`}
+                            {t('admin.client')}: {convexClient ? t('admin.clientReady') : t('admin.clientUnavailable')}
+                            {lastSyncError && `\n${t('admin.error', { message: lastSyncError.message.substring(0, 50) })}`}
                           </ThemedText>
                         </View>
                       </View>
@@ -1589,14 +1687,14 @@ export default function AppSettingsScreen() {
                 <LiquidGlassCard style={[styles.sectionCard, styles.errorContainerGlass]} intensity={26} overlayColor={GLASS_OVERLAY}>
                   <IconSymbol name="exclamationmark.triangle" size={40} color="#FF6B6B" />
                   <ThemedText style={styles.errorText}>
-                    Einstellungen konnten nicht geladen werden
+                    {t('screen.loadFailed')}
                   </ThemedText>
                   <TouchableOpacity
                     style={[styles.retryButton, { backgroundColor: theme.accent }]}
                     onPress={loadSettings}
                   >
                     <ThemedText style={styles.retryButtonText}>
-                      Erneut versuchen
+                      {t('screen.retry')}
                     </ThemedText>
                   </TouchableOpacity>
                   </LiquidGlassCard>
@@ -1628,8 +1726,8 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: LAYOUT_PAD,
-    paddingBottom: 40,
-    paddingTop: 10,
+    paddingBottom: 48,
+    paddingTop: 12,
   },
   contentWrap: {
     width: '100%',
@@ -1644,29 +1742,121 @@ const styles = StyleSheet.create({
     marginTop: 10,
     fontSize: 16,
   },
-  sectionCard: { marginBottom: 16, borderRadius: 22, overflow: 'hidden' },
+  heroCard: {
+    marginBottom: 18,
+    borderRadius: 26,
+    overflow: 'hidden',
+    padding: 20,
+    boxShadow: '0 10px 30px rgba(83, 59, 89, 0.12)',
+  },
+  heroGlow: {
+    position: 'absolute',
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    top: -76,
+    right: -46,
+    backgroundColor: 'rgba(157,190,187,0.22)',
+  },
+  heroTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 13,
+  },
+  heroIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  heroEyebrow: {
+    fontSize: 10,
+    lineHeight: 14,
+    fontWeight: '800',
+    letterSpacing: 1.1,
+  },
+  heroTitle: {
+    fontSize: 22,
+    lineHeight: 28,
+    fontWeight: '800',
+  },
+  heroDescription: {
+    fontSize: 14,
+    lineHeight: 20,
+    opacity: 0.78,
+    paddingTop: 13,
+  },
+  heroPills: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    paddingTop: 16,
+  },
+  heroPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 999,
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    backgroundColor: 'rgba(255,255,255,0.28)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.55)',
+  },
+  heroPillLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  sectionCard: {
+    marginBottom: 16,
+    borderRadius: 22,
+    overflow: 'hidden',
+    boxShadow: '0 6px 20px rgba(83, 59, 89, 0.08)',
+  },
+  sectionHeading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingTop: 17,
+    paddingBottom: 9,
+    paddingHorizontal: 18,
+  },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 12,
-    paddingHorizontal: 16,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '800',
+    letterSpacing: 0.35,
+    opacity: 0.82,
   },
   rowItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
+    minHeight: 68,
+    paddingVertical: 13,
     paddingHorizontal: 16,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: 'rgba(0,0,0,0.08)'
   },
+  firstRow: {
+    borderTopWidth: 0,
+  },
   rowIcon: {
-    width: 40,
+    width: 38,
+    height: 38,
+    borderRadius: 13,
     alignItems: 'center',
-    marginRight: 12,
+    justifyContent: 'center',
+    marginRight: 13,
+    backgroundColor: 'rgba(255,255,255,0.2)',
   },
   rowContent: { flex: 1 },
-  rowTitle: { fontSize: 16, fontWeight: '700' },
-  rowDescription: { fontSize: 13, opacity: 0.8, marginTop: 2 },
+  rowTitle: { fontSize: 16, lineHeight: 21, fontWeight: '700' },
+  rowDescription: { fontSize: 13, lineHeight: 18, opacity: 0.72, marginTop: 2 },
   trailing: { marginLeft: 12, alignItems: 'center', justifyContent: 'center' },
   autoDarkTrailing: {
     marginLeft: 12,
@@ -1680,12 +1870,14 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
   },
   subsectionLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-    opacity: 0.72,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    opacity: 0.62,
     paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 4,
+    paddingTop: 16,
+    paddingBottom: 6,
   },
   inlineNote: {
     fontSize: 13,
@@ -1786,10 +1978,12 @@ const styles = StyleSheet.create({
   backgroundPreviewContainer: {
     marginHorizontal: 16,
     marginBottom: 12,
-    borderRadius: 12,
+    borderRadius: 16,
     overflow: 'hidden',
-    height: 120,
+    height: 132,
     position: 'relative',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.55)',
   },
   backgroundPreview: {
     width: '100%',

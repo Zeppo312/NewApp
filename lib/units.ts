@@ -9,17 +9,17 @@ const LARGE_UNIT_BY_BASE: Record<string, string> = {
   ml: 'l',
 };
 
-export const formatNumber = (value: number): string =>
-  value.toLocaleString('de-DE', { maximumFractionDigits: 2 });
+export const formatNumber = (value: number, locale = 'de-DE'): string =>
+  value.toLocaleString(locale, { maximumFractionDigits: 2 });
 
 /** "1200" + "g" -> "1,2 kg"; "540" + "g" -> "540 g"; "5" + "Stück" -> "5 Stück". */
-export const formatUnitQuantity = (value: number, unit: string): string => {
+export const formatUnitQuantity = (value: number, unit: string, locale = 'de-DE'): string => {
   const normalizedUnit = unit.trim().toLowerCase();
   const largeUnit = LARGE_UNIT_BY_BASE[normalizedUnit];
   if (largeUnit && Math.abs(value) >= 1000) {
-    return `${formatNumber(value / 1000)} ${largeUnit}`;
+    return `${formatNumber(value / 1000, locale)} ${largeUnit}`;
   }
-  return `${formatNumber(value)} ${unit.trim()}`;
+  return `${formatNumber(value, locale)} ${unit.trim()}`;
 };
 
 /**

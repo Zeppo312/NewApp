@@ -17,25 +17,41 @@ import {
   getLinkedBabySelectionOptions,
   type LinkedBabySelectionOption,
 } from '@/lib/baby';
+import {
+  DEFAULT_ACCOUNT_LINKING_LOCALE,
+  getAccountLinkingLocaleTag,
+  translateAccountLinkingText,
+  type AccountLinkingLocale,
+  type AccountLinkingTranslationKey,
+} from '@/lib/accountLinkingTranslations';
 
 type LinkedBabySelectionModalProps = {
   visible: boolean;
   currentUserId?: string | null;
   linkedUserId?: string | null;
   linkedUserName?: string | null;
+  locale?: AccountLinkingLocale;
   onApplied: () => Promise<void> | void;
 };
 
-const formatBabyMeta = (baby: LinkedBabySelectionOption) => {
+const formatBabyMeta = (
+  baby: LinkedBabySelectionOption,
+  locale: AccountLinkingLocale,
+) => {
+  const t = (key: AccountLinkingTranslationKey, params?: Record<string, string | number>) =>
+    translateAccountLinkingText(locale, key, params);
+
   if (baby.birth_date) {
     const date = new Date(baby.birth_date);
     if (!Number.isNaN(date.getTime())) {
-      return `Geboren am ${date.toLocaleDateString('de-DE')}`;
+      return t('modal.bornOn', {
+        date: date.toLocaleDateString(getAccountLinkingLocaleTag(locale)),
+      });
     }
-    return 'Geboren';
+    return t('modal.born');
   }
 
-  return 'Schwangerschaft / kein Geburtsdatum';
+  return t('modal.pregnancy');
 };
 
 export function LinkedBabySelectionModal({
@@ -43,6 +59,7 @@ export function LinkedBabySelectionModal({
   currentUserId,
   linkedUserId,
   linkedUserName,
+  locale = DEFAULT_ACCOUNT_LINKING_LOCALE,
   onApplied,
 }: LinkedBabySelectionModalProps) {
   const colorScheme = useColorScheme() ?? 'light';
@@ -64,6 +81,8 @@ export function LinkedBabySelectionModal({
   const activeCardColor = isDark ? 'rgba(233,201,182,0.14)' : 'rgba(233,201,182,0.16)';
   const primaryButtonColor = '#9DBEBB';
   const secondaryButtonColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(125, 90, 80, 0.08)';
+  const t = (key: AccountLinkingTranslationKey, params?: Record<string, string | number>) =>
+    translateAccountLinkingText(locale, key, params);
 
   useEffect(() => {
     if (!visible || !currentUserId || !linkedUserId) {
@@ -96,7 +115,10 @@ export function LinkedBabySelectionModal({
       .catch((error: any) => {
         console.error('Failed to load linked baby selection modal:', error);
         if (!cancelled) {
-          Alert.alert('Fehler', error?.message || 'Die Baby-Auswahl konnte nicht geladen werden.');
+          Alert.alert(
+            translateAccountLinkingText(locale, 'common.error'),
+            error?.message || translateAccountLinkingText(locale, 'modal.loadFailed'),
+          );
           setOptions([]);
           setSelectedBabyIds([]);
         }
@@ -110,7 +132,7 @@ export function LinkedBabySelectionModal({
     return () => {
       cancelled = true;
     };
-  }, [visible, currentUserId, linkedUserId]);
+  }, [visible, currentUserId, linkedUserId, locale]);
 
   const currentUserBabies = useMemo(
     () => options.filter((baby) => baby.is_owned_by_current_user),
@@ -139,7 +161,7 @@ export function LinkedBabySelectionModal({
       : selectedBabyIds;
 
     if (targetSelection.length === 0) {
-      Alert.alert('Hinweis', 'Bitte wähle mindestens ein Baby aus.');
+      Alert.alert(t('common.notice'), t('modal.minimumSelection'));
       return;
     }
 
@@ -159,7 +181,7 @@ export function LinkedBabySelectionModal({
       await onApplied();
     } catch (error: any) {
       console.error('Failed to apply linked baby selection:', error);
-      Alert.alert('Fehler', error?.message || 'Die Baby-Auswahl konnte nicht gespeichert werden.');
+      Alert.alert(t('common.error'), error?.message || t('modal.saveFailed'));
     } finally {
       setIsApplying(false);
     }
@@ -190,10 +212,10 @@ export function LinkedBabySelectionModal({
               <View style={styles.babyCardTopRow}>
                 <View style={styles.babyTitleWrap}>
                   <ThemedText style={[styles.babyTitle, { color: textPrimary }]}>
-                    {baby.name?.trim() || 'Ohne Namen'}
+                    {baby.name?.trim() || t('modal.unnamedBaby')}
                   </ThemedText>
                   <ThemedText style={[styles.babyMeta, { color: textSecondary }]}>
-                    {formatBabyMeta(baby)}
+                    {formatBabyMeta(baby, locale)}
                   </ThemedText>
                 </View>
                 <IconSymbol
@@ -217,26 +239,28 @@ export function LinkedBabySelectionModal({
             <View style={styles.centerState}>
               <ActivityIndicator size="large" color={primaryButtonColor} />
               <ThemedText style={[styles.centerStateText, { color: textSecondary }]}>
-                Lade Baby-Auswahl…
+                {t('modal.loading')}
               </ThemedText>
             </View>
           ) : (
             <>
               <ThemedText style={[styles.title, { color: textPrimary }]}>
-                Welche Babys möchtet ihr gemeinsam nutzen?
+                {t('modal.title')}
               </ThemedText>
               <ThemedText style={[styles.subtitle, { color: textSecondary }]}>
-                Wähle ein oder mehrere Baby-Profile aus. Nicht ausgewählte Profile werden nicht mehr zwischen deinem Account und {linkedUserName || 'dem verbundenen Account'} geteilt.
+                {t('modal.subtitle', {
+                  name: linkedUserName || t('modal.linkedAccountFallback'),
+                })}
               </ThemedText>
 
               {options.length === 0 ? (
                 <>
                   <View style={[styles.emptyStateCard, { backgroundColor: cardColor, borderColor: cardBorderColor }]}>
                     <ThemedText style={[styles.emptyStateTitle, { color: textPrimary }]}>
-                      Keine separaten Baby-Profile gefunden
+                      {t('modal.emptyTitle')}
                     </ThemedText>
                     <ThemedText style={[styles.emptyStateText, { color: textSecondary }]}>
-                      Die Accounts sind verbunden. Falls später mehrere Baby-Profile vorhanden sind, kannst du die Auswahl erneut im Verknüpfungsbereich anpassen.
+                      {t('modal.emptyText')}
                     </ThemedText>
                   </View>
 
@@ -245,7 +269,7 @@ export function LinkedBabySelectionModal({
                     onPress={() => void onApplied()}
                     activeOpacity={0.9}
                   >
-                    <ThemedText style={styles.primaryButtonText}>Weiter</ThemedText>
+                    <ThemedText style={styles.primaryButtonText}>{t('modal.continue')}</ThemedText>
                   </TouchableOpacity>
                 </>
               ) : (
@@ -261,7 +285,7 @@ export function LinkedBabySelectionModal({
                       color={allSelected ? primaryButtonColor : textSecondary}
                     />
                     <ThemedText style={[styles.selectAllText, { color: allSelected ? primaryButtonColor : textSecondary }]}>
-                      {allSelected ? 'Alle ausgewählt' : 'Alle auswählen'}
+                      {allSelected ? t('modal.allSelected') : t('modal.selectAll')}
                     </ThemedText>
                   </TouchableOpacity>
 
@@ -270,8 +294,8 @@ export function LinkedBabySelectionModal({
                     contentContainerStyle={styles.scrollContent}
                     showsVerticalScrollIndicator={false}
                   >
-                    {renderBabyGroup('Dein Account', currentUserBabies)}
-                    {renderBabyGroup(linkedUserName || 'Verbundenes Konto', linkedUserBabies)}
+                    {renderBabyGroup(t('modal.ownAccount'), currentUserBabies)}
+                    {renderBabyGroup(linkedUserName || t('modal.linkedAccount'), linkedUserBabies)}
                   </ScrollView>
 
                   <TouchableOpacity
@@ -292,10 +316,10 @@ export function LinkedBabySelectionModal({
                   >
                     <View style={styles.deleteToggleTextWrap}>
                       <ThemedText style={[styles.deleteToggleTitle, { color: textPrimary }]}>
-                        Nicht ausgewählte eigene Babys löschen?
+                        {t('modal.deleteTitle')}
                       </ThemedText>
                       <ThemedText style={[styles.deleteToggleSubtitle, { color: textSecondary }]}>
-                        Gilt nur für Babys aus deinem Account. Partner-Babys werden bei Nicht-Auswahl nur entkoppelt.
+                        {t('modal.deleteDescription')}
                       </ThemedText>
                     </View>
                     <IconSymbol
@@ -313,7 +337,7 @@ export function LinkedBabySelectionModal({
                       activeOpacity={0.9}
                     >
                       <ThemedText style={[styles.secondaryButtonText, { color: textPrimary }]}>
-                        Alle behalten
+                        {t('modal.keepAll')}
                       </ThemedText>
                     </TouchableOpacity>
 
@@ -330,7 +354,7 @@ export function LinkedBabySelectionModal({
                       {isApplying ? (
                         <ActivityIndicator color="#FFFFFF" />
                       ) : (
-                        <ThemedText style={styles.primaryButtonText}>Auswahl übernehmen</ThemedText>
+                        <ThemedText style={styles.primaryButtonText}>{t('modal.applySelection')}</ThemedText>
                       )}
                     </TouchableOpacity>
                   </View>

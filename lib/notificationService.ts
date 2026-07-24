@@ -182,6 +182,10 @@ export function navigateToNotificationTarget(type: string, referenceId: string) 
         router.push('/(tabs)/daily_old' as any);
         break;
 
+      case 'advisor_reminder':
+        router.push('/lottis-fuersorge' as any);
+        break;
+
       default:
         // Standardmäßig zur Community-Ansicht
         console.log('Unknown notification type:', type);

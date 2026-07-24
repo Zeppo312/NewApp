@@ -2,15 +2,15 @@ import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Redirect, useRouter , useFocusEffect } from 'expo-router';
+import { Redirect, Stack, useFocusEffect, useRouter } from 'expo-router';
 
 import Header from '@/components/Header';
 import { SubscriptionCancellationFeedbackModal } from '@/components/SubscriptionCancellationFeedbackModal';
@@ -26,10 +26,8 @@ import {
 } from '@/constants/DesignGuide';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
-import { useColorScheme } from '@/hooks/useColorScheme';
 import { getCachedUserProfile } from '@/lib/appCache';
 import {
-  getPaywallAccessRoleLabel,
   isPaywallAccessRole,
   type PaywallAccessRole,
 } from '@/lib/paywallAccess';
@@ -38,6 +36,7 @@ import {
   hasRevenueCatEntitlement,
   restoreRevenueCatPurchases,
   type RevenueCatPlanType,
+  type SubscriptionTier,
 } from '@/lib/revenuecat';
 import {
   saveSubscriptionCancellationFeedback,
@@ -47,12 +46,20 @@ import {
   getSubscriptionManagementStoreLabel,
   openSubscriptionManagement,
 } from '@/lib/subscriptionManagement';
+import {
+  DEFAULT_SUBSCRIPTION_LOCALE,
+  getSubscriptionAccessRoleLabel,
+  getSubscriptionLocaleTag,
+  translateSubscriptionText,
+  type SubscriptionTranslationKey,
+} from '@/lib/subscriptionTranslations';
 
 type SubscriptionViewState = {
   isAdmin: boolean;
   accessRole: PaywallAccessRole | null;
   isPremium: boolean;
   planType: RevenueCatPlanType | null;
+  tier: SubscriptionTier | null;
   productId: string | null;
   expiresDate: string | null;
   willRenew: boolean | null;
@@ -63,26 +70,30 @@ const EMPTY_STATE: SubscriptionViewState = {
   accessRole: null,
   isPremium: false,
   planType: null,
+  tier: null,
   productId: null,
   expiresDate: null,
   willRenew: null,
 };
+
+const ACTIVE_SUBSCRIPTION_LOCALE = DEFAULT_SUBSCRIPTION_LOCALE;
+const t = (
+  key: SubscriptionTranslationKey,
+  params?: Record<string, string | number>,
+) => translateSubscriptionText(ACTIVE_SUBSCRIPTION_LOCALE, key, params);
 
 const formatDate = (date: string | null) => {
   if (!date) return null;
   const parsed = new Date(date);
   if (Number.isNaN(parsed.getTime())) return null;
 
-  return parsed.toLocaleDateString('de-DE', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  });
+  return new Intl.DateTimeFormat(
+    getSubscriptionLocaleTag(ACTIVE_SUBSCRIPTION_LOCALE),
+    { day: '2-digit', month: '2-digit', year: 'numeric' },
+  ).format(parsed);
 };
 
 export default function SubscriptionScreen() {
-  const colorScheme = useColorScheme() ?? 'light';
-  const theme = Colors[colorScheme];
   const adaptiveColors = useAdaptiveColors();
   const router = useRouter();
   const { session, user } = useAuth();
@@ -97,9 +108,18 @@ export default function SubscriptionScreen() {
     adaptiveColors.isDarkBackground;
   const textPrimary = isDark ? Colors.dark.textPrimary : '#5C4033';
   const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
+  const textTertiary = isDark ? Colors.dark.textTertiary : '#9C8178';
   const glassOverlay = isDark ? GLASS_OVERLAY_DARK : GLASS_OVERLAY;
-  const iconAccentColor = isDark ? '#FFFFFF' : theme.accent;
-  const iconSecondaryColor = isDark ? 'rgba(255,255,255,0.9)' : theme.tabIconDefault;
+  const dividerColor = isDark
+    ? 'rgba(255,255,255,0.12)'
+    : 'rgba(125,90,80,0.10)';
+  const softSurface = isDark
+    ? 'rgba(255,255,255,0.07)'
+    : 'rgba(255,255,255,0.42)';
+  const iconAccentColor = isDark ? '#FFD0AE' : '#8E4EC6';
+  const iconSecondaryColor = isDark
+    ? 'rgba(255,255,255,0.86)'
+    : '#9C8178';
 
   const loadState = useCallback(async () => {
     if (!user) {
@@ -114,13 +134,9 @@ export default function SubscriptionScreen() {
       const profile = await getCachedUserProfile();
       if (profile?.is_admin === true) {
         setState({
+          ...EMPTY_STATE,
           isAdmin: true,
-          accessRole: null,
           isPremium: true,
-          planType: null,
-          productId: null,
-          expiresDate: null,
-          willRenew: null,
         });
         return;
       }
@@ -130,13 +146,8 @@ export default function SubscriptionScreen() {
         : null;
       if (accessRole) {
         setState({
-          isAdmin: false,
+          ...EMPTY_STATE,
           accessRole,
-          isPremium: false,
-          planType: null,
-          productId: null,
-          expiresDate: null,
-          willRenew: null,
         });
         return;
       }
@@ -151,6 +162,7 @@ export default function SubscriptionScreen() {
         accessRole: null,
         isPremium: fallbackPremium,
         planType: summary.planType,
+        tier: summary.tier,
         productId: summary.productId,
         expiresDate: summary.expiresDate,
         willRenew: summary.willRenew,
@@ -173,13 +185,12 @@ export default function SubscriptionScreen() {
     return <Redirect href="/(auth)/login" />;
   }
 
-  const openStoreManagement = async () => {
-    setIsFeedbackModalVisible(true);
-  };
-
   const continueToStoreManagement = async () => {
     setIsFeedbackModalVisible(false);
-    await openSubscriptionManagement();
+    await openSubscriptionManagement({
+      failureTitle: t('alert.manageErrorTitle'),
+      failureMessage: t('alert.manageErrorMessage'),
+    });
   };
 
   const handleSubmitCancellationFeedback = async ({
@@ -223,416 +234,503 @@ export default function SubscriptionScreen() {
       const restored = await restoreRevenueCatPurchases(user.id);
       if (!restored) {
         Alert.alert(
-          'Kein Abo gefunden',
-          'Es wurde kein aktives Abo zum Wiederherstellen gefunden.',
+          t('alert.restoreNoneTitle'),
+          t('alert.restoreNoneMessage'),
         );
       }
       await loadState();
     } catch (error) {
       console.error('Restore purchases failed:', error);
-      Alert.alert('Fehler', 'Käufe konnten nicht wiederhergestellt werden.');
+      Alert.alert(t('alert.errorTitle'), t('alert.restoreError'));
     } finally {
       setIsRestoring(false);
     }
   };
 
-  const planLabel = state.isAdmin
-    ? 'Admin-Zugang'
-    : state.accessRole
-      ? `${getPaywallAccessRoleLabel(state.accessRole)}-Zugang`
-    : state.planType === 'monthly'
-      ? 'Monatsabo'
+  const showPlans = () => {
+    router.push({
+      pathname: '/paywall',
+      params: {
+        next: '/subscription',
+        origin: 'subscription-screen',
+      },
+    } as any);
+  };
+
+  const roleLabel = state.accessRole
+    ? getSubscriptionAccessRoleLabel(
+        ACTIVE_SUBSCRIPTION_LOCALE,
+        state.accessRole,
+      )
+    : null;
+  const intervalLabel =
+    state.planType === 'monthly'
+      ? t('plan.monthly')
       : state.planType === 'yearly'
-        ? 'Jahresabo'
-        : state.isPremium
-          ? 'Aktives Abo'
-          : 'Kein aktives Abo';
+        ? t('plan.yearly')
+        : null;
+  const tierLabel = state.tier ? t(`tier.${state.tier}`) : null;
+  const planLabel = state.isAdmin
+    ? t('plan.admin')
+    : roleLabel
+      ? t('plan.special', { role: roleLabel })
+      : tierLabel && intervalLabel
+        ? t('plan.withTier', { tier: tierLabel, interval: intervalLabel })
+        : intervalLabel ?? (state.isPremium ? t('plan.active') : t('plan.none'));
 
   const statusLabel = state.isAdmin
-    ? 'Aktiv durch Admin-Rechte'
-    : state.accessRole
-      ? `Aktiv als ${getPaywallAccessRoleLabel(state.accessRole)}`
-    : state.isPremium
-      ? 'Abo aktiv'
-      : 'Derzeit nicht aktiv';
-
+    ? t('status.admin')
+    : roleLabel
+      ? t('status.special', { role: roleLabel })
+      : state.isPremium
+        ? t('status.subscription')
+        : t('status.noSubscription');
   const detailLabel = state.isAdmin
-    ? 'Du siehst den Zustand ohne Paywall. Store-Käufe sind im Admin-Modus nicht nötig.'
-    : state.accessRole
-      ? `Dieser Account umgeht die Paywall aktuell über den Sonderzugang "${getPaywallAccessRoleLabel(state.accessRole)}". Store-Käufe sind dafür nicht nötig.`
-    : state.isPremium
-      ? state.willRenew === false
-        ? 'Dein Abo läuft aktuell, verlängert sich aber nicht automatisch.'
-        : 'Dein Abo läuft und die App bleibt ohne Paywall nutzbar.'
-      : 'Für die Nutzung von Lotti Baby brauchst du ein aktives Abo. Eine eventuelle kostenlose Apple-Testphase wird dir vor dem Kauf im Store angezeigt.';
+    ? t('detail.admin')
+    : roleLabel
+      ? t('detail.special', { role: roleLabel })
+      : state.isPremium
+        ? state.willRenew === false
+          ? t('detail.activeEnding')
+          : t('detail.activeRenewing')
+        : t('detail.inactive');
 
   const hasActiveAccess = state.isAdmin || !!state.accessRole || state.isPremium;
   const expirationLabel = formatDate(state.expiresDate);
   const canManageStore = state.isPremium && !state.isAdmin && !state.accessRole;
-  const canChoosePlan = !hasActiveAccess;
   const canRestore = !state.isAdmin && !state.accessRole;
-  const showActions = canManageStore || canChoosePlan || canRestore;
+  const showActions = canManageStore || canRestore;
+  const renewalLabel =
+    state.isAdmin || state.accessRole
+      ? t('renewal.notApplicable')
+      : state.willRenew === false
+        ? t('renewal.ended')
+        : state.isPremium
+          ? t('renewal.automatic')
+          : t('renewal.none');
+  const statusColor = hasActiveAccess ? '#6F9F99' : '#C7835F';
+  const statusSurface = hasActiveAccess
+    ? isDark
+      ? 'rgba(157,190,187,0.18)'
+      : 'rgba(157,190,187,0.24)'
+    : isDark
+      ? 'rgba(233,201,182,0.16)'
+      : 'rgba(233,201,182,0.34)';
 
-  const statusDotColor = hasActiveAccess ? '#9DBEBB' : '#E9C9B6';
-  const statusText = hasActiveAccess ? 'Aktiv' : 'Inaktiv';
+  const renderSummaryRow = (
+    icon: string,
+    label: string,
+    value: string,
+    isLast = false,
+  ) => (
+    <View
+      style={[
+        styles.summaryRow,
+        !isLast && { borderBottomColor: dividerColor, borderBottomWidth: 1 },
+      ]}
+    >
+      <View style={[styles.summaryIcon, { backgroundColor: softSurface }]}>
+        <IconSymbol name={icon} size={17} color={iconSecondaryColor} />
+      </View>
+      <ThemedText style={[styles.summaryLabel, { color: textSecondary }]}>
+        {label}
+      </ThemedText>
+      <ThemedText
+        selectable
+        style={[styles.summaryValue, { color: textPrimary }]}
+      >
+        {value}
+      </ThemedText>
+    </View>
+  );
 
   return (
-    <ThemedBackground style={styles.background}>
-      <SafeAreaView style={styles.container}>
-        <StatusBar
-          barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'}
-        />
+    <>
+      <Stack.Screen options={{ headerShown: false }} />
+      <ThemedBackground style={styles.background}>
+        <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+          <StatusBar
+            barStyle={isDark ? 'light-content' : 'dark-content'}
+            backgroundColor="transparent"
+            translucent
+          />
 
-        <Header
-          title="Abo"
-          subtitle="Status und Verwaltung deines Zugangs"
-          showBackButton
-          showBabySwitcher={false}
-          onBackPress={() => router.push('/(tabs)/more')}
-        />
+          <Header
+            title={t('screen.title')}
+            subtitle={t('screen.subtitle')}
+            showBackButton
+            showBabySwitcher={false}
+            onBackPress={() => router.push('/(tabs)/more')}
+          />
 
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.contentContainer}
-        >
-          {/* Status Card */}
-          <LiquidGlassCard
-            style={[styles.sectionCard, canChoosePlan && styles.sectionCardTinted]}
-            intensity={26}
-            overlayColor={glassOverlay}
+          <ScrollView
+            style={styles.scrollView}
+            contentContainerStyle={styles.contentContainer}
+            contentInsetAdjustmentBehavior="automatic"
+            showsVerticalScrollIndicator={false}
           >
-            {isLoading ? (
-              <View style={styles.loadingWrap}>
-                <ActivityIndicator color={theme.accent} />
-                <ThemedText
-                  style={[styles.loadingText, { color: textSecondary }]}
-                >
-                  Abo-Status wird geladen…
-                </ThemedText>
-              </View>
-            ) : (
-              <>
-                <View style={styles.statusHeader}>
-                  <View style={styles.statusIconWrap}>
-                    <IconSymbol
-                      name={
-                        (state.isAdmin
-                          ? 'checkmark.shield.fill'
-                          : state.accessRole
-                            ? 'person.fill'
-                            : state.isPremium
-                              ? 'star.fill'
-                              : 'lock.fill') as any
-                      }
-                      size={22}
-                      color={iconAccentColor}
-                    />
+            <LiquidGlassCard
+              style={styles.statusCard}
+              intensity={30}
+              overlayColor={glassOverlay}
+            >
+              <View
+                style={[
+                  styles.statusAccent,
+                  { backgroundColor: hasActiveAccess ? '#9DBEBB' : '#E9C9B6' },
+                ]}
+              />
+              {isLoading ? (
+                <View style={styles.loadingWrap}>
+                  <View style={[styles.loadingIcon, { backgroundColor: softSurface }]}>
+                    <ActivityIndicator color={iconAccentColor} />
                   </View>
-                  <View style={styles.statusHeaderText}>
-                    <ThemedText
-                      style={[styles.statusTitle, { color: textPrimary }]}
-                    >
-                      {planLabel}
-                    </ThemedText>
-                    <View style={styles.statusBadgeRow}>
+                  <ThemedText style={[styles.loadingText, { color: textSecondary }]}>
+                    {t('screen.loading')}
+                  </ThemedText>
+                </View>
+              ) : (
+                <>
+                  <View style={styles.statusContent}>
+                    <View style={styles.statusTopRow}>
                       <View
                         style={[
-                          styles.statusDot,
-                          { backgroundColor: statusDotColor },
+                          styles.statusIconWrap,
+                          { backgroundColor: statusSurface },
                         ]}
-                      />
-                      <ThemedText
-                        style={[styles.statusBadgeText, { color: textSecondary }]}
                       >
-                        {statusText}
+                        <IconSymbol
+                          name={
+                            state.isAdmin
+                              ? 'checkmark.seal.fill'
+                              : state.accessRole
+                                ? 'person.fill'
+                                : state.isPremium
+                                  ? 'star.fill'
+                                  : 'lock.shield'
+                          }
+                          size={25}
+                          color={hasActiveAccess ? '#6F9F99' : iconAccentColor}
+                        />
+                      </View>
+                      <View style={styles.statusHeading}>
+                        <ThemedText
+                          style={[styles.eyebrow, { color: textTertiary }]}
+                        >
+                          {t('status.eyebrow')}
+                        </ThemedText>
+                        <ThemedText
+                          selectable
+                          style={[styles.planTitle, { color: textPrimary }]}
+                        >
+                          {planLabel}
+                        </ThemedText>
+                      </View>
+                      <View
+                        style={[
+                          styles.statusPill,
+                          { backgroundColor: statusSurface },
+                        ]}
+                      >
+                        <View
+                          style={[styles.statusDot, { backgroundColor: statusColor }]}
+                        />
+                        <ThemedText
+                          style={[styles.statusPillText, { color: statusColor }]}
+                        >
+                          {hasActiveAccess
+                            ? t('status.active')
+                            : t('status.inactive')}
+                        </ThemedText>
+                      </View>
+                    </View>
+
+                    <View style={styles.statusCopy}>
+                      <ThemedText
+                        style={[styles.statusTitle, { color: textPrimary }]}
+                      >
+                        {statusLabel}
+                      </ThemedText>
+                      <ThemedText
+                        selectable
+                        style={[styles.detailText, { color: textSecondary }]}
+                      >
+                        {detailLabel}
                       </ThemedText>
                     </View>
                   </View>
-                </View>
 
-                <View style={styles.detailSection}>
-                  <ThemedText
-                    style={[styles.statusSubtitle, { color: textPrimary }]}
-                  >
-                    {statusLabel}
-                  </ThemedText>
-                  <ThemedText
-                    style={[styles.detailText, { color: textSecondary }]}
-                  >
-                    {detailLabel}
-                  </ThemedText>
-                </View>
-
-                {/* Info-Zeilen */}
-                <View style={styles.infoRows}>
-                  <View style={styles.infoRow}>
-                    <IconSymbol
-                      name="square.grid.2x2.fill"
-                      size={15}
-                      color={iconSecondaryColor}
-                    />
-                    <ThemedText
-                      style={[styles.infoLabel, { color: textSecondary }]}
-                    >
-                      Tarif
-                    </ThemedText>
-                    <ThemedText
-                      style={[styles.infoValue, { color: textPrimary }]}
-                    >
-                      {planLabel}
-                    </ThemedText>
-                  </View>
-
-                  <View style={styles.infoRow}>
-                    <IconSymbol
-                      name="arrow.triangle.2.circlepath"
-                      size={15}
-                      color={iconSecondaryColor}
-                    />
-                    <ThemedText
-                      style={[styles.infoLabel, { color: textSecondary }]}
-                    >
-                      Verlängerung
-                    </ThemedText>
-                    <ThemedText
-                      style={[styles.infoValue, { color: textPrimary }]}
-                    >
-                      {state.isAdmin
-                        ? 'Nicht relevant'
-                        : state.accessRole
-                          ? 'Nicht relevant'
-                          : state.willRenew === false
-                            ? 'Beendet'
-                            : state.isPremium
-                              ? 'Automatisch'
-                              : 'Keine'}
-                    </ThemedText>
-                  </View>
-
-                  {expirationLabel ? (
-                    <View style={styles.infoRow}>
-                      <IconSymbol
-                        name="calendar"
-                        size={15}
-                        color={iconSecondaryColor}
-                      />
-                      <ThemedText
-                        style={[styles.infoLabel, { color: textSecondary }]}
-                      >
-                        Ablauf
-                      </ThemedText>
-                      <ThemedText
-                        style={[styles.infoValue, { color: textPrimary }]}
-                      >
-                        {expirationLabel}
-                      </ThemedText>
-                    </View>
-                  ) : null}
-                </View>
-              </>
-            )}
-          </LiquidGlassCard>
-
-          {/* Hervorgehobener CTA wenn kein Abo */}
-          {!isLoading && canChoosePlan ? (
-            <View style={styles.ctaCard}>
-              <LinearGradient
-                colors={['#6B4FCE', '#8E6BE8']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={StyleSheet.absoluteFill}
-              />
-              <View style={styles.ctaInner}>
-                <View style={styles.ctaIconWrap}>
-                  <IconSymbol name="star.fill" size={26} color="#FFD8B5" />
-                </View>
-                <ThemedText style={styles.ctaTitle}>
-                  Lotti Baby freischalten
-                </ThemedText>
-                <ThemedText style={styles.ctaDescription}>
-                  Wähle dein Abo und nutze alle Funktionen ohne Einschränkung weiter.
-                </ThemedText>
-                <TouchableOpacity
-                  style={styles.ctaButton}
-                  activeOpacity={0.8}
-                  onPress={() =>
-                    router.push({
-                      pathname: '/paywall',
-                      params: {
-                        next: '/subscription',
-                        origin: 'subscription-screen',
-                      },
-                    } as any)
-                  }
-                >
-                  <LinearGradient
-                    colors={['#FFCFAE', '#FEB493']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={StyleSheet.absoluteFill}
-                  />
-                  <ThemedText style={styles.ctaButtonText}>
-                    Jetzt Abo auswählen
-                  </ThemedText>
-                </TouchableOpacity>
-              </View>
-            </View>
-          ) : null}
-
-          {/* Aktionen */}
-          {!isLoading && showActions ? (
-            <LiquidGlassCard
-              style={[styles.sectionCard, canChoosePlan && styles.sectionCardTinted]}
-              intensity={26}
-              overlayColor={glassOverlay}
-            >
-              <ThemedText style={[styles.sectionTitle, { color: textPrimary }]}>
-                Aktionen
-              </ThemedText>
-
-              {canManageStore ? (
-                <TouchableOpacity
-                  style={styles.menuItem}
-                  onPress={openStoreManagement}
-                >
-                  <View style={styles.menuItemIcon}>
-                    <IconSymbol
-                      name="creditcard.fill"
-                      size={24}
-                      color={iconAccentColor}
-                    />
-                  </View>
-                  <View style={styles.menuItemContent}>
-                    <ThemedText
-                      style={[styles.menuItemTitle, { color: textPrimary }]}
-                    >
-                      Abo verwalten
-                    </ThemedText>
-                    <ThemedText
-                      style={[
-                        styles.menuItemDescription,
-                        { color: textSecondary },
-                      ]}
-                    >
-                      Öffne deine Abo-Verwaltung im App Store oder Google Play
-                    </ThemedText>
-                  </View>
-                  <IconSymbol
-                    name="chevron.right"
-                    size={20}
-                    color={iconSecondaryColor}
-                  />
-                </TouchableOpacity>
-              ) : null}
-
-              {canRestore ? (
-                <TouchableOpacity
-                  style={styles.menuItem}
-                  onPress={handleRestore}
-                  disabled={isRestoring}
-                >
-                  <View style={styles.menuItemIcon}>
-                    <IconSymbol
-                      name="arrow.clockwise"
-                      size={24}
-                      color={iconAccentColor}
-                    />
-                  </View>
-                  <View style={styles.menuItemContent}>
-                    <ThemedText
-                      style={[styles.menuItemTitle, { color: textPrimary }]}
-                    >
-                      {isRestoring
-                        ? 'Wird geprüft…'
-                        : 'Käufe wiederherstellen'}
-                    </ThemedText>
-                    <ThemedText
-                      style={[
-                        styles.menuItemDescription,
-                        { color: textSecondary },
-                      ]}
-                    >
-                      Prüft, ob bereits ein Abo in deinem Store-Konto vorhanden
-                      ist
-                    </ThemedText>
-                  </View>
-                </TouchableOpacity>
-              ) : null}
-            </LiquidGlassCard>
-          ) : null}
-
-          {/* Alles gut Card */}
-          {!isLoading && !showActions ? (
-            <LiquidGlassCard
-              style={styles.sectionCard}
-              intensity={26}
-              overlayColor={glassOverlay}
-            >
-              <View style={styles.noteRow}>
-                <View style={styles.menuItemIcon}>
-                  <IconSymbol
-                    name="checkmark.circle.fill"
-                    size={24}
-                    color="#9DBEBB"
-                  />
-                </View>
-                <View style={styles.menuItemContent}>
-                  <ThemedText
-                    style={[styles.menuItemTitle, { color: textPrimary }]}
-                  >
-                    Keine weiteren Schritte nötig
-                  </ThemedText>
-                  <ThemedText
+                  <View
                     style={[
-                      styles.menuItemDescription,
-                      { color: textSecondary },
+                      styles.summaryPanel,
+                      { backgroundColor: softSurface, borderColor: dividerColor },
                     ]}
                   >
-                    Dein Zugang ist aktiv. Für diesen Account sind aktuell keine
-                    weiteren Schritte nötig.
+                    {renderSummaryRow(
+                      'square.grid.2x2.fill',
+                      t('summary.plan'),
+                      planLabel,
+                    )}
+                    {renderSummaryRow(
+                      'arrow.triangle.2.circlepath',
+                      t('summary.renewal'),
+                      renewalLabel,
+                      !expirationLabel,
+                    )}
+                    {expirationLabel
+                      ? renderSummaryRow(
+                          'calendar',
+                          state.willRenew === false
+                            ? t('summary.accessUntil')
+                            : t('summary.nextRenewal'),
+                          expirationLabel,
+                          true,
+                        )
+                      : null}
+                  </View>
+                </>
+              )}
+            </LiquidGlassCard>
+
+            {!isLoading ? (
+              <View style={styles.plansCard}>
+                <LinearGradient
+                  colors={isDark ? ['#493783', '#7655B8'] : ['#7052C7', '#9A72DD']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={StyleSheet.absoluteFill}
+                />
+                <View style={styles.decorativeOrbLarge} />
+                <View style={styles.decorativeOrbSmall} />
+                <View style={styles.plansContent}>
+                  <View style={styles.plansHeaderRow}>
+                    <View style={styles.plansIconWrap}>
+                      <IconSymbol name="sparkles" size={24} color="#FFD8B5" />
+                    </View>
+                    <ThemedText style={styles.plansEyebrow}>
+                      {t('plans.eyebrow')}
+                    </ThemedText>
+                  </View>
+                  <ThemedText style={styles.plansTitle}>
+                    {hasActiveAccess
+                      ? t('plans.title.active')
+                      : t('plans.title.inactive')}
                   </ThemedText>
+                  <ThemedText style={styles.plansDescription}>
+                    {hasActiveAccess
+                      ? t('plans.description.active')
+                      : t('plans.description.inactive')}
+                  </ThemedText>
+
+                  <View style={styles.tierRow}>
+                    {(['lite', 'standard', 'premium'] as const).map((tier) => (
+                      <View key={tier} style={styles.tierPill}>
+                        <View style={styles.tierDot} />
+                        <ThemedText style={styles.tierText}>
+                          {t(`tier.${tier}`)}
+                        </ThemedText>
+                      </View>
+                    ))}
+                  </View>
+
+                  <TouchableOpacity
+                    style={styles.plansButton}
+                    activeOpacity={0.84}
+                    onPress={showPlans}
+                  >
+                    <LinearGradient
+                      colors={['#FFF5EB', '#FFD6BC']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={StyleSheet.absoluteFill}
+                    />
+                    <ThemedText style={styles.plansButtonText}>
+                      {hasActiveAccess
+                        ? t('plans.button.active')
+                        : t('plans.button.inactive')}
+                    </ThemedText>
+                    <IconSymbol
+                      name="arrow.right.circle.fill"
+                      size={21}
+                      color="#6748B5"
+                    />
+                  </TouchableOpacity>
                 </View>
               </View>
-            </LiquidGlassCard>
-          ) : null}
+            ) : null}
 
-          {/* Technische Info */}
-          {!isLoading && state.productId ? (
-            <LiquidGlassCard
-              style={styles.sectionCard}
-              intensity={26}
-              overlayColor={glassOverlay}
-            >
-              <ThemedText style={[styles.sectionTitle, { color: textPrimary }]}>
-                Technische Info
-              </ThemedText>
-              <View style={styles.infoRow}>
-                <IconSymbol
-                  name="info.circle"
-                  size={15}
-                  color={iconSecondaryColor}
-                />
-                <ThemedText
-                  style={[styles.infoLabel, { color: textSecondary }]}
-                >
-                  Produkt-ID
-                </ThemedText>
-                <ThemedText style={[styles.infoValue, { color: textPrimary }]}>
-                  {state.productId}
-                </ThemedText>
-              </View>
-            </LiquidGlassCard>
-          ) : null}
-        </ScrollView>
-      </SafeAreaView>
-      <SubscriptionCancellationFeedbackModal
-        visible={isFeedbackModalVisible}
-        isSubmitting={isSubmittingFeedback}
-        onClose={() => setIsFeedbackModalVisible(false)}
-        onSkip={() => void continueToStoreManagement()}
-        onSubmit={(feedback) => void handleSubmitCancellationFeedback(feedback)}
-      />
-    </ThemedBackground>
+            {!isLoading && showActions ? (
+              <LiquidGlassCard
+                style={styles.sectionCard}
+                intensity={26}
+                overlayColor={glassOverlay}
+              >
+                <View style={styles.sectionHeader}>
+                  <ThemedText style={[styles.sectionTitle, { color: textPrimary }]}>
+                    {t('actions.title')}
+                  </ThemedText>
+                </View>
+
+                {canManageStore ? (
+                  <TouchableOpacity
+                    style={[styles.menuItem, { borderTopColor: dividerColor }]}
+                    activeOpacity={0.78}
+                    onPress={() => setIsFeedbackModalVisible(true)}
+                  >
+                    <View style={[styles.menuItemIcon, { backgroundColor: softSurface }]}>
+                      <IconSymbol
+                        name="creditcard.fill"
+                        size={22}
+                        color={iconAccentColor}
+                      />
+                    </View>
+                    <View style={styles.menuItemContent}>
+                      <ThemedText
+                        style={[styles.menuItemTitle, { color: textPrimary }]}
+                      >
+                        {t('actions.manageTitle')}
+                      </ThemedText>
+                      <ThemedText
+                        style={[
+                          styles.menuItemDescription,
+                          { color: textSecondary },
+                        ]}
+                      >
+                        {t('actions.manageDescription', {
+                          store: getSubscriptionManagementStoreLabel(),
+                        })}
+                      </ThemedText>
+                    </View>
+                    <IconSymbol
+                      name="chevron.right"
+                      size={20}
+                      color={iconSecondaryColor}
+                    />
+                  </TouchableOpacity>
+                ) : null}
+
+                {canRestore ? (
+                  <TouchableOpacity
+                    style={[styles.menuItem, { borderTopColor: dividerColor }]}
+                    activeOpacity={0.78}
+                    onPress={handleRestore}
+                    disabled={isRestoring}
+                  >
+                    <View style={[styles.menuItemIcon, { backgroundColor: softSurface }]}>
+                      {isRestoring ? (
+                        <ActivityIndicator size="small" color={iconAccentColor} />
+                      ) : (
+                        <IconSymbol
+                          name="arrow.clockwise"
+                          size={22}
+                          color={iconAccentColor}
+                        />
+                      )}
+                    </View>
+                    <View style={styles.menuItemContent}>
+                      <ThemedText
+                        style={[styles.menuItemTitle, { color: textPrimary }]}
+                      >
+                        {isRestoring
+                          ? t('actions.restoring')
+                          : t('actions.restore')}
+                      </ThemedText>
+                      <ThemedText
+                        style={[
+                          styles.menuItemDescription,
+                          { color: textSecondary },
+                        ]}
+                      >
+                        {t('actions.restoreDescription')}
+                      </ThemedText>
+                    </View>
+                  </TouchableOpacity>
+                ) : null}
+              </LiquidGlassCard>
+            ) : null}
+
+            {!isLoading && !showActions ? (
+              <LiquidGlassCard
+                style={styles.sectionCard}
+                intensity={26}
+                overlayColor={glassOverlay}
+              >
+                <View style={styles.noteRow}>
+                  <View style={[styles.menuItemIcon, { backgroundColor: softSurface }]}>
+                    <IconSymbol
+                      name="checkmark.circle.fill"
+                      size={22}
+                      color="#7EAAA4"
+                    />
+                  </View>
+                  <View style={styles.menuItemContent}>
+                    <ThemedText
+                      style={[styles.menuItemTitle, { color: textPrimary }]}
+                    >
+                      {t('note.title')}
+                    </ThemedText>
+                    <ThemedText
+                      style={[
+                        styles.menuItemDescription,
+                        { color: textSecondary },
+                      ]}
+                    >
+                      {t('note.description')}
+                    </ThemedText>
+                  </View>
+                </View>
+              </LiquidGlassCard>
+            ) : null}
+
+            {!isLoading && state.productId ? (
+              <LiquidGlassCard
+                style={styles.technicalCard}
+                intensity={22}
+                overlayColor={glassOverlay}
+              >
+                <View style={styles.technicalHeader}>
+                  <IconSymbol
+                    name="info.circle"
+                    size={17}
+                    color={iconSecondaryColor}
+                  />
+                  <ThemedText
+                    style={[styles.technicalTitle, { color: textSecondary }]}
+                  >
+                    {t('technical.title')}
+                  </ThemedText>
+                </View>
+                <View style={styles.technicalRow}>
+                  <ThemedText
+                    style={[styles.technicalLabel, { color: textTertiary }]}
+                  >
+                    {t('technical.productId')}
+                  </ThemedText>
+                  <ThemedText
+                    selectable
+                    numberOfLines={2}
+                    style={[styles.technicalValue, { color: textPrimary }]}
+                  >
+                    {state.productId}
+                  </ThemedText>
+                </View>
+              </LiquidGlassCard>
+            ) : null}
+          </ScrollView>
+        </SafeAreaView>
+
+        <SubscriptionCancellationFeedbackModal
+          visible={isFeedbackModalVisible}
+          isSubmitting={isSubmittingFeedback}
+          locale={ACTIVE_SUBSCRIPTION_LOCALE}
+          onClose={() => setIsFeedbackModalVisible(false)}
+          onSkip={() => void continueToStoreManagement()}
+          onSubmit={(feedback) =>
+            void handleSubmitCancellationFeedback(feedback)
+          }
+        />
+      </ThemedBackground>
+    </>
   );
 }
 
@@ -648,195 +746,316 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     paddingHorizontal: LAYOUT_PAD,
-    paddingTop: 10,
-    paddingBottom: 56,
+    paddingTop: 14,
+    paddingBottom: 64,
+    gap: 16,
   },
-  sectionCard: {
-    marginBottom: 16,
-    borderRadius: 22,
+  statusCard: {
+    borderRadius: 26,
     overflow: 'hidden',
   },
-  sectionCardTinted: {
-    borderWidth: 1,
-    borderColor: 'rgba(107,79,206,0.15)',
-    backgroundColor: 'rgba(107,79,206,0.04)',
+  statusAccent: {
+    height: 4,
+    width: '100%',
   },
   loadingWrap: {
-    paddingVertical: 40,
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 14,
-  },
-  /* Status header */
-  statusHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 4,
-    paddingBottom: 12,
-  },
-  statusIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    minHeight: 230,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(142,78,198,0.12)',
-    marginRight: 14,
+    gap: 12,
   },
-  statusHeaderText: {
-    flex: 1,
+  loadingIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  statusTitle: {
-    fontSize: 20,
-    fontWeight: '800',
+  loadingText: {
+    fontSize: 14,
   },
-  statusBadgeRow: {
+  statusContent: {
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    gap: 17,
+  },
+  statusTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 4,
+    gap: 12,
+  },
+  statusIconWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statusHeading: {
+    flex: 1,
+    gap: 2,
+  },
+  eyebrow: {
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '800',
+    letterSpacing: 1.15,
+  },
+  planTitle: {
+    fontSize: 20,
+    lineHeight: 25,
+    fontWeight: '800',
+  },
+  statusPill: {
+    minHeight: 30,
+    borderRadius: 15,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
     gap: 6,
   },
   statusDot: {
-    width: 8,
-    height: 8,
+    width: 7,
+    height: 7,
     borderRadius: 4,
   },
-  statusBadgeText: {
-    fontSize: 13,
-    fontWeight: '600',
+  statusPillText: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '800',
   },
-  /* Detail section */
-  detailSection: {
-    paddingHorizontal: 16,
-    paddingBottom: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(0,0,0,0.08)',
+  statusCopy: {
+    gap: 5,
+    paddingBottom: 17,
   },
-  statusSubtitle: {
-    fontSize: 15,
+  statusTitle: {
+    fontSize: 16,
+    lineHeight: 21,
     fontWeight: '700',
-    marginBottom: 4,
   },
   detailText: {
     fontSize: 14,
     lineHeight: 20,
   },
-  /* Info rows */
-  infoRows: {
-    paddingTop: 6,
+  summaryPanel: {
+    marginHorizontal: 12,
+    marginBottom: 12,
+    borderRadius: 18,
+    borderWidth: 1,
+    overflow: 'hidden',
   },
-  infoRow: {
+  summaryRow: {
+    minHeight: 55,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 11,
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     gap: 10,
   },
-  infoLabel: {
-    fontSize: 13,
+  summaryIcon: {
+    width: 31,
+    height: 31,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  summaryLabel: {
     flex: 1,
+    fontSize: 13,
+    lineHeight: 17,
   },
-  infoValue: {
+  summaryValue: {
+    flexShrink: 1,
+    maxWidth: '54%',
     fontSize: 14,
+    lineHeight: 19,
     fontWeight: '700',
+    textAlign: 'right',
   },
-  /* Section title */
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 12,
-    paddingHorizontal: 16,
+  plansCard: {
+    minHeight: 315,
+    borderRadius: 26,
+    overflow: 'hidden',
+    boxShadow: '0 10px 28px rgba(83, 57, 151, 0.24)',
   },
-  /* Menu items (same pattern as more.tsx) */
-  menuItem: {
+  decorativeOrbLarge: {
+    position: 'absolute',
+    width: 190,
+    height: 190,
+    borderRadius: 95,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    right: -68,
+    top: -82,
+  },
+  decorativeOrbSmall: {
+    position: 'absolute',
+    width: 92,
+    height: 92,
+    borderRadius: 46,
+    backgroundColor: 'rgba(255,216,181,0.10)',
+    left: -32,
+    bottom: -35,
+  },
+  plansContent: {
+    padding: 22,
+    gap: 12,
+  },
+  plansHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
+    gap: 10,
+  },
+  plansIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 13,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  plansEyebrow: {
+    color: 'rgba(255,255,255,0.78)',
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '800',
+    letterSpacing: 1.1,
+  },
+  plansTitle: {
+    color: '#FFFFFF',
+    fontSize: 23,
+    lineHeight: 29,
+    fontWeight: '800',
+  },
+  plansDescription: {
+    color: 'rgba(255,255,255,0.84)',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  tierRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  tierPill: {
+    minHeight: 30,
+    borderRadius: 15,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    gap: 6,
+  },
+  tierDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: '#FFD8B5',
+  },
+  tierText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '700',
+  },
+  plansButton: {
+    minHeight: 52,
+    borderRadius: 17,
+    overflow: 'hidden',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 18,
+    gap: 9,
+  },
+  plansButtonText: {
+    color: '#5D3FA9',
+    fontSize: 16,
+    lineHeight: 21,
+    fontWeight: '800',
+  },
+  sectionCard: {
+    borderRadius: 24,
+    overflow: 'hidden',
+  },
+  sectionHeader: {
+    paddingHorizontal: 17,
+    paddingTop: 16,
+    paddingBottom: 12,
+  },
+  sectionTitle: {
+    fontSize: 17,
+    lineHeight: 22,
+    fontWeight: '800',
+  },
+  menuItem: {
+    minHeight: 76,
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 16,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(0,0,0,0.08)',
+    paddingVertical: 13,
+    borderTopWidth: 1,
+    gap: 12,
   },
   menuItemIcon: {
-    width: 40,
+    width: 42,
+    height: 42,
+    borderRadius: 14,
     alignItems: 'center',
-    marginRight: 12,
+    justifyContent: 'center',
   },
   menuItemContent: {
     flex: 1,
+    gap: 2,
   },
   menuItemTitle: {
-    fontSize: 16,
+    fontSize: 15,
+    lineHeight: 20,
     fontWeight: '700',
-    marginBottom: 2,
   },
   menuItemDescription: {
     fontSize: 13,
     lineHeight: 18,
   },
-  /* CTA Card */
-  ctaCard: {
-    marginBottom: 16,
-    borderRadius: 22,
-    overflow: 'hidden',
-    shadowColor: '#6B4FCE',
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 8,
-  },
-  ctaInner: {
-    padding: 24,
-    alignItems: 'center',
-  },
-  ctaIconWrap: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 14,
-  },
-  ctaTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#FDFBF6',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  ctaDescription: {
-    fontSize: 14,
-    color: 'rgba(253,251,246,0.85)',
-    textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 20,
-    maxWidth: 300,
-  },
-  ctaButton: {
-    width: '100%',
-    paddingVertical: 16,
-    borderRadius: 18,
-    alignItems: 'center',
-    overflow: 'hidden',
-    shadowColor: '#FEB493',
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-  },
-  ctaButtonText: {
-    color: '#5E3DB3',
-    fontSize: 17,
-    fontWeight: '800',
-    letterSpacing: 0.3,
-  },
-  /* Note row */
   noteRow: {
+    minHeight: 82,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
+    padding: 16,
+    gap: 12,
+  },
+  technicalCard: {
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
+  technicalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 15,
+    paddingTop: 14,
+    gap: 7,
+  },
+  technicalTitle: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '700',
+  },
+  technicalRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingHorizontal: 15,
+    paddingTop: 8,
+    paddingBottom: 14,
+    gap: 12,
+  },
+  technicalLabel: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  technicalValue: {
+    flex: 2,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '600',
+    textAlign: 'right',
   },
 });

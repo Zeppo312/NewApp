@@ -48,7 +48,7 @@ interface SettingsRow {
 }
 
 /** Lokale Stunde / lokales Datum in einer IANA-Zeitzone. */
-const localParts = (tz: string): { hour: number; date: string } => {
+const localParts = (tz: string): { hour: number; minute: number; date: string } => {
   try {
     const parts = new Intl.DateTimeFormat('en-CA', {
       timeZone: tz,
@@ -56,15 +56,33 @@ const localParts = (tz: string): { hour: number; date: string } => {
       month: '2-digit',
       day: '2-digit',
       hour: '2-digit',
+      minute: '2-digit',
       hour12: false,
     }).formatToParts(new Date());
     const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
     return {
       hour: Number(get('hour')) % 24,
+      minute: Number(get('minute')) || 0,
       date: `${get('year')}-${get('month')}-${get('day')}`,
     };
   } catch {
     return localParts('Europe/Berlin');
+  }
+};
+
+const localMinuteOf = (iso: string, tz: string): number => {
+  try {
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: tz,
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).formatToParts(new Date(iso));
+    const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '0';
+    return (Number(get('hour')) % 24) * 60 + Number(get('minute'));
+  } catch {
+    const date = new Date(iso);
+    return date.getUTCHours() * 60 + date.getUTCMinutes();
   }
 };
 
@@ -208,7 +226,7 @@ serve(async (req: Request) => {
   for (const settings of (allSettings ?? []) as SettingsRow[]) {
     try {
       const tz = settings.timezone || 'Europe/Berlin';
-      const { hour: localHour, date: localDate } = localParts(tz);
+      const { hour: localHour, minute: localMinute, date: localDate } = localParts(tz);
 
       // Nur im 8-Uhr-Fenster der jeweiligen Zeitzone verarbeiten.
       if (!force && localHour !== SEND_HOUR_LOCAL) continue;
@@ -327,16 +345,24 @@ serve(async (req: Request) => {
 
         // Eigene Baseline: Ø Mahlzeiten/Tag der letzten 14 Tage (ohne heute),
         // nur Tage mit Einträgen; ab 3 solchen Tagen aussagekräftig.
-        const perDay = new Map<string, number>();
+        const cutoffMinute = localHour * 60 + localMinute;
+        const perDay = new Map<string, { total: number; byNow: number }>();
         for (const e of feedings) {
           const day = localDateOf(e.start_time, tz);
           if (day === localDate) continue;
           if (nowMs - new Date(e.start_time).getTime() > 14 * 86_400_000) continue;
-          perDay.set(day, (perDay.get(day) ?? 0) + 1);
+          const value = perDay.get(day) ?? { total: 0, byNow: 0 };
+          value.total += 1;
+          if (localMinuteOf(e.start_time, tz) <= cutoffMinute) value.byNow += 1;
+          perDay.set(day, value);
         }
         const typicalPerDay =
           perDay.size >= 3
-            ? Array.from(perDay.values()).reduce((a, b) => a + b, 0) / perDay.size
+            ? Array.from(perDay.values()).reduce((a, b) => a + b.total, 0) / perDay.size
+            : null;
+        const typicalByNow =
+          perDay.size >= 3
+            ? Array.from(perDay.values()).reduce((a, b) => a + b.byNow, 0) / perDay.size
             : null;
 
         const todayDiapers = care.filter(
@@ -402,6 +428,8 @@ serve(async (req: Request) => {
             solidsCountLast21Days: solids21,
             likelyFeedingMode,
             typicalPerDay,
+            typicalByNow,
+            baselineSampleDays: perDay.size,
           },
           diaper: {
             count: todayDiapers.length,
@@ -409,7 +437,13 @@ serve(async (req: Request) => {
             wetCountToday: wetDiapers.length,
             lastWetAt: lastWet ? lastWet.toISOString() : null,
           },
-          sleep: { minutes: sleepMinutes, isReal: sleepMinutes > 0 },
+          sleep: {
+            minutes: sleepMinutes,
+            isReal: sleepMinutes > 0,
+            typicalMinutesByNow: null,
+            baselineSampleDays: 0,
+          },
+          context: { localHour, localMinute },
           weather: weather ?? {
             available: false,
             temperature: null,

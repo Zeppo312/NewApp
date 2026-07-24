@@ -42,6 +42,9 @@ export interface RuleFeeding {
   likelyFeedingMode?: FeedingMode;
   /** Eigene 14-Tage-Baseline (Mahlzeiten/Tag); null = zu wenig Historie. */
   typicalPerDay?: number | null;
+  /** Eigene 14-Tage-Baseline bis zur aktuellen Uhrzeit. */
+  typicalByNow?: number | null;
+  baselineSampleDays?: number;
 }
 
 export interface RuleDiaper {
@@ -58,7 +61,13 @@ export interface RuleSignals {
   ageText: string;
   feeding: RuleFeeding;
   diaper?: RuleDiaper;
-  sleep: { minutes: number; isReal: boolean };
+  sleep: {
+    minutes: number;
+    isReal: boolean;
+    typicalMinutesByNow?: number | null;
+    baselineSampleDays?: number;
+  };
+  context?: { localHour: number; localMinute: number };
   weather: {
     available: boolean;
     temperature: number | null;
@@ -170,7 +179,7 @@ const hoursText = (h: number): string =>
 /**
  * Wertet alle Regeln aus und liefert die aktiven Kandidaten,
  * sortiert nach Priorität (beste zuerst). Enthält immer mindestens
- * den Positiv-Fallback `all_good`.
+ * einen sicheren Fallback (`all_good` oder `learning`).
  */
 export const evaluateRules = (s: RuleSignals): RuleCandidate[] => {
   const name = s.babyName || 'dein Baby';
@@ -179,22 +188,18 @@ export const evaluateRules = (s: RuleSignals): RuleCandidate[] => {
   const mode = resolveFeedingMode(s.feeding);
   const under6Months = s.ageMonths != null && s.ageMonths < 6;
 
-  // „Wenig getrunken" nie aus reiner Mahlzeitenzahl ableiten, wenn Beikost
-  // dominiert — dort zählt Flüssigkeit (Flasche/Wasser/nasse Windeln).
-  const liquidCount =
-    (s.feeding.breastCount ?? 0) +
-    (s.feeding.bottleCount ?? 0) +
-    (s.feeding.waterCount ?? 0);
-  const lowFeeding =
-    mode === 'solids'
-      ? s.feeding.isReal && s.feeding.totalCount > 0 && liquidCount === 0
-      : s.feeding.totalCount > 0 && s.feeding.totalCount < feedRef;
-
-  const lowSleep = s.sleep.minutes > 0 && s.sleep.minutes < sleepRef;
-
-  // Nasse Windeln (Hydrations-Indikator bei Hitze).
-  const wetCount = s.diaper?.wetCountToday;
-  const wetKnown = typeof wetCount === 'number' && s.diaper?.isReal !== false;
+  const localHour = s.context?.localHour ?? 12;
+  const localMinute = s.context?.localMinute ?? 0;
+  const activeProgress = Math.max(
+    0,
+    Math.min(1, (localHour * 60 + localMinute - 6 * 60) / (16 * 60)),
+  );
+  const expectedByNow =
+    typeof s.feeding.typicalByNow === 'number'
+      ? s.feeding.typicalByNow
+      : typeof s.feeding.typicalPerDay === 'number'
+        ? s.feeding.typicalPerDay * activeProgress
+        : null;
 
   // Intervall seit der letzten Mahlzeit vs. übliches Intervall
   // (~16 wache Stunden / übliche Mahlzeiten pro Tag, begrenzt auf 2–6 Std).
@@ -204,6 +209,30 @@ export const evaluateRules = (s: RuleSignals): RuleCandidate[] => {
     typeof hoursSince === 'number' &&
     hoursSince > expectedIntervalH * 1.3 &&
     mode !== 'solids';
+  const countLowForThisTime =
+    expectedByNow != null && expectedByNow >= 2 &&
+    s.feeding.totalCount + 1 < expectedByNow;
+
+  // „Wenig getrunken" nie aus einer starren Tagesgrenze ableiten. Bei
+  // Beikost zählt zusätzlich, ob bis jetzt überhaupt Flüssigkeit erfasst ist.
+  const liquidCount =
+    (s.feeding.breastCount ?? 0) +
+    (s.feeding.bottleCount ?? 0) +
+    (s.feeding.waterCount ?? 0);
+  const lowFeeding =
+    mode === 'solids'
+      ? countLowForThisTime && liquidCount === 0
+      : intervalLong || countLowForThisTime;
+
+  const sleepTypicalByNow = s.sleep.typicalMinutesByNow;
+  const lowSleep =
+    typeof sleepTypicalByNow === 'number' &&
+    sleepTypicalByNow >= 60 &&
+    s.sleep.minutes + 60 < sleepTypicalByNow * 0.75;
+
+  // Nasse Windeln (Hydrations-Indikator bei Hitze).
+  const wetCount = s.diaper?.wetCountToday;
+  const wetKnown = typeof wetCount === 'number' && s.diaper?.isReal !== false;
 
   // Tagesforecast: UV & Regen (Fallback-Schwellen, falls der Client die
   // Flags noch nicht liefert). Babyhaut braucht ab UV 3 Schutz; die eigene
@@ -217,12 +246,16 @@ export const evaluateRules = (s: RuleSignals): RuleCandidate[] => {
     ageMonths: s.ageMonths,
     feedingsToday: s.feeding.totalCount,
     feedingsTypical: feedRef,
+    feedingsTypicalByNow: expectedByNow,
+    baselineSampleDays: s.feeding.baselineSampleDays ?? 0,
     feedingMode: mode,
     liquidFeedingsToday: liquidCount,
     hoursSinceLastFeeding: hoursSince ?? null,
     wetDiapersToday: wetKnown ? wetCount : null,
     sleepMinutes: s.sleep.minutes,
     sleepTypical: sleepRef,
+    sleepTypicalByNow: sleepTypicalByNow ?? null,
+    localHour,
     temperature: s.weather.temperature,
     feelsLike: s.weather.feelsLike,
     uvIndex,
@@ -255,7 +288,9 @@ export const evaluateRules = (s: RuleSignals): RuleCandidate[] => {
       reasons: [
         mode === 'solids'
           ? `Heute ${s.feeding.totalCount} Mahlzeiten, aber noch nichts zu trinken erfasst`
-          : `Heute erst ${s.feeding.totalCount} Mahlzeiten (üblich sind bei euch etwa ${feedRef})`,
+          : typeof hoursSince === 'number' && intervalLong
+            ? `Letzte Mahlzeit vor ${hoursText(hoursSince)} (bei euch meist etwa ${hoursText(expectedIntervalH)})`
+            : `Bis jetzt ${s.feeding.totalCount} Mahlzeiten (bei euch sonst etwa ${Math.round((expectedByNow ?? 0) * 10) / 10})`,
         `Wetter heute: warm (${temp(s)})`,
         ...wetReason,
         `Alter berücksichtigt: ${s.ageText || 'unbekannt'}`,
@@ -278,7 +313,7 @@ export const evaluateRules = (s: RuleSignals): RuleCandidate[] => {
       coreContent:
         'Hitze stört den Babyschlaf. Für den nächsten Schlaf den kühlsten Raum wählen, leichte Kleidung bzw. dünneren Schlafsack nutzen und das Schlaffenster eher etwas vorziehen.',
       reasons: [
-        `Heutiger Schlaf (${Math.round(s.sleep.minutes / 6) / 10} Std) unter dem üblichen Rahmen`,
+        `Bis jetzt ${Math.round(s.sleep.minutes / 6) / 10} Std Schlaf (bei euch sonst etwa ${Math.round((sleepTypicalByNow ?? 0) / 6) / 10} Std)`,
         `Wetter heute: warm (${temp(s)})`,
         'Schlafmuster der letzten Tage',
       ],
@@ -392,8 +427,8 @@ export const evaluateRules = (s: RuleSignals): RuleCandidate[] => {
       coreContent:
         'Nach einer kurzen Nacht den Mittagsschlaf nicht zu spät legen, Schlaffenster eher vorziehen, den Tag ruhig gestalten. Auch die Eltern-Selbstfürsorge erwähnen.',
       reasons: [
-        `Heutiger Schlaf (${Math.round(s.sleep.minutes / 6) / 10} Std) unter dem üblichen Rahmen`,
-        'Schlafmuster der letzten Tage',
+        `Bis jetzt ${Math.round(s.sleep.minutes / 6) / 10} Std Schlaf (bei euch sonst etwa ${Math.round((sleepTypicalByNow ?? 0) / 6) / 10} Std)`,
+        `${s.sleep.baselineSampleDays ?? 0} Vergleichstage berücksichtigt`,
       ],
       facts: baseFacts,
     });
@@ -402,11 +437,11 @@ export const evaluateRules = (s: RuleSignals): RuleCandidate[] => {
   // 4.6 Lange keine Mahlzeit — bevorzugt über das echte Intervall,
   // sonst über die Tageszahl. Nicht bei Beikost-Kindern, nicht bei Hitze
   // (dort greift die Kombi-Regel).
-  if ((intervalLong || lowFeeding) && s.feeding.isReal && !s.weather.isHot && mode !== 'solids') {
+  if (lowFeeding && s.feeding.isReal && !s.weather.isHot && mode !== 'solids') {
     const intervalBody =
       typeof hoursSince === 'number'
         ? `Die letzte Mahlzeit ist ${hoursText(hoursSince)} her – bei euch liegt das Intervall sonst eher bei ${hoursText(expectedIntervalH)}. Magst du bald wieder ${offerPhrase(mode)} anbieten?`
-        : `${name} hatte heute erst ${s.feeding.totalCount} Mahlzeiten – üblich sind bei euch eher ${feedRef}. Magst du bald wieder ${offerPhrase(mode)} anbieten?`;
+        : `${name} hatte bis jetzt ${s.feeding.totalCount} Mahlzeiten – um diese Uhrzeit sind es bei euch meist etwa ${Math.round((expectedByNow ?? 0) * 10) / 10}. Magst du bald wieder ${offerPhrase(mode)} anbieten?`;
     candidates.push({
       ruleId: 'low_feeding',
       priority: 3,
@@ -421,29 +456,36 @@ export const evaluateRules = (s: RuleSignals): RuleCandidate[] => {
       reasons: [
         typeof hoursSince === 'number'
           ? `Letzte Mahlzeit vor ${hoursText(hoursSince)} (üblich: etwa ${hoursText(expectedIntervalH)})`
-          : `Heute erst ${s.feeding.totalCount} Mahlzeiten (üblich sind bei euch etwa ${feedRef})`,
+          : `Bis jetzt ${s.feeding.totalCount} Mahlzeiten (bei euch sonst etwa ${Math.round((expectedByNow ?? 0) * 10) / 10})`,
         `Alter berücksichtigt: ${s.ageText || 'unbekannt'}`,
       ],
       facts: baseFacts,
     });
   }
 
-  // 4.9 Positiv-Fallback (immer vorhanden)
+  const hasPersonalBaseline = expectedByNow != null || sleepTypicalByNow != null;
+
+  // 4.9 Fallback: ohne persönliche Daten ehrlich Lernphase zeigen.
   candidates.push({
-    ruleId: 'all_good',
+    ruleId: hasPersonalBaseline ? 'all_good' : 'learning',
     priority: 5,
     category: 'motivation',
-    tone: 'positive',
-    emoji: '🌿',
-    title: 'Heute läuft es rund',
-    headline: 'Alles im grünen Bereich',
-    body: `${name}s Tag wirkt heute schön ausgeglichen – Schlaf, Trinken und Wickeln liegen im gewohnten Rahmen. Genießt euren Tag zusammen!`,
-    coreContent:
-      'Positive Rückmeldung: Die heutigen Werte liegen im gewohnten Rahmen. Kurz bestärken, keinen Handlungsauftrag geben.',
-    reasons: [
-      'Heutige Werte im Vergleich zu euren üblichen Mustern',
-      'Schlaf, Ernährung und Windeln berücksichtigt',
-    ],
+    tone: hasPersonalBaseline ? 'positive' : 'neutral',
+    emoji: hasPersonalBaseline ? '🌿' : '🌱',
+    title: hasPersonalBaseline ? 'Heute läuft es rund' : 'Lotti lernt euch kennen',
+    headline: hasPersonalBaseline ? 'Alles im grünen Bereich' : 'Noch kein Vergleich nötig',
+    body: hasPersonalBaseline
+      ? `${name}s Tag wirkt heute schön ausgeglichen – Schlaf, Trinken und Wickeln liegen im gewohnten Rahmen. Genießt euren Tag zusammen!`
+      : `Erfasse ein paar Tage lang Schlaf und Mahlzeiten von ${name}. Ab drei Vergleichstagen kann Lotti euren eigenen Rhythmus statt allgemeiner Grenzwerte nutzen.`,
+    coreContent: hasPersonalBaseline
+      ? 'Positive Rückmeldung: Die heutigen Werte liegen im gewohnten Rahmen. Kurz bestärken, keinen Handlungsauftrag geben.'
+      : 'Transparent erklären, dass noch zu wenige persönliche Vergleichstage vorliegen. Keine medizinische Bewertung und keine Entwarnung behaupten.',
+    reasons: hasPersonalBaseline
+      ? [
+          'Heutige Werte im Vergleich zu euren üblichen Mustern',
+          'Schlaf, Ernährung und Windeln berücksichtigt',
+        ]
+      : ['Noch weniger als 3 ausreichend erfasste Vergleichstage'],
     facts: baseFacts,
   });
 
@@ -453,7 +495,7 @@ export const evaluateRules = (s: RuleSignals): RuleCandidate[] => {
 /**
  * Wählt den besten Kandidaten unter Beachtung von Theme-Opt-outs und
  * Regel-Cooldown (dieselbe Regel max. 1× pro 72 h → recentRuleIds).
- * Der Positiv-Fallback ist vom Cooldown ausgenommen, damit immer
+ * Die Fallbacks sind vom Cooldown ausgenommen, damit immer
  * ein Tageshinweis existiert.
  */
 export const selectCandidate = (
@@ -463,10 +505,11 @@ export const selectCandidate = (
   const themes = options.themes;
   const recent = new Set(options.recentRuleIds ?? []);
   const allowed = candidates.filter((c) => {
-    if (themes && themes.length > 0 && !themes.includes(c.category) && c.ruleId !== 'all_good') {
+    const fallback = c.ruleId === 'all_good' || c.ruleId === 'learning';
+    if (themes && themes.length > 0 && !themes.includes(c.category) && !fallback) {
       return false;
     }
-    if (recent.has(c.ruleId) && c.ruleId !== 'all_good') return false;
+    if (recent.has(c.ruleId) && !fallback) return false;
     return true;
   });
   return allowed[0] ?? candidates[candidates.length - 1];

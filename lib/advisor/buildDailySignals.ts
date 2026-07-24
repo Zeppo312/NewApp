@@ -23,6 +23,7 @@ import {
 } from '@/lib/weatherService';
 
 import type { DailySignals } from './types';
+import { buildFeedingBaselines, buildSleepBaseline } from './baselines';
 
 const HOT_THRESHOLD_C = 27;
 const COLD_THRESHOLD_C = 5;
@@ -80,27 +81,6 @@ const formatSleepMinutes = (minutes: number): string => {
  * Damit zählt auch der Nachtschlaf mit, der gestern Abend begann und heute
  * Morgen endete — nicht nur die heute gestarteten Nickerchen.
  */
-const computeTodaySleepMinutes = (entries: any[] | undefined): number => {
-  if (!entries?.length) return 0;
-  const today = new Date();
-  let total = 0;
-  for (const entry of entries) {
-    const start = entry?.start_time ? new Date(entry.start_time) : null;
-    if (!start || Number.isNaN(start.getTime())) continue;
-    const end = entry?.end_time ? new Date(entry.end_time) : null;
-    const endValid = end && !Number.isNaN(end.getTime());
-    const countsToday =
-      (endValid && isSameDay(end, today)) || isSameDay(start, today);
-    if (!countsToday) continue;
-    if (typeof entry?.duration_minutes === 'number' && entry.duration_minutes > 0) {
-      total += entry.duration_minutes;
-    } else if (endValid) {
-      total += Math.max(0, Math.round((end.getTime() - start.getTime()) / 60_000));
-    }
-  }
-  return total;
-};
-
 /**
  * Wetter nur laden, wenn die Standortfreigabe bereits erteilt ist (kein Prompt).
  * Lädt aktuelles Wetter (Beschreibung) UND den Tagesforecast (Tmax, UV-Index,
@@ -158,9 +138,33 @@ const buildEmptySignals = (babyName: string): DailySignals => ({
     solidsCountLast21Days: 0,
     likelyFeedingMode: 'unknown',
     typicalPerDay: null,
+    typicalByNow: null,
+    baselineSampleDays: 0,
+    typicalIntervalMinutes: null,
+    intervalSampleCount: 0,
   },
   diaper: { count: 0, isReal: true, wetCountToday: 0, lastWetAt: null },
-  sleep: { minutes: 0, text: '–', isReal: true },
+  sleep: {
+    minutes: 0,
+    text: '–',
+    isReal: true,
+    typicalMinutesByNow: null,
+    baselineSampleDays: 0,
+    lastSleepEndAt: null,
+    currentSleepStartedAt: null,
+    isSleepingNow: false,
+    currentAwakeMinutes: null,
+    typicalWakeMinutes: null,
+    wakeSampleCount: 0,
+    lastNightMinutes: null,
+    typicalNightMinutes: null,
+    nightSampleDays: 0,
+    roughNight: false,
+  },
+  context: {
+    localHour: new Date().getHours(),
+    localMinute: new Date().getMinutes(),
+  },
   weather: {
     available: false,
     temperature: null,
@@ -264,21 +268,7 @@ export const buildDailySignals = async (
                 ? 'solids'
                 : 'unknown';
 
-      // Eigene Baseline: Ø Mahlzeiten/Tag der letzten 14 Tage (ohne heute),
-      // nur Tage mit Einträgen; ab 3 solchen Tagen aussagekräftig.
-      const perDay = new Map<string, number>();
-      for (const e of feedingEntries) {
-        const start = validDate(e?.start_time);
-        if (!start || isSameDay(start, today)) continue;
-        if (now.getTime() - start.getTime() > 14 * 86_400_000) continue;
-        const key = start.toDateString();
-        perDay.set(key, (perDay.get(key) ?? 0) + 1);
-      }
-      const trackedDays = perDay.size;
-      const typicalPerDay =
-        trackedDays >= 3
-          ? Array.from(perDay.values()).reduce((a, b) => a + b, 0) / trackedDays
-          : null;
+      const feedingBaselines = buildFeedingBaselines(feedingEntries, now);
 
       feeding = {
         totalCount: overview.totalFeedingCount,
@@ -301,7 +291,11 @@ export const buildDailySignals = async (
         bottleCountLast21Days: bottle21,
         solidsCountLast21Days: solids21,
         likelyFeedingMode,
-        typicalPerDay,
+        typicalPerDay: feedingBaselines.typicalPerDay,
+        typicalByNow: feedingBaselines.typicalByNow,
+        baselineSampleDays: feedingBaselines.sampleDays,
+        typicalIntervalMinutes: feedingBaselines.typicalIntervalMinutes,
+        intervalSampleCount: feedingBaselines.intervalSampleCount,
       };
 
       const todayDiapers = todayEntries.filter((e) => e?.entry_type === 'diaper');
@@ -323,10 +317,24 @@ export const buildDailySignals = async (
   if (sleepResult.status === 'fulfilled') {
     const sleepValue: any = sleepResult.value;
     const sleepEntries: any[] = sleepValue?.entries ?? sleepValue ?? [];
-    const minutes = computeTodaySleepMinutes(sleepEntries);
-    if (minutes > 0) {
-      sleep = { minutes, text: formatSleepMinutes(minutes), isReal: true };
-    }
+    const baseline = buildSleepBaseline(sleepEntries);
+    sleep = {
+      minutes: baseline.todayMinutes,
+      text: formatSleepMinutes(baseline.todayMinutes),
+      isReal: true,
+      typicalMinutesByNow: baseline.typicalMinutesByNow,
+      baselineSampleDays: baseline.sampleDays,
+      lastSleepEndAt: baseline.lastSleepEndAt,
+      currentSleepStartedAt: baseline.currentSleepStartedAt,
+      isSleepingNow: baseline.isSleepingNow,
+      currentAwakeMinutes: baseline.currentAwakeMinutes,
+      typicalWakeMinutes: baseline.typicalWakeMinutes,
+      wakeSampleCount: baseline.wakeSampleCount,
+      lastNightMinutes: baseline.lastNightMinutes,
+      typicalNightMinutes: baseline.typicalNightMinutes,
+      nightSampleDays: baseline.nightSampleDays,
+      roughNight: baseline.roughNight,
+    };
   }
 
   // --- Wetter (nur echt; ohne Standortfreigabe bleibt es leer) ---
@@ -366,6 +374,10 @@ export const buildDailySignals = async (
     feeding,
     diaper,
     sleep,
+    context: {
+      localHour: new Date().getHours(),
+      localMinute: new Date().getMinutes(),
+    },
     weather,
   };
 };

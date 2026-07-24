@@ -17,6 +17,32 @@ export type AdvisorCategory = 'weather' | 'sleep' | 'feeding' | 'motivation';
 
 export type AdvisorFrequency = 'daily' | 'critical_only' | 'off';
 
+export type MamaEnergy = 'good' | 'okay' | 'low';
+
+export type ReliefEventType =
+  | 'accepted'
+  | 'delegated'
+  | 'dismissed'
+  | 'helped'
+  | 'not_helpful';
+
+export interface AdvisorReliefEvent {
+  id: string;
+  energy: MamaEnergy;
+  reliefId: string;
+  eventType: ReliefEventType;
+  localDate: string;
+  createdAt: string;
+}
+
+export interface AdvisorTodayState {
+  id: string;
+  actedAt: string | null;
+  remindAt: string | null;
+  reminderNotificationId: string | null;
+  sharedAt: string | null;
+}
+
 /** Ein gespeicherter Hinweis aus `advisor_messages`. */
 export interface AdvisorHistoryItem {
   id: string;
@@ -122,32 +148,65 @@ const rowToHistoryItem = (row: any): AdvisorHistoryItem => ({
 export const saveTodayInsight = async (
   babyId: string,
   analysis: AdvisorAnalysis,
-): Promise<void> => {
+): Promise<string | null> => {
   const userId = await getUserId();
-  if (!userId) return;
+  if (!userId) return null;
 
   const main = analysis.main;
   try {
-    await supabase.from('advisor_messages').upsert(
-      {
-        user_id: userId,
-        baby_id: babyId,
-        local_date: localDateString(),
-        rule_id: main.id,
-        title: main.title,
-        headline: main.headline ?? null,
-        body: main.body,
-        emoji: main.emoji,
-        tone: main.tone,
-        category: categoryForRule(main.id),
-        priority: priorityForRule(main.id),
-        facts: { reasons: analysis.reasons },
-        source: 'rules',
-      },
-      { onConflict: 'user_id,baby_id,local_date' },
-    );
+    const { data, error } = await supabase
+      .from('advisor_messages')
+      .upsert(
+        {
+          user_id: userId,
+          baby_id: babyId,
+          local_date: localDateString(),
+          rule_id: main.id,
+          title: main.title,
+          headline: main.headline ?? null,
+          body: main.body,
+          emoji: main.emoji,
+          tone: main.tone,
+          category: categoryForRule(main.id),
+          priority: priorityForRule(main.id),
+          facts: { reasons: analysis.reasons },
+          source: 'rules',
+        },
+        { onConflict: 'user_id,baby_id,local_date' },
+      )
+      .select('id')
+      .maybeSingle();
+    if (error) return null;
+    return data?.id ?? null;
   } catch {
     // Tabelle fehlt / offline – Seite funktioniert ohne Persistenz weiter.
+    return null;
+  }
+};
+
+export const fetchTodayState = async (
+  babyId: string,
+): Promise<AdvisorTodayState | null> => {
+  const userId = await getUserId();
+  if (!userId) return null;
+  try {
+    const { data, error } = await supabase
+      .from('advisor_messages')
+      .select('id, acted_at, remind_at, reminder_notification_id, shared_at')
+      .eq('user_id', userId)
+      .eq('baby_id', babyId)
+      .eq('local_date', localDateString())
+      .maybeSingle();
+    if (error || !data) return null;
+    return {
+      id: data.id,
+      actedAt: data.acted_at ?? null,
+      remindAt: data.remind_at ?? null,
+      reminderNotificationId: data.reminder_notification_id ?? null,
+      sharedAt: data.shared_at ?? null,
+    };
+  } catch {
+    return null;
   }
 };
 
@@ -207,6 +266,143 @@ export const setActed = async (
       .eq('id', messageId);
   } catch {
     // best effort
+  }
+};
+
+export const setReminderState = async (
+  messageId: string,
+  remindAt: Date,
+  notificationId: string,
+): Promise<void> => {
+  try {
+    await supabase
+      .from('advisor_messages')
+      .update({
+        remind_at: remindAt.toISOString(),
+        reminder_notification_id: notificationId,
+      })
+      .eq('id', messageId);
+  } catch {
+    // Die lokale Erinnerung funktioniert auch ohne Server-Persistenz.
+  }
+};
+
+export const markInsightShared = async (messageId: string): Promise<void> => {
+  try {
+    await supabase
+      .from('advisor_messages')
+      .update({ shared_at: new Date().toISOString() })
+      .eq('id', messageId);
+  } catch {
+    // best effort
+  }
+};
+
+export const fetchTodayMamaCheckin = async (
+  babyId: string,
+): Promise<MamaEnergy | null> => {
+  const userId = await getUserId();
+  if (!userId) return null;
+  try {
+    const { data, error } = await supabase
+      .from('advisor_mama_checkins')
+      .select('energy')
+      .eq('user_id', userId)
+      .eq('baby_id', babyId)
+      .eq('local_date', localDateString())
+      .maybeSingle();
+    if (error) return null;
+    return (data?.energy as MamaEnergy | undefined) ?? null;
+  } catch {
+    return null;
+  }
+};
+
+export const saveMamaCheckin = async (
+  babyId: string,
+  energy: MamaEnergy,
+): Promise<boolean> => {
+  const userId = await getUserId();
+  if (!userId) return false;
+  try {
+    const { error } = await supabase.from('advisor_mama_checkins').upsert(
+      {
+        user_id: userId,
+        baby_id: babyId,
+        local_date: localDateString(),
+        energy,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'user_id,baby_id,local_date' },
+    );
+    return !error;
+  } catch {
+    return false;
+  }
+};
+
+export const fetchRecentReliefEvents = async (
+  babyId: string,
+  days = 30,
+): Promise<AdvisorReliefEvent[]> => {
+  const userId = await getUserId();
+  if (!userId) return [];
+  const oldestDate = new Date();
+  oldestDate.setDate(oldestDate.getDate() - days);
+  try {
+    const { data, error } = await supabase
+      .from('advisor_relief_events')
+      .select('id, energy, relief_id, event_type, local_date, created_at')
+      .eq('user_id', userId)
+      .eq('baby_id', babyId)
+      .gte('local_date', localDateString(oldestDate))
+      .order('created_at', { ascending: true });
+    if (error) return [];
+    return (data ?? []).map((row: any) => ({
+      id: row.id,
+      energy: row.energy as MamaEnergy,
+      reliefId: row.relief_id,
+      eventType: row.event_type as ReliefEventType,
+      localDate: row.local_date,
+      createdAt: row.created_at,
+    }));
+  } catch {
+    return [];
+  }
+};
+
+export const saveReliefEvent = async (
+  babyId: string,
+  energy: MamaEnergy,
+  reliefId: string,
+  eventType: ReliefEventType,
+): Promise<AdvisorReliefEvent | null> => {
+  const userId = await getUserId();
+  if (!userId) return null;
+  try {
+    const { data, error } = await supabase
+      .from('advisor_relief_events')
+      .insert({
+        user_id: userId,
+        baby_id: babyId,
+        local_date: localDateString(),
+        energy,
+        relief_id: reliefId,
+        event_type: eventType,
+      })
+      .select('id, energy, relief_id, event_type, local_date, created_at')
+      .single();
+    if (error || !data) return null;
+    return {
+      id: data.id,
+      energy: data.energy as MamaEnergy,
+      reliefId: data.relief_id,
+      eventType: data.event_type as ReliefEventType,
+      localDate: data.local_date,
+      createdAt: data.created_at,
+    };
+  } catch {
+    return null;
   }
 };
 
