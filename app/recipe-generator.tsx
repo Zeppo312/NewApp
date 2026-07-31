@@ -2,18 +2,18 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Dimensions,
   KeyboardAvoidingView,
   Modal,
   Platform,
-  SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
   TextInput,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import { BlurView } from "expo-blur";
@@ -44,6 +44,14 @@ import {
 import { extractYouTubeVideoId } from "@/lib/recipeVideo";
 import { addRecipeIngredientsToShoppingList } from "@/lib/shopping";
 import { useActiveBaby } from "@/contexts/ActiveBabyContext";
+import {
+  DEFAULT_RECIPE_LOCALE,
+  getRecipeAllergenLabel,
+  getRecipeLocaleTag,
+  RecipeTranslationKey,
+  translateRecipePlural,
+  translateRecipeText,
+} from "@/lib/recipeTranslations";
 
 type AllergenId = "milk" | "gluten" | "egg" | "nuts" | "fish";
 
@@ -54,30 +62,29 @@ const clampFilterAgeMonths = (value: number) =>
 const clampRecipeAgeMonths = (value: number) =>
   Math.max(RECIPE_AGE_LIMITS.min, Math.min(RECIPE_AGE_LIMITS.max, value));
 
-const ALLERGEN_OPTIONS: { id: AllergenId; label: string; hint: string }[] = [
-  { id: "milk", label: "Milchprodukte", hint: "Joghurt, Käse, Butter" },
-  { id: "gluten", label: "Gluten", hint: "Hafer, Weizen, Brot" },
-  { id: "egg", label: "Ei", hint: "Rührei, Gebäck" },
-  { id: "nuts", label: "Nüsse", hint: "Erdnuss, Mandel, Haselnuss" },
-  { id: "fish", label: "Fisch", hint: "Lachs, Forelle" },
+const ALLERGEN_OPTIONS: {
+  id: AllergenId;
+  labelKey: RecipeTranslationKey;
+  hintKey: RecipeTranslationKey;
+}[] = [
+  { id: "milk", labelKey: "allergy.milk", hintKey: "allergy.milkHint" },
+  { id: "gluten", labelKey: "allergy.gluten", hintKey: "allergy.glutenHint" },
+  { id: "egg", labelKey: "allergy.egg", hintKey: "allergy.eggHint" },
+  { id: "nuts", labelKey: "allergy.nuts", hintKey: "allergy.nutsHint" },
+  { id: "fish", labelKey: "allergy.fish", hintKey: "allergy.fishHint" },
 ];
 
-const ALLERGEN_LABELS: Record<AllergenId, string> = {
-  milk: "Milchprodukte",
-  gluten: "Gluten",
-  egg: "Ei",
-  nuts: "Nüsse",
-  fish: "Fisch",
-};
+const ACTIVE_RECIPE_LOCALE = DEFAULT_RECIPE_LOCALE;
+const RECIPE_LOCALE_TAG = getRecipeLocaleTag(ACTIVE_RECIPE_LOCALE);
+const t = (
+  key: RecipeTranslationKey,
+  params?: Record<string, string | number>,
+) => translateRecipeText(ACTIVE_RECIPE_LOCALE, key, params);
 
-// Layout-System mit maximaler Content-Breite
-const { width: screenWidth } = Dimensions.get("window");
-const SCREEN_PADDING = 4; // Minimales Außen-Padding
-const contentWidth = screenWidth - 2 * SCREEN_PADDING; // Maximale Breite
-const isCompact = screenWidth < 380;
-
-const CARD_INTERNAL_PADDING = 20; // Sehr kompakter Abstand zum Rand
-const CARD_SPACING = 4; // Ultra minimaler Abstand zwischen Cards
+const SCREEN_PADDING = 16;
+const MAX_CONTENT_WIDTH = 720;
+const CARD_INTERNAL_PADDING = 18;
+const CARD_SPACING = 14;
 const ALLERGEN_COLUMNS = 2; // Immer 2 Buttons pro Reihe
 
 const chunkItems = <T,>(items: T[], columns: number): (T | null)[][] => {
@@ -101,7 +108,9 @@ const chunkItems = <T,>(items: T[], columns: number): (T | null)[][] => {
 const SAMPLE_RECIPES: RecipeSample[] = RECIPE_SAMPLES;
 
 const formatAllergens = (allergens: string[] = []) =>
-  allergens.map((id) => ALLERGEN_LABELS[id as AllergenId] ?? id).join(", ");
+  allergens
+    .map((id) => getRecipeAllergenLabel(ACTIVE_RECIPE_LOCALE, id))
+    .join(", ");
 
 type InstructionStep = {
   number: string;
@@ -159,6 +168,12 @@ const lightenHex = (hex: string, amount = 0.35) => {
 
 const RecipeGeneratorScreen = () => {
   const router = useRouter();
+  const { width: screenWidth } = useWindowDimensions();
+  const contentWidth = Math.min(
+    Math.max(0, screenWidth - SCREEN_PADDING * 2),
+    MAX_CONTENT_WIDTH,
+  );
+  const isCompact = screenWidth < 380;
   const adaptiveColors = useAdaptiveColors();
   const isDark =
     adaptiveColors.effectiveScheme === "dark" ||
@@ -184,6 +199,7 @@ const RecipeGeneratorScreen = () => {
         accentColor,
         glassOverlay,
         glassBorder,
+        isCompact,
       }),
     [
       isDark,
@@ -193,6 +209,7 @@ const RecipeGeneratorScreen = () => {
       accentColor,
       glassOverlay,
       glassBorder,
+      isCompact,
     ],
   );
   const { activeBaby, activeBabyId } = useActiveBaby();
@@ -214,10 +231,7 @@ const RecipeGeneratorScreen = () => {
   const handleAddIngredientsToShoppingList = useCallback(
     async (recipe: RecipeRecord) => {
       if (!activeBabyId) {
-        Alert.alert(
-          "Kein Baby ausgewählt",
-          "Bitte wähle zuerst ein Baby aus, um die Einkaufsliste zu nutzen.",
-        );
+        Alert.alert(t("shopping.noBabyTitle"), t("shopping.noBabyMessage"));
         return;
       }
       setIsAddingToShoppingList(true);
@@ -227,22 +241,22 @@ const RecipeGeneratorScreen = () => {
       );
       setIsAddingToShoppingList(false);
       if (error || !data) {
-        Alert.alert(
-          "Fehler",
-          "Die Zutaten konnten nicht zur Einkaufsliste hinzugefügt werden.",
-        );
+        Alert.alert(t("common.error"), t("shopping.addFailed"));
         return;
       }
       const message =
         data.added === 0
-          ? "Alle Zutaten stehen bereits auf der Einkaufsliste."
+          ? t("shopping.allPresent")
           : data.skipped > 0
-            ? `${data.added} Zutaten hinzugefügt, ${data.skipped} standen bereits auf der Liste.`
-            : `${data.added} Zutaten zur Einkaufsliste hinzugefügt.`;
-      Alert.alert("Einkaufsliste", message, [
-        { text: "OK" },
+            ? t("shopping.addedSkipped", {
+                added: data.added,
+                skipped: data.skipped,
+              })
+            : t("shopping.added", { added: data.added });
+      Alert.alert(t("shopping.title"), message, [
+        { text: t("common.ok") },
         {
-          text: "Zur Liste",
+          text: t("shopping.open"),
           onPress: () => router.push("/shopping-list" as any),
         },
       ]);
@@ -264,7 +278,7 @@ const RecipeGeneratorScreen = () => {
   const sortedRecipes = useMemo(() => {
     return [...recipes].sort((a, b) => {
       if (a.min_months === b.min_months) {
-        return a.title.localeCompare(b.title, "de");
+        return a.title.localeCompare(b.title, RECIPE_LOCALE_TAG);
       }
       return a.min_months - b.min_months;
     });
@@ -299,10 +313,7 @@ const RecipeGeneratorScreen = () => {
       setRecipes(data);
     } catch (error) {
       console.error("Error loading recipes:", error);
-      Alert.alert(
-        "Fehler beim Laden",
-        "Die Rezepte konnten nicht geladen werden. Bitte versuche es später erneut.",
-      );
+      Alert.alert(t("load.errorTitle"), t("load.errorMessage"));
     } finally {
       setIsLoading(false);
     }
@@ -393,10 +404,7 @@ const RecipeGeneratorScreen = () => {
       const { status } =
         await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== "granted") {
-        Alert.alert(
-          "Berechtigung erforderlich",
-          "Wir benötigen Zugriff auf deine Fotos, um Bilder hinzuzufügen.",
-        );
+        Alert.alert(t("photo.permissionTitle"), t("photo.permissionMessage"));
         return;
       }
 
@@ -426,23 +434,23 @@ const RecipeGeneratorScreen = () => {
       }
     } catch (error) {
       console.error("Error picking image:", error);
-      Alert.alert("Fehler", "Das Bild konnte nicht ausgewählt werden.");
+      Alert.alert(t("common.error"), t("photo.pickFailed"));
     }
   };
 
   const handleCreateRecipe = async () => {
     if (!newTitle.trim()) {
-      Alert.alert("Hinweis", "Bitte gib einen Rezepttitel ein.");
+      Alert.alert(t("common.notice"), t("validation.titleRequired"));
       return;
     }
 
     if (newIngredients.length === 0) {
-      Alert.alert("Hinweis", "Bitte füge mindestens eine Zutat hinzu.");
+      Alert.alert(t("common.notice"), t("validation.ingredientsRequired"));
       return;
     }
 
     if (!newInstructions.trim()) {
-      Alert.alert("Hinweis", "Beschreibe kurz die Zubereitung.");
+      Alert.alert(t("common.notice"), t("validation.instructionsRequired"));
       return;
     }
 
@@ -481,14 +489,12 @@ const RecipeGeneratorScreen = () => {
 
       resetCreateForm();
       setShowCreateModal(false);
-      Alert.alert("Erfolg", "Dein Rezept wurde gespeichert.");
+      Alert.alert(t("common.success"), t("create.saved"));
     } catch (error) {
       console.error("Error creating recipe:", error);
       const message =
-        error instanceof Error
-          ? error.message
-          : "Beim Speichern ist ein Fehler aufgetreten.";
-      Alert.alert("Fehler", message);
+        error instanceof Error ? error.message : t("create.saveFailed");
+      Alert.alert(t("common.error"), message);
     } finally {
       setIsSubmitting(false);
     }
@@ -535,14 +541,14 @@ const RecipeGeneratorScreen = () => {
       await loadRecipes();
 
       Alert.alert(
-        "Rezepte importiert",
+        t("import.title"),
         inserted > 0
-          ? `${inserted} Standardrezepte wurden hinzugefügt.`
-          : "Alle Standardrezepte sind bereits vorhanden.",
+          ? t("import.added", { count: inserted })
+          : t("import.alreadyPresent"),
       );
     } catch (error) {
       console.error("Error seeding recipes:", error);
-      Alert.alert("Fehler", "Standardrezepte konnten nicht importiert werden.");
+      Alert.alert(t("common.error"), t("import.failed"));
     } finally {
       setIsSeeding(false);
     }
@@ -556,8 +562,8 @@ const RecipeGeneratorScreen = () => {
           <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
           <View style={styles.overlayContainer}>
             <Header
-              title="BLW-Rezepte"
-              subtitle="Filter nach Alter & Allergien"
+              title={t("screen.title")}
+              subtitle={t("screen.subtitle")}
               showBackButton
               onBackPress={() => router.back()}
             />
@@ -565,6 +571,8 @@ const RecipeGeneratorScreen = () => {
               <TouchableOpacity
                 style={styles.headerActionButton}
                 onPress={() => router.push("/my-recipes")}
+                accessibilityRole="button"
+                accessibilityLabel={t("screen.myRecipesAccessibility")}
               >
                 <IconSymbol name="book.fill" size={22} color={accentColor} />
               </TouchableOpacity>
@@ -572,6 +580,7 @@ const RecipeGeneratorScreen = () => {
           </View>
 
           <ScrollView
+            contentInsetAdjustmentBehavior="automatic"
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
           >
@@ -585,6 +594,8 @@ const RecipeGeneratorScreen = () => {
                 }
                 borderColor={isDark ? glassBorder : "rgba(255,255,255,0.35)"}
               >
+                <View style={styles.heroGlowLarge} />
+                <View style={styles.heroGlowSmall} />
                 <View style={styles.heroRow}>
                   <View style={styles.heroIcon}>
                     <IconSymbol
@@ -594,12 +605,40 @@ const RecipeGeneratorScreen = () => {
                     />
                   </View>
                   <View style={styles.heroTextWrap}>
+                    <ThemedText style={styles.heroEyebrow}>
+                      {t("hero.eyebrow")}
+                    </ThemedText>
                     <ThemedText style={styles.heroTitle}>
-                      Rezepte für kleine Entdecker
+                      {t("hero.title")}
                     </ThemedText>
                     <ThemedText style={styles.heroSubtitle}>
-                      Stell Alter und Allergien ein – wir zeigen passende
-                      Rezepte.
+                      {t("hero.subtitle")}
+                    </ThemedText>
+                  </View>
+                </View>
+                <View style={styles.heroStatsRow}>
+                  <View style={styles.heroStatPill}>
+                    <IconSymbol
+                      name="fork.knife"
+                      size={14}
+                      color={accentColor}
+                    />
+                    <ThemedText style={styles.heroStatText}>
+                      {translateRecipePlural(
+                        ACTIVE_RECIPE_LOCALE,
+                        "hero.recipeCount",
+                        recipes.length,
+                      )}
+                    </ThemedText>
+                  </View>
+                  <View style={styles.heroStatPill}>
+                    <IconSymbol
+                      name="slider.horizontal.3"
+                      size={14}
+                      color={accentColor}
+                    />
+                    <ThemedText style={styles.heroStatText}>
+                      {t("hero.personalized")}
                     </ThemedText>
                   </View>
                 </View>
@@ -625,10 +664,10 @@ const RecipeGeneratorScreen = () => {
                       <IconSymbol name="plus" size={20} color={accentColor} />
                     </View>
                     <ThemedText style={styles.quickActionLabel}>
-                      Rezept
+                      {t("action.recipe")}
                     </ThemedText>
                     <ThemedText style={styles.quickActionMeta}>
-                      Erstellen
+                      {t("action.create")}
                     </ThemedText>
                   </View>
                 </TouchableOpacity>
@@ -652,10 +691,14 @@ const RecipeGeneratorScreen = () => {
                       />
                     </View>
                     <ThemedText style={styles.quickActionLabel}>
-                      Baby-Alter
+                      {t("action.age")}
                     </ThemedText>
                     <ThemedText style={styles.quickActionMeta}>
-                      {ageMonths} Monate
+                      {translateRecipePlural(
+                        ACTIVE_RECIPE_LOCALE,
+                        "age.months",
+                        ageMonths,
+                      )}
                     </ThemedText>
                   </View>
                 </TouchableOpacity>
@@ -696,10 +739,12 @@ const RecipeGeneratorScreen = () => {
                       )}
                     </View>
                     <ThemedText style={styles.quickActionLabel}>
-                      Allergien
+                      {t("action.allergies")}
                     </ThemedText>
                     <ThemedText style={styles.quickActionMeta}>
-                      {selectedAllergies.length > 0 ? "Aktiv" : "Keine"}
+                      {selectedAllergies.length > 0
+                        ? t("action.active")
+                        : t("action.none")}
                     </ThemedText>
                   </View>
                 </TouchableOpacity>
@@ -710,16 +755,25 @@ const RecipeGeneratorScreen = () => {
                 <View style={styles.loadingWrapper}>
                   <ActivityIndicator size="large" color={accentColor} />
                   <ThemedText style={styles.loadingText}>
-                    Rezepte werden geladen ...
+                    {t("catalog.loading")}
                   </ThemedText>
                 </View>
               ) : (
                 <>
                   {/* All Recipes Catalog */}
                   <View style={styles.catalogHeader}>
-                    <ThemedText style={styles.catalogTitle}>
-                      Alle Rezepte
-                    </ThemedText>
+                    <View style={styles.catalogTitleGroup}>
+                      <ThemedText style={styles.catalogTitle}>
+                        {t("catalog.title")}
+                      </ThemedText>
+                      <ThemedText style={styles.catalogCount}>
+                        {translateRecipePlural(
+                          ACTIVE_RECIPE_LOCALE,
+                          "catalog.count",
+                          sortedRecipes.length,
+                        )}
+                      </ThemedText>
+                    </View>
                     <TouchableOpacity
                       style={styles.refreshButton}
                       onPress={loadRecipes}
@@ -731,7 +785,7 @@ const RecipeGeneratorScreen = () => {
                         color={accentColor}
                       />
                       <ThemedText style={styles.refreshLabel}>
-                        Aktualisieren
+                        {t("catalog.refresh")}
                       </ThemedText>
                     </TouchableOpacity>
                   </View>
@@ -754,11 +808,10 @@ const RecipeGeneratorScreen = () => {
                           color={accentColor}
                         />
                         <ThemedText style={styles.emptyStateTitle}>
-                          Noch keine Supabase-Rezepte
+                          {t("catalog.emptyTitle")}
                         </ThemedText>
                         <ThemedText style={styles.emptyStateText}>
-                          Leg direkt los und füge euer erstes Lieblingsrezept
-                          hinzu!
+                          {t("catalog.emptyText")}
                         </ThemedText>
                         <TouchableOpacity
                           style={[
@@ -779,7 +832,7 @@ const RecipeGeneratorScreen = () => {
                                 color="#FFFFFF"
                               />
                               <ThemedText style={styles.seedButtonText}>
-                                Standardrezepte importieren
+                                {t("catalog.import")}
                               </ThemedText>
                             </>
                           )}
@@ -832,13 +885,14 @@ const RecipeGeneratorScreen = () => {
                                   color="#FFFFFF"
                                 />
                                 <ThemedText style={styles.ageTagText}>
-                                  ab {recipe.min_months} M
+                                  {t("age.fromShort", {
+                                    count: recipe.min_months,
+                                  })}
                                 </ThemedText>
                               </View>
                             </View>
                             <ThemedText style={styles.disabledNotice}>
-                              Dieses Rezept ist aktuell ausgeblendet (Filter
-                              aktiv).
+                              {t("catalog.filteredNotice")}
                             </ThemedText>
                           </LiquidGlassCard>
                         );
@@ -886,7 +940,9 @@ const RecipeGeneratorScreen = () => {
                                   color="#FFFFFF"
                                 />
                                 <ThemedText style={styles.imageHeaderBadgeText}>
-                                  ab {recipe.min_months} M
+                                  {t("age.fromShort", {
+                                    count: recipe.min_months,
+                                  })}
                                 </ThemedText>
                               </View>
                               {!!recipe.allergens.length && (
@@ -924,7 +980,7 @@ const RecipeGeneratorScreen = () => {
                               ellipsizeMode="tail"
                             >
                               {recipe.description ??
-                                "Leckeres BLW-Gericht – tippe für Details."}
+                                t("catalog.fallbackDescription")}
                             </ThemedText>
                             <View style={styles.catalogMetaRow}>
                               <View style={styles.statPill}>
@@ -934,7 +990,11 @@ const RecipeGeneratorScreen = () => {
                                   color={accentColor}
                                 />
                                 <ThemedText style={styles.statText}>
-                                  {recipe.ingredients.length} Zutaten
+                                  {translateRecipePlural(
+                                    ACTIVE_RECIPE_LOCALE,
+                                    "recipe.ingredients",
+                                    recipe.ingredients.length,
+                                  )}
                                 </ThemedText>
                               </View>
                             </View>
@@ -957,10 +1017,14 @@ const RecipeGeneratorScreen = () => {
                   borderColor={isDark ? glassBorder : "rgba(255,255,255,0.28)"}
                 >
                   <ThemedText style={styles.noticeTitle}>
-                    Allergie-Filter aktiv
+                    {t("catalog.filterActive")}
                   </ThemedText>
                   <ThemedText style={styles.noticeText}>
-                    Wir haben {blockedRecipeCount} Rezepte ausgeblendet.
+                    {translateRecipePlural(
+                      ACTIVE_RECIPE_LOCALE,
+                      "catalog.hidden",
+                      blockedRecipeCount,
+                    )}
                   </ThemedText>
                 </LiquidGlassCard>
               )}
@@ -999,15 +1063,20 @@ const RecipeGeneratorScreen = () => {
                 </TouchableOpacity>
                 <View style={styles.recipeModalHeaderCenter}>
                   <ThemedText style={styles.recipeModalHeaderTitle}>
-                    Rezept ansehen
+                    {t("recipe.view")}
                   </ThemedText>
                   <ThemedText style={styles.recipeModalHeaderSubtitle}>
-                    Ab {selectedRecipe.min_months} Monaten
+                    {translateRecipePlural(
+                      ACTIVE_RECIPE_LOCALE,
+                      "age.fromLong",
+                      selectedRecipe.min_months,
+                    )}
                   </ThemedText>
                 </View>
                 <View style={styles.recipeModalHeaderSpacer} />
               </View>
               <ScrollView
+                contentInsetAdjustmentBehavior="automatic"
                 contentContainerStyle={styles.recipeModalScroll}
                 showsVerticalScrollIndicator={false}
               >
@@ -1039,7 +1108,9 @@ const RecipeGeneratorScreen = () => {
                       <View style={styles.recipeHeroChip}>
                         <IconSymbol name="clock" size={14} color="#FFFFFF" />
                         <ThemedText style={styles.recipeHeroChipText}>
-                          ab {selectedRecipe.min_months} M
+                          {t("age.fromShort", {
+                            count: selectedRecipe.min_months,
+                          })}
                         </ThemedText>
                       </View>
                       {selectedRecipe.allergens.length > 0 && (
@@ -1072,13 +1143,14 @@ const RecipeGeneratorScreen = () => {
                 {selectedRecipe.video_url && selectedRecipeVideoId ? (
                   <View style={styles.recipeSectionCard}>
                     <ThemedText style={styles.recipeSectionTitle}>
-                      Videokurs
+                      {t("recipe.video")}
                     </ThemedText>
                     <RecipeVideoCourse
                       accentColor={accentColor}
                       textColor={textPrimary}
                       secondaryTextColor={textSecondary}
                       videoUrl={selectedRecipe.video_url}
+                      locale={ACTIVE_RECIPE_LOCALE}
                     />
                   </View>
                 ) : null}
@@ -1091,7 +1163,11 @@ const RecipeGeneratorScreen = () => {
                       color={accentColor}
                     />
                     <ThemedText style={styles.recipeInfoChipText}>
-                      {selectedRecipe.ingredients.length} Zutaten
+                      {translateRecipePlural(
+                        ACTIVE_RECIPE_LOCALE,
+                        "recipe.ingredients",
+                        selectedRecipe.ingredients.length,
+                      )}
                     </ThemedText>
                   </View>
                   <View
@@ -1123,14 +1199,14 @@ const RecipeGeneratorScreen = () => {
                     >
                       {selectedRecipe.allergens.length > 0
                         ? formatAllergens(selectedRecipe.allergens)
-                        : "Allergiefreundlich"}
+                        : t("recipe.allergyFriendly")}
                     </ThemedText>
                   </View>
                 </View>
 
                 <View style={styles.recipeSectionCard}>
                   <ThemedText style={styles.recipeSectionTitle}>
-                    Zutaten
+                    {t("recipe.ingredientsTitle")}
                   </ThemedText>
                   {selectedRecipe.ingredients.map((ingredient) => (
                     <View key={ingredient} style={styles.recipeIngredientRow}>
@@ -1153,7 +1229,7 @@ const RecipeGeneratorScreen = () => {
                       <IconSymbol name="cart" size={16} color="#FFFFFF" />
                     )}
                     <ThemedText style={styles.ingredientsToListButtonText}>
-                      Zutaten zur Einkaufsliste
+                      {t("recipe.addToShopping")}
                     </ThemedText>
                   </TouchableOpacity>
                 </View>
@@ -1161,7 +1237,7 @@ const RecipeGeneratorScreen = () => {
                 {selectedRecipe.instructions ? (
                   <View style={styles.recipeSectionCard}>
                     <ThemedText style={styles.recipeSectionTitle}>
-                      Anleitung
+                      {t("recipe.instructions")}
                     </ThemedText>
                     {instructionParts ? (
                       <>
@@ -1217,10 +1293,7 @@ const RecipeGeneratorScreen = () => {
                 ) : null}
 
                 <ThemedText style={styles.recipeDisclaimer}>
-                  Hinweis: Die Rezepte sind allgemeine Empfehlungen und ersetzen
-                  keine medizinische Beratung. Achte auf altersgerechte
-                  Konsistenz, Erstickungsgefahr und individuelle Allergien. Bei
-                  Unsicherheiten sprich mit Kinderarzt oder Hebamme.
+                  {t("recipe.disclaimer")}
                 </ThemedText>
               </ScrollView>
             </BlurView>
@@ -1257,10 +1330,10 @@ const RecipeGeneratorScreen = () => {
               </TouchableOpacity>
               <View style={styles.recipeModalHeaderCenter}>
                 <ThemedText style={styles.recipeModalHeaderTitle}>
-                  Baby-Alter
+                  {t("action.age")}
                 </ThemedText>
                 <ThemedText style={styles.recipeModalHeaderSubtitle}>
-                  Filter auf {ageMonths} Monate
+                  {t("age.filter", { count: ageMonths })}
                 </ThemedText>
               </View>
               <View style={styles.recipeModalHeaderSpacer} />
@@ -1268,27 +1341,35 @@ const RecipeGeneratorScreen = () => {
             <View style={styles.filterModalContent}>
               <View style={styles.sectionHeader}>
                 <IconSymbol name="calendar" size={22} color={accentColor} />
-                <ThemedText style={styles.sectionTitle}>Baby-Alter</ThemedText>
+                <ThemedText style={styles.sectionTitle}>
+                  {t("action.age")}
+                </ThemedText>
               </View>
               <ThemedText style={styles.sectionHint}>
-                Wir filtern alle Rezepte passend zu {ageMonths} Monaten.
+                {t("age.filterHint", { count: ageMonths })}
               </ThemedText>
               <View style={styles.ageControlRow}>
                 <TouchableOpacity
                   style={styles.ageButton}
                   onPress={() => handleAgeChange(-1)}
                   activeOpacity={0.8}
+                  accessibilityRole="button"
+                  accessibilityLabel={t("age.decrease")}
                 >
                   <ThemedText style={styles.ageButtonText}>-</ThemedText>
                 </TouchableOpacity>
                 <View style={styles.ageBadge}>
                   <ThemedText style={styles.ageValue}>{ageMonths}</ThemedText>
-                  <ThemedText style={styles.ageLabel}>Monate</ThemedText>
+                  <ThemedText style={styles.ageLabel}>
+                    {t(ageMonths === 1 ? "age.unit.one" : "age.unit.other")}
+                  </ThemedText>
                 </View>
                 <TouchableOpacity
                   style={styles.ageButton}
                   onPress={() => handleAgeChange(1)}
                   activeOpacity={0.8}
+                  accessibilityRole="button"
+                  accessibilityLabel={t("age.increase")}
                 >
                   <ThemedText style={styles.ageButtonText}>+</ThemedText>
                 </TouchableOpacity>
@@ -1327,15 +1408,16 @@ const RecipeGeneratorScreen = () => {
               </TouchableOpacity>
               <View style={styles.recipeModalHeaderCenter}>
                 <ThemedText style={styles.recipeModalHeaderTitle}>
-                  Allergien berücksichtigen
+                  {t("allergy.title")}
                 </ThemedText>
                 <ThemedText style={styles.recipeModalHeaderSubtitle}>
-                  Markiere, was ihr aktuell meidet
+                  {t("allergy.subtitle")}
                 </ThemedText>
               </View>
               <View style={styles.recipeModalHeaderSpacer} />
             </View>
             <ScrollView
+              contentInsetAdjustmentBehavior="automatic"
               contentContainerStyle={styles.filterModalScroll}
               showsVerticalScrollIndicator={false}
             >
@@ -1346,11 +1428,11 @@ const RecipeGeneratorScreen = () => {
                   color={accentColor}
                 />
                 <ThemedText style={styles.sectionTitle}>
-                  Allergien berücksichtigen
+                  {t("allergy.title")}
                 </ThemedText>
               </View>
               <ThemedText style={styles.sectionHint}>
-                Markiere, was ihr aktuell meidet.
+                {t("allergy.hint")}
               </ThemedText>
               <View style={styles.chipGrid}>
                 {allergenRows.map((row, rowIndex, rows) => (
@@ -1396,10 +1478,10 @@ const RecipeGeneratorScreen = () => {
                                 isSelected && styles.chipLabelSelected,
                               ]}
                             >
-                              {option.label}
+                              {t(option.labelKey)}
                             </ThemedText>
                             <ThemedText style={styles.chipHint}>
-                              {option.hint}
+                              {t(option.hintKey)}
                             </ThemedText>
                           </TouchableOpacity>
                         </View>
@@ -1448,27 +1530,27 @@ const RecipeGeneratorScreen = () => {
               </TouchableOpacity>
               <View style={styles.recipeModalHeaderCenter}>
                 <ThemedText style={styles.recipeModalHeaderTitle}>
-                  Neues Rezept
+                  {t("form.title")}
                 </ThemedText>
                 <ThemedText style={styles.recipeModalHeaderSubtitle}>
-                  Teile euer Lieblingsgericht
+                  {t("form.subtitle")}
                 </ThemedText>
               </View>
               <View style={styles.recipeModalHeaderSpacer} />
             </View>
             <ScrollView
+              contentInsetAdjustmentBehavior="automatic"
               contentContainerStyle={styles.formContent}
               showsVerticalScrollIndicator={false}
             >
-              <ThemedText style={styles.formHint}>
-                Beschreibe kurz das Gericht, Zutaten, Allergene und optional ein
-                Foto.
-              </ThemedText>
+              <ThemedText style={styles.formHint}>{t("form.hint")}</ThemedText>
               <View style={styles.formGroup}>
-                <ThemedText style={styles.formLabel}>Titel</ThemedText>
+                <ThemedText style={styles.formLabel}>
+                  {t("form.name")}
+                </ThemedText>
                 <TextInput
                   style={styles.formInput}
-                  placeholder="z. B. Cremige Kürbis-Pasta"
+                  placeholder={t("form.namePlaceholder")}
                   value={newTitle}
                   onChangeText={setNewTitle}
                   placeholderTextColor={placeholderTextColor}
@@ -1476,11 +1558,11 @@ const RecipeGeneratorScreen = () => {
               </View>
               <View style={styles.formGroup}>
                 <ThemedText style={styles.formLabel}>
-                  Kurzbeschreibung
+                  {t("form.description")}
                 </ThemedText>
                 <TextInput
                   style={[styles.formInput, styles.formMultiline]}
-                  placeholder="Was macht das Rezept besonders?"
+                  placeholder={t("form.descriptionPlaceholder")}
                   value={newDescription}
                   onChangeText={setNewDescription}
                   multiline
@@ -1491,7 +1573,7 @@ const RecipeGeneratorScreen = () => {
               <View style={styles.formRow}>
                 <View style={styles.formRowItem}>
                   <ThemedText style={styles.formLabel}>
-                    Alter (Monate)
+                    {t("form.age")}
                   </ThemedText>
                   <TextInput
                     style={styles.formInput}
@@ -1507,11 +1589,11 @@ const RecipeGeneratorScreen = () => {
                 </View>
                 <View style={styles.formRowItem}>
                   <ThemedText style={styles.formLabel}>
-                    Optionaler Tipp
+                    {t("form.tip")}
                   </ThemedText>
                   <TextInput
                     style={styles.formInput}
-                    placeholder="Tricks oder Variation"
+                    placeholder={t("form.tipPlaceholder")}
                     value={newTip}
                     onChangeText={setNewTip}
                     placeholderTextColor={placeholderTextColor}
@@ -1519,11 +1601,13 @@ const RecipeGeneratorScreen = () => {
                 </View>
               </View>
               <View style={styles.formGroup}>
-                <ThemedText style={styles.formLabel}>Zutaten</ThemedText>
+                <ThemedText style={styles.formLabel}>
+                  {t("form.ingredients")}
+                </ThemedText>
                 <View style={styles.formRow}>
                   <TextInput
                     style={[styles.formInput, styles.formRowInput]}
-                    placeholder="Zutat eingeben"
+                    placeholder={t("form.ingredientPlaceholder")}
                     value={newIngredientInput}
                     onChangeText={setNewIngredientInput}
                     onSubmitEditing={addIngredientToForm}
@@ -1540,7 +1624,7 @@ const RecipeGeneratorScreen = () => {
                 <View style={styles.formChipRow}>
                   {newIngredients.length === 0 ? (
                     <ThemedText style={styles.formChipHint}>
-                      Noch keine Zutaten hinzugefügt.
+                      {t("form.noIngredients")}
                     </ThemedText>
                   ) : (
                     newIngredients.map((ingredient) => (
@@ -1564,7 +1648,9 @@ const RecipeGeneratorScreen = () => {
                 </View>
               </View>
               <View style={styles.formGroup}>
-                <ThemedText style={styles.formLabel}>Allergene</ThemedText>
+                <ThemedText style={styles.formLabel}>
+                  {t("form.allergens")}
+                </ThemedText>
                 <View style={styles.formChipRow}>
                   {ALLERGEN_OPTIONS.map((option) => {
                     const isSelected = newAllergens.includes(option.id);
@@ -1584,7 +1670,7 @@ const RecipeGeneratorScreen = () => {
                             isSelected && styles.formAllergenLabelSelected,
                           ]}
                         >
-                          {option.label}
+                          {t(option.labelKey)}
                         </ThemedText>
                       </TouchableOpacity>
                     );
@@ -1592,14 +1678,16 @@ const RecipeGeneratorScreen = () => {
                 </View>
               </View>
               <View style={styles.formGroup}>
-                <ThemedText style={styles.formLabel}>Anleitung</ThemedText>
+                <ThemedText style={styles.formLabel}>
+                  {t("form.instructions")}
+                </ThemedText>
                 <TextInput
                   style={[
                     styles.formInput,
                     styles.formMultiline,
                     styles.formInstructions,
                   ]}
-                  placeholder="Beschreibe die Zubereitungsschritte"
+                  placeholder={t("form.instructionsPlaceholder")}
                   value={newInstructions}
                   onChangeText={setNewInstructions}
                   multiline
@@ -1609,11 +1697,11 @@ const RecipeGeneratorScreen = () => {
               </View>
               <View style={styles.formGroup}>
                 <ThemedText style={styles.formLabel}>
-                  Videokurs-Link (optional)
+                  {t("form.video")}
                 </ThemedText>
                 <TextInput
                   style={styles.formInput}
-                  placeholder="YouTube-Link einfuegen"
+                  placeholder={t("form.videoPlaceholder")}
                   value={newVideoUrl}
                   onChangeText={setNewVideoUrl}
                   autoCapitalize="none"
@@ -1622,13 +1710,12 @@ const RecipeGeneratorScreen = () => {
                   placeholderTextColor={placeholderTextColor}
                 />
                 <ThemedText style={styles.formChipHint}>
-                  Hinterlege einfach einen YouTube-Link. In der Rezeptansicht zeigen wir nur
-                  einen reduzierten Start/Stop-Player.
+                  {t("form.videoHint")}
                 </ThemedText>
               </View>
               <View style={styles.formGroup}>
                 <ThemedText style={styles.formLabel}>
-                  Bild (optional)
+                  {t("form.image")}
                 </ThemedText>
                 {newImage ? (
                   <View style={styles.formImagePreviewWrapper}>
@@ -1646,7 +1733,7 @@ const RecipeGeneratorScreen = () => {
                     >
                       <IconSymbol name="trash" size={18} color="#FFFFFF" />
                       <ThemedText style={styles.formImageRemoveText}>
-                        Entfernen
+                        {t("common.remove")}
                       </ThemedText>
                     </TouchableOpacity>
                   </View>
@@ -1658,7 +1745,7 @@ const RecipeGeneratorScreen = () => {
                   >
                     <IconSymbol name="camera" size={22} color={accentColor} />
                     <ThemedText style={styles.formImagePickerText}>
-                      Bild aus der Mediathek wählen
+                      {t("form.imagePicker")}
                     </ThemedText>
                   </TouchableOpacity>
                 )}
@@ -1674,7 +1761,7 @@ const RecipeGeneratorScreen = () => {
                   disabled={isSubmitting}
                 >
                   <ThemedText style={styles.formCancelText}>
-                    Abbrechen
+                    {t("common.cancel")}
                   </ThemedText>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -1687,7 +1774,7 @@ const RecipeGeneratorScreen = () => {
                     <ActivityIndicator color="#FFFFFF" />
                   ) : (
                     <ThemedText style={styles.formSubmitText}>
-                      Speichern
+                      {t("common.save")}
                     </ThemedText>
                   )}
                 </TouchableOpacity>
@@ -1705,6 +1792,7 @@ export default RecipeGeneratorScreen;
 // @ts-nocheck - StyleSheet.create type inference issues with strict mode
 type RecipeGeneratorStyleParams = {
   isDark: boolean;
+  isCompact: boolean;
   textPrimary: string;
   textSecondary: string;
   textTertiary: string;
@@ -1715,6 +1803,7 @@ type RecipeGeneratorStyleParams = {
 
 const createStyles = ({
   isDark,
+  isCompact,
   textPrimary,
   textSecondary,
   textTertiary,
@@ -1729,7 +1818,6 @@ const createStyles = ({
     },
     safeArea: {
       flex: 1,
-      paddingHorizontal: SCREEN_PADDING, // Minimales Padding für maximale Breite
     },
     overlayContainer: {
       width: "100%",
@@ -1744,41 +1832,50 @@ const createStyles = ({
       zIndex: 10,
     },
     headerActionButton: {
-      padding: 8,
-      borderRadius: 18,
+      width: 38,
+      height: 38,
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: 19,
       backgroundColor: isDark ? "rgba(0,0,0,0.45)" : "rgba(255,255,255,0.75)",
+      borderWidth: 1,
+      borderColor: glassBorder,
     },
     scrollContent: {
       paddingBottom: 100,
+      paddingHorizontal: SCREEN_PADDING,
       alignItems: "center",
     },
     contentContainer: {
       alignSelf: "center",
+      paddingTop: 4,
     },
-    // JEDE Card verwendet diesen Style - garantiert einheitliche Breite
     card: {
       marginBottom: CARD_SPACING,
       padding: CARD_INTERNAL_PADDING,
-      borderRadius: 20,
+      borderRadius: 26,
       shadowColor: "#000",
-      shadowOffset: { width: 0, height: 8 },
-      shadowOpacity: 0.05,
-      shadowRadius: 8,
-      elevation: 4,
+      shadowOffset: { width: 0, height: 10 },
+      shadowOpacity: isDark ? 0.16 : 0.07,
+      shadowRadius: 18,
+      elevation: 3,
     },
     topCard: {
-      marginBottom: CARD_SPACING,
+      width: "100%",
+      alignSelf: "stretch",
+      marginBottom: 12,
+      overflow: "hidden",
+      padding: isCompact ? 18 : 22,
     },
     recipeCard: {
-      // Gleiche Breite wie normale Cards - Padding wird durch innere Elemente erreicht
-      paddingHorizontal: CARD_INTERNAL_PADDING, // 32px - gleiche Breite wie andere Cards
-      paddingVertical: CARD_INTERNAL_PADDING, // 32px
+      paddingHorizontal: CARD_INTERNAL_PADDING,
+      paddingVertical: CARD_INTERNAL_PADDING,
     },
     imageHeader: {
       marginTop: -CARD_INTERNAL_PADDING,
       marginHorizontal: -CARD_INTERNAL_PADDING,
-      borderTopLeftRadius: 20,
-      borderTopRightRadius: 20,
+      borderTopLeftRadius: 26,
+      borderTopRightRadius: 26,
       overflow: "hidden",
       position: "relative",
     },
@@ -1826,37 +1923,86 @@ const createStyles = ({
       fontSize: 12,
       fontWeight: "700",
     },
-    // Hero Section
+    heroGlowLarge: {
+      position: "absolute",
+      width: 180,
+      height: 180,
+      borderRadius: 90,
+      right: -70,
+      top: -85,
+      backgroundColor: toRgba(accentColor, isDark ? 0.18 : 0.1),
+    },
+    heroGlowSmall: {
+      position: "absolute",
+      width: 90,
+      height: 90,
+      borderRadius: 45,
+      left: -45,
+      bottom: -48,
+      backgroundColor: toRgba(accentColor, isDark ? 0.12 : 0.07),
+    },
     heroRow: {
-      flexDirection: "column",
-      alignItems: "center",
-      gap: 6,
+      flexDirection: isCompact ? "column" : "row",
+      alignItems: isCompact ? "flex-start" : "center",
+      gap: 16,
     },
     heroIcon: {
-      width: 48,
-      height: 48,
-      borderRadius: 24,
-      backgroundColor: toRgba(accentColor, isDark ? 0.26 : 0.12),
+      width: 56,
+      height: 56,
+      borderRadius: 18,
+      backgroundColor: toRgba(accentColor, isDark ? 0.28 : 0.14),
       alignItems: "center",
       justifyContent: "center",
+      borderWidth: 1,
+      borderColor: toRgba(accentColor, isDark ? 0.34 : 0.18),
     },
     heroTextWrap: {
-      alignItems: "center",
+      flex: 1,
+      alignItems: "flex-start",
       gap: 4,
     },
+    heroEyebrow: {
+      fontSize: 11,
+      fontWeight: "800",
+      color: accentColor,
+      letterSpacing: 1.15,
+      marginBottom: 1,
+    },
     heroTitle: {
-      fontSize: 24, // Größere Schrift für bessere Sichtbarkeit
-      fontWeight: "700",
-      color: textSecondary,
-      letterSpacing: -0.3,
-      textAlign: "center",
+      fontSize: isCompact ? 23 : 25,
+      fontWeight: "800",
+      color: textPrimary,
+      letterSpacing: -0.55,
+      textAlign: "left",
       lineHeight: 30,
     },
     heroSubtitle: {
-      fontSize: 15, // Größere Schrift für bessere Lesbarkeit
+      fontSize: 14,
       color: textSecondary,
-      lineHeight: 22,
-      textAlign: "center",
+      lineHeight: 20,
+      textAlign: "left",
+    },
+    heroStatsRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+      marginTop: 18,
+    },
+    heroStatPill: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 7,
+      paddingHorizontal: 11,
+      paddingVertical: 8,
+      borderRadius: 999,
+      backgroundColor: isDark ? "rgba(0,0,0,0.24)" : "rgba(255,255,255,0.52)",
+      borderWidth: 1,
+      borderColor: glassBorder,
+    },
+    heroStatText: {
+      fontSize: 12,
+      fontWeight: "700",
+      color: textSecondary,
     },
     // Action Section
     actionCard: {
@@ -1898,13 +2044,15 @@ const createStyles = ({
     quickActionRow: {
       flexDirection: "row",
       justifyContent: "space-between",
-      gap: 12,
-      marginBottom: 12,
+      gap: 8,
+      marginBottom: 22,
     },
     quickActionButton: {
       flex: 1,
-      paddingVertical: 12,
-      borderRadius: 22,
+      minHeight: 112,
+      paddingVertical: 13,
+      paddingHorizontal: 6,
+      borderRadius: 20,
       borderWidth: 1,
       borderColor: glassBorder,
       backgroundColor: isDark ? "rgba(0,0,0,0.34)" : "rgba(255,255,255,0.35)",
@@ -1925,26 +2073,28 @@ const createStyles = ({
       alignItems: "center",
     },
     quickActionIcon: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
+      width: 38,
+      height: 38,
+      borderRadius: 14,
       alignItems: "center",
       justifyContent: "center",
       backgroundColor: isDark ? "rgba(0,0,0,0.35)" : "rgba(255,255,255,0.6)",
       borderWidth: 1,
       borderColor: isDark ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.65)",
-      marginBottom: 8,
+      marginBottom: 7,
     },
     quickActionLabel: {
-      fontSize: 14,
+      fontSize: isCompact ? 12 : 13,
       fontWeight: "700",
-      color: textSecondary,
+      color: textPrimary,
+      textAlign: "center",
     },
     quickActionMeta: {
       fontSize: 12,
       color: textSecondary,
       marginTop: 2,
       fontWeight: "500",
+      textAlign: "center",
     },
     quickActionBadge: {
       position: "absolute",
@@ -2085,7 +2235,7 @@ const createStyles = ({
       color: "#FFFFFF",
     },
     loadingWrapper: {
-      marginTop: 12,
+      marginTop: 28,
       alignItems: "center",
       gap: 8,
     },
@@ -2138,9 +2288,9 @@ const createStyles = ({
       gap: 6,
     },
     recipeTitle: {
-      fontSize: 18, // Größere Schrift für bessere Lesbarkeit
-      fontWeight: "700",
-      color: textSecondary,
+      fontSize: 18,
+      fontWeight: "800",
+      color: textPrimary,
       flex: 1,
       lineHeight: 24,
       paddingRight: 6,
@@ -2157,10 +2307,10 @@ const createStyles = ({
       flexDirection: "row",
       alignItems: "center",
       gap: 8,
-      paddingVertical: 10,
-      paddingHorizontal: 14,
-      borderRadius: 16,
-      backgroundColor: isDark ? "rgba(0,0,0,0.34)" : "rgba(255,255,255,0.28)",
+      paddingVertical: 7,
+      paddingHorizontal: 11,
+      borderRadius: 999,
+      backgroundColor: toRgba(accentColor, isDark ? 0.2 : 0.1),
     },
     statText: {
       fontSize: 14, // Größere Schrift für bessere Lesbarkeit
@@ -2186,36 +2336,46 @@ const createStyles = ({
       fontWeight: "700",
       color: textSecondary,
       marginBottom: 8,
-      textAlign: "center",
+      textAlign: "left",
     },
     noticeText: {
       fontSize: 14,
       color: textSecondary,
       lineHeight: 20,
-      textAlign: "center",
+      textAlign: "left",
     },
     catalogHeader: {
-      flexDirection: "column",
+      flexDirection: "row",
       alignItems: "center",
-      marginTop: 12,
-      marginBottom: 4,
-      gap: 6,
+      justifyContent: "space-between",
+      marginBottom: 12,
+      paddingHorizontal: 2,
+      gap: 12,
+    },
+    catalogTitleGroup: {
+      flex: 1,
+      gap: 2,
     },
     catalogTitle: {
-      fontSize: 20, // Größere Schrift für bessere Sichtbarkeit
-      fontWeight: "700",
-      color: textSecondary,
-      letterSpacing: -0.2,
-      textAlign: "center",
+      fontSize: 21,
+      fontWeight: "800",
+      color: textPrimary,
+      letterSpacing: -0.35,
+      textAlign: "left",
       lineHeight: 26,
+    },
+    catalogCount: {
+      fontSize: 13,
+      color: textTertiary,
+      fontWeight: "600",
     },
     refreshButton: {
       flexDirection: "row",
       alignItems: "center",
       gap: 8,
-      paddingHorizontal: 16,
-      paddingVertical: 8,
-      borderRadius: 16,
+      paddingHorizontal: 12,
+      paddingVertical: 9,
+      borderRadius: 999,
       backgroundColor: toRgba(accentColor, isDark ? 0.28 : 0.15),
     },
     refreshLabel: {
@@ -2224,7 +2384,7 @@ const createStyles = ({
       color: accentColor,
     },
     catalogTextColumn: {
-      marginTop: 12,
+      marginTop: 14,
       flex: 1,
       minWidth: 0,
     },
@@ -2243,7 +2403,7 @@ const createStyles = ({
       paddingHorizontal: 2,
     },
     disabledRecipeCard: {
-      opacity: 0.6,
+      opacity: 0.68,
     },
     disabledRecipeTitle: {
       color: isDark ? "rgba(255,255,255,0.68)" : "rgba(125,90,80,0.6)",

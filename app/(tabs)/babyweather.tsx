@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, View, ScrollView, SafeAreaView, StatusBar, TouchableOpacity, Image, ActivityIndicator, Alert, TextInput, Dimensions } from 'react-native';
+import { StyleSheet, View, ScrollView, StatusBar, TouchableOpacity, Image, ActivityIndicator, Alert, TextInput } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedBackground } from '@/components/ThemedBackground';
@@ -10,16 +11,25 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import * as Location from 'expo-location';
 import { getWeatherByCoordinates, getWeatherByZipCode, getMockWeatherData, WeatherData, getWeatherByCity } from '@/lib/weatherService';
-import { API_KEYS } from '@/lib/config';
 import { Stack } from 'expo-router';
 import Header from '@/components/Header';
 import { useSmartBack } from '@/contexts/NavigationContext';
-import { LiquidGlassCard, LAYOUT_PAD, TIMELINE_INSET, GLASS_OVERLAY_DARK, GLASS_BORDER_DARK } from '@/constants/DesignGuide';
+import { LiquidGlassCard, LAYOUT_PAD, GLASS_OVERLAY_DARK, GLASS_BORDER_DARK } from '@/constants/DesignGuide';
+import {
+  DEFAULT_BABY_WEATHER_LOCALE,
+  formatBabyWeatherMonths,
+  getBabyWeatherClothingLabel,
+  getBabyWeatherContextLabel,
+  getBabyWeatherTipKeys,
+  translateBabyWeatherText,
+  type BabyWeatherTranslationKey,
+} from '@/lib/babyWeatherTranslations';
 
-const { width: screenWidth } = Dimensions.get('window');
-const TIMELINE_CONTENT_WIDTH = screenWidth - LAYOUT_PAD;
 const BLUE_GLASS_OVERLAY = 'rgba(166,205,237,0.18)';
 const BLUE_GLASS_BORDER = 'rgba(166,205,237,0.35)';
+const ACTIVE_BABY_WEATHER_LOCALE = DEFAULT_BABY_WEATHER_LOCALE;
+const t = (key: BabyWeatherTranslationKey, params?: Record<string, string | number>) =>
+  translateBabyWeatherText(ACTIVE_BABY_WEATHER_LOCALE, key, params);
 
 // Funktion zum Laden der Bilder
 const getClothingImage = (imageName: string | null) => {
@@ -177,43 +187,6 @@ const clothingCatalogue: Record<ClothingCategory, ClothingItem[]> = {
   ],
 };
 
-// Tipps für verschiedene Wetterbedingungen
-const weatherTips: Record<TemperatureBand, string[]> = {
-  hot: [
-    'Schatten, Wasser, Sonnenhut – so bleibt es entspannt.',
-    'Leichte Stoffe lassen die Haut atmen.',
-    'Kurze Check-ins: Nacken warm? Dann passt alles.',
-    'In der Mittagssonne lieber eine Pause drinnen machen.',
-    'Luftig im Kinderwagen hilft gegen Hitzestau.',
-  ],
-  warm: [
-    'Eine leichte Schicht dabei haben – falls Wind aufzieht.',
-    'Sonnenschutz lohnt sich auch bei milder Sonne.',
-    'Im Kinderwagen hilft eine dünne Decke gegen Zugluft.',
-  ],
-  mild: [
-    'Schichten sind praktisch, wenn das Wetter kippt.',
-    'Eine dünne Mütze kann bei Wind helfen.',
-    'Kurz lüften, dann wieder kuschelig machen.',
-  ],
-  cool: [
-    'Kalte Hände sind ok – der Nacken zählt mehr.',
-    'Für längere Ausflüge Wechselkleidung einpacken.',
-    'Im Kinderwagen schützt ein Fußsack vor Kälte.',
-  ],
-  fresh: [
-    'Windschutz oder Softshell hilft gegen Zugluft.',
-    'Ein Halstuch schützt empfindliche Haut.',
-    'Regenverdeck griffbereit, falls es umschlägt.',
-  ],
-  cold: [
-    'Mehrere dünne Schichten wärmen oft besser.',
-    'Trocken bleibt warm – nasse Kleidung zügig wechseln.',
-    'Windschutz am Kinderwagen macht viel aus.',
-    'Ein kleines Wechselset beruhigt unterwegs.',
-  ],
-};
-
 // Temperaturanpassungen je nach Kontext
 const contextModifiers: {[key in ContextMode]: number} = {
   stroller: 0,       // Keine Anpassung im Kinderwagen
@@ -223,14 +196,8 @@ const contextModifiers: {[key in ContextMode]: number} = {
   carSeat: 0,        // Keine Anpassung im Auto
 };
 
-// Beschreibungen der Kontexte
-const contextDescriptions: {[key in ContextMode]: string} = {
-  stroller: 'Kinderwagen',
-  carrier: 'Babytrage',
-  indoor: 'Drinnen',
-  sleeping: 'Schlafenszeit',
-  carSeat: 'Auto',
-};
+const contextModes: ContextMode[] = ['stroller', 'carrier', 'indoor', 'sleeping', 'carSeat'];
+const getContextLabel = (mode: ContextMode) => getBabyWeatherContextLabel(ACTIVE_BABY_WEATHER_LOCALE, mode);
 
 const getTemperatureBand = (value: number): TemperatureBand => {
   if (value >= 28) {
@@ -251,52 +218,9 @@ const getTemperatureBand = (value: number): TemperatureBand => {
   return 'cold';
 };
 
-const temperatureBandLabels: Record<TemperatureBand, string> = {
-  hot: 'heiß',
-  warm: 'warm',
-  mild: 'mild',
-  cool: 'kühl',
-  fresh: 'frisch',
-  cold: 'kalt',
-};
-
 const getHeroRecommendation = (band: TemperatureBand, mode: ContextMode): string => {
-  const baseRecommendations: Record<TemperatureBand, string> = {
-    hot: 'Kurzarm & luftig',
-    warm: 'Kurzarm + leichte Schicht',
-    mild: 'Langarm + leichte Schicht',
-    cool: 'Langarm + Schichten',
-    fresh: 'Langarm + warme Schichten',
-    cold: 'Warm einpacken + Schichten',
-  };
-
-  const indoorRecommendations: Record<TemperatureBand, string> = {
-    hot: 'Luftig & leicht',
-    warm: 'Leicht & bequem',
-    mild: 'Langarm + leichte Schicht',
-    cool: 'Langarm + Schichten',
-    fresh: 'Langarm + warme Schichten',
-    cold: 'Warm & kuschelig',
-  };
-
-  const sleepingRecommendations: Record<TemperatureBand, string> = {
-    hot: 'Leichter Schlafsack reicht',
-    warm: 'Leichter Schlafsack + Body',
-    mild: 'Schlafsack + Langarm',
-    cool: 'Schlafsack + warme Schichten',
-    fresh: 'Wärmerer Schlafsack + Schichten',
-    cold: 'Wärmerer Schlafsack + extra Schichten',
-  };
-
-  if (mode === 'sleeping') {
-    return sleepingRecommendations[band];
-  }
-
-  if (mode === 'indoor') {
-    return indoorRecommendations[band];
-  }
-
-  return baseRecommendations[band];
+  const variant = mode === 'sleeping' ? 'sleeping' : mode === 'indoor' ? 'indoor' : 'default';
+  return t(`hero.${variant}.${band}` as BabyWeatherTranslationKey);
 };
 
 // Header component that will be memoized
@@ -316,7 +240,7 @@ interface HeaderProps {
   handleCitySearch: () => void;
   zipCodeInputRef: React.RefObject<TextInput | null>;
   cityNameInputRef: React.RefObject<TextInput | null>;
-  weatherData: any;
+  weatherData: WeatherData | null;
   isLoading: boolean;
   errorMessage: string;
   selectedMode: ContextMode;
@@ -329,6 +253,32 @@ interface HeaderProps {
   heroTitle: string;
   heroSubtitle: string;
 }
+
+const SectionHeading = ({
+  icon,
+  title,
+  subtitle,
+  color,
+  iconColor,
+}: {
+  icon: any;
+  title: string;
+  subtitle?: string;
+  color: string;
+  iconColor: string;
+}) => (
+  <View style={styles.sectionHeading}>
+    <View style={[styles.sectionHeadingIcon, { backgroundColor: `${iconColor}1F` }]}>
+      <IconSymbol name={icon} size={18} color={iconColor} />
+    </View>
+    <View style={styles.sectionHeadingCopy}>
+      <ThemedText style={[styles.sectionHeadingTitle, { color }]}>{title}</ThemedText>
+      {subtitle ? (
+        <ThemedText style={[styles.sectionHeadingSubtitle, { color }]}>{subtitle}</ThemedText>
+      ) : null}
+    </View>
+  </View>
+);
 
 const BabyWeatherHeader: React.FC<HeaderProps> = ({ 
   colorScheme, 
@@ -375,6 +325,8 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
       <TouchableOpacity 
         style={styles.infoButton}
         onPress={() => setShowBabyInfo(!showBabyInfo)}
+        accessibilityRole="button"
+        accessibilityLabel={t(showBabyInfo ? 'info.hide' : 'info.show')}
       >
         <IconSymbol name="info.circle" size={22} color={textSecondary} />
       </TouchableOpacity>
@@ -386,17 +338,22 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
           lightColor={isDark ? 'rgba(12,12,16,0.82)' : theme.cardLight}
           darkColor={isDark ? 'rgba(12,12,16,0.82)' : theme.cardDark}
         >
-          <ThemedText style={styles.infoTitle}>Baby-Daten für Empfehlungen</ThemedText>
-          <View style={styles.infoRow}>
-            <ThemedText style={styles.infoLabel}>Alter:</ThemedText>
-            <ThemedText style={styles.infoValue}>{babyAgeMonths} Monate</ThemedText>
+          <View style={styles.infoTitleRow}>
+            <View style={[styles.infoIcon, { backgroundColor: `${accentColor}1F` }]}>
+              <IconSymbol name="person.crop.circle.fill" size={19} color={accentColor} />
+            </View>
+            <ThemedText style={[styles.infoTitle, { color: textPrimary }]}>{t('info.title')}</ThemedText>
           </View>
           <View style={styles.infoRow}>
-            <ThemedText style={styles.infoLabel}>Gewicht-Perzentile:</ThemedText>
-            <ThemedText style={styles.infoValue}>{babyWeightPercentile}%</ThemedText>
+            <ThemedText style={[styles.infoLabel, { color: textSecondary }]}>{t('info.age')}</ThemedText>
+            <ThemedText style={[styles.infoValue, { color: textPrimary }]}>{formatBabyWeatherMonths(ACTIVE_BABY_WEATHER_LOCALE, babyAgeMonths)}</ThemedText>
           </View>
-          <ThemedText style={styles.infoNote}>
-            Diese Daten werden aus dem Babyprofil übernommen und für präzisere Kleidungsempfehlungen verwendet.
+          <View style={styles.infoRow}>
+            <ThemedText style={[styles.infoLabel, { color: textSecondary }]}>{t('info.weightPercentile')}</ThemedText>
+            <ThemedText style={[styles.infoValue, { color: textPrimary }]}>{babyWeightPercentile}%</ThemedText>
+          </View>
+          <ThemedText style={[styles.infoNote, { color: textSecondary }]}>
+            {t('info.note')}
           </ThemedText>
         </ThemedView>
       )}
@@ -408,7 +365,13 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
         overlayColor={glassOverlay}
         borderColor={glassBorder}
       >
-        <ThemedText style={[styles.sectionTitle, { color: textSecondary }]}>Standort</ThemedText>
+        <SectionHeading
+          icon="location.fill"
+          title={t('location.title')}
+          subtitle={t('location.subtitle')}
+          color={textPrimary}
+          iconColor={accentColor}
+        />
         <View style={styles.locationToggle}>
           <TouchableOpacity
             style={[
@@ -428,7 +391,7 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
             onPress={toggleLocationMode}
           >
             <IconSymbol name="location.fill" size={20} color={searchType === 'location' ? accentColor : iconSecondaryColor} />
-            <ThemedText style={[styles.locationButtonText, { color: textSecondary }, searchType === 'location' && [styles.activeLocationButtonText, { color: textPrimary }]]}>Standort</ThemedText>
+            <ThemedText style={[styles.locationButtonText, { color: textSecondary }, searchType === 'location' && [styles.activeLocationButtonText, { color: textPrimary }]]}>{t('location.current')}</ThemedText>
           </TouchableOpacity>
           
           <TouchableOpacity
@@ -449,7 +412,7 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
             onPress={switchToZipCodeSearch}
           >
             <IconSymbol name="number" size={20} color={searchType === 'zipCode' ? accentColor : iconSecondaryColor} />
-            <ThemedText style={[styles.locationButtonText, { color: textSecondary }, searchType === 'zipCode' && [styles.activeLocationButtonText, { color: textPrimary }]]}>PLZ</ThemedText>
+            <ThemedText style={[styles.locationButtonText, { color: textSecondary }, searchType === 'zipCode' && [styles.activeLocationButtonText, { color: textPrimary }]]}>{t('location.zip')}</ThemedText>
           </TouchableOpacity>
           
           <TouchableOpacity
@@ -470,7 +433,7 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
             onPress={switchToCitySearch}
           >
             <IconSymbol name="building.2.fill" size={20} color={searchType === 'cityName' ? accentColor : iconSecondaryColor} />
-            <ThemedText style={[styles.locationButtonText, { color: textSecondary }, searchType === 'cityName' && [styles.activeLocationButtonText, { color: textPrimary }]]}>Stadt</ThemedText>
+            <ThemedText style={[styles.locationButtonText, { color: textSecondary }, searchType === 'cityName' && [styles.activeLocationButtonText, { color: textPrimary }]]}>{t('location.city')}</ThemedText>
           </TouchableOpacity>
         </View>
 
@@ -485,7 +448,7 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
                   backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.18)',
                 }
               ]}
-              placeholder="PLZ eingeben (z.B. 10115)"
+              placeholder={t('location.zipPlaceholder')}
               placeholderTextColor={iconSecondaryColor}
               value={zipCode}
               onChangeText={handleZipCodeChange}
@@ -506,7 +469,7 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
               ]}
               onPress={handleZipCodeSearch}
             >
-              <ThemedText style={styles.searchButtonText}>Suchen</ThemedText>
+              <ThemedText style={styles.searchButtonText}>{t('location.search')}</ThemedText>
             </TouchableOpacity>
           </View>
         )}
@@ -522,7 +485,7 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
                   backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.18)',
                 }
               ]}
-              placeholder="Stadt eingeben (z.B. Berlin)"
+              placeholder={t('location.cityPlaceholder')}
               placeholderTextColor={iconSecondaryColor}
               value={cityName}
               onChangeText={handleCityNameChange}
@@ -542,14 +505,18 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
               ]}
               onPress={handleCitySearch}
             >
-              <ThemedText style={styles.searchButtonText}>Suchen</ThemedText>
+              <ThemedText style={styles.searchButtonText}>{t('location.search')}</ThemedText>
             </TouchableOpacity>
           </View>
         )}
 
         {weatherData && (
           <ThemedText style={[styles.currentLocation, { color: textSecondary }]}>
-            {weatherData.location || (searchType === 'location' ? 'Aktueller Standort' : searchType === 'zipCode' ? `PLZ ${searchType === 'zipCode' ? zipCode : ''}` : cityName)}
+            {weatherData.location || (searchType === 'location'
+              ? t('location.currentLabel')
+              : searchType === 'zipCode'
+                ? t('location.postalCode', { zipCode })
+                : cityName)}
           </ThemedText>
         )}
       </LiquidGlassCard>
@@ -557,7 +524,7 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
       {isLoading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={accentColor} />
-          <ThemedText style={[styles.loadingText, { color: textSecondary }]}>Wetterdaten werden geladen...</ThemedText>
+          <ThemedText style={[styles.loadingText, { color: textSecondary }]}>{t('loading.weather')}</ThemedText>
         </View>
       ) : errorMessage ? (
         <LiquidGlassCard
@@ -578,7 +545,12 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
             overlayColor={glassOverlay}
             borderColor={glassBorder}
           >
-            <ThemedText style={[styles.sectionTitle, styles.weatherTitle, { color: textSecondary }]}>Aktuelle Wetterlage</ThemedText>
+            <SectionHeading
+              icon="cloud.sun.fill"
+              title={t('weather.title')}
+              color={textPrimary}
+              iconColor={accentColor}
+            />
             
             {/* New weather display layout */}
             <View style={styles.weatherDisplayContainer}>
@@ -593,8 +565,9 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
                     },
                   ]}
                 >
-                  <ThemedText style={[styles.temperatureValue, { color: textPrimary }]} numberOfLines={1} ellipsizeMode="clip">{weatherData?.temperature}°C</ThemedText>
-                  <ThemedText style={[styles.feelsLikeValue, { color: textSecondary }]}>Gefühlt: {weatherData?.feelsLike}°C</ThemedText>
+                  <ThemedText style={[styles.weatherNowLabel, { color: accentColor }]}>{t('weather.now')}</ThemedText>
+                  <ThemedText style={[styles.temperatureValue, { color: textPrimary }]} numberOfLines={1} ellipsizeMode="clip">{weatherData?.temperature}°</ThemedText>
+                  <ThemedText style={[styles.feelsLikeValue, { color: textSecondary }]}>{t('weather.feelsLike', { temperature: weatherData?.feelsLike ?? '–' })}</ThemedText>
                 </View>
                 
                 <View
@@ -621,7 +594,10 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
                 ]}
               >
                 <ThemedText style={[styles.weatherDescriptionText, { color: textPrimary }]}>{weatherData?.description}</ThemedText>
-                <ThemedText style={[styles.locationText, { color: textSecondary }]}>{weatherData?.location || (searchType === 'location' ? 'Aktueller Standort' : searchType === 'zipCode' ? `PLZ ${zipCode}` : cityName)}</ThemedText>
+                <View style={styles.weatherLocationRow}>
+                  <IconSymbol name="location.fill" size={12} color={iconSecondaryColor} />
+                  <ThemedText style={[styles.locationText, { color: textSecondary }]}>{weatherData?.location || (searchType === 'location' ? t('location.currentLabel') : searchType === 'zipCode' ? t('location.postalCode', { zipCode }) : cityName)}</ThemedText>
+                </View>
               </View>
               
               {/* Weather details with smaller icons */}
@@ -636,7 +612,10 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
                   ]}
                 >
                   <IconSymbol name="arrow.left.and.right" size={18} color={iconSecondaryColor} />
-                  <ThemedText style={[styles.weatherDetailText, { color: textSecondary }]}>Wind: {weatherData?.windSpeed} km/h</ThemedText>
+                  <View style={styles.weatherDetailCopy}>
+                    <ThemedText style={[styles.weatherDetailLabel, { color: textSecondary }]}>{t('weather.wind')}</ThemedText>
+                    <ThemedText style={[styles.weatherDetailValue, { color: textPrimary }]}>{weatherData?.windSpeed} km/h</ThemedText>
+                  </View>
                 </View>
                 
                 <View
@@ -649,7 +628,10 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
                   ]}
                 >
                   <IconSymbol name="drop.fill" size={18} color={iconSecondaryColor} />
-                  <ThemedText style={[styles.weatherDetailText, { color: textSecondary }]}>Luftfeuchte: {weatherData?.humidity}%</ThemedText>
+                  <View style={styles.weatherDetailCopy}>
+                    <ThemedText style={[styles.weatherDetailLabel, { color: textSecondary }]}>{t('weather.humidity')}</ThemedText>
+                    <ThemedText style={[styles.weatherDetailValue, { color: textPrimary }]}>{weatherData?.humidity}%</ThemedText>
+                  </View>
                 </View>
               </View>
             </View>
@@ -663,6 +645,9 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
               borderColor={glassBorder}
               radius={16}
             >
+              <View style={[styles.heroIcon, { backgroundColor: `${accentColor}1F` }]}>
+                <IconSymbol name="sparkles" size={20} color={accentColor} />
+              </View>
               <ThemedText style={[styles.sectionTitle, styles.heroTitle, { color: textSecondary }]}>{heroTitle}</ThemedText>
               <ThemedText style={[styles.heroSubtitle, { color: textPrimary }]}>{heroSubtitle}</ThemedText>
             </LiquidGlassCard>
@@ -675,9 +660,15 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
             overlayColor={glassOverlay}
             borderColor={glassBorder}
           >
-            <ThemedText style={[styles.sectionTitle, { color: textSecondary }]}>Situation auswählen</ThemedText>
+            <SectionHeading
+              icon="figure.and.child.holdinghands"
+              title={t('situation.title')}
+              subtitle={t('situation.subtitle')}
+              color={textPrimary}
+              iconColor={accentColor}
+            />
             <View style={styles.contextButtonsContainer}>
-              {(Object.keys(contextDescriptions) as ContextMode[]).map((mode) => (
+              {contextModes.map((mode) => (
                 <TouchableOpacity
                   key={mode}
                   style={[
@@ -722,7 +713,7 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
                       selectedMode === mode && [styles.selectedContextButtonTextNew, { color: textPrimary }]
                     ]}
                   >
-                    {contextDescriptions[mode]}
+                    {getContextLabel(mode)}
                   </ThemedText>
                 </TouchableOpacity>
               ))}
@@ -736,7 +727,13 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
               overlayColor={glassOverlay}
               borderColor={glassBorder}
             >
-              <ThemedText style={[styles.sectionTitle, { color: textSecondary }]}>Gefühlte Temperatur wählen</ThemedText>
+              <SectionHeading
+                icon="thermometer.medium"
+                title={t('feltTemperature.title')}
+                subtitle={t('feltTemperature.subtitle')}
+                color={textPrimary}
+                iconColor={accentColor}
+              />
               <View style={styles.feltTempOptions}>
                 <TouchableOpacity
                   style={[
@@ -762,7 +759,7 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
                       feltTemperature === null && [styles.feltTempButtonTextActive, { color: textPrimary }]
                     ]}
                   >
-                    Auto
+                    {t('feltTemperature.auto')}
                   </ThemedText>
                 </TouchableOpacity>
                 {feltTemperatureOptions.map((temp) => {
@@ -801,7 +798,7 @@ const BabyWeatherHeader: React.FC<HeaderProps> = ({
               </View>
               {autoFeltTemp !== undefined && autoFeltTemp !== null && (
                 <ThemedText style={[styles.feltTempHint, { color: textSecondary }]}>
-                  Aktuell (Wetter): {autoFeltTemp}°C
+                  {t('feltTemperature.current', { temperature: autoFeltTemp })}
                 </ThemedText>
               )}
             </LiquidGlassCard>
@@ -829,7 +826,7 @@ export default function BabyWeatherScreen() {
   const iconSecondaryColor = isDark ? adaptiveColors.iconSecondary : theme.tabIconDefault;
   const glassOverlay = isDark ? GLASS_OVERLAY_DARK : BLUE_GLASS_OVERLAY;
   const glassBorder = isDark ? GLASS_BORDER_DARK : BLUE_GLASS_BORDER;
-  const { isBabyBorn, babyAgeMonths, babyWeightPercentile } = useBabyStatus();
+  const { babyAgeMonths, babyWeightPercentile } = useBabyStatus();
   
   // Set fallback route for smart back navigation
   useSmartBack('/(tabs)/home');
@@ -841,14 +838,13 @@ export default function BabyWeatherScreen() {
   const zipCodeInputBuffer = useRef('');
   const cityNameInputBuffer = useRef('');
 
-  const [weatherData, setWeatherData] = useState<any>(null);
+  const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedMode, setSelectedMode] = useState<ContextMode>('stroller');
   const [clothingRecommendations, setClothingRecommendations] = useState<ClothingItem[]>([]);
   const [errorMessage, setErrorMessage] = useState('');
   const [zipCode, setZipCode] = useState('');
   const [cityName, setCityName] = useState('');
-  const [useLocation, setUseLocation] = useState(true);
   const [searchZipCode, setSearchZipCode] = useState('');
   const [searchCityName, setSearchCityName] = useState('');
   const [searchType, setSearchType] = useState<'location' | 'zipCode' | 'cityName'>('location');
@@ -888,10 +884,10 @@ export default function BabyWeatherScreen() {
       const { status } = await Location.requestForegroundPermissionsAsync();
       
       if (status !== 'granted') {
-        setErrorMessage('Standortberechtigung wurde nicht erteilt');
+        setErrorMessage(t('error.locationPermission'));
         setIsLoading(false);
         // Fallback auf Mock-Daten
-        const mockData = getMockWeatherData(true);
+        const mockData = getMockWeatherData(true, undefined, false, ACTIVE_BABY_WEATHER_LOCALE);
         setWeatherData(mockData);
         updateClothingRecommendations(mockData.temperature, selectedMode);
         return;
@@ -903,7 +899,7 @@ export default function BabyWeatherScreen() {
 
       try {
         // API-Aufruf ohne überflüssige Prüfung
-        const weatherData = await getWeatherByCoordinates(latitude, longitude);
+        const weatherData = await getWeatherByCoordinates(latitude, longitude, ACTIVE_BABY_WEATHER_LOCALE);
         setWeatherData(weatherData);
         updateClothingRecommendations(weatherData.temperature, selectedMode);
       } catch (apiError) {
@@ -913,16 +909,16 @@ export default function BabyWeatherScreen() {
           console.error('API Error Details:', apiError.message);
         }
         // Fallback auf Mock-Daten bei API-Fehler
-        const mockData = getMockWeatherData(true);
+        const mockData = getMockWeatherData(true, undefined, false, ACTIVE_BABY_WEATHER_LOCALE);
         setWeatherData(mockData);
         updateClothingRecommendations(mockData.temperature, selectedMode);
       }
     } catch (error) {
       console.error('Error fetching weather data:', error);
-      setErrorMessage('Fehler beim Abrufen der Wetterdaten');
+      setErrorMessage(t('error.weather'));
       
       // Fallback auf Mock-Daten bei allgemeinen Fehlern
-      const mockData = getMockWeatherData(true);
+      const mockData = getMockWeatherData(true, undefined, false, ACTIVE_BABY_WEATHER_LOCALE);
       setWeatherData(mockData);
       updateClothingRecommendations(mockData.temperature, selectedMode);
     } finally {
@@ -938,7 +934,7 @@ export default function BabyWeatherScreen() {
 
       try {
         // API-Aufruf ohne überflüssige Prüfung
-        const weatherData = await getWeatherByZipCode(zipCode);
+        const weatherData = await getWeatherByZipCode(zipCode, 'de', ACTIVE_BABY_WEATHER_LOCALE);
         setWeatherData(weatherData);
         updateClothingRecommendations(weatherData.temperature, selectedMode);
       } catch (apiError) {
@@ -948,16 +944,16 @@ export default function BabyWeatherScreen() {
           console.error('API Error Details:', apiError.message);
         }
         // Fallback auf Mock-Daten bei API-Fehler
-        const mockData = getMockWeatherData(false, zipCode);
+        const mockData = getMockWeatherData(false, zipCode, false, ACTIVE_BABY_WEATHER_LOCALE);
         setWeatherData(mockData);
         updateClothingRecommendations(mockData.temperature, selectedMode);
       }
     } catch (error) {
       console.error('Error fetching weather data by zip code:', error);
-      setErrorMessage('Fehler beim Abrufen der Wetterdaten für diese Postleitzahl');
+      setErrorMessage(t('error.weatherZip'));
       
       // Fallback auf Mock-Daten bei allgemeinen Fehlern
-      const mockData = getMockWeatherData(false, zipCode);
+      const mockData = getMockWeatherData(false, zipCode, false, ACTIVE_BABY_WEATHER_LOCALE);
       setWeatherData(mockData);
       updateClothingRecommendations(mockData.temperature, selectedMode);
     } finally {
@@ -973,7 +969,7 @@ export default function BabyWeatherScreen() {
 
       try {
         // API-Aufruf ohne überflüssige Prüfung
-        const weatherData = await getWeatherByCity(cityName);
+        const weatherData = await getWeatherByCity(cityName, 'de', ACTIVE_BABY_WEATHER_LOCALE);
         setWeatherData(weatherData);
         updateClothingRecommendations(weatherData.temperature, selectedMode);
       } catch (apiError) {
@@ -983,16 +979,16 @@ export default function BabyWeatherScreen() {
           console.error('API Error Details:', apiError.message);
         }
         // Fallback auf Mock-Daten bei API-Fehler
-        const mockData = getMockWeatherData(false, cityName);
+        const mockData = getMockWeatherData(false, cityName, true, ACTIVE_BABY_WEATHER_LOCALE);
         setWeatherData(mockData);
         updateClothingRecommendations(mockData.temperature, selectedMode);
       }
     } catch (error) {
       console.error('Error fetching weather data by city name:', error);
-      setErrorMessage('Fehler beim Abrufen der Wetterdaten für diese Stadt');
+      setErrorMessage(t('error.weatherCity'));
       
       // Fallback auf Mock-Daten bei allgemeinen Fehlern
-      const mockData = getMockWeatherData(false, cityName);
+      const mockData = getMockWeatherData(false, cityName, true, ACTIVE_BABY_WEATHER_LOCALE);
       setWeatherData(mockData);
       updateClothingRecommendations(mockData.temperature, selectedMode);
     } finally {
@@ -1022,7 +1018,7 @@ export default function BabyWeatherScreen() {
       setSearchZipCode(zipCode);
       setSearchType('zipCode');
     } else {
-      Alert.alert('Ungültige Eingabe', 'Bitte gib eine gültige 5-stellige Postleitzahl ein.');
+      Alert.alert(t('error.invalidTitle'), t('error.invalidZip'));
     }
   };
 
@@ -1032,7 +1028,7 @@ export default function BabyWeatherScreen() {
       setSearchCityName(cityName);
       setSearchType('cityName');
     } else {
-      Alert.alert('Ungültige Eingabe', 'Bitte gib einen gültigen Stadtnamen ein (mindestens 2 Zeichen).');
+      Alert.alert(t('error.invalidTitle'), t('error.invalidCity'));
     }
   };
 
@@ -1130,7 +1126,7 @@ export default function BabyWeatherScreen() {
     }
 
     const contextModifier = (hasManualFeltTemp && (mode === 'indoor' || mode === 'sleeping')) ? 0 : contextModifiers[mode];
-    console.log(`Kontext-Modifikator: ${contextModifier}°C (${contextDescriptions[mode]})`);
+    console.log(`Kontext-Modifikator: ${contextModifier}°C (${getContextLabel(mode)})`);
 
     const usePersonalModifiers = !(hasManualFeltTemp && (mode === 'indoor' || mode === 'sleeping'));
     const ageModifier = usePersonalModifiers ? (babyAgeMonths < 3 ? -2 : (babyAgeMonths < 6 ? -1 : 0)) : 0;
@@ -1159,17 +1155,19 @@ export default function BabyWeatherScreen() {
     }
 
     const heroTempValue = Math.round(hasManualFeltTemp ? manualFeltTemp : temperature);
-    const heroBandLabel = temperatureBandLabels[temperatureBand] ?? 'mild';
-    const heroTitleText = `Heute ${heroBandLabel} (${heroTempValue}°C)`;
+    const heroBandLabel = t(`band.${temperatureBand}` as BabyWeatherTranslationKey);
+    const heroTitleText = t('recommendation.today', { band: heroBandLabel, temperature: heroTempValue });
     const heroSubtitleText = getHeroRecommendation(layeringBand, mode);
     setHeroTitle(heroTitleText);
     setHeroSubtitle(heroSubtitleText);
 
     const description = weatherData?.description?.toLowerCase() ?? '';
     const iconName = weatherData?.icon ?? '';
-    const requiresRainProtection = description.includes('regen') || iconName.includes('rain') || iconName.includes('drizzle');
-    const indicatesSnow = description.includes('schnee') || iconName.includes('snow');
-    const indicatesWind = description.includes('wind') || windSpeed >= 20;
+    const requiresRainProtection = ['regen', 'rain', 'lluvia'].some(word => description.includes(word))
+      || iconName.includes('rain')
+      || iconName.includes('drizzle');
+    const indicatesSnow = ['schnee', 'snow', 'nieve'].some(word => description.includes(word)) || iconName.includes('snow');
+    const indicatesWind = ['wind', 'windy', 'viento'].some(word => description.includes(word)) || windSpeed >= 20;
 
     // ✨ EXKLUSIVE LayerSlot-Logik: Maximal 1 Teil pro Layer
     const layers: LayerSlot = {
@@ -1333,7 +1331,7 @@ export default function BabyWeatherScreen() {
     const metaWarnings = new Set<string>();
 
     if (mode === 'carrier' && layeringBand !== 'hot') {
-      metaWarnings.add("In der Trage wird es wärmer - bei Bedarf eine Schicht weniger wählen.");
+        metaWarnings.add(t('warning.carrier'));
     }
 
     if (mode === 'carSeat') {
@@ -1347,7 +1345,7 @@ export default function BabyWeatherScreen() {
       }
 
       if (['cool', 'fresh', 'cold'].includes(layeringBand)) {
-        metaWarnings.add("Im Autositz nur dünne Jacken tragen und warme Schichten erst nach dem Anschnallen ergänzen.");
+        metaWarnings.add(t('warning.carSeat'));
         layers.accessories = layers.accessories.filter(item => item !== 'Handschuhe' && item !== 'Schal');
         if (!layers.accessories.includes('Kinderwagen-Decke')) {
           layers.accessories.push('Kinderwagen-Decke');
@@ -1409,12 +1407,13 @@ export default function BabyWeatherScreen() {
 
     const cards = [];
 
-    const tipList = weatherTips[temperatureBand] ?? [];
-    const randomTip = tipList.length > 0 ? tipList[Math.floor(Math.random() * tipList.length)] : '';
+    const tipKeys = getBabyWeatherTipKeys(temperatureBand);
+    const randomTipKey = tipKeys.length > 0 ? tipKeys[Math.floor(Math.random() * tipKeys.length)] : null;
+    const randomTip = randomTipKey ? t(randomTipKey) : '';
 
     if (randomTip) {
       cards.push({
-        title: "Tipp für heute",
+        title: t('tips.today'),
         content: randomTip,
         icon: "lightbulb.fill" as any
       });
@@ -1423,7 +1422,7 @@ export default function BabyWeatherScreen() {
     const warnings = Array.from(metaWarnings);
     if (warnings.length > 0) {
       cards.push({
-        title: "Gut zu wissen",
+        title: t('tips.goodToKnow'),
         content: warnings[0],
         icon: "exclamationmark.triangle.fill" as any
       });
@@ -1431,14 +1430,14 @@ export default function BabyWeatherScreen() {
 
     if (temperatureBand === 'hot') {
       cards.push({
-        title: "Hitze-Hinweis",
-        content: "Schatten, trinken, Sonnenhut – kurze Nacken-Checks reichen.",
+        title: t('tips.heatTitle'),
+        content: t('tips.heat'),
         icon: "sun.max.fill" as any
       });
     } else if (temperatureBand === 'cold') {
       cards.push({
-        title: "Kälte-Hinweis",
-        content: "Fühlt sich der Nacken warm an? Dann ist alles gut.",
+        title: t('tips.coldTitle'),
+        content: t('tips.cold'),
         icon: "snowflake" as any
       });
     }
@@ -1477,7 +1476,7 @@ export default function BabyWeatherScreen() {
 
   const renderFooter = () => (
     <ThemedText style={[styles.disclaimer, { color: textSecondary }]}>
-      Hinweis: Die Empfehlungen sind Richtwerte und sollten an die individuellen Bedürfnisse deines Babys angepasst werden.
+      {t('footer.disclaimer')}
     </ThemedText>
   );
 
@@ -1491,18 +1490,15 @@ export default function BabyWeatherScreen() {
 
   const getDisplayName = (name: string, mode: ContextMode): string => {
     if (mode === 'carrier') {
-      if (name === 'Strumpfhose') return 'Leggings';
-      if (name === 'Mütze') return 'Wintermütze';
+      if (name === 'Strumpfhose') return t('clothing.carrierLeggings');
+      if (name === 'Mütze') return t('clothing.carrierWinterHat');
     }
-    return name;
+    return getBabyWeatherClothingLabel(ACTIVE_BABY_WEATHER_LOCALE, name);
   };
 
   const renderClothingItem = ({ item }: { item: ClothingItem }) => {
     const itemLayer = getItemLayer(item.name);
     const hasAlternatives = itemLayer && layerAlternatives[itemLayer] && layerAlternatives[itemLayer]!.length > 1;
-    const alternatives = itemLayer ? layerAlternatives[itemLayer] : null;
-    const currentIndex = itemLayer ? (currentAlternativeIndex[itemLayer] ?? 0) : 0;
-    const nextAlternative = hasAlternatives && alternatives ? alternatives[(currentIndex + 1) % alternatives.length] : null;
     const displayName = getDisplayName(item.name, selectedMode);
 
     return (
@@ -1527,7 +1523,7 @@ export default function BabyWeatherScreen() {
             <TouchableOpacity
               style={[styles.swapButton, { backgroundColor: isDark ? 'rgba(166,205,237,0.75)' : 'rgba(125, 90, 80, 0.85)' }]}
               onPress={() => itemLayer && swapLayerAlternative(itemLayer)}
-              accessibilityLabel="Alternative wechseln"
+              accessibilityLabel={t('outfit.swap')}
             >
               <IconSymbol name="arrow.triangle.2.circlepath" size={16} color="#FFFFFF" />
             </TouchableOpacity>
@@ -1548,9 +1544,13 @@ export default function BabyWeatherScreen() {
         overlayColor={glassOverlay}
         borderColor={glassBorder}
       >
-        <ThemedText style={[styles.sectionTitle, { color: textSecondary }]}>
-          Kleidung für {contextDescriptions[selectedMode]}
-        </ThemedText>
+        <SectionHeading
+          icon="tshirt.fill"
+          title={t('outfit.title', { context: getContextLabel(selectedMode) })}
+          subtitle={t('outfit.subtitle')}
+          color={textPrimary}
+          iconColor={isDark ? adaptiveColors.accent : theme.accent}
+        />
         {recommendedItems.length > 0 ? (
           <View style={styles.outfitGrid}>
             {recommendedItems.map(item => (
@@ -1563,7 +1563,7 @@ export default function BabyWeatherScreen() {
           <View style={styles.noRecommendations}>
             <IconSymbol name="questionmark.circle" size={32} color={iconSecondaryColor} />
             <ThemedText style={[styles.noRecommendationsText, { color: textSecondary }]}>
-              Keine spezifischen Empfehlungen für diese Situation.
+              {t('outfit.none')}
             </ThemedText>
           </View>
         )}
@@ -1587,9 +1587,12 @@ export default function BabyWeatherScreen() {
         borderColor={glassBorder}
         radius={18}
       >
-        <View style={styles.tipHeader}>
-          <ThemedText style={[styles.sectionTitle, styles.tipTitle, { color: textSecondary }]}>{primaryTip.title}</ThemedText>
-        </View>
+        <SectionHeading
+          icon={primaryTip.icon}
+          title={primaryTip.title}
+          color={textPrimary}
+          iconColor={isDark ? adaptiveColors.accent : theme.accent}
+        />
         <ThemedText style={[styles.tipContent, { color: textPrimary }]}>{primaryTip.content}</ThemedText>
         {extraTips.length > 0 && (
           <TouchableOpacity
@@ -1597,7 +1600,7 @@ export default function BabyWeatherScreen() {
             onPress={() => setTipsExpanded(!tipsExpanded)}
           >
             <ThemedText style={[styles.tipToggleText, { color: textSecondary }]}>
-              {tipsExpanded ? 'Weniger anzeigen' : 'Mehr erfahren'}
+              {t(tipsExpanded ? 'tips.less' : 'tips.more')}
             </ThemedText>
             <IconSymbol
               name={tipsExpanded ? 'chevron.up' : 'chevron.down'}
@@ -1627,9 +1630,14 @@ export default function BabyWeatherScreen() {
         <SafeAreaView style={styles.container}>
           <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
           
-          <Header title="Babywetter" showBackButton />
+          <Header title={t('screen.title')} showBackButton />
           
-          <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
+          <ScrollView
+            style={styles.scrollView}
+            contentContainerStyle={styles.contentContainer}
+            contentInsetAdjustmentBehavior="automatic"
+            showsVerticalScrollIndicator={false}
+          >
             <MemoHeader 
               colorScheme={colorScheme}
               showBabyInfo={showBabyInfo}
@@ -1671,24 +1679,6 @@ export default function BabyWeatherScreen() {
       </ThemedBackground>
     </>
   );
-}
-
-// Hilfsfunktionen für Icons und Farben
-function getContextIcon(mode: ContextMode): any {
-  switch (mode) {
-    case 'stroller':
-      return 'cart.fill';
-    case 'carrier':
-      return 'person.2.fill';
-    case 'indoor':
-      return 'house.fill';
-    case 'sleeping':
-      return 'moon.fill';
-    case 'carSeat':
-      return 'car.fill';
-    default:
-      return 'questionmark.circle';
-  }
 }
 
 // Verbesserte Kleidungs-Icons mit spezifischeren passenden SF Symbols
@@ -1826,6 +1816,7 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 40,
     alignItems: 'stretch',
+    gap: 12,
   },
 
   loadingContainer: {
@@ -1838,9 +1829,10 @@ const styles = StyleSheet.create({
     marginTop: 15,
   },
   headerWrapper: {
-    width: TIMELINE_CONTENT_WIDTH,
+    width: '100%',
     alignSelf: 'center',
     position: 'relative',
+    gap: 12,
   },
   errorContainer: {
     width: '100%',
@@ -1958,6 +1950,37 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     width: '100%',
   },
+  sectionHeading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    width: '100%',
+    paddingTop: 20,
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+  },
+  sectionHeadingIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sectionHeadingCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  sectionHeadingTitle: {
+    fontSize: 17,
+    lineHeight: 22,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+  },
+  sectionHeadingSubtitle: {
+    fontSize: 12,
+    lineHeight: 17,
+    opacity: 0.72,
+  },
   weatherTitle: {
     marginBottom: 10,
   },
@@ -2019,12 +2042,12 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   outfitCard: {
-    paddingVertical: 16,
-    paddingHorizontal: 18,
+    paddingVertical: 0,
+    paddingHorizontal: 0,
     marginBottom: 4,
   },
   outfitCardWide: {
-    width: TIMELINE_CONTENT_WIDTH,
+    width: '100%',
     alignSelf: 'center',
   },
   outfitHeader: {
@@ -2051,6 +2074,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
+    paddingHorizontal: 18,
+    paddingBottom: 18,
   },
   outfitGridItem: {
     width: '32%',
@@ -2201,6 +2226,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 10,
+    marginHorizontal: 14,
   },
   locationButton: {
     flexDirection: 'row',
@@ -2233,6 +2259,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginVertical: 10,
+    marginHorizontal: 14,
   },
   zipCodeInput: {
     flex: 1,
@@ -2270,6 +2297,8 @@ const styles = StyleSheet.create({
     marginBottom: 2,
     color: '#7D5A50',
     fontWeight: '500',
+    paddingHorizontal: 18,
+    paddingBottom: 18,
   },
   location: {
     fontSize: 12,
@@ -2312,17 +2341,18 @@ const styles = StyleSheet.create({
   },
   infoButton: {
     position: 'absolute',
-    right: 10,
-    top: 10,
+    right: 16,
+    top: 16,
     padding: 8,
     zIndex: 10,
+    borderRadius: 18,
   },
   infoCard: {
     width: '100%',
     borderRadius: 22,
     paddingVertical: 16,
     paddingHorizontal: 20,
-    marginBottom: 4,
+    marginBottom: 0,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -2332,7 +2362,21 @@ const styles = StyleSheet.create({
   infoTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    marginBottom: 10,
+    flex: 1,
+  },
+  infoTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingRight: 34,
+    marginBottom: 12,
+  },
+  infoIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   infoRow: {
     flexDirection: 'row',
@@ -2354,18 +2398,25 @@ const styles = StyleSheet.create({
   },
   sectionCard: {
     width: '100%',
-    marginBottom: 4,
+    marginBottom: 0,
     borderRadius: 22,
-    paddingTop: 18,
-    paddingBottom: 16,
-    paddingHorizontal: 24,
+    padding: 0,
     alignItems: 'stretch',
   },
   heroCard: {
-    paddingVertical: 16,
-    paddingHorizontal: 22,
+    padding: 0,
     alignItems: 'center',
     borderRadius: 16,
+  },
+  heroIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+    marginTop: 22,
+    marginBottom: 8,
   },
   heroTitle: {
     marginBottom: 6,
@@ -2379,7 +2430,7 @@ const styles = StyleSheet.create({
     opacity: 0.85,
     lineHeight: 22,
     paddingHorizontal: 8,
-    paddingBottom: 4,
+    paddingBottom: 22,
     flexWrap: 'wrap',
   },
   heroContextPill: {
@@ -2400,28 +2451,20 @@ const styles = StyleSheet.create({
     color: '#7D5A50',
   },
   tipCard: {
-    paddingTop: 18,
-    paddingBottom: 20,
-    paddingHorizontal: 22,
+    padding: 0,
     borderRadius: 18,
-    marginBottom: 4,
-  },
-  tipHeader: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 10,
+    marginBottom: 0,
   },
   tipTitle: {
     marginBottom: 0,
     textAlign: 'center',
   },
   tipContent: {
-    fontSize: 13,
-    lineHeight: 20,
+    fontSize: 14,
+    lineHeight: 21,
     color: '#7D5A50',
-    textAlign: 'center',
-    paddingHorizontal: 10,
-    marginTop: 4,
+    textAlign: 'left',
+    paddingHorizontal: 20,
     marginBottom: 10,
     flexWrap: 'wrap',
   },
@@ -2434,6 +2477,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 12,
     alignSelf: 'center',
+    marginBottom: 16,
   },
   tipToggleText: {
     fontSize: 12,
@@ -2474,7 +2518,7 @@ const styles = StyleSheet.create({
   columnWrapper: {
     justifyContent: 'space-around',
     marginVertical: 6,
-    width: TIMELINE_CONTENT_WIDTH,
+    width: '100%',
     alignSelf: 'center',
   },
   metaCardsContainer: {
@@ -2522,12 +2566,12 @@ const styles = StyleSheet.create({
     marginBottom: 5,
   },
   weatherCard: {
-    paddingVertical: 16,
-    paddingHorizontal: 22,
+    padding: 0,
   },
   weatherDisplayContainer: {
     width: '100%',
-    paddingHorizontal: 6,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
   },
   mainWeatherRow: {
     flexDirection: 'row',
@@ -2545,8 +2589,15 @@ const styles = StyleSheet.create({
     padding: 12,
     marginRight: 12,
     minWidth: 130,
-    minHeight: 90,
+    minHeight: 112,
     justifyContent: 'center',
+  },
+  weatherNowLabel: {
+    fontSize: 10,
+    lineHeight: 13,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    marginBottom: 1,
   },
   temperatureValue: {
     fontSize: 38,
@@ -2592,10 +2643,16 @@ const styles = StyleSheet.create({
   locationText: {
     fontSize: 12,
     opacity: 0.7,
-    marginTop: 4,
+    flex: 1,
     color: '#7D5A50',
     lineHeight: 16,
     flexWrap: 'wrap',
+  },
+  weatherLocationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 5,
   },
   weatherDetailsContainer: {
     flexDirection: 'row',
@@ -2613,6 +2670,22 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 14,
     flex: 0.48,
+    gap: 9,
+  },
+  weatherDetailCopy: {
+    flex: 1,
+    gap: 1,
+  },
+  weatherDetailLabel: {
+    fontSize: 10,
+    lineHeight: 13,
+    fontWeight: '600',
+    opacity: 0.72,
+  },
+  weatherDetailValue: {
+    fontSize: 13,
+    lineHeight: 17,
+    fontWeight: '700',
   },
   tempMainContainer: {
     flexDirection: 'row',
@@ -2642,8 +2715,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    marginBottom: 4,
-    paddingHorizontal: 4,
+    marginBottom: 0,
+    paddingHorizontal: 18,
+    paddingBottom: 12,
   },
   contextButtonNew: {
     width: '48%',
@@ -2694,6 +2768,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
+    paddingHorizontal: 18,
   },
   feltTempButton: {
     width: '30%',
@@ -2727,6 +2802,8 @@ const styles = StyleSheet.create({
     opacity: 0.7,
     color: '#7D5A50',
     fontWeight: '500',
+    paddingHorizontal: 18,
+    paddingBottom: 18,
   },
   recommendationTitle: {
     fontSize: 24,

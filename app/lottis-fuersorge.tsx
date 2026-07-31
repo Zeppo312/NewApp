@@ -27,6 +27,7 @@ import { ThemedBackground } from '@/components/ThemedBackground';
 import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { GlassCard } from '@/components/ui/GlassCard';
+import { CareAnalyticsSection } from '@/components/CareAnalyticsSection';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { useAdvisorAccess } from '@/lib/advisor/access';
 import {
@@ -1074,6 +1075,7 @@ export default function LottisFuersorgeScreen() {
           {renderCopilotBriefing()}
           {!atLimit ? (
             <>
+              <CareAnalyticsSection babyId={activeBaby?.id} />
               {history && history.length > 0
                 ? renderRealHistory(history)
                 : analysis && analysis.history.length > 0

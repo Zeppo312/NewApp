@@ -12,13 +12,22 @@ import { WebView } from "react-native-webview";
 
 import { ThemedText } from "@/components/ThemedText";
 import { IconSymbol } from "@/components/ui/IconSymbol";
-import { extractYouTubeVideoId, getRecipeVideoThumbnailUrl } from "@/lib/recipeVideo";
+import {
+  extractYouTubeVideoId,
+  getRecipeVideoThumbnailUrl,
+} from "@/lib/recipeVideo";
+import {
+  DEFAULT_RECIPE_LOCALE,
+  RecipeLocale,
+  translateRecipeText,
+} from "@/lib/recipeTranslations";
 
 type RecipeVideoCourseProps = {
   accentColor: string;
   textColor: string;
   secondaryTextColor: string;
   videoUrl: string;
+  locale?: RecipeLocale;
 };
 
 type PlayerMessage =
@@ -26,8 +35,11 @@ type PlayerMessage =
   | { type: "state"; state: "playing" | "paused" | "ended" }
   | { type: "error" };
 
-const buildHtmlDocument = (videoId: string) => `<!DOCTYPE html>
-<html lang="de">
+const buildHtmlDocument = (
+  videoId: string,
+  locale: RecipeLocale,
+) => `<!DOCTYPE html>
+<html lang="${locale}">
   <head>
     <meta charset="utf-8" />
     <meta
@@ -170,6 +182,7 @@ export function RecipeVideoCourse({
   textColor,
   secondaryTextColor,
   videoUrl,
+  locale = DEFAULT_RECIPE_LOCALE,
 }: RecipeVideoCourseProps) {
   const webViewRef = useRef<WebView>(null);
   const [hasStarted, setHasStarted] = useState(false);
@@ -182,9 +195,17 @@ export function RecipeVideoCourse({
     [videoId],
   );
   const htmlDocument = useMemo(
-    () => (videoId ? buildHtmlDocument(videoId) : null),
-    [videoId],
+    () => (videoId ? buildHtmlDocument(videoId, locale) : null),
+    [locale, videoId],
   );
+  const t = (
+    key:
+      | "video.badge"
+      | "video.title"
+      | "video.subtitle"
+      | "video.start"
+      | "video.stop",
+  ) => translateRecipeText(locale, key);
 
   useEffect(() => {
     setHasStarted(false);
@@ -254,7 +275,10 @@ export function RecipeVideoCourse({
             <>
               <WebView
                 ref={webViewRef}
-                source={{ html: htmlDocument, baseUrl: "https://www.youtube-nocookie.com" }}
+                source={{
+                  html: htmlDocument,
+                  baseUrl: "https://www.youtube-nocookie.com",
+                }}
                 style={styles.webView}
                 allowsInlineMediaPlayback
                 mediaPlaybackRequiresUserAction={false}
@@ -264,9 +288,11 @@ export function RecipeVideoCourse({
                 bounces={false}
                 setSupportMultipleWindows={false}
                 originWhitelist={["https://*"]}
-              onMessage={(event) => {
-                try {
-                  const payload = JSON.parse(event.nativeEvent.data) as PlayerMessage;
+                onMessage={(event) => {
+                  try {
+                    const payload = JSON.parse(
+                      event.nativeEvent.data,
+                    ) as PlayerMessage;
 
                     if (payload.type === "ready") {
                       setIsReady(true);
@@ -279,10 +305,10 @@ export function RecipeVideoCourse({
 
                     setIsReady(false);
                   } catch {
-                  setIsReady(false);
-                }
-              }}
-            />
+                    setIsReady(false);
+                  }
+                }}
+              />
               {!isReady ? (
                 <View style={styles.loadingOverlay} pointerEvents="none">
                   <ActivityIndicator color={accentColor} />
@@ -305,17 +331,28 @@ export function RecipeVideoCourse({
               )}
               <View style={styles.posterContentOverlay} />
               <View style={styles.posterContent}>
-                <View style={[styles.badge, { backgroundColor: `${accentColor}22` }]}>
-                  <IconSymbol name="play.rectangle.fill" size={14} color={accentColor} />
-                  <ThemedText style={[styles.badgeText, { color: accentColor }]}>
-                    Videokurs
+                <View
+                  style={[
+                    styles.badge,
+                    { backgroundColor: `${accentColor}22` },
+                  ]}
+                >
+                  <IconSymbol
+                    name="play.rectangle.fill"
+                    size={14}
+                    color={accentColor}
+                  />
+                  <ThemedText
+                    style={[styles.badgeText, { color: accentColor }]}
+                  >
+                    {t("video.badge")}
                   </ThemedText>
                 </View>
                 <ThemedText style={styles.posterTitle}>
-                  Schritt fuer Schritt ansehen
+                  {t("video.title")}
                 </ThemedText>
                 <ThemedText style={styles.posterSubtitle}>
-                  Shorts-Format, sauber eingebettet und ohne sichtbare YouTube-Steuerung.
+                  {t("video.subtitle")}
                 </ThemedText>
               </View>
             </>
@@ -335,7 +372,9 @@ export function RecipeVideoCourse({
           activeOpacity={0.88}
         >
           <IconSymbol name="play.fill" size={16} color="#FFFFFF" />
-          <ThemedText style={styles.primaryButtonText}>Start</ThemedText>
+          <ThemedText style={styles.primaryButtonText}>
+            {t("video.start")}
+          </ThemedText>
         </TouchableOpacity>
         <TouchableOpacity
           style={[
@@ -348,7 +387,9 @@ export function RecipeVideoCourse({
           disabled={!hasStarted || !isReady}
         >
           <IconSymbol name="gobackward.10" size={16} color={textColor} />
-          <ThemedText style={[styles.secondaryButtonText, { color: textColor }]}>
+          <ThemedText
+            style={[styles.secondaryButtonText, { color: textColor }]}
+          >
             -10s
           </ThemedText>
         </TouchableOpacity>
@@ -363,7 +404,9 @@ export function RecipeVideoCourse({
           disabled={!hasStarted || !isReady}
         >
           <IconSymbol name="goforward.10" size={16} color={textColor} />
-          <ThemedText style={[styles.secondaryButtonText, { color: textColor }]}>
+          <ThemedText
+            style={[styles.secondaryButtonText, { color: textColor }]}
+          >
             +10s
           </ThemedText>
         </TouchableOpacity>
@@ -378,8 +421,10 @@ export function RecipeVideoCourse({
           disabled={!hasStarted}
         >
           <IconSymbol name="stop.fill" size={16} color={textColor} />
-          <ThemedText style={[styles.secondaryButtonText, { color: textColor }]}>
-            Stop
+          <ThemedText
+            style={[styles.secondaryButtonText, { color: textColor }]}
+          >
+            {t("video.stop")}
           </ThemedText>
         </TouchableOpacity>
         {Platform.OS === "web" ? (
@@ -388,7 +433,11 @@ export function RecipeVideoCourse({
             onPress={handleOpenExternally}
             activeOpacity={0.88}
           >
-            <IconSymbol name="arrow.up.right.square" size={16} color={secondaryTextColor} />
+            <IconSymbol
+              name="arrow.up.right.square"
+              size={16}
+              color={secondaryTextColor}
+            />
           </TouchableOpacity>
         ) : null}
       </View>

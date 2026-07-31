@@ -36,6 +36,14 @@ import { pregnancySymptoms } from '@/constants/PregnancySymptoms';
 import { BIRTH_PREP_SECTION_START_WEEK, birthPreparationMeasures } from '@/constants/BirthPreparationMeasures';
 import { babySizeData } from '@/lib/baby-size-data';
 import Header from '@/components/Header';
+import {
+  CountdownTranslationKey,
+  DEFAULT_COUNTDOWN_LOCALE,
+  getCountdownFruitComparison,
+  getCountdownLocaleTag,
+  localizeBirthPreparationMeasure,
+  translateCountdownText,
+} from '@/lib/countdownTranslations';
 
 // Sleep-Tracker Design Tokens
 import { LiquidGlassCard, GLASS_OVERLAY, GLASS_OVERLAY_DARK, LAYOUT_PAD, SECTION_GAP_BOTTOM } from '@/constants/DesignGuide';
@@ -47,6 +55,13 @@ const ACCENT_MINT = '#389D91';
 const ACCENT_ORANGE = '#FF8C42';
 const WARN = '#E57373';
 const TIMELINE_INSET = 8;
+const ACTIVE_COUNTDOWN_LOCALE = DEFAULT_COUNTDOWN_LOCALE;
+const COUNTDOWN_LOCALE_TAG = getCountdownLocaleTag(ACTIVE_COUNTDOWN_LOCALE);
+const t = (key: CountdownTranslationKey, params?: Record<string, string | number>) =>
+  translateCountdownText(ACTIVE_COUNTDOWN_LOCALE, key, params);
+const localizedBirthPreparationMeasures = birthPreparationMeasures.map((measure) =>
+  localizeBirthPreparationMeasure(ACTIVE_COUNTDOWN_LOCALE, measure),
+);
 
 const fruitEmoji: Record<string, string> = {
   'Mohnkorn': '🌱',
@@ -230,8 +245,6 @@ export default function CountdownScreen() {
   const avatarBorderColor = isDark ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.8)';
   const badgeBorderColor = isDark ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.6)';
   const badgeBg = isDark ? toRgba(accentPurple, 0.25) : 'rgba(142,78,198,0.15)';
-  const pillBorderColor = isDark ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.65)';
-  const pillGhostBg = isDark ? 'rgba(255,255,255,0.06)' : 'transparent';
   const pillPrimaryBorder = isDark ? toRgba(accentPurple, 0.7) : 'rgba(255,255,255,0.7)';
   const cardBlurTint = isDark ? 'dark' : 'light';
   const actionPurpleBg = isDark ? toRgba(accentPurple, 0.22) : 'rgba(220,200,255,0.55)';
@@ -255,8 +268,8 @@ export default function CountdownScreen() {
   const [daysOverdue, setDaysOverdue] = useState<number>(0);
   const [birthPreparationSectionY, setBirthPreparationSectionY] = useState<number | null>(null);
   const headerSubtitle = isReadOnlyPreviewMode
-    ? 'Vorschau-Modus: nur ansehen'
-    : 'Verfolge die Zeit bis zur Geburt';
+    ? t('screen.previewSubtitle')
+    : t('screen.subtitle');
   const minDueDate = useMemo(() => {
     const date = new Date();
     date.setHours(0, 0, 0, 0);
@@ -265,7 +278,7 @@ export default function CountdownScreen() {
   const maxDueDate = useMemo(() => new Date(2100, 11, 31, 23, 59, 59, 999), []);
 
   const showReadOnlyPreviewAlert = () => {
-    Alert.alert('Nur Vorschau', 'Du schaust den Schwangerschaftsmodus an. Der Countdown ist hier gesperrt.');
+    Alert.alert(t('preview.title'), t('preview.description'));
   };
 
   const ensureWritableInCurrentMode = () => {
@@ -430,7 +443,7 @@ export default function CountdownScreen() {
     if (!ensureWritableInCurrentMode()) return;
     try {
       if (!user) {
-        Alert.alert('Hinweis', 'Bitte melde dich an, um deinen Geburtstermin zu speichern.');
+        Alert.alert(t('common.notice'), t('alert.signIn'));
         return;
       }
 
@@ -438,7 +451,7 @@ export default function CountdownScreen() {
 
       if (!result.success) {
         console.error('Error saving due date:', result.error);
-        Alert.alert('Fehler', 'Der Geburtstermin konnte nicht gespeichert werden.');
+        Alert.alert(t('common.error'), t('alert.saveFailed'));
         return;
       }
 
@@ -448,15 +461,15 @@ export default function CountdownScreen() {
       const syncedUsers = result.syncResult?.linkedUsers || [];
       if (syncedUsers.length > 0) {
         const linkedUserNames = syncedUsers.map((u: LinkedUser) => u.firstName).join(', ');
-        Alert.alert('Erfolg', `Dein Geburtstermin wurde gespeichert und mit ${linkedUserNames} synchronisiert.`);
+        Alert.alert(t('common.success'), t('alert.savedAndSynced', { names: linkedUserNames }));
       } else {
-        Alert.alert('Erfolg', 'Dein Geburtstermin wurde erfolgreich gespeichert.');
+        Alert.alert(t('common.success'), t('alert.saved'));
       }
 
       loadDueDate();
     } catch (err) {
       console.error('Failed to save due date:', err);
-      Alert.alert('Fehler', 'Der Geburtstermin konnte nicht gespeichert werden.');
+      Alert.alert(t('common.error'), t('alert.saveFailed'));
     }
   };
 
@@ -501,9 +514,9 @@ export default function CountdownScreen() {
 
   const handleDownloadPDF = async () => {
     if (!geburtsplanExists) {
-      Alert.alert('Geburtsplan', 'Du hast noch keinen Geburtsplan erstellt. Möchtest du jetzt einen erstellen?', [
-        { text: 'Nein', style: 'cancel' },
-        { text: 'Ja', onPress: () => router.push('/geburtsplan') }
+      Alert.alert(t('alert.birthPlanTitle'), t('alert.birthPlanMissing'), [
+        { text: t('common.no'), style: 'cancel' },
+        { text: t('common.yes'), onPress: () => router.push('/geburtsplan') }
       ]);
       return;
     }
@@ -512,7 +525,7 @@ export default function CountdownScreen() {
       await generateAndDownloadPDF(babyIconBase64 || '', setIsGeneratingPDF);
     } catch (error) {
       console.error('Error generating PDF:', error);
-      Alert.alert('Fehler', 'Beim Generieren des PDFs ist ein Fehler aufgetreten.');
+      Alert.alert(t('common.error'), t('alert.pdfFailed'));
     }
   };
 
@@ -534,16 +547,16 @@ export default function CountdownScreen() {
       let syncMessage = '';
       if (linkedUsersResult.success && linkedUsersResult.linkedUsers.length > 0) {
         const linkedUserNames = linkedUsersResult.linkedUsers.map((u: LinkedUser) => u.firstName).join(', ');
-        syncMessage = `\n\nDiese Information wurde auch mit ${linkedUserNames} geteilt.`;
+        syncMessage = t('alert.bornSynced', { names: linkedUserNames });
       }
       Alert.alert(
-        'Herzlichen Glückwunsch!',
-        `Wir freuen uns mit dir über die Geburt deines Babys! 🎉${syncMessage}`,
-        [{ text: 'OK', onPress: () => router.replace('/(tabs)/baby') }]
+        t('alert.congratulations'),
+        t('alert.bornMessage', { syncMessage }),
+        [{ text: t('common.ok'), onPress: () => router.replace('/(tabs)/baby') }]
       );
     } catch (error) {
       console.error('Fehler beim Setzen des Baby-Status:', error);
-      Alert.alert('Fehler', 'Es gab ein Problem bei der Aktualisierung des Status.');
+      Alert.alert(t('common.error'), t('alert.statusFailed'));
     }
   };
 
@@ -567,25 +580,53 @@ export default function CountdownScreen() {
       <SafeAreaView style={{ flex: 1 }}>
         <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
         <Header
-          title="Countdown"
+          title={t('screen.title')}
           subtitle={headerSubtitle}
           showBackButton
           onBackPress={() => router.push('/(tabs)/pregnancy-home')}
         />
 
         {isReadOnlyPreviewMode && (
-          <View style={styles.readOnlyPreviewBanner}>
-            <ThemedText style={styles.readOnlyPreviewTitle}>Nur Vorschau aktiv</ThemedText>
-            <ThemedText style={styles.readOnlyPreviewText}>
-              Du schaust den Schwangerschaftsmodus an. Der Countdown ist hier gesperrt.
+          <View style={[
+            styles.readOnlyPreviewBanner,
+            isDark && styles.readOnlyPreviewBannerDark,
+          ]}>
+            <View style={styles.readOnlyPreviewHeading}>
+              <IconSymbol name="eye.fill" size={17} color={isDark ? '#FFD889' : '#8A5A00'} />
+              <ThemedText style={[styles.readOnlyPreviewTitle, isDark && styles.readOnlyPreviewTextDark]}>
+                {t('preview.title')}
+              </ThemedText>
+            </View>
+            <ThemedText style={[styles.readOnlyPreviewText, isDark && styles.readOnlyPreviewTextDark]}>
+              {t('preview.description')}
             </ThemedText>
           </View>
         )}
 
-        <ScrollView ref={scrollViewRef} contentContainerStyle={styles.scrollContent}>
+        <ScrollView
+          ref={scrollViewRef}
+          contentInsetAdjustmentBehavior="automatic"
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+        >
           {/* Countdown im Glas-Card */}
-          <LiquidGlassCard style={[styles.sectionCard, styles.centerCard]} intensity={26} overlayColor={glassOverlay}>
-            <CountdownTimer dueDate={dueDate} variant="embedded" />
+          <LiquidGlassCard style={[styles.sectionCard, styles.heroCard]} intensity={30} overlayColor={glassOverlay}>
+            <View style={styles.heroHeader}>
+              <View style={styles.heroCopy}>
+                <ThemedText style={[styles.heroEyebrow, { color: accentPurple }]}>
+                  {t('hero.eyebrow')}
+                </ThemedText>
+                <ThemedText style={[styles.heroTitle, { color: textPrimary }]}>
+                  {currentWeek !== null && currentDay !== null
+                    ? t('hero.week', { week: Math.max(0, currentWeek - 1), day: currentDay })
+                    : t('hero.waiting')}
+                </ThemedText>
+              </View>
+              <View style={[styles.heroIcon, { backgroundColor: toRgba(accentPurple, isDark ? 0.24 : 0.12) }]}>
+                <IconSymbol name="heart.fill" size={20} color={accentPurple} />
+              </View>
+            </View>
+            <CountdownTimer dueDate={dueDate} variant="embedded" locale={ACTIVE_COUNTDOWN_LOCALE} />
           </LiquidGlassCard>
 
           {/* Babygröße Highlight */}
@@ -598,6 +639,8 @@ export default function CountdownScreen() {
                 onPress={() => router.push({ pathname: '/baby-size', params: { week: String(currentWeek) } })}
                 activeOpacity={0.9}
                 style={styles.babySizeTouchTarget}
+                accessibilityRole="button"
+                accessibilityLabel={t('babySize.accessibility', { week: currentWeek })}
               >
                 <LiquidGlassCard style={[styles.sectionCard, styles.babySizeCard]} intensity={26} overlayColor={glassOverlay}>
                   <View style={styles.babySizeRow}>
@@ -606,10 +649,12 @@ export default function CountdownScreen() {
                     </View>
                     <View style={styles.babySizeTextWrap}>
                       <ThemedText style={[styles.babySizeFruit, { color: textPrimary }]}>
-                        So groß wie {sizeData.fruitComparison}
+                        {t('babySize.title', {
+                          comparison: getCountdownFruitComparison(ACTIVE_COUNTDOWN_LOCALE, sizeData.fruitComparison),
+                        })}
                       </ThemedText>
                       <ThemedText style={[styles.babySizeMeta, { color: textSecondary }]}>
-                        ca. {sizeData.length} · ca. {sizeData.weight}
+                        {t('babySize.meta', { length: sizeData.length, weight: sizeData.weight })}
                       </ThemedText>
                     </View>
                     <IconSymbol name="chevron.right" size={16} color={textSecondary} />
@@ -621,9 +666,9 @@ export default function CountdownScreen() {
 
           {/* Entbindungstermin */}
           <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={glassOverlay}>
-            <ThemedText style={[styles.sectionTitle, { color: textPrimary }]}>Entbindungstermin</ThemedText>
+            <ThemedText style={[styles.sectionTitle, { color: textPrimary }]}>{t('dueDate.title')}</ThemedText>
             <ThemedText style={[styles.sectionDescription, { color: textSecondary }]}>
-              Wähle den ET, damit Countdown & Inhalte exakt passen.
+              {t('dueDate.description')}
             </ThemedText>
 
             <TouchableOpacity
@@ -631,18 +676,23 @@ export default function CountdownScreen() {
               activeOpacity={0.9}
               style={[styles.fullWidthAction, isReadOnlyPreviewMode && styles.actionDisabled]}
               disabled={isReadOnlyPreviewMode}
+              accessibilityRole="button"
+              accessibilityLabel={t('dueDate.accessibility')}
             >
               <BlurView intensity={24} tint={cardBlurTint} style={styles.cardBlur}>
                 <View style={[styles.actionCard, { backgroundColor: actionPurpleBg, borderColor: cardBorderColor }]}>
                   <View style={[styles.actionIcon, { backgroundColor: accentPurple, borderColor: cardBorderColor }]}>
                     <IconSymbol name="calendar" size={24} color="#fff" />
                   </View>
-                  <ThemedText style={[styles.actionTitle, { color: textPrimary }]}>
-                    {dueDate
-                      ? dueDate.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
-                      : 'ET auswählen'}
-                  </ThemedText>
-                  <ThemedText style={[styles.actionSub, { color: textSecondary }]}>Tippen zum Ändern</ThemedText>
+                  <View style={styles.actionCopy}>
+                    <ThemedText style={[styles.actionTitle, { color: textPrimary }]}>
+                      {dueDate
+                        ? dueDate.toLocaleDateString(COUNTDOWN_LOCALE_TAG, { day: '2-digit', month: 'long', year: 'numeric' })
+                        : t('dueDate.choose')}
+                    </ThemedText>
+                    <ThemedText style={[styles.actionSub, { color: textSecondary }]}>{t('dueDate.change')}</ThemedText>
+                  </View>
+                  <IconSymbol name="chevron.right" size={17} color={textSecondary} />
                 </View>
               </BlurView>
             </TouchableOpacity>
@@ -651,7 +701,7 @@ export default function CountdownScreen() {
           {Platform.OS === 'ios' && (
             <IOSBottomDatePicker
               visible={showDatePicker}
-              title="Entbindungstermin wählen"
+              title={t('dueDate.pickerTitle')}
               value={getSafePickerDate(tempDate, minDueDate, {
                 minimumDate: minDueDate,
                 maximumDate: maxDueDate,
@@ -689,8 +739,8 @@ export default function CountdownScreen() {
             >
               <ThemedText style={[styles.sectionTitle, { color: textPrimary }, isOverdue && { color: warnColor }]}>
                 {isOverdue
-                  ? `${daysOverdue} ${daysOverdue === 1 ? 'Tag' : 'Tage'} über dem ET: Was jetzt wichtig ist`
-                  : `SSW ${currentWeek}: Was geschieht diese Woche?`}
+                  ? t(daysOverdue === 1 ? 'week.overdueTitle.one' : 'week.overdueTitle.other', { days: daysOverdue })
+                  : t('week.title', { week: currentWeek })}
               </ThemedText>
 
               {/* Baby */}
@@ -699,7 +749,7 @@ export default function CountdownScreen() {
                   <View style={[styles.avatar, { backgroundColor: isDark ? toRgba(accentPurple, 0.2) : 'rgba(142,78,198,0.18)', borderColor: avatarBorderColor }]}>
                     <IconSymbol name="figure.child" size={18} color={accentPurple} />
                   </View>
-                  <ThemedText style={[styles.infoTitle, { color: textPrimary }]}>Beim Baby</ThemedText>
+                  <ThemedText style={[styles.infoTitle, { color: textPrimary }]}>{t('week.baby')}</ThemedText>
                 </View>
                 <ThemedText style={[styles.infoText, { color: textSecondary }]}>
                   {isOverdue
@@ -714,7 +764,7 @@ export default function CountdownScreen() {
                   <View style={[styles.avatar, { backgroundColor: isDark ? toRgba(accentMint, 0.2) : 'rgba(56,157,145,0.18)', borderColor: avatarBorderColor }]}>
                     <IconSymbol name="person.fill" size={18} color={accentMint} />
                   </View>
-                  <ThemedText style={[styles.infoTitle, { color: textPrimary }]}>Bei der Mutter</ThemedText>
+                  <ThemedText style={[styles.infoTitle, { color: textPrimary }]}>{t('week.mother')}</ThemedText>
                 </View>
                 <ThemedText style={[styles.infoText, { color: textSecondary }]}>
                   {isOverdue
@@ -729,7 +779,7 @@ export default function CountdownScreen() {
                   <View style={[styles.avatar, { backgroundColor: isDark ? toRgba(accentOrange, 0.2) : 'rgba(255,140,66,0.18)', borderColor: avatarBorderColor }]}>
                     <IconSymbol name="person.2.fill" size={18} color={accentOrange} />
                   </View>
-                  <ThemedText style={[styles.infoTitle, { color: textPrimary }]}>Für den Partner</ThemedText>
+                  <ThemedText style={[styles.infoTitle, { color: textPrimary }]}>{t('week.partner')}</ThemedText>
                 </View>
                 <ThemedText style={[styles.infoText, { color: textSecondary }]}>
                   {isOverdue
@@ -748,7 +798,7 @@ export default function CountdownScreen() {
               overlayColor={glassOverlay}
             >
               <ThemedText style={[styles.sectionTitle, { color: textPrimary }, isOverdue && { color: warnColor }]}>
-                {isOverdue ? 'Häufige Anzeichen kurz vor der Geburt' : `Mögliche Symptome in SSW ${currentWeek}`}
+                {isOverdue ? t('symptoms.overdueTitle') : t('symptoms.title', { week: currentWeek })}
               </ThemedText>
 
               <View style={styles.symptomList}>
@@ -774,26 +824,26 @@ export default function CountdownScreen() {
                 overlayColor={glassOverlay}
               >
                 <ThemedText style={[styles.sectionTitle, { color: textPrimary }]}>
-                  Geburtsvorbereitung (ab SSW {BIRTH_PREP_SECTION_START_WEEK})
+                  {t('birthPrep.title', { week: BIRTH_PREP_SECTION_START_WEEK })}
                 </ThemedText>
                 <ThemedText style={[styles.sectionDescription, { color: textSecondary }]}>
-                  Alltagstaugliche Maßnahmen für die letzten Wochen. Bitte individuell mit Hebamme oder gynäkologischer Praxis abstimmen.
+                  {t('birthPrep.description')}
                 </ThemedText>
 
                 <View style={styles.birthPrepList}>
-                  {birthPreparationMeasures.map((measure) => (
+                  {localizedBirthPreparationMeasures.map((measure) => (
                     <View key={measure.id} style={[styles.birthPrepCard, { borderColor: cardBorderColor }]}>
                       <View style={styles.birthPrepHeader}>
                         <ThemedText style={styles.birthPrepIcon}>{measure.icon}</ThemedText>
                         <ThemedText style={[styles.birthPrepTitle, { color: textPrimary }]}>{measure.title}</ThemedText>
                       </View>
-                      <ThemedText style={[styles.birthPrepLabel, { color: textPrimary }]}>Was bringt&apos;s?</ThemedText>
+                      <ThemedText style={[styles.birthPrepLabel, { color: textPrimary }]}>{t('birthPrep.benefit')}</ThemedText>
                       <ThemedText style={[styles.birthPrepText, { color: textSecondary }]}>{measure.benefit}</ThemedText>
-                      <ThemedText style={[styles.birthPrepLabel, { color: textPrimary }]}>Ab wann?</ThemedText>
+                      <ThemedText style={[styles.birthPrepLabel, { color: textPrimary }]}>{t('birthPrep.start')}</ThemedText>
                       <ThemedText style={[styles.birthPrepText, { color: textSecondary }]}>{measure.startAt}</ThemedText>
-                      <ThemedText style={[styles.birthPrepLabel, { color: textPrimary }]}>Wie oft?</ThemedText>
+                      <ThemedText style={[styles.birthPrepLabel, { color: textPrimary }]}>{t('birthPrep.frequency')}</ThemedText>
                       <ThemedText style={[styles.birthPrepText, { color: textSecondary }]}>{measure.frequency}</ThemedText>
-                      <ThemedText style={[styles.birthPrepLabel, { color: textPrimary }]}>Wann nicht?</ThemedText>
+                      <ThemedText style={[styles.birthPrepLabel, { color: textPrimary }]}>{t('birthPrep.caution')}</ThemedText>
                       <ThemedText style={[styles.birthPrepText, { color: textSecondary }]}>{measure.caution}</ThemedText>
                     </View>
                   ))}
@@ -808,13 +858,13 @@ export default function CountdownScreen() {
               <View style={styles.infoInset}>
                 <View style={[styles.infoHeader, { marginBottom: 8 }]}>
                   <IconSymbol name="info.circle.fill" size={20} color={warnColor} />
-                  <ThemedText style={[styles.infoTitle, { color: warnColor }]}>Wichtige Information</ThemedText>
+                  <ThemedText style={[styles.infoTitle, { color: warnColor }]}>{t('overdue.title')}</ThemedText>
                 </View>
                 <ThemedText style={[styles.bodyText, { color: textSecondary }]}>
-                  Ab dem errechneten Geburtstermin wird die Schwangerschaft als „überfällig“ bezeichnet. Etwa 5–10% aller Schwangerschaften dauern länger als 42 Wochen. Die meisten Geburten finden jedoch bis zu zwei Wochen vor oder nach dem ET statt.
+                  {t('overdue.descriptionOne')}
                 </ThemedText>
                 <ThemedText style={[styles.bodyText, { color: textSecondary }]}>
-                  Halte regelmäßigen Kontakt zu deiner Hebamme oder deinem Frauenarzt. In dieser Phase werden häufigere Kontrollen durchgeführt, um das Wohlbefinden deines Babys sicherzustellen.
+                  {t('overdue.descriptionTwo')}
                 </ThemedText>
               </View>
             </LiquidGlassCard>
@@ -822,24 +872,35 @@ export default function CountdownScreen() {
 
           {/* Geburtsplan */}
           <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={glassOverlay}>
-            <ThemedText style={[styles.sectionTitle, { color: textPrimary }]}>Geburtsplan</ThemedText>
+            <ThemedText style={[styles.sectionTitle, { color: textPrimary }]}>{t('birthPlan.title')}</ThemedText>
             <ThemedText style={[styles.sectionDescription, { color: textSecondary }]}>
               {geburtsplanExists
-                ? 'Du hast bereits einen Geburtsplan. Du kannst ihn als PDF exportieren oder bearbeiten.'
-                : 'Erstelle einen individuellen Geburtsplan und teile ihn mit deinem Team.'}
+                ? t('birthPlan.existingDescription')
+                : t('birthPlan.emptyDescription')}
             </ThemedText>
 
             {/* Hauptaktion: exakt wie ET-Button aufgebaut */}
-            <TouchableOpacity onPress={() => router.push('/geburtsplan')} activeOpacity={0.9} style={styles.fullWidthAction}>
+            <TouchableOpacity
+              onPress={() => router.push('/geburtsplan')}
+              activeOpacity={0.9}
+              style={styles.fullWidthAction}
+              accessibilityRole="button"
+              accessibilityLabel={t(geburtsplanExists ? 'birthPlan.accessibilityEdit' : 'birthPlan.accessibilityCreate')}
+            >
               <BlurView intensity={24} tint={cardBlurTint} style={styles.cardBlur}>
                 <View style={[styles.actionCard, { backgroundColor: actionPurpleBg, borderColor: cardBorderColor }]}>
                   <View style={[styles.actionIcon, { backgroundColor: accentPurple, borderColor: cardBorderColor }]}>
                     <IconSymbol name={geburtsplanExists ? 'pencil' : 'plus.circle'} size={24} color="#fff" />
                   </View>
-                  <ThemedText style={[styles.actionTitle, { color: textPrimary }]}>
-                    {geburtsplanExists ? 'Geburtsplan bearbeiten' : 'Geburtsplan erstellen'}
-                  </ThemedText>
-                  <ThemedText style={[styles.actionSub, { color: textSecondary }]}>Tippen zum {geburtsplanExists ? 'Bearbeiten' : 'Erstellen'}</ThemedText>
+                  <View style={styles.actionCopy}>
+                    <ThemedText style={[styles.actionTitle, { color: textPrimary }]}>
+                      {t(geburtsplanExists ? 'birthPlan.edit' : 'birthPlan.create')}
+                    </ThemedText>
+                    <ThemedText style={[styles.actionSub, { color: textSecondary }]}>
+                      {t(geburtsplanExists ? 'birthPlan.tapEdit' : 'birthPlan.tapCreate')}
+                    </ThemedText>
+                  </View>
+                  <IconSymbol name="chevron.right" size={17} color={textSecondary} />
                 </View>
               </BlurView>
             </TouchableOpacity>
@@ -849,17 +910,26 @@ export default function CountdownScreen() {
               isGeneratingPDF ? (
                 <View style={styles.loadingRow}>
                   <ActivityIndicator size="small" color={isDark ? adaptiveColors.accent : theme.tint} />
-                  <ThemedText style={{ marginLeft: 8, color: textSecondary }}>PDF wird generiert…</ThemedText>
+                  <ThemedText style={{ marginLeft: 8, color: textSecondary }}>{t('birthPlan.generating')}</ThemedText>
                 </View>
               ) : (
-                <TouchableOpacity onPress={handleDownloadPDF} activeOpacity={0.9} style={styles.fullWidthAction}>
+                <TouchableOpacity
+                  onPress={handleDownloadPDF}
+                  activeOpacity={0.9}
+                  style={styles.fullWidthAction}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('birthPlan.download')}
+                >
                   <BlurView intensity={24} tint={cardBlurTint} style={styles.cardBlur}>
                     <View style={[styles.actionCard, { backgroundColor: actionMintBg, borderColor: cardBorderColor }]}>
                       <View style={[styles.actionIcon, { backgroundColor: accentMint, borderColor: cardBorderColor }]}>
                         <IconSymbol name="arrow.down.doc" size={22} color="#fff" />
                       </View>
-                      <ThemedText style={[styles.actionTitle, { color: textPrimary }]}>Als PDF herunterladen</ThemedText>
-                      <ThemedText style={[styles.actionSub, { color: textSecondary }]}>Tippen zum Exportieren</ThemedText>
+                      <View style={styles.actionCopy}>
+                        <ThemedText style={[styles.actionTitle, { color: textPrimary }]}>{t('birthPlan.download')}</ThemedText>
+                        <ThemedText style={[styles.actionSub, { color: textSecondary }]}>{t('birthPlan.exportHint')}</ThemedText>
+                      </View>
+                      <IconSymbol name="chevron.right" size={17} color={textSecondary} />
                     </View>
                   </BlurView>
                 </TouchableOpacity>
@@ -874,14 +944,19 @@ export default function CountdownScreen() {
               activeOpacity={0.9}
               style={[styles.fullWidthAction, isReadOnlyPreviewMode && styles.actionDisabled]}
               disabled={isReadOnlyPreviewMode}
+              accessibilityRole="button"
+              accessibilityLabel={t('born.accessibility')}
             >
               <BlurView intensity={24} tint={cardBlurTint} style={styles.cardBlur}>
                 <View style={[styles.actionCard, { backgroundColor: actionWarnBg, borderColor: cardBorderColor }]}>
                   <View style={[styles.actionIcon, { backgroundColor: warnColor, borderColor: cardBorderColor }]}>
                     <IconSymbol name="heart.fill" size={22} color="#fff" />
                   </View>
-                  <ThemedText style={[styles.actionTitle, { color: textPrimary }]}>Mein Baby ist geboren!</ThemedText>
-                  <ThemedText style={[styles.actionSub, { color: textSecondary, opacity: 0.85 }]}>Tippen zum Bestätigen</ThemedText>
+                  <View style={styles.actionCopy}>
+                    <ThemedText style={[styles.actionTitle, { color: textPrimary }]}>{t('born.title')}</ThemedText>
+                    <ThemedText style={[styles.actionSub, { color: textSecondary, opacity: 0.85 }]}>{t('born.description')}</ThemedText>
+                  </View>
+                  <IconSymbol name="chevron.right" size={17} color={textSecondary} />
                 </View>
               </BlurView>
             </TouchableOpacity>
@@ -890,7 +965,8 @@ export default function CountdownScreen() {
           {/* Geteilter Countdown */}
           {linkedUsers.length > 0 && (
             <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={glassOverlay}>
-              <ThemedText style={[styles.sectionTitle, { color: textPrimary }]}>Geteilter Countdown</ThemedText>
+              <ThemedText style={[styles.sectionTitle, { color: textPrimary }]}>{t('shared.title')}</ThemedText>
+              <ThemedText style={[styles.sectionDescription, { color: textSecondary }]}>{t('shared.description')}</ThemedText>
               <View style={styles.badgeWrap}>
                 {linkedUsers.map((lu, index) => (
                   <View key={lu.id ?? lu.userId ?? `${lu.firstName}-${index}`} style={[styles.badge, { backgroundColor: badgeBg, borderColor: badgeBorderColor }]}>
@@ -910,7 +986,7 @@ const styles = StyleSheet.create({
   // Layout
   scrollContent: {
     paddingHorizontal: LAYOUT_PAD + TIMELINE_INSET,
-    paddingTop: 10,
+    paddingTop: 12,
     paddingBottom: 140,
   },
 
@@ -918,7 +994,7 @@ const styles = StyleSheet.create({
     width: '100%',
     alignSelf: 'center',
     marginBottom: SECTION_GAP_BOTTOM,
-    borderRadius: 22,
+    borderRadius: 26,
     overflow: 'hidden',
   },
   readOnlyPreviewBanner: {
@@ -932,11 +1008,21 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(229, 180, 77, 0.45)',
   },
+  readOnlyPreviewBannerDark: {
+    backgroundColor: 'rgba(108, 75, 13, 0.48)',
+    borderColor: 'rgba(255, 216, 137, 0.38)',
+  },
+  readOnlyPreviewHeading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    marginBottom: 4,
+  },
   readOnlyPreviewTitle: {
     fontSize: 15,
     fontWeight: '700',
     color: '#8A5A00',
-    marginBottom: 4,
     textAlign: 'center',
   },
   readOnlyPreviewText: {
@@ -945,23 +1031,59 @@ const styles = StyleSheet.create({
     color: '#8A5A00',
     textAlign: 'center',
   },
-  centerCard: { alignItems: 'center', justifyContent: 'center', paddingVertical: 18 },
+  readOnlyPreviewTextDark: { color: '#FFD889' },
+
+  heroCard: {
+    paddingHorizontal: 18,
+    paddingTop: 22,
+    paddingBottom: 14,
+  },
+  heroHeader: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 8,
+    gap: 12,
+  },
+  heroCopy: { flex: 1 },
+  heroEyebrow: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    marginBottom: 4,
+  },
+  heroTitle: {
+    fontSize: 21,
+    lineHeight: 26,
+    fontWeight: '800',
+  },
+  heroIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 
   // Typo
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 10,
-    paddingHorizontal: 16,
-    textAlign: 'center',
+    fontSize: 19,
+    lineHeight: 24,
+    fontWeight: '800',
+    marginTop: 18,
+    marginBottom: 7,
+    paddingHorizontal: 18,
+    textAlign: 'left',
     color: PRIMARY_TEXT,
   },
   sectionDescription: {
     fontSize: 14,
+    lineHeight: 20,
     opacity: 0.9,
-    textAlign: 'center',
-    paddingHorizontal: 16,
-    marginBottom: 10,
+    textAlign: 'left',
+    paddingHorizontal: 18,
+    marginBottom: 12,
     color: PRIMARY_TEXT,
   },
   bodyText: {
@@ -969,44 +1091,47 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     color: PRIMARY_TEXT,
     opacity: 0.95,
+    marginBottom: 10,
   },
 
   // Action Cards (Sleep-Tracker Stil)
   fullWidthAction: {
-    borderRadius: 22,
+    borderRadius: 20,
     overflow: 'hidden',
-    marginHorizontal: 18,
-    marginTop: 8,
-    marginBottom: 4,
+    marginHorizontal: 14,
+    marginTop: 4,
+    marginBottom: 14,
   },
   actionDisabled: {
     opacity: 0.45,
   },
-  cardBlur: { borderRadius: 22, overflow: 'hidden' },
+  cardBlur: { borderRadius: 20, overflow: 'hidden' },
   actionCard: {
-    borderRadius: 22,
-    padding: 16,
+    flexDirection: 'row',
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
     alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 112,
+    minHeight: 78,
+    gap: 12,
     borderWidth: 1.5,
     borderColor: 'rgba(255,255,255,0.6)',
   },
   actionIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 46,
+    height: 46,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 8,
     borderWidth: 2,
     borderColor: 'rgba(255,255,255,0.6)',
   },
-  actionTitle: { fontSize: 16, fontWeight: '800', color: PRIMARY_TEXT, marginBottom: 2, textAlign: 'center' },
-  actionSub: { fontSize: 11, color: PRIMARY_TEXT, opacity: 0.8, textAlign: 'center' },
+  actionCopy: { flex: 1, gap: 3 },
+  actionTitle: { fontSize: 16, lineHeight: 20, fontWeight: '800', color: PRIMARY_TEXT, textAlign: 'left' },
+  actionSub: { fontSize: 12, lineHeight: 16, color: PRIMARY_TEXT, opacity: 0.8, textAlign: 'left' },
 
   // Info Blöcke
-  infoBlock: { marginBottom: 12, paddingBottom: 12, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.35)' },
+  infoBlock: { marginBottom: 12, paddingBottom: 14, paddingHorizontal: 18, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.35)' },
   infoHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
   infoTitle: { fontSize: 15, fontWeight: '800', color: PRIMARY_TEXT },
   infoText: { fontSize: 14, lineHeight: 20, color: PRIMARY_TEXT, opacity: 0.95, paddingLeft: 40 },
@@ -1017,19 +1142,19 @@ const styles = StyleSheet.create({
   },
 
   // Symptome
-  symptomList: { paddingHorizontal: 16, paddingTop: 2 },
-  symptomItem: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  symptomText: { fontSize: 14, marginLeft: 8, color: PRIMARY_TEXT },
+  symptomList: { paddingHorizontal: 18, paddingTop: 4, paddingBottom: 12 },
+  symptomItem: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
+  symptomText: { flex: 1, fontSize: 14, lineHeight: 19, color: PRIMARY_TEXT },
 
   // Geburtsvorbereitung
-  birthPrepList: { paddingHorizontal: 12, paddingBottom: 8 },
+  birthPrepList: { paddingHorizontal: 14, paddingBottom: 6 },
   birthPrepCard: {
-    borderRadius: 14,
+    borderRadius: 18,
     backgroundColor: 'rgba(255,255,255,0.45)',
     borderWidth: 1.2,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginBottom: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    marginBottom: 12,
   },
   birthPrepHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
   birthPrepIcon: { fontSize: 17, marginRight: 8 },
@@ -1037,10 +1162,10 @@ const styles = StyleSheet.create({
   birthPrepLabel: { fontSize: 12, fontWeight: '800', marginTop: 4 },
   birthPrepText: { fontSize: 13, lineHeight: 18, opacity: 0.95 },
 
-  infoInset: { paddingHorizontal: 16 },
+  infoInset: { paddingHorizontal: 18, paddingTop: 18, paddingBottom: 8 },
 
   // Badges (Linked Users)
-  badgeWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingHorizontal: 8, paddingBottom: 8 },
+  badgeWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingHorizontal: 18, paddingBottom: 18 },
   badge: {
     paddingVertical: 6, paddingHorizontal: 12, borderRadius: 18,
     backgroundColor: 'rgba(142,78,198,0.15)',
@@ -1053,7 +1178,7 @@ const styles = StyleSheet.create({
     width: '100%',
     alignSelf: 'center',
   },
-  babySizeCard: { paddingVertical: 28, paddingHorizontal: 22 },
+  babySizeCard: { paddingVertical: 22, paddingHorizontal: 20 },
   babySizeRow: { flexDirection: 'row', alignItems: 'center', gap: 16, paddingHorizontal: 2 },
   babySizeEmojiWrap: {
     width: 68, height: 68, borderRadius: 22,

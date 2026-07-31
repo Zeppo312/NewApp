@@ -58,6 +58,7 @@ const MAPPING: Record<string, MaterialIconName> = {
   'doc.on.doc': 'content-copy',
   'drop.fill': 'opacity',
   'envelope': 'email',
+  'eye.fill': 'visibility',
   'moon.stars.fill': 'nightlight',
   'moon.stars': 'bedtime',
   'moon.zzz': 'hotel',

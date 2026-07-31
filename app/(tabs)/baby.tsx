@@ -53,6 +53,12 @@ import {
   translateBabyText,
   type BabyTranslationKey,
 } from '@/lib/babyTranslations';
+import {
+  deleteBabyPhoto,
+  prepareBabyPhoto,
+  uploadBabyPhoto,
+  type PreparedBabyPhoto,
+} from '@/lib/babyPhoto';
 
 const ACTIVE_BABY_LOCALE = DEFAULT_BABY_LOCALE;
 const BABY_LOCALE_TAG = getBabyLocaleTag(ACTIVE_BABY_LOCALE);
@@ -206,6 +212,9 @@ export default function BabyScreen() {
   const [isBabyBornForCurrentBaby, setIsBabyBornForCurrentBaby] = useState(false);
   const [bedtimeInput, setBedtimeInput] = useState(DEFAULT_BEDTIME_ANCHOR);
   const [bedtimeInputError, setBedtimeInputError] = useState<string | null>(null);
+  const [pendingPhoto, setPendingPhoto] = useState<PreparedBabyPhoto | null>(null);
+  const [isPhotoRemoved, setIsPhotoRemoved] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const birthDateBounds = getCurrentBirthDateBounds();
   const birthDateForDisplay = parseSafeDate(babyInfo.birth_date, birthDateBounds);
   const birthDatePickerValue = getSafePickerDate(
@@ -312,6 +321,9 @@ export default function BabyScreen() {
       return;
     }
 
+    setPendingPhoto(null);
+    setIsPhotoRemoved(false);
+
     try {
       const [
         { data, isStale, refresh },
@@ -387,7 +399,9 @@ export default function BabyScreen() {
     }, [user, isReady, targetBabyId, router, loadBabyInfo, fallbackHomeRoute])
   );
 
-  const displayPhoto = babyInfo.photo_url || null;
+  const displayPhoto = isPhotoRemoved
+    ? null
+    : pendingPhoto?.uri ?? babyInfo.photo_url ?? null;
 
   const triggerHaptic = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
@@ -411,54 +425,45 @@ export default function BabyScreen() {
     unknown: t('gender.unknown'),
   };
 
-  const pickBabyPhoto = async () => {
+  const pickBabyPhoto = async ({ enterEditMode = false } = {}) => {
     try {
+      // Expo baut den PHPicker mit PHPickerConfiguration(photoLibrary:). Diese
+      // Variante braucht eine erteilte Mediathek-Berechtigung, sonst öffnet
+      // sich der Picker unter iOS als leere weiße Fläche.
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert(t('photo.permissionTitle'), t('photo.permissionMessage'));
         return;
       }
 
+      // Kein presentationStyle setzen: Der PHPicker läuft unter iOS in einem
+      // eigenen Prozess und bleibt weiß, wenn man ihn zu fullScreen zwingt.
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.7,
-        base64: true,
+        mediaTypes: ['images'],
+        allowsEditing: false,
+        quality: 1,
+        selectionLimit: 1,
+        shouldDownloadFromNetwork: true,
+        preferredAssetRepresentationMode:
+          ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const asset = result.assets[0];
-        let base64Data: string | null = null;
-
-        if (asset.base64) {
-          base64Data = `data:image/jpeg;base64,${asset.base64}`;
-        } else if (asset.uri) {
-          try {
-            const response = await fetch(asset.uri);
-            const blob = await response.blob();
-            const reader = new FileReader();
-            base64Data = await new Promise((resolve, reject) => {
-              reader.onload = () => resolve(reader.result as string);
-              reader.onerror = reject;
-              reader.readAsDataURL(blob);
-            });
-          } catch (error) {
-            console.error('Fehler bei der Bildkonvertierung:', error);
-            Alert.alert(t('error.title'), t('photo.processError'));
-            return;
-          }
-        }
-
-        if (!base64Data) {
+        if (!asset.uri) {
           Alert.alert(t('error.title'), t('photo.processError'));
           return;
         }
 
-        setBabyInfo((current) => ({
-          ...current,
-          photo_url: base64Data,
-        }));
+        const preparedPhoto = await prepareBabyPhoto(asset.uri, {
+          width: asset.width,
+          height: asset.height,
+        });
+        setPendingPhoto(preparedPhoto);
+        setIsPhotoRemoved(false);
+        if (enterEditMode) {
+          setIsEditing(true);
+        }
       }
     } catch (error) {
       console.error('Error picking baby photo:', error);
@@ -467,14 +472,12 @@ export default function BabyScreen() {
   };
 
   const removeBabyPhoto = () => {
-    setBabyInfo((current) => ({
-      ...current,
-      photo_url: null,
-    }));
+    setPendingPhoto(null);
+    setIsPhotoRemoved(true);
   };
 
   const handleSave = async () => {
-    if (!targetBabyId || !user?.id) return;
+    if (!targetBabyId || !user?.id || isSaving) return;
 
     const normalizedBedtime = commitBedtimeInput(bedtimeInput, true);
     if (!normalizedBedtime) return;
@@ -491,18 +494,32 @@ export default function BabyScreen() {
       return;
     }
 
+    const previousPhotoUrl = babyInfo.photo_url ?? null;
+    let uploadedPhotoUrl: string | null = null;
+    let babyInfoWasSaved = false;
+
+    setIsSaving(true);
     try {
+      if (pendingPhoto) {
+        uploadedPhotoUrl = await uploadBabyPhoto({
+          bytes: pendingPhoto.bytes,
+          userId: user.id,
+          babyId: targetBabyId,
+        });
+      }
+
       const sanitizedBabyInfo: BabyInfo = {
         ...babyInfo,
         birth_date: birthDateForSave ? birthDateForSave.toISOString() : null,
         preferred_bedtime: normalizedBedtime,
+        photo_url: uploadedPhotoUrl ?? (isPhotoRemoved ? null : previousPhotoUrl),
       };
 
       const { error } = await saveBabyInfo(sanitizedBabyInfo, targetBabyId);
       if (error) {
-        console.error('Error saving baby info:', error);
-        Alert.alert(t('error.title'), t('save.errorMessage'));
+        throw error;
       } else {
+        babyInfoWasSaved = true;
         const { data: existingSettings, error: existingSettingsError } = await supabase
           .from('user_settings')
           .select('id')
@@ -535,6 +552,8 @@ export default function BabyScreen() {
         }
 
         Alert.alert(t('save.successTitle'), t('save.successMessage'));
+        setPendingPhoto(null);
+        setIsPhotoRemoved(false);
         setIsEditing(false);
         if (targetBabyId !== activeBabyId) {
           await setActiveBabyId(targetBabyId);
@@ -551,12 +570,28 @@ export default function BabyScreen() {
         // Invalidate cache after save
         await invalidateBabyCache(targetBabyId);
 
+        if (
+          previousPhotoUrl
+          && previousPhotoUrl !== sanitizedBabyInfo.photo_url
+        ) {
+          deleteBabyPhoto(previousPhotoUrl).catch((photoDeleteError) => {
+            console.warn('Failed to remove previous baby photo:', photoDeleteError);
+          });
+        }
+
         // Reload fresh data from Supabase
-        loadBabyInfo();
+        void loadBabyInfo();
       }
     } catch (err) {
+      if (uploadedPhotoUrl && !babyInfoWasSaved) {
+        deleteBabyPhoto(uploadedPhotoUrl).catch((photoDeleteError) => {
+          console.warn('Failed to clean up unsaved baby photo:', photoDeleteError);
+        });
+      }
       console.error('Failed to save baby info:', err);
       Alert.alert(t('error.title'), t('save.errorMessage'));
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -928,8 +963,7 @@ export default function BabyScreen() {
                   style={[styles.photoEditBadge, { backgroundColor: isDark ? '#6E5A74' : '#9C7186', borderColor: isDark ? '#342C38' : '#FFFFFF' }]}
                   onPress={() => {
                     triggerHaptic();
-                    setIsEditing(true);
-                    pickBabyPhoto();
+                    void pickBabyPhoto({ enterEditMode: true });
                   }}
                   accessibilityLabel={t('photo.change')}
                 >
@@ -972,8 +1006,9 @@ export default function BabyScreen() {
                         style={[styles.photoHintButton, { backgroundColor: photoButtonBackground, borderColor: photoButtonBorder }]}
                         onPress={() => {
                           triggerHaptic();
-                          pickBabyPhoto();
+                          void pickBabyPhoto();
                         }}
+                        disabled={isSaving}
                       >
                         <IconSymbol name="photo" size={15} color={textPrimary} />
                         <ThemedText style={[styles.photoHintButtonText, { color: textPrimary }]}>
@@ -987,6 +1022,7 @@ export default function BabyScreen() {
                           triggerHaptic();
                           removeBabyPhoto();
                         }}
+                        disabled={isSaving}
                       >
                         <IconSymbol name="trash" size={15} color={textPrimary} />
                         <ThemedText style={[styles.photoHintButtonText, { color: textPrimary }]}>
@@ -1264,9 +1300,12 @@ export default function BabyScreen() {
                       ]}
                       onPress={() => {
                         triggerHaptic();
+                        setPendingPhoto(null);
+                        setIsPhotoRemoved(false);
                         setIsEditing(false);
                         loadBabyInfo(); // Zurücksetzen auf gespeicherte Daten
                       }}
+                      disabled={isSaving}
                     >
                       <ThemedText style={[styles.buttonText, { color: textPrimary }]}>
                         {t('form.cancel')}
@@ -1279,6 +1318,7 @@ export default function BabyScreen() {
                         triggerHaptic();
                         handleSave();
                       }}
+                      disabled={isSaving}
                     >
                       <ThemedText style={[styles.buttonText, { color: textPrimary }]}>
                         {t('form.save')}

@@ -24,21 +24,6 @@ import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Canvas, RoundedRect, LinearGradient as SkiaLinearGradient, RadialGradient, Circle, vec } from '@shopify/react-native-skia';
 import SortableTileGrid, { type SortableTileGridScrollMetrics } from '@/components/SortableTileGrid';
-import { useAdvisorAccess } from '@/lib/advisor/access';
-
-// Tägliche Tipps für Schwangere
-const dailyTips = [
-  "Nimm dir heute 10 Minuten nur für dich – eine kleine Auszeit kann Wunder wirken!",
-  "Trinke ausreichend Wasser – besonders wichtig für dich und dein Baby.",
-  "Ein kurzer Spaziergang an der frischen Luft kann deine Stimmung heben.",
-  "Bitte um Hilfe, wenn du sie brauchst – du musst nicht alles alleine schaffen.",
-  "Achte auf gute Ernährung – sie ist die Basis für eine gesunde Schwangerschaft.",
-  "Gönn dir ausreichend Schlaf – er ist wichtig für dich und dein Baby.",
-  "Stress reduzieren – probiere Entspannungsübungen wie Schwangerschaftsyoga.",
-  "Feiere jeden kleinen Fortschritt – dein Körper leistet Großartiges!",
-  "Vertraue deinem Instinkt – du weißt, was gut für dich und dein Baby ist.",
-  "Verbinde dich mit deinem Baby – sprich mit ihm oder höre gemeinsam Musik."
-];
 
 function GlassBorderGlint({ radius = 30 }: { radius?: number }) {
   const anim = React.useState(() => new Animated.Value(0))[0];
@@ -458,8 +443,6 @@ export default function PregnancyHomeScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { isBabyBorn, setIsBabyBorn } = useBabyStatus();
-  // Lottis Fürsorge: nur für Premiumtester/Admins sichtbar (später Premium-Abo).
-  const advisorAccess = useAdvisorAccess();
   const DEFAULT_OVERVIEW_HEIGHT = 230;
   const OVERVIEW_ROTATION_INTERVAL_MS = 20000;
   const OVERVIEW_SLIDE_COUNT = 2;
@@ -468,7 +451,6 @@ export default function PregnancyHomeScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [userName, setUserName] = useState('');
   const [profileAvatarUrl, setProfileAvatarUrl] = useState<string | null>(null);
-  const [dailyTip, setDailyTip] = useState('');
   const [currentWeek, setCurrentWeek] = useState<number | null>(null);
   const [currentDay, setCurrentDay] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -908,8 +890,6 @@ export default function PregnancyHomeScreen() {
       }
 
       await loadUserData();
-      const randomTip = dailyTips[Math.floor(Math.random() * dailyTips.length)];
-      setDailyTip(randomTip);
 
       // Plattformspezifisches Feedback
       if (Platform.OS === 'android') {
@@ -1193,53 +1173,6 @@ export default function PregnancyHomeScreen() {
         ))}
       </View>
     </View>
-  );
-
-  const renderAdvisorEntry = () => (
-    <TouchableOpacity
-      activeOpacity={0.9}
-      onPress={() => router.push('/lottis-fuersorge' as any)}
-      style={[styles.liquidGlassWrapper, styles.advisorEntryWrapper]}
-    >
-      <BlurView
-        intensity={22}
-        tint={colorScheme === 'dark' ? 'dark' : 'light'}
-        style={[styles.liquidGlassBackground, { backgroundColor: glassBlurBg }]}
-      >
-        <View
-          style={[
-            styles.advisorEntryContainer,
-            styles.liquidGlassContainer,
-            { backgroundColor: glassCardBg },
-          ]}
-        >
-          <View style={styles.advisorEntryIcon}>
-            <Text style={styles.advisorEntryEmoji}>🌿</Text>
-          </View>
-          <View style={styles.advisorEntryTextWrap}>
-            <View style={styles.advisorEntryTitleRow}>
-              <ThemedText
-                adaptive={false}
-                style={[styles.advisorEntryTitle, { color: accentPurple }]}
-              >
-                Lottis Fürsorge
-              </ThemedText>
-              <View style={styles.advisorEntryBadge}>
-                <Text style={styles.advisorEntryBadgeText}>Premium</Text>
-              </View>
-            </View>
-            <ThemedText
-              adaptive={false}
-              numberOfLines={2}
-              style={[styles.advisorEntrySubtitle, { color: textSecondary }]}
-            >
-              Persönliche Hinweise aus Schlaf, Wetter & Ernährung
-            </ThemedText>
-          </View>
-          <IconSymbol name="chevron.right" size={20} color={textSecondary} />
-        </View>
-      </BlurView>
-    </TouchableOpacity>
   );
 
   const shouldShowBirthPreparationCard = Boolean(
@@ -1632,29 +1565,13 @@ export default function PregnancyHomeScreen() {
                       </View>
                     </View>
                   </TouchableOpacity>
-                ) : (
-                  <View style={styles.tipCard}>
-                    <GlassLensOverlay radius={20} />
-                    <TipHighlightDots />
-                    <View style={styles.tipCardRow}>
-                      <View style={styles.tipIconWrap}>
-                        <IconSymbol name="lightbulb.fill" size={18} color="#D6B28C" />
-                      </View>
-                      <View style={styles.tipContent}>
-                        <ThemedText adaptive={false} style={[styles.tipLabel, { color: accentPurple }]}>Tipp des Tages</ThemedText>
-                        <ThemedText adaptive={false} style={[styles.tipText, { color: textPrimary }]}>{dailyTip}</ThemedText>
-                      </View>
-                    </View>
-                  </View>
-                )}
+                ) : null}
               </ThemedView>
             </BlurView>
             <GlassBorderGlint radius={30} />
           </View>
 
           {renderOverviewSection()}
-
-          {advisorAccess === true ? renderAdvisorEntry() : null}
 
           {renderQuickAccessSection()}
         </ScrollView>
@@ -1846,55 +1763,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 14,
     elevation: 8,
-  },
-  advisorEntryWrapper: {
-    marginTop: 4,
-  },
-  advisorEntryContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    paddingVertical: 16,
-    paddingHorizontal: 18,
-  },
-  advisorEntryIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(94, 61, 179, 0.12)',
-  },
-  advisorEntryEmoji: {
-    fontSize: 24,
-  },
-  advisorEntryTextWrap: {
-    flex: 1,
-  },
-  advisorEntryTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 2,
-  },
-  advisorEntryTitle: {
-    fontSize: 17,
-    fontWeight: '800',
-  },
-  advisorEntryBadge: {
-    backgroundColor: 'rgba(94, 61, 179, 0.14)',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 999,
-  },
-  advisorEntryBadgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#5E3DB3',
-  },
-  advisorEntrySubtitle: {
-    fontSize: 13,
-    lineHeight: 18,
   },
   greetingCardWrapper: {
     borderRadius: 30,
